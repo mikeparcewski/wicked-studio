@@ -80,13 +80,51 @@ test.describe('mobile (390×844)', () => {
     await expect(tabs).toHaveCount(3);
     // the short titles are what shows; the full title and status are the tabs' names
     await expect(ide.getByRole('tab', { name: /^Fix the flaky checkout test, Waiting on you$/ })).toBeVisible();
-    await expect(ide.getByRole('tab', { name: /^Move CI to Node 22, Done$/ })).toBeVisible();
+    // the Node 22 job runs to done in the background
+    await expect(ide.getByRole('tab', { name: /^Move CI to Node 22, (Done|GitHub Copilot working)$/ })).toBeVisible();
     for (let k = 0; k < 3; k++) await expect(tabs.nth(k)).toBeInViewport();
     const short = await ide.locator('button, input, [role=tab]').evaluateAll((els) =>
       els.filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 44; })
         .map((e) => (e.textContent || '').trim().slice(0, 24) + ' ' + Math.round(e.getBoundingClientRect().height)),
     );
     expect(short).toEqual([]);
+  });
+
+  test('a tap that pins a tour or pauses a frame never changes the page height', async ({ page }) => {
+    // Pause and Play were different widths, so the heading beside the button rewrapped on a tap and
+    // the tablist jumped 25px under the finger (critic, 390x844).
+    await page.goto('/');
+    const desk = page.locator('#desk');
+    await page.locator('#ex-tab-agents').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    const d0 = await desk.evaluate((el) => (el as HTMLElement).offsetHeight);
+    const doc0 = await page.evaluate(() => document.documentElement.scrollHeight);
+    await page.locator('#ex-tab-agents').tap();
+    await expect(page.locator('.desk [data-play-toggle]')).toHaveAttribute('aria-pressed', 'true');
+    expect(await desk.evaluate((el) => (el as HTMLElement).offsetHeight)).toBe(d0);
+    const why = page.locator('#why');
+    const btn = why.locator('[data-play-toggle]');
+    await btn.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    const w0 = await why.evaluate((el) => (el as HTMLElement).offsetHeight);
+    await btn.tap();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+    expect(await why.evaluate((el) => (el as HTMLElement).offsetHeight)).toBe(w0);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(doc0);
+  });
+
+  test('the first screen names the product; the benefits stack and read in full', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.hero-pkg')).toBeVisible();
+    await expect(page.locator('.hero-pkg')).toHaveText('wicked-studio');
+    await expect(page.locator('.hero-pkg')).toBeInViewport();
+    // three cards, one under the other, each the full width of the row
+    const cards = await page.locator('.why .ben').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width) }; }));
+    expect(cards).toHaveLength(3);
+    expect(cards[0].l).toBe(cards[1].l);
+    expect(cards[1].t).toBeGreaterThan(cards[0].t);
+    expect(cards[2].t).toBeGreaterThan(cards[1].t);
+    // the Learn schematic wraps instead of cutting words off
+    const cut = await page.locator('.art-learn .al-row span').evaluateAll((ls) => ls.filter((l) => l.scrollWidth > l.clientWidth + 1).length);
+    expect(cut).toBe(0);
   });
 
   test('the hamburger menu lists studio as a site link', async ({ page }) => {

@@ -74,7 +74,7 @@ const title = 'wicked-studio — the ADE for running a team of coding agents';
 // What search results and social cards show. Same attribution boundary as the page: the crew
 // daemon runs the agents; studio is the screen you run them from.
 const description =
-  'The agentic development environment (ADE) for running a team of coding agents. Chat with Claude Code, Codex, Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. By default a different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
+  'The IDE for running a team of coding agents. Chat with Claude Code, Codex, GitHub Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. By default a different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
 // Nine of the sidebar's real pages (NAV_GROUPS + LEARN_ITEM in src/board/navModel.ts; Report has no
@@ -100,7 +100,7 @@ const GROUPS = [
 ];
 const slug = (n: string) => n.toLowerCase();
 
-const AGENTS = ['Claude Code', 'Codex', 'Copilot', 'OpenCode', 'Pi'];
+const AGENTS = ['Claude Code', 'Codex', 'GitHub Copilot', 'OpenCode', 'Pi'];
 
 // Three benefits, right under the demo (studio 0.14 / crew 0.16.12).
 const BENEFITS = [
@@ -111,12 +111,15 @@ const BENEFITS = [
 
 // What's new in 0.14, one line each.
 const NEW = [
-  { name: 'Voice', line: 'A mic beside Send, Start and Ask. With whisper.cpp installed, speech becomes text on your machine (the model downloads only when you ask), and the audio is never stored.' },
+  { name: 'Voice', line: 'A mic beside Send, Start and Ask. With whisper.cpp installed, speech becomes text on your machine (the model downloads only when you ask), and the audio is never stored.',
+    more: 'Press the mic and say “show me this job”, then “tell it to keep the old URL working”. Nothing is sent to a job until you confirm it on screen.' },
   { name: 'Guided asks', line: 'A job’s questions and decisions share one guided card.' },
   { name: 'Learn', line: 'Style, rules, personality and brand, in one place.' },
   { name: 'Page chat', line: 'The main pages, including Understand, Report, Evaluate, Steering, Memory, Learn and Nerve Center, each have a chat over their own data.' },
   { name: 'Requirements with real coverage', line: 'The real-requirements share against your minimum; placeholders never count, and an unconfirmed item shows its reason.' },
-  { name: 'Power mode on the job page', line: 'Rigor, checkpoints, and a pause (at a turn boundary) when the job detects a qualifying jump in complexity or signs that the agent is struggling.' },
+  // DECISIONS N3: lead with the benefit, then the on-screen name once.
+  { name: 'Power mode on the job page', lead: 'When you launch a preset or a plan on a repository, the code-writing step runs as one agent’s checkpointed turns, and failed checks go back for rework or wait for your judgment (power mode, on by default for those launches).',
+    line: 'Rigor, checkpoints, and a pause (at a turn boundary) when the job detects a qualifying jump in complexity or signs that the agent is struggling.' },
   { name: 'Wicked Dark, Wicked Light and Ambient', line: 'Ambient adds a quiet line and tint that follow the state of your work; text never changes colour.' },
   { name: 'Plugins as cards', line: 'See where each plugin appears, its preview when it has one, and, in its details, what it was granted.' },
 ];
@@ -126,6 +129,11 @@ const HITS = [
   { repo: 'wicked-core', n: 4, lang: 'Rust' },
   { repo: 'wicked-crew', n: 3, lang: 'TypeScript' },
   { repo: 'wicked-studio', n: 1, lang: 'TypeScript' },
+];
+// page.js alternates the search between these (same repos, same labels: an example).
+const QUERIES = [
+  { q: 'register', n: HITS.map((h) => h.n) },
+  { q: 'rateLimit', n: [2, 3, 1] },
 ];
 
 // Injected at build time from the repo's package.json via astro.config.mjs (DT-7).
@@ -139,11 +147,12 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
   <section class="hero frame snap-section" id="top" aria-labelledby="hero-h">
     <div class="amber-floor" aria-hidden="true"></div>
     <div class="wrap hero-wrap">
+      <!-- phones: the topbar hides the package name below 768px, so the hero names it -->
+      <p class="hero-pkg" aria-hidden="true">wicked-studio</p>
       <h1 id="hero-h">{HEADLINE}</h1>
       <div class="hero-grid">
         <div class="hero-copy">
           <p class="lede">{SUBLINE}</p>
-          <p class="voice-note hero-voice"><span class="mic" aria-hidden="true"></span>{VOICE}</p>
           <div class="hero-agents">
             <p class="mini-k" id="hero-agents-k">Bring the agents you already use</p>
             <ul class="agent-row" role="list" aria-labelledby="hero-agents-k">
@@ -154,8 +163,9 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
             <button class="cta-copy" type="button" data-copy="npx wicked-crew serve" aria-label="Copy npx wicked-crew serve">
               <span class="cta-prompt" aria-hidden="true">$</span><code>npx wicked-crew serve</code><span class="cta-copy-l" data-copy-label aria-hidden="true">Copy</span>
             </button>
-            <p class="cta-alt">One command. Studio comes with it. <a href="#demo" class="cta-watch" data-watch>Watch a job <span aria-hidden="true">↓</span></a></p>
+            <p class="cta-alt">One command on your machine starts the wicked-crew daemon, which runs your agents in sandboxes, and serves studio in your browser. <a href="#demo" class="cta-watch" data-watch>Watch a job<span class="cta-arr" aria-hidden="true"></span></a></p>
           </div>
+          <p class="voice-note hero-voice"><span class="mic" aria-hidden="true"></span><span>Voice needs whisper.cpp. {VOICE}</span></p>
           <p class="hero-fine">{FINE}</p>
         </div>
 
@@ -168,7 +178,8 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
             <nav class="ide-tabs" aria-label="Sidebar pages (illustration)">
               <span>Learn</span> <span>Projects</span> <span class="is-on">Jobs</span> <span>Repositories</span> <span>Report</span> <span>Understand</span> <span>Evaluate</span> <span>Steering</span> <span>Memory</span> <span>Agents</span>
             </nav>
-            <span class="ide-url" data-demo-note>scripted demo · press Send, then make the calls</span>
+            <span class="ide-url" data-demo-note>scripted demo · approve the plan, then make the calls</span>
+            <button type="button" class="play-toggle play-toggle--sm" data-play-toggle data-demo-pause aria-pressed="false" aria-label="Pause the demo's motion"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
           </div>
 
           <div class="ide-body">
@@ -214,7 +225,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <p class="kicker beat">Example job: rate limits for the public API</p>
           <h2 id="why-h">What studio does for you</h2>
         </div>
-        <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the scenes"><span class="pt-ic" aria-hidden="true"></span><span data-play-label>Pause</span></button>
+        <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the scenes"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
       </div>
       <div class="trio ben-row" data-swipe>
         {BENEFITS.map((b, i) => (
@@ -278,10 +289,11 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     <div class="wrap">
       <div class="sec-head sec-head--row">
         <div>
+          <p class="kicker beat">Same job, in the Desk</p>
           <h2 id="desk-h">One Desk for every agent and every repo.</h2>
-          <p class="sec-sub">Launch jobs across your projects and let them run. When one needs a decision, it comes to you.</p>
+          <p class="sec-sub">The Desk is studio’s one screen: launch jobs across your projects and let them run. When one needs a decision, it comes to you.</p>
         </div>
-        <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the tour of the pages"><span class="pt-ic" aria-hidden="true"></span><span data-play-label>Pause</span></button>
+        <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the tour of the pages"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
       </div>
       <div class="explorer" data-tour data-tour-ms="4000">
         <div class="ex-side" role="tablist" aria-label="Sidebar pages" aria-orientation="vertical">
@@ -290,7 +302,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               {g.label && <span class="ex-group" aria-hidden="true">{g.label}</span>}
               {g.items.map((n, k) => (
                 <button type="button" role="tab" class={`ex-tab${n === 'Learn' ? ' is-on' : ''}`} id={`ex-tab-${slug(n)}`} aria-controls={`ex-panel-${slug(n)}`} aria-selected={n === 'Learn' ? 'true' : 'false'} tabindex={n === 'Learn' ? '0' : '-1'}>
-                  <span class="ex-tab-n">{n}</span>{n === 'Learn' && <span class="ex-mark">{' '}Start here</span>}
+                  <span class="ex-tab-n" data-label={n}>{n}</span>{n === 'Learn' && <span class="ex-mark">{' '}Start here</span>}
                 </button>
               ))}
             </>
@@ -308,7 +320,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
                   <div class="al-row"><b>Rule</b><span>Public routes carry a rate limit</span><i class="tog on"></i></div>
                   <div class="al-row"><b>Memory</b><span>Limits are per API key</span><i class="tog on"></i></div>
                   <div class="al-row"><b>Personality</b><span>Short answers, plain words</span><i class="tog"></i></div>
-                  <div class="al-row"><b>Brand</b><span>Product names in full</span><i class="tog"></i></div>
+                  <div class="al-row"><b>Brand</b><span>Colours from your site</span><i class="tog"></i></div>
                 </div>
               </div>
             </div>
@@ -369,7 +381,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
                 <div class="ae-rule">Rule: public routes carry a rate limit</div>
                 <div class="ae-row"><span>Example: a route added without the limit</span><b class="ae-v ae-v--ok">caught</b></div>
                 <div class="ae-row"><span>Example: the limit keyed on the client IP</span><b class="ae-v ae-v--gap">slips through</b></div>
-                <div class="ae-row"><span>Example: an internal route, no limit</span><b class="ae-v ae-v--ok">left alone</b></div>
+                <div class="ae-row"><span>Example: an internal route, no limit</span><b class="ae-v ae-v--ok">no false alarm</b></div>
               </div>
             </div>
           </div>
@@ -424,7 +436,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
   </section>
 
   <!-- ── 4. A different agent checks the work: the relay, and the receipt it leaves ── -->
-  <section class="review frame snap-section" id="review" aria-labelledby="review-h" data-relay>
+  <section class="review frame snap-section" id="review" aria-labelledby="review-h" data-relay data-autoplay>
     <div class="wrap review-grid">
       <div class="review-left">
         <div class="sec-head">
@@ -434,7 +446,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         </div>
         <div class="relay has-arc" data-mode="two" data-tok="y">
           <ol class="flow" aria-label="Who does what on a job">
-            <li class="fl-b" data-s="s2"><span class="flow-who">Builder</span><span class="flow-what">Claude Code writes the change in its sandbox</span><span class="fl-s" aria-hidden="true"><span class="fl-s1">writing</span><span class="fl-s2">fixed: per API key</span></span></li>
+            <li class="fl-b" data-s="s2"><span class="flow-who">Builder</span><span class="flow-what">Claude Code writes the change in its sandbox</span><span class="fl-s" aria-hidden="true"><span class="fl-s1">writing</span><span class="fl-s2">fixed: per API key</span><span class="fl-s3">built</span></span></li>
             <li class="fl-r" data-s="s2"><span class="flow-who">Reviewer</span><span class="flow-what">Codex checks it, and can send it back</span><span class="fl-s" aria-hidden="true"><span class="fl-s1">one finding</span><span class="fl-s2">approved</span><span class="fl-s3">no second agent</span></span></li>
             <li class="fl-y is-lit" data-s="s2"><span class="flow-who flow-who--you">You</span><span class="flow-what">approve, add a note, or send it back</span><span class="fl-s" aria-hidden="true"><span class="fl-s2">approved</span></span></li>
           </ol>
@@ -445,7 +457,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         </div>
         <ul class="facts" role="list">
           <li>Only one agent signed in? The job stops and says why, unless you launch it with <b>reduced assurance</b>, labelled everywhere.</li>
-          <li>Jobs launched as a feature, bug fix, migration, MCP server or editor plugin need <b>QE acceptance</b> before they ship. A change small on every measure is waived, and skipping takes a reason; either is labelled.</li>
+          <li>Jobs launched as a feature, bug fix, migration, MCP server or editor plugin need <b>acceptance testing (QE)</b> before they ship. A change small on every measure is waived, and skipping takes a reason; either is labelled.</li>
           <li>The checks are <a href="https://wc.wickedagile.com">crew’s</a>. Studio shows them and never grades anything.</li>
         </ul>
       </div>
@@ -455,22 +467,22 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
             <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
             <span class="switch-l" aria-hidden="true"><span class="sw-on">Two agents signed in</span><span class="sw-off">Only one agent signed in</span></span>
           </button>
-          <button type="button" class="replay" data-relay-replay>Replay</button>
+          <span class="relay-btns"><button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the replays"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button><button type="button" class="replay" data-relay-replay>Replay</button></span>
         </div>
         <figure class="receipt" aria-label="An example assurance receipt" data-mode="two">
           <figcaption>Receipt · job r-7c19 · build step</figcaption>
           <table>
             <tbody>
-              <tr class="is-filled" data-row="1"><th scope="row">Required</th><td><span class="rv rv-two">tests pass, a different agent reviews, QE acceptance</span><span class="rv rv-one">tests pass, a different agent reviews, QE acceptance</span></td></tr>
-              <tr class="is-filled" data-row="4"><th scope="row">Ran</th><td><span class="rv rv-two">tests (38 pass), review, QE acceptance</span><span class="rv rv-one">nothing: the job stopped before review</span></td></tr>
+              <tr class="is-filled" data-row="1"><th scope="row">Required</th><td><span class="rv rv-two">tests pass, a different agent reviews</span><span class="rv rv-one">tests pass, a different agent reviews</span></td></tr>
+              <tr class="is-filled" data-row="4"><th scope="row">Ran</th><td><span class="rv rv-two">tests (38 pass), review</span><span class="rv rv-one">the build; then the job held at review</span></td></tr>
               <tr class="is-filled" data-row="1"><th scope="row">Built by</th><td><span class="rv rv-two">Claude Code</span><span class="rv rv-one">Claude Code</span></td></tr>
-              <tr class="is-filled" data-row="4"><th scope="row">Reviewed by</th><td><span class="rv rv-two">Codex <span class="ok">separate agent</span></span><span class="rv rv-one">nobody: no second agent</span></td></tr>
-              <tr class="is-filled" data-row="5"><th scope="row">Skipped</th><td><span class="rv rv-two">nothing</span><span class="rv rv-one">review, until you choose reduced assurance</span></td></tr>
+              <tr class="is-filled" data-row="4"><th scope="row">Reviewed by</th><td><span class="rv rv-two">Codex <span class="ok">separate agent</span></span><span class="rv rv-one">nobody yet: no second agent</span></td></tr>
+              <tr class="is-filled" data-row="5"><th scope="row">Skipped</th><td><span class="rv rv-two">nothing</span><span class="rv rv-one">nothing: the job waits</span></td></tr>
             </tbody>
           </table>
           <div class="rc-foot">
             <p class="receipt-foot">“Passed checks, nobody reviewed it” never reads like “independently accepted”.</p>
-            <p class="relay-stop"><b>Stopped.</b> Only one agent is signed in, so nobody can review the change. Launch it with reduced assurance to go on; the label goes on the job, every gate and the delivery.</p>
+            <p class="relay-stop"><b>Held.</b> Only one agent is signed in, so no other agent can review the change. Sign in a second agent, or launch it again as reduced assurance; the label goes on the job, every gate and the delivery.</p>
           </div>
         </figure>
       </div>
@@ -478,26 +490,41 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
   </section>
 
   <!-- ── 5. Rules, memory, knowledge: three different things, kept apart ───── -->
-  <section class="steer frame snap-section" id="steer" aria-labelledby="steer-h">
+  <section class="steer frame snap-section" id="steer" aria-labelledby="steer-h" data-autoplay>
     <div class="wrap">
-      <div class="sec-head">
-        <h2 id="steer-h">Rules you set. Memory you can edit. Knowledge it learned.</h2>
-        <p class="sec-sub">Three different things, kept apart. Agents suggest; you approve.</p>
+      <div class="sec-head sec-head--row">
+        <div>
+          <p class="kicker beat">Same job: what it left behind</p>
+          <h2 id="steer-h">Rules you set. Memory you can edit. Knowledge it learned.</h2>
+          <p class="sec-sub">Three different things, kept apart. Agents suggest; you approve.</p>
+        </div>
+        <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the suggestions"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
       </div>
       <div class="trio">
         <div class="trio-card drawer" data-drawer="rule" data-state="in">
           <h3>Rules</h3>
           <p>What a gate checks. Each rule applies to every repository or to one project, and can target a language, a layer or a framework.</p>
-          <div class="dr-box" aria-live="polite">
+          <div class="dr-box">
             <span class="dr-k">Waiting for you · example</span>
-            <div class="dr-slot">
-              <div class="dr-rule">
-                <span class="dr-from">Suggested by Claude Code</span>
+            <!-- three suggestions in one cell: page.js rotates them while the card waits for you -->
+            <div class="dr-slot dr-rot" data-rot>
+              <div class="dr-rule is-on">
+                <span class="dr-from">Suggested by Learn, from your team docs</span>
                 <b>Public routes carry a rate limit</b>
-                <span class="as-chip">Every repository</span>
+                <span class="dr-chips"><span class="as-chip">Every repository</span></span>
+              </div>
+              <div class="dr-rule">
+                <span class="dr-from">Suggested by Learn, from your team docs</span>
+                <b>Limits key on the API key</b>
+                <span class="dr-chips"><span class="as-chip">One project</span><span class="as-chip">API layer</span></span>
+              </div>
+              <div class="dr-rule">
+                <span class="dr-from">Suggested by Learn, from your best repos</span>
+                <b>Tests never read the real clock</b>
+                <span class="dr-chips"><span class="as-chip">One project</span><span class="as-chip">TypeScript</span></span>
               </div>
             </div>
-            <div class="dr-stack">
+            <div class="dr-stack" aria-live="polite">
               <div class="dr-acts dr-s-in"><button type="button" class="btn-yes" data-dr="approve">Approve</button><button type="button" class="btn-q" data-dr="later">Not now</button></div>
               <p class="dr-s-ok"><span class="dr-state dr-state--ok">Active</span> You approved it. <button type="button" class="link-btn" data-dr="reset">Reset</button></p>
               <p class="dr-s-later"><span class="dr-state">Parked</span> It stays a suggestion. <button type="button" class="link-btn" data-dr="reset">Reset</button></p>
@@ -545,25 +572,30 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
   </section>
 
   <!-- ── 6. Your agents, sandboxed; your repos, one project ───────────────── -->
-  <section class="reach frame snap-section" id="reach" aria-labelledby="reach-h">
+  <section class="reach frame snap-section" id="reach" aria-labelledby="reach-h" data-autoplay>
     <div class="wrap">
-      <div class="sec-head">
-        <h2 id="reach-h">Your agents, sandboxed. Your repos, one project.</h2>
+      <div class="sec-head sec-head--row">
+        <div>
+          <p class="kicker beat">Same job: where it ran</p>
+          <h2 id="reach-h">Your agents, sandboxed. Your repos, one project.</h2>
+        </div>
+        <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the examples"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
       </div>
       <div class="reach-grid">
         <div class="reach-card">
           <h3>Bring the agents you already use</h3>
           <div class="agent-chips" role="radiogroup" aria-label="Pick an agent to see its sandbox" data-agents>
             {AGENTS.map((a, k) => (
-              <button type="button" role="radio" class={`agent-chip${k === 0 ? ' is-on' : ''}`} aria-checked={k === 0 ? 'true' : 'false'} tabindex={k === 0 ? '0' : '-1'} data-agent={a}>{a}</button>
+              <button type="button" role="radio" class={`agent-chip${k === 1 ? ' is-on' : ''}`} aria-checked={k === 1 ? 'true' : 'false'} tabindex={k === 1 ? '0' : '-1'} data-agent={a}>{a}</button>
             ))}
           </div>
           <div class="sandbox" aria-hidden="true">
             <div class="sbx">
               <span class="sbx-k">sandbox</span>
-              <span class="sbx-agent" data-agent-name>Claude Code</span>
+              <span class="sbx-agent" data-agent-name>{AGENTS[1]}</span>
               <span class="sbx-repo">your repo</span>
-              <span class="sbx-sees">sees <code>placeholder</code></span>
+              <!-- both lines in one cell: Claude Code's is the subscription-token exception -->
+              <span class="sbx-sees"><span class="sbx-s1">sees <code>placeholder</code></span><span class="sbx-s2">sees placeholders, except a subscription’s sign-in token</span></span>
             </div>
             <div class="sbx-wire"><span class="sbx-token"></span></div>
             <div class="sbx-broker"><span class="sbx-k">broker</span><b>your keys</b><span class="sbx-lock" aria-hidden="true"></span></div>
@@ -573,9 +605,9 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         <div class="reach-card" data-search>
           <h3>A project spans repos</h3>
           <p>Attach repos to a project and its jobs search one code graph over all of them.</p>
-          <div class="search-box" aria-hidden="true"><span class="sq-ic"></span><span class="sq-t" data-q>register</span><span class="sq-caret"></span><span class="sq-ex">example</span></div>
-          <table class="hits" aria-label="One search across three repos (an example)">
-            <caption><code>register</code> across one project: 8 hits</caption>
+          <div class="search-box" aria-hidden="true"><span class="sq-ic"></span><span class="sq-t" data-q>{QUERIES[0].q}</span><span class="sq-caret"></span><span class="sq-ex">example</span></div>
+          <table class="hits" aria-label="One search across three repos (an example)" data-queries={JSON.stringify(QUERIES)}>
+            <caption><code data-q-cap>{QUERIES[0].q}</code> across one project: <span data-total>{QUERIES[0].n.reduce((a, b) => a + b, 0)}</span> hits</caption>
             <tbody>
               {HITS.map((h) => (
                 <tr><th scope="row">{h.repo}</th><td class="hits-n" data-n={h.n}>{h.n}</td><td class="hits-bar" aria-hidden="true"><i style={`--w:${h.n / 4}`}></i></td><td>{h.lang}</td></tr>
@@ -595,7 +627,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         <div>
           <h2 id="new-h">What’s new in 0.14</h2>
         </div>
-        <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the tour of what is new"><span class="pt-ic" aria-hidden="true"></span><span data-play-label>Pause</span></button>
+        <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the tour of what is new"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
       </div>
       <div class="news" data-tour data-tour-ms="4500">
         <div class="news-tabs" role="tablist" aria-label="What is new in 0.14">
@@ -609,8 +641,9 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               <div class="news-copy">
                 <span class="news-n" aria-hidden="true">{String(k + 1).padStart(2, '0')} / 08</span>
                 <h3>{n.name}</h3>
-                <p>{n.line}</p>
-                {n.name === 'Voice' && <p class="voice-note"><span class="mic" aria-hidden="true"></span>{VOICE}</p>}
+                {n.lead && <p>{n.lead}</p>}
+                <p class={n.lead ? 'news-sub' : undefined}>{n.line}</p>
+                {n.more && <p class="news-sub">{n.more}</p>}
               </div>
               <div class="ex-art news-art" aria-hidden="true">
                 {k === 0 && (

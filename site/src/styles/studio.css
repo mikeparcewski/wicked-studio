@@ -71,15 +71,38 @@ html .footer { scroll-snap-align: end; }
   .frame { min-height: 0; padding: 44px 0; }
 }
 /* Big windows: scale each frame as a whole (type, cards, scenes and the demo together) so it fills
-   about three quarters of the frame instead of a third, and widen the topbar's row to the same
-   measure so the wordmark stays on the content's left edge. The platform band keeps its own size. */
-@media (min-width: 1500px) and (min-height: 860px) {
-  .frame > .wrap { zoom: 1.16; }
-  html .topbar__inner { max-width: calc(1240px * 1.16); padding-inline: calc(28px * 1.16); }
+   the frame instead of floating in it, and widen the topbar's row to the same measure so the
+   wordmark stays on the content's left edge. The platform band keeps its own size.
+   The tiers follow the window's HEIGHT (that is where the empty space was: a 1440x900 window had
+   200px above and below most frames), each guarded by a width at which the zoomed content still
+   lays out at 1200px or wider (width / zoom >= 1200), the narrowest desktop layout it is built for. */
+@media (min-width: 1320px) and (min-height: 800px) {
+  .frame > .wrap { zoom: 1.1; }
+  html .topbar__inner { max-width: calc(1240px * 1.1); padding-inline: calc(28px * 1.1); }
 }
-@media (min-width: 1720px) and (min-height: 1000px) {
-  .frame > .wrap { zoom: 1.36; }
-  html .topbar__inner { max-width: calc(1240px * 1.36); padding-inline: calc(28px * 1.36); }
+@media (min-width: 1440px) and (min-height: 880px) {
+  .frame > .wrap { zoom: 1.2; }
+  html .topbar__inner { max-width: calc(1240px * 1.2); padding-inline: calc(28px * 1.2); }
+}
+@media (min-width: 1560px) and (min-height: 960px) {
+  .frame > .wrap { zoom: 1.3; }
+  html .topbar__inner { max-width: calc(1240px * 1.3); padding-inline: calc(28px * 1.3); }
+}
+@media (min-width: 1680px) and (min-height: 1040px) {
+  .frame > .wrap { zoom: 1.4; }
+  html .topbar__inner { max-width: calc(1240px * 1.4); padding-inline: calc(28px * 1.4); }
+}
+@media (min-width: 1920px) and (min-height: 1200px) {
+  .frame > .wrap { zoom: 1.6; }
+  html .topbar__inner { max-width: calc(1240px * 1.6); padding-inline: calc(28px * 1.6); }
+}
+@media (min-width: 2160px) and (min-height: 1360px) {
+  .frame > .wrap { zoom: 1.8; }
+  html .topbar__inner { max-width: calc(1240px * 1.8); padding-inline: calc(28px * 1.8); }
+}
+@media (min-width: 2400px) and (min-height: 1400px) {
+  .frame > .wrap { zoom: 2; }
+  html .topbar__inner { max-width: calc(1240px * 2); padding-inline: calc(28px * 2); }
 }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -287,7 +310,7 @@ code {
 .ide-sess-s { grid-column: 2; font-size: var(--text-caption); color: var(--muted); }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
 .dot--you { background: var(--you); box-shadow: 0 0 0 3px color-mix(in oklab, var(--you) 22%, transparent); }
-.dot--run { background: var(--run); animation: run-ring 1.4s ease-out 3; }
+.dot--run { background: var(--run); animation: run-ring 1.6s ease-out infinite; }
 .dot--done { background: var(--ok); }
 @keyframes run-ring { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--run) 55%, transparent); } 100% { box-shadow: 0 0 0 6px transparent; } }
 
@@ -299,7 +322,7 @@ code {
 .ide-steps li { font-size: var(--text-caption); color: var(--faint); padding: 1px 8px; border-radius: 999px; border: 1px solid var(--hairline); transition: color .3s var(--ease), background .3s var(--ease), border-color .3s var(--ease); }
 .ide-steps li.done { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 40%, transparent); }
 .ide-steps li.now--you { color: var(--accent-fg); background: var(--you); border-color: var(--you); font-weight: var(--weight-strong); }
-.ide-steps li.now--run { color: var(--run); border-color: var(--run); font-weight: var(--weight-strong); animation: run-ring 1.4s ease-out 3; }
+.ide-steps li.now--run { color: var(--run); border-color: var(--run); font-weight: var(--weight-strong); animation: run-ring 1.6s ease-out infinite; }
 .ide-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
 .ide-thread:focus-visible { outline-offset: -3px; }
 .empty { margin: auto; max-width: 34ch; text-align: center; color: var(--muted); font-size: var(--text-body); }
@@ -312,7 +335,7 @@ code {
 .msg--gate, .msg--ask { border-color: color-mix(in oklab, var(--you) 55%, transparent); }
 .msg--done { border-color: color-mix(in oklab, var(--ok) 50%, transparent); }
 /* the card waiting on you glows softly; the glow stays inside the thread's padding */
-.msg.is-live { box-shadow: 0 0 0 1px color-mix(in oklab, var(--you) 40%, transparent), 0 4px 14px -8px var(--you); animation: msg-in .3s var(--ease) backwards, live 1.2s ease-in-out .3s 1 alternate forwards; }
+.msg.is-live { box-shadow: 0 0 0 1px color-mix(in oklab, var(--you) 40%, transparent), 0 4px 14px -8px var(--you); animation: msg-in .3s var(--ease) backwards, live 1.6s ease-in-out .3s infinite alternate; }
 @keyframes live { to { box-shadow: 0 0 0 1px color-mix(in oklab, var(--you) 70%, transparent), 0 4px 16px -7px var(--you); } }
 .msg-who { display: block; font-size: var(--text-caption); font-weight: var(--weight-strong); color: var(--muted); margin-bottom: 3px; }
 .msg b { color: var(--ink); }
@@ -329,7 +352,7 @@ button.chip:hover { border-color: var(--border-strong); background: color-mix(in
 .chip--pr { cursor: default; color: var(--ok); border-color: color-mix(in oklab, var(--ok) 45%, transparent); }
 .msg-event { margin: 0; align-self: center; font-size: var(--text-caption); color: var(--muted); }
 .msg-working { margin: 0; align-self: flex-start; display: flex; align-items: center; gap: 8px; font-size: var(--text-caption); color: var(--run); }
-.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--run); animation: pulse 1.2s ease-in-out 4; }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--run); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
 @keyframes msg-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 .ide-composer { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--hairline); }
@@ -667,8 +690,9 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 /* the placeholder travels the wire and nowhere else: a 10px ring inside the wire's own lane */
 .sbx-wire { --lane: 62px; }
 .sbx-token { position: absolute; top: -4px; right: 0; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ink); background: var(--surface-2); opacity: 0; }
-.sandbox.is-live .sbx-token { animation: hand-in 2.4s var(--ease) 2; }
-@keyframes hand-in { 0% { opacity: 0; transform: none; } 15% { opacity: 1; } 75% { opacity: 1; transform: translateX(calc(10px - var(--lane))); } 100% { opacity: 0; transform: translateX(calc(10px - var(--lane))); } }
+.sandbox.is-live .sbx-token { animation: hand-in 3.2s var(--ease) infinite; }
+.sandbox.is-still .sbx-token { animation-play-state: paused; }
+@keyframes hand-in { 0% { opacity: 0; transform: none; } 12% { opacity: 1; } 58% { opacity: 1; transform: translateX(calc(10px - var(--lane))); } 72%, 100% { opacity: 0; transform: translateX(calc(10px - var(--lane))); } }
 .sbx-broker { position: relative; height: 72%; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 8px 12px; border: 1px solid var(--hairline-strong); border-radius: 12px; background: var(--surface); }
 .sbx-broker b { font-size: var(--text-body); }
 .sbx-lock { position: absolute; right: 10px; top: 10px; width: 11px; height: 9px; border-radius: 2px; background: var(--muted); }
@@ -961,4 +985,137 @@ html.frames-overflow .hero { height: auto; min-height: var(--frame); }
 @media (max-width: 940px) {
   .ide-main { height: auto; min-height: clamp(360px, 62svh, 470px); }
   .ide-thread { flex: 1 1 0px; min-height: 160px; }
+}
+
+/* ── Fix round 1 (critics, 2026-11-02) ───────────────────────────────────────────────────────── */
+
+/* Topbar, site-side (no wicked-web edit): the Experiments tooltip (z 300) drew over its own open
+   menu (z 200) while the pointer stayed on the button; and the menu cut the studio row's line. */
+html .topbar .dropdown-wrap:has(> #projectsBtn[aria-expanded="true"])::after { opacity: 0 !important; }
+html .topbar #projectsMenu { min-width: 300px; }
+
+/* Pause / Play: both labels stacked in one cell, so the button is one width in both states and the
+   heading beside it never rewraps (a tap on a phone moved the tablist under the finger). */
+.play-toggle { justify-content: center; }
+.pt-l { display: grid; }
+.pt-l > span { grid-area: 1 / 1; }
+.pt-play { visibility: hidden; }
+.play-toggle.is-paused .pt-pause { visibility: hidden; }
+.play-toggle.is-paused .pt-play { visibility: visible; }
+.play-toggle--sm { flex-shrink: 0; gap: 6px; padding: 3px 10px 3px 8px; font-weight: var(--weight-regular); }
+.relay-btns { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Copy chips: "Copied" is wider than "Copy"; reserve it so the chip keeps one width. */
+.cta-copy-l::after, .install__copy span::after { content: 'Copied'; display: block; height: 0; overflow: hidden; visibility: hidden; }
+/* Explorer tabs: the selected tab is bold; reserve the bold width so labels never shift. */
+.ex-tab-n { display: inline-flex; flex-direction: column; }
+.ex-tab-n::after { content: attr(data-label); font-weight: var(--weight-strong); height: 0; overflow: hidden; visibility: hidden; }
+.ex-mark { color: var(--muted); }
+
+/* ── Movement: the demo keeps breathing while it is on screen (demo.js) ── */
+.ide-sess .dot--you { animation: you-breathe 2.4s ease-in-out infinite; }
+@keyframes you-breathe { 50% { box-shadow: 0 0 0 5px color-mix(in oklab, var(--you) 10%, transparent); } }
+/* still (paused or off screen): the pulses stop; a message's own entrance still plays */
+.ide.is-still .dot, .ide.is-still .pulse, .ide.is-still .ide-steps li { animation: none; }
+.ide.is-still .msg.is-live { animation: msg-in .3s var(--ease) backwards; }
+.scene.is-frozen .pulse { animation: none; }
+
+/* ── Colour: the experience amber under the demo, one status hue per frame ── */
+.amber-floor {
+  background:
+    radial-gradient(ellipse 44% 58% at 66% 60%, color-mix(in oklab, var(--amb) 30%, transparent), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 82% 6%, color-mix(in oklab, var(--amb) 12%, transparent), transparent 62%);
+}
+@media (max-width: 1199px), (max-height: 639px) {
+  .amber-floor { background: radial-gradient(ellipse 90% 34% at 50% 74%, color-mix(in oklab, var(--amb) 30%, transparent), transparent 72%); }
+}
+/* the light theme's amber is a dark ochre: it needs a stronger mix to read as warmth on a pale canvas */
+html[data-theme="light"] .amber-floor {
+  background:
+    radial-gradient(ellipse 44% 58% at 66% 60%, color-mix(in oklab, var(--amb) 34%, transparent), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 82% 6%, color-mix(in oklab, var(--amb) 16%, transparent), transparent 62%);
+}
+@media (max-width: 1199px), (max-height: 639px) {
+  html[data-theme="light"] .amber-floor { background: radial-gradient(ellipse 90% 34% at 50% 74%, color-mix(in oklab, var(--amb) 34%, transparent), transparent 72%); }
+}
+.ide {
+  border-top-color: color-mix(in oklab, var(--amb) 75%, transparent);
+  box-shadow: 0 40px 80px -50px rgba(0,0,0,.8), 0 0 0 1px color-mix(in oklab, var(--amb) 14%, transparent), 0 -18px 50px -34px color-mix(in oklab, var(--amb) 60%, transparent);
+}
+/* each frame's hue, from the brand's status and plane hues (in this brand run and ok are one green):
+   gate lavender where you decide, run green where agents work, foundation blue for what estate keeps
+   (memory and knowledge), the experience amber for studio itself (what is new, get it) */
+.why, .review { --hue: var(--you); }
+.desk, .reach { --hue: var(--run); }
+.steer { --hue: var(--plane-foundation); }
+.new, .get { --hue: var(--amb); }
+.receipt { --hue: var(--ok); }
+.kicker.beat::before { background: var(--hue, var(--you)); box-shadow: 0 0 0 3px color-mix(in oklab, var(--hue, var(--you)) 22%, transparent); }
+.why .trio-card, .steer .trio-card, .reach-card, .explorer, .news-stage, .receipt, .install--primary {
+  border-top: 2px solid color-mix(in oklab, var(--hue) 80%, transparent);
+  background-image: linear-gradient(to bottom, color-mix(in oklab, var(--hue) 12%, transparent), transparent 150px);
+}
+/* cards sit nearly opaque over the background line-art, so no glyph shows through behind text */
+.trio-card, .reach-card { background-color: color-mix(in oklab, var(--surface-2) 92%, transparent); }
+@media (min-width: 1440px) { .sec-head h2, .get-intro h2 { font-size: 36px; } }
+
+/* hero: the package name on phones (the topbar hides it below 768px); "Watch a job" points at the demo */
+.hero-pkg { display: none; }
+@media (max-width: 768px) {
+  .hero-pkg { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-mono); font-size: var(--text-code); font-weight: var(--weight-strong); color: var(--ink); }
+  .hero-pkg::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--amb); box-shadow: 0 0 0 3px color-mix(in oklab, var(--amb) 24%, transparent); }
+}
+.cta-alt { line-height: 1.5; max-width: 46ch; }
+.cta-arr { margin-left: .3em; }
+.cta-arr::before { content: '↓'; }
+@media (min-width: 1200px) and (min-height: 640px) { .cta-arr::before { content: '→'; } }
+
+/* the demo's sidebar strip: a page name that does not fit wraps onto a hidden second row, so no
+   name is cut mid-word next to the note and the Pause button */
+.ide-tabs { flex-wrap: wrap; height: 24px; align-content: flex-start; }
+.ide-tabs span { line-height: 18px; }
+/* the demo's side pane: counts never wrap, and the diff wraps so the fix is readable */
+@media (min-width: 1200px) { .ide-body { grid-template-columns: 184px minmax(0, 1fr) 256px; } }
+.file .n { white-space: nowrap; flex-shrink: 0; }
+.ide-pane .dl { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: calc(8px + 2ch); text-indent: -2ch; }
+.ide-pane .diff { overflow-x: hidden; }
+
+/* review: one agent holds the job for a distinct reviewer (it waits for you), not a failure */
+.fl-b .fl-s3 { color: var(--ok); }
+.fl-r .fl-s3 { color: var(--you); }
+.relay.is-stopped .relay-token { background: var(--you); box-shadow: 0 0 0 4px color-mix(in oklab, var(--you) 22%, transparent); }
+.receipt.is-stopped { border-color: color-mix(in oklab, var(--you) 60%, var(--hairline-strong)); }
+.relay-stop b { color: var(--you); }
+
+/* steer: the rotating suggestions share one cell */
+.dr-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+/* the ones waiting their turn keep their place untransformed (inside the slot); the one coming in
+   rises 6px into it, inside the drawer's own padding */
+.dr-rot > .dr-rule:not(.is-on) { opacity: 0; visibility: hidden; transform: none; transition: opacity .35s var(--ease), visibility 0s linear .35s; }
+.dr-rot > .dr-rule.is-on { animation: rot-in .45s var(--ease) backwards; }
+@keyframes rot-in { from { opacity: 0; transform: translateY(6px); } }
+/* while it waits for you (and rotates), the suggestion breathes in the gate hue; its 3px ring stays
+   inside the drawer's 10px padding */
+.drawer[data-state="in"]:not(.is-still):not(.is-pre) .dr-rot > .dr-rule.is-on { animation: rot-in .45s var(--ease) backwards, wait-glow 2.4s ease-in-out .45s infinite; }
+@keyframes wait-glow { 50% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--you) 18%, transparent); } }
+
+/* reach: Claude Code's line names its token exception (both lines share a cell) */
+.sbx-sees { display: grid; }
+.sbx-sees > span { grid-area: 1 / 1; }
+.sbx-s2 { visibility: hidden; }
+.sandbox[data-sub] .sbx-s1 { visibility: hidden; }
+.sandbox[data-sub] .sbx-s2 { visibility: visible; }
+.hits th { white-space: nowrap; }
+@media (max-width: 600px) { .hits-bar { width: 28%; } }
+
+/* what's new: a second, quieter line where an item needs one */
+.news-panel p.news-sub { font-size: var(--text-body); line-height: 1.5; color: var(--muted); }
+
+/* phones: the three benefits stack (no swipe), and schematic rows wrap instead of cutting words */
+@media (max-width: 600px) {
+  .ben-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; overflow: visible; scroll-snap-type: none; margin-inline: 0; padding: 0; }
+  .ben-row > .ben { flex: none; }
+  .swipe-dots { display: none; }
+  .al-row { align-items: flex-start; }
+  .al-row span { white-space: normal; overflow: visible; text-overflow: clip; }
 }

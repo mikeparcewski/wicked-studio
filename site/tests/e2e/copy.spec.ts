@@ -115,7 +115,10 @@ test.describe('the reviewed messaging', () => {
     await page.goto('/');
     await expect(page.locator('.hero .hero-fine')).toContainText('By default a different agent reviews the work.');
     await expect(page.locator('.hero .hero-fine')).toContainText('reduced assurance');
-    await expect(page.locator('.hero .agent-row li')).toHaveText(['Claude Code', 'Codex', 'Copilot', 'OpenCode', 'Pi']);
+    await expect(page.locator('.hero .agent-row li')).toHaveText(['Claude Code', 'Codex', 'GitHub Copilot', 'OpenCode', 'Pi']);
+    // the first screen says what studio is and where it runs (critic: "IDE" read as a desktop app)
+    await expect(page.locator('.hero .cta-alt')).toContainText('One command on your machine starts the wicked-crew daemon');
+    await expect(page.locator('.hero .cta-alt')).toContainText('serves studio in your browser');
     await expect(page.locator('.hero .cta-copy')).toContainText('npx wicked-crew serve');
     const why = page.locator('.why');
     // the benefits frame has a visible heading now (it was sr-only)
@@ -130,10 +133,40 @@ test.describe('the reviewed messaging', () => {
     await expect(soon).not.toContainText(/20\d\d|Q[1-4]/);
   });
 
-  test('QE acceptance names its five kinds of job', async ({ page }) => {
+  test('acceptance testing names its five kinds of job', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.review .facts')).toContainText(
-      'a feature, bug fix, migration, MCP server or editor plugin need QE acceptance',
+      'a feature, bug fix, migration, MCP server or editor plugin need acceptance testing (QE)',
+    );
+  });
+
+  test('the example receipt matches the example job: a chat build requires no QE acceptance', async ({ page }) => {
+    await page.goto('/');
+    const receipt = page.locator('.review .receipt');
+    await expect(receipt.getByRole('row', { name: /Required/ })).not.toContainText('QE');
+    await expect(receipt.getByRole('row', { name: /Ran/ })).not.toContainText('QE');
+  });
+
+  test('one agent signed in: the build runs and the job holds at review; nothing is skipped', async ({ page }) => {
+    await page.goto('/');
+    const rv = (k: number) => page.locator('.review .receipt tbody tr').nth(k).locator('.rv-one');
+    await expect(rv(1)).toHaveText('the build; then the job held at review');
+    await expect(rv(3)).toHaveText('nobody yet: no second agent');
+    await expect(rv(4)).toHaveText('nothing: the job waits');
+    const stop = page.locator('.review .relay-stop');
+    await expect(stop).toContainText('Held.');
+    await expect(stop).toContainText('Sign in a second agent, or launch it again as reduced assurance');
+    expect(await page.locator('.review .receipt').innerText()).not.toMatch(/Skipped\s*review|stopped before review/i);
+  });
+
+  test('rules are suggested by Learn, never by an agent; power mode is explained before it is named', async ({ page }) => {
+    await page.goto('/');
+    const from = page.locator('.steer [data-drawer="rule"] .dr-from');
+    await expect(from).toHaveCount(3);
+    for (const t of await from.allTextContents()) expect(t).toMatch(/^Suggested by Learn, from your /);
+    const power = page.getByRole('tabpanel', { name: 'Power mode on the job page', includeHidden: true });
+    await expect(power.locator('p').first()).toHaveText(
+      'When you launch a preset or a plan on a repository, the code-writing step runs as one agent’s checkpointed turns, and failed checks go back for rework or wait for your judgment (power mode, on by default for those launches).',
     );
   });
 });
@@ -163,11 +196,14 @@ test.describe('the reviewed messaging, details', () => {
     const N6 = 'Speech is turned into text on your machine, and the audio is never stored.';
     // the hero's "or talk to them"
     await expect(page.locator('.hero .lede')).toContainText('or talk to them');
-    await expect(page.locator('.hero .hero-voice')).toHaveText(N6);
+    await expect(page.locator('.hero .hero-voice')).toHaveText('Voice needs whisper.cpp. ' + N6);
     // the Voice mode chip
     await expect(page.locator('.desk .extras')).toContainText('Voice mode');
     await expect(page.locator('.desk .voice-note')).toContainText(N6);
-    // the Voice release item
-    await expect(page.getByRole('tabpanel', { name: 'Voice', includeHidden: true }).locator('.voice-note')).toHaveText(N6);
+    // the Voice release item carries the privacy line in its own words (COPY rev 5), and says what you can say
+    const voice = page.getByRole('tabpanel', { name: 'Voice', includeHidden: true });
+    await expect(voice).toContainText('speech becomes text on your machine');
+    await expect(voice).toContainText('the audio is never stored');
+    await expect(voice).toContainText('Nothing is sent to a job until you confirm it on screen.');
   });
 });

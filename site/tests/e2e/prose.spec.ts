@@ -21,7 +21,7 @@ test('prose does not fuse words into the following bold or code span', async ({ 
 
   const mustRead = [
     'launch it with reduced assurance, labelled everywhere',
-    'need QE acceptance before they ship',
+    'need acceptance testing (QE) before they ship',
     'Studio is a pure client of crew’s /api/v1 and /ws',
     'the published contract, wicked-crew-api-types',
     'kept by wicked-estate',
@@ -32,7 +32,7 @@ test('prose does not fuse words into the following bold or code span', async ({ 
   }
 
   // And the fused forms must never appear.
-  for (const fused of ['withreduced', 'needQE', 'crew’s/api', 'contract,wicked', 'bywicked']) {
+  for (const fused of ['withreduced', 'needacceptance', 'crew’s/api', 'contract,wicked', 'bywicked']) {
     expect(body, `found the fused form "${fused}"`).not.toContain(fused);
   }
 });

@@ -90,13 +90,18 @@ window.addEventListener(
     const target = dir > 0 ? all.find((t) => t > y) : all.slice().reverse().find((t) => t < y);
     if (target != null) window.scrollTo({ top: target, behavior: 'smooth' });
   };
+  // A keyboard scroll can report its end a frame early and stop short of a target: look once more
+  // after the page has been still for a moment (only if nothing scrolled since).
+  let lastMove = 0, again = null;
+  const recheck = () => { clearTimeout(again); again = setTimeout(() => { if (performance.now() - lastMove >= 280) settle(); }, 300); };
   window.addEventListener('scroll', () => {
     const y = window.scrollY;
     if (y !== lastY) dir = y > lastY ? 1 : -1;
     lastY = y;
-    if (!('onscrollend' in window)) { clearTimeout(timer); timer = setTimeout(settle, 180); }
+    lastMove = performance.now();
+    if (!('onscrollend' in window)) { clearTimeout(timer); timer = setTimeout(() => { settle(); recheck(); }, 180); }
   }, { passive: true });
-  if ('onscrollend' in window) window.addEventListener('scrollend', settle);
+  if ('onscrollend' in window) window.addEventListener('scrollend', () => { settle(); recheck(); });
 })();
 
 /* ── helpers ─────────────────────────────────────────────────────────────────────────────── */
@@ -124,6 +129,11 @@ function hold(el, fn) {
   el.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') { hover = false; emit(); } });
   el.addEventListener('focusin', () => { focus = true; emit(); });
   el.addEventListener('focusout', (e) => { if (!el.contains(e.relatedTarget)) { focus = false; emit(); } });
+}
+// one hold over several boxes: held while the pointer is over any of them or focus is inside one
+function holdAll(els, fn) {
+  const on = new Set();
+  els.forEach((el, k) => hold(el, (h) => { if (h) on.add(k); else on.delete(k); fn(on.size > 0); }));
 }
 function roving(list, tabs, { vertical, onMove }) {
   list.addEventListener('keydown', (e) => {
@@ -184,13 +194,12 @@ function group(section) {
   const g = { paused: false, players: [] };
   if (!btn) return g;
   if (reduced) { btn.hidden = true; return g; }
-  const label = btn.querySelector('[data-play-label]');
   const base = btn.getAttribute('aria-label') || '';
   g.set = (p) => {
     g.paused = p;
     btn.setAttribute('aria-pressed', p ? 'true' : 'false');
+    // both labels are stacked in one cell (studio.css .pt-l), so the button never changes width
     btn.classList.toggle('is-paused', p);
-    label.textContent = p ? 'Play' : 'Pause';
     btn.setAttribute('aria-label', p ? base.replace(/^Pause/, 'Play') : base);
     g.players.forEach((pl) => pl.sync());
   };
@@ -285,7 +294,9 @@ $$('[data-tour]').forEach((el) => {
   inView(el, 0.6, () => { seen = true; player.sync(); }, () => { seen = false; player.sync(); });
 });
 
-/* ── The review relay: Builder → Reviewer → back → Reviewer → You, the receipt in step ─────── */
+/* ── The review relay: Builder → Reviewer → back → Reviewer → You, the receipt in step ───────
+   It replays on its own while it is on screen (a pause of HOLD after each run), stops while the
+   pointer or focus is on the relay, the receipt or the switch, and under the frame’s Pause. */
 (() => {
   const sec = document.querySelector('[data-relay]');
   if (!sec) return;
@@ -312,13 +323,18 @@ $$('[data-tour]').forEach((el) => {
     { lit: 'r', tok: 'r', s: { b: 's2', r: 's2' }, fill: 4, arc: true },
     { lit: 'y', tok: 'y', s: { b: 's2', r: 's2', y: 's2' }, fill: 5, arc: true },
   ];
+  // one agent: the build runs, then the job holds at review for a distinct agent (it is not skipped)
   const ONE = [
     { lit: '', tok: '', s: {}, fill: 0 },
     { lit: 'b', tok: 'b', s: { b: 's1' }, fill: 1 },
-    { lit: 'r', tok: 'r', s: { b: 's1', r: 's3' }, fill: 5, stop: true },
+    { lit: 'r', tok: 'r', s: { b: 's3', r: 's3' }, fill: 5, stop: true },
   ];
   const DELAY = [400, 900, 1000, 900, 900];
-  let mode = 'two', t = null, played = false;
+  const HOLD = 5200;
+  const g = groupOf(sec);
+  let mode = 'two', t = null, loop = null, playing = false, seen = false, held = false;
+  const live = () => seen && !held && !g.paused;
+  const again = () => { clearTimeout(loop); loop = null; if (live() && !playing) loop = setTimeout(play, HOLD); };
   const apply = (st) => {
     Object.keys(rows).forEach((k) => {
       rows[k].classList.toggle('is-lit', st.lit === k);
@@ -330,16 +346,21 @@ $$('[data-tour]').forEach((el) => {
     receipt.classList.toggle('is-stopped', !!st.stop);
     trs.forEach((tr) => tr.classList.toggle('is-filled', +tr.getAttribute('data-row') <= st.fill));
   };
-  const play = () => {
-    clearTimeout(t);
+  function play() {
+    clearTimeout(t); clearTimeout(loop); loop = null;
     const seq = mode === 'two' ? TWO : ONE;
     relay.setAttribute('data-mode', mode);
     receipt.setAttribute('data-mode', mode);
     if (reduced) { apply(seq[seq.length - 1]); return; }
     let k = 0;
-    const next = () => { apply(seq[k]); if (k < seq.length - 1) { t = setTimeout(() => { k++; next(); }, DELAY[k]); } };
+    playing = true;
+    const next = () => {
+      apply(seq[k]);
+      if (k < seq.length - 1) { t = setTimeout(() => { k++; next(); }, DELAY[k]); }
+      else { playing = false; again(); }
+    };
     next();
-  };
+  }
   sw.addEventListener('click', () => {
     mode = mode === 'two' ? 'one' : 'two';
     sw.setAttribute('aria-checked', mode === 'two' ? 'true' : 'false');
@@ -348,8 +369,12 @@ $$('[data-tour]').forEach((el) => {
   replay.addEventListener('click', play);
   // The final frame is the no-JS / reduced-motion state; motion starts from the empty one.
   if (reduced) { play(); return; }
+  g.players.push({ sync: again });
+  // held over the relay, the receipt and the switch; not over Pause or Replay, so Play resumes at once
+  holdAll([relay, receipt, sw], (h) => { held = h; again(); });
   apply(TWO[0]);
-  inView(relay, 0.6, () => { if (!played) { played = true; play(); } });
+  // each time it comes on screen it plays from the top; off screen it stops after the current run
+  inView(relay, 0.6, () => { seen = true; play(); }, () => { seen = false; again(); });
 })();
 
 /* ── Rules / memory / knowledge drawers: each acts on its own sample, locally ───────────────── */
@@ -357,13 +382,37 @@ $$('[data-drawer]').forEach((card) => {
   const kind = card.getAttribute('data-drawer');
   const set = (s) => card.setAttribute('data-state', s);
   if (kind === 'rule') {
-    if (!reduced) { card.classList.add('is-pre'); inView(card, 0.6, () => card.classList.remove('is-pre')); }
+    // While the card waits for you, a new suggestion rotates into the slot every ROT ms (all three
+    // are stacked in one cell, so the card never changes size). A decision stops it; Reset resumes.
+    const ROT = 6000;
+    const rules = $$('[data-rot] > .dr-rule', card);
+    const g = groupOf(card);
+    let ri = 0, rt = null, seen = false, held = false;
+    const rotate = () => {
+      clearTimeout(rt); rt = null;
+      const go = !reduced && seen && !held && !g.paused && card.getAttribute('data-state') === 'in' && rules.length > 1;
+      card.classList.toggle('is-still', !go); // the waiting card's glow runs only while it rotates
+      if (!go) return;
+      rt = setTimeout(() => {
+        rules[ri].classList.remove('is-on');
+        ri = (ri + 1) % rules.length;
+        rules[ri].classList.add('is-on');
+        rotate();
+      }, ROT);
+    };
+    g.players.push({ sync: rotate });
+    if (!reduced) {
+      card.classList.add('is-pre');
+      hold(card, (h) => { held = h; rotate(); });
+      inView(card, 0.6, () => { card.classList.remove('is-pre'); seen = true; rotate(); }, () => { seen = false; rotate(); });
+    }
     card.addEventListener('click', (e) => {
       const b = e.target.closest('[data-dr]');
       if (!b) return;
       const a = b.getAttribute('data-dr');
       const next = a === 'approve' ? 'ok' : a === 'later' ? 'later' : 'in';
       set(next);
+      rotate();
       const target = card.querySelector(next === 'in' ? '.dr-s-in button' : `.dr-s-${next} button`);
       if (target) target.focus({ preventScroll: true });
     });
@@ -412,6 +461,7 @@ $$('[data-drawer]').forEach((card) => {
   const chips = $$('[role="radio"]', list);
   const name = document.querySelector('[data-agent-name]');
   const box = document.querySelector('.sandbox');
+  const g = groupOf(list);
   const pick = (k) => {
     chips.forEach((c, j) => {
       const on = j === k;
@@ -419,33 +469,66 @@ $$('[data-drawer]').forEach((card) => {
       c.setAttribute('aria-checked', on ? 'true' : 'false');
       c.tabIndex = on ? 0 : -1;
     });
-    name.textContent = chips[k].getAttribute('data-agent');
+    const who = chips[k].getAttribute('data-agent');
+    name.textContent = who;
+    // a Claude subscription's sign-in token is the one key a sandbox receives (both lines share a cell)
+    if (box) box.toggleAttribute('data-sub', who === 'Claude Code');
     if (!reduced && box) { box.classList.remove('is-swap', 'is-live'); void box.offsetWidth; box.classList.add('is-swap', 'is-live'); }
   };
   chips.forEach((c, k) => c.addEventListener('click', () => pick(k)));
   roving(list, chips, { vertical: true, onMove: pick });
-  if (box && !reduced) inView(box, 0.5, () => box.classList.add('is-live'), () => box.classList.remove('is-live'));
+  if (box && !reduced) {
+    g.players.push({ sync() { box.classList.toggle('is-still', g.paused); } });
+    inView(box, 0.5, () => box.classList.add('is-live'), () => box.classList.remove('is-live'));
+  }
 })();
 
-/* ── Projects: the example search types its query, then the counts climb ───────────────────── */
+/* ── Projects: the example search types its query, then the counts climb ───────────────────
+   While on screen it alternates between the example queries (a pause of HOLD after each count),
+   stops while the pointer or focus is on the card and under the frame's Pause, and starts again
+   from the first query each time it comes back on screen. */
 (() => {
   const card = document.querySelector('[data-search]');
   if (!card || reduced) return;
   const q = card.querySelector('[data-q]');
   const cells = $$('[data-n]', card);
-  const word = q.textContent;
-  let timer = null, frame = 0, run = 0; // run: a play's generation; a stale climb never touches the card
+  const bars = $$('.hits-bar i', card);
+  const cap = card.querySelector('[data-q-cap]');
+  const total = card.querySelector('[data-total]');
+  let queries = [];
+  try { queries = JSON.parse(card.querySelector('[data-queries]').getAttribute('data-queries')); } catch (e) { queries = []; }
+  if (!queries.length) queries = [{ q: q.textContent, n: cells.map((c) => +c.getAttribute('data-n')) }];
+  const HOLD = 4200;
+  const g = groupOf(card);
+  let timer = null, frame = 0, run = 0, qi = 0, loop = null, busy = false, seen = false, held = false; // run: a play's generation; a stale climb never touches the card
+  const live = () => seen && !held && !g.paused;
+  const again = () => { clearTimeout(loop); loop = null; if (live() && !busy) loop = setTimeout(() => play((qi + 1) % queries.length), HOLD); };
   const reset = () => {
     run++;
+    busy = false;
     clearInterval(timer);
+    clearTimeout(loop); loop = null;
     cancelAnimationFrame(frame);
     q.textContent = '';
     cells.forEach((c) => { c.textContent = '0'; });
     card.classList.remove('is-done', 'is-counted');
     card.classList.add('is-pre');
   };
-  const play = () => {
+  // load query k into the card: its word, its counts and bars, and its summary (hidden until counted)
+  const load = (k) => {
+    qi = k;
+    const Q = queries[k];
+    const max = Math.max(1, ...Q.n);
+    cells.forEach((c, j) => c.setAttribute('data-n', String(Q.n[j] || 0)));
+    bars.forEach((b, j) => b.style.setProperty('--w', String((Q.n[j] || 0) / max)));
+    if (cap) cap.textContent = Q.q;
+    if (total) total.textContent = String(Q.n.reduce((a, b) => a + b, 0));
+  };
+  const play = (k) => {
     reset();
+    load(k);
+    busy = true;
+    const word = queries[k].q;
     const mine = run;
     let i = 0;
     timer = setInterval(() => {
@@ -461,33 +544,35 @@ $$('[data-drawer]').forEach((card) => {
         const p = Math.min(1, (now - t0) / 700);
         cells.forEach((c) => { c.textContent = String(Math.round(p * +c.getAttribute('data-n'))); });
         if (p < 1) frame = requestAnimationFrame(climb);
-        else card.classList.add('is-counted'); // the total shows only once the rows add up to it
+        else { card.classList.add('is-counted'); busy = false; again(); } // the total shows only once the rows add up to it
       };
       frame = requestAnimationFrame(climb);
     }, 70);
   };
+  g.players.push({ sync: again });
+  hold(card, (h) => { held = h; again(); });
   reset();
-  inView(card, 0.6, play, reset);
+  load(0);
+  inView(card, 0.6, () => { seen = true; play(0); }, () => { seen = false; reset(); load(0); });
 })();
 
-/* ── Get it: the recommended command types itself in once ───────────────────────────────── */
+/* ── Get it: the recommended command types itself in each time it comes on screen ─────────── */
 (() => {
   const code = document.querySelector('[data-typed]');
   if (!code || reduced) return;
   const full = code.getAttribute('data-typed');
-  let done = false;
+  let t = null;
   inView(code, 0.9, () => {
-    if (done) return;
-    done = true;
+    clearInterval(t);
     let i = 0;
     code.textContent = '';
     code.classList.add('is-typing');
-    const t = setInterval(() => {
+    t = setInterval(() => {
       i++;
       code.textContent = full.slice(0, i);
-      if (i >= full.length) { clearInterval(t); code.classList.remove('is-typing'); }
+      if (i >= full.length) { clearInterval(t); t = null; code.classList.remove('is-typing'); }
     }, 45);
-  });
+  }, () => { clearInterval(t); t = null; code.textContent = full; code.classList.remove('is-typing'); });
 })();
 
 /* ── Phones: swipe rows get dots and become keyboard-scrollable ────────────────────────── */

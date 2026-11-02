@@ -72,7 +72,8 @@ test('review: the relay fills the receipt; one agent signed in stops the job wit
   await expect(receipt.locator('.receipt-foot')).toBeHidden();
   await expect(receipt.locator('.rv-one').nth(3)).toBeVisible();
   await expect(receipt.locator('.rv-two').nth(3)).toBeHidden();
-  await expect(receipt.getByRole('row', { name: /Reviewed by/ })).toHaveAccessibleName(/nobody: no second agent/);
+  await expect(receipt.getByRole('row', { name: /Reviewed by/ })).toHaveAccessibleName(/nobody yet: no second agent/);
+  await expect(receipt.locator('.relay-stop')).toContainText('Held.');
   // both states have the same rows and the same height
   expect(await box(receipt)).toEqual(h0);
   await sw.click();
@@ -156,18 +157,30 @@ test('agents: picking one puts it in the sandbox; the search example counts its 
   await page.goto('/');
   const reach = page.locator('.reach');
   await bringIntoView(reach);
+  // stop the alternating search so the first query's counts stay put for the asserts below
+  await frozen(page, '.reach');
   const group = reach.getByRole('radiogroup', { name: 'Pick an agent to see its sandbox' });
+  // Codex is the default pick (Claude Code is the one with a token exception)
+  await expect(group.getByRole('radio', { name: 'Codex' })).toHaveAttribute('aria-checked', 'true');
+  const sbx = reach.locator('.sandbox');
+  const s0 = await box(sbx);
+  await group.getByRole('radio', { name: 'Claude Code' }).click();
+  await expect(sbx.locator('.sbx-s2')).toBeVisible();
+  await expect(sbx.locator('.sbx-s2')).toHaveText('sees placeholders, except a subscription’s sign-in token');
+  await expect(sbx.locator('.sbx-s1')).toBeHidden();
+  expect(await box(sbx)).toEqual(s0);
   await group.getByRole('radio', { name: 'Codex' }).click();
+  await expect(sbx.locator('.sbx-s1')).toBeVisible();
   await expect(group.getByRole('radio', { name: 'Codex' })).toHaveAttribute('aria-checked', 'true');
   await expect(reach.locator('[data-agent-name]')).toHaveText('Codex');
   await page.keyboard.press('ArrowRight');
-  await expect(group.getByRole('radio', { name: 'Copilot' })).toBeFocused();
-  await expect(reach.locator('[data-agent-name]')).toHaveText('Copilot');
+  await expect(group.getByRole('radio', { name: 'GitHub Copilot' })).toBeFocused();
+  await expect(reach.locator('[data-agent-name]')).toHaveText('GitHub Copilot');
   // radios take all four arrows
   await page.keyboard.press('ArrowDown');
   await expect(group.getByRole('radio', { name: 'OpenCode' })).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('ArrowUp');
-  await expect(group.getByRole('radio', { name: 'Copilot' })).toBeFocused();
+  await expect(group.getByRole('radio', { name: 'GitHub Copilot' })).toBeFocused();
   await expect(reach.locator('.hits [data-n="4"]')).toHaveText('4', { timeout: 6000 });
   await expect(reach.locator('.hits [data-n="3"]')).toHaveText('3');
   await expect(reach.locator('.hits caption')).toContainText('8 hits');
@@ -416,17 +429,113 @@ test('the side panel is a named tabpanel for the selected tab', async ({ page })
   await expect(ide.getByRole('tab', { name: 'Receipt' })).toHaveAttribute('aria-controls', 'ide-pane-body');
 });
 
-test('the automatic part of the demo stops moving within five seconds of the prompt starting to type', async ({ page }) => {
-  // WCAG 2.2.2: motion that starts on its own and runs past five seconds needs a pause control.
+test('the demo keeps moving on its own, and its Pause stills it (WCAG 2.2.2)', async ({ page }) => {
+  // Motion that starts on its own and runs past five seconds needs a pause control: the title bar's.
   await page.goto('/');
   const ide = page.locator('[data-ide]');
-  await expect(ide).toHaveClass(/is-typing/, { timeout: 6000 });
-  const t0 = Date.now();
-  await expect(ide.getByRole('button', { name: 'Approve plan' })).toBeVisible({ timeout: 6000 });
-  await page.waitForTimeout(Math.max(0, 5000 - (Date.now() - t0)));
-  const running = await ide.evaluate((el) => el.getAnimations({ subtree: true }).filter((a) => a.playState === 'running').length);
-  expect(running).toBe(0);
-  await expect(ide).not.toHaveClass(/is-typing/);
+  await expect(ide.getByRole('button', { name: 'Approve plan' })).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(5200);
+  const running = () => ide.evaluate((el) => el.getAnimations({ subtree: true }).filter((a) => a.playState === 'running').length);
+  expect(await running(), 'the pulses still run after five seconds').toBeGreaterThan(0);
+  const pause = ide.locator('[data-demo-pause]');
+  await expect(pause).toHaveAccessibleName("Pause the demo's motion");
+  const w0 = await box(pause);
+  await pause.click();
+  await expect(ide.getByRole('button', { name: "Play the demo's motion" })).toHaveAttribute('aria-pressed', 'true');
+  await expect(ide).toHaveClass(/is-still/);
+  await expect.poll(running).toBe(0);
+  expect((await box(pause)).w, 'Pause and Play are one width').toBe(w0.w);
+  // the background job waits too: its status does not move while paused
+  const node = ide.locator('[data-id="node"]');
+  const n0 = await node.getAttribute('aria-label');
+  await page.waitForTimeout(4500);
+  expect(await node.getAttribute('aria-label')).toBe(n0);
+  await ide.getByRole('button', { name: "Play the demo's motion" }).click();
+  await expect(ide).not.toHaveClass(/is-still/);
+  await expect(node).toHaveAttribute('aria-label', 'Move CI to Node 22, Done', { timeout: 12_000 });
+});
+
+test('the background job finishes by itself while the demo is on screen', async ({ page }) => {
+  await page.goto('/');
+  const node = page.locator('[data-ide] [data-id="node"]');
+  await expect(node).toHaveAttribute('aria-label', 'Move CI to Node 22, GitHub Copilot working');
+  await expect(node).toHaveAttribute('aria-label', 'Move CI to Node 22, Done', { timeout: 14_000 });
+});
+
+test('every Pause button is one width as Pause and as Play', async ({ page }) => {
+  await page.goto('/');
+  for (const sel of ['.why', '.desk', '.review', '.steer', '.reach', '.new']) {
+    const btn = page.locator(sel).locator('[data-play-toggle]');
+    await bringIntoView(btn);
+    const w0 = (await box(btn)).w;
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+    await expect(btn).toHaveAccessibleName(/^Play /);
+    expect((await box(btn)).w, sel).toBe(w0);
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'false');
+  }
+});
+
+test('the relay replays on its own while it is on screen, and Pause stops the replays', async ({ page }) => {
+  await page.goto('/');
+  const sec = page.locator('.review');
+  await sec.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.mouse.move(5, 690);
+  const receipt = sec.locator('.receipt');
+  await expect(receipt.locator('tr.is-filled')).toHaveCount(5, { timeout: 10_000 });
+  // after its pause the run starts again from the empty receipt
+  await expect(receipt.locator('tr.is-filled')).toHaveCount(0, { timeout: 9000 });
+  await expect(receipt.locator('tr.is-filled')).toHaveCount(5, { timeout: 10_000 });
+  await sec.getByRole('button', { name: 'Pause the replays' }).click();
+  await page.mouse.move(5, 690);
+  await page.waitForTimeout(6500);
+  await expect(receipt.locator('tr.is-filled')).toHaveCount(5);
+});
+
+test('the Rules card rotates its suggestions in one cell until you decide', async ({ page }) => {
+  await page.goto('/');
+  const steer = page.locator('.steer');
+  await steer.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.mouse.move(5, 690);
+  const rule = steer.locator('[data-drawer="rule"]');
+  const shown = rule.locator('.dr-rule.is-on b');
+  const slot = rule.locator('.dr-slot');
+  const h0 = await box(slot);
+  await expect(shown).toHaveText('Public routes carry a rate limit');
+  await expect(shown).toHaveText('Limits key on the API key', { timeout: 9000 });
+  // one suggestion is exposed at a time; the others keep their space but are hidden
+  await expect(rule.locator('.dr-rule:visible')).toHaveCount(1);
+  expect(await box(slot)).toEqual(h0);
+  await rule.getByRole('button', { name: 'Approve' }).click();
+  await expect(rule).toHaveAttribute('data-state', 'ok');
+  await page.mouse.move(5, 690);
+  await page.waitForTimeout(6800);
+  await expect(shown).toHaveText('Limits key on the API key');
+});
+
+test('the example search alternates its query while on screen', async ({ page }) => {
+  await page.goto('/');
+  const reach = page.locator('.reach');
+  await reach.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.mouse.move(5, 690);
+  const cap = reach.locator('.hits caption');
+  await expect(cap).toHaveText('register across one project: 8 hits', { timeout: 6000 });
+  await expect(reach.locator('.reach-card[data-search]')).toHaveClass(/is-counted/);
+  await expect(cap).toHaveText('rateLimit across one project: 6 hits', { timeout: 9000 });
+  await expect(reach.locator('.reach-card[data-search]')).toHaveClass(/is-counted/, { timeout: 4000 });
+  await expect(reach.locator('.hits-n')).toHaveText(['2', '3', '1']);
+});
+
+test('opening the Experiments menu with the mouse hides the button tooltip over it', async ({ page }) => {
+  await page.goto('/');
+  const btn = page.locator('#projectsBtn');
+  await btn.hover();
+  const tipOpacity = () => page.locator('.topbar .dropdown-wrap[data-tip]').evaluate((el) => getComputedStyle(el, '::after').opacity);
+  await expect.poll(tipOpacity).toBe('1');
+  await btn.click();
+  await expect(page.locator('#projectsMenu')).toBeVisible();
+  await expect.poll(tipOpacity).toBe('0');
 });
 
 test.describe('Watch a job on a phone', () => {

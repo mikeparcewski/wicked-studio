@@ -2,6 +2,11 @@
    Scripted, not live: it never calls a daemon. Under prefers-reduced-motion there are no timers and
    no typing: every step lands its outcome at once.
 
+   Motion: while the demo is on screen, a background job (Move CI to Node 22) runs to done on its
+   own, and the status dots and the card waiting on you pulse. The Pause button in the title bar
+   (and leaving the screen) stills all of it: the background job stops between steps and the
+   pulses stop (studio.css .ide.is-still). Your own decisions always play out.
+
    Keyboard: the thread is re-rendered with innerHTML, so a decision would drop focus to <body>.
    Every render that removes the focused control hands focus to the newest decision card's first
    action, or to the thread itself (tabindex=-1). The rail and the side-panel tabs are tablists with
@@ -56,17 +61,30 @@
         { k: 'agent', who: 'Codex', t: 'Found it: the test reads the real clock, so it fails whenever a run crosses midnight UTC.' },
         { k: 'ask', who: 'Codex', q: 'Freeze the clock in the test, or pass a clock into the checkout service?', opts: ['Freeze it in the test', 'Pass a clock in'], ans: null }
       ], files: [], openFile: 0, receipt: null },
-      node: { title: 'Move CI to Node 22', short: 'Node 22', who: 'Copilot', state: 'done', steps: 5, msgs: [
+      node: { title: 'Move CI to Node 22', short: 'Node 22', who: 'GitHub Copilot', state: 'done', steps: 5, msgs: [
         { k: 'user', t: 'Move CI and the engines field to Node 22.' },
-        { k: 'agent', who: 'Copilot', t: 'Updated the CI matrix and the engines field. Nothing else needed changing.' },
-        { k: 'agent', who: 'Copilot', done: true, t: 'Done. Tests pass (212), and claude reviewed and approved it. Pull request #9 is open.', chips: ['Pull request #9', 'Changes', 'Evidence'] }
+        { k: 'agent', who: 'GitHub Copilot', t: 'Updated the CI matrix and the engines field. Nothing else needed changing.' },
+        { k: 'agent', who: 'GitHub Copilot', done: true, t: 'Done. Tests pass (212), and claude reviewed and approved it. Pull request #9 is open.', chips: ['Pull request #9', 'Changes', 'Evidence'] }
       ], files: [
         { path: '.github/workflows/ci.yml', add: 1, del: 1, diff: [['-', '        node: [20]'], ['+', '        node: [22]']] },
         { path: 'package.json', add: 1, del: 1, diff: [['-', '    "node": ">=20"'], ['+', '    "node": ">=22"']] }
-      ], openFile: 0, receipt: { built: 'Copilot', reviewed: 'Claude Code', tests: '212 pass', decision: 'approved by the reviewer' } }
+      ], openFile: 0, receipt: { built: 'GitHub Copilot', reviewed: 'Claude Code', tests: '212 pass', decision: 'approved by the reviewer' } }
     };
   }
   var S = fresh();
+  // The background job: under motion it starts at its Test step and finishes by itself. The final
+  // message is kept aside and posted at the end; under reduced motion it is done from the start.
+  var NODE_DONE = S.node.msgs[2], NODE_RECEIPT = S.node.receipt;
+  if (!reduced) {
+    S.node.state = 'run'; S.node.steps = 3;
+    S.node.msgs = S.node.msgs.slice(0, 2).concat([{ k: 'working', t: 'Working on Test…' }]);
+    S.node.receipt = { built: 'GitHub Copilot', reviewed: 'Claude Code' };
+  }
+  var BG = [
+    { ms: 4000, go: function () { var n = S.node; n.receipt.tests = '212 pass'; push('node', { k: 'event', t: 'Tests pass (212).' }); n.steps = 4; work('node', 'Working on Deliver…'); } },
+    { ms: 4000, go: function () { var n = S.node; n.state = 'done'; n.steps = 5; n.receipt = NODE_RECEIPT; push('node', NODE_DONE); } }
+  ];
+  var bgAt = 0, bgTimer = null, paused = false, onScreen = false;
   var ORDER = ['rate', 'flaky', 'node'];
   var cur = 'rate';
   var pane = 'changes';
@@ -76,6 +94,26 @@
   var lastNeeds = -1;
 
   function later(ms, fn) { if (reduced) { fn(); return; } timers.push(setTimeout(fn, ms)); }
+  // still = paused or off screen: the background job waits between steps, and the pulses stop
+  function bgSync() {
+    var still = paused || !onScreen;
+    root.classList.toggle('is-still', still);
+    if (still) { clearTimeout(bgTimer); bgTimer = null; return; }
+    if (bgTimer || bgAt >= BG.length || reduced) return;
+    bgTimer = setTimeout(function () { bgTimer = null; BG[bgAt++].go(); bgSync(); }, BG[bgAt].ms);
+  }
+  var pauseBtn = root.querySelector('[data-demo-pause]');
+  if (pauseBtn) {
+    var pauseName = pauseBtn.getAttribute('aria-label') || '';
+    if (reduced) pauseBtn.hidden = true;
+    pauseBtn.addEventListener('click', function () {
+      paused = !paused;
+      pauseBtn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+      pauseBtn.classList.toggle('is-paused', paused);
+      pauseBtn.setAttribute('aria-label', paused ? pauseName.replace(/^Pause/, 'Play') : pauseName);
+      bgSync();
+    });
+  }
   function clearTimers() { timers.forEach(clearTimeout); timers = []; stopTyping(); }
   function focusQuiet(el) { if (!el) return; try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } }
 
@@ -431,5 +469,9 @@
       if (es.some(function (x) { return x.isIntersecting; })) { io.disconnect(); setTimeout(autoStart, 700); }
     }, { threshold: 0.25 });
     io.observe(root);
-  } else { autoStart(); }
+    new IntersectionObserver(function (es) {
+      es.forEach(function (x) { onScreen = x.isIntersecting; });
+      bgSync();
+    }, { threshold: 0.1 }).observe(root);
+  } else { onScreen = true; autoStart(); bgSync(); }
 })();
