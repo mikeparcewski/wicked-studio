@@ -16,7 +16,7 @@
 .wk-proposal-chip--struck { color: var(--ink-muted); background: transparent; }
 .wk-proposal-chip--struck s { text-decoration-thickness: 1px; }
 .wk-proposal-chip-why { white-space: normal; }
-.wk-proposal-blocked, .wk-proposal-stub, .wk-proposal-note, .wk-proposal-error { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; font-size: var(--text-sm); line-height: 1.45; }
+.wk-proposal-blocked, .wk-proposal-stub, .wk-proposal-note, .wk-proposal-error { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; font-size: var(--text-sm); line-height: 1.45; overflow-wrap: anywhere; }
 .wk-proposal-blocked { background: color-mix(in oklab, var(--status-gate) 14%, transparent); color: var(--ink-body); }
 .wk-proposal-blocked b { color: var(--ink-high); }
 .wk-proposal-stub { background: var(--surface-base); color: var(--ink-muted); }
@@ -34,3 +34,5 @@
   .wk-proposal .wk-ask-opts { grid-template-columns: minmax(0, 1fr); }
 }
 .wk-proposal .wk-ask-record-meta { color: var(--ink-muted); }
+/* Only the recommended option carries the "Recommended" badge: the others need no room for it. */
+.wk-proposal .wk-ask-opt:not([data-ask-option="go"]) .wk-ask-opt-label { padding-right: 0; }

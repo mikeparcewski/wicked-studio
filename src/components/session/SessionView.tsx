@@ -309,8 +309,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     const folded = foldChatProposals(source);
     // Only THIS chat's earlier cards stand in while its kept history loads (never another chat's).
     const held = lastEntries.current?.chatId === ref.chatId ? lastEntries.current.entries : [];
-    return reconcileProposals(ref.chatId, waitingForKept && folded.length === 0 ? held : folded);
-  }, [proposalsOn, ref, keptChat, kept, messages, waitingForKept]);
+    // While the read is pending, or after it failed, this chat's cards stay as they were (beside the error and Retry).
+    return reconcileProposals(ref.chatId, (waitingForKept || keptError !== null) && folded.length === 0 ? held : folded);
+  }, [proposalsOn, ref, keptChat, kept, messages, waitingForKept, keptError]);
   useEffect(() => { if (ref.kind === 'chat') lastEntries.current = { chatId: ref.chatId, entries: proposalEntries }; }, [ref, proposalEntries]);
   // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
   // live run here is NOT what Send reaches (it starts a separate Ask), and the composer says so.

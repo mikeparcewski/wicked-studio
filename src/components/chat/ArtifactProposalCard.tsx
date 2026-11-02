@@ -12,6 +12,8 @@ import {
   proposalRefusal,
   proposalResultWords,
   proposalTimeWords,
+  isProposalView,
+  shownProposal,
   type ProposalEntry,
 } from '../../board/artifactProposal.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
@@ -41,40 +43,42 @@ const terminal = (s: ChatProposalView['state']): boolean => s === 'decided' || s
 
 export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged }: ArtifactProposalCardProps): React.ReactElement {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A refusal's words, and whether its own view settled the card (only then does it stay beside a settled card: a stale
+  // refusal never hangs under an answer another tab gave meanwhile).
+  const [error, setError] = useState<{ words: string; settles: boolean } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [details, setDetails] = useState(false);
   // The daemon's answer to THIS card's request, shown at once while the re-read catches up: a settled one stays (a
   // stale read never reopens it); an open one (a refusal's fresh facts: the document moved) stands until the next read
   // of the chat arrives, which carries the same or newer facts.
   const [answered, setAnswered] = useState<{ view: ProposalEntry; against: ProposalEntry } | null>(null);
-  const view: ProposalEntry = answered !== null && !terminal(entry.state) && (terminal(answered.view.state) || answered.against === entry) ? answered.view : entry;
-  const p = view.proposal;
+  // Compared by content, not identity: a re-read that brings the same (older) facts keeps the refusal's newer ones.
+  const same = (a: ProposalEntry, b: ProposalEntry): boolean => a.state === b.state && JSON.stringify(shownProposal(a)) === JSON.stringify(shownProposal(b));
+  const view: ProposalEntry = answered !== null && !terminal(entry.state) && (terminal(answered.view.state) || same(answered.against, entry)) ? answered.view : entry;
+  const p = shownProposal(view);
   const open = view.state === 'open';
   const detailsId = useId();
-  // A card that settles (here, or by another tab's answer) drops what it said while it was open.
-  const settledNow = terminal(view.state);
+  // A card that settles drops the note it showed while it was open.
   useEffect(() => {
     if (!open) setNote(null);
-    if (settledNow) setError(null);
-  }, [open, settledNow]);
+  }, [open]);
 
   const decide = (decision: 'go' | 'not_now'): void => {
     setBusy(true);
     setError(null);
     setNote(null);
     const keep = (v: ChatProposalView): void => {
-      const next: ProposalEntry = { ...entry, ...v };
+      // Crew's view replaces the proposal (with what was accepted, as crew answers it), never the card's place.
+      const next: ProposalEntry = { pid: entry.pid, turnId: entry.turnId, at: entry.at, ...v };
       if (terminal(v.state)) noteSettled(chatId, next);
       setAnswered({ view: next, against: entry });
     };
     api.decideChatProposal(chatId, entry.pid, { decision })
-      .then((r) => keep(r.view))
+      .then((r) => { if (isProposalView(r.view)) keep(r.view); })
       .catch((err: unknown) => {
         const refusal = proposalRefusal(err);
         if (refusal.view !== null) keep(refusal.view);
-        // Set after: a settled view clears an earlier error, never this one.
-        setTimeout(() => setError(refusal.words), 0);
+        setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
       })
       .finally(() => {
         setBusy(false);
@@ -149,7 +153,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
         </>
       )}
       {open && note !== null && <p data-testid="artifact-proposal-note" role="status" className="wk-proposal-note">{note}</p>}
-      {error !== null && view.state !== 'superseded' && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error}</p>}
+      {error !== null && (!terminal(view.state) || (error.settles && view.state !== 'superseded')) && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error.words}</p>}
     </section>
   );
 }

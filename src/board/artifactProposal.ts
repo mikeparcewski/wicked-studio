@@ -20,6 +20,9 @@ export interface ProposalEntry extends ChatProposalView {
   turnId: string;
   /** When crew first recorded it (daemon millis): the card sits there in the thread. */
   at: number;
+  /** What a Go accepted (edits applied), kept beside the proposal as crew keeps it: the card shows it while accepting
+   *  and once started, and the proposal as recorded otherwise (crew's `viewOf`). */
+  accepted?: ArtifactProposal;
 }
 
 const KINDS: ReadonlySet<string> = new Set(['proposal', 'proposal_accepting', 'proposal_decided']);
@@ -65,9 +68,12 @@ export function isProposalRecord(r: unknown): r is ChatProposalRecord {
   return typeof r['pid'] === 'string' && (r['decision'] === 'go' || r['decision'] === 'not_now') && isResult(r['result']);
 }
 
-/** A view a refusal carried, when it is one the card can draw; else `null`. */
+/** A view crew answered with (a decision, or a refusal's), when it is one the card can draw; else `null`. */
 export function isProposalView(v: unknown): v is ChatProposalView {
-  return isObj(v) && isArtifactProposal(v['proposal']) && ['open', 'accepting', 'decided', 'superseded'].includes(String(v['state']));
+  return isObj(v) && isArtifactProposal(v['proposal']) && ['open', 'accepting', 'decided', 'superseded'].includes(String(v['state']))
+    && (v['decision'] === undefined || v['decision'] === 'go' || v['decision'] === 'not_now')
+    && (v['result'] === undefined || isResult(v['result']))
+    && (v['decidedAt'] === undefined || typeof v['decidedAt'] === 'number');
 }
 
 /**
@@ -95,7 +101,7 @@ export function foldChatProposals(records: readonly unknown[]): ProposalEntry[] 
       const v = byPid.get(r.pid);
       if (v === undefined || v.state === 'decided') continue;
       v.state = 'accepting';
-      v.proposal = r.resolution;
+      v.accepted = r.resolution;
     } else {
       const v = byPid.get(r.pid);
       if (v === undefined || v.state === 'decided') continue;
@@ -220,6 +226,11 @@ export function proposalAsk(e: ProposalEntry, o: { stub: boolean }): Ask {
     answeredBy: 'person',
     record: 'You chose: {label}',
   };
+}
+
+/** The facts the card draws: what was accepted while accepting and once started; the proposal as recorded otherwise. */
+export function shownProposal(e: ProposalEntry): ArtifactProposal {
+  return e.accepted !== undefined && (e.state === 'accepting' || (e.state === 'decided' && e.decision === 'go')) ? e.accepted : e.proposal;
 }
 
 /** The one plain line an answered (or replaced, or interrupted) card collapses to; `null` while it is open. */

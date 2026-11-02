@@ -21,7 +21,7 @@ const { useGateStore } = await import('../src/store/gates.js');
 const { useSheets } = await import('../src/store/sheets.js');
 const { makeUnit, makeView } = await import('./factories.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
-const { foldChatProposals, proposalAsk, changeRoute, proposalRecordLine, resetSettledProposals, isProposalRecord } = await import('../src/board/artifactProposal.js');
+const { foldChatProposals, proposalAsk, changeRoute, proposalRecordLine, resetSettledProposals, isProposalRecord, isProposalView, shownProposal } = await import('../src/board/artifactProposal.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 
 const T0 = 1_700_000_000_000;
@@ -58,9 +58,11 @@ const TURN = [
 
 let chatBody: Record<string, unknown> = {};
 const posts: Array<{ path: string; body: unknown }> = [];
-let decideAnswer: () => Response = () => new Response('{}', { status: 500 });
+let decideAnswer: () => Response | Promise<Response> = () => new Response('{}', { status: 500 });
 /** `GET /chats/:id/messages` (an ended chat's kept history): its body, or an error status. */
 let keptBody: Record<string, unknown> | number = 404;
+/** How many times the page read the chat (`GET /chats/:id` and `/messages`). */
+let chatReads = 0;
 
 function ok(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -69,6 +71,7 @@ function ok(body: unknown): Response {
 beforeEach(() => {
   posts.length = 0;
   keptBody = 404;
+  chatReads = 0;
   resetSettledProposals();
   chatBody = { chatId: 'chat-ask', seats: ['claude'], scope: { kind: 'none' }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() }], path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: null, helpers: [], stepId: 'answer-1' } };
   useCapabilities.setState({ loaded: true, runChatId: true, askPath: true, chatProposals: true, chatArtifactsStub: false, chatList: true });
@@ -83,9 +86,10 @@ beforeEach(() => {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
     if (init?.method === 'POST') {
       posts.push({ path, body: JSON.parse(String(init.body)) });
-      return Promise.resolve(path.includes('/proposals/') ? decideAnswer() : ok({}));
+      return path.includes('/proposals/') ? Promise.resolve(decideAnswer()) : Promise.resolve(ok({}));
     }
     if (path.includes('/considered')) return Promise.resolve(new Response('{}', { status: 404 }));
+    if (path.startsWith('/chats/')) chatReads += 1;
     if (path.startsWith('/chats/') && path.endsWith('/messages')) {
       if (keptBody === -1) return new Promise<Response>(() => undefined); // a read still in flight
       return Promise.resolve(typeof keptBody === 'number' ? new Response(JSON.stringify({ error: 'read failed' }), { status: keptBody }) : ok(keptBody));
@@ -301,14 +305,32 @@ describe('the card in the chat thread', () => {
     expect(screen.getByTestId('artifact-proposal').querySelector('[data-ask-option="go"]')?.textContent).toContain('Records your click; nothing starts');
   });
 
-  it('the test configuration says Go starts nothing; a chatProposal frame re-reads the chat', async () => {
+  it('the test configuration says Go starts nothing; a chatProposal frame re-reads the chat and the card follows', async () => {
     useCapabilities.setState({ chatArtifactsStub: true });
     page();
     await screen.findByTestId('artifact-proposal');
     expect(text('artifact-proposal-stub')).toBe('Test configuration: Make it records your click and starts nothing.');
-    const before = useAskThreadStore.getState().replySeq['chat-ask'] ?? 0;
+    // Another tab answered: the transcript now holds the decision, and its frame arrives here.
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: T0 + 2000, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'local', decision: 'not_now', result: null }] };
+    const reads = chatReads;
     act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
-    expect(useAskThreadStore.getState().replySeq['chat-ask']).toBe(before + 1);
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));
+    expect(chatReads).toBeGreaterThan(reads);
+    expect(text('artifact-proposal-record')).toBe('You chose: Not now');
+  });
+
+  it('an interrupted Go later declined shows the proposal as recorded; a started one shows what was accepted', () => {
+    const edited = proposal({ brief: 'EDITED' });
+    const base = [
+      { at: 1, turnId: 't1', kind: 'proposal', proposal: proposal() },
+      { at: 2, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'l', edits: { brief: 'EDITED' }, resolution: edited, identity: { artifactRef: null, runId: 'r' } },
+    ];
+    const declined = foldChatProposals([...base, { at: 3, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'l', decision: 'not_now', result: null }])[0]!;
+    expect(shownProposal(declined).brief).toBe('what changed');
+    const started = foldChatProposals([...base, { at: 3, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'l', decision: 'go', result: { runId: 'r', artifactRef: null, adopted: false, stub: true } }])[0]!;
+    expect(shownProposal(started).brief).toBe('EDITED');
+    // A malformed decided view (a non-string run id) is not drawn.
+    expect(isProposalView({ proposal: proposal(), state: 'decided', decision: 'go', result: { runId: 42, stub: false } })).toBe(false);
   });
 
   it('a refusal’s fresh facts show at once (the document moved): the card is never left on what crew replaced', async () => {
@@ -317,26 +339,35 @@ describe('the card in the chat thread', () => {
     page();
     await screen.findByTestId('artifact-proposal-target');
     expect(text('artifact-proposal-target')).toBe('ChangesDeck · v4');
+    const reads = chatReads;
     fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
-    // The re-read (still the old record here) has not landed the new facts: the refusal's view is shown meanwhile.
-    await waitFor(() => expect(text('artifact-proposal-target')).toBe('ChangesDeck · v5'));
     await waitFor(() => expect(screen.getByTestId('artifact-proposal-error').textContent).toMatch(/now v5/));
+    // The re-read the answer triggers lands (still the OLDER record here): the refusal's newer facts stay.
+    await waitFor(() => expect(chatReads).toBeGreaterThan(reads));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(text('artifact-proposal-target')).toBe('ChangesDeck · v5');
   });
 
   it('an ended chat’s cards come from its kept history; a failed read says so with Retry; nothing leaks between chats', async () => {
     const CLOSED = 'chat-closed';
-    const closedRun = makeView({ id: 'r-closed', status: 'completed', problem: 'x', chat_id: CLOSED, created_at: T0 / 1000 } as never, []);
     chatBody = { chatId: CLOSED, seats: [], scope: null, messages: [] };
     keptBody = 503;
-    const first = page(() => {}, [closedRun], CLOSED);
+    // No runs: the page would say "nothing here" — it does not while the read failed (it says the read failed).
+    page(() => {}, [], CLOSED);
     await screen.findByTestId('artifact-proposals-read-error');
     expect(screen.queryByTestId('artifact-proposal')).toBeNull();
-    first.unmount();
+    expect(screen.queryByTestId('session-missing')).toBeNull();
     keptBody = { chat: { id: CLOSED }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal({ pid: `${CLOSED}:t1`, chatId: CLOSED }) }], attachments: [] };
-    page(() => {}, [closedRun], CLOSED);
+    fireEvent.click(screen.getByTestId('artifact-proposals-read-error').querySelector('button')!);
     const card = await screen.findByTestId('artifact-proposal');
     expect(card.getAttribute('data-pid')).toBe(`${CLOSED}:t1`);
+    expect(screen.queryByTestId('artifact-proposals-read-error')).toBeNull();
     expect(screen.queryByTestId('session-missing')).toBeNull();
+    // A later read that fails keeps the cards shown beside the error.
+    keptBody = 503;
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: CLOSED, turn_id: 't1', record: {} } as never));
+    await screen.findByTestId('artifact-proposals-read-error');
+    expect(screen.getByTestId('artifact-proposal').getAttribute('data-pid')).toBe(`${CLOSED}:t1`);
     // Another chat's cards never stand in for this one's while its kept history loads.
     cleanup();
     chatBody = { chatId: 'chat-ask', seats: ['claude'], scope: { kind: 'none' }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() }], path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: null, helpers: [], stepId: 'answer-1' } };
@@ -350,6 +381,23 @@ describe('the card in the chat thread', () => {
     // Malformed records (no `time`, a null source) are skipped, never crash the thread.
     expect(isProposalRecord({ at: 1, turnId: 't9', kind: 'proposal', proposal: { ...proposal(), time: undefined } })).toBe(false);
     expect(isProposalRecord({ at: 1, turnId: 't9', kind: 'proposal', proposal: { ...proposal(), sources: [null] } })).toBe(false);
+  });
+
+  it('a refusal that arrives after another tab settled the card leaves no stale error under the answer', async () => {
+    let release!: () => void;
+    decideAnswer = () => new Promise<Response>((res) => {
+      release = () => res(new Response(JSON.stringify({ code: 'chat_busy', error: 'This chat already has a job running.', view: { proposal: proposal(), state: 'open' } }), { status: 409, headers: { 'content-type': 'application/json' } }));
+    });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    // Meanwhile another tab answered Not now: the frame re-reads the chat first.
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: T0 + 2000, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'local', decision: 'not_now', result: null }] };
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));
+    await act(async () => { release(); await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided');
+    expect(screen.queryByTestId('artifact-proposal-error')).toBeNull();
   });
 
   it('a daemon without the capability draws no card', async () => {
