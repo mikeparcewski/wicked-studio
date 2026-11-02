@@ -286,6 +286,13 @@ export class EditorHost {
   private torn = false;
   /** The write request whose timeout line the host is showing, while no later line replaced it (codex r5). */
   private timeoutLine: string | null = null;
+  /** Write requests accepted from the plugin and not yet answered. */
+  private readonly writesInFlight = new Set<Promise<unknown>>();
+
+  /** Wait for every write request accepted so far to be answered (and its written line said). A few rounds at most. */
+  async writesSettled(): Promise<void> {
+    for (let round = 0; round < 4 && this.writesInFlight.size > 0; round += 1) await Promise.allSettled([...this.writesInFlight]);
+  }
   private loads = 0;
   private readyTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -503,7 +510,15 @@ export class EditorHost {
       }
       this.post(refuse(id, 'timeout', `no answer in ${Math.round(limitMs / 1000)} s`));
     }, limitMs);
-    this.handleRequest(msg.type, msg.payload)
+    const work = this.handleRequest(msg.type, msg.payload);
+    // DES-CHAT-ARTIFACTS-001 §5.1: a write is in flight from the moment it is accepted (before its inventory read), so
+    // a chat message sent right after a hand edit waits for it (`writesSettled`).
+    if (isWrite || msg.type === 'version.fork') {
+      this.writesInFlight.add(work);
+      const done = (): void => { this.writesInFlight.delete(work); };
+      work.then(done, done);
+    }
+    work
       .then((r) => {
         // Settled by the timer: the plugin heard "timeout" and no second reply follows — but what the
         // adapter did meanwhile is real (a write's landing window is 20 s, the reply's 10 s; codex r3), so

@@ -21,7 +21,7 @@ import './hostTabs.js';
 import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge.js';
 import { askAbout } from '../../board/askAbout.js';
 import { artifactRefOf } from '../../api/chatArtifacts-wire.js';
-import { registerInView } from '../../store/artifactInView.js';
+import { noteShown, noteWritten, placementEntry, registerInView } from '../../store/artifactInView.js';
 import { FullShell } from './FullShell.js';
 import { useRunHost } from './RunHostContext.js';
 
@@ -181,33 +181,30 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   );
   const group = groupKey(editor.id, binding.artifactKey);
   const full = useHostChrome((s) => s.full === binding.artifactKey);
-  /** The version this card's own last edit made, until the plugin reads a version again. */
-  const lastWritten = useRef<number | null>(null);
   // DES-CHAT-ARTIFACTS-001 §5.1: a document card on screen is what a chat message from its composer (or the floating
   // chat beside it) is about. The send reads the version it shows after its writes in flight have settled.
   const inViewRef = binding.source === 'interactive-doc' ? artifactRefOf(binding.projectId, binding.docId) : null;
+  const inViewRefNow = useRef(inViewRef);
+  inViewRefNow.current = inViewRef;
+  const lensRef = useRef<number | null>(null);
   useEffect(() => {
     if (adapter === null || inViewRef === null) return undefined;
     const key = binding.artifactKey;
-    return registerInView({
+    return registerInView(placementEntry({
       key,
       ref: inViewRef,
       title: bindingRef.current.title,
       composerKey: bindingRef.current.composerKey,
-      surface: () => (useHostChrome.getState().full === key ? 'full' : useHostPanel.getState().group?.key === group ? 'pane' : 'inline'),
-      shown: () => lastWritten.current ?? useGroupShown.getState().shown[group] ?? (adapter.artifact().head > 0 ? adapter.artifact().head : null),
-      flush: async () => {
-        if (adapter.flush === undefined) return null;
-        const before = adapter.artifact().head;
-        const head = await adapter.flush();
-        // The head moved to a version THIS card wrote while the send waited: that edit is what the person sees.
-        const mine = (adapter as { writes?: ReadonlyMap<number, number> }).writes;
-        if (head !== before && mine?.has(head) === true) lastWritten.current = head;
-        // Let the host's own reply to the write (its `written` line) run before the version is read.
-        await new Promise((r) => setTimeout(r, 0));
-        return head;
+      surface: () => {
+        if (useHostChrome.getState().full === key) return 'full';
+        const panel = useHostPanel.getState();
+        return panel.group?.key === group && !panel.folded && panel.tab.owner !== 'run' ? 'pane' : 'inline';
       },
-    });
+      lens: () => lensRef.current,
+      groupShown: () => useGroupShown.getState().shown[group] ?? null,
+      adapter: adapter as SurfaceAdapter & { made?: ReadonlySet<number> },
+      host: () => hostRef.current,
+    }));
   }, [adapter, inViewRef, binding.artifactKey, binding.composerKey, group]);
   const enterFull = useHostChrome((s) => s.enterFull);
   const exitFull = useHostChrome((s) => s.exitFull);
@@ -246,7 +243,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     const written: NonNullable<HostUi['written']> = (w) => {
       announced.current = w.version;
       // A chat message sent before the plugin re-reads names the version this edit made (DES-CHAT-ARTIFACTS-001 §5.1).
-      lastWritten.current = w.version;
+      if (inViewRefNow.current !== null) noteWritten(inViewRefNow.current, w.version);
       relay(group, 'card', { type: 'changed', head: w.version, kind: w.verb === 'restyled' ? 'theme' : 'deterministic' });
       if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, binding.kind as EditorKind), verb: w.verb });
     };
@@ -303,7 +300,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           thread: () => undefined,
           written,
           writeFailed: (text) => { if (live.current) setLine({ kind: 'failed', text }); },
-          shown: (v) => { lastWritten.current = null; setGroupShown(group, v); },
+          shown: (v) => { if (inViewRefNow.current !== null) noteShown(inViewRefNow.current); setGroupShown(group, v); },
           fullscreen: async () => { if (live.current) setOffer('full'); return false; },
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
@@ -398,6 +395,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const seekRun = binding.kind === 'walkthrough' ? binding.runId : undefined;
   const seek = useWalkthroughSeek((s) => seekRun === undefined ? undefined : s.byRun[seekRun]);
   const lensVersion = address !== null && address.routeKey === key ? address.routeVersion : null;
+  // A full-screen version lens shows an older version over the editor: a chat message is about that one.
+  lensRef.current = full && lensVersion !== null ? lensVersion : null;
   useEffect(() => {
     const owner = useHostChrome.getState().full;
     if (size === 'full' && owner !== key) enterFull(key);
@@ -498,7 +497,12 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     if (!live.current) return;
     const head = adapter.artifact().head;
     if ('error' in r) setLine(r.error === 'head_moved' ? { kind: 'not-undone', head: r.head ?? head } : { kind: 'failed', text: `Could not undo: ${r.message}` });
-    else { setLine({ kind: 'undone', version: head }); relay(group, 'card', { type: 'changed', head, kind: 'fork' }); }
+    else {
+      setLine({ kind: 'undone', version: head });
+      relay(group, 'card', { type: 'changed', head, kind: 'fork' });
+      // The undo's own version is what the person now sees (a chat message names it, not the undone one).
+      if (inViewRef !== null) noteWritten(inViewRef, head);
+    }
     setBusy(false);
   };
 

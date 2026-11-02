@@ -36,9 +36,9 @@ export function chipsToComposer(b: ArtifactBinding, chips: readonly Chip[]): voi
   const ref = b.source === 'interactive-doc' ? artifactRefOf(b.projectId, b.docId) : null;
   for (const c of chips) {
     if (c.anchor.kind === 'element') {
-      addAboutChip(b.composerKey, { kind: 'about', key: `el:${doc}/${c.anchor.id}`, label: c.label, ...(ref !== null && isAnchorWid(c.anchor.id) ? { ref, wid: c.anchor.id } : {}) });
+      addAboutChip(b.composerKey, { kind: 'about', key: `el:${doc}/${c.anchor.id}`, label: c.label, ...(ref !== null ? { ref } : {}), ...(ref !== null && isAnchorWid(c.anchor.id) ? { wid: c.anchor.id } : {}) });
     } else if (c.anchor.kind === 'chapter') {
-      addAboutChip(b.composerKey, { kind: 'about', key: `ch:${doc}/${c.anchor.id}`, label: c.label });
+      addAboutChip(b.composerKey, { kind: 'about', key: `ch:${doc}/${c.anchor.id}`, label: c.label, ...(ref !== null ? { ref } : {}) });
     }
   }
 }

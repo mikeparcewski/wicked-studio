@@ -43,6 +43,9 @@ export class InteractiveDocAdapter implements HostAdapter {
   private readonly requirements: (() => Promise<DocumentRequirements>) | undefined;
   /** Writes sent and not yet settled (a text edit is settled when its version is seen land, up to 20 s). */
   private readonly inFlight = new Set<Promise<unknown>>();
+  /** Every version THIS adapter made (an edit, an undo, a theme, a fork): what the person did here, as opposed to a
+   *  version another hand landed (DES-CHAT-ARTIFACTS-001 §5.1). */
+  readonly made = new Set<number>();
 
   constructor(
     private readonly projectId: string,
@@ -179,6 +182,7 @@ export class InteractiveDocAdapter implements HostAdapter {
       }
       if ('unchanged' in r) return { error: 'refused', message: 'Nothing changed: the slide is already there.' };
       this.writes.set(r.version, base);
+      this.made.add(r.version);
       // The manifest's head may already be past this write (another hand, just after it): the head
       // follows the manifest, and the host is told it moved on (codex r1).
       let headNow = r.version;
@@ -248,6 +252,7 @@ export class InteractiveDocAdapter implements HostAdapter {
       return { error: 'unavailable', message: `Two edits landed from version ${base} at once (versions ${landed.ambiguous.join(' and ')}); which is yours cannot be told, so nothing here offers to undo it.`, head: landed.head, ...(moved !== undefined ? { moved } : {}) };
     }
     this.writes.set(landed.version, base);
+    this.made.add(landed.version);
     return { version: landed.version, ...(moved !== undefined ? { moved } : {}) };
   }
 
@@ -268,6 +273,7 @@ export class InteractiveDocAdapter implements HostAdapter {
     if (parent === null) return { error: 'refused', message: 'nothing to undo' };
     try {
       const r = await postFork(this.projectId, this.docId, parent, undefined, version);
+      this.made.add(r.version);
       this.moveHead(r.version);
       return { undone: true, moved: { head: r.version, kind: 'fork' } };
     } catch (e: unknown) {
@@ -314,6 +320,7 @@ export class InteractiveDocAdapter implements HostAdapter {
       // helper's change in between is never discarded (codex h4-r1 P1).
       const parent = typeof r.parent === 'number' ? r.parent : base;
       this.writes.set(r.version, parent);
+      this.made.add(r.version);
       this.moveHead(r.version);
       return { version: r.version };
     } catch (e: unknown) {
@@ -329,6 +336,7 @@ export class InteractiveDocAdapter implements HostAdapter {
   private async forkNow(from: number): Promise<AdapterResult<{ version: number }>> {
     try {
       const r = await postFork(this.projectId, this.docId, from);
+      this.made.add(r.version);
       this.moveHead(r.version);
       return { version: r.version };
     } catch (e: unknown) {

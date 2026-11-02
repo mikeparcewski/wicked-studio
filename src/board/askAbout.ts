@@ -42,24 +42,39 @@ export function askAboutRoute(input: {
   return { to: 'new', projectId: unfiled ? null : input.projectId, seed: unfiled && input.seedable };
 }
 
-/** The chat a document's run was launched from, read from crew's doc↔run index; `null` when none says. */
-async function madeInChatOf(docId: string, projectId: string): Promise<string | null> {
+const unfiled = (projectId: string | null | undefined): boolean => projectId === undefined || projectId === null || projectId === '' || projectId === 'default';
+
+/** Is a chat open on the daemon? This browser's live-chat record first; a chat it has no record of (after a reload)
+ *  is asked of the daemon (`GET /chats/:id`: seats while it is open). */
+async function chatLiveNow(chatId: string): Promise<boolean> {
+  const s = useLiveChatsStore.getState();
+  if (s.retired.has(chatId)) return false;
+  if (s.sessions[chatId] !== undefined) return true;
   try {
-    const { runs } = await api.listRunsForDoc(docId);
-    const mount = projectId === '' || projectId === 'default' ? null : projectId;
-    const hit = runs.find((v) => {
-      const s = v.session as { chat_id?: string | null; project_id?: string | null };
-      return typeof s.chat_id === 'string' && s.chat_id !== '' && (s.project_id ?? null) === mount;
-    });
-    return hit === undefined ? null : ((hit.session as { chat_id?: string }).chat_id ?? null);
+    return (await api.getChat(chatId)).seats.length > 0;
   } catch {
-    return null;
+    return false;
   }
 }
 
-function chatLive(chatId: string): boolean {
-  const s = useLiveChatsStore.getState();
-  return s.sessions[chatId] !== undefined && !s.retired.has(chatId);
+/** The open chat a document was made in: of the runs that answered it in its own mount, the newest whose chat is
+ *  still open. `null` when none is (or the doc↔run index cannot be read). */
+async function madeInChatOf(docId: string, projectId: string): Promise<string | null> {
+  let runs;
+  try {
+    ({ runs } = await api.listRunsForDoc(docId));
+  } catch {
+    return null;
+  }
+  const chats = runs
+    .filter((v) => {
+      const s = v.session as { chat_id?: string | null; project_id?: string | null };
+      return typeof s.chat_id === 'string' && s.chat_id !== '' && (unfiled(s.project_id) ? unfiled(projectId) : s.project_id === projectId);
+    })
+    .sort((a, b) => Number((b.session as { created_at?: number }).created_at ?? 0) - Number((a.session as { created_at?: number }).created_at ?? 0))
+    .map((v) => (v.session as { chat_id: string }).chat_id);
+  for (const id of [...new Set(chats)]) if (await chatLiveNow(id)) return id;
+  return null;
 }
 
 /** The version this placement shows, for a chat opened after its card has gone. */
@@ -71,33 +86,42 @@ function shownVersion(b: ArtifactBinding): number | null {
   return own?.[1] ?? null;
 }
 
+/** Each press supersedes the one before: a slower lookup for an earlier press changes nothing. */
+let pressSeq = 0;
+
 /** Ask about this artifact (the card's `host:ask`). */
 export async function askAbout(b: ArtifactBinding): Promise<void> {
+  const press = ++pressSeq;
   const ref = b.source === 'interactive-doc' ? artifactRefOf(b.projectId, b.docId) : null;
+  // What is on screen at the press, before anything awaits.
+  const version = shownVersion(b);
   const onScreen = composerOnScreen(b.composerKey);
-  // A part-less artifact (a demo video, a walkthrough) has no ref crew can read: the chip still says what it is about.
-  const chip = artifactChip(ref ?? b.artifactKey, b.title);
-  const madeIn = !onScreen && ref !== null && b.docId !== undefined ? await madeInChatOf(b.docId, b.projectId) : null;
+  if (onScreen) {
+    // An artifact crew can read rides as its chip; one it cannot (a demo video, a walkthrough) still names its subject.
+    addAboutChip(b.composerKey, ref !== null ? artifactChip(ref, b.title) : { kind: 'about', key: `art:${b.artifactKey}`, label: b.title.trim() === '' ? 'this' : b.title.trim() });
+    focusComposer(b.composerKey);
+    return;
+  }
+  // Whether the daemon takes `seedFromArtifact` decides the new chat's scope: known before deciding.
+  if (!useCapabilities.getState().loaded) await useCapabilities.getState().load().catch(() => undefined);
+  const madeIn = ref !== null && b.docId !== undefined ? await madeInChatOf(b.docId, b.projectId) : null;
+  if (press !== pressSeq) return;
   const route = askAboutRoute({
     composerKey: b.composerKey,
     projectId: b.projectId,
-    composerOnScreen: onScreen,
+    composerOnScreen: false,
     madeInChat: madeIn,
-    chatLive,
+    chatLive: () => madeIn !== null,
     seedable: useCapabilities.getState().chatContext,
   });
-  if (route.to === 'composer') {
-    if (ref !== null) addAboutChip(route.composerKey, chip);
-    focusComposer(route.composerKey);
-    return;
-  }
+  if (route.to === 'composer') return;
   if (ref !== null && b.docId !== undefined) {
     setAskAboutSeed({
       ref,
-      label: chip.label,
-      projectId: route.to === 'new' ? route.projectId : b.projectId === '' || b.projectId === 'default' ? null : b.projectId,
+      label: b.title.trim() === '' ? ref : b.title.trim(),
+      projectId: unfiled(b.projectId) ? null : b.projectId,
       docId: b.docId,
-      version: shownVersion(b),
+      version,
       seed: route.to === 'new' && route.seed,
     });
   }

@@ -43,7 +43,10 @@ const { clearRepoCache } = await import('../src/store/repoCache.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { useLiveChatsStore } = await import('../src/store/liveChats.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
-const { registerInView, resetInView, setAskAboutSeed, artifactContext, inViewFor, inViewAnywhere } = await import('../src/store/artifactInView.js');
+const { registerInView, resetInView, setAskAboutSeed, peekAskAboutSeed, takeAskAboutSeed, artifactContext, inViewFor, inViewAnywhere, placementEntry, noteWritten, noteShown } = await import('../src/store/artifactInView.js');
+const { ApiError } = await import('../src/api/errors.js');
+const { writeAskSession } = await import('../src/store/askSession.js');
+const { useDocsCache } = await import('../src/store/docsCache.js');
 const { addChip, artifactChip, artifactOfChips, messageWithAbout } = await import('../src/board/aboutChips.js');
 const { askAbout, askAboutRoute } = await import('../src/board/askAbout.js');
 const { useComposerChips } = await import('../src/store/composerChips.js');
@@ -75,6 +78,7 @@ beforeEach(() => {
   useLiveChatsStore.setState({ sessions: {} });
   useCapabilities.setState({ loaded: true, chatContext: false, chatList: false, chatAttachments: false, askPath: false });
   useComposerChips.setState({ byComposer: {} });
+  document.body.innerHTML = '';
   try { localStorage.clear(); } catch { /* stubbed */ }
   try { sessionStorage.clear(); } catch { /* stubbed */ }
 });
@@ -150,6 +154,56 @@ describe('a daemon with chatArtifacts.context', () => {
     );
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
     expect(sendChatMessage.mock.calls[0]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', version: 5, anchors: ['slide-3-heading-1'] } });
+    // Once: the next message from the dock's own box does not carry the handed-over artifact or its parts (and the
+    // inline card is not "beside" the floating chat).
+    await userEvent.setup().type(screen.getByTestId('assist-input'), 'and slide 5?');
+    await userEvent.setup().click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect((sendChatMessage.mock.calls[1]![4] as { artifact?: unknown } | undefined)?.artifact).toBeUndefined();
+  });
+
+  it('a handed-over message that failed to send keeps its artifact for the person’s retry', async () => {
+    placeDeck({ surface: 'inline', composerKey: 's-1', before: 5, after: 5 });
+    sendChatMessage.mockRejectedValueOnce(new ApiError(502, 'bad gateway'));
+    render(
+      <AskDock runs={[]} pathname="/s/s-1" onClose={() => undefined} sendText="what does slide 4 say?" sendFresh
+        sendArtifact={{ ref: 'mikes/deck', anchors: ['slide-3-heading-1'], composerKey: 's-1' }} />,
+    );
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('assist-send')).not.toBeDisabled());
+    await userEvent.setup().click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(sendChatMessage.mock.calls[1]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', anchors: ['slide-3-heading-1'] } });
+  });
+
+  it('a document chip turned off sends no artifact and no seed, even with the document beside the chat', async () => {
+    placeDeck({ surface: 'full', ref: '_unfiled/release-note', before: 2, after: 2 });
+    setAskAboutSeed({ ref: '_unfiled/release-note', label: 'Release note', projectId: null, docId: 'release-note', version: 2, seed: true });
+    render(<AskDock runs={[]} pathname="/projects/default/made" onClose={() => undefined} startFresh />);
+    const docChip = screen.getAllByTestId('chat-scope-chip').find((c) => c.getAttribute('data-key') === 'doc:default/release-note')!;
+    await userEvent.setup().click(docChip);
+    await ask('anything new?');
+    expect(openChat.mock.calls[0]![0]).not.toHaveProperty('seedFromArtifact');
+    expect((sendChatMessage.mock.calls[0]![4] as { artifact?: unknown } | undefined)?.artifact).toBeUndefined();
+  });
+
+  it('an Unfiled Ask opened on a project page stays in no project', async () => {
+    setAskAboutSeed({ ref: '_unfiled/release-note', label: 'Release note', projectId: null, docId: 'release-note', version: 1, seed: true });
+    render(<AskDock runs={[]} pathname="/p/mikes" onClose={() => undefined} startFresh />);
+    await ask('summarise this');
+    const body = openChat.mock.calls[0]![0] as ChatOpenBody;
+    expect(body.projectId).toBeUndefined();
+    expect(body).toMatchObject({ seedFromArtifact: '_unfiled/release-note' });
+  });
+
+  it('a resumed chat whose document chip is on keeps sending that document, at the version the docs list holds', async () => {
+    useDocsCache.setState({ byProject: { mikes: [{ name: 'deck', head: 6 } as never] } } as never);
+    writeAskSession({ chatId: 'c-old', title: 'deck', seeded: true, chips: [{ key: 'page', kind: 'page', label: 'This page', on: true }, { key: 'doc:mikes/deck', kind: 'doc', label: 'deck', ref: 'deck', projectId: 'mikes', on: true, added: true }] } as never);
+    getChat.mockResolvedValue({ chatId: 'c-old', seats: ['claude'] });
+    render(<AskDock runs={[]} pathname="/" onClose={() => undefined} />);
+    await ask('and now?');
+    expect(sendChatMessage.mock.calls[0]![0]).toBe('c-old');
+    expect(sendChatMessage.mock.calls[0]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', version: 6 } });
   });
 });
 
@@ -173,9 +227,70 @@ describe('the artifacts on screen', () => {
     expect(await artifactContext('mikes/gone')).toBeNull();
   });
 
+  it('a placement says the lens, else the person’s own last write (an edit, an undo), else what the plugin read, else the head', async () => {
+    let head = 3;
+    let lens: number | null = null;
+    let group: number | null = 2;
+    const made = new Set<number>();
+    let hostWaited = false;
+    const entry = placementEntry({
+      key: 'k', ref: 'mikes/deck', title: 't', composerKey: 'c',
+      surface: () => 'full', lens: () => lens, groupShown: () => group,
+      adapter: { artifact: () => ({ head }), made, flush: async () => head },
+      host: () => ({ writesSettled: async () => { await new Promise((r) => setTimeout(r, 10)); hostWaited = true; head = 4; made.add(4); } }),
+    });
+    expect(entry.shown()).toBe(2);
+    // A write accepted by the host lands while the send waits: its version is what the person sees.
+    expect(await entry.flush()).toBe(4);
+    expect(hostWaited).toBe(true);
+    expect(entry.shown()).toBe(4);
+    // The plugin reads a version again: the group's read stands.
+    noteShown('mikes/deck');
+    group = 4;
+    expect(entry.shown()).toBe(4);
+    // An undo makes version 5 (the card notes it): that, not the undone 4.
+    noteWritten('mikes/deck', 5);
+    expect(entry.shown()).toBe(5);
+    // A version lens over the editor wins.
+    lens = 1;
+    expect(entry.shown()).toBe(1);
+    // A version another hand landed is not claimed as theirs.
+    lens = null;
+    noteShown('mikes/deck');
+    group = 5;
+    head = 9;
+    const other = placementEntry({ key: 'k2', ref: 'mikes/deck', title: 't', composerKey: 'c', surface: () => 'full', lens: () => null, groupShown: () => 5, adapter: { artifact: () => ({ head }), made, flush: async () => 10 }, host: () => null });
+    await other.flush();
+    expect(other.shown()).toBe(5);
+  });
+
+  it('names the version the sending composer’s placement shows, not another placement’s', async () => {
+    placeDeck({ surface: 'full', composerKey: 'made:mikes/deck', before: 7, after: 7 });
+    placeDeck({ surface: 'inline', composerKey: 's-9', before: 3, after: 3 });
+    expect(await artifactContext('mikes/deck', [], null, 50, 's-9')).toEqual({ ref: 'mikes/deck', version: 3 });
+    expect(await artifactContext('mikes/deck', [], null, 50)).toEqual({ ref: 'mikes/deck', version: 7 });
+  });
+
   it('bounds the wait for a write that never settles', async () => {
     registerInView({ key: 'k', ref: 'mikes/slow', title: 't', composerKey: 'c', surface: () => 'full', shown: () => 2, flush: () => new Promise(() => undefined) });
     expect(await artifactContext('mikes/slow', [], null, 30)).toEqual({ ref: 'mikes/slow', version: 2 });
+  });
+});
+
+describe('the Ask about this seed', () => {
+  it('is read by one chat, once, and goes stale if no chat opens with it', () => {
+    vi.useFakeTimers();
+    try {
+      setAskAboutSeed({ ref: 'mikes/deck', label: 'Deck', projectId: 'mikes', docId: 'deck', version: 1, seed: false });
+      expect(peekAskAboutSeed()?.ref).toBe('mikes/deck');
+      takeAskAboutSeed();
+      expect(peekAskAboutSeed()).toBeNull();
+      setAskAboutSeed({ ref: 'mikes/deck', label: 'Deck', projectId: 'mikes', docId: 'deck', version: 1, seed: false });
+      vi.advanceTimersByTime(11_000);
+      expect(peekAskAboutSeed()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -210,7 +325,7 @@ describe('the editor bridge and the adapter', () => {
 });
 
 describe('Ask about this', () => {
-  const binding = { artifactKey: 'made:mikes/deck', title: 'Domain coverage', kind: 'deck', source: 'interactive-doc' as const, projectId: 'mikes', docId: 'deck', composerKey: 'made:mikes/deck' };
+  const binding = { artifactKey: 'made:mikes/deck', title: 'Domain coverage', kind: 'deck', source: 'interactive-doc' as const, projectId: 'mikes', docId: 'deck' as string, composerKey: 'made:mikes/deck' };
 
   it('routes to a composer on screen, else the chat the document was made in if it is open, else a new chat', () => {
     const base = { composerKey: 'k', projectId: 'mikes', madeInChat: null, chatLive: () => false, seedable: true };
@@ -229,6 +344,31 @@ describe('Ask about this', () => {
     expect(req).toMatchObject({ fresh: true, projectId: 'mikes' });
     render(<AskDock runs={[]} pathname="/projects/mikes/made" onClose={() => undefined} startProjectId="mikes" startFresh />);
     expect(screen.getAllByTestId('chat-scope-chip').map((c) => c.getAttribute('data-key'))).toContain('doc:mikes/deck');
+  });
+
+  it('brings back the open chat the document was made in, with the document chip and its artifact', async () => {
+    useCapabilities.setState({ chatContext: true });
+    listRunsForDoc.mockResolvedValue({ runs: [{ session: { id: 'r1', chat_id: 'c-made', project_id: 'mikes', created_at: 5 }, units: [] }] });
+    placeDeck({ surface: 'full', before: 4, after: 4 });
+    useLiveChatsStore.setState({ sessions: { 'c-made': { chatId: 'c-made', seats: ['claude'] } as never } });
+    await askAbout(binding);
+    render(<AskDock runs={[]} pathname="/projects/mikes/made" onClose={() => undefined} />);
+    expect(screen.getAllByTestId('chat-scope-chip').map((c) => c.getAttribute('data-key'))).toContain('doc:mikes/deck');
+    await ask('what does slide 4 say?');
+    expect(sendChatMessage.mock.calls[0]![0]).toBe('c-made');
+    expect(sendChatMessage.mock.calls[0]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', version: 4 } });
+  });
+
+  it('a later press supersedes an earlier one whose lookup is slower', async () => {
+    useCapabilities.setState({ chatContext: true });
+    let releaseA!: () => void;
+    listRunsForDoc.mockImplementationOnce(() => new Promise((r) => { releaseA = () => r({ runs: [] }); }));
+    listRunsForDoc.mockResolvedValueOnce({ runs: [] });
+    const a = askAbout({ ...binding, artifactKey: 'made:mikes/a', docId: 'a', title: 'A' });
+    await askAbout({ ...binding, artifactKey: 'made:mikes/b', docId: 'b', title: 'B' });
+    releaseA();
+    await a;
+    expect(peekAskAboutSeed()?.ref).toBe('mikes/b');
   });
 
   it('with the session composer on screen, adds the artifact chip there and focuses it', async () => {

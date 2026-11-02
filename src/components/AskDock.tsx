@@ -48,8 +48,8 @@ import { PAGE_CHAT_SPECS, pageChatRules, pageChatSessionKey, type PageChatKind, 
 import { pageChatEpoch } from '../store/pageChat.js';
 import { focusPack } from './askContext.js';
 import { CHAT_ATTACHMENT_LIMITS, type ChatAttachmentError, type ChatStartedOn } from '../api/chatHistory-wire.js';
-import { CONTEXT_PAGE_MAX, type ChatMessageContext } from '../api/chatArtifacts-wire.js';
-import { artifactContext, inViewAnywhere, peekAskAboutSeed, takeAskAboutSeed, type AskAboutSeed } from '../store/artifactInView.js';
+import { artifactRefOf, CONTEXT_PAGE_MAX, parseArtifactRef, type ChatMessageContext } from '../api/chatArtifacts-wire.js';
+import { artifactContext, FLUSH_WAIT_MS, inViewAnywhere, inViewFor, peekAskAboutSeed, takeAskAboutSeed, type AskAboutSeed } from '../store/artifactInView.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -105,7 +105,25 @@ function pageField(pack: string | null): string | undefined {
   if (pack === null || pack.trim() === '') return undefined;
   if (pack.length <= CONTEXT_PAGE_MAX) return pack;
   const note = '\n[the rest of studio\u2019s page summary was cut]';
-  return pack.slice(0, CONTEXT_PAGE_MAX - note.length) + note;
+  let end = CONTEXT_PAGE_MAX - note.length;
+  // Never between the two halves of a surrogate pair.
+  const last = pack.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return pack.slice(0, end) + note;
+}
+
+/** A document's latest version as the docs list last read it, for a doc chip whose card is not on screen. */
+function headOf(ref: string): number | null {
+  const p = parseArtifactRef(ref);
+  if (p === null) return null;
+  const head = (useDocsCache.getState().byProject[p.projectId] ?? []).find((d) => d.name === p.docId)?.head;
+  return typeof head === 'number' && head >= 1 ? head : null;
+}
+
+/** The doc chip "Ask about this" adds for a document (one spelling, so a resumed chat can be given it too). */
+function askAboutDocChip(seed: AskAboutSeed): ScopeChip {
+  const mount = seed.projectId ?? 'default';
+  return { key: `doc:${mount}/${seed.docId}`, kind: 'doc', label: seed.label, ref: seed.docId, projectId: mount, on: true, added: true };
 }
 
 /** The chips a chat opened by "Ask about this" starts with: its project (or none, for an Unfiled document, whose
@@ -114,8 +132,18 @@ export function askAboutChips(seed: AskAboutSeed, projectName: string | null): S
   const base = defaultScopeChips({ project: seed.projectId === null ? null : { id: seed.projectId, name: projectName ?? seed.projectId }, repo: null });
   // Seeded: no "All repos" — the chat reads the repositories the document was made about.
   const chips = seed.seed ? base.map((c) => (c.kind === 'all-repos' ? { ...c, on: false } : c)) : base;
-  const mount = seed.projectId ?? 'default';
-  return [...chips, { key: `doc:${mount}/${seed.docId}`, kind: 'doc', label: seed.label, ref: seed.docId, projectId: mount, on: true, added: true }];
+  return [...chips, askAboutDocChip(seed)];
+}
+
+/** The document an active doc chip names, as an artifact ref (the newest one on, when several are). */
+export function docChipArtifact(chips: readonly ScopeChip[]): { ref: string; chipKey: string } | null {
+  for (let i = chips.length - 1; i >= 0; i -= 1) {
+    const c = chips[i]!;
+    if (c.kind !== 'doc' || !c.on || c.ref === undefined) continue;
+    const ref = artifactRefOf(c.projectId ?? 'default', c.ref);
+    if (ref !== null) return { ref, chipKey: c.key };
+  }
+  return null;
 }
 
 /** §8 F6, crew#1020: a 409 `turn_in_flight` (the PA is still answering) or `chat_scope_changed`
@@ -405,6 +433,12 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     if (aboutSeed !== null && resumed === null) {
       return askAboutChips(aboutSeed, aboutSeed.projectId === null ? null : useProjectsStore.getState().projects.find((p) => p.id === aboutSeed.projectId)?.name ?? null);
     }
+    // The chat the document was made in, brought back by Ask about this: its own chips, plus the document.
+    if (aboutSeed !== null && resumed !== null) {
+      const own = resumed.chips !== undefined && resumed.chips.length > 0 ? resumed.chips : defaultScopeChips(ctx);
+      const doc = askAboutDocChip(aboutSeed);
+      return [...own.filter((c) => c.key !== doc.key), doc];
+    }
     if (resumed?.chips !== undefined && resumed.chips.length > 0) return resumed.chips;
     // A past chat reopened from history whose choices this browser never saw: nothing is claimed as
     // chosen — every chip starts off, and the user turns on what the chat may see now.
@@ -514,28 +548,66 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     if (split) return { message: pg !== undefined ? `${text}\n\n${pageChatRules(pg.kind)}` : text, sig, diag, page: pack };
     return { message: `${text}${PACK_JOIN}${pack}${pg !== undefined ? `\n${pageChatRules(pg.kind)}` : ''}`, sig, diag, page: null };
   }, []);
+  /** The handed-over message is still owed (its artifact rides it until a send of it lands). */
+  const handoffOwed = useRef(sendText !== undefined);
+  /** Documents whose chip the person removed or turned off: the chat is not about them, even while one is on screen. */
+  const dismissed = useRef(new Set<string>());
+  const docChipsBefore = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    const now = new Map<string, string>();
+    for (const c of chips) {
+      if (c.kind !== 'doc' || c.ref === undefined) continue;
+      const ref = artifactRefOf(c.projectId ?? 'default', c.ref);
+      if (ref === null) continue;
+      if (c.on) {
+        now.set(c.key, ref);
+        dismissed.current.delete(ref);
+      } else dismissed.current.add(ref);
+    }
+    for (const [key, ref] of docChipsBefore.current) if (!now.has(key)) dismissed.current.add(ref);
+    docChipsBefore.current = now;
+  }, [chips]);
+
   /**
-   * DES-CHAT-ARTIFACTS-001 §5.1: the `context` a message carries, on a daemon that takes it: the artifact (the handed-
-   * over message's, else this chat's "Ask about this" document while its chip is on, else the one open in full screen,
-   * a pane or Made) at the version shown once its editor's writes have settled, and the page summary.
+   * DES-CHAT-ARTIFACTS-001 §5.1: what a message is about, chosen when its send BEGINS (before opening the chat or
+   * uploading), so navigating meanwhile changes nothing: the handed-over message's own artifact (and nothing else for
+   * it); else the document a doc chip names (Ask about this, + Add, a resumed chat's); else the artifact open in full
+   * screen, a pane or Made beside the chat — unless the person turned that document's chip off. The version shown is
+   * read now as the fallback for a card that closes before the send.
    */
-  const contextFor = useCallback(async (page: string | null): Promise<ChatMessageContext | undefined> => {
-    if (!useCapabilities.getState().chatContext) return undefined;
-    const handed = handoffArtifact.current;
-    handoffArtifact.current = null;
-    const seedOn = aboutSeed !== null && chipsRef.current.some((c) => c.kind === 'doc' && c.on && c.ref === aboutSeed.docId && (c.projectId ?? 'default') === (aboutSeed.projectId ?? 'default'));
+  const pickArtifact = useCallback((): { ref: string; anchors: string[]; fallback: number | null; composerKey?: string } | null => {
+    if (!useCapabilities.getState().chatContext) return null;
+    if (handoffOwed.current) {
+      const h = handoffArtifact.current;
+      return h === null ? null : { ref: h.ref, anchors: h.anchors, fallback: inViewFor(h.composerKey)?.ref === h.ref ? inViewFor(h.composerKey)!.shown() : null, composerKey: h.composerKey };
+    }
+    const chosen = docChipArtifact(chipsRef.current);
+    if (chosen !== null) {
+      const placed = inViewAnywhere();
+      const fallback = placed?.ref === chosen.ref ? placed.shown()
+        : aboutSeed?.ref === chosen.ref ? aboutSeed.version
+          : headOf(chosen.ref);
+      return { ref: chosen.ref, anchors: [], fallback };
+    }
     const beside = inViewAnywhere();
-    const pick = handed !== null ? { ref: handed.ref, anchors: handed.anchors, fallback: null as number | null }
-      : seedOn ? { ref: aboutSeed.ref, anchors: [] as string[], fallback: aboutSeed.version }
-        : beside !== null ? { ref: beside.ref, anchors: [] as string[], fallback: null as number | null } : null;
-    const artifact = pick === null ? null : await artifactContext(pick.ref, pick.anchors, pick.fallback);
+    if (beside === null || dismissed.current.has(beside.ref)) return null;
+    return { ref: beside.ref, anchors: [], fallback: beside.shown() };
+  }, [aboutSeed]);
+
+  /** The `context` of a message: its picked artifact at the version shown once its editor's writes settled, and the page. */
+  const contextFor = useCallback(async (page: string | null, picked: ReturnType<typeof pickArtifact>): Promise<ChatMessageContext | undefined> => {
+    if (!useCapabilities.getState().chatContext) return undefined;
+    const artifact = picked === null ? null : await artifactContext(picked.ref, picked.anchors, picked.fallback, FLUSH_WAIT_MS, picked.composerKey);
     const pageText = pageField(page);
     if (artifact === null && pageText === undefined) return undefined;
     return { ...(artifact !== null ? { artifact } : {}), ...(pageText !== undefined ? { page: pageText } : {}) };
-  }, [aboutSeed]);
+  }, []);
 
   /** A message landed: the pack it carried is what the chat has seen. */
   const packLanded = useCallback((id: string, out: { sig: string; diag: boolean }) => {
+    // The handed-over message landed: its artifact has ridden it, and later messages choose their own.
+    handoffOwed.current = false;
+    handoffArtifact.current = null;
     lastPackRef.current = out.sig;
     if (out.diag) diagSentRef.current = true;
     seededRef.current = true;
@@ -554,12 +626,14 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       send: async (text, _documents, files = []) => {
         // Uploads (DES-SYSTEM-CHAT §8) are checked against crew's caps before anything is opened.
         if (files.length > 0) checkUpload(files);
+        // What this message is about is chosen now, before anything below awaits.
+        const picked = pickArtifact();
         let id = chatIdRef.current;
         if (id !== null && resumed !== null && id === resumed.chatId) {
           try {
             const out = withPack(text, useCapabilities.getState().chatContext);
             const ids = await upload(id, files);
-            const context = await contextFor(out.page);
+            const context = await contextFor(out.page, picked);
             if (ended()) throw new Error('This chat was closed; nothing was sent.');
             deposit(id, text, await postMessage(id, out.message, ids, context).catch(plainSendRefusal(id)));
             packLanded(id, out);
@@ -623,11 +697,14 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const seats = askPath && workflow === null ? [pick, ...chosenSeats(eligible, dropped, picked).filter((k) => k !== pick)] : [pick];
             // A failed open keeps the page's id for the retry; only a chat the daemon opened spends it.
             id = openIdRef.current ?? crypto.randomUUID();
-            const body: ChatOpenBody & { startedOn?: ChatStartedOn; workflow?: string; seedFromArtifact?: string } = { chatId: id, ...chipsOpenFields(chosen, ambientProjectId(packInputs.current.pathname)), clis: seats };
+            // DES-CHAT-ARTIFACTS-001 §6.3: "Ask about this" on an Unfiled document opens a chat in NO project — never the
+            // project of the page it happens to be on — and, while its document chip is on and the daemon takes it,
+            // crew seeds the chat's repositories from the document's binding.
+            const unfiledAsk = aboutSeed !== null && aboutSeed.projectId === null;
+            const seedDocOn = aboutSeed !== null && chosen.some((c) => c.key === askAboutDocChip(aboutSeed).key);
+            const body: ChatOpenBody & { startedOn?: ChatStartedOn; workflow?: string; seedFromArtifact?: string } = { chatId: id, ...chipsOpenFields(chosen, unfiledAsk ? null : ambientProjectId(packInputs.current.pathname)), clis: seats };
             if (workflow !== null) body.workflow = workflow;
-            // DES-CHAT-ARTIFACTS-001 §6.3: "Ask about this" on an Unfiled document — crew seeds the chat's repositories
-            // from the document's binding (only a daemon that takes it is sent the field).
-            if (aboutSeed?.seed === true && useCapabilities.getState().chatContext) body.seedFromArtifact = aboutSeed.ref;
+            if (unfiledAsk && seedDocOn && useCapabilities.getState().chatContext) body.seedFromArtifact = aboutSeed.ref;
             // The page it started on, for past chats (`chatList` only: an older crew's strict schema refuses it).
             if (useCapabilities.getState().chatList) body.startedOn = { route: packInputs.current.pathname, label: packInputs.current.pageLabel };
             if (askPath) body.primary = pick;
@@ -678,7 +755,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         }
         const out = withPack(text, useCapabilities.getState().chatContext);
         const ids = await upload(id, files);
-        const context = await contextFor(out.page);
+        const context = await contextFor(out.page, picked);
         if (ended()) throw new Error('This chat was closed; nothing was sent.');
         deposit(id, text, await postMessage(id, out.message, ids, context).catch(plainSendRefusal(id)));
         packLanded(id, out);
@@ -688,7 +765,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `ended` reads the module epoch
-    [resumed, stepAside, withPack, packLanded, contextFor],
+    [resumed, stepAside, withPack, packLanded, contextFor, pickArtifact],
   );
 
   const needRows = useMemo(
