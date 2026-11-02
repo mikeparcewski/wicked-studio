@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 288,
-    "occurrences": 4050,
-    "static": 3453,
+    "occurrences": 4051,
+    "static": 3454,
     "dynamic": 93,
     "computed": 44
   },
@@ -12416,6 +12416,12 @@
     },
     {
       "testId": "proposal-answer-council-reading",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council-refresh",
       "files": [
         "src/components/everything/NewDocument.tsx"
       ]

@@ -228,6 +228,14 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
     return () => { cancelled = true; };
   }, [roster, rosterTry]);
   const only = answer.helpersOnly === true;
+  /** Read the roster again (a helper may have signed in since this tab's copy); the shared cache tells every reader. */
+  const refreshRoster = (): void => {
+    setRosterError(false);
+    Promise.resolve()
+      .then(() => api.getRoster())
+      .then(({ roster: r }) => setCachedRoster(r))
+      .catch(() => setRosterError(true));
+  };
   // Opened from a control that is now gone: focus goes to the form itself (never to Make it).
   const formRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { formRef.current?.focus(); }, []);
@@ -351,7 +359,8 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
         </span>
         <span data-testid="proposal-answer-council" role={form.helpers.length !== ANSWER_SEATS ? 'alert' : undefined}>
           {roster !== null && !form.helpers.every(eligible)
-            ? 'A helper on this proposal is no longer available: leave it out and choose another.'
+            ? <>A helper on this proposal is no longer available: leave it out and choose another, or{' '}
+                <button type="button" data-testid="proposal-answer-council-refresh" className="wk-since-toggle" onClick={refreshRoster}>check the helpers again</button>.</>
             : form.helpers.length === ANSWER_SEATS
               ? `${seatName(form.helpers[0]!)} and ${seatName(form.helpers[1]!)}: one writes, the other checks`
               : 'Choose two helpers: one writes the document and another checks it.'}

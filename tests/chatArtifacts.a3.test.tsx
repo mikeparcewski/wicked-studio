@@ -167,7 +167,11 @@ describe('Change something on a create card (A3)', () => {
   });
 
   it('Make it answers THIS proposal with the edits, never a create; the card then shows what was started', async () => {
-    const accepted = proposal({ what: { entry: 'document-static', title: 'Coverage note', label: 'Document · Coverage note', outcome: null }, helpers: { seats: ['codex', 'agy'], label: 'Codex and Antigravity: one writes, the other checks' } });
+    const accepted = proposal({
+      what: { entry: 'document-static', title: 'Coverage note', label: 'Document · Coverage note', outcome: null },
+      helpers: { seats: ['codex', 'agy'], label: 'Codex and Antigravity: one writes, the other checks' },
+      sources: proposal().sources.filter((s) => s.token !== 'run:29bbbfb1-0000'),
+    });
     decideAnswer = () => ok({ view: { proposal: accepted, state: 'decided', decision: 'go', result: { runId: 'aaaaaaaa-1111-5222-8333-444444444444', artifactRef: '_unfiled/coverage-note-1a', adopted: false, stub: false }, decidedAt: T0 + 3000 } });
     const form = await openForm();
     fireEvent.change(within(form).getByTestId('proposal-answer-title'), { target: { value: 'Coverage note' } });
@@ -188,6 +192,8 @@ describe('Change something on a create card (A3)', () => {
     expect(text('artifact-proposal-what')).toBe('Document · Coverage note');
     fireEvent.click(screen.getByTestId('artifact-proposal-details'));
     expect(text('artifact-proposal-helpers')).toContain('Codex and Antigravity');
+    expect(text('artifact-proposal-from')).toContain('run 57443b2b');
+    expect(text('artifact-proposal-from')).not.toContain('run 29bbbfb1');
   });
 
   it('a refusal stays in the form, in crew’s words, and the form stays editable', async () => {
@@ -369,6 +375,53 @@ describe('Change something on a create card (A3)', () => {
     fireEvent.click(within(form).getByTestId('proposal-answer-go'));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]!.body).toStrictEqual({ decision: 'go', edits: { helpers: ['codex', 'agy'] } });
+  });
+
+  it('a Go crew refused (launch_failed) offers Go again at once, even when its accepting record is moments old', async () => {
+    decideAnswer = () => new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    // The reread after the refusal carries the fresh accepting record.
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: Date.now(), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await screen.findByTestId('artifact-proposal-go-again');
+    expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+  });
+
+  it('the helpers-only form stays mounted while its answer is on the way, and keeps the replacement when refused', async () => {
+    decideAnswer = () => new Response(JSON.stringify({ code: 'chat_busy', error: 'This chat already has a job running (run 0bad0bad). Wait, or stop that run.' }), { status: 409, headers: { 'content-type': 'application/json' } });
+    chatBody = { ...chatBody, messages: [
+      ...TURN,
+      { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() },
+      { at: T0 + 1600, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
+    ] };
+    page();
+    fireEvent.click(await screen.findByTestId('artifact-proposal-change-helpers'));
+    const form = screen.getByTestId('proposal-answer-form');
+    fireEvent.click(within(form).getAllByTestId('proposal-answer-seat').find((s) => s.getAttribute('data-seat') === 'claude')!);
+    fireEvent.click(within(form).getAllByTestId('proposal-answer-seat').find((s) => s.getAttribute('data-seat') === 'agy')!);
+    fireEvent.click(within(form).getByTestId('proposal-answer-go'));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-error').textContent).toContain('already has a job running'));
+    expect(screen.getByTestId('proposal-answer-form')).toBe(form);
+    expect(within(form).getAllByTestId('proposal-answer-seat').filter((s) => s.getAttribute('aria-pressed') === 'true').map((s) => s.getAttribute('data-seat')).sort()).toEqual(['agy', 'codex']);
+  });
+
+  it('a helper the tab thinks is signed out can be checked again: a fresh roster read lifts it', async () => {
+    setCachedRoster([
+      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, auth: 'signed_out' } as never,
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true } as never,
+    ]);
+    const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => new URL(url, 'http://x').pathname.endsWith('/roster')
+      ? Promise.resolve(ok({ roster: [
+        { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
+        { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true },
+      ] }))
+      : base(url, init)));
+    const form = await openForm();
+    expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(true);
+    fireEvent.click(within(form).getByTestId('proposal-answer-council-refresh'));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(false));
   });
 
   it('Cancel puts focus back on Change something', async () => {

@@ -110,6 +110,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
       // The card keeps every refusal; where it shows depends on what is on screen when it renders (the form while it is
       // open, else under the card), never on the response alone: a live record may already have closed the form.
       setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
+      setRefusedAt(Date.now());
       return refusal.words;
     } finally {
       sending.current = false;
@@ -134,7 +135,11 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   // card says so instead of "Interrupted · Go again".
   // Judged against the clock at every render; the timer only makes a render happen when the window closes.
   const [, setTick] = useState(0);
-  const starting = proposalStarting(view, Date.now(), busy);
+  // A Go that crew answered with a refusal (launch_failed, helper_unavailable, …) is not starting, whatever its age: the
+  // card offers Go again at once. A newer accepting record (another Go) starts the window again.
+  const [refusedAt, setRefusedAt] = useState<number | null>(null);
+  const refused = refusedAt !== null && view.state === 'accepting' && (view.acceptingAt ?? 0) <= refusedAt;
+  const starting = !refused && proposalStarting(view, Date.now(), busy && !answering);
   useEffect(() => {
     if (view.state !== 'accepting' || busy || view.acceptingAt === undefined) return;
     // Never skipped: a window that closed between the render and this effect still gets its render (delay 0).
@@ -206,7 +211,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
           </div>
         </>
       )}
-      {(open || (view.state === 'accepting' && !starting)) && answering && (
+      {(open || view.state === 'accepting') && answering && (
         <NewDocument
           projects={projects}
           onClose={() => {
