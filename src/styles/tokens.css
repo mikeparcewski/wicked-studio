@@ -157,9 +157,10 @@
   --space-12: 48px; --space-16: 64px;
 
   /* ── Type (§2.8, round 6): one sans for prose, labels and data; mono only for real code. */
-  /* The three swap points (operator 2026-11-01): text is Wicked Sans v2, with self-hosted Inter as the per-character
-     fallback (Wicked Sans has no accented letters); code JetBrains Mono; --font-display is Wicked Serif, the default
-     wordmark only. All self-hosted (fonts.css), no CDN. */
+  /* The three swap points (operator 2026-11-01; the face per fonts-v3, 2026-11-02): text is Wicked Sans A, an OFL cut
+     of Inter covering Latin-1 and Latin Extended-A, with self-hosted Inter as the per-character fallback beyond that;
+     code JetBrains Mono; --font-display is Wicked Serif, now only for brand text set with .wk-wordmark (the default
+     wordmark is drawn: components/ui/BrandMarks.tsx). All self-hosted (fonts.css), no CDN. */
   --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
   --font-display: 'Wicked Serif', Georgia, serif;

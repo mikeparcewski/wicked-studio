@@ -41,6 +41,11 @@ describe('the brand marks', () => {
     expect(bar.querySelector('.wk-desk-dot, .wk-wordmark')).toBeNull();
   });
 
+  it('the mask keeps its paint under forced colours (high contrast would erase a background-colour mask)', () => {
+    const css = readFileSync(join(process.cwd(), 'src', 'styles', 'components.css'), 'utf8');
+    expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.wk-brand-svg \{ forced-color-adjust: none; background-color: CanvasText; \}/u);
+  });
+
   it('the favicon is the vendored Shoreline mark', () => {
     const html = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
     expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/src/vendor/wicked-design/brand/favicon.svg" />');

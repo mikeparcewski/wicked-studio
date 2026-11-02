@@ -657,6 +657,11 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-size: contain;
 }
 .wk-rail-brand .wk-brand-svg, .wk-topbar-brand .wk-brand-svg { color: var(--ink-high); }
+/* Forced colours (Windows high contrast) repaint backgrounds to the surface, which would erase a mask painted
+   with background-color: keep the paint and give it the system text colour, so the lockup stays visible. */
+@media (forced-colors: active) {
+  .wk-brand-svg { forced-color-adjust: none; background-color: CanvasText; }
+}
 .wk-desk-avatar .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
 /* The action row (DES-SYSTEM-CHAT §1): four equal icon buttons — New job · New project · Chat · Search. */
 .wk-rail-actions { display: flex; align-items: center; gap: 6px; margin: 0 10px 10px; }
