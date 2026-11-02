@@ -149,7 +149,15 @@ export function prologueEnd(text: string): { at: number; afterHashbang: boolean;
       lineStart = false;
       at = i;
       semicolon = false;
-    } else if (crossed && endsByAsi(text, i)) {
+    } else if (text.startsWith('<!--', i)) {
+      // A comment in a classic script, code in a module (`"a" < !--x`): end the directive here with our own `;` and
+      // stop, so the prelude stands before this text either way (a module then fails on it; a classic script keeps its
+      // strict mode).
+      at = end;
+      semicolon = true;
+      afterHashbang = false;
+      break;
+    } else if ((crossed || i >= n) && endsByAsi(text, i)) {
       at = end;
       semicolon = true;
     } else {
@@ -201,7 +209,7 @@ function scriptsIn(root: ParentNode): Element[] {
 }
 
 /** The document's own enforcing CSP metas, including those inside HTML `<template>` contents (cloned in later, they
- *  would hash the rewritten scripts as they were and refuse them). */
+ *  would otherwise hash the rewritten scripts as they were and refuse them). */
 function cspMetasIn(root: ParentNode): Element[] {
   const out = Array.from(root.querySelectorAll('meta[http-equiv]')).filter((m) => m.getAttribute('http-equiv')!.trim().toLowerCase() === 'content-security-policy');
   for (const t of Array.from(root.querySelectorAll('template'))) if (t.namespaceURI === HTML_NS) out.push(...cspMetasIn(t.content));
@@ -225,9 +233,16 @@ export function guardNestedHtml(html: string): string {
     script.textContent = text;
     hashes.add(sha256Base64(text));
   }
-  // The document's own enforcing policy would still hash the scripts as they were, and refuse them as rewritten. This
-  // frame stays under the bundle's policy and the one written below, so the document's own is dropped.
-  for (const own of cspMetasIn(doc)) own.remove();
+  // The document's own enforcing policy would still hash the scripts as they were, and refuse them as rewritten. Its
+  // script directives give way to inline scripts (the policies written below decide which run); everything else it
+  // restricts (images, styles, fonts...) stays.
+  for (const own of cspMetasIn(doc)) {
+    const kept = (own.getAttribute('content') ?? '')
+      .split(';')
+      .map((d) => d.trim())
+      .filter((d) => d !== '' && !/^script-src(-elem|-attr)?(\s|$)/i.test(d));
+    own.setAttribute('content', [...kept, "script-src 'unsafe-inline'"].join('; '));
+  }
   const policy = doc.createElement('meta');
   policy.setAttribute('http-equiv', 'Content-Security-Policy');
   policy.setAttribute(

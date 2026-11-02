@@ -80,7 +80,7 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     expect(withNestedPrelude('<!-- old\n"use strict";x()')).toBe(`<!-- old\n"use strict";${P}x()`);
     expect(withNestedPrelude('\n--> old\n"use strict";x()')).toBe(`\n--> old\n"use strict";${P}x()`);
     // After a directive, `<!--` is code in a module: never skipped there, so the prelude goes first (review r7).
-    expect(withNestedPrelude('"a"\n<!--window[rtc()]\n;')).toBe(`${P}"a"\n<!--window[rtc()]\n;`);
+    expect(withNestedPrelude('"a"\n<!--window[rtc()]\n;')).toBe(`"a";${P}\n<!--window[rtc()]\n;`);
     expect(withNestedPrelude('/*\n*/ --> c\n"use strict";y()')).toBe(`/*\n*/ --> c\n"use strict";${P}y()`);
     expect(withNestedPrelude('#!/x\ny()')).toBe(`#!/x\n${P}\ny()`);
     expect(withNestedPrelude('"use strict"\nb()')).toBe(`"use strict";${P}\nb()`);
@@ -94,13 +94,14 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     expect(hashesOf(doc)).toContain(node(script.textContent!));
   });
 
-  it("the document's own enforcing CSP is dropped (it would refuse the rewritten scripts); a report-only one stays", () => {
-    const own = '<head><meta http-equiv="Content-Security-Policy" content="script-src \'sha256-AAAA\'"><meta http-equiv="content-security-policy-report-only" content="img-src none"></head><body><script>window.x=1</script></body>';
+  it("the document's own enforcing CSP keeps its non-script restrictions; its script directives give way to inline scripts", () => {
+    const own = '<head><meta http-equiv="Content-Security-Policy" content="script-src \'sha256-AAAA\'; style-src \'none\'; img-src \'none\'; script-src-elem \'none\'"><meta http-equiv="content-security-policy-report-only" content="img-src none"></head><body><script>window.x=1</script></body>';
     const doc = parse(guardNestedHtml(own));
-    const metas = Array.from(doc.querySelectorAll('meta[http-equiv]')).map((m) => m.getAttribute('http-equiv')!.toLowerCase());
-    expect(metas).toEqual(['content-security-policy', 'content-security-policy', 'content-security-policy-report-only']);
+    const metas = Array.from(doc.querySelectorAll('meta[http-equiv]')).map((m) => [m.getAttribute('http-equiv')!.toLowerCase(), m.getAttribute('content')]);
     expect(policyOf(doc)).toMatch(/^script-src 'sha256-/);
-    expect(policyOf(doc)).not.toContain('AAAA');
+    expect(metas.find(([, c]) => c!.startsWith("style-src 'none'"))).toEqual(['content-security-policy', "style-src 'none'; img-src 'none'; script-src 'unsafe-inline'"]);
+    expect(metas.some(([k]) => k === 'content-security-policy-report-only')).toBe(true);
+    expect(JSON.stringify(metas)).not.toContain('AAAA');
   });
 
   it('scripts inside <template> contents (a declarative shadow root, a template cloned later) are guarded and hashed too', () => {
@@ -141,10 +142,10 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     expect(hashesOf(doc)).toContain(node(s.textContent!));
   });
 
-  it("a template's own enforcing CSP is dropped too (cloned in later, it would refuse the template's rewritten script)", () => {
-    const doc = parse(guardNestedHtml('<template id="t"><meta http-equiv="Content-Security-Policy" content="script-src \'sha256-AAAA\'"><script>window.t=1</script></template>'));
+  it("a template's own enforcing CSP gives way the same way (cloned in later, it would refuse the template's rewritten script)", () => {
+    const doc = parse(guardNestedHtml('<template id="t"><meta http-equiv="Content-Security-Policy" content="script-src \'sha256-AAAA\'; style-src \'none\'"><script>window.t=1</script></template>'));
     const content = (doc.getElementById('t') as HTMLTemplateElement).content;
-    expect(content.querySelector('meta[http-equiv]')).toBeNull();
+    expect(content.querySelector('meta[http-equiv]')!.getAttribute('content')).toBe("style-src 'none'; script-src 'unsafe-inline'");
     expect(content.querySelector('script')!.textContent).toBe(`${P}window.t=1`);
   });
 
