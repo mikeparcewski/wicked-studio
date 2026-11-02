@@ -173,59 +173,71 @@ test('agents: picking one puts it in the sandbox; the search example counts its 
   await expect(reach.locator('.hits caption')).toContainText('8 hits');
 });
 
+// The example search on a fake clock (timers and animation frames), so every step is placed exactly
+// and a loaded host cannot skip one. Its summary is shown unless the card is typing (is-pre) or
+// counting (is-done without is-counted); while it is shown or painted, the rows must read 4,3,1.
+async function searchSteps(page: Page) {
+  const card = page.locator('[data-search]');
+  const state = () => card.evaluate((el) => {
+    const rows = Array.from(el.querySelectorAll('[data-n]')).map((c) => c.textContent).join(',');
+    const has = (c: string) => el.classList.contains(c);
+    // shown by its classes (a flip the fade has not painted yet) or by what is painted (a CSS rule lost)
+    const painted = parseFloat(getComputedStyle(el.querySelector('.hits caption')!).opacity) > 0.01;
+    return { rows, pre: has('is-pre'), done: has('is-done'), counted: has('is-counted'), shown: painted || (!has('is-pre') && !(has('is-done') && !has('is-counted'))) };
+  });
+  const bad: string[] = [];
+  // advance in 35ms steps until `until` holds, checking the invariant at every step
+  const run = async (until: (s: Awaited<ReturnType<typeof state>>) => boolean, label: string) => {
+    let st = await state();
+    // a real-time bound, not a step count: the observer that starts a play runs on real time
+    for (const deadline = Date.now() + 20_000; Date.now() < deadline;) {
+      st = await state();
+      if (st.shown && st.rows !== '4,3,1') bad.push(`${label}:${st.rows}`);
+      if (until(st)) return st;
+      await page.clock.runFor(35);
+    }
+    throw new Error(`the search never finished its ${label}: ${JSON.stringify(st)}`);
+  };
+  return { state, run, bad };
+}
+
 test('the example search never shows its total while its rows still count up', async ({ page }) => {
+  await page.clock.install();
   await page.goto('/');
-  // start the sampler before the card comes into view, so it sees the typing, the climb and the reveal
-  const sampled = page.evaluate(() => new Promise<{ frames: number; shown: number; bad: string[] }>((done) => {
-    const card = document.querySelector('[data-search]')!;
-    const cap = card.querySelector('.hits caption')!;
-    const cells = Array.from(card.querySelectorAll('[data-n]'));
-    const bad: string[] = [];
-    let frames = 0, shown = 0;
-    const t0 = performance.now();
-    const tick = () => {
-      frames++;
-      const sum = cells.reduce((a, c) => a + Number(c.textContent), 0);
-      if (parseFloat(getComputedStyle(cap).opacity) > 0.01) { shown++; if (sum !== 8) bad.push(cells.map((c) => c.textContent).join(',')); }
-      if (performance.now() - t0 < 4000) requestAnimationFrame(tick); else done({ frames, shown, bad });
-    };
-    requestAnimationFrame(tick);
-  }));
+  const { run, bad } = await searchSteps(page);
   await page.locator('.reach').evaluate((el) => el.scrollIntoView({ block: 'start' }));
-  const r = await sampled;
-  expect(r.bad).toEqual([]);
-  expect(r.shown).toBeGreaterThan(0);
+  await run((st) => st.done, 'typing');
+  // done when counted, or when the rows have read 4,3,1 for 10 steps without it (then the assert fails)
+  let settled = 0;
+  const end = await run((st) => st.done && (st.counted || (st.rows === '4,3,1' && ++settled > 10)), 'climb');
+  expect(bad).toEqual([]);
+  expect(end.counted).toBe(true);
   await expect(page.locator('.reach .hits caption')).toHaveCSS('opacity', '1');
 });
 
 test('leaving the example search mid-count and coming straight back never shows a stale total', async ({ page }) => {
+  await page.clock.install();
   await page.goto('/');
-  const r = await page.evaluate(() => new Promise<{ bad: string[]; replayed: boolean; final: string }>((done) => {
-    const card = document.querySelector('[data-search]')!;
-    const reach = document.querySelector('.reach') as HTMLElement;
-    const cap = card.querySelector('.hits caption')!;
-    const cells = Array.from(card.querySelectorAll('[data-n]'));
-    const bad: string[] = [];
-    let phase = 'in', t = 0, replayed = false;
-    const t0 = performance.now();
-    reach.scrollIntoView({ block: 'start' });
-    const tick = (now: number) => {
-      const sum = cells.reduce((a, c) => a + Number(c.textContent), 0);
-      if (parseFloat(getComputedStyle(cap).opacity) > 0.01 && sum !== 8) bad.push(`${phase}:${cells.map((c) => c.textContent).join(',')}`);
-      // 1. wait for the first climb to start, 2. leave ~220ms into it, 3. come back as soon as it resets
-      if (phase === 'in' && card.classList.contains('is-done')) { phase = 'climbing'; t = now; }
-      else if (phase === 'climbing' && now - t > 220) { phase = 'away'; window.scrollTo({ top: 0, behavior: 'instant' }); }
-      else if (phase === 'away' && card.classList.contains('is-pre')) { phase = 'back'; reach.scrollIntoView({ block: 'start' }); }
-      else if (phase === 'back' && card.classList.contains('is-done')) { phase = 'replay'; replayed = true; t = now; }
-      else if (phase === 'replay' && now - t > 1600) { done({ bad, replayed, final: cells.map((c) => c.textContent).join(',') }); return; }
-      if (now - t0 > 12000) { done({ bad: [...bad, `timeout in ${phase}`], replayed, final: '' }); return; }
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }));
-  expect(r.replayed).toBe(true);
-  expect(r.bad).toEqual([]);
-  expect(r.final).toBe('4,3,1');
+  const { state, run, bad } = await searchSteps(page);
+  const reach = page.locator('.reach');
+  await reach.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await run((st) => st.done, 'typing');
+  await page.clock.runFor(280); // 40% into the 700ms climb: its next frame is still pending
+  const mid = await state();
+  expect(mid.counted).toBe(false);
+  expect(mid.rows).not.toBe('0,0,0');
+  expect(mid.rows).not.toBe('4,3,1');
+  // leave (the observer is real, so the reset runs without the clock), then come straight back
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await expect.poll(async () => (await state()).pre).toBe(true);
+  await reach.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  // the replay types again, during which the old play's pending frames come due, then counts
+  await run((st) => st.done, 'replay typing');
+  // done when counted, or when the rows have read 4,3,1 for 10 steps without it (then the assert fails)
+  let settled = 0;
+  const end = await run((st) => st.done && (st.counted || (st.rows === '4,3,1' && ++settled > 10)), 'replay climb');
+  expect(bad).toEqual([]);
+  expect(end.counted).toBe(true);
   await expect(page.locator('.reach .hits caption')).toHaveCSS('opacity', '1');
 });
 
