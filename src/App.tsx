@@ -552,15 +552,17 @@ export function App(): React.ReactElement {
   // ── Repo graph modal — opened from RepoDetailPage via onOpenGraph ───────────
   const [graphModalRepo, setGraphModalRepo] = useState<RepoEntry | null>(null);
   const [graphModalFocus, setGraphModalFocus] = useState<string | null>(null);
+  const [graphModalView, setGraphModalView] = useState<'code' | 'domain'>('code');
 
   const openGraphModal = useCallback(
-    (focus?: string) => {
+    (focus?: string, view: 'code' | 'domain' = 'code') => {
       if (!repoId) return;
       setGraphModalFocus(focus ?? null);
+      setGraphModalView(view);
       void api.listRepos().then(({ repos }) => {
         const r = repos.find((x) => x.id === repoId);
         if (r) setGraphModalRepo(r);
-      });
+      }, () => undefined);
     },
     [repoId],
   );
@@ -929,8 +931,10 @@ export function App(): React.ReactElement {
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (
         <RepoGraphModal
+          key={`${graphModalRepo.id}:${graphModalView}`}
           repo={graphModalRepo}
           initialFocus={graphModalFocus}
+          initialView={graphModalView}
           onClose={() => { setGraphModalRepo(null); setGraphModalFocus(null); }}
           onSelectRun={selectRun}
         />

@@ -15,13 +15,17 @@ import { useMembershipStore } from '../store/membership.js';
 import { readErrorKind } from '../api/errors.js';
 import { useDisplayText } from '../hooks/useHomePath.js';
 import { announceHistoryChange, keepEntryState, useHistoryEntryValue } from '../hooks/useHistoryState.js';
+import { knowledgeMarks } from '../board/repoKnowledge.js';
+import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
+import { KnowMarks } from './RepoKnowledge.js';
 import { EmptyState, PageFrame, SectionTitle, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
 
 interface Props {
   repoId: string;
   onSelectRun: (id: string) => void;
   navigate: (path: string) => void;
-  onOpenGraph: (focus?: string) => void;
+  /** Opens the repository's graph: the code graph (optionally focused on a symbol) or its requirements graph. */
+  onOpenGraph: (focus?: string, view?: 'code' | 'domain') => void;
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
@@ -61,6 +65,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
+  const [runsFailed, setRunsFailed] = useState(false);
   const [graph, setGraph] = useState<CodeGraphData | null>(null);
   // studio#461: a failed graph read is its own state, never "not indexed".
   const [graphFailed, setGraphFailed] = useState<string | null>(null);
@@ -78,6 +83,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [rerunError, setRerunError] = useState<unknown>(null);
   const entryOnboardError = useHistoryEntryValue('onboardError');
   const registrationError = typeof entryOnboardError === 'string' && entryOnboardError.trim() !== '' ? entryOnboardError : null;
+  // What we know about it (round 10): the same marks as its row on Repositories, as a band of tiles.
+  const knowledge = useRepoKnowledgeFor([repoId]);
 
   useEffect(() => {
     setRerunError(null);
@@ -97,14 +104,16 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
       api.listRepos().then(({ repos }) => repos.find(r => r.id === repoId) ?? null),
       api.listRuns().then(({ runs: rs }) =>
         rs.filter((v: SessionView) => v.session.repo_ref === repoId)
-      ).catch(() => [] as SessionView[]),
+      ).catch(() => null),
       api.getRepoGraph(repoId)
         .then(({ graph: g }) => ({ g, failed: null as string | null }))
         .catch((e: unknown) => ({ g: null, failed: e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer' })),
     ]).then(([r, rs, gr]) => {
       if (cancelled) return;
       setRepo(r);
-      setRuns(rs);
+      // A failed run list: the page lists none, and What we know says its run marks are unknown (not none).
+      setRuns(rs ?? []);
+      setRunsFailed(rs === null);
       setGraph(gr.g);
       setGraphFailed(gr.failed);
     }).catch((err: unknown) => {
@@ -312,6 +321,21 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
         {graphFailedHere && (
           <StateBanner data-testid="repo-graph" kind={readErrorKind(graphFailed)} what="the code map" error={graphFailed} onRetry={retryGraph} />
         )}
+
+        <section className="wk-card wk-know-sec" aria-labelledby="repo-know-title" data-testid="repo-know-band">
+          <h2 id="repo-know-title" className="wk-section-title">What we know</h2>
+          <KnowMarks
+            variant="band"
+            testId="repo-know"
+            marks={knowledgeMarks(repo, runsFailed ? null : runs, knowledgeOf(knowledge, repo.id), Date.now())}
+            onOpen={(t) => {
+              if (t.kind === 'code-graph') onOpenGraph();
+              else if (t.kind === 'req-graph') onOpenGraph(undefined, 'domain');
+              else if (t.kind === 'requirements') setRequirementsOpen(true);
+              else if (t.kind === 'run') onSelectRun(t.runId);
+            }}
+          />
+        </section>
 
         <StatLine
           data-testid="repo-detail-stats"

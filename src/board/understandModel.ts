@@ -18,6 +18,8 @@ export interface AskedQuestion {
   question: string;
   /** Unix ms. */
   at: number;
+  /** The repositories it was asked about (the page's choice when sent); absent = all of them, or not recorded. */
+  repos?: string[];
 }
 
 export const ASKED_KEY = 'studio.understand.asked';
@@ -179,4 +181,17 @@ function withoutGrounding(title: string): string {
     if (t.endsWith(head) && /(^|\s)$/u.test(t.slice(0, t.length - k))) return t.slice(0, t.length - k);
   }
   return t;
+}
+
+/** How many repositories Understand's sidebar links to before it offers "All N repositories". */
+export const GRAPH_LINKS_SHOWN = 6;
+
+/**
+ * The repositories whose graphs Understand's sidebar links to (operator, round 10: "quick links to the repo graphs
+ * (code and requirements)"): the ones the question is about, in the list's order; with none chosen (the question
+ * reads them all), every repository. At most {@link GRAPH_LINKS_SHOWN}.
+ */
+export function graphLinkRepos<R extends { id: string }>(repos: readonly R[], scope: readonly string[]): R[] {
+  const inScope = scope.length === 0 ? repos : repos.filter((r) => scope.includes(r.id));
+  return inScope.slice(0, GRAPH_LINKS_SHOWN);
 }

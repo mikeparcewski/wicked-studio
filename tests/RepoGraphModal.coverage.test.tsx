@@ -64,3 +64,15 @@ describe('the domain-graph modal: real requirements, never placeholders as progr
     expect(screen.queryByTestId('domain-graph-coverage')).not.toBeInTheDocument();
   });
 });
+
+describe('opened on the requirements graph (round 10: a requirements-graph link)', () => {
+  it('starts on the Domain view and never waits for the code graph', async () => {
+    getRepoGraph.mockReset().mockReturnValue(new Promise(() => {})); // the code graph never answers
+    getRepoDomainGraph.mockReset().mockResolvedValue({ graph: GRAPH, coverage: OLD_DOMAIN_COVERAGE });
+    listRequirements.mockReset().mockResolvedValue({ total: 1, corpus: 1, offset: 0, limit: 1, items: [], coverage: LIVE });
+    render(<RepoGraphModal repo={repo} initialView="domain" onClose={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Domain' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByText(/54% real requirements/)).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).toBeNull();
+  });
+});

@@ -22,6 +22,25 @@ import { statusCounts, type StatusCounts } from './windowStats.js';
  * Windowed counts reuse `statusCounts`/`outcomeOf` — never re-implemented.
  */
 
+/**
+ * The runs newest first by `created_at` (stable for runs without one). `GET /runs` is not in start order (on the rig a
+ * repository's re-index 2 days ago came after its first index 16 days ago), so "the newest onboard" must sort.
+ */
+function newestFirst(runs: readonly SessionView[]): SessionView[] {
+  const at = (v: SessionView): number => (typeof v.session.created_at === 'number' && Number.isFinite(v.session.created_at) ? v.session.created_at : 0);
+  return [...runs].sort((a, b) => at(b) - at(a));
+}
+
+/**
+ * A run's workflow: the resolved preset or workflow name (`run_identity.name`) when the daemon stamps one (a
+ * materialized definition's `workflow_id` is `wf-<id>`), else its `workflow_id`.
+ */
+export function runWorkflow(v: SessionView): string {
+  const id = (v.session as { run_identity?: { kind?: string; name?: string | null } }).run_identity;
+  if ((id?.kind === 'preset' || id?.kind === 'workflow') && typeof id.name === 'string' && id.name !== '') return id.name;
+  return v.session.workflow_id ?? '';
+}
+
 /** The graph-building workflow's id (crew's BUILTIN_WORKFLOWS). */
 export const ONBOARDING_WORKFLOW_ID = 'onboarding';
 
@@ -125,9 +144,9 @@ export function graphReady(m: Pick<RepoFleetModel, 'onboard' | 'graphGap'>): boo
  */
 export function repoOnboard(runs: readonly SessionView[], repoId: string): RepoOnboard {
   let verdict: RepoOnboard | null = null;
-  for (const v of runs) {
+  for (const v of newestFirst(runs)) {
     const s = v.session;
-    if (s.archived_at != null || s.repo_ref !== repoId || s.workflow_id !== ONBOARDING_WORKFLOW_ID) continue;
+    if (s.archived_at != null || s.repo_ref !== repoId || runWorkflow(v) !== ONBOARDING_WORKFLOW_ID) continue;
     const o = outcomeOf(s.status);
     if (o === 'run' || o === 'gate') return { state: 'onboarding', run: v };
     if (o === 'cancelled') continue; // withdrawn, not a verdict — look further back
@@ -143,9 +162,9 @@ export function repoOnboard(runs: readonly SessionView[], repoId: string): RepoO
  */
 export function repoCapture(runs: readonly SessionView[], repoId: string): RepoCapture {
   let verdict: RepoCapture | null = null;
-  for (const v of runs) {
+  for (const v of newestFirst(runs)) {
     const s = v.session;
-    if (s.archived_at != null || s.repo_ref !== repoId || s.workflow_id !== CAPTURE_LEARNINGS_WORKFLOW_ID) continue;
+    if (s.archived_at != null || s.repo_ref !== repoId || runWorkflow(v) !== CAPTURE_LEARNINGS_WORKFLOW_ID) continue;
     const o = outcomeOf(s.status);
     if (o === 'run' || o === 'gate') return { state: 'capturing', run: v };
     if (o === 'cancelled') continue; // withdrawn, not a verdict — look further back
