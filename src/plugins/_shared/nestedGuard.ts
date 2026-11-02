@@ -86,12 +86,22 @@ export function prologueEnd(text: string): { at: number; afterHashbang: boolean;
     afterHashbang = true;
   }
   let crossed = false;
+  // At the start of a line (only whitespace and comments since the last line end): where a classic script's `-->`
+  // opens a line comment.
+  let lineStart = true;
   /** Past whitespace and whole comments (noting a line end); false at a block comment that never closes. */
   const skip = (): boolean => {
     for (;;) {
       while (i < n && SPACE.test(text[i]!)) {
-        if (LINE_END.test(text[i]!)) crossed = true;
+        if (LINE_END.test(text[i]!)) {
+          crossed = true;
+          lineStart = true;
+        }
         i++;
+      }
+      if (lineStart && text.startsWith('-->', i)) {
+        while (i < n && !LINE_END.test(text[i]!)) i++;
+        continue;
       }
       if (text.startsWith('/*', i)) {
         const close = text.indexOf('*/', i + 2);
@@ -119,12 +129,14 @@ export function prologueEnd(text: string): { at: number; afterHashbang: boolean;
       j += 1;
     }
     if (!closed) break;
+    lineStart = false;
     const end = j;
     i = j;
     crossed = false;
     if (!skip()) break;
     if (text[i] === ';') {
       i += 1;
+      lineStart = false;
       at = i;
       semicolon = false;
     } else if (crossed && endsByAsi(text, i)) {
@@ -160,7 +172,7 @@ const HTML_NS = 'http://www.w3.org/1999/xhtml';
  *  script is external by `href` or `xlink:href`; `src` means nothing there. */
 function runsInline(s: Element): boolean {
   if (s.namespaceURI === SVG_NS ? s.hasAttribute('href') || s.hasAttribute('xlink:href') : s.hasAttribute('src')) return false;
-  const language = s.getAttribute('language');
+  const language = s.namespaceURI === SVG_NS ? null : s.getAttribute('language'); // HTML's legacy fallback, not SVG's
   const raw = s.hasAttribute('type') ? s.getAttribute('type')! : language !== null && language !== '' ? `text/${language}` : '';
   if (raw === '') return true;
   const type = raw.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '').toLowerCase();

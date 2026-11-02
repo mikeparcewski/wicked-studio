@@ -78,6 +78,7 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
   it('a directive prologue and a hashbang stay first (strict mode is kept); after a lone hashbang the prelude starts a new line', () => {
     expect(withNestedPrelude('"use strict";x()')).toBe(`"use strict";${P}x()`);
     expect(withNestedPrelude('<!-- old\n"use strict";x()')).toBe(`<!-- old\n"use strict";${P}x()`);
+    expect(withNestedPrelude('\n--> old\n"use strict";x()')).toBe(`\n--> old\n"use strict";${P}x()`);
     expect(withNestedPrelude('#!/x\ny()')).toBe(`#!/x\n${P}\ny()`);
     expect(withNestedPrelude('"use strict"\nb()')).toBe(`"use strict";${P}\nb()`);
     expect(withNestedPrelude('"use strict"\n(b)')).toBe(`${P}"use strict"\n(b)`);
@@ -125,6 +126,9 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     expect(svgScripts[1]!.textContent).toBe('');
     expect(svgScripts[2]!.textContent).toBe('');
     expect(doc.querySelector('body > script[src]')!.textContent).toBe('');
+    // `language` is HTML's fallback only: an SVG script with language="other" runs, so it is guarded.
+    const lang = parse(guardNestedHtml('<svg><script language="other">window.l=1</script></svg>'));
+    expect(lang.querySelector('svg script')!.textContent).toBe(`${P}window.l=1`);
   });
 
   it('inline event handlers stay in the markup but the policy refuses them (no unsafe-hashes)', () => {
