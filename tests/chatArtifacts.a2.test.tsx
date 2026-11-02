@@ -156,7 +156,9 @@ describe('the proposal fold', () => {
     expect(blocked.default).toBe('change');
     expect(blocked.options?.[0]).toMatchObject({ disabled: 'Blocked: Needs a second helper to check it' });
     expect(blocked.options?.[0]?.consequence).toMatch(/^Test configuration/);
-    expect(changeRoute('create').note).toMatch(/New document form/);
+    // A3: a create's Change something is New document in "answer this proposal" mode; the others say what is coming.
+    expect(changeRoute('create')).toStrictEqual({ kind: 'form' });
+    expect(changeRoute('refine')).toMatchObject({ kind: 'stub', note: expect.stringMatching(/refining from a chat/) });
   });
 });
 
@@ -198,14 +200,15 @@ describe('the card in the chat thread', () => {
     expect(screen.getByTestId('ask-record-row').textContent).toContain('Started · run aaaaaaaa');
   });
 
-  it('Not now posts not_now; Change something posts nothing and says what is coming', async () => {
+  it('Not now posts not_now; Change something posts nothing (a create opens New document under the card)', async () => {
     decideAnswer = () => ok({ view: { proposal: proposal(), state: 'decided', decision: 'not_now', result: null, decidedAt: T0 + 3000 } });
     page();
     const card = await screen.findByTestId('artifact-proposal');
     fireEvent.click(card.querySelector('[data-ask-option="change"]')!);
     fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
-    expect(text('artifact-proposal-note')).toMatch(/New document form/);
+    expect(screen.getByTestId('proposal-answer-form')).not.toBeNull();
     expect(posts).toStrictEqual([]);
+    fireEvent.click(screen.getByTestId('proposal-answer-cancel')); // the form is the one answer surface while open
     fireEvent.click(card.querySelector('[data-ask-option="not_now"]')!);
     fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
     await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));

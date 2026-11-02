@@ -4,6 +4,8 @@ import type {
   ArtifactProposalKind,
   ChatProposalRecord,
   ChatProposalView,
+  ProposalEdits,
+  ProposalSource,
 } from '../api/chatArtifacts-wire.js';
 import { ApiError } from '../api/errors.js';
 
@@ -23,6 +25,9 @@ export interface ProposalEntry extends ChatProposalView {
   /** What a Go accepted (edits applied), kept beside the proposal as crew keeps it: the card shows it while accepting
    *  and once started, and the proposal as recorded otherwise (crew's `viewOf`). */
   accepted?: ArtifactProposal;
+  /** When Go was recorded (`proposal_accepting`, daemon millis): a real launch takes seconds (A3), so a fresh one is
+   *  "Starting it…", not interrupted. */
+  acceptingAt?: number;
 }
 
 const KINDS: ReadonlySet<string> = new Set(['proposal', 'proposal_accepting', 'proposal_decided']);
@@ -45,11 +50,15 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   if (!Array.isArray(p['sources']) || !p['sources'].every(isSource)) return false;
   if (!Array.isArray(p['repos']) || !p['repos'].every(str)) return false;
   const helpers = p['helpers'];
-  if (helpers !== null && (!isObj(helpers) || !str(helpers['label']))) return false;
+  if (helpers !== null && (!isObj(helpers) || !str(helpers['label']) || !Array.isArray(helpers['seats']) || !helpers['seats'].every(str))) return false;
+  // (A3) What the answer form reads: the repositories' ids, a retry's document.
+  const refs = p['repoRefs'];
+  if (refs !== undefined && (!Array.isArray(refs) || !refs.every(str))) return false;
+  if (p['artifactRef'] !== undefined && !str(p['artifactRef'])) return false;
   const time = p['time'];
   if (time !== null && (!isObj(time) || !str(time['label']))) return false;
   const filed = p['filedIn'];
-  if (!isObj(filed) || !str(filed['label'])) return false;
+  if (!isObj(filed) || !str(filed['label']) || !(filed['projectId'] === null || str(filed['projectId']))) return false;
   const target = p['target'];
   if (target !== undefined && (!isObj(target) || !str(target['title']) || typeof target['base'] !== 'number')) return false;
   const theme = p['theme'];
@@ -102,6 +111,7 @@ export function foldChatProposals(records: readonly unknown[]): ProposalEntry[] 
       if (v === undefined || v.state === 'decided') continue;
       v.state = 'accepting';
       v.accepted = r.resolution;
+      v.acceptingAt = r.at;
     } else {
       const v = byPid.get(r.pid);
       if (v === undefined || v.state === 'decided') continue;
@@ -185,9 +195,10 @@ const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
  * page (theme) or New job's demo form (demo). Each arrives with its own slice; until then the card says what is coming
  * instead of opening a form that cannot answer the proposal.
  */
-export function changeRoute(kind: ArtifactProposalKind): { kind: 'stub'; note: string } {
-  const notes: Record<ArtifactProposalKind, string> = {
-    create: 'Changing the brief, sources and helpers opens the New document form once documents can be made from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
+export function changeRoute(kind: ArtifactProposalKind): { kind: 'form' } | { kind: 'stub'; note: string } {
+  // A3: a create opens New document in "answer this proposal" mode, under the card.
+  if (kind === 'create') return { kind: 'form' };
+  const notes: Record<Exclude<ArtifactProposalKind, 'create'>, string> = {
     refine: 'Editing the ask here comes with refining from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
     theme: 'Opening the theme on the Theme page comes with theme proposals. For now, say what to change in the chat and a new proposal replaces this one.',
     demo: 'Changing the address, audience and what to show comes with demo videos from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
@@ -234,10 +245,19 @@ export function shownProposal(e: ProposalEntry): ArtifactProposal {
 }
 
 /** The one plain line an answered (or replaced, or interrupted) card collapses to; `null` while it is open. */
-export function proposalRecordLine(e: ProposalEntry): string | null {
+/** How long a recorded Go reads as still starting (crew creates the document, snapshots its repositories and launches:
+ *  seconds, up to a big clone). After it, an `accepting` proposal reads as interrupted, with Go again. */
+export const PROPOSAL_STARTING_MS = 180_000;
+
+/** Whether an `accepting` proposal is still starting: this tab's own Go is in flight, or Go was recorded moments ago. */
+export function proposalStarting(e: ProposalEntry, now: number, inFlight: boolean): boolean {
+  return e.state === 'accepting' && (inFlight || (e.acceptingAt !== undefined && now - e.acceptingAt < PROPOSAL_STARTING_MS));
+}
+
+export function proposalRecordLine(e: ProposalEntry, starting = false): string | null {
   if (e.state === 'open') return null;
   if (e.state === 'superseded') return 'A newer proposal replaced this one. Nothing was started.';
-  if (e.state === 'accepting') return 'Interrupted before it was recorded as started.';
+  if (e.state === 'accepting') return starting ? 'Starting it…' : 'Interrupted before it was recorded as started.';
   return `You chose: ${e.decision === 'go' ? GO_WORDS[e.proposal.kind] : 'Not now'}`;
 }
 
@@ -265,4 +285,83 @@ export function proposalRefusal(err: unknown): { words: string; code: string | n
 export function proposalTimeWords(p: ArtifactProposal): string | null {
   const t = p.time;
   return t === null || t.label === '' ? null : t.label;
+}
+
+// ── New document in "answer this proposal" mode (slice A3, DES §4.2 Change something on a create) ─────────────────────
+
+/** The proposal's repositories as the form keys them: the registry id when crew sent one, else the name. Two that share
+ *  a name are told apart by their id in the label. */
+export function repoKeysOf(p: ArtifactProposal): Array<{ key: string; label: string }> {
+  return p.repos.map((name, i) => {
+    const key = p.repoRefs?.[i] ?? name;
+    const shared = p.repos.filter((n) => n === name).length > 1;
+    return { key, label: shared && key !== name ? `${name} (${key})` : name };
+  });
+}
+
+/** Whether a roster seat can be one of a proposal's two helpers: crew's own rule at Go (`rosterEligible`): enabled for
+ *  councils, eligible for work, not signed out, not opt-in. */
+export function proposalHelperEligible(seat: { enabled_for_council?: boolean } & Record<string, unknown>): boolean {
+  return seat.enabled_for_council === true && seat['seat_eligible_for_work'] !== false && seat['auth'] !== 'signed_out' && seat['optIn'] !== true;
+}
+
+/** What the form edits. `project`: the target project id, `null` = Unfiled. `repos`: repository keys ({@link repoKeysOf}). */
+export interface ProposalForm {
+  title: string;
+  brief: string;
+  project: string | null;
+  /** The source tokens the person keeps (struck ones never count). */
+  sources: string[];
+  repos: string[];
+  helpers: string[];
+}
+
+/** The form as the proposal opens it. */
+export function proposalFormOf(p: ArtifactProposal): ProposalForm {
+  return {
+    title: p.what.title,
+    brief: p.brief ?? '',
+    project: p.filedIn.projectId,
+    sources: p.sources.filter((s) => s.status === 'ok').map((s) => s.token),
+    // By registry id (two checkouts may share a name), the name only when crew sent no ids.
+    repos: repoKeysOf(p).map((r) => r.key),
+    helpers: [...(p.helpers?.seats ?? [])],
+  };
+}
+
+/**
+ * Each chip as the form shows it once a project is chosen: a run or document from another project is struck at once
+ * ("not in Mikes"), before Go (crew re-checks the rest, the conversation and a `message:` source's records, at Go).
+ */
+export function formSources(p: ArtifactProposal, f: Pick<ProposalForm, 'project' | 'sources'>, projectLabel: (id: string | null) => string): Array<ProposalSource & { kept: boolean }> {
+  const moved = f.project !== p.filedIn.projectId;
+  return p.sources.map((s) => {
+    if (s.status !== 'ok') return { ...s, kept: false };
+    const tagged = s.token.startsWith('run:') || s.token.startsWith('doc:');
+    if (moved && tagged && s.projectId !== undefined && s.projectId !== f.project) {
+      return { ...s, status: 'struck' as const, reason: `not in ${projectLabel(f.project)}`, kept: false };
+    }
+    return { ...s, kept: f.sources.includes(s.token) };
+  });
+}
+
+/** The typed edits a Go carries: only what the person changed, never a chip the project change struck. */
+export function proposalFormEdits(p: ArtifactProposal, f: ProposalForm, projectLabel: (id: string | null) => string = (id) => id ?? 'Unfiled'): ProposalEdits {
+  const was = proposalFormOf(p);
+  const edits: ProposalEdits = {};
+  if (f.title.trim() !== was.title.trim()) edits.title = f.title.trim();
+  if (f.brief !== was.brief) edits.brief = f.brief;
+  if (f.project !== was.project) {
+    edits.project = f.project;
+    // The kept repositories ride with a project change (even unchanged): crew then checks them as the person's choice
+    // and refuses one outside the target, instead of silently cutting it.
+    edits.repos = [...f.repos];
+  }
+  const usable = formSources(p, f, projectLabel).filter((s) => s.status === 'ok').map((s) => s.token);
+  const kept = usable.filter((t) => f.sources.includes(t));
+  if (kept.length !== usable.length) edits.sources = kept;
+  const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
+  if (edits.repos === undefined && !sameSet(f.repos, was.repos)) edits.repos = [...f.repos];
+  if (!sameSet(f.helpers, was.helpers)) edits.helpers = [...f.helpers];
+  return edits;
 }
