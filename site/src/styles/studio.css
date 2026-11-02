@@ -376,7 +376,7 @@ button.chip:hover { border-color: var(--border-strong); background: color-mix(in
 .ben { padding: 10px 10px 16px; }
 .ben h3, .ben > p { padding-inline: 6px; }
 .scene {
-  position: relative; height: 212px; overflow: hidden; border-radius: 10px; padding: 12px;
+  position: relative; min-height: 212px; overflow: hidden; border-radius: 10px; padding: 12px;
   border: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 60%, transparent);
   font-size: var(--text-caption); line-height: 1.4; color: var(--ink);
 }
@@ -476,7 +476,7 @@ button.chip:hover { border-color: var(--border-strong); background: color-mix(in
 .ex-panel.is-on { opacity: 1; visibility: visible; transition-delay: 0s; }
 .ex-copy h3 { font-size: var(--text-title); letter-spacing: var(--tracking-title); line-height: 1.1; }
 .ex-copy p { margin: 10px 0 0; font-size: var(--text-lead); line-height: 1.5; color: color-mix(in oklab, var(--ink) 80%, transparent); max-width: 34ch; }
-.ex-art { height: 236px; border: 1px solid var(--hairline); border-radius: 12px; background: color-mix(in oklab, var(--canvas) 55%, transparent); padding: 14px; overflow: hidden; display: flex; align-items: center; }
+.ex-art { min-height: 236px; border: 1px solid var(--hairline); border-radius: 12px; background: color-mix(in oklab, var(--canvas) 55%, transparent); padding: 14px; overflow: hidden; display: flex; align-items: center; }
 .ex-illus { position: absolute; right: 8px; bottom: 0; font-size: var(--text-caption); color: var(--faint); }
 .ex-progress { position: absolute; left: 6px; bottom: 6px; width: 64px; height: 2px; border-radius: 2px; background: var(--hairline); overflow: hidden; }
 .ex-progress i { display: block; height: 100%; background: var(--ink); transform: scaleX(0); transform-origin: left; }
@@ -538,7 +538,7 @@ button.chip:hover { border-color: var(--border-strong); background: color-mix(in
 .relay { --row: 50px; position: relative; padding-left: 30px; margin-bottom: 16px; }
 .flow { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .flow li {
-  height: var(--row); display: grid; grid-template-columns: 86px minmax(0, 1fr) 128px; gap: 12px; align-items: center;
+  min-height: var(--row); display: grid; grid-template-columns: 86px minmax(0, 1fr) 128px; gap: 12px; align-items: center;
   padding: 0 10px; border-radius: 10px; border: 1px solid transparent;
   transition: background .35s var(--ease), border-color .35s var(--ease), opacity .35s var(--ease);
 }
@@ -551,15 +551,18 @@ button.chip:hover { border-color: var(--border-strong); background: color-mix(in
 .fl-s1 { color: var(--run); } .fl-s2 { color: var(--ok); } .fl-s3 { color: var(--deny); }
 .fl-r .fl-s1 { color: var(--you); }
 li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity: 1; }
-.relay-track { position: absolute; left: 0; top: 0; width: 24px; height: calc(var(--row) * 3); }
-.relay-track::before { content: ''; position: absolute; left: 11px; top: calc(var(--row) * .5); height: calc(var(--row) * 2); width: 2px; border-radius: 2px; background: var(--hairline-strong); }
-.relay-arc { position: absolute; left: -2px; top: calc(var(--row) * .5); width: 14px; height: var(--row); overflow: visible; opacity: 0; transition: opacity .4s var(--ease); }
+/* --yb/--yr/--yy: the builder, reviewer and you row centres, measured by page.js (these defaults hold
+   when every row is its minimum height) */
+.relay { --yb: calc(var(--row) * .5); --yr: calc(var(--row) * 1.5); --yy: calc(var(--row) * 2.5); }
+.relay-track { position: absolute; left: 0; top: 0; bottom: 0; width: 24px; }
+.relay-track::before { content: ''; position: absolute; left: 11px; top: var(--yb); height: calc(var(--yy) - var(--yb)); width: 2px; border-radius: 2px; background: var(--hairline-strong); }
+.relay-arc { position: absolute; left: -2px; top: var(--yb); width: 14px; height: calc(var(--yr) - var(--yb)); overflow: visible; opacity: 0; transition: opacity .4s var(--ease); }
 .relay-arc path { fill: none; stroke: var(--you); stroke-width: 1.6; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
 .relay.has-arc .relay-arc { opacity: 1; }
-.relay-token { position: absolute; left: 6px; top: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--run); box-shadow: 0 0 0 4px color-mix(in oklab, var(--run) 22%, transparent); opacity: 0; transform: translateY(calc(var(--row) * .5 - 6px)); transition: transform .6s var(--ease), opacity .3s var(--ease), background .3s var(--ease); }
+.relay-token { position: absolute; left: 6px; top: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--run); box-shadow: 0 0 0 4px color-mix(in oklab, var(--run) 22%, transparent); opacity: 0; transform: translateY(calc(var(--yb) - 6px)); transition: transform .6s var(--ease), opacity .3s var(--ease), background .3s var(--ease); }
 .relay[data-tok="b"] .relay-token, .relay[data-tok="r"] .relay-token, .relay[data-tok="y"] .relay-token { opacity: 1; }
-.relay[data-tok="r"] .relay-token { transform: translateY(calc(var(--row) * 1.5 - 6px)); }
-.relay[data-tok="y"] .relay-token { transform: translateY(calc(var(--row) * 2.5 - 6px)); background: var(--ok); box-shadow: 0 0 0 4px color-mix(in oklab, var(--ok) 22%, transparent); }
+.relay[data-tok="r"] .relay-token { transform: translateY(calc(var(--yr) - 6px)); }
+.relay[data-tok="y"] .relay-token { transform: translateY(calc(var(--yy) - 6px)); background: var(--ok); box-shadow: 0 0 0 4px color-mix(in oklab, var(--ok) 22%, transparent); }
 .relay.is-stopped .relay-token { background: var(--deny); box-shadow: 0 0 0 4px color-mix(in oklab, var(--deny) 22%, transparent); }
 .relay.is-stopped .fl-y { opacity: .45; }
 .facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
@@ -653,8 +656,8 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .agent-chip { font: inherit; font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--muted); padding: 5px 12px; border-radius: 999px; border: 1px solid var(--hairline-strong); background: transparent; cursor: pointer; transition: color .2s var(--ease), background .2s var(--ease), border-color .2s var(--ease); }
 .agent-chip:hover { color: var(--ink); border-color: var(--border-strong); }
 .agent-chip.is-on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
-.sandbox { display: grid; grid-template-columns: minmax(0, 1.25fr) 74px minmax(0, 0.8fr); align-items: center; height: 108px; font-size: var(--text-caption); }
-.sbx { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 10px 12px; border: 1.5px dashed var(--border-strong); border-radius: 12px; background: color-mix(in oklab, var(--canvas) 55%, transparent); }
+.sandbox { display: grid; grid-template-columns: minmax(0, 1.25fr) 74px minmax(0, 0.8fr); align-items: center; min-height: 108px; font-size: var(--text-caption); }
+.sbx { position: relative; min-height: 98px; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 10px 12px; border: 1.5px dashed var(--border-strong); border-radius: 12px; background: color-mix(in oklab, var(--canvas) 55%, transparent); }
 .sbx-k { position: absolute; top: -8px; left: 10px; padding: 0 6px; font-weight: var(--weight-strong); color: var(--muted); background: var(--surface-2); }
 .sbx-agent { font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink); }
 .sandbox.is-swap .sbx-agent { animation: art-in .35s var(--ease); }
@@ -770,7 +773,7 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
   .ex-mark { display: none; }
   .ex-panel { grid-template-columns: 1fr; align-items: start; gap: 12px; }
   .ex-copy p { max-width: none; }
-  .ex-art { height: 214px; }
+  .ex-art { min-height: 214px; }
   .relay-ctl { flex-wrap: wrap; }
 }
 @media (max-width: 768px) {
@@ -832,7 +835,7 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 /* What's new: one schematic per release item (all stacked in one cell, like the explorer) */
 .news-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: 28px; align-items: center; }
 .news-copy { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; min-width: 0; }
-.news-art { height: 196px; }
+.news-art { min-height: 196px; }
 .av-wave { display: flex; align-items: center; justify-content: center; gap: 4px; height: 54px; }
 .av-wave i { width: 4px; height: 30%; border-radius: 4px; background: var(--ink); opacity: .7; }
 .av-wave i:nth-child(2n) { height: 60%; } .av-wave i:nth-child(3n) { height: 85%; } .av-wave i:nth-child(5) { height: 100%; }
@@ -890,7 +893,7 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .drawer .dr-box { flex: 1 1 auto; }
 @media (max-width: 940px) {
   .news-panel { grid-template-columns: 1fr; gap: 16px; align-items: start; }
-  .news-art { height: 180px; }
+  .news-art { min-height: 180px; }
 }
 /* scene text is mock UI at caption size, not card prose */
 .trio-card .scene p { font-size: inherit; line-height: inherit; color: inherit; }
@@ -901,12 +904,12 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
   .ex-group { margin: 5px 9px 1px; }
   .extras-row { margin-top: 12px; gap: 8px 18px; }
 }
-.scene { height: 246px; }
-@media (min-width: 941px) and (max-width: 1199px) { .scene { height: 300px; } }
+.scene { min-height: 246px; }
+@media (min-width: 941px) and (max-width: 1199px) { .scene { min-height: 300px; } }
 .relay-arc { left: -9px; width: 20px; }
 .relay-arc path { stroke-width: 2; stroke-dasharray: 5 4; }
-@media (max-width: 768px) { .scene { height: 290px; } }
-@media (max-width: 340px) { .scene { height: 318px; } }
+@media (max-width: 768px) { .scene { min-height: 290px; } }
+@media (max-width: 340px) { .scene { min-height: 318px; } }
 @media (pointer: coarse) { .ide-composer input, .note-row input, .dr-mem-in { min-height: 44px; } }
 /* phones and tablets: the platform band is not a frame there, and its bottom padding (4px in the
    compact band) is shorter than the hover glow's reach, so give the glow room inside the band */
@@ -921,12 +924,12 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 /* each drawer's slot is sized to its largest state (the rule card is the tallest) */
 [data-drawer="rule"] .dr-slot { min-height: 98px; }
 .dr-slot.dr-slot--know { height: auto; }
-.sandbox { height: 118px; padding-top: 10px; }
+.sandbox { min-height: 118px; padding-top: 10px; }
 @media (pointer: coarse) { [data-drawer="memory"] .dr-slot { min-height: 78px; } }
 /* narrower schematic boxes wrap more: give them the height their largest panel needs */
-@media (max-width: 1199px) { .news-art { height: 240px; } }
-@media (max-width: 940px) { .ex-art { height: 240px; } .news-art { height: 252px; } }
-@media (max-width: 400px) { .ex-art { height: 252px; } .news-art { height: 276px; } }
+@media (max-width: 1199px) { .news-art { min-height: 240px; } }
+@media (max-width: 940px) { .ex-art { min-height: 240px; } .news-art { min-height: 252px; } }
+@media (max-width: 400px) { .ex-art { min-height: 252px; } .news-art { min-height: 276px; } }
 /* phones under 360px: the relay rows hold three lines of explanation plus the status */
 @media (max-width: 360px) { .relay { --row: 88px; } }
 .ide-pane-body:focus-visible { outline-offset: -3px; }

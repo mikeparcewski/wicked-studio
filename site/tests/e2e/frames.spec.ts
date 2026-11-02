@@ -169,3 +169,49 @@ test('enlarged text in a drawer pushes its actions down instead of covering the 
   }));
   expect(m.rule).toBeLessThanOrEqual(m.acts);
 });
+
+// A minimum font size (a low-vision setting) makes every text larger: nothing may be cut off inside
+// its box, the relay rows may not run into each other, and the scenes and counts must still start.
+test.describe('with a 24px minimum font size', () => {
+  test.use({ viewport: { width: 1280, height: 660 } });
+  const BIG = 'body *:not(svg):not(svg *) { font-size: max(24px, 1em) !important; }';
+
+  test('the reserved boxes grow and nothing is clipped', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+    await page.addStyleTag({ content: BIG });
+    await page.evaluate(async () => { await document.fonts.ready; await new Promise((r) => setTimeout(r, 200)); });
+    const bad = await page.evaluate(() => {
+      const out: string[] = [];
+      for (const box of document.querySelectorAll('.scene, .ex-art, .dr-slot, .dr-src-stack, .sandbox, .flow li')) {
+        const b = box.getBoundingClientRect();
+        for (const el of box.querySelectorAll('*')) {
+          const r = el.getBoundingClientRect();
+          if (!r.width || !r.height || (el.closest('svg') && el.tagName !== 'svg')) continue;
+          const cs = getComputedStyle(el);
+          if (cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) continue;
+          const over = Math.max(b.top - r.top, r.bottom - b.bottom);
+          if (over > 1.5) out.push(`${(box as HTMLElement).className.split(' ')[0]} > ${el.tagName.toLowerCase()}.${String((el as HTMLElement).className).split(' ')[0]} by ${over.toFixed(1)}px`);
+        }
+      }
+      // the relay rows never overlap
+      const lis = Array.from(document.querySelectorAll('.flow li')).map((li) => li.getBoundingClientRect());
+      for (let k = 1; k < lis.length; k++) if (lis[k].top < lis[k - 1].bottom - 1) out.push(`relay row ${k} overlaps row ${k - 1}`);
+      return out;
+    });
+    expect(bad).toEqual([]);
+    await expect(page.locator('html')).toHaveClass(/frames-overflow/);
+  });
+
+  test('scenes that cannot show 60% of themselves still start', async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 320 });
+    await page.goto('/');
+    await page.addStyleTag({ content: BIG });
+    const rule = page.locator('[data-drawer="rule"]');
+    await rule.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await expect(rule).not.toHaveClass(/is-pre/, { timeout: 5000 });
+    const search = page.locator('[data-search]');
+    await search.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await expect(search.locator('[data-n="4"]')).toHaveText('4', { timeout: 6000 });
+  });
+});

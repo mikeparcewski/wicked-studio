@@ -100,17 +100,20 @@ window.addEventListener(
 })();
 
 /* ── helpers ─────────────────────────────────────────────────────────────────────────────── */
+// "In view" is `ratio` of the element, or half the window for an element too tall to ever show that
+// much (minimum font sizes and short windows make cards taller than the screen).
 function inView(el, ratio, enter, leave) {
   if (!('IntersectionObserver' in window)) { enter(); return; }
   let on = false;
   const io = new IntersectionObserver(
     (es) => {
       es.forEach((x) => {
-        if (!on && x.intersectionRatio >= ratio - 0.001) { on = true; enter(); }
-        else if (on && x.intersectionRatio < 0.12) { on = false; if (leave) leave(); }
+        const seen = x.intersectionRatio >= ratio - 0.001 || x.intersectionRect.height >= window.innerHeight * 0.5;
+        if (!on && seen) { on = true; enter(); }
+        else if (on && x.intersectionRatio < 0.12 && x.intersectionRect.height < window.innerHeight * 0.1) { on = false; if (leave) leave(); }
       });
     },
-    { threshold: [0, 0.12, ratio] },
+    { threshold: [0, 0.05, 0.12, 0.25, 0.4, 0.5, ratio, 0.75, 1] },
   );
   io.observe(el);
 }
@@ -292,6 +295,14 @@ $$('[data-tour]').forEach((el) => {
   const replay = sec.querySelector('[data-relay-replay]');
   const rows = { b: relay.querySelector('.fl-b'), r: relay.querySelector('.fl-r'), y: relay.querySelector('.fl-y') };
   const trs = $$('tbody tr', receipt);
+  // rows grow with their text (minimum font sizes): the track, the arc and the token follow the measured centres
+  const measure = () => {
+    const base = relay.getBoundingClientRect().top;
+    ['b', 'r', 'y'].forEach((k) => { const r = rows[k].getBoundingClientRect(); relay.style.setProperty('--y' + k, Math.round(r.top - base + r.height / 2) + 'px'); });
+  };
+  measure();
+  if ('ResizeObserver' in window) new ResizeObserver(measure).observe(relay.querySelector('.flow'));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
   // lit row, token row, status shown in each row, receipt rows filled, return arc, stopped
   const TWO = [
     { lit: '', tok: '', s: {}, fill: 0 },
