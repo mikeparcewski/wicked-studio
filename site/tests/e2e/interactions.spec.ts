@@ -586,20 +586,77 @@ test('the example search alternates its query while live, and Pause stops it mid
   await expect(reach.locator('.hits-n')).toHaveText(['2', '3', '1']);
 });
 
-test('reduced motion turned on while the page is open stops every loop on its final frame', async ({ page }) => {
-  await stoppedClock(page);
+test('changing the motion preference while the page is open loads it again in the new mode', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.steer').evaluate((el) => el.scrollIntoView({ block: 'start' }));
-  await page.mouse.move(5, 690);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('.why [data-play-toggle]')).toBeVisible();
+  await Promise.all([page.waitForEvent('load'), page.emulateMedia({ reducedMotion: 'reduce' })]);
+  // the reduced page: final frames, no loops, nothing left to pause
   await expect(page.locator('[data-play-toggle]:visible')).toHaveCount(0);
   await expect(page.locator('[data-scene][data-step="4"]')).toHaveCount(3);
   await expect(page.locator('.relay')).toHaveAttribute('data-tok', 'y');
-  await expect(page.locator('[data-ide]')).toHaveClass(/is-still/);
-  const shown = page.locator('[data-drawer="rule"] .dr-rule.is-on b');
-  const first = await shown.textContent();
-  await page.clock.runFor(20_000);
-  await expect(shown).toHaveText(first!);
+  await expect(page.locator('[data-typed]')).toHaveText('npx wicked-crew serve');
+  await expect(page.locator('[data-ide] [data-id="node"]')).toHaveAttribute('aria-label', 'Move CI to Node 22, Done');
+  await Promise.all([page.waitForEvent('load'), page.emulateMedia({ reducedMotion: 'no-preference' })]);
+  await expect(page.locator('.why [data-play-toggle]')).toBeVisible();
+});
+
+test('the prompt the demo types by itself waits under Pause even after a click in the demo', async ({ page }) => {
+  await stoppedClock(page);
+  await page.goto('/');
+  const ide = page.locator('[data-ide]');
+  await until(page, async () => /is-typing/.test((await ide.getAttribute('class')) || ''), 'the prompt typing');
+  // a click on the side panel is not "Watch a job": the run is still the demo's own
+  await ide.getByRole('tab', { name: 'Receipt' }).click();
+  await ide.locator('[data-demo-pause]').click();
+  await page.clock.runFor(6000);
+  await expect(ide.locator('.msg--user')).toHaveCount(0);
+  await expect(ide.getByRole('button', { name: 'Approve plan' })).toHaveCount(0);
+  await ide.locator('[data-demo-pause]').click();
+  await until(page, () => ide.getByRole('button', { name: 'Approve plan' }).isVisible(), 'the plan after Play');
+});
+
+test('picking an agent with the sandbox off screen does not start its hand-off', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.locator('.agent-chip[data-agent="OpenCode"]').evaluate((el) => (el as HTMLElement).click());
+  await expect(page.locator('[data-agent-name]')).toHaveText('OpenCode');
+  await expect(page.locator('.sandbox')).not.toHaveClass(/is-live/);
+});
+
+test('a rotating suggestion never shows on top of the one before it', async ({ page }) => {
+  await stoppedClock(page);
+  await page.goto('/');
+  const steer = page.locator('.steer');
+  await steer.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.mouse.move(5, 690);
+  const rule = steer.locator('[data-drawer="rule"]');
+  await page.clock.runFor(800);
+  await page.clock.runFor(6000); // the rotation is due: the fades below run on real time
+  const both: number[] = [];
+  for (const end = Date.now() + 900; Date.now() < end;) {
+    const seen = await rule.evaluate((el) => Array.from(el.querySelectorAll('.dr-rule')).filter((r) => parseFloat(getComputedStyle(r).opacity) > 0.04 && getComputedStyle(r).visibility === 'visible').length);
+    both.push(seen);
+  }
+  expect(Math.max(...both), 'two suggestions painted at once').toBeLessThanOrEqual(1);
+  await expect(rule.locator('.dr-rule.is-on b')).toHaveText('Limits key on the API key');
+});
+
+test('a paused search stops its caret, and a paused tour stops its waveform', async ({ page }) => {
+  await stoppedClock(page);
+  await page.goto('/');
+  const reach = page.locator('.reach');
+  await reach.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.mouse.move(5, 690);
+  await page.clock.runFor(140);
+  await reach.getByRole('button', { name: 'Pause the examples' }).click();
+  const caret = reach.locator('.sq-caret');
+  await expect.poll(() => caret.evaluate((el) => el.getAnimations().map((a) => a.playState).join(','))).toBe('paused');
+  const news = page.locator('.new');
+  await news.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.mouse.move(5, 690);
+  await news.getByRole('button', { name: 'Pause the tour of what is new' }).click();
+  const wave = news.locator('.av-wave i').first();
+  await expect.poll(() => wave.evaluate((el) => el.getAnimations().map((a) => a.playState).join(','))).toMatch(/^(paused|)$/);
 });
 
 test('opening the Experiments menu with the mouse hides the button tooltip over it', async ({ page }) => {

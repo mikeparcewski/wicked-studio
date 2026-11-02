@@ -12,8 +12,11 @@
 import 'wicked-web/scripts/scroll-wheel.js';
 
 const reduceMq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
-// `let`: a visitor can turn reduced motion on while the page is open (see the listener after the groups)
-let reduced = !!(reduceMq && reduceMq.matches);
+const reduced = !!(reduceMq && reduceMq.matches);
+// The motion preference changed while the page is open (either way): load the page again, so every
+// component starts in the right mode. One mechanism, instead of settling each loop, timer and CSS
+// effect by hand in both directions; the page holds nothing a visitor would lose.
+if (reduceMq && reduceMq.addEventListener) reduceMq.addEventListener('change', () => { location.reload(); });
 const $$ = (s, r = document) => Array.prototype.slice.call(r.querySelectorAll(s));
 
 /* ── Wheel: one notch, one frame (wicked-web scroll-wheel.js), only where every frame snaps ──────
@@ -217,17 +220,6 @@ const groupOf = (el) => {
   if (!groups.has(s)) groups.set(s, group(s));
   return groups.get(s);
 };
-// Reduced motion turned on while the page is open: every loop stops for good and settles on its
-// final frame (a player's settle), the Pause buttons go (nothing is left to pause). The CSS side
-// (no animations, no transitions) follows the media query by itself.
-if (reduceMq && !reduced && reduceMq.addEventListener) {
-  reduceMq.addEventListener('change', (e) => {
-    if (!e.matches || reduced) return;
-    reduced = true;
-    $$('[data-play-toggle]').forEach((b) => { b.hidden = true; });
-    groups.forEach((g) => g.players.forEach((pl) => (pl.settle ? pl.settle() : pl.sync())));
-  });
-}
 
 /* ── Scenes (the three benefits): stepped frames, looped while on screen ──────────────────── */
 const SCENE_STEPS = {
@@ -256,12 +248,11 @@ $$('[data-scene]').forEach((el) => {
       el.classList.toggle('is-frozen', !go);
       if (go) run();
     },
-    settle() { clearTimeout(t); t = null; show(last); el.classList.add('is-frozen'); },
   };
   g.players.push(player);
   show(0);
   hold(el.closest('.trio-card') || el, (h) => { held = h; player.sync(); });
-  inView(el, 0.6, () => { seen = true; player.sync(); }, () => { seen = false; if (!reduced) show(0); player.sync(); });
+  inView(el, 0.6, () => { seen = true; player.sync(); }, () => { seen = false; show(0); player.sync(); });
 });
 
 /* ── Tours (the sidebar explorer, What's new): auto-advance, hover/focus/click pins ────────── */
@@ -294,7 +285,7 @@ $$('[data-tour]').forEach((el) => {
   };
   const run = () => { barReset(true); t = setTimeout(() => { select((i + 1) % tabs.length); run(); }, ms); };
   const player = {
-    sync() { clearTimeout(t); t = null; const go = !reduced && seen && !held && !g.paused; if (go) run(); else barReset(false); },
+    sync() { clearTimeout(t); t = null; const go = !reduced && seen && !held && !g.paused; el.classList.toggle('is-still', !go); if (go) run(); else barReset(false); },
   };
   g.players.push(player);
   const pin = () => { if (!reduced && g.set && !g.paused) g.set(true); };
@@ -395,7 +386,7 @@ $$('[data-tour]').forEach((el) => {
   replay.addEventListener('click', () => start(true));
   // The final frame is the no-JS / reduced-motion state; motion starts from the empty one.
   if (reduced) { start(false); return; }
-  g.players.push({ sync: tick, settle() { run = false; driven = false; k = seq().length - 1; apply(seq()[k]); tick(); } });
+  g.players.push({ sync: tick });
   // held over the relay, the receipt and the switch; not over Pause or Replay, so Play resumes at once
   holdAll([relay, receipt, sw], (h) => { held = h; tick(); });
   apply(TWO[0]);
@@ -492,6 +483,7 @@ $$('[data-drawer]').forEach((card) => {
   const name = document.querySelector('[data-agent-name]');
   const box = document.querySelector('.sandbox');
   const g = groupOf(list);
+  let seen = false, held = false;
   const pick = (k) => {
     chips.forEach((c, j) => {
       const on = j === k;
@@ -503,18 +495,18 @@ $$('[data-drawer]').forEach((card) => {
     name.textContent = who;
     // a Claude subscription's sign-in token is the one key a sandbox receives (both lines share a cell)
     if (box) box.toggleAttribute('data-sub', who === 'Claude Code');
-    if (!reduced && box) { box.classList.remove('is-swap', 'is-live'); void box.offsetWidth; box.classList.add('is-swap', 'is-live'); }
+    // the name swaps in; the hand-off restarts from the agent, but only while the sandbox is on screen
+    if (!reduced && box) { box.classList.remove('is-swap', 'is-live'); void box.offsetWidth; box.classList.add('is-swap'); box.classList.toggle('is-live', seen); }
   };
   chips.forEach((c, k) => c.addEventListener('click', () => pick(k)));
   roving(list, chips, { vertical: true, onMove: pick });
   if (box && !reduced) {
-    // the hand-off loops while on screen; it stills under the frame's Pause and while the pointer or
-    // focus is on the agents card
-    let held = false;
+    // the hand-off loops while on screen (is-live); it stills under the frame's Pause and while the
+    // pointer or focus is on the agents card (is-still)
     const sync = () => box.classList.toggle('is-still', g.paused || held);
     g.players.push({ sync });
     hold(list.closest('.reach-card') || list, (h) => { held = h; sync(); });
-    inView(box, 0.5, () => box.classList.add('is-live'), () => box.classList.remove('is-live'));
+    inView(box, 0.5, () => { seen = true; box.classList.add('is-live'); }, () => { seen = false; box.classList.remove('is-live'); });
   }
 })();
 
@@ -538,7 +530,7 @@ $$('[data-drawer]').forEach((card) => {
   const g = groupOf(card);
   // phase: 'type' (i letters shown) → 'climb' (p of the way) → 'shown' (then HOLD) → the next query
   let qi = 0, phase = 'shown', i = 0, p = 0, timer = null, frame = 0, run = 0, seen = false, held = false;
-  const live = () => !reduced && seen && !held && !g.paused;
+  const live = () => seen && !held && !g.paused;
   const stop = () => { clearTimeout(timer); timer = null; cancelAnimationFrame(frame); frame = 0; run++; };
   const paint = () => {
     q.textContent = queries[qi].q.slice(0, i);
@@ -563,6 +555,7 @@ $$('[data-drawer]').forEach((card) => {
   // one place decides what happens next, and only while the search is live
   const step = () => {
     stop();
+    card.classList.toggle('is-still', !live()); // the caret's blink stops with the search
     if (!live()) return;
     const mine = run;
     if (phase === 'type') {
@@ -586,14 +579,14 @@ $$('[data-drawer]').forEach((card) => {
       timer = setTimeout(() => { if (mine !== run) return; begin((qi + 1) % queries.length); step(); }, HOLD);
     }
   };
-  g.players.push({ sync: step, settle() { stop(); finish(qi); } });
+  g.players.push({ sync: step });
   hold(card, (h) => { held = h; step(); });
   begin(0);
   inView(card, 0.6, () => {
     seen = true;
-    if (g.paused || reduced) finish(0); else begin(0);
+    if (g.paused) finish(0); else begin(0);
     step();
-  }, () => { seen = false; stop(); if (reduced) finish(qi); else begin(0); });
+  }, () => { seen = false; stop(); begin(0); });
 })();
 
 /* ── Get it: the recommended command types itself in each time it comes on screen ─────────── */
@@ -604,7 +597,6 @@ $$('[data-drawer]').forEach((card) => {
   let t = null;
   inView(code, 0.9, () => {
     clearInterval(t);
-    if (reduced) { code.textContent = full; code.classList.remove('is-typing'); return; }
     let i = 0;
     code.textContent = '';
     code.classList.add('is-typing');

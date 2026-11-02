@@ -1089,14 +1089,15 @@ html[data-theme="light"] .amber-floor {
 
 /* steer: the rotating suggestions share one cell */
 .dr-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-/* the ones waiting their turn keep their place untransformed (inside the slot); the one coming in
-   rises 6px into it, inside the drawer's own padding */
-.dr-rot > .dr-rule:not(.is-on) { opacity: 0; visibility: hidden; transform: none; transition: opacity .35s var(--ease), visibility 0s linear .35s; }
-.dr-rot > .dr-rule.is-on { animation: rot-in .45s var(--ease) backwards; }
+/* the ones waiting their turn keep their place untransformed (inside the slot). The one going out
+   fades in .14s and only then does the one coming in rise 6px into the slot (inside the drawer's own
+   padding), so two suggestions never show on top of each other */
+.dr-rot > .dr-rule:not(.is-on) { opacity: 0; visibility: hidden; transform: none; transition: opacity .14s var(--ease), visibility 0s linear .14s; }
+.dr-rot > .dr-rule.is-on { animation: rot-in .4s var(--ease) .16s backwards; }
 @keyframes rot-in { from { opacity: 0; transform: translateY(6px); } }
 /* while it waits for you (and rotates), the suggestion breathes in the gate hue; its 3px ring stays
    inside the drawer's 10px padding */
-.drawer[data-state="in"]:not(.is-still):not(.is-pre) .dr-rot > .dr-rule.is-on { animation: rot-in .45s var(--ease) backwards, wait-glow 2.4s ease-in-out .45s infinite; }
+.drawer[data-state="in"]:not(.is-still):not(.is-pre) .dr-rot > .dr-rule.is-on { animation: rot-in .4s var(--ease) .16s backwards, wait-glow 2.4s ease-in-out .56s infinite; }
 @keyframes wait-glow { 50% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--you) 18%, transparent); } }
 
 /* reach: Claude Code's line names its token exception (both lines share a cell) */
@@ -1125,3 +1126,10 @@ html[data-theme="light"] .amber-floor {
 /* schematic text in What's new is mock UI at caption size, not panel prose (the panel's p rule reached
    the power mode message and set it at 20px) */
 .news-art p { font-size: inherit; line-height: inherit; max-width: none; }
+/* tours (the explorer, What's new): the old panel fades out before the new one fades in, so two
+   panels' text never shows on top of each other mid-change */
+.ex-panel { transition: opacity .14s var(--ease), visibility 0s linear .14s; }
+.ex-panel.is-on { transition: opacity .3s var(--ease) .12s, visibility 0s linear 0s; }
+/* a stopped search (paused, held, off screen) stops its caret; a stopped tour stops its waveform */
+.reach-card.is-still .sq-caret { animation-play-state: paused; }
+.news.is-still .av-wave i { animation-play-state: paused; }

@@ -88,14 +88,14 @@
     { ms: 4000, go: function () { var n = S.node; n.receipt.tests = '212 pass'; push('node', { k: 'event', t: 'Tests pass (212).' }); n.steps = 4; work('node', 'Working on Deliver…'); } },
     { ms: 4000, go: function () { var n = S.node; n.state = 'done'; n.steps = 5; n.receipt = NODE_RECEIPT; push('node', NODE_DONE); } }
   ];
-  var bgAt = 0, bgTimer = null, paused = false, onScreen = false, autoWanted = false, pendingPlan = null;
+  var bgAt = 0, bgTimer = null, paused = false, onScreen = false, autoWanted = false, heldTyping = false, pendingPlan = null;
   function isStill() { return paused || !onScreen; }
   var ORDER = ['rate', 'flaky', 'node'];
   var cur = 'rate';
   var pane = 'changes';
   var timers = [];
   var userTouched = false;
-  var typing = null, typingPost = null, typingGen = 0;
+  var typing = null, typingPost = null, typingGen = 0, typingAuto = false;
   var lastNeeds = -1;
 
   function later(ms, fn) { if (reduced) { fn(); return; } timers.push(setTimeout(fn, ms)); }
@@ -105,24 +105,19 @@
     root.classList.toggle('is-still', still);
     if (still) {
       clearTimeout(bgTimer); bgTimer = null;
-      // a prompt typing by itself stops and waits, untyped, for the demo to be live again
-      if ((typing || typingPost) && !userTouched) { stopTyping(); input.value = PROMPT; autoWanted = true; }
+      // a prompt typing by itself stops and waits, untyped, for the demo to be live again (a run you
+      // started with "Watch a job" plays on)
+      if ((typing || typingPost) && typingAuto) { stopTyping(); input.value = PROMPT; heldTyping = true; }
       return;
     }
     if (autoWanted) { autoWanted = false; autoStart(); }
+    // the demo's own prompt, held mid-typing: it types again, unless the composer is no longer its draft
+    if (heldTyping) { heldTyping = false; if (S.rate.state === 'draft' && cur === 'rate' && input.value === PROMPT && document.activeElement !== input) typeThenStart(true); }
     if (pendingPlan) pendingPlan();
     if (bgTimer || bgAt >= BG.length || reduced) return;
     bgTimer = setTimeout(function () { bgTimer = null; BG[bgAt++].go(); bgSync(); }, BG[bgAt].ms);
   }
   var pauseBtn = root.querySelector('[data-demo-pause]');
-  // a visitor who turns on reduced motion while the page is open: everything that runs by itself stops
-  var rmq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
-  if (rmq && !reduced && rmq.addEventListener) rmq.addEventListener('change', function (e) {
-    if (!e.matches) return;
-    paused = true;
-    if (pauseBtn) pauseBtn.hidden = true;
-    bgSync();
-  });
   if (pauseBtn) {
     var pauseName = pauseBtn.getAttribute('aria-label') || '';
     if (reduced) pauseBtn.hidden = true;
@@ -388,13 +383,16 @@
   // replay starts a new generation, which cancels both the typing and its pending post.
   function stopTyping() {
     typingGen++;
+    typingAuto = false;
     if (typing) { clearInterval(typing); typing = null; }
     if (typingPost) { clearTimeout(typingPost); typingPost = null; }
     root.classList.remove('is-typing');
   }
-  function typeThenStart() {
+  // auto: the demo started this run by itself (not "Watch a job"); Pause and leaving the screen hold it
+  function typeThenStart(auto) {
     if (reduced) { input.value = ''; start(PROMPT); return; }
     stopTyping();
+    typingAuto = !!auto;
     var gen = typingGen, i = 0, step = Math.max(1, Math.round(PROMPT.length / 60));
     input.value = '';
     root.classList.add('is-typing');
@@ -406,7 +404,7 @@
         clearInterval(typing); typing = null; root.classList.remove('is-typing');
         typingPost = setTimeout(function () {
           typingPost = null;
-          if (gen === typingGen && S.rate.state === 'draft' && cur === 'rate' && input.value === PROMPT) { input.value = ''; start(PROMPT, !userTouched); }
+          if (gen === typingGen && S.rate.state === 'draft' && cur === 'rate' && input.value === PROMPT) { input.value = ''; start(PROMPT, !!auto); }
         }, 260);
       }
     }, 20);
@@ -421,7 +419,7 @@
     renderAll();
   }
   function restart() {
-    clearTimers(); S.rate = fresh().rate; cur = 'rate'; pane = 'changes'; input.value = PROMPT; renderAll();
+    clearTimers(); heldTyping = false; autoWanted = false; S.rate = fresh().rate; cur = 'rate'; pane = 'changes'; input.value = PROMPT; renderAll();
   }
 
   // ── input ───────────────────────────────────────────────────────────
@@ -492,7 +490,7 @@
   function autoStart() {
     if (userTouched || S.rate.state !== 'draft') return;
     if (!reduced && isStill()) { autoWanted = true; return; } // waits for the demo to be live
-    typeThenStart();
+    typeThenStart(true);
   }
   if (reduced) { autoStart(); return; }
   if ('IntersectionObserver' in window) {
