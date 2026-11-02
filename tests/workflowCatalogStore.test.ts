@@ -106,3 +106,50 @@ describe('useWorkflowCatalog', () => {
     expect(titleOf(b.result.current)).toBe('newer');
   });
 });
+
+describe('round 7 (codex r7)', () => {
+  it('a 404 drops every catalog the replaced daemon served; revisiting a project then reads as an older daemon', async () => {
+    const spy = vi.spyOn(api, 'getWorkflowCatalog').mockResolvedValueOnce(catalog('A from the old daemon'));
+    expect(titleOf(await readWorkflowCatalog('a'))).toBe('A from the old daemon');
+    spy.mockRejectedValueOnce(new ApiError(404, 'not found'));
+    expect(titleOf(await readWorkflowCatalog('b'))).toBe('unavailable');
+    expect(peekWorkflowCatalog('a')).toBeUndefined();
+    spy.mockResolvedValueOnce({ error: 'not a catalog' });
+    expect(titleOf(await readWorkflowCatalog('a'))).toBe('unavailable');
+  });
+
+  it('a stale catalog answer after a newer 404 changes nothing shared', async () => {
+    let releaseOld!: (v: unknown) => void;
+    const spy = vi.spyOn(api, 'getWorkflowCatalog')
+      .mockImplementationOnce(() => new Promise((r) => { releaseOld = r; }))
+      .mockRejectedValueOnce(new ApiError(404, 'not found'));
+    const older = readWorkflowCatalog('p1');
+    expect(titleOf(await readWorkflowCatalog('p1'))).toBe('unavailable');
+    releaseOld(catalog('stale'));
+    expect(await older).toBeNull();
+    // Still an older daemon: a body that is not a catalog for a new project reads as one, not as an error.
+    spy.mockResolvedValueOnce({ error: 'not a catalog' });
+    expect(titleOf(await readWorkflowCatalog('p2'))).toBe('unavailable');
+  });
+
+  it('a 200 whose body is not JSON (an HTML page) is not a catalog: an older daemon', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('<!doctype html><html></html>', { status: 200, headers: { 'content-type': 'text/html' } }))));
+    try {
+      expect(await api.getWorkflowCatalog(null)).toBeNull();
+      expect(titleOf(await readWorkflowCatalog(null))).toBe('unavailable');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('round 7 (agy r7): a daemon that starts serving its catalog', () => {
+  it('drops the older-daemon answers cached before it', async () => {
+    const spy = vi.spyOn(api, 'getWorkflowCatalog').mockResolvedValueOnce({ error: 'not a catalog' });
+    expect(titleOf(await readWorkflowCatalog('p1'))).toBe('unavailable');
+    spy.mockResolvedValueOnce(catalog('now served'));
+    expect(titleOf(await readWorkflowCatalog(null))).toBe('now served');
+    // p1's old answer is gone: switching to p1 reads (and holds) rather than showing today's list.
+    expect(peekWorkflowCatalog('p1')).toBeUndefined();
+  });
+});

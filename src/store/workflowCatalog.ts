@@ -39,23 +39,34 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   const atEpoch = epoch;
   // A retry after a failure is a read in flight, not the failure still standing.
   if (cache.get(key)?.state === 'error') { cache.set(key, { state: 'loading' }); notify(); }
-  let load: CatalogLoad;
-  const prev = cache.get(key);
-  // The rules (xreview r6): a 404 is the route's absence, an older daemon (also after a catalog was
-  // served: the daemon was replaced), so today's list applies. A 200 that is not a catalog is an
-  // older daemon only before this one served its catalog. Anything else failing is transient: keep
-  // a catalog already read, else "couldn't read" (never today's list in its place, cold start included).
-  let routeAbsent = false;
+  // The rules (xreview r6-r7): a 404 is the route's absence, an older daemon (also after a catalog
+  // was served: the daemon was replaced, so every catalog it served is dropped). A 200 that is not a
+  // catalog (an HTML page included) is an older daemon unless this daemon has served its catalog.
+  // Anything else failing is transient: keep a catalog already read, else "couldn't read" (never
+  // today's list in its place, cold start included).
+  let view: CatalogView | null = null;
+  let failure: unknown = null;
   try {
-    const view = catalogFromWire(await api.getWorkflowCatalog(projectId));
-    load = view !== null ? { state: 'ready', view } : prev?.state === 'ready' ? prev : served ? { state: 'error' } : { state: 'unavailable' };
-    if (view !== null) served = true;
+    view = catalogFromWire(await api.getWorkflowCatalog(projectId));
   } catch (err) {
-    routeAbsent = err instanceof ApiError && err.status === 404;
-    load = routeAbsent ? { state: 'unavailable' } : prev?.state === 'ready' ? prev : { state: 'error' };
+    failure = err ?? new Error('catalog read failed');
   }
+  // A read that is no longer the newest for its project changes nothing shared (codex r7).
   if (atEpoch !== epoch || asked.get(key) !== gen) return null;
-  if (routeAbsent) served = false;
+  const prev = cache.get(key);
+  const routeAbsent = failure instanceof ApiError && failure.status === 404;
+  if (routeAbsent) {
+    served = false;
+    for (const [k, v] of [...cache]) if (v.state === 'ready') cache.delete(k);
+  }
+  // And the first catalog from this daemon drops the older-daemon answers cached before it (agy r7):
+  // another project's "unavailable" must not stand in for this daemon's catalog.
+  if (view !== null && !served) for (const [k, v] of [...cache]) if (v.state === 'unavailable') cache.delete(k);
+  if (view !== null) served = true;
+  const load: CatalogLoad = view !== null ? { state: 'ready', view }
+    : routeAbsent ? { state: 'unavailable' }
+      : failure === null ? (!served ? { state: 'unavailable' } : prev?.state === 'ready' ? prev : { state: 'error' })
+        : prev?.state === 'ready' ? prev : { state: 'error' };
   cache.set(key, load);
   notify();
   return load;

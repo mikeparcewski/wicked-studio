@@ -802,3 +802,49 @@ describe('round 6 (xreview r6): this project’s own answer first, for every dra
     expect(screen.getByTestId('launch-catalog-failed')).toBeInTheDocument();
   });
 });
+
+describe('round 7 (codex r7): a failed read holds even when an earlier answer is still shown', () => {
+  it('404 (older daemon), pick, close and reopen, then the read fails: held', async () => {
+    await openCatalog();
+    expect(screen.getByTestId('launch-catalog').dataset.source).toBe('fallback');
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-feature'));
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'add dark mode' } });
+    act(() => useLaunchWizard.getState().close());
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/workflows/catalog')
+      ? Promise.resolve(new Response(JSON.stringify({ error: 'busy' }), { status: 503, headers: { 'content-type': 'application/json' } }))
+      : realFetch(url, init))));
+    act(() => openLaunchWizard({}));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.change(await screen.findByTestId('launch-wizard-repo'), { target: { value: 'repo-1' } });
+    for (let i = 0; i < 4 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('review');
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Couldn’t check this workflow');
+    expect(screen.getByTestId('launch-wizard-launch')).toBeDisabled();
+    expect(posts.filter((p) => p.path === '/runs')).toEqual([]);
+  });
+});
+
+describe('round 7 (agy r7): a card picked from today’s list that is gone blocks too', () => {
+  it('older daemon: a project’s preset picked, then a project without it: blocked', async () => {
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const u = new URL(url, 'http://x');
+      if (u.pathname.endsWith('/presets')) {
+        const presets = u.searchParams.get('projectId') === 'p1' ? [{ name: 'p1-preset', steps: [{ id: 'build' }] }] : [];
+        return Promise.resolve(new Response(JSON.stringify({ presets }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      return realFetch(url, init);
+    }));
+    render(<LaunchWizard />);
+    act(() => openLaunchWizard({ projectId: 'p1' }));
+    fireEvent.click(await screen.findByTestId('launch-wizard-workflow-p1-preset'));
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'do the thing' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.change(screen.getByTestId('launch-wizard-project'), { target: { value: 'p2' } });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('This workflow is not available now.');
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+  });
+});

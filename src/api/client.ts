@@ -579,8 +579,10 @@ export const api = {
    * metadata and this operator's usage (`?projectId` counts that project's runs and adds its saved presets). Read as `unknown` (`catalogFromWire` parses it); an older
    * daemon answers 404 and New job falls back to `listWorkflows`.
    */
+  // A 200 whose body is not JSON (an older service's HTML page) is "not a catalog" (null), not a failure.
   getWorkflowCatalog: (projectId?: string | null) =>
-    apiFetch<unknown>(projectId != null && projectId !== '' ? `${WORKFLOW_CATALOG_PATH}?projectId=${encodeURIComponent(projectId)}` : WORKFLOW_CATALOG_PATH),
+    apiFetch<unknown>(projectId != null && projectId !== '' ? `${WORKFLOW_CATALOG_PATH}?projectId=${encodeURIComponent(projectId)}` : WORKFLOW_CATALOG_PATH)
+      .catch((err: unknown) => { if (err instanceof SyntaxError) return null; throw err; }),
 
   /** One workflow definition by id; 404 if unknown. */
   getWorkflow: (id: string) => apiFetch<{ workflow: import('./types.js').WorkflowDef }>(`/workflows/${encodeURIComponent(id)}`),

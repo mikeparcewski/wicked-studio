@@ -146,7 +146,9 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // A draft waits until THIS project's answer is the one shown (crew's catalog, or a confirmed older
   // daemon): while the first read is out, after a project change, after a failed read, across a close
   // and reopen, for every draft (xreview r4-r6).
-  const scopePending = lastRead.current === null || lastRead.current.key !== catalogKey;
+  // (And while this project's read is out again after a failure, or failed: what is shown is not its answer, codex r7.)
+  const scopePending = lastRead.current === null || lastRead.current.key !== catalogKey
+    || catalogLoad.state === 'loading' || catalogLoad.state === 'error';
   const thisCatalog = !scopePending && lastRead.current!.view.source === 'catalog';
   const holdLine = catalogLoad.state === 'error'
     ? 'Couldn’t check this workflow for the chosen project. Close New job and open it again to retry.'
@@ -214,7 +216,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // is never launched (codex r1).
   // With crew's catalog for this project in, every draft (picked or opened by id) needs an offered card.
   const entryBlocker = draft.workflowId !== null && catalog !== null
-    && ((thisCatalog && (entry === null || !offered(entry))) || (entry !== null && !offered(entry)))
+    // And a card picked from a list (crew's or today's) that is gone blocks under any list (agy r7).
+    && (((thisCatalog || draft.catalogEntryId !== null) && entry === null) || (entry !== null && !offered(entry)))
     ? 'This workflow is not available now. Change job to pick another.' : null;
   // A workflow the catalog says works without a repository does not ask for one; any other keeps
   // today's rule (an unknown workflow, a preset, an older daemon's list: a repository is required).
