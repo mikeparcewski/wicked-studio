@@ -59,6 +59,8 @@ const TURN = [
 let chatBody: Record<string, unknown> = {};
 const posts: Array<{ path: string; body: unknown }> = [];
 let decideAnswer: () => Response = () => new Response('{}', { status: 500 });
+/** `GET /chats/:id/messages` (an ended chat's kept history): its body, or an error status. */
+let keptBody: Record<string, unknown> | number = 404;
 
 function ok(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -66,6 +68,7 @@ function ok(body: unknown): Response {
 
 beforeEach(() => {
   posts.length = 0;
+  keptBody = 404;
   resetSettledProposals();
   chatBody = { chatId: 'chat-ask', seats: ['claude'], scope: { kind: 'none' }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() }], path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: null, helpers: [], stepId: 'answer-1' } };
   useCapabilities.setState({ loaded: true, runChatId: true, askPath: true, chatProposals: true, chatArtifactsStub: false, chatList: true });
@@ -83,6 +86,10 @@ beforeEach(() => {
       return Promise.resolve(path.includes('/proposals/') ? decideAnswer() : ok({}));
     }
     if (path.includes('/considered')) return Promise.resolve(new Response('{}', { status: 404 }));
+    if (path.startsWith('/chats/') && path.endsWith('/messages')) {
+      if (keptBody === -1) return new Promise<Response>(() => undefined); // a read still in flight
+      return Promise.resolve(typeof keptBody === 'number' ? new Response(JSON.stringify({ error: 'read failed' }), { status: keptBody }) : ok(keptBody));
+    }
     if (path.startsWith('/chats/')) return Promise.resolve(ok(chatBody));
     if (path.endsWith('/team')) return Promise.resolve(new Response('{}', { status: 404 }));
     if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
@@ -91,8 +98,8 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-function page() {
-  return render(<SessionPage sessionId="chat-ask" runs={[ASK_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+function page(onAsk: (text: string, opts: unknown) => void = () => {}, runs = [ASK_RUN], sessionId = 'chat-ask') {
+  return render(<SessionPage sessionId={sessionId} runs={runs} runsLoaded needRows={[]} navigate={() => {}} onAsk={onAsk} />);
 }
 const text = (id: string): string => screen.getByTestId(id).textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
@@ -109,6 +116,14 @@ describe('the proposal fold', () => {
     ]);
     expect(folded.map((f) => [f.pid, f.state, f.at])).toStrictEqual([[PID, 'superseded', 1], ['chat-ask:t2', 'open', 3]]);
     expect(folded[1]!.proposal.target?.base).toBe(5);
+    // An older proposal re-resolved after a newer one exists is superseded, never re-opened over it (crew's rule).
+    const older = foldChatProposals([
+      { at: 1, turnId: 't1', kind: 'proposal', proposal: p1 },
+      { at: 2, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: p1, identity: { artifactRef: null, runId: 'r' } },
+      { at: 3, turnId: 't2', kind: 'proposal', proposal: p2 },
+      { at: 4, turnId: 't1', kind: 'proposal', proposal: p1 },
+    ]);
+    expect(older.map((f) => [f.pid, f.state])).toStrictEqual([[PID, 'superseded'], ['chat-ask:t2', 'open']]);
     const decided = foldChatProposals([
       { at: 1, turnId: 't1', kind: 'proposal', proposal: p1 },
       { at: 2, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'local', decision: 'not_now', result: null },
@@ -254,7 +269,8 @@ describe('the card in the chat thread', () => {
   });
 
   it('Enter in the composer with a card on screen sends a message, never an answer; the card never takes focus', async () => {
-    page();
+    const asked: Array<[string, unknown]> = [];
+    page((text, opts) => asked.push([text, opts]));
     await screen.findByTestId('artifact-proposal');
     const box = screen.getByTestId('session-composer-input') as HTMLTextAreaElement;
     box.focus();
@@ -264,6 +280,7 @@ describe('the card in the chat thread', () => {
     act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
     await new Promise((r) => setTimeout(r, 30));
     expect(document.activeElement).toBe(box);
+    expect(asked.map(([t, o]) => [t, (o as { chatId?: string }).chatId])).toStrictEqual([['actually, one more question', 'chat-ask']]);
     expect(posts.filter((p) => p.path.includes('/proposals/'))).toStrictEqual([]);
     expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('open');
   });
@@ -292,6 +309,47 @@ describe('the card in the chat thread', () => {
     const before = useAskThreadStore.getState().replySeq['chat-ask'] ?? 0;
     act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
     expect(useAskThreadStore.getState().replySeq['chat-ask']).toBe(before + 1);
+  });
+
+  it('a refusal’s fresh facts show at once (the document moved): the card is never left on what crew replaced', async () => {
+    chatBody = { ...chatBody, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal({ kind: 'refine', target: { ref: 'mikes/deck', title: 'Deck', base: 4 } }) }] };
+    decideAnswer = () => new Response(JSON.stringify({ code: 'proposal_reresolved', error: 'Deck changed since this was proposed (now v5); check the card again', view: { proposal: proposal({ kind: 'refine', target: { ref: 'mikes/deck', title: 'Deck', base: 5 } }), state: 'open' } }), { status: 409, headers: { 'content-type': 'application/json' } });
+    page();
+    await screen.findByTestId('artifact-proposal-target');
+    expect(text('artifact-proposal-target')).toBe('ChangesDeck · v4');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    // The re-read (still the old record here) has not landed the new facts: the refusal's view is shown meanwhile.
+    await waitFor(() => expect(text('artifact-proposal-target')).toBe('ChangesDeck · v5'));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-error').textContent).toMatch(/now v5/));
+  });
+
+  it('an ended chat’s cards come from its kept history; a failed read says so with Retry; nothing leaks between chats', async () => {
+    const CLOSED = 'chat-closed';
+    const closedRun = makeView({ id: 'r-closed', status: 'completed', problem: 'x', chat_id: CLOSED, created_at: T0 / 1000 } as never, []);
+    chatBody = { chatId: CLOSED, seats: [], scope: null, messages: [] };
+    keptBody = 503;
+    const first = page(() => {}, [closedRun], CLOSED);
+    await screen.findByTestId('artifact-proposals-read-error');
+    expect(screen.queryByTestId('artifact-proposal')).toBeNull();
+    first.unmount();
+    keptBody = { chat: { id: CLOSED }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal({ pid: `${CLOSED}:t1`, chatId: CLOSED }) }], attachments: [] };
+    page(() => {}, [closedRun], CLOSED);
+    const card = await screen.findByTestId('artifact-proposal');
+    expect(card.getAttribute('data-pid')).toBe(`${CLOSED}:t1`);
+    expect(screen.queryByTestId('session-missing')).toBeNull();
+    // Another chat's cards never stand in for this one's while its kept history loads.
+    cleanup();
+    chatBody = { chatId: 'chat-ask', seats: ['claude'], scope: { kind: 'none' }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() }], path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: null, helpers: [], stepId: 'answer-1' } };
+    const view = page();
+    await screen.findByTestId('artifact-proposal');
+    chatBody = { chatId: 'chat-other', seats: [], scope: null, messages: [] };
+    keptBody = -1;
+    view.rerender(<SessionPage sessionId="chat-other" runs={[makeView({ id: 'r-o', status: 'completed', problem: 'x', chat_id: 'chat-other', created_at: T0 / 1000 } as never, [])]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('artifact-proposal')).toBeNull();
+    // Malformed records (no `time`, a null source) are skipped, never crash the thread.
+    expect(isProposalRecord({ at: 1, turnId: 't9', kind: 'proposal', proposal: { ...proposal(), time: undefined } })).toBe(false);
+    expect(isProposalRecord({ at: 1, turnId: 't9', kind: 'proposal', proposal: { ...proposal(), sources: [null] } })).toBe(false);
   });
 
   it('a daemon without the capability draws no card', async () => {

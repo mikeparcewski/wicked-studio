@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 288,
-    "occurrences": 4027,
-    "static": 3431,
+    "occurrences": 4029,
+    "static": 3433,
     "dynamic": 93,
     "computed": 44
   },
@@ -766,6 +766,12 @@
       ]
     },
     {
+      "testId": "artifact-proposal-details-region",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "artifact-proposal-error",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
@@ -871,6 +877,12 @@
       "testId": "artifact-proposal-what",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposals-read-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
       ]
     },
     {

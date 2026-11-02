@@ -44,34 +44,37 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [details, setDetails] = useState(false);
-  // The daemon's answer to THIS card's request, shown at once while the re-read catches up — only a settled one (an
-  // open or accepting view from a refusal is left to the re-read, which carries crew's newest facts).
-  const [answered, setAnswered] = useState<ProposalEntry | null>(null);
-  const view: ProposalEntry = answered !== null && !terminal(entry.state) ? answered : entry;
+  // The daemon's answer to THIS card's request, shown at once while the re-read catches up: a settled one stays (a
+  // stale read never reopens it); an open one (a refusal's fresh facts: the document moved) stands until the next read
+  // of the chat arrives, which carries the same or newer facts.
+  const [answered, setAnswered] = useState<{ view: ProposalEntry; against: ProposalEntry } | null>(null);
+  const view: ProposalEntry = answered !== null && !terminal(entry.state) && (terminal(answered.view.state) || answered.against === entry) ? answered.view : entry;
   const p = view.proposal;
   const open = view.state === 'open';
   const detailsId = useId();
-  // A card that settles drops what it said while it was open.
+  // A card that settles (here, or by another tab's answer) drops what it said while it was open.
+  const settledNow = terminal(view.state);
   useEffect(() => {
     if (!open) setNote(null);
-  }, [open]);
+    if (settledNow) setError(null);
+  }, [open, settledNow]);
 
   const decide = (decision: 'go' | 'not_now'): void => {
     setBusy(true);
     setError(null);
     setNote(null);
     const keep = (v: ChatProposalView): void => {
-      if (!terminal(v.state)) return;
-      const settled: ProposalEntry = { ...entry, ...v };
-      noteSettled(chatId, settled);
-      setAnswered(settled);
+      const next: ProposalEntry = { ...entry, ...v };
+      if (terminal(v.state)) noteSettled(chatId, next);
+      setAnswered({ view: next, against: entry });
     };
     api.decideChatProposal(chatId, entry.pid, { decision })
       .then((r) => keep(r.view))
       .catch((err: unknown) => {
         const refusal = proposalRefusal(err);
-        setError(refusal.words);
         if (refusal.view !== null) keep(refusal.view);
+        // Set after: a settled view clears an earlier error, never this one.
+        setTimeout(() => setError(refusal.words), 0);
       })
       .finally(() => {
         setBusy(false);
@@ -102,9 +105,9 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
         <span>{open ? `Proposal from ${seatName} · nothing starts until you choose` : `Proposal from ${seatName}`}</span>
       </p>
       <p className="wk-ask-q" data-testid="artifact-proposal-what">{p.what.label}</p>
-      {open || view.state === 'accepting' || details ? (
+      {open || view.state === 'accepting' ? (
         <>
-          {p.what.outcome !== null && <p className="wk-ask-sub">{p.what.outcome}</p>}
+          {p.what.outcome !== null && p.what.outcome !== '' && <p className="wk-ask-sub">{p.what.outcome}</p>}
           <ProposalLines p={p} id={detailsId} />
         </>
       ) : null}
@@ -113,8 +116,8 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
           <b>Can’t start here yet.</b> {p.blocked}. Nothing was started.
         </p>
       )}
-      {open && stub && (
-        <p data-testid="artifact-proposal-stub" className="wk-proposal-stub">Test configuration: {GO_WORDS[p.kind]} records your click and starts nothing.</p>
+      {(open || view.state === 'accepting') && stub && (
+        <p data-testid="artifact-proposal-stub" className="wk-proposal-stub">Test configuration: {open ? GO_WORDS[p.kind] : 'Go again'} records your click and starts nothing.</p>
       )}
       {open ? (
         <AskCard ask={proposalAsk(view, { stub })} header={false} busy={busy} onAnswer={onAnswer}
@@ -126,13 +129,24 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
           <button type="button" data-testid="artifact-proposal-go-again" className="wk-btn wk-btn--primary wk-btn--sm" disabled={busy} onClick={() => decide('go')}>Go again</button>
         </div>
       ) : (
-        <div className="wk-proposal-settled">
-          <AskRecord line={line ?? ''} testId="artifact-proposal-record" {...(result !== null ? { meta: result } : {})} />
-          <button type="button" data-testid="artifact-proposal-details" className="wk-btn wk-btn--quiet wk-btn--sm"
-            aria-expanded={details} aria-controls={detailsId} onClick={() => setDetails((d) => !d)}>
-            {details ? 'Hide details' : 'Details'}
-          </button>
-        </div>
+        <>
+          <div className="wk-proposal-settled">
+            <AskRecord line={line ?? ''} testId="artifact-proposal-record" {...(result !== null ? { meta: result } : {})} />
+            <button type="button" data-testid="artifact-proposal-details" className="wk-btn wk-btn--quiet wk-btn--sm"
+              aria-expanded={details} aria-controls={detailsId} onClick={() => setDetails((d) => !d)}>
+              {details ? 'Hide details' : 'Details'}
+            </button>
+          </div>
+          {/* After the button that opens it (reading order), present but hidden while collapsed (a valid target). */}
+          <div id={detailsId} hidden={!details} data-testid="artifact-proposal-details-region">
+            {details && (
+              <>
+                {p.what.outcome !== null && p.what.outcome !== '' && <p className="wk-ask-sub">{p.what.outcome}</p>}
+                <ProposalLines p={p} />
+              </>
+            )}
+          </div>
+        </>
       )}
       {open && note !== null && <p data-testid="artifact-proposal-note" role="status" className="wk-proposal-note">{note}</p>}
       {error !== null && view.state !== 'superseded' && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error}</p>}
@@ -141,18 +155,19 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
 }
 
 /** Crew's facts, one per line, each only when crew stated it. */
-function ProposalLines({ p, id }: { p: ArtifactProposal; id: string }): React.ReactElement {
+function ProposalLines({ p, id }: { p: ArtifactProposal; id?: string }): React.ReactElement {
   const time = proposalTimeWords(p);
+  const has = (v: string | null | undefined): v is string => v !== null && v !== undefined && v.trim() !== '';
   return (
-    <dl id={id} className="wk-proposal-lines" data-testid="artifact-proposal-lines">
+    <dl {...(id !== undefined ? { id } : {})} className="wk-proposal-lines" data-testid="artifact-proposal-lines">
       {p.target !== undefined && <Row k="Changes" testId="artifact-proposal-target">{p.target.title} · v{p.target.base}</Row>}
-      {p.kind === 'refine' && p.brief !== null && <Row k="Ask" testId="artifact-proposal-brief">{p.brief}</Row>}
-      {p.kind === 'create' && p.brief !== null && p.brief !== '' && <Row k="Brief" testId="artifact-proposal-brief">{p.brief}</Row>}
+      {p.kind === 'refine' && has(p.brief) && <Row k="Ask" testId="artifact-proposal-brief">{p.brief}</Row>}
+      {p.kind === 'create' && has(p.brief) && <Row k="Brief" testId="artifact-proposal-brief">{p.brief}</Row>}
       {p.touches !== undefined && p.touches.length > 0 && <Row k="Parts" testId="artifact-proposal-touches">{p.touches.join(', ')}</Row>}
-      {p.theme !== undefined && <Row k="Changes" testId="artifact-proposal-theme">{p.theme.changes.join(', ')}</Row>}
-      {p.demo !== undefined && <Row k="Records" testId="artifact-proposal-demo">{p.demo.url}</Row>}
-      {p.demo !== undefined && p.demo.audience !== null && <Row k="For" testId="artifact-proposal-audience">{p.demo.audience}</Row>}
-      {p.demo !== undefined && p.demo.show !== null && <Row k="Shows" testId="artifact-proposal-show">{p.demo.show}</Row>}
+      {p.theme !== undefined && p.theme.changes.length > 0 && <Row k="Changes" testId="artifact-proposal-theme">{p.theme.changes.join(', ')}</Row>}
+      {p.demo !== undefined && has(p.demo.url) && <Row k="Records" testId="artifact-proposal-demo">{p.demo.url}</Row>}
+      {p.demo !== undefined && has(p.demo.audience) && <Row k="For" testId="artifact-proposal-audience">{p.demo.audience}</Row>}
+      {p.demo !== undefined && has(p.demo.show) && <Row k="Shows" testId="artifact-proposal-show">{p.demo.show}</Row>}
       {p.sources.length > 0 && (
         <Row k="From" testId="artifact-proposal-from">
           <span className="wk-proposal-chips">{p.sources.map((s) => <SourceChip key={s.token} s={s} />)}</span>
@@ -161,9 +176,9 @@ function ProposalLines({ p, id }: { p: ArtifactProposal; id: string }): React.Re
       {p.repos.length > 0 && <Row k="About" testId="artifact-proposal-about">{p.repos.join(', ')}</Row>}
       {p.helpers !== null && <Row k="Helpers" testId="artifact-proposal-helpers">{p.helpers.label}</Row>}
       {time !== null && <Row k="Time, cost" testId="artifact-proposal-time">{time}</Row>}
-      {p.stops !== null && <Row k="Stops" testId="artifact-proposal-stops">{p.stops}</Row>}
+      {has(p.stops) && <Row k="Stops" testId="artifact-proposal-stops">{p.stops}</Row>}
       <Row k="Filed in" testId="artifact-proposal-filed">{p.filedIn.label}</Row>
-      {p.reason !== null && p.reason !== '' && <Row k="Why" testId="artifact-proposal-reason">{p.reason}</Row>}
+      {has(p.reason) && <Row k="Why" testId="artifact-proposal-reason">{p.reason}</Row>}
     </dl>
   );
 }
@@ -177,7 +192,8 @@ function Row({ k, testId, children }: { k: string; testId: string; children: Rea
   );
 }
 
-/** A source chip. A struck one says so in words (read the same way aloud and on screen), with crew's reason verbatim. */
+/** A source chip. A struck one is struck through on screen and starts with "Left out:" for a screen reader, then crew's
+ *  reason verbatim (or "left out" when crew gave none) — the same facts both ways, nothing invented. */
 function SourceChip({ s }: { s: ProposalSource }): React.ReactElement {
   if (s.status === 'ok') return <span data-testid="artifact-proposal-source" data-status="ok" className="wk-proposal-chip">{s.label}</span>;
   const reason = s.reason !== undefined && s.reason.trim() !== '' ? s.reason : null;

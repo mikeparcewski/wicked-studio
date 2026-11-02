@@ -24,19 +24,45 @@ export interface ProposalEntry extends ChatProposalView {
 
 const KINDS: ReadonlySet<string> = new Set(['proposal', 'proposal_accepting', 'proposal_decided']);
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
-/** A proposal shape the card can draw (crew's; a malformed record is skipped, never drawn half). */
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const str = (v: unknown): v is string => typeof v === 'string';
+const strOrNull = (v: unknown): boolean => v === null || typeof v === 'string';
+const KIND_SET: ReadonlySet<string> = new Set(['create', 'refine', 'theme', 'demo']);
+const isSource = (s: unknown): boolean => isObj(s) && str(s['token']) && str(s['label']) && (s['status'] === 'ok' || s['status'] === 'struck')
+  && (s['reason'] === undefined || str(s['reason']));
+/**
+ * A proposal shape the card can draw: every field the card reads, with its nullability (crew's; a malformed record is
+ * skipped, never drawn half and never crashing the thread).
+ */
 export function isArtifactProposal(p: unknown): p is ArtifactProposal {
-  return isObj(p) && typeof p['pid'] === 'string' && typeof p['kind'] === 'string' && isObj(p['what'])
-    && typeof (p['what'] as Record<string, unknown>)['label'] === 'string' && Array.isArray(p['sources']) && Array.isArray(p['repos'])
-    && isObj(p['filedIn']);
+  if (!isObj(p) || !str(p['pid']) || !str(p['kind']) || !KIND_SET.has(p['kind']) || !str(p['seat'])) return false;
+  const what = p['what'];
+  if (!isObj(what) || !str(what['label']) || !str(what['title']) || !strOrNull(what['outcome'])) return false;
+  if (!strOrNull(p['brief']) || !strOrNull(p['reason']) || !strOrNull(p['stops']) || !strOrNull(p['blocked'])) return false;
+  if (!Array.isArray(p['sources']) || !p['sources'].every(isSource)) return false;
+  if (!Array.isArray(p['repos']) || !p['repos'].every(str)) return false;
+  const helpers = p['helpers'];
+  if (helpers !== null && (!isObj(helpers) || !str(helpers['label']))) return false;
+  const time = p['time'];
+  if (time !== null && (!isObj(time) || !str(time['label']))) return false;
+  const filed = p['filedIn'];
+  if (!isObj(filed) || !str(filed['label'])) return false;
+  const target = p['target'];
+  if (target !== undefined && (!isObj(target) || !str(target['title']) || typeof target['base'] !== 'number')) return false;
+  const theme = p['theme'];
+  if (theme !== undefined && (!isObj(theme) || !Array.isArray(theme['changes']) || !theme['changes'].every(str))) return false;
+  const demo = p['demo'];
+  if (demo !== undefined && (!isObj(demo) || !str(demo['url']) || !strOrNull(demo['audience']) || !strOrNull(demo['show']))) return false;
+  const touches = p['touches'];
+  return touches === undefined || (Array.isArray(touches) && touches.every(str));
 }
+const isResult = (r: unknown): boolean => r === null || (isObj(r) && str(r['runId']) && typeof r['stub'] === 'boolean');
 
 export function isProposalRecord(r: unknown): r is ChatProposalRecord {
   if (!isObj(r) || !KINDS.has(String(r['kind'])) || typeof r['turnId'] !== 'string') return false;
   if (r['kind'] === 'proposal') return isArtifactProposal(r['proposal']);
   if (r['kind'] === 'proposal_accepting') return typeof r['pid'] === 'string' && isArtifactProposal(r['resolution']);
-  return typeof r['pid'] === 'string' && (r['decision'] === 'go' || r['decision'] === 'not_now');
+  return typeof r['pid'] === 'string' && (r['decision'] === 'go' || r['decision'] === 'not_now') && isResult(r['result']);
 }
 
 /** A view a refusal carried, when it is one the card can draw; else `null`. */
@@ -46,9 +72,9 @@ export function isProposalView(v: unknown): v is ChatProposalView {
 
 /**
  * The chat's proposals in the order crew first recorded them, folded exactly as crew folds them (`chat-proposals.ts`
- * `foldProposals`): the newest proposal record is the chat's one open proposal (a new pid, or a re-resolution of an
- * open or interrupted one) and supersedes every other open one; an accepting (in-flight) one is not open; a decided
- * or superseded one stays so. Records of other kinds, and malformed ones, are ignored.
+ * `foldProposals`): the newest proposal is the chat's one open proposal (a new pid, or a re-resolution of the newest)
+ * and supersedes every other open one; an older proposal re-resolved after a newer one exists is superseded; an
+ * accepting (in-flight) one is not open; a decided or superseded one stays so. Records of other kinds, and malformed ones, are ignored.
  */
 export function foldChatProposals(records: readonly unknown[]): ProposalEntry[] {
   const byPid = new Map<string, ProposalEntry>();
@@ -58,6 +84,11 @@ export function foldChatProposals(records: readonly unknown[]): ProposalEntry[] 
       const pid = r.proposal.pid;
       const held = byPid.get(pid);
       if (held !== undefined && (held.state === 'decided' || held.state === 'superseded')) continue;
+      // A re-resolution of an older proposal while a newer one exists never takes the chat back: it is superseded.
+      if (held !== undefined && [...byPid.keys()].indexOf(pid) < byPid.size - 1) {
+        held.state = 'superseded';
+        continue;
+      }
       for (const [other, v] of byPid) if (other !== pid && v.state === 'open') v.state = 'superseded';
       byPid.set(pid, { pid, turnId: r.turnId, at: held?.at ?? r.at, proposal: r.proposal, state: 'open' });
     } else if (r.kind === 'proposal_accepting') {

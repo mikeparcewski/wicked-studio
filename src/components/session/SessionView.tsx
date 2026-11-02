@@ -281,7 +281,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const proposalsOn = useCapabilities((s) => s.chatProposals);
   const proposalsStub = useCapabilities((s) => s.chatArtifactsStub);
   const historyOn = useCapabilities((s) => s.chatList);
-  const [kept, setKept] = useState<{ id: string; records: readonly unknown[] } | null>(null);
+  const [kept, setKept] = useState<{ id: string; records: readonly unknown[]; error: string | null } | null>(null);
   const keptChat = ref.kind === 'chat' && proposalsOn && historyOn && conversation === 'closed' ? ref.chatId : null;
   // A proposal record on an ended chat (another tab's answer) ticks the chat's re-read too.
   const keptSeq = useAskThreadStore((s) => (keptChat === null ? 0 : s.replySeq[keptChat] ?? 0));
@@ -289,22 +289,29 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     if (keptChat === null) return;
     let cancelled = false;
     api.getChatMessages(keptChat)
-      .then((r) => { if (!cancelled) setKept({ id: keptChat, records: r.messages as readonly unknown[] }); })
-      .catch(() => { /* no kept history: no cards, as before */ });
+      .then((r) => { if (!cancelled) setKept({ id: keptChat, records: r.messages as readonly unknown[], error: null }); })
+      // A failed read is said (with Retry) and keeps whatever this chat's cards last showed; a 404 is no kept history.
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const gone = e instanceof ApiError && e.status === 404;
+        setKept((k) => ({ id: keptChat, records: gone ? [] : k?.id === keptChat ? k.records : [], error: gone ? null : e instanceof Error ? e.message : String(e) }));
+      });
     return () => { cancelled = true; };
   }, [keptChat, chatTry, keptSeq]);
   // While an ended chat's kept history is being read, the cards it last showed stay (never a blank flash that would
   // drop what a card just answered); a settled card never reopens on an older read (`reconcileProposals`).
-  const lastEntries = useRef<ProposalEntry[]>([]);
+  const lastEntries = useRef<{ chatId: string; entries: ProposalEntry[] } | null>(null);
+  const waitingForKept = keptChat !== null && kept?.id !== keptChat;
+  const keptError = keptChat !== null && kept?.id === keptChat ? kept.error : null;
   const proposalEntries = useMemo<ProposalEntry[]>(() => {
     if (!proposalsOn || ref.kind !== 'chat') return [];
-    const waitingForKept = keptChat !== null && kept?.id !== keptChat;
     const source = keptChat !== null && kept?.id === keptChat ? kept.records : messages;
     const folded = foldChatProposals(source);
-    if (waitingForKept && folded.length === 0) return lastEntries.current;
-    return reconcileProposals(ref.chatId, folded);
-  }, [proposalsOn, ref, keptChat, kept, messages]);
-  useEffect(() => { lastEntries.current = proposalEntries; }, [proposalEntries]);
+    // Only THIS chat's earlier cards stand in while its kept history loads (never another chat's).
+    const held = lastEntries.current?.chatId === ref.chatId ? lastEntries.current.entries : [];
+    return reconcileProposals(ref.chatId, waitingForKept && folded.length === 0 ? held : folded);
+  }, [proposalsOn, ref, keptChat, kept, messages, waitingForKept]);
+  useEffect(() => { if (ref.kind === 'chat') lastEntries.current = { chatId: ref.chatId, entries: proposalEntries }; }, [ref, proposalEntries]);
   // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
   // live run here is NOT what Send reaches (it starts a separate Ask), and the composer says so.
   const scopeNote = composerScopeNote(mine, ref.kind === 'chat' && conversation === 'live');
@@ -856,7 +863,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     id: v.session.id, workdir: typeof v.session.workdir === 'string' ? v.session.workdir : null,
   })).filter((r) => r.workdir !== null), [mine]);
   // An ended chat whose kept history still holds its proposal cards is not "nothing here".
-  const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none') && proposalEntries.length === 0;
+  const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none') && proposalEntries.length === 0
+    && !waitingForKept && keptError === null;
   // studio#631 (2): a chat's thread has its own Stop — the same 10 s-undo stop ⌘K offers ("Stop this
   // session"), on every run of the chat still going. Hidden when nothing in it is running.
   const liveRuns = useMemo(() => mine.filter((v) => !['completed', 'cancelled', 'failed'].includes(v.session.status)).map((v) => v.session.id), [mine]);
@@ -1241,6 +1249,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} solo={mine.length === 1 ? title : null} />);
             return <Fragment key={e.key}>{label}{node}</Fragment>;
           })}
+          {/* A2: an ended chat's proposal cards come from its kept history; a failed read says so, with Retry. */}
+          {keptError !== null && (
+            <StateBanner data-testid="artifact-proposals-read-error" kind={readErrorKind(keptError)} what="this chat's proposals" error={keptError} onRetry={() => setChatTry((n) => n + 1)} />
+          )}
           {/* S16a-4g: the chat's own question and gate (keyed by the chat id) at the thread's foot. */}
           {ref.kind === 'chat' && <ChatQuestions chatId={ref.chatId} />}
         </div>
