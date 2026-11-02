@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { createDoc, listDocs, UNFILED_MOUNT } from '../../api/interactive.js';
 import type { ArtifactProposal, ProposalEdits } from '../../api/chatArtifacts-wire.js';
-import { formSources, proposalFormEdits, proposalFormOf, type ProposalForm } from '../../board/artifactProposal.js';
+import { formSources, proposalFormEdits, proposalFormOf, repoKeysOf, type ProposalForm } from '../../board/artifactProposal.js';
 import { apiStatus } from '../../api/errors.js';
 import type { Project } from '../../api/types.js';
 import { chosenSeats, defaultDocSeats, docClisJson } from '../../board/docSeats.js';
@@ -216,7 +216,8 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
     const s = roster?.find((x) => x.key === key);
     return s === undefined ? key : s.display_name || s.key;
   };
-  const blocked = form.title.trim() === '' || form.helpers.length !== ANSWER_SEATS;
+  const available = (key: string): boolean => roster === null || roster.some((s) => s.key === key);
+  const blocked = form.title.trim() === '' || form.helpers.length !== ANSWER_SEATS || !form.helpers.every(available);
   const go = async (): Promise<void> => {
     if (sending.current || blocked) return;
     sending.current = true;
@@ -242,7 +243,7 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
             {projects.filter((x) => x.id !== UNFILED_MOUNT && x.id !== 'default').map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </select>
         ) : (
-          <span data-testid="proposal-answer-project-fixed">{p.filedIn.label} (this chat’s project)</span>
+          <span data-testid="proposal-answer-project-fixed">{p.filedIn.label} {answer.fixed === true ? '(a retry keeps its document where it is)' : '(this chat’s project)'}</span>
         )}
       </label>
       <label className="wk-made-new-field">
@@ -278,14 +279,14 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
         <div data-testid="proposal-answer-repos" role="group" aria-label="About these repositories" className="wk-made-new-field">
           <span>About</span>
           <span className="wk-proposal-chips">
-            {p.repos.map((r) => {
-              const on = form.repos.includes(r);
+            {repoKeysOf(p).map(({ key, label }) => {
+              const on = form.repos.includes(key);
               return (
-                <button key={r} type="button" data-testid="proposal-answer-repo" data-repo={r} aria-pressed={on} disabled={busy || answer.fixed === true}
-                  onClick={() => setForm({ ...form, repos: toggle(form.repos, r) })}
-                  title={on ? `${r} grounds it. Click to leave it out.` : `${r} is left out. Click to use it.`}
+                <button key={key} type="button" data-testid="proposal-answer-repo" data-repo={key} aria-pressed={on} disabled={busy || answer.fixed === true}
+                  onClick={() => setForm({ ...form, repos: toggle(form.repos, key) })}
+                  title={on ? `${label} grounds it. Click to leave it out.` : `${label} is left out. Click to use it.`}
                   className={`wk-chip wk-proposal-chip${on ? '' : ' wk-proposal-chip--off'}`}>
-                  {r}
+                  {label}
                 </button>
               );
             })}
@@ -301,22 +302,29 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
       <div data-testid="proposal-answer-seats" role="group" aria-label="Helpers" className="wk-made-new-field">
         <span>Helpers</span>
         <span className="wk-prop-btns">
-          {(roster ?? []).filter((s) => s.enabled_for_council || form.helpers.includes(s.key)).map((s) => {
+          {/* The roster's seats, plus any the proposal chose that the roster no longer has (said, and removable). */}
+          {[
+            ...(roster ?? []).filter((s) => s.enabled_for_council || form.helpers.includes(s.key)).map((s) => ({ key: s.key, name: s.display_name || s.key, gone: false })),
+            ...form.helpers.filter((k) => !(roster ?? []).some((s) => s.key === k)).map((k) => ({ key: k, name: k, gone: true })),
+          ].map((s) => {
             const on = form.helpers.includes(s.key);
             return (
-              <button key={s.key} type="button" data-testid="proposal-answer-seat" data-seat={s.key} aria-pressed={on} disabled={busy}
+              <button key={s.key} type="button" data-testid="proposal-answer-seat" data-seat={s.key} aria-pressed={on} disabled={busy || (s.gone && !on)}
+                {...(s.gone ? { 'data-gone': 'true' } : {})}
                 onClick={() => setForm({ ...form, helpers: toggle(form.helpers, s.key) })}
-                title={on ? `${s.display_name || s.key} helps. Click to leave it out.` : `${s.display_name || s.key} is left out. Click to add it.`}
+                title={s.gone ? `${s.name} can no longer help here. Click to leave it out.` : on ? `${s.name} helps. Click to leave it out.` : `${s.name} is left out. Click to add it.`}
                 className="wk-chip">
-                {s.display_name || s.key}
+                {s.gone ? `${s.name} (not available)` : s.name}
               </button>
             );
           })}
         </span>
         <span data-testid="proposal-answer-council" role={form.helpers.length !== ANSWER_SEATS ? 'alert' : undefined}>
-          {form.helpers.length === ANSWER_SEATS
-            ? `${seatName(form.helpers[0]!)} and ${seatName(form.helpers[1]!)}: one writes, the other checks`
-            : 'Choose two helpers: one writes the document and another checks it.'}
+          {!form.helpers.every(available)
+            ? 'A helper on this proposal is no longer available: leave it out and choose another.'
+            : form.helpers.length === ANSWER_SEATS
+              ? `${seatName(form.helpers[0]!)} and ${seatName(form.helpers[1]!)}: one writes, the other checks`
+              : 'Choose two helpers: one writes the document and another checks it.'}
         </span>
       </div>
       {error !== null && <p data-testid="proposal-answer-error" role="alert" className="wk-artifact-line wk-artifact-line--bad">{error}</p>}

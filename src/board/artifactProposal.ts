@@ -25,6 +25,9 @@ export interface ProposalEntry extends ChatProposalView {
   /** What a Go accepted (edits applied), kept beside the proposal as crew keeps it: the card shows it while accepting
    *  and once started, and the proposal as recorded otherwise (crew's `viewOf`). */
   accepted?: ArtifactProposal;
+  /** When Go was recorded (`proposal_accepting`, daemon millis): a real launch takes seconds (A3), so a fresh one is
+   *  "Starting it…", not interrupted. */
+  acceptingAt?: number;
 }
 
 const KINDS: ReadonlySet<string> = new Set(['proposal', 'proposal_accepting', 'proposal_decided']);
@@ -104,6 +107,7 @@ export function foldChatProposals(records: readonly unknown[]): ProposalEntry[] 
       if (v === undefined || v.state === 'decided') continue;
       v.state = 'accepting';
       v.accepted = r.resolution;
+      v.acceptingAt = r.at;
     } else {
       const v = byPid.get(r.pid);
       if (v === undefined || v.state === 'decided') continue;
@@ -237,10 +241,19 @@ export function shownProposal(e: ProposalEntry): ArtifactProposal {
 }
 
 /** The one plain line an answered (or replaced, or interrupted) card collapses to; `null` while it is open. */
-export function proposalRecordLine(e: ProposalEntry): string | null {
+/** How long a recorded Go reads as still starting (crew creates the document, snapshots its repositories and launches:
+ *  seconds, up to a big clone). After it, an `accepting` proposal reads as interrupted, with Go again. */
+export const PROPOSAL_STARTING_MS = 180_000;
+
+/** Whether an `accepting` proposal is still starting: this tab's own Go is in flight, or Go was recorded moments ago. */
+export function proposalStarting(e: ProposalEntry, now: number, inFlight: boolean): boolean {
+  return e.state === 'accepting' && (inFlight || (e.acceptingAt !== undefined && now - e.acceptingAt < PROPOSAL_STARTING_MS));
+}
+
+export function proposalRecordLine(e: ProposalEntry, starting = false): string | null {
   if (e.state === 'open') return null;
   if (e.state === 'superseded') return 'A newer proposal replaced this one. Nothing was started.';
-  if (e.state === 'accepting') return 'Interrupted before it was recorded as started.';
+  if (e.state === 'accepting') return starting ? 'Starting it…' : 'Interrupted before it was recorded as started.';
   return `You chose: ${e.decision === 'go' ? GO_WORDS[e.proposal.kind] : 'Not now'}`;
 }
 
@@ -272,7 +285,12 @@ export function proposalTimeWords(p: ArtifactProposal): string | null {
 
 // ── New document in "answer this proposal" mode (slice A3, DES §4.2 Change something on a create) ─────────────────────
 
-/** What the form edits. `project`: the target project id, `null` = Unfiled. */
+/** The proposal's repositories as the form keys them: the registry id when crew sent one, else the name. */
+export function repoKeysOf(p: ArtifactProposal): Array<{ key: string; label: string }> {
+  return p.repos.map((name, i) => ({ key: p.repoRefs?.[i] ?? name, label: name }));
+}
+
+/** What the form edits. `project`: the target project id, `null` = Unfiled. `repos`: repository keys ({@link repoKeysOf}). */
 export interface ProposalForm {
   title: string;
   brief: string;
@@ -290,7 +308,8 @@ export function proposalFormOf(p: ArtifactProposal): ProposalForm {
     brief: p.brief ?? '',
     project: p.filedIn.projectId,
     sources: p.sources.filter((s) => s.status === 'ok').map((s) => s.token),
-    repos: [...p.repos],
+    // By registry id (two checkouts may share a name), the name only when crew sent no ids.
+    repos: repoKeysOf(p).map((r) => r.key),
     helpers: [...(p.helpers?.seats ?? [])],
   };
 }

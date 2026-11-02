@@ -98,6 +98,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+const text = (id: string): string => screen.getByTestId(id).textContent?.replace(/\s+/g, ' ').trim() ?? '';
 const page = () => render(<SessionPage sessionId="chat-ask" runs={[ASK_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
 
 async function openForm(): Promise<HTMLElement> {
@@ -112,7 +113,9 @@ describe('the answer form, pure', () => {
   it('opens on crew’s resolution, and a Go carries only what changed', () => {
     const p = proposal();
     const f = proposalFormOf(p);
-    expect(f).toStrictEqual({ title: 'Release note', brief: 'what changed in coverage', project: null, sources: ['chat', 'run:29bbbfb1-0000', 'run:57443b2b-0000'], repos: ['wicked-crew'], helpers: ['claude', 'codex'] });
+    expect(f).toStrictEqual({ title: 'Release note', brief: 'what changed in coverage', project: null, sources: ['chat', 'run:29bbbfb1-0000', 'run:57443b2b-0000'], repos: ['repo-crew'], helpers: ['claude', 'codex'] });
+    // Repositories go by registry id (two checkouts may share a name).
+    expect(proposalFormEdits(proposal({ repos: ['shared', 'shared'], repoRefs: ['r-a', 'r-b'] }), { ...proposalFormOf(proposal({ repos: ['shared', 'shared'], repoRefs: ['r-a', 'r-b'] })), repos: ['r-b'] })).toStrictEqual({ repos: ['r-b'] });
     expect(proposalFormEdits(p, f)).toStrictEqual({});
     expect(proposalFormEdits(p, { ...f, title: ' Coverage note ', helpers: ['codex', 'agy'], sources: ['chat', 'run:57443b2b-0000'] }))
       .toStrictEqual({ title: 'Coverage note', sources: ['chat', 'run:57443b2b-0000'], helpers: ['codex', 'agy'] });
@@ -210,6 +213,90 @@ describe('Change something on a create card (A3)', () => {
     fireEvent.click(within(form).getByTestId('proposal-answer-cancel'));
     expect(screen.queryByTestId('proposal-answer-form')).toBeNull();
     expect(posts).toStrictEqual([]);
+  });
+
+  it('a Go that is still starting (a real launch takes seconds) reads "Starting it…", never "Interrupted · Go again"', async () => {
+    // Another tab's Go recorded a moment ago: the accepting record is fresh.
+    const now = Date.now();
+    chatBody = { ...chatBody, messages: [
+      ...TURN,
+      { at: now - 2000, turnId: 't1', kind: 'proposal', proposal: proposal() },
+      { at: now - 1000, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
+    ] };
+    page();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('accepting'));
+    expect(text('artifact-proposal-record')).toBe('Starting it…');
+    expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
+    // An old one (a crash before the record) is interrupted, with Go again.
+    cleanup();
+    resetSettledProposals();
+    chatBody = { ...chatBody, messages: [
+      ...TURN,
+      { at: now - 600_000, turnId: 't1', kind: 'proposal', proposal: proposal() },
+      { at: now - 500_000, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
+    ] };
+    page();
+    await screen.findByTestId('artifact-proposal-go-again');
+    expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+  });
+
+  it('while the form is open it is the only way to answer; Enter in its fields submits nothing', async () => {
+    const form = await openForm();
+    // The card's own choices are gone until Cancel: no competing answer without the form's edits.
+    expect(screen.queryByTestId('artifact-proposal-confirm')).toBeNull();
+    for (const id of ['proposal-answer-title', 'proposal-answer-brief']) {
+      const el = within(form).getByTestId(id);
+      el.focus();
+      fireEvent.keyDown(el, { key: 'Enter', code: 'Enter' });
+      fireEvent.keyUp(el, { key: 'Enter', code: 'Enter' });
+    }
+    await new Promise((r) => setTimeout(r, 30));
+    expect(posts).toStrictEqual([]);
+    fireEvent.click(within(form).getByTestId('proposal-answer-cancel'));
+    expect(screen.getByTestId('artifact-proposal-confirm')).not.toBeNull();
+  });
+
+  it('a retry card keeps its document and its repositories: only the allowed edits are sent', async () => {
+    setup(proposal({ pid: 'chat-ask:retry:r1', turnId: null, sourceRunId: 'r1', artifactRef: 'mikes/release-note-1a2b3c4d', filedIn: { projectId: 'mikes', label: 'Mikes' } }));
+    decideAnswer = () => ok({ view: { proposal: proposal(), state: 'decided', decision: 'go', result: { runId: 'bbbbbbbb-1', artifactRef: 'mikes/release-note-1a2b3c4d', adopted: false, stub: false }, decidedAt: T0 + 3000 } });
+    page();
+    const card = await screen.findByTestId('artifact-proposal');
+    fireEvent.click(card.querySelector('[data-ask-option="change"]')!);
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    const form = screen.getByTestId('proposal-answer-form');
+    expect(within(form).queryByTestId('proposal-answer-project')).toBeNull();
+    expect(within(form).getByTestId('proposal-answer-project-fixed').textContent).toContain('a retry keeps its document where it is');
+    expect(within(form).getAllByTestId('proposal-answer-repo').every((r) => (r as HTMLButtonElement).disabled)).toBe(true);
+    fireEvent.change(within(form).getByTestId('proposal-answer-title'), { target: { value: 'Release note, again' } });
+    fireEvent.click(within(form).getByTestId('proposal-answer-go'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.body).toStrictEqual({ decision: 'go', edits: { title: 'Release note, again' } });
+  });
+
+  it('a helper the roster no longer has is said and can be swapped for another', async () => {
+    setCachedRoster([
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true } as never,
+      { key: 'agy', display_name: 'Antigravity', binary: 'agy', enabled_for_council: true } as never,
+    ]);
+    const form = await openForm();
+    const gone = within(form).getAllByTestId('proposal-answer-seat').find((s) => s.getAttribute('data-seat') === 'claude')!;
+    expect(gone.textContent).toBe('claude (not available)');
+    expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(true);
+    fireEvent.click(gone);
+    fireEvent.click(within(form).getAllByTestId('proposal-answer-seat').find((s) => s.getAttribute('data-seat') === 'agy')!);
+    expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(false);
+    fireEvent.click(within(form).getByTestId('proposal-answer-go'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.body).toStrictEqual({ decision: 'go', edits: { helpers: ['codex', 'agy'] } });
+  });
+
+  it('a refusal that closes the form (launch_failed, now interrupted) is said once, under the card', async () => {
+    decideAnswer = () => new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } });
+    const form = await openForm();
+    fireEvent.click(within(form).getByTestId('proposal-answer-go'));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-error').textContent).toBe('could not start it: the engine is restarting. Go again resumes the same job.'));
+    expect(screen.queryByTestId('proposal-answer-form')).toBeNull();
+    expect(screen.getAllByText('could not start it: the engine is restarting. Go again resumes the same job.')).toHaveLength(1);
   });
 
   it('under the test configuration a create card no longer says it starts nothing; a refine card still does', async () => {

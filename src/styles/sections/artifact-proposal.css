@@ -45,3 +45,6 @@ button.wk-proposal-chip { cursor: pointer; font: inherit; font-size: var(--text-
 button.wk-proposal-chip:focus-visible { outline: 2px solid var(--focus-ring, var(--accent)); outline-offset: 2px; }
 .wk-proposal-chip--off { background: transparent; box-shadow: inset 0 0 0 1px var(--border); border: 1px dashed var(--border); color: var(--ink-muted); }
 .wk-proposal-answer .wk-proposal-note { margin: 0; }
+/* The form's chip rows wrap inside the thread at any width (a phone keeps every helper in view). */
+.wk-proposal-answer .wk-prop-btns { flex-wrap: wrap; min-width: 0; }
+.wk-proposal-answer .wk-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

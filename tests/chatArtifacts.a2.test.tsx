@@ -208,6 +208,7 @@ describe('the card in the chat thread', () => {
     fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
     expect(screen.getByTestId('proposal-answer-form')).not.toBeNull();
     expect(posts).toStrictEqual([]);
+    fireEvent.click(screen.getByTestId('proposal-answer-cancel')); // the form is the one answer surface while open
     fireEvent.click(card.querySelector('[data-ask-option="not_now"]')!);
     fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
     await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));

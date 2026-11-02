@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { api } from '../../api/client.js';
 import type { AskAnswer } from '../../api/ask.js';
@@ -12,6 +12,8 @@ import {
   proposalAsk,
   proposalRecordLine,
   proposalRefusal,
+  proposalStarting,
+  PROPOSAL_STARTING_MS,
   proposalResultWords,
   proposalTimeWords,
   isProposalView,
@@ -72,8 +74,12 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
     }
   }, [open]);
 
+  /** One answer at a time from this card, whichever control sent it (the card's choices or the open form). */
+  const sending = useRef(false);
   /** Answer the proposal; resolves crew's refusal words, or `null` when it was taken. */
   const answerWith = async (decision: 'go' | 'not_now', edits?: ProposalEdits): Promise<string | null> => {
+    if (sending.current) return 'An answer to this proposal is already on its way.';
+    sending.current = true;
     setBusy(true);
     setError(null);
     setNote(null);
@@ -90,10 +96,14 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
     } catch (err: unknown) {
       const refusal = proposalRefusal(err);
       if (refusal.view !== null) keep(refusal.view);
-      // A refusal of the form's own answer is said in the form (it stays open, editable); any other under the card.
-      if (edits === undefined) setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
+      // A refusal of the form's own answer that leaves the proposal open is said in the form (still open, editable);
+      // any other (a card answer, or one whose view closes the form: started, interrupted, replaced) under the card.
+      if (edits === undefined || (refusal.view !== null && refusal.view.state !== 'open')) {
+        setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
+      }
       return refusal.words;
     } finally {
+      sending.current = false;
       setBusy(false);
       onChanged();
     }
@@ -111,7 +121,18 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
     }
   };
 
-  const line = proposalRecordLine(view);
+  // A3: a real Go takes seconds; while it starts (this tab's request, or a Go recorded moments ago in another tab) the
+  // card says so instead of "Interrupted · Go again".
+  const [now, setNow] = useState(() => Date.now());
+  const starting = proposalStarting(view, now, busy);
+  useEffect(() => {
+    if (view.state !== 'accepting' || busy || view.acceptingAt === undefined) return;
+    const left = view.acceptingAt + PROPOSAL_STARTING_MS - Date.now();
+    if (left <= 0) return;
+    const t = setTimeout(() => setNow(Date.now()), left + 50);
+    return () => clearTimeout(t);
+  }, [view.state, view.acceptingAt, busy]);
+  const line = proposalRecordLine(view, starting);
   const result = proposalResultWords(view);
   return (
     <section
@@ -141,14 +162,14 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
       {(open || view.state === 'accepting') && stub && (
         <p data-testid="artifact-proposal-stub" className="wk-proposal-stub">Test configuration: {open ? GO_WORDS[p.kind] : 'Go again'} records your click and starts nothing.</p>
       )}
-      {open ? (
+      {open && answering ? null : open ? (
         <AskCard ask={proposalAsk(view, { stub })} header={false} busy={busy} onAnswer={onAnswer}
           confirmLabel={(o) => (o.id === 'change' ? 'Change something' : o.label)}
           testIds={{ root: 'artifact-proposal-ask', confirm: 'artifact-proposal-confirm' }} />
       ) : view.state === 'accepting' ? (
         <div className="wk-proposal-again">
           <AskRecord line={line ?? ''} testId="artifact-proposal-record" />
-          <button type="button" data-testid="artifact-proposal-go-again" className="wk-btn wk-btn--primary wk-btn--sm" disabled={busy} onClick={() => decide('go')}>Go again</button>
+          {!starting && <button type="button" data-testid="artifact-proposal-go-again" className="wk-btn wk-btn--primary wk-btn--sm" disabled={busy} onClick={() => decide('go')}>Go again</button>}
         </div>
       ) : (
         <>
