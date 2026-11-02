@@ -141,8 +141,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // What is shown may be the previous project's catalog; it does not say what THIS project offers, so a
   // card picked from it waits for this project's read before it launches (codex r3).
   // (Only crew's catalog says what a project offers; today's list on an older daemon authorizes nothing.)
-  const scopePending = catalogLoad.state === 'loading' && lastRead.current !== null && lastRead.current.view.source === 'catalog'
-    && lastRead.current.key !== catalogKey;
+  // Held in ANY state until this project's catalog answers (xreview r4: a failed read released it).
+  const scopePending = lastRead.current !== null && lastRead.current.view.source === 'catalog' && lastRead.current.key !== catalogKey;
   const [now] = useState(() => Date.now());
   const roster = useRoster();
   // A greyed helper's Sign in opens its sign-in modal over the wizard; closing it re-reads the roster,
@@ -210,6 +210,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // A workflow the catalog says works without a repository does not ask for one; any other keeps
   // today's rule (an unknown workflow, a preset, an older daemon's list: a repository is required).
   const repoRequired = entry === null ? true : needsRepo(entry);
+  // A workflow whose card says it works within a project (crew: `needs` has `project`) asks for one.
+  const projectRequired = entry !== null && entry.launchKind === 'run' && entry.needs.includes('project');
   const jobName = entry?.title ?? workflowLabel(row?.key ?? draft.workflowId ?? '');
   // The catalog's form: its first text input names the words box; any other text input is listed under it.
   const textInputs = (entry?.inputs ?? []).filter((i) => i.kind === 'text');
@@ -289,14 +291,18 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     : step === 'demo' ? demoProblem
     : step === 'workflow' ? (draft.workflowId === null ? 'Choose the kind of job.' : null)
       : step === 'what' ? (draft.intent.trim() === '' && !wordsOptional ? 'Say what you want done.' : null)
-        : step === 'where' ? (repoRequired && repoRef === null ? 'Choose the repository this works in.' : null)
+        : step === 'where' ? (repoRequired && repoRef === null ? 'Choose the repository this works in.'
+          : projectRequired && filedProject === null ? 'Choose the project this works in.' : null)
           : step === 'options' ? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
             : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null)
             : null;
   // Review re-checks every rule (codex r1: another tab may have dropped the last helper meanwhile).
   const launchBlocker: string | null =
     entryBlocker !== null ? entryBlocker
-    : scopePending && draft.catalogEntryId !== null ? 'Checking this workflow for the chosen project…'
+    : scopePending && draft.catalogEntryId !== null
+      ? (catalogLoad.state === 'loading' ? 'Checking this workflow for the chosen project…'
+        : 'Couldn’t check this workflow for the chosen project. Close New job and open it again to retry.')
+    : projectRequired && filedProject === null ? 'Choose the project this works in.'
     : drafting ? draftBlocker
     : demoing ? (demoProblem ?? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.' : null))
     : draft.workflowId === null ? 'Choose the kind of job.'
@@ -379,9 +385,16 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // offering the workflow meanwhile (codex r2), and the launch must not post what is no longer offered.
   const blockerNow = useRef<string | null>(null);
   blockerNow.current = launchBlocker;
+  // And what is sent is what was checked (codex r4): if the request itself changed while the preview
+  // was awaited (a catalog refresh re-derived the repository, say), the launch stops for a fresh look.
+  const requestNow = useRef('');
+  requestNow.current = JSON.stringify([draft.workflowId, draft.catalogEntryId, repoRef, draft.projectId, problemText.trim(),
+    deliver, seats.map((x) => x.key), lead, offerPower ? powerOn : null, offerReduced && draft.reduced, draft.skipQe, draft.skipQeReason]);
   const resolveConfirmStill = async (): Promise<Awaited<ReturnType<typeof preview.resolveHumanConfirm>>> => {
+    const asked = requestNow.current;
     const confirm = await preview.resolveHumanConfirm();
     if (blockerNow.current !== null) throw new Error(blockerNow.current);
+    if (requestNow.current !== asked) throw new Error('This job changed while it was being checked. Look it over and launch again.');
     return confirm;
   };
 
@@ -569,7 +582,9 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   <option value="">Not in a project</option>
                   {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-                <span className="wk-field-note">Optional. Files the job with a project so it shows up there.</span>
+                <span className="wk-field-note" data-testid="launch-wizard-project-note">{projectRequired
+                  ? 'Required by this workflow: it works within a project.'
+                  : 'Optional. Files the job with a project so it shows up there.'}</span>
               </label>
             </>
           )}
@@ -852,10 +867,10 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
           {(step === 'review' ? launchBlocker : blocker) !== null && step !== 'workflow' && <p className="wk-field-note" data-testid="launch-wizard-blocker" role="status">{step === 'review' ? launchBlocker : blocker}</p>}
           <div className="wk-launch-wizard-actions">
             {step !== 'workflow' && step !== 'what' && step !== 'requirements' && step !== 'demo' && (
-              <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-back" onClick={goBack}>Back</button>
+              <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-back" disabled={launching} onClick={goBack}>Back</button>
             )}
             {(step === 'what' || step === 'requirements' || step === 'demo') && (
-              <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-change" onClick={() => setStep('workflow')}>Change job</button>
+              <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-change" disabled={launching} onClick={() => setStep('workflow')}>Change job</button>
             )}
             {step === 'review' ? (
               <button type="button" className="wk-btn wk-btn--primary" data-testid="launch-wizard-launch" disabled={launching || launchBlocker !== null} onClick={() => { void launch(); }}>

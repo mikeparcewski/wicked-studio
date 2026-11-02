@@ -567,3 +567,86 @@ describe('round 3 (codex r3): a card picked from another project’s catalog wai
     expect(screen.getByTestId('launch-wizard-launch')).toBeDisabled();
   });
 });
+
+describe('round 4 (xreview r4)', () => {
+  const rr = (extra: Record<string, unknown> = {}) => ({
+    id: 'rr', category: 'analyze', title: 'Review recent work', summary: 'Recommendations.', outcome: 'A report', needs: ['runs'], inputs: [],
+    status: 'available', launch: { kind: 'run', workflow: 'review-recent-work' }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null }, ...extra,
+  });
+  const cats = [{ id: 'analyze', title: 'Analyze' }];
+  const toReview = (): void => {
+    for (let i = 0; i < 4 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) fireEvent.click(screen.getByTestId('launch-wizard-next'));
+  };
+
+  it('a failed read for the chosen project still holds the launch (agy + codex r4)', async () => {
+    catalog = { categories: cats, entries: [rr()] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/workflows/catalog')
+      ? Promise.resolve(new Response(JSON.stringify({ error: 'busy' }), { status: 503, headers: { 'content-type': 'application/json' } }))
+      : realFetch(url, init))));
+    fireEvent.change(screen.getByTestId('launch-wizard-project'), { target: { value: 'p2' } });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    toReview();
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Couldn’t check this workflow for the chosen project');
+    expect(screen.getByTestId('launch-wizard-launch')).toBeDisabled();
+    expect(posts.filter((p) => p.path === '/runs')).toEqual([]);
+  });
+
+  it('a card that works within a project asks for one (live domain-extraction: needs repo + project)', async () => {
+    catalog = fixture;
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-domain-extraction'));
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'map the billing domain' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.change(await screen.findByTestId('launch-wizard-repo'), { target: { value: 'repo-1' } });
+    expect(screen.getByTestId('launch-wizard-project-note')).toHaveTextContent('Required by this workflow');
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Choose the project this works in.');
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('launch-wizard-project'), { target: { value: 'p1' } });
+    expect(screen.getByTestId('launch-wizard-next')).not.toBeDisabled();
+  });
+
+  it('while launching, the job cannot be changed; a request that changed during the preview is not sent (codex r4)', async () => {
+    catalog = { categories: cats, entries: [rr({ needs: ['repo'] })] };
+    let releasePreview: ((r: Response) => void) | null = null;
+    const realFetch = globalThis.fetch;
+    const json = (b: unknown): Response => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname;
+      // A preset of that name: its launch previews the plan (the await this guards).
+      if (path.endsWith('/presets')) return Promise.resolve(json({ presets: [{ name: 'review-recent-work', steps: [{ id: 'analyze' }] }] }));
+      if (path.endsWith('/plans/preview')) return new Promise<Response>((r) => { releasePreview = r; });
+      return realFetch(url, init);
+    }));
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.change(await screen.findByTestId('launch-wizard-repo'), { target: { value: 'repo-1' } });
+    toReview();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(releasePreview).not.toBeNull(), { timeout: 3000 });
+    expect(screen.getByTestId('launch-wizard-back')).toBeDisabled();
+    // Anything that changes the request meanwhile (here, the draft's repository).
+    act(() => useLaunchWizard.getState().update({ repoRef: 'repo-2' }));
+    const PREVIEW = { score: 0, deterministic: 0, reasons: [], destructive: false, band: '0-39', high_risk: false, floor: [], floor_override: null, steps: [{ id: 'analyze' }] };
+    await act(async () => {
+      releasePreview!(json(PREVIEW));
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(posts.filter((p) => p.path === '/runs')).toEqual([]);
+    expect(screen.getByTestId('launch-wizard-error')).toBeInTheDocument();
+    // The control: launched again with nothing changing meanwhile, it is sent, with what was reviewed.
+    releasePreview = null;
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(releasePreview).not.toBeNull(), { timeout: 3000 });
+    await act(async () => {
+      releasePreview!(json(PREVIEW));
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await waitFor(() => expect(posts.filter((p) => p.path === '/runs')).toHaveLength(1));
+    expect(posts.find((p) => p.path === '/runs')!.body.repoRef).toBe('repo-2');
+  });
+});

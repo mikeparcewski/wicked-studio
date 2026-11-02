@@ -341,3 +341,14 @@ describe('median run time', () => {
     expect(v.entries[0]!.medianMinutes).toBe(1);
   });
 });
+
+describe('document cards (codex r4)', () => {
+  it('a document card with a missing or unknown format is not offered', () => {
+    const v = catalogFromWire({ entries: [
+      { id: 'd1', status: 'available', launch: { kind: 'document', style: 'ppt' } },
+      { id: 'd2', status: 'available', launch: { kind: 'document' } },
+      { id: 'd3', status: 'available', launch: { kind: 'document', style: 'xlsx' } },
+    ] })!;
+    expect(v.entries.map((e) => [e.launchKind, e.status, e.docStyle])).toEqual([['document', 'ready', 'ppt'], ['none', 'unavailable', null], ['none', 'unavailable', null]]);
+  });
+});

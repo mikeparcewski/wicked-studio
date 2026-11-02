@@ -1,5 +1,6 @@
 import type { WorkflowDef } from '../api/types.js';
 import type { Preset } from '../api/teamPlan.js';
+import { isDocFormat } from './everythingModel.js';
 import { workflowItems } from './workflowCommand.js';
 import { workflowLabel } from './workflowNames.js';
 import { workflowPurpose } from './workflowPurpose.js';
@@ -160,7 +161,12 @@ function launchOf(id: string, v: unknown): { launchKind: LaunchKind; launchId: s
     }
     case 'demo': return { launchKind: 'demo', launchId: STUDIO_KIND_DEMO, docStyle: null };
     case 'compose': return { launchKind: 'compose', launchId: STUDIO_KIND_DRAFT_EPICS, docStyle: null };
-    case 'document': return { launchKind: 'document', launchId: `document:${id}`, docStyle: str(r?.['style']) };
+    case 'document': {
+      // A document card names a format New document makes; a missing or unknown one is not offered (codex r4).
+      const style = str(r?.['style']);
+      if (!isDocFormat(style)) return { launchKind: 'none', launchId: `none:${id}`, docStyle: null };
+      return { launchKind: 'document', launchId: `document:${id}`, docStyle: style };
+    }
     case 'chat': return { launchKind: 'chat', launchId: `chat:${id}`, docStyle: null };
     // `none`, or a kind this studio does not know: shown, never launched.
     default: return { launchKind: 'none', launchId: `none:${id}`, docStyle: null };

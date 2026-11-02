@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 285,
-    "occurrences": 3960,
-    "static": 3367,
+    "occurrences": 3961,
+    "static": 3368,
     "dynamic": 93,
     "computed": 44
   },
@@ -6990,6 +6990,12 @@
     },
     {
       "testId": "launch-wizard-project",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-project-note",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]

@@ -697,13 +697,20 @@
    "outcome": "A map of the domain: entities, rules and requirements",
    "useWhen": [],
    "needs": [
-    "repo"
+    "repo",
+    "project"
    ],
    "inputs": [
     {
      "id": "repo",
      "label": "Repository",
      "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
      "required": true
     },
     {
