@@ -55,6 +55,9 @@ function endsByAsi(text: string, i: number): boolean {
   const c = text[i]!;
   if (c === '"' || c === "'" || c === '{' || c === '~' || /[0-9]/.test(c)) return true;
   if (c === '!') return text[i + 1] !== '=';
+  // `.5` is a number, and `\u0074op` an identifier written with an escape (an escaped `in` is no keyword).
+  if (c === '.') return /[0-9]/.test(text[i + 1] ?? '');
+  if (c === '\\') return true;
   if (c === '+' || c === '-') return text[i + 1] === c;
   if (!IDENTIFIER_PART.test(c)) return false;
   let j = i;
@@ -149,14 +152,25 @@ const JS_TYPES = new Set([
   'text/x-ecmascript', 'text/x-javascript',
 ]);
 
-/** Whether the browser runs this script's text as a classic or module script (not external, not a data block). */
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Whether the browser runs this script's text as a classic or module script (not external, not a data block). An SVG
+ *  script is external by `href` or `xlink:href`; `src` means nothing there. */
 function runsInline(s: Element): boolean {
-  if (s.hasAttribute('src')) return false;
+  if (s.namespaceURI === SVG_NS ? s.hasAttribute('href') || s.hasAttribute('xlink:href') : s.hasAttribute('src')) return false;
   const language = s.getAttribute('language');
   const raw = s.hasAttribute('type') ? s.getAttribute('type')! : language !== null && language !== '' ? `text/${language}` : '';
   if (raw === '') return true;
   const type = raw.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '').toLowerCase();
   return type === 'module' || JS_TYPES.has(type);
+}
+
+/** Every script in the document, including those inside `<template>` contents (a declarative shadow root, or a template
+ *  the document clones at run time), which `querySelectorAll` does not enter. */
+function scriptsIn(root: ParentNode): Element[] {
+  const out: Element[] = Array.from(root.querySelectorAll('script'));
+  for (const t of Array.from(root.querySelectorAll('template'))) out.push(...scriptsIn(t.content));
+  return out;
 }
 
 /** The document's own doctype, written back as it was (none stays none: the document keeps its rendering mode). */
@@ -168,7 +182,7 @@ function doctypeOf(doc: Document): string {
 export function guardNestedHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const hashes = new Set<string>([sha256Base64(NESTED_PRELUDE)]);
-  for (const script of Array.from(doc.querySelectorAll('script'))) {
+  for (const script of scriptsIn(doc)) {
     if (!runsInline(script)) continue;
     const text = withNestedPrelude(script.textContent ?? '');
     script.textContent = text;

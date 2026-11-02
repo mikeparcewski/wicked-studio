@@ -96,6 +96,26 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     expect(policyOf(doc)).not.toContain('AAAA');
   });
 
+  it('scripts inside <template> contents (a declarative shadow root, a template cloned later) are guarded and hashed too', () => {
+    const doc = parse(guardNestedHtml('<div><template shadowrootmode="open"><p>in</p><script>window.a=1</script></template></div><template id="t"><template><script>window.b=2</script></template></template>'));
+    const texts: string[] = [];
+    const walk = (root: ParentNode): void => {
+      for (const s of Array.from(root.querySelectorAll('script'))) texts.push(s.textContent ?? '');
+      for (const t of Array.from(root.querySelectorAll('template'))) walk((t as HTMLTemplateElement).content);
+    };
+    walk(doc);
+    expect(texts).toEqual(expect.arrayContaining([`${P}window.a=1`, `${P}window.b=2`]));
+    for (const t of texts) expect(hashesOf(doc)).toContain(node(t));
+  });
+
+  it('an SVG script is external by href (src means nothing there), an HTML one by src', () => {
+    const doc = parse(guardNestedHtml('<svg><script src="ignored">window.s=1</script><script href="x.js"></script></svg><script src="y.js"></script>'));
+    const svgScripts = Array.from(doc.querySelectorAll('svg script'));
+    expect(svgScripts[0]!.textContent).toBe(`${P}window.s=1`);
+    expect(svgScripts[1]!.textContent).toBe('');
+    expect(doc.querySelector('body > script[src]')!.textContent).toBe('');
+  });
+
   it('inline event handlers stay in the markup but the policy refuses them (no unsafe-hashes)', () => {
     const out = guardNestedHtml('<img src="x" onerror="new RTCPeerConnection()">');
     expect(out).toContain('onerror=');
