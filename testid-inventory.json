@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 288,
-    "occurrences": 4029,
-    "static": 3433,
+    "occurrences": 4046,
+    "static": 3449,
     "dynamic": 93,
     "computed": 44
   },
@@ -12382,6 +12382,102 @@
       "testId": "projects-unfiled-state",
       "files": [
         "src/components/everything/ProjectsPage.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-brief",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-cancel",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-error",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-form",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-go",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-project",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-project-fixed",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-recheck",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-repo",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-repos",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-seat",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-seats",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-source",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-sources",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-title",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
       ]
     },
     {

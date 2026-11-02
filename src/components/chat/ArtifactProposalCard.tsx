@@ -2,7 +2,9 @@ import { useEffect, useId, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { api } from '../../api/client.js';
 import type { AskAnswer } from '../../api/ask.js';
-import type { ArtifactProposal, ChatProposalView, ProposalSource } from '../../api/chatArtifacts-wire.js';
+import type { ArtifactProposal, ChatProposalView, ProposalEdits, ProposalSource } from '../../api/chatArtifacts-wire.js';
+import { useProjectsStore } from '../../store/projects.js';
+import { NewDocument } from '../everything/NewDocument.js';
 import {
   changeRoute,
   GO_WORDS,
@@ -23,9 +25,10 @@ import { AskCard, AskRecord } from '../ask/AskCard.js';
  * resolution — What, the brief or what to show, From (a struck source says why the draft will never see it), About,
  * Helpers, Time and cost, Stops, Filed in — answered on `AskCard` (`host: 'chat'`). The primary (Make it / Make the
  * change / Preview) is preselected but never focused, so Enter in the composer still sends a message. Only a click
- * answers it: Go and Not now go to `POST /chats/:id/proposals/:pid`; Change something is routed per kind (a note until
- * each kind's slice lands). Once answered or replaced, the card collapses to its headline and one record line, with the
- * facts behind Details; an interrupted Go offers Go again.
+ * answers it: Go and Not now go to `POST /chats/:id/proposals/:pid`; Change something is routed per kind: a create opens
+ * New document in "answer this proposal" mode under the card (slice A3), the others a note until their slices land.
+ * Once answered or replaced, the card collapses to its headline and one record line, with the facts behind Details; an
+ * interrupted Go offers Go again.
  */
 export interface ArtifactProposalCardProps {
   chatId: string;
@@ -48,6 +51,9 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   const [error, setError] = useState<{ words: string; settles: boolean } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [details, setDetails] = useState(false);
+  // A3: Change something on a create opens New document under the card, answering this proposal.
+  const [answering, setAnswering] = useState(false);
+  const projects = useProjectsStore((s) => s.projects);
   // The daemon's answer to THIS card's request, shown at once while the re-read catches up: a settled one stays (a
   // stale read never reopens it); an open one (a refusal's fresh facts: the document moved) stands until the next read
   // of the chat arrives, which carries the same or newer facts.
@@ -60,10 +66,14 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   const detailsId = useId();
   // A card that settles drops the note it showed while it was open.
   useEffect(() => {
-    if (!open) setNote(null);
+    if (!open) {
+      setNote(null);
+      setAnswering(false);
+    }
   }, [open]);
 
-  const decide = (decision: 'go' | 'not_now'): void => {
+  /** Answer the proposal; resolves crew's refusal words, or `null` when it was taken. */
+  const answerWith = async (decision: 'go' | 'not_now', edits?: ProposalEdits): Promise<string | null> => {
     setBusy(true);
     setError(null);
     setNote(null);
@@ -73,23 +83,31 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
       if (terminal(v.state)) noteSettled(chatId, next);
       setAnswered({ view: next, against: entry });
     };
-    api.decideChatProposal(chatId, entry.pid, { decision })
-      .then((r) => { if (isProposalView(r.view)) keep(r.view); })
-      .catch((err: unknown) => {
-        const refusal = proposalRefusal(err);
-        if (refusal.view !== null) keep(refusal.view);
-        setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
-      })
-      .finally(() => {
-        setBusy(false);
-        onChanged();
-      });
+    try {
+      const r = await api.decideChatProposal(chatId, entry.pid, { decision, ...(edits !== undefined ? { edits } : {}) });
+      if (isProposalView(r.view)) keep(r.view);
+      return null;
+    } catch (err: unknown) {
+      const refusal = proposalRefusal(err);
+      if (refusal.view !== null) keep(refusal.view);
+      // A refusal of the form's own answer is said in the form (it stays open, editable); any other under the card.
+      if (edits === undefined) setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
+      return refusal.words;
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  };
+  const decide = (decision: 'go' | 'not_now'): void => {
+    void answerWith(decision);
   };
   const onAnswer = (a: AskAnswer): void => {
     if (a.option === 'go' || a.option === 'not_now') decide(a.option);
     else if (a.option === 'change') {
       setError(null);
-      setNote(changeRoute(p.kind).note);
+      const route = changeRoute(p.kind);
+      if (route.kind === 'form') setAnswering(true);
+      else setNote(route.note);
     }
   };
 
@@ -151,6 +169,23 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
             )}
           </div>
         </>
+      )}
+      {open && answering && (
+        <NewDocument
+          projects={projects}
+          onClose={() => setAnswering(false)}
+          answer={{
+            proposal: p,
+            // The project moves only in a chat filed in no project (crew re-checks); a retry keeps its document.
+            projectChangeable: entry.proposal.filedIn.projectId === null && p.artifactRef === undefined,
+            fixed: p.artifactRef !== undefined,
+            onSubmit: async (edits) => {
+              const refused = await answerWith('go', edits);
+              if (refused === null) setAnswering(false);
+              return refused;
+            },
+          }}
+        />
       )}
       {open && note !== null && <p data-testid="artifact-proposal-note" role="status" className="wk-proposal-note">{note}</p>}
       {error !== null && (!terminal(view.state) || (error.settles && view.state !== 'superseded')) && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error.words}</p>}

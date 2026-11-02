@@ -17,6 +17,9 @@ export interface ChatArtifactsCapabilities {
   /** (api-types 0.170.0) The daemon runs the chat-artifacts TEST configuration: Go records a stub dispatch and starts
    *  nothing. The card says so. */
   stub?: true;
+  /** (api-types 0.171.0, A3) Under the test configuration, the kinds whose Go is still a stub (`create` is real since A3).
+   *  Absent with `stub: true` = every kind (a daemon before the field). */
+  stubOps?: ArtifactProposalKind[];
 }
 
 /** `ChatMessageBody.context` (api-types 0.169.0): what studio shows beside the message. */
@@ -120,6 +123,10 @@ export interface ArtifactProposal {
   reason: string | null;
   sources: ProposalSource[];
   repos: string[];
+  /** (api-types 0.171.0) The same repositories by registry id, in the same order. */
+  repoRefs?: string[];
+  /** (api-types 0.171.0) A crew-made retry (`sourceRunId`): the document it fills again. */
+  artifactRef?: string;
   helpers: ProposalHelpers | null;
   time: ProposalTime | null;
   stops: string | null;

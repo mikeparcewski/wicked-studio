@@ -4,6 +4,8 @@ import type {
   ArtifactProposalKind,
   ChatProposalRecord,
   ChatProposalView,
+  ProposalEdits,
+  ProposalSource,
 } from '../api/chatArtifacts-wire.js';
 import { ApiError } from '../api/errors.js';
 
@@ -185,9 +187,10 @@ const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
  * page (theme) or New job's demo form (demo). Each arrives with its own slice; until then the card says what is coming
  * instead of opening a form that cannot answer the proposal.
  */
-export function changeRoute(kind: ArtifactProposalKind): { kind: 'stub'; note: string } {
-  const notes: Record<ArtifactProposalKind, string> = {
-    create: 'Changing the brief, sources and helpers opens the New document form once documents can be made from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
+export function changeRoute(kind: ArtifactProposalKind): { kind: 'form' } | { kind: 'stub'; note: string } {
+  // A3: a create opens New document in "answer this proposal" mode, under the card.
+  if (kind === 'create') return { kind: 'form' };
+  const notes: Record<Exclude<ArtifactProposalKind, 'create'>, string> = {
     refine: 'Editing the ask here comes with refining from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
     theme: 'Opening the theme on the Theme page comes with theme proposals. For now, say what to change in the chat and a new proposal replaces this one.',
     demo: 'Changing the address, audience and what to show comes with demo videos from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
@@ -265,4 +268,61 @@ export function proposalRefusal(err: unknown): { words: string; code: string | n
 export function proposalTimeWords(p: ArtifactProposal): string | null {
   const t = p.time;
   return t === null || t.label === '' ? null : t.label;
+}
+
+// ── New document in "answer this proposal" mode (slice A3, DES §4.2 Change something on a create) ─────────────────────
+
+/** What the form edits. `project`: the target project id, `null` = Unfiled. */
+export interface ProposalForm {
+  title: string;
+  brief: string;
+  project: string | null;
+  /** The source tokens the person keeps (struck ones never count). */
+  sources: string[];
+  repos: string[];
+  helpers: string[];
+}
+
+/** The form as the proposal opens it. */
+export function proposalFormOf(p: ArtifactProposal): ProposalForm {
+  return {
+    title: p.what.title,
+    brief: p.brief ?? '',
+    project: p.filedIn.projectId,
+    sources: p.sources.filter((s) => s.status === 'ok').map((s) => s.token),
+    repos: [...p.repos],
+    helpers: [...(p.helpers?.seats ?? [])],
+  };
+}
+
+/**
+ * Each chip as the form shows it once a project is chosen: a run or document from another project is struck at once
+ * ("not in Mikes"), before Go (crew re-checks the rest, the conversation and a `message:` source's records, at Go).
+ */
+export function formSources(p: ArtifactProposal, f: Pick<ProposalForm, 'project' | 'sources'>, projectLabel: (id: string | null) => string): Array<ProposalSource & { kept: boolean }> {
+  const moved = f.project !== p.filedIn.projectId;
+  return p.sources.map((s) => {
+    if (s.status !== 'ok') return { ...s, kept: false };
+    const tagged = s.token.startsWith('run:') || s.token.startsWith('doc:');
+    if (moved && tagged && s.projectId !== undefined && s.projectId !== f.project) {
+      return { ...s, status: 'struck' as const, reason: `not in ${projectLabel(f.project)}`, kept: false };
+    }
+    return { ...s, kept: f.sources.includes(s.token) };
+  });
+}
+
+/** The typed edits a Go carries: only what the person changed, never a chip the project change struck. */
+export function proposalFormEdits(p: ArtifactProposal, f: ProposalForm, projectLabel: (id: string | null) => string = (id) => id ?? 'Unfiled'): ProposalEdits {
+  const was = proposalFormOf(p);
+  const edits: ProposalEdits = {};
+  if (f.title.trim() !== was.title.trim()) edits.title = f.title.trim();
+  if (f.brief !== was.brief) edits.brief = f.brief;
+  if (f.project !== was.project) edits.project = f.project;
+  const usable = formSources(p, f, projectLabel).filter((s) => s.status === 'ok').map((s) => s.token);
+  const kept = usable.filter((t) => f.sources.includes(t));
+  if (kept.length !== usable.length) edits.sources = kept;
+  const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
+  if (!sameSet(f.repos, was.repos)) edits.repos = [...f.repos];
+  if (!sameSet(f.helpers, was.helpers)) edits.helpers = [...f.helpers];
+  return edits;
 }

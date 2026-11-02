@@ -11,7 +11,7 @@ import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { CLOSED_LINE, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import { useCapabilities } from '../../store/capabilities.js';
+import { proposalIsStub, useCapabilities } from '../../store/capabilities.js';
 import { useConnectionStore } from '../../store/connection.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import { isChatScopeProblem, plainRunTitle } from '../../board/deskWords.js';
@@ -281,6 +281,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // live transcript is gone, but its kept history holds them (an open proposal stays answerable after it ends).
   const proposalsOn = useCapabilities((s) => s.chatProposals);
   const proposalsStub = useCapabilities((s) => s.chatArtifactsStub);
+  const proposalsStubOps = useCapabilities((s) => s.chatArtifactsStubOps);
   const historyOn = useCapabilities((s) => s.chatList);
   const [kept, setKept] = useState<{ id: string; records: readonly unknown[]; error: string | null } | null>(null);
   const keptChat = ref.kind === 'chat' && proposalsOn && historyOn && conversation === 'closed' ? ref.chatId : null;
@@ -1222,7 +1223,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               : e.kind === 'proposal'
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />
               : e.kind === 'artifact' && ref.kind === 'chat'
-                ? <ArtifactProposalCard key={e.key} chatId={ref.chatId} entry={e.entry} seatName={who.name} stub={proposalsStub} onChanged={() => setChatTry((n) => n + 1)} />
+                ? <ArtifactProposalCard key={e.key} chatId={ref.chatId} entry={e.entry} seatName={who.name} stub={proposalIsStub(proposalsStub, proposalsStubOps, e.entry.proposal.kind)} onChanged={() => setChatTry((n) => n + 1)} />
               : e.kind === 'artifact'
                 ? null
                 : e.kind === 'turn'

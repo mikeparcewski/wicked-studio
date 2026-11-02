@@ -57,6 +57,9 @@ interface CapabilitiesStore {
   chatProposals: boolean;
   /** `chatArtifacts.stub`: the daemon runs the chat-artifacts test configuration (Go starts nothing); the card says so. */
   chatArtifactsStub: boolean;
+  /** `chatArtifacts.stubOps` (api-types 0.171.0, A3): the kinds still stubbed under the test configuration; `null` = the
+   *  daemon did not say (with `stub`, every kind is). */
+  chatArtifactsStubOps: string[] | null;
   load: () => Promise<void>;
 }
 
@@ -79,6 +82,7 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   chatContext: false,
   chatProposals: false,
   chatArtifactsStub: false,
+  chatArtifactsStubOps: null,
   load: () => {
     if (get().loaded) return Promise.resolve();
     // The HTTP client is reached lazily: the stores that read a capability (gates, the ask thread)
@@ -86,10 +90,21 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true, chatArtifactsStubOps: stubOpsOf(caps['chatArtifacts']) });
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false, chatArtifactsStubOps: null }); })
       .finally(() => { inflight = null; });
     return inflight;
   },
 }));
+
+/** `chatArtifacts.stubOps` as a list of kind names, or `null` when absent or malformed. */
+function stubOpsOf(raw: unknown): string[] | null {
+  const ops = (raw as { stubOps?: unknown } | undefined)?.stubOps;
+  return Array.isArray(ops) ? ops.filter((k): k is string => typeof k === 'string') : null;
+}
+
+/** Whether Go on a proposal of this kind is the test configuration's stub (it starts nothing). */
+export function proposalIsStub(stub: boolean, stubOps: readonly string[] | null, kind: string): boolean {
+  return stub && (stubOps === null || stubOps.includes(kind));
+}
