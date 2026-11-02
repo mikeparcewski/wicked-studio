@@ -41,7 +41,7 @@ import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from
 import { aboutMinutes, catalogFromDefs, needsLine, needsRepo, withStudioKinds, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
 import { useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { WorkflowCatalog } from './WorkflowCatalog.js';
-import { everythingPath, madeKindForFormat } from '../../board/everythingModel.js';
+import { everythingPath, isDocFormat, madeKindForFormat } from '../../board/everythingModel.js';
 
 type Step = 'workflow' | 'what' | 'where' | 'options' | 'requirements' | 'demo' | 'review';
 const STEP_TITLE: Record<Step, string> = {
@@ -58,7 +58,7 @@ const DRAFT_EPICS_LINE = 'Turn requirements into epics and stories';
 const INSTRUCTIONS_MAX = 500;
 /** Studio's own kinds in the catalog (launched through their own routes), and the app builder that is coming. */
 const studioEntry = (e: Pick<CatalogEntry, 'id' | 'title' | 'category' | 'gets' | 'needs' | 'status' | 'tags' | 'launchKind' | 'delivers'>): CatalogEntry => ({
-  launchId: e.id, docStyle: null, subcategory: null, summary: '', inputs: [], time: null, cost: null, synonyms: [], statusNote: null,
+  launchId: e.id, docStyle: null, subcategory: null, summary: '', inputs: [], form: false, time: null, cost: null, synonyms: [], statusNote: null,
   order: 0, artKey: e.id, launches: 0, lastUsedAt: null, medianMinutes: null, ...e,
 });
 /** Studio's own kinds, added when the catalog does not list them (an older daemon never does). */
@@ -122,14 +122,19 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   useEffect(() => { loadPresets(draft.projectId ?? null); }, [draft.projectId]);
   const rows = useMemo(() => workflowItems('', defs, presets, Number.POSITIVE_INFINITY), [defs, presets]);
   // The catalog (crew's, or today's list on an older daemon), with studio's own kinds added.
-  const catalogLoad = useWorkflowCatalog(draft.projectId === null || draft.projectId === UNFILED_MOUNT ? null : draft.projectId);
-  const catalog: CatalogView | null = useMemo(() => {
+  const catalogLoad = useWorkflowCatalog(draft.projectId === null || draft.projectId === '' || draft.projectId === UNFILED_MOUNT ? null : draft.projectId);
+  const read: CatalogView | null = useMemo(() => {
     if (catalogLoad.state === 'ready') return withStudioKinds(catalogLoad.view, STUDIO_KINDS);
     if (catalogLoad.state === 'loading') return null;
     // An older daemon: today's list. Its defs may never come (no `/workflows`, or the read failed and the
     // cache keeps "not known"), so studio's own kinds show at once and the daemon's join when they land.
     return withStudioKinds(catalogFromDefs(defs ?? [], presets), [...STUDIO_KINDS, VIBE_ENTRY]);
   }, [catalogLoad, defs, presets]);
+  // A project change mid-shaping re-reads the catalog (its usage and presets): the last one read stays
+  // shown meanwhile, so the picked workflow's rules (repository, words) never flip while it loads.
+  const lastRead = useRef<CatalogView | null>(null);
+  if (read !== null) lastRead.current = read;
+  const catalog = read ?? lastRead.current;
   const [now] = useState(() => Date.now());
   const roster = useRoster();
   // A greyed helper's Sign in opens its sign-in modal over the wizard; closing it re-reads the roster,
@@ -179,7 +184,14 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   }, []);
 
   const row = rows.find((r) => r.workflowId === draft.workflowId) ?? null;
-  const entry = draft.workflowId === null ? null : (catalog?.entries.find((e) => e.launchId === draft.workflowId) ?? null);
+  // The card picked (its id, when two cards launch one workflow), else the first card for the workflow.
+  const entry = draft.workflowId === null ? null
+    : (catalog?.entries.find((e) => e.id === draft.catalogEntryId && e.launchId === draft.workflowId)
+      ?? catalog?.entries.find((e) => e.launchId === draft.workflowId) ?? null);
+  // The catalog may have changed since the pick (a resumed draft, a re-read): what is no longer offered
+  // is never launched (codex r1).
+  const entryBlocker = entry !== null && (entry.status !== 'ready' || !(['run', 'demo', 'compose'] as const).includes(entry.launchKind as 'run'))
+    ? 'This workflow is not available now. Change job to pick another.' : null;
   // A workflow the catalog says works without a repository does not ask for one; any other keeps
   // today's rule (an unknown workflow, a preset, an older daemon's list: a repository is required).
   const repoRequired = entry === null ? true : needsRepo(entry);
@@ -189,7 +201,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // Words are required unless the catalog says otherwise: a workflow whose form has no text input,
   // or whose first one is optional. Crew still needs a problem (`problem` min 1), so a launch with no
   // words sends the workflow's own summary.
-  const wordsOptional = entry !== null && entry.launchKind === 'run' && entry.inputs.length > 0 && textInputs[0]?.required !== true;
+  const wordsOptional = entry !== null && entry.launchKind === 'run' && entry.form && textInputs[0]?.required !== true;
   const wordsLabel = textInputs[0]?.label ?? (wordsOptional ? 'Anything to focus on?' : 'What do you want done?');
   const moreWords = textInputs.slice(1);
   const problemText = draft.intent.trim() !== '' || entry === null ? draft.intent : (entry.summary.split('. ')[0] || entry.title);
@@ -203,7 +215,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     if (ctx !== undefined) return ctx.id;
     return list.length === 1 ? list[0]?.id ?? null : null;
   }, [repos, draft.contextRepo]);
-  const repoRef = draft.repoRef !== null ? (draft.repoRef === '' ? null : draft.repoRef) : defaultRepo;
+  // A workflow that works without a repository starts with none (it is offered, not assumed).
+  const repoRef = draft.repoRef !== null ? (draft.repoRef === '' ? null : draft.repoRef) : repoRequired ? defaultRepo : null;
   // A named def that runs no code is not a delivering launch; an unknown one (a preset) may deliver.
   // A demo video never delivers (crew launches it with `deliver: 'none'`) and its gates are the preset's own.
   // A job with no repository has nothing to deliver a pull request to.
@@ -256,7 +269,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // What each step needs before Next: words; a repository; a helper and, for a skip, its reason.
   const demoProblem = demoing ? demoBlocker(draft) : null;
   const blocker: string | null =
-    step === 'requirements' ? draftBlocker
+    step !== 'workflow' && entryBlocker !== null ? entryBlocker
+    : step === 'requirements' ? draftBlocker
     : step === 'demo' ? demoProblem
     : step === 'workflow' ? (draft.workflowId === null ? 'Choose the kind of job.' : null)
       : step === 'what' ? (draft.intent.trim() === '' && !wordsOptional ? 'Say what you want done.' : null)
@@ -266,7 +280,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
             : null;
   // Review re-checks every rule (codex r1: another tab may have dropped the last helper meanwhile).
   const launchBlocker: string | null =
-    drafting ? draftBlocker
+    entryBlocker !== null ? entryBlocker
+    : drafting ? draftBlocker
     : demoing ? (demoProblem ?? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.' : null))
     : draft.workflowId === null ? 'Choose the kind of job.'
       : draft.intent.trim() === '' && !wordsOptional ? 'Say what you want done.'
@@ -292,6 +307,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     const el = dialogRef.current?.querySelector<HTMLElement>('[data-autofocus="true"]')
       ?? dialogRef.current?.querySelector<HTMLElement>('button, select, textarea, input');
     el?.focus();
+    el?.scrollIntoView?.({ block: 'nearest' });
     autoFocused.current = el ?? null;
   }, [step]);
   // The catalog may arrive after focus went to the search box: focus then moves to what the step
@@ -302,6 +318,8 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     if (catalogCount < 0) return;
     const active = document.activeElement;
     if (active !== autoFocused.current && active !== document.body && active !== dialogRef.current) return;
+    // Someone already typing in the search box keeps it.
+    if (active instanceof HTMLInputElement && active.dataset.testid === 'launch-catalog-search' && active.value !== '') return;
     const el = dialogRef.current?.querySelector<HTMLElement>('[data-testid="launch-catalog"] [data-autofocus="true"]') ?? null;
     if (el === null || el === active) return;
     el.focus();
@@ -327,14 +345,16 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
       if (launchingRef.current) return;
       closeStore();
       const project = filedProject;
-      (navigate ?? goToPath)(everythingPath({ tab: 'made', kind: madeKindForFormat(e.docStyle ?? ''), ...(project !== null ? { project } : {}), new: 'document' }));
+      const format = isDocFormat(e.docStyle) ? e.docStyle : '';
+      (navigate ?? goToPath)(everythingPath({ tab: 'made', kind: madeKindForFormat(format), ...(project !== null ? { project } : {}), new: 'document', ...(format !== '' ? { format } : {}) }));
       return;
     }
-    pickCard(e.launchId);
+    pickCard(e.launchId, e.id);
   };
-  const pickCard = (id: string): void => {
+  const pickCard = (id: string, entryId: string | null = null): void => {
     // codex r1: another kind of job starts its own options; studio#767: and its own words.
-    if (id !== draft.workflowId) update(withJobKind(draft, id));
+    if (id !== draft.workflowId) update({ ...withJobKind(draft, id), catalogEntryId: entryId });
+    else if (entryId !== draft.catalogEntryId) update({ catalogEntryId: entryId });
     setStep(id === DRAFT_EPICS_ID ? 'requirements' : id === DEMO_VIDEO_ID ? 'demo' : 'what');
   };
 

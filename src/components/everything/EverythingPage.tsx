@@ -794,7 +794,7 @@ function MadeTab({ runs, runsLoaded = true, q, navigate, go }: { runs: SessionVi
         <NewDocument
           projects={projects}
           initialProject={q.project}
-          initialFormat={formatForMadeKind(q.kind)}
+          initialFormat={q.format ?? formatForMadeKind(q.kind)}
           onClose={() => navigate(withDoor(false), { replace: true })}
           // studio#768: land on the list the new item is filed under (a web page under Pages), never
           // on a filter that says "No documents yet" beside it; an existing one opens on All.

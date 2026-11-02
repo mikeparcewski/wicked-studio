@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { WorkflowDef } from '../src/api/types.js';
 import {
   applyFilters, catalogFromDefs, catalogFromWire, minutesLabel, needsLine, NO_FILTERS, scoreEntry, searchCatalog,
-  stem, tokens, topEntries, usageScore, withStudioKinds, type CatalogEntry, type CatalogView,
+  stem, tokens, topEntries, typingWord, usageScore, withStudioKinds, type CatalogEntry, type CatalogView,
 } from '../src/board/workflowCatalog.js';
 import fixture from './fixtures/workflowCatalog.json';
 
@@ -17,7 +17,7 @@ const entry = (id: string): CatalogEntry => view().entries.find((e) => e.id === 
 const ids = (es: readonly CatalogEntry[]): string[] => es.map((e) => e.id);
 const extra = (id: string, category: string | null): CatalogEntry => ({
   id, launchId: id, launchKind: 'run', docStyle: null, title: id, category, subcategory: null, gets: id, summary: '', needs: [],
-  inputs: [], time: null, cost: null, delivers: null, tags: [], synonyms: [], status: 'ready', statusNote: null, order: 0,
+  inputs: [], form: false, time: null, cost: null, delivers: null, tags: [], synonyms: [], status: 'ready', statusNote: null, order: 0,
   artKey: id, launches: 0, lastUsedAt: null, medianMinutes: null,
 });
 
@@ -62,7 +62,8 @@ describe('catalogFromWire (WIRE v1)', () => {
     expect(v.categories.map((c) => c.id)).toEqual(['create', 'more']);
     expect(ids(v.entries)).toEqual(['a', 'c']);
     expect(v.entries[0]).toMatchObject({ title: 'A', needs: ['repo'], tags: [], status: 'soon', launches: 0 });
-    expect(v.entries[1]).toMatchObject({ category: 'more', launchId: 'c-wf' });
+    // No status on the wire: shown, not offered (fail closed).
+    expect(v.entries[1]).toMatchObject({ category: 'more', launchId: 'c-wf', status: 'unavailable' });
     expect(catalogFromWire(null)).toBeNull();
     expect(catalogFromWire({ error: 'not found' })).toBeNull();
     expect(catalogFromWire('<html>')).toBeNull();
@@ -166,8 +167,8 @@ describe('search ranking', () => {
   it('a tie goes to what this operator uses more', () => {
     const v = catalogFromWire({
       entries: [
-        { id: 'a', title: 'Alpha tool', launch: { kind: 'run', workflow: 'a' } },
-        { id: 'b', title: 'Beta tool', launch: { kind: 'run', workflow: 'b' }, usage: { launches: 4, lastUsedAt: '2026-11-01T00:00:00Z' } },
+        { id: 'a', title: 'Alpha tool', status: 'available', launch: { kind: 'run', workflow: 'a' } },
+        { id: 'b', title: 'Beta tool', status: 'available', launch: { kind: 'run', workflow: 'b' }, usage: { launches: 4, lastUsedAt: '2026-11-01T00:00:00Z' } },
       ],
     })!;
     expect(ids(searchCatalog(v, 'tool', NOW))).toEqual(['b', 'a']);
@@ -224,5 +225,84 @@ describe('Your top', () => {
     expect(usageScore({ launches: 10, lastUsedAt: '2026-10-18T12:00:00Z' }, NOW)).toBeCloseTo(5);
     expect(usageScore({ launches: 10, lastUsedAt: null }, NOW)).toBeLessThan(1);
     expect(usageScore({ launches: 0, lastUsedAt: '2026-11-01T12:00:00Z' }, NOW)).toBe(0);
+  });
+});
+
+describe('untrusted wire and search text (xreview r1)', () => {
+  it('words that are Object.prototype names neither crash search nor read inherited values', () => {
+    expect(() => searchCatalog(view(), 'constructor', NOW)).not.toThrow();
+    expect(() => searchCatalog(view(), 'write a constructor', NOW)).not.toThrow();
+    expect(() => searchCatalog(view(), '__proto__ toString', NOW)).not.toThrow();
+    const v = catalogFromWire({
+      categories: [{ id: 'constructor' }],
+      entries: [{ id: '__proto__', category: 'constructor', status: 'available', cost: 'constructor', delivers: 'toString', needs: ['toString'], launch: { kind: 'run', workflow: 'hasOwnProperty' } }],
+    })!;
+    expect(typeof v.categories[0]!.title).toBe('string');
+    expect(typeof v.entries[0]!.title).toBe('string');
+    expect(typeof v.entries[0]!.gets).toBe('string');
+    expect(v.entries[0]!.cost).toBeNull();
+    expect(needsLine(v.entries[0]!)).toBe('Needs toString');
+  });
+
+  it('status fails closed: only "available" is offered', () => {
+    const v = catalogFromWire({ entries: [
+      { id: 'a', status: 'available', launch: { kind: 'run', workflow: 'a' } },
+      { id: 'b', status: 'disabled', launch: { kind: 'run', workflow: 'b' } },
+      { id: 'c', launch: { kind: 'run', workflow: 'c' } },
+      { id: 'd', status: 7, launch: { kind: 'run', workflow: 'd' } },
+      { id: 'e', status: 'coming_soon', launch: { kind: 'none' } },
+    ] })!;
+    expect(v.entries.map((e) => e.status)).toEqual(['ready', 'unavailable', 'unavailable', 'unavailable', 'soon']);
+  });
+
+  it('a run without its workflow, or named like studio’s own kinds, is never offered; launch is by launch.workflow', () => {
+    const v = catalogFromWire({ entries: [
+      { id: 'run:bug', status: 'available', launch: { kind: 'run' } },
+      { id: 'run:demo-video', status: 'available', launch: { kind: 'run', workflow: 'demo-video' } },
+      { id: 'run:presentation', title: 'My deck steps', status: 'available', launch: { kind: 'run', workflow: 'presentation' } },
+    ] })!;
+    expect(v.entries.map((e) => [e.launchKind, e.status])).toEqual([['none', 'unavailable'], ['none', 'unavailable'], ['run', 'ready']]);
+    expect(v.entries[2]!.launchId).toBe('presentation');
+    // The card id's "run:" is not a word the card answers to.
+    expect(scoreEntry(v.entries[2]!, 'run')).toBe(0);
+    expect(scoreEntry(v.entries[2]!, 'presentation')).toBeGreaterThan(0);
+  });
+
+  it('needs fail closed: missing or malformed means a repository; an explicit list is taken as said', () => {
+    const v = catalogFromWire({ entries: [
+      { id: 'a', status: 'available', launch: { kind: 'run', workflow: 'a' } },
+      { id: 'b', status: 'available', needs: 'repo', launch: { kind: 'run', workflow: 'b' } },
+      { id: 'c', status: 'available', needs: [], launch: { kind: 'run', workflow: 'c' } },
+      { id: 'd', status: 'available', needs: ['nothing'], launch: { kind: 'run', workflow: 'd' } },
+    ] })!;
+    expect(v.entries.map((e) => e.needs)).toEqual([['repo'], ['repo'], [], []]);
+  });
+
+  it('a form is a list on the wire (even empty); an older daemon’s list has none', () => {
+    const v = catalogFromWire({ entries: [
+      { id: 'a', status: 'available', inputs: [], launch: { kind: 'run', workflow: 'a' } },
+      { id: 'b', status: 'available', launch: { kind: 'run', workflow: 'b' } },
+    ] })!;
+    expect(v.entries.map((e) => e.form)).toEqual([true, false]);
+    expect(catalogFromDefs([{ id: 'bug', phases: [] } as unknown as WorkflowDef], null).entries[0]!.form).toBe(false);
+  });
+
+  it('studio’s own kinds never shadow the catalog’s disabled card of the same kind', () => {
+    const v = withStudioKinds(
+      catalogFromWire({ entries: [{ id: 'demo-video', category: 'create', status: 'unavailable', launch: { kind: 'none' } }] })!,
+      [extra('demo-video', 'create')],
+    );
+    expect(v.entries.filter((e) => e.id === 'demo-video')).toHaveLength(1);
+    expect(v.entries[0]!.status).toBe('unavailable');
+  });
+
+  it('prefix matching only on the word being typed, bonus included', () => {
+    const author = catalogFromWire({ entries: [{ id: 'author-docs', title: 'Author documents', status: 'available', launch: { kind: 'run', workflow: 'author-docs' } }] })!.entries[0]!;
+    expect(typingWord('auth')).toBe('auth');
+    expect(typingWord('auth ')).toBeNull();
+    expect(typingWord('auth for')).toBeNull();
+    expect(scoreEntry(author, 'auth')).toBeGreaterThan(0);
+    expect(scoreEntry(author, 'auth ')).toBe(0);
+    expect(scoreEntry(author, 'auth for')).toBe(0);
   });
 });

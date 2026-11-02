@@ -19,12 +19,21 @@ Captures: e2e/shots/desk-newjob-catalog-*.png. Env: FEEDBACK_PORT (default 4523)
 import json
 import os
 import sys
+from datetime import datetime, timezone
 
 from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4523"))
 SHOTS = REPO / "e2e" / "shots"
 CATALOG = json.loads((REPO / "tests" / "fixtures" / "workflowCatalog.json").read_text())
+# Your top is recency-weighted against the real clock: keep each launch the same distance from now as it
+# is from the fixture's day (2026-11-01T12:00Z), so the expected order never drifts (codex r1).
+_FIXTURE_NOW = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+_SHIFT = datetime.now(timezone.utc) - _FIXTURE_NOW
+for _e in CATALOG["entries"]:
+    _at = _e.get("usage", {}).get("lastUsedAt")
+    if _at:
+        _e["usage"]["lastUsedAt"] = (datetime.fromisoformat(_at.replace("Z", "+00:00")) + _SHIFT).isoformat().replace("+00:00", "Z")
 
 report: dict = {"ok": False, "steps": {}}
 

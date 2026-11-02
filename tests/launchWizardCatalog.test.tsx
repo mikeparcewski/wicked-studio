@@ -13,6 +13,7 @@ import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 import { resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
+import { WorkflowCatalog } from '../src/components/launch/WorkflowCatalog.js';
 import fixture from './fixtures/workflowCatalog.json';
 
 const def = (id: string, phases: string[], extra: Partial<WorkflowDef> = {}): WorkflowDef =>
@@ -29,21 +30,32 @@ const REPO = { id: 'repo-1', name: 'svc', root_path: '/srv/svc', default_branch:
 const REPO2 = { ...REPO, id: 'repo-2', name: 'web' } as RepoEntry;
 
 let catalog: unknown = null;
+let repos: RepoEntry[] = [REPO, REPO2];
+let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
 function stubWire(): void {
-  vi.stubGlobal('fetch', vi.fn((url: string) => {
+  posts = [];
+  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+    if (init?.method === 'POST') {
+      posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
+      return Promise.resolve(new Response(JSON.stringify({ runId: 'r-new' }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    }
     if (path === '/workflows/catalog') {
       return Promise.resolve(catalog === null
         ? new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } })
         : new Response(JSON.stringify(catalog), { status: 200, headers: { 'content-type': 'application/json' } }));
     }
-    const body = path === '/repos' ? { repos: [REPO, REPO2] } : path === '/projects' ? { projects: [] } : {};
+    const body = path === '/repos' ? { repos } : path === '/projects' ? { projects: [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }] } : {};
     return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
   }));
 }
 
 beforeEach(() => {
+  // Your top is recency-weighted: the clock is the fixture's (codex r1: real time made the order drift).
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-01T12:00:00Z'));
   catalog = null;
+  repos = [REPO, REPO2];
   stubWire();
   resetPlanCatalog();
   clearCachedWorkflows();
@@ -52,7 +64,7 @@ beforeEach(() => {
   resetWorkflowCatalog();
   resetLaunchWizard();
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 const cardIds = (within0: HTMLElement): string[] =>
   [...within0.querySelectorAll<HTMLElement>('[data-testid^="launch-wizard-workflow-"], [data-testid^="launch-catalog-soon-"]:not([data-testid="launch-catalog-soon-tag"]), [data-testid^="launch-catalog-top-"], [data-testid^="launch-catalog-fit-"]')]
@@ -94,14 +106,34 @@ describe('an older daemon (no catalog)', () => {
     await waitFor(() => expect(screen.queryByTestId('launch-catalog-loading')).toBeNull());
   });
 
-  it('a daemon that lists no workflows says so and offers chat', async () => {
+  it('a daemon that lists no workflows of its own still offers studio’s kinds', async () => {
     clearCachedWorkflows();
     setCachedWorkflows([]);
-    catalog = { categories: [], workflows: [] };
+    catalog = { categories: [], entries: [] };
     await openCatalog();
-    // Studio's own kinds still show; an empty catalog with nothing at all is the empty state.
     expect(screen.queryByTestId('launch-catalog-empty')).toBeNull();
     expect(cardIds(screen.getByTestId('launch-catalog-results'))).toContain('demo-video');
+  });
+
+  it('the empty state: nothing at all to list says so and offers chat (agy r1: was untested)', () => {
+    const onChat = vi.fn();
+    render(<WorkflowCatalog view={{ source: 'catalog', categories: [], entries: [] }} pickedId={null} intent="" now={0} onPick={() => {}} onChat={onChat} />);
+    const empty = screen.getByTestId('launch-catalog-empty');
+    expect(empty).toHaveTextContent('This daemon lists no workflows.');
+    fireEvent.click(within(empty).getByRole('button', { name: 'Talk it through first' }));
+    expect(onChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('filters that leave nothing say so, with Clear filters (agy r1: was a blank section)', async () => {
+    // Today's list with none of the daemon's own: only studio's kinds, none of which needs a repository.
+    clearCachedWorkflows();
+    setCachedWorkflows([]);
+    await openCatalog();
+    fireEvent.change(screen.getByTestId('launch-catalog-repo'), { target: { value: 'needs' } });
+    expect(document.querySelector('[data-section="all"]')).toBeNull();
+    expect(screen.getByTestId('launch-catalog-noresults')).toHaveTextContent('No workflow fits these filters.');
+    fireEvent.click(screen.getByTestId('launch-catalog-clear-filters'));
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual(['demo-video', 'draft-epics', 'apps']);
   });
 });
 
@@ -263,7 +295,7 @@ describe('a daemon with the catalog', () => {
     render(<LaunchWizard navigate={navigate} />);
     act(() => openLaunchWizard({ projectId: 'p1' }));
     fireEvent.click(await screen.findByTestId('launch-wizard-workflow-document:presentation'));
-    expect(navigate).toHaveBeenCalledWith('/everything?tab=made&project=p1&kind=decks&new=document');
+    expect(navigate).toHaveBeenCalledWith('/everything?tab=made&project=p1&kind=decks&new=document&format=ppt');
     expect(useLaunchWizard.getState().open).toBe(false);
     act(() => openLaunchWizard({}));
     fireEvent.click(await screen.findByTestId('launch-wizard-workflow-chat:start-chat'));
@@ -340,5 +372,81 @@ describe('words a workflow does not require (live catalog: Check documentation, 
     await openCatalog();
     fireEvent.click(screen.getByTestId('launch-wizard-workflow-feature'));
     expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+  });
+});
+
+describe('launching from the catalog (xreview r1: the wire body, the picked card, what is still offered)', () => {
+  const run = (id: string, workflow: string, extra: Record<string, unknown> = {}) => ({
+    id, category: 'analyze', title: id, summary: `${id} summary. More words.`, outcome: `${id} outcome`, needs: ['runs'],
+    inputs: [], status: 'available', launch: { kind: 'run', workflow }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null }, ...extra,
+  });
+  const toReview = async (): Promise<void> => {
+    for (let i = 0; i < 4 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) {
+      fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    }
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('review');
+  };
+
+  it('no words for a workflow whose form has none: POST /runs carries launch.workflow and the summary as the problem', async () => {
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [run('run:review', 'review-recent-work')] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    await toReview();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    const body = posts.find((p) => p.path === '/runs')!.body;
+    expect(body.workflow).toBe('review-recent-work');
+    expect(body.problem).toBe('run:review summary');
+    expect(body.repoRef).toBeUndefined();
+    expect(body.deliver).toBeUndefined();
+  });
+
+  it('a workflow that works without a repository starts with none, even when there is only one', async () => {
+    repos = [REPO];
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [run('rr', 'review-recent-work')] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-repo').querySelectorAll('option')).toHaveLength(2));
+    expect(screen.getByTestId('launch-wizard-repo')).toHaveValue('');
+  });
+
+  it('two cards for one workflow: the shaping step is the picked card’s', async () => {
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [
+      run('first', 'shared', { title: 'First card', needs: ['repo'] }),
+      run('second', 'shared', { title: 'Second card', needs: ['runs'] }),
+    ] };
+    await openCatalog();
+    const cards = screen.getAllByTestId('launch-wizard-workflow-shared');
+    fireEvent.click(cards[1]!);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('New job: Second card');
+    expect(screen.getByTestId('launch-wizard-shape-needs')).toHaveTextContent('runs to review');
+  });
+
+  it('a draft resumed after the catalog stopped offering its workflow cannot go on or launch', async () => {
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [run('rr', 'review-recent-work')] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    act(() => useLaunchWizard.getState().close());
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [run('rr', 'review-recent-work', { status: 'unavailable', statusNote: 'Gone' })] };
+    act(() => openLaunchWizard({}));
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('This workflow is not available now.'));
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+    expect(posts).toEqual([]);
+  });
+
+  it('changing the project mid-shaping keeps the workflow’s rules while that project’s catalog is read', async () => {
+    let release: ((r: Response) => void) | null = null;
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [run('rr', 'review-recent-work')] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/workflows/catalog')
+      ? new Promise<Response>((r) => { release = r; }) : realFetch(url, init))));
+    fireEvent.change(screen.getByTestId('launch-wizard-project'), { target: { value: 'p2' } });
+    expect(release).not.toBeNull();
+    expect(screen.getByTestId('launch-wizard-repo-note')).toHaveTextContent('works without a repository');
+    expect(screen.getByTestId('launch-wizard-next')).not.toBeDisabled();
   });
 });

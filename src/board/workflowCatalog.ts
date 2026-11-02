@@ -58,6 +58,9 @@ export interface CatalogEntry {
   /** What it needs before it can start: `repo`, `project`, `running_app`, `requirements`, `document`, `runs`. */
   needs: readonly string[];
   inputs: readonly CatalogInput[];
+  /** True when the catalog sent a form (`inputs` was a list, even an empty one): only then may it make
+   *  the words optional. An older daemon's list, or a malformed form, keeps the words required. */
+  form: boolean;
   time: string | null;
   cost: string | null;
   /** What it ends with: `pr`, `document`, `video`, `report`, `answer`, `none`; null = not said. */
@@ -94,11 +97,17 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !=
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap((x) => (typeof x === 'string' && x.trim() !== '' ? [x.trim()] : [])) : []);
 const rec = (v: unknown): Record<string, unknown> | null => (v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null);
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
+/** A dictionary's OWN value for a key from the wire or the search box ("constructor" is not a word we know). */
+export function own<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
+}
 
+/** Fail closed: only `available` is offered; `coming_soon` is shown as coming; anything else (missing,
+ *  unknown, `unavailable`) is shown as not available. */
 function statusOf(v: unknown): CatalogStatus {
+  if (v === 'available') return 'ready';
   if (v === 'coming_soon') return 'soon';
-  if (v === 'unavailable') return 'unavailable';
-  return 'ready';
+  return 'unavailable';
 }
 
 /** "10–30 min", "45 min–2 h", "1–3 h" from a [low, high] in minutes. */
@@ -134,7 +143,13 @@ function launchOf(id: string, v: unknown): { launchKind: LaunchKind; launchId: s
   const r = rec(v);
   const kind = str(r?.['kind']);
   switch (kind) {
-    case 'run': return { launchKind: 'run', launchId: str(r?.['workflow']) ?? id, docStyle: null };
+    case 'run': {
+      // Launch by `launch.workflow`, never the card id (which may be `run:<name>`). A run without one, or
+      // one named like studio's own kinds (the wizard would take it for Demo video / Draft epics), is not offered.
+      const wf = str(r?.['workflow']);
+      if (wf === null || wf === STUDIO_KIND_DEMO || wf === STUDIO_KIND_DRAFT_EPICS) return { launchKind: 'none', launchId: `none:${id}`, docStyle: null };
+      return { launchKind: 'run', launchId: wf, docStyle: null };
+    }
     case 'demo': return { launchKind: 'demo', launchId: STUDIO_KIND_DEMO, docStyle: null };
     case 'compose': return { launchKind: 'compose', launchId: STUDIO_KIND_DRAFT_EPICS, docStyle: null };
     case 'document': return { launchKind: 'document', launchId: `document:${id}`, docStyle: str(r?.['style']) };
@@ -160,7 +175,7 @@ export function catalogFromWire(body: unknown): CatalogView | null {
     const r = rec(x);
     const id = str(r?.['id']);
     if (r === null || id === null || categories.some((c) => c.id === id)) continue;
-    categories.push({ id, title: str(r['title']) ?? workflowLabel(id), blurb: str(r['summary']) });
+    categories.push({ id, title: str(r['title']) ?? String(workflowLabel(id)), blurb: str(r['summary']) });
     for (const sx of Array.isArray(r['subcategories']) ? r['subcategories'] : []) {
       const sr = rec(sx);
       const sid = str(sr?.['id']);
@@ -186,15 +201,17 @@ export function catalogFromWire(body: unknown): CatalogView | null {
     entries.push({
       id,
       ...launch,
-      title: str(r['title']) ?? workflowLabel(id),
+      title: str(r['title']) ?? String(workflowLabel(launch.launchKind === 'run' ? launch.launchId : id)),
       category: cat !== null && known.has(cat) ? cat : MORE_CATEGORY.id,
       subcategory: cat !== null && sub !== null ? subTitle.get(`${cat}/${sub}`) ?? null : null,
-      gets: str(r['outcome']) ?? str(r['summary']) ?? workflowPurpose(id, ''),
+      gets: str(r['outcome']) ?? str(r['summary']) ?? String(workflowPurpose(launch.launchKind === 'run' ? launch.launchId : id, '')),
       summary,
-      needs: [...new Set(strs(r['needs']).filter((n) => n !== 'nothing'))],
+      // Fail closed: a missing or malformed `needs` is taken to need a repository (today's rule).
+      needs: Array.isArray(r['needs']) ? [...new Set(strs(r['needs']).filter((n) => n !== 'nothing'))] : ['repo'],
       inputs: inputsOf(r['inputs']),
+      form: Array.isArray(r['inputs']),
       time: minutesLabel(r['typicalMinutes']),
-      cost: COST[str(r['cost']) ?? ''] ?? null,
+      cost: own(COST, str(r['cost']) ?? '') ?? null,
       delivers: str(r['delivers']),
       tags: strs(r['tags']),
       synonyms: strs(r['synonyms']),
@@ -214,8 +231,10 @@ export function catalogFromWire(body: unknown): CatalogView | null {
 
 /** Studio's own kinds, when the catalog does not list them (demo and draft epics are launched by studio). */
 export function withStudioKinds(view: CatalogView, extras: readonly CatalogEntry[]): CatalogView {
-  const have = new Set(view.entries.map((e) => e.launchId));
-  const add = extras.filter((e) => !have.has(e.launchId)).map((e, i) => ({
+  // A kind the catalog lists in ANY state (by its card id or its launch target) is the catalog's: a
+  // coming-soon or unavailable Demo video is never shadowed by studio's own ready one.
+  const have = new Set(view.entries.flatMap((e) => [e.id, e.launchId]));
+  const add = extras.filter((e) => !have.has(e.id) && !have.has(e.launchId)).map((e, i) => ({
     ...e,
     order: view.entries.length + i,
     category: view.source === 'fallback' ? null : (e.category !== null && view.categories.some((c) => c.id === e.category) ? e.category : MORE_CATEGORY.id),
@@ -247,6 +266,7 @@ export function catalogFromDefs(defs: readonly WorkflowDef[] | null, presets: re
       summary: [summary, useWhen].filter((s): s is string => s !== null && s !== '').join(' '),
       needs: ['repo'],
       inputs: [],
+      form: false,
       time: null,
       cost: null,
       delivers: null,
@@ -396,6 +416,14 @@ export function stem(w: string): string {
   return s;
 }
 
+/** The word still being typed: the query's last word when it does not end in a space or punctuation
+ *  and is not a stop word ("auth for" is typing "for", which matches nothing). */
+export function typingWord(query: string): string | null {
+  if (!/[\p{L}\p{N}]$/u.test(query)) return null;
+  const last = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).pop() ?? '';
+  return last === '' || STOP.has(last) ? null : last;
+}
+
 export function tokens(text: string): string[] {
   return text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((t) => t !== '' && !STOP.has(t)).map(stem).filter((t) => t !== '' && !STOP.has(t));
 }
@@ -405,7 +433,8 @@ const EXPANSION_FACTOR = 0.5;
 
 function fieldTokens(e: CatalogEntry, categoryTitle: string): { t: Set<string>; w: number }[] {
   return [
-    { t: new Set([...tokens(e.title), ...tokens(e.id)]), w: FIELD_WEIGHT.title },
+    // A run card is named by its workflow, not its card id (`run:<name>` would make every one match "run").
+    { t: new Set([...tokens(e.title), ...tokens(e.launchKind === 'run' ? e.launchId : e.id)]), w: FIELD_WEIGHT.title },
     { t: new Set([...e.tags, ...e.synonyms].flatMap(tokens)), w: FIELD_WEIGHT.words },
     { t: new Set([...tokens(e.gets), ...tokens(e.summary)]), w: FIELD_WEIGHT.gets },
     { t: new Set([...e.needs.flatMap(tokens), ...tokens(categoryTitle), ...tokens(e.subcategory ?? ''), ...e.inputs.flatMap((i) => tokens(i.label))]), w: FIELD_WEIGHT.other },
@@ -433,20 +462,23 @@ export function scoreEntry(e: CatalogEntry, query: string, categoryTitle = ''): 
   let score = 0;
   let matched = 0;
   // The last word is still being typed only when the query does not end in a space or punctuation.
-  const typingLast = /[\p{L}\p{N}]$/u.test(query);
+  const typingLast = typingWord(query) !== null;
   for (const [i, q] of qs.entries()) {
     const direct = tokenScore(q, fields, typingLast && i === qs.length - 1);
     let expanded = 0;
-    for (const x of LEXICON[q] ?? []) expanded = Math.max(expanded, tokenScore(stem(x), fields, false) * EXPANSION_FACTOR);
+    for (const x of own(LEXICON, q) ?? []) expanded = Math.max(expanded, tokenScore(stem(x), fields, false) * EXPANSION_FACTOR);
     const best = Math.max(direct, expanded);
     if (best > 0) matched += 1;
     score += best;
   }
-  // A workflow that answers more of the sentence beats one that answers one word of it strongly.
+  // Weighted toward workflows that answer more of the sentence (a weighting, not a guarantee: a strong
+  // title match on one word can still lead).
   score *= 0.5 + (0.5 * matched) / qs.length;
   const title = e.title.toLowerCase();
   const whole = query.trim().toLowerCase();
-  if (whole.length >= 2 && (title.startsWith(whole) || e.id.toLowerCase().startsWith(whole))) score += 4;
+  // The whole-query prefix bonus is for a query still being typed ("auth " and "auth for" are not "Author").
+  const target = (e.launchKind === 'run' ? e.launchId : e.id).toLowerCase();
+  if (typingLast && whole.length >= 2 && (title.startsWith(whole) || target.startsWith(whole))) score += 4;
   return score;
 }
 
@@ -466,7 +498,7 @@ const DELIVERS_WORDS: Readonly<Record<string, string>> = {
   pr: 'a pull request', document: 'a document', video: 'a video', report: 'a report', answer: 'an answer', none: 'nothing to deliver',
 };
 export function deliversWord(d: string | null): string | null {
-  return d === null ? null : DELIVERS_WORDS[d] ?? null;
+  return d === null ? null : own(DELIVERS_WORDS, d) ?? null;
 }
 
 /** The words a card's meta line shows: what it needs, then time and cost. */
@@ -479,7 +511,7 @@ const NEED_WORDS: Readonly<Record<string, string>> = {
   runs: 'runs to review',
 };
 export function needWord(n: string): string {
-  return NEED_WORDS[n] ?? n.replace(/[-_]+/g, ' ');
+  return own(NEED_WORDS, n) ?? n.replace(/[-_]+/g, ' ');
 }
 export function needsLine(e: Pick<CatalogEntry, 'needs'>): string {
   if (e.needs.length === 0) return 'Works without a repository';

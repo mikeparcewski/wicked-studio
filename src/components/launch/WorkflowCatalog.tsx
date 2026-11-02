@@ -58,7 +58,7 @@ export function WorkflowCatalog({ view, pickedId, intent, now, onPick, onChat }:
   const top = useMemo(() => (view === null || searching || filters.category !== null || filters.repo !== 'any' ? [] : topEntries(view.entries, now)), [view, searching, filters, now]);
   const sections = useMemo(() => {
     if (view === null || searching) return [];
-    if (older) return [{ id: 'all', title: 'All workflows', blurb: null as string | null, entries: filtered }];
+    if (older) return filtered.length === 0 ? [] : [{ id: 'all', title: 'All workflows', blurb: null as string | null, entries: filtered }];
     return categories
       .filter((c) => filters.category === null || c.id === filters.category)
       .map((c) => ({ id: c.id, title: c.title, blurb: c.blurb, entries: filtered.filter((e) => e.category === c.id) }))
