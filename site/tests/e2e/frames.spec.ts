@@ -234,7 +234,16 @@ test.describe('a 320px phone with a 28px minimum font size', () => {
       document.querySelectorAll('.hits th, .hits td').forEach((c) => inside(c, card, 'search cell'));
       inside(document.querySelector('[data-demo-pause]')!, document.querySelector('[data-ide]')!, 'demo Pause');
       const sbx = document.querySelector('.sbx')!;
-      document.querySelectorAll('.sbx-agent > span, .sbx-sees > span').forEach((s) => { if (getComputedStyle(s).visibility !== 'hidden') inside(s, sbx, 'sandbox text'); });
+      // the text's own line boxes, not just the span's box (a grid cell can hold a span whose text overflows it)
+      const b = sbx.getBoundingClientRect();
+      document.querySelectorAll('.sbx-agent > span, .sbx-sees > span').forEach((s) => {
+        if (getComputedStyle(s).visibility === 'hidden') return;
+        const range = document.createRange(); range.selectNodeContents(s);
+        for (const r of Array.from(range.getClientRects())) {
+          const over = Math.max(b.left - r.left, r.right - b.right);
+          if (over > 1.5) out.push(`sandbox text "${(s.textContent || '').slice(0, 24)}" by ${over.toFixed(1)}px`);
+        }
+      });
       return out;
     });
     expect(bad).toEqual([]);

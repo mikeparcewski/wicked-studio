@@ -615,6 +615,20 @@ test('the prompt the demo types by itself waits under Pause even after a click i
   await until(page, () => ide.getByRole('button', { name: 'Approve plan' }).isVisible(), 'the plan after Play');
 });
 
+test('the search caret is held off screen, blinks on screen, and is held again when it leaves', async ({ page }) => {
+  await stoppedClock(page);
+  await page.goto('/');
+  const caret = page.locator('.reach .sq-caret');
+  const states = () => caret.evaluate((el) => el.getAnimations().map((a) => a.playState).join(','));
+  // off screen from the start: the caret's blink exists and is held
+  await expect.poll(states).toBe('paused');
+  await page.locator('.reach').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.mouse.move(5, 690);
+  await expect.poll(states).toBe('running');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect.poll(states).toBe('paused');
+});
+
 test('picking an agent with the sandbox off screen does not start its hand-off', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -651,9 +665,6 @@ test('a paused search stops its caret, and a paused tour stops its waveform', as
   await reach.getByRole('button', { name: 'Pause the examples' }).click();
   const caret = reach.locator('.sq-caret');
   await expect.poll(() => caret.evaluate((el) => el.getAnimations().map((a) => a.playState).join(','))).toBe('paused');
-  // the caret is still off screen too
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await expect(reach.locator('.reach-card[data-search]')).toHaveClass(/is-still/);
   const news = page.locator('.new');
   await news.evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await page.mouse.move(5, 690);
