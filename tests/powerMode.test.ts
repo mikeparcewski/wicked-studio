@@ -166,6 +166,9 @@ describe('the state as it stands now', () => {
       state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 9, inTurn: false, sessionRestarts: 0 }, turnLog: [null] as never }),
       state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: {} } as never }),
       state({ on: false, toggles: flip, handoff: { round: 2, maxRounds: 3, steps: [null] } as never }),
+      // partial records: a turn without its cli, a step without its seat (codex r9)
+      state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 9, inTurn: false, sessionRestarts: 0 }, turnLog: [{ turn: 9, attempt: 0, startedAt: 1, endedAt: null, outcome: null, summary: 'x' }] as never }),
+      state({ on: false, toggles: flip, handoff: { round: 2, maxRounds: 3, steps: [{ step: 'review', status: 'running', at: at(30), summary: null }] } as never }),
     ]) {
       const kept = mergePower(bad, [], local, at(25))!;
       expect(kept.handoff).toEqual(local.handoff);

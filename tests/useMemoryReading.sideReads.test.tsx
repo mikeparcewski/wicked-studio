@@ -167,4 +167,36 @@ describe('useMemoryReading', () => {
     await act(async () => { answer({ total: 2 }); });
     await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, pending: 0, indexedRepos: 0 }));
   });
+
+  it('a poller depositing the same list every few seconds neither restarts the total nor withholds the count (codex r9 on 9d)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 3 });
+    listProposals.mockResolvedValue([{ kind: 'memory' }]);
+    listRepos.mockResolvedValue({ repos: [] });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await act(async () => { await useNeedsSources.getState().load(); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 3, pending: 1, indexedRepos: 0 }));
+    const reads = memoryCoverage.mock.calls.length;
+    for (let i = 0; i < 3; i++) act(() => { useNeedsSources.getState().depositProposals([{ kind: 'memory' } as never]); });
+    expect(memoryCoverage.mock.calls.length).toBe(reads);
+    expect(result.current).toEqual({ state: 'ok', total: 3, pending: 1, indexedRepos: 0 });
+  });
+
+  it('a failed queue read is tried again after 30 s even while another surface keeps depositing (codex r9 on 9d)', async () => {
+    let now = 1_000_000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      listProposals.mockRejectedValueOnce(new Error('503'));
+      await useNeedsSources.getState().loadRepos();
+      await useNeedsSources.getState().load();
+      expect(useNeedsSources.getState().readOk.proposals).toBe(false);
+      now += 40_000;
+      useNeedsSources.getState().depositProposals([{ kind: 'memory' } as never]);
+      listProposals.mockResolvedValueOnce([{ kind: 'memory' }]);
+      await useNeedsSources.getState().load(30_000);
+      expect(listProposals).toHaveBeenCalledTimes(2);
+      expect(useNeedsSources.getState().readOk.proposals).toBe(true);
+    } finally {
+      clock.mockRestore();
+    }
+  });
 });

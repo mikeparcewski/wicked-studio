@@ -64,6 +64,9 @@ export interface NeedsSourcesState {
 
 /** In-flight reads, one per wire. */
 const inflight: Partial<Record<NeedsSource, Promise<void>>> = {};
+/** When this store last TRIED each wire itself: a failed read is retried after the freshness window even while other
+ *  surfaces deposit (a deposit renews `readAt` but never certifies a failed read; codex r9 on 9d). */
+const attemptAt: Partial<Record<NeedsSource, number>> = {};
 
 /** Deferred so a synchronous throw (a client without the route, a partial mock) is a miss. */
 const attempt = <T,>(fn: () => Promise<T>): Promise<T> => Promise.resolve().then(fn);
@@ -91,7 +94,8 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     const running = inflight[source];
     if (running !== undefined) return running;
     const at = get().readAt[source];
-    if (at !== undefined && Date.now() - at < maxAgeMs) return Promise.resolve();
+    const since = get().readOk[source] === false ? attemptAt[source] : at;
+    if (since !== undefined && Date.now() - since < maxAgeMs) return Promise.resolve();
     const p = readers[source]()
       .then(() => { set((s) => ({ readOk: { ...s.readOk, [source]: true } })); })
       .catch((e: unknown) => {
@@ -103,6 +107,7 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
       })
       .finally(() => {
         delete inflight[source];
+        attemptAt[source] = Date.now();
         set((s) => ({ readAt: { ...s.readAt, [source]: Date.now() } }));
       });
     inflight[source] = p;
@@ -126,6 +131,6 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
 
 /** Test seam: back to never-read (the suite-wide setup calls it before every test). */
 export function resetNeedsSourcesForTest(): void {
-  for (const s of SOURCES) delete inflight[s];
+  for (const s of SOURCES) { delete inflight[s]; delete attemptAt[s]; }
   useNeedsSources.setState({ chats: null, proposals: null, repos: null, readAt: {}, readOk: {} });
 }

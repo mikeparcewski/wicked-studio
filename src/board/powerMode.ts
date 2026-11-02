@@ -617,16 +617,23 @@ function withLiveProgress(local: PowerState, p: PowerState): PowerState {
   };
 }
 
-/** The progress fields a session snapshot carries are well formed enough to compare and to render. */
+/** The progress fields a session snapshot carries are well formed enough to compare and to render: every field the
+ *  merge and the panel read (codex r8/r9 on 9d). */
 function readableProgress(p: PowerState): boolean {
-  const obj = (v: unknown): boolean => v !== null && typeof v === 'object';
+  const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object';
+  const finite = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
+  const strOrNull = (v: unknown): boolean => v === null || typeof v === 'string';
   const o = p.orchestrator as unknown;
-  if (!obj(o) || typeof (o as { turns?: unknown }).turns !== 'number') return false;
-  if (p.turnLog !== undefined && (!Array.isArray(p.turnLog) || !p.turnLog.every(obj))) return false;
-  if (typeof p.checkpoints !== 'number') return false;
+  if (!obj(o) || !finite(o['turns']) || !strOrNull(o['cli']) || !(o['ord'] === null || finite(o['ord'])) || typeof o['inTurn'] !== 'boolean') return false;
+  const turnOk = (t: unknown): boolean => obj(t) && finite(t['turn']) && finite(t['attempt']) && typeof t['cli'] === 'string'
+    && finite(t['startedAt']) && (t['endedAt'] === null || finite(t['endedAt'])) && strOrNull(t['summary']) && strOrNull(t['outcome']);
+  if (p.turnLog !== undefined && (!Array.isArray(p.turnLog) || !p.turnLog.every(turnOk))) return false;
+  if (!finite(p.checkpoints)) return false;
+  const STATUS = new Set(['pending', 'running', 'passed', 'failed', 'skipped']);
+  const stepOk = (st: unknown): boolean => obj(st) && typeof st['step'] === 'string' && typeof st['status'] === 'string' && STATUS.has(st['status'])
+    && finite(st['at']) && strOrNull(st['seat']) && strOrNull(st['summary']) && (st['round'] === undefined || finite(st['round']));
   const h = p.handoff as unknown;
-  if (h !== null && (!obj(h) || typeof (h as { round?: unknown }).round !== 'number' || !Array.isArray((h as { steps?: unknown }).steps)
-    || !((h as { steps: unknown[] }).steps).every(obj))) return false;
+  if (h !== null && (!obj(h) || !finite(h['round']) || !Array.isArray(h['steps']) || !(h['steps'] as unknown[]).every(stepOk))) return false;
   return true;
 }
 
