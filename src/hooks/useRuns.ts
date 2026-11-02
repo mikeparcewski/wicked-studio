@@ -25,11 +25,32 @@ import { rememberWorkTitles } from '../board/gateActions.js';
  */
 const TERMINAL = new Set(['completed', 'cancelled', 'failed']);
 
+/**
+ * artifact-runs-fix (rig: 404 noise on `GET /runs/:id/elicitation`): a live run whose read answered "none" is not
+ * read again until its status changes. A question that opens later arrives live on `/ws`; this read exists for a page
+ * that loads after one opened, so every `GET /runs` refresh re-reading every parked run (13 on the rig, each a 404)
+ * bought nothing. Keyed run → the status it had when it answered none.
+ */
+const answeredNone = new Map<string, string>();
+
+/** Test seam. */
+export function resetElicitationProbes(): void {
+  answeredNone.clear();
+}
+
 /** studio#769: read the open question of every live run the store holds none for (CAS-guarded). */
 export async function hydrateElicitations(runs: readonly SessionView[], cancelled: () => boolean = () => false): Promise<void> {
   const store = useElicitationStore.getState;
-  const live = runs.filter((v) => !TERMINAL.has(v.session.status) && store().elicitations[v.session.id] === undefined).map((v) => v.session.id);
-  await Promise.all(live.map(async (id) => {
+  // A recorded "none" holds only while the run stays in the status it answered in (review r1: a run that leaves and
+  // comes back is read again); a finished run's entry goes.
+  for (const v of runs) {
+    const was = answeredNone.get(v.session.id);
+    if (was !== undefined && (was !== v.session.status || TERMINAL.has(v.session.status))) answeredNone.delete(v.session.id);
+  }
+  const live = runs
+    .filter((v) => !TERMINAL.has(v.session.status) && store().elicitations[v.session.id] === undefined && answeredNone.get(v.session.id) !== v.session.status)
+    .map((v) => [v.session.id, v.session.status] as const);
+  await Promise.all(live.map(async ([id, status]) => {
     const gen = store().getRunGen(id);
     let e: Awaited<ReturnType<typeof api.getElicitation>>;
     try {
@@ -37,7 +58,10 @@ export async function hydrateElicitations(runs: readonly SessionView[], cancelle
     } catch {
       return;
     }
-    if (cancelled() || e === null) return;
+    // Recorded only for a pass still current and a run whose question state did not move meanwhile (review r1).
+    if (cancelled() || store().getRunGen(id) !== gen) return;
+    if (e === null) { answeredNone.set(id, status); return; }
+    answeredNone.delete(id);
     store().setFromGetIfUnchanged(id, gen, {
       runId: e.runId, elicitationId: e.elicitationId, message: e.message, options: e.options, receivedAt: e.receivedAt, ...askerOf(e), ...answerShapeOf(e),
     });
@@ -76,6 +100,9 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       if (debounceRef.current !== null) clearTimeout(debounceRef.current);
     };
   }, []);
+
+  // A (re)connect may have missed a question's live frame: every live run is read again (review r1).
+  useEffect(() => { if (status === 'connected') resetElicitationProbes(); }, [status]);
 
   useEffect(() => {
     if (status !== 'connected') return;

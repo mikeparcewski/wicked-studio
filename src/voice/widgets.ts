@@ -200,3 +200,20 @@ export function formatMetric(v: number): string {
   if (Number.isInteger(v)) return v.toLocaleString('en-US');
   return v.toFixed(a < 10 ? 2 : 1);
 }
+
+/**
+ * A job the Running jobs widget lists and the narration counts — ONE predicate for both (artifact-runs-fix: the
+ * widget listed 13 chats parked at their turn while the narration said "no jobs running"). Running = working, quiet
+ * or stalled; a run waiting on a person is not running (its decision is in Waiting on you, and a chat parked between
+ * turns is a chat, not a job), and a held one is not either.
+ */
+export function isRunningJob(r: { liveness: string }): boolean {
+  return r.liveness === 'working' || r.liveness === 'quiet' || r.liveness === 'stalled';
+}
+
+/** The step a job is on, in words — or nothing when crew sent the engine's synthetic id (an older crew sends
+ *  `wf-<run>:unit-1`, which is no word for a person). */
+export function stepWords(phase: string | null): string | null {
+  if (phase === null || phase === '' || /(^|:)unit-\d+(:a\d+)?$/.test(phase)) return null;
+  return phase;
+}

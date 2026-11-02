@@ -106,3 +106,7 @@
 .wk-pcard-lens { position: absolute; inset: 0; z-index: 2; display: flex; background: var(--surface-base); }
 .wk-pcard-lens > .wk-artifact-body { flex: 1 1 auto; display: flex; }
 .wk-pcard-lens .wk-artifact-frame { flex: 1 1 auto; width: 100%; border: 0; }
+
+/* "Open with" (artifact-runs-fix): one line above the card that wraps on a phone; the select never overflows. */
+.wk-pcard-openwith { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; margin: 0 0 6px; }
+.wk-pcard-openwith select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }

@@ -42,6 +42,7 @@ import { INITIAL_VOICE, lineId, useVoiceStore, type ListenMode, type VoiceAskCon
 import { isLeave, parseConfirm, parseEntry, parseGateAnswer, parseMode } from './intent.js';
 import { BrowserMic, BrowserSpeaker, crewStt, type MicSource, type Speaker, type SttEngine } from './io.js';
 import { Vad } from './vad.js';
+import { isRunningJob } from './widgets.js';
 
 // ── The edges ─────────────────────────────────────────────────────────────────────────────────
 
@@ -985,7 +986,7 @@ function describeNow(): string {
   const snap = snapshotNow();
   const gates = Object.keys(useGateStore.getState().gates).length;
   if (snap === null) return 'You’re in voice mode. Around us is the live system.';
-  const working = snap.runs.filter((r) => r.liveness === 'working' || r.liveness === 'quiet').length;
+  const working = snap.runs.filter(isRunningJob).length;
   const load = snap.infra.find((i) => i.key === 'load');
   const busy = load?.state === 'down' ? 'the machine very busy' : load?.state === 'degraded' ? 'the machine a bit busy' : 'the machine calm';
   const jobs = working === 0 ? 'no jobs running' : working === 1 ? 'one job running' : `${working} jobs running`;

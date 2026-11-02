@@ -69,7 +69,9 @@
 .wk-voice-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: var(--text-sm); color: var(--ink-body); }
 .wk-voice-list li { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wk-voice-ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.wk-voice-list li > .wk-voice-small { flex: none; white-space: nowrap; }
+.wk-voice-list li > .wk-voice-ellip { flex: 1 1 auto; }
+/* The step yields to the title: a long step never squeezes the job's name to "W." (artifact-runs-fix). */
+.wk-voice-list li > .wk-voice-small { flex: 0 1 auto; max-width: 45%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-voice-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; background: var(--ink-dim); display: inline-block; }
 .wk-voice-dot[data-tone="ok"] { background: var(--status-ok); }
 .wk-voice-dot[data-tone="run"] { background: var(--status-run); }

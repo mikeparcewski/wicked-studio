@@ -1,5 +1,5 @@
 import type { CoreEvent, RosterSeat, RunAcceptanceSummary, SessionView as RunView } from '../api/types.js';
-import { reassignCandidates, runBenchesOf, type ReassignCandidate } from '../components/gateVerdictModel.js';
+import { reassignCandidates, reassignRefusedOf, runBenchesOf, type ReassignCandidate } from '../components/gateVerdictModel.js';
 import { isDeliverGate } from '../components/gateMoveModel.js';
 import { deliverAcceptance } from './checkState.js';
 import { choicesOf, type OpenGate } from '../store/gates.js';
@@ -31,9 +31,12 @@ export function runPoolOf(view: RunView): string[] {
 
 /**
  * evaluator ≠ creator, read off the live roster: who may judge the gate's step. `builders` are the seats that built
- * the judged work — every creator step at or before the gate, the seat crew names ("built on `codex`") and the seat
- * the gate's own step ran on. `inJob`: a seat of the job's own pool that is none of them and can take work now (the
- * only kind crew's reassign accepts). `outside`: a signed-in helper outside the job that is none of them.
+ * the judged work — every creator step at or before the gate, the seat crew names ("built on `codex`"), the seat
+ * the gate's own step ran on, and every seat the ENGINE refuses as this step's reviewer (`WorkUnit.reassign_refused`:
+ * the work's authors as the engine counts them, a seat whose earlier attempt was reassigned away included — rig run
+ * 968e8c7c led with "Approve and retry with Claude Code" and the reassign answered 409). `inJob`: a seat of the job's
+ * own pool that is none of them and can take work now (the only kind crew's reassign accepts). `outside`: a
+ * signed-in helper outside the job that is none of them.
  */
 export function judgeSeats(view: RunView, ord: number, prompt: string, pool: readonly string[], roster: readonly RosterSeat[] | null, benched: ReturnType<typeof runBenchesOf> = []): {
   builders: string[]; inJob?: ReassignCandidate; outside?: RosterSeat;
@@ -44,6 +47,7 @@ export function judgeSeats(view: RunView, ord: number, prompt: string, pool: rea
     ...view.units.filter((u) => u.role === 'creator' && u.ord <= ord && isHelperSeat(u.assigned_cli)).map((u) => u.assigned_cli as string),
     ...(builtOn !== null ? [builtOn] : []),
     ...(isHelperSeat(unitCli) ? [unitCli] : []),
+    ...reassignRefusedOf(view.units, ord),
   ])];
   const inJob = reassignCandidates(pool, unitCli, roster, builders, benched).find((c) => c.state === 'ready' && !builders.includes(c.cli));
   const outside = (roster ?? []).find((r) => r.signed_in === true && !pool.includes(r.key) && !builders.includes(r.key) && isHelperSeat(r.key)
