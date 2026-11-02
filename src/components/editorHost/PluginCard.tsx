@@ -4,7 +4,7 @@ import { editorSaves, type EditorView } from '../../api/editors.js';
 import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, type WriteVerb } from '../../board/artifactMorph.js';
 import { EditorHost, type HostLogEntry, type HostUi } from '../../editors/host.js';
 import {
-  LIVE_FRAME_CAP, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, replayGroupSelection, touchLive, useHostChrome, useHostPanel, useLiveCards,
+  LIVE_FRAME_CAP, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, replayGroupSelection, touchLive, useGroupShown, useHostChrome, useHostPanel, useLiveCards,
   type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
@@ -18,7 +18,10 @@ import { useEditorChoices, useEditorFor, useEditorPicks } from '../../store/edit
 import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import '../../editors/adapters/index.js';
 import './hostTabs.js';
-import { chipsToComposer, focusComposer, forwardedKey, typedToComposer } from './composerBridge.js';
+import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge.js';
+import { askAbout } from '../../board/askAbout.js';
+import { artifactRefOf } from '../../api/chatArtifacts-wire.js';
+import { registerInView } from '../../store/artifactInView.js';
 import { FullShell } from './FullShell.js';
 import { useRunHost } from './RunHostContext.js';
 
@@ -178,6 +181,34 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   );
   const group = groupKey(editor.id, binding.artifactKey);
   const full = useHostChrome((s) => s.full === binding.artifactKey);
+  /** The version this card's own last edit made, until the plugin reads a version again. */
+  const lastWritten = useRef<number | null>(null);
+  // DES-CHAT-ARTIFACTS-001 §5.1: a document card on screen is what a chat message from its composer (or the floating
+  // chat beside it) is about. The send reads the version it shows after its writes in flight have settled.
+  const inViewRef = binding.source === 'interactive-doc' ? artifactRefOf(binding.projectId, binding.docId) : null;
+  useEffect(() => {
+    if (adapter === null || inViewRef === null) return undefined;
+    const key = binding.artifactKey;
+    return registerInView({
+      key,
+      ref: inViewRef,
+      title: bindingRef.current.title,
+      composerKey: bindingRef.current.composerKey,
+      surface: () => (useHostChrome.getState().full === key ? 'full' : useHostPanel.getState().group?.key === group ? 'pane' : 'inline'),
+      shown: () => lastWritten.current ?? useGroupShown.getState().shown[group] ?? (adapter.artifact().head > 0 ? adapter.artifact().head : null),
+      flush: async () => {
+        if (adapter.flush === undefined) return null;
+        const before = adapter.artifact().head;
+        const head = await adapter.flush();
+        // The head moved to a version THIS card wrote while the send waited: that edit is what the person sees.
+        const mine = (adapter as { writes?: ReadonlyMap<number, number> }).writes;
+        if (head !== before && mine?.has(head) === true) lastWritten.current = head;
+        // Let the host's own reply to the write (its `written` line) run before the version is read.
+        await new Promise((r) => setTimeout(r, 0));
+        return head;
+      },
+    });
+  }, [adapter, inViewRef, binding.artifactKey, binding.composerKey, group]);
   const enterFull = useHostChrome((s) => s.enterFull);
   const exitFull = useHostChrome((s) => s.exitFull);
   const openGroup = useHostPanel((s) => s.openGroup);
@@ -214,6 +245,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     // Card and Options writes use the same host words, edit line and Undo handler.
     const written: NonNullable<HostUi['written']> = (w) => {
       announced.current = w.version;
+      // A chat message sent before the plugin re-reads names the version this edit made (DES-CHAT-ARTIFACTS-001 §5.1).
+      lastWritten.current = w.version;
       relay(group, 'card', { type: 'changed', head: w.version, kind: w.verb === 'restyled' ? 'theme' : 'deterministic' });
       if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, binding.kind as EditorKind), verb: w.verb });
     };
@@ -270,7 +303,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           thread: () => undefined,
           written,
           writeFailed: (text) => { if (live.current) setLine({ kind: 'failed', text }); },
-          shown: (v) => setGroupShown(group, v),
+          shown: (v) => { lastWritten.current = null; setGroupShown(group, v); },
           fullscreen: async () => { if (live.current) setOffer('full'); return false; },
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
@@ -500,7 +533,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
 
   const runAction = async (a: CardAction): Promise<void> => {
     if (a.verb === 'host:export') { setExportOpen((o) => !o); return; }
-    if (a.verb === 'host:ask') { focusComposer(binding.composerKey); return; }
+    // DES-CHAT-ARTIFACTS-001 §6.3: the composer on screen gets the artifact chip, else a chat opens beside it.
+    if (a.verb === 'host:ask') { void askAbout(binding); return; }
     const r = await hostRef.current?.action(a.id);
     if (!live.current) return;
     if (r === null || r === undefined) setLine({ kind: 'status', text: `${a.label}: no answer from ${editor.title}` });

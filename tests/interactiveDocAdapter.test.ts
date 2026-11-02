@@ -36,6 +36,16 @@ beforeEach(() => { api.manifests = []; api.events = []; api.forks = []; api.fork
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('InteractiveDocAdapter', () => {
+  it('DES-CHAT-ARTIFACTS-001 §5.1: flush() waits for a write in flight and answers the version it made', async () => {
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page');
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
+    await a.refresh();
+    const writing = a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
+    expect(a.head).toBe(1);
+    expect(await a.flush()).toBe(2);
+    expect(await writing).toEqual({ version: 2 });
+    expect(await a.flush()).toBe(2);
+  });
   it('a write is ONE feedback batch on the base, and its own deterministic child is the version returned', async () => {
     const heads: number[] = [];
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', (h) => heads.push(h));

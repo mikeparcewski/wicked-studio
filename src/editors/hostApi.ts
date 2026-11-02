@@ -79,6 +79,9 @@ export interface SurfaceAdapter extends HostAdapter {
   mcpBridge?(): McpHostBridge | undefined;
   /** Host chrome re-renders on a change of pills/parts/head. */
   subscribe?(onChange: () => void): () => void;
+  /** Wait for the writes in flight to settle and answer the head (DES-CHAT-ARTIFACTS-001 §5.1: a chat message names
+   *  the version a hand edit just made). Absent = the adapter keeps no writes in flight. */
+  flush?(): Promise<number>;
 }
 
 export type AdapterFactory = (binding: ArtifactBinding) => SurfaceAdapter;

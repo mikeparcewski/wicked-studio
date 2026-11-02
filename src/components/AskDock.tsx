@@ -48,6 +48,8 @@ import { PAGE_CHAT_SPECS, pageChatRules, pageChatSessionKey, type PageChatKind, 
 import { pageChatEpoch } from '../store/pageChat.js';
 import { focusPack } from './askContext.js';
 import { CHAT_ATTACHMENT_LIMITS, type ChatAttachmentError, type ChatStartedOn } from '../api/chatHistory-wire.js';
+import { CONTEXT_PAGE_MAX, type ChatMessageContext } from '../api/chatArtifacts-wire.js';
+import { artifactContext, inViewAnywhere, peekAskAboutSeed, takeAskAboutSeed, type AskAboutSeed } from '../store/artifactInView.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -87,6 +89,33 @@ function deposit(chatId: string, typed: string, res: { turnId?: string; runId?: 
     ...(res.runId !== undefined ? { runId: res.runId } : {}),
     ...(res.stepId !== undefined ? { stepId: res.stepId } : {}),
   });
+}
+
+/**
+ * DES-CHAT-ARTIFACTS-001 §5.1: one send, with `context` only when there is some (and only when the daemon takes it —
+ * the caller decides). Without it the call is exactly what it was, so an older daemon sees no change.
+ */
+function postMessage(chatId: string, message: string, ids: string[] | undefined, context: ChatMessageContext | undefined) {
+  if (context !== undefined) return api.sendChatMessage(chatId, message, undefined, ids, context);
+  return ids === undefined ? api.sendChatMessage(chatId, message) : api.sendChatMessage(chatId, message, undefined, ids);
+}
+
+/** The page summary as `context.page`, within crew's cap (cut, and said to be cut, rather than refused). */
+function pageField(pack: string | null): string | undefined {
+  if (pack === null || pack.trim() === '') return undefined;
+  if (pack.length <= CONTEXT_PAGE_MAX) return pack;
+  const note = '\n[the rest of studio\u2019s page summary was cut]';
+  return pack.slice(0, CONTEXT_PAGE_MAX - note.length) + note;
+}
+
+/** The chips a chat opened by "Ask about this" starts with: its project (or none, for an Unfiled document, whose
+ *  repositories crew seeds from its binding), and the document itself. */
+export function askAboutChips(seed: AskAboutSeed, projectName: string | null): ScopeChip[] {
+  const base = defaultScopeChips({ project: seed.projectId === null ? null : { id: seed.projectId, name: projectName ?? seed.projectId }, repo: null });
+  // Seeded: no "All repos" — the chat reads the repositories the document was made about.
+  const chips = seed.seed ? base.map((c) => (c.kind === 'all-repos' ? { ...c, on: false } : c)) : base;
+  const mount = seed.projectId ?? 'default';
+  return [...chips, { key: `doc:${mount}/${seed.docId}`, kind: 'doc', label: seed.label, ref: seed.docId, projectId: mount, on: true, added: true }];
 }
 
 /** §8 F6, crew#1020: a 409 `turn_in_flight` (the PA is still answering) or `chat_scope_changed`
@@ -193,7 +222,7 @@ export interface PageChatBinding {
   focusChip?: React.ReactNode;
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, sendWorkflow, sendRepos, startProjectId, startText, startFresh = false, page }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, sendWorkflow, sendRepos, sendArtifact, startProjectId, startText, startFresh = false, page }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -225,6 +254,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   sendWorkflow?: string;
   /** The repositories that question is about: the new chat's scope. */
   sendRepos?: Array<{ id: string; name: string }>;
+  /** DES-CHAT-ARTIFACTS-001 §5.1: the artifact the handed-over message is about (its composer's chip or surface). */
+  sendArtifact?: { ref: string; anchors: string[]; composerKey: string };
   /** Concept A (`openAskDock`): open a FRESH chat scoped to this project, nothing sent. */
   startProjectId?: string;
   /** Words placed in the box when the dock opens, never sent (⌘K "New demo"). */
@@ -244,6 +275,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   useEffect(() => { takeTypedSeed(); }, []);
   // A Desk handoff is read once, at mount, like the seed: later props never re-send it.
   const [handoff] = useState(() => sendText);
+  // DES-CHAT-ARTIFACTS-001: the artifact the handed-over message is about rides that ONE send; an "Ask about this" seed
+  // (read once, like the typed seed) is the artifact this chat is about for as long as its chip stays on.
+  const handoffArtifact = useRef(sendText !== undefined ? sendArtifact ?? null : null);
+  const [aboutSeed] = useState(() => (page === undefined && sendText === undefined ? peekAskAboutSeed() : null));
+  useEffect(() => { if (aboutSeed !== null) takeAskAboutSeed(); }, [aboutSeed]);
   const tookRef = useRef(onHandoffTaken);
   useEffect(() => { if (handoff !== undefined) tookRef.current?.(); }, [handoff]);
   const [diag, setDiag] = useState<DiagnosticsState>({ kind: 'loading' });
@@ -366,6 +402,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // project from elsewhere (⌘K "Chat in this project") is held to that project, with the page's repo.
   const startProject = sendProjectId ?? startProjectId;
   const [chipEdits, setChipEdits] = useState<ScopeChip[] | null>(() => {
+    if (aboutSeed !== null && resumed === null) {
+      return askAboutChips(aboutSeed, aboutSeed.projectId === null ? null : useProjectsStore.getState().projects.find((p) => p.id === aboutSeed.projectId)?.name ?? null);
+    }
     if (resumed?.chips !== undefined && resumed.chips.length > 0) return resumed.chips;
     // A past chat reopened from history whose choices this browser never saw: nothing is claimed as
     // chosen — every chip starts off, and the user turns on what the chat may see now.
@@ -452,7 +491,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
    *  included) on the first message, a fresh one later only when the chips or the page changed. The
    *  chips and page are SNAPSHOT here, so the acknowledgement records exactly what this message carried
    *  (a chip changed while it is in flight is still owed to the next one). */
-  const withPack = useCallback((text: string): { message: string; sig: string; diag: boolean } => {
+  // DES-CHAT-ARTIFACTS-001 §5.1: on a daemon that takes `context`, the pack rides as `context.page` (studio's summary,
+  // labelled as studio's) instead of inside the person's words; a page chat's rules stay in the text (they are how to
+  // answer, not what the page shows).
+  const withPack = useCallback((text: string, split = false): { message: string; sig: string; diag: boolean; page: string | null } => {
     const chipsNow = chipsRef.current;
     // What this turn's answer will say it saw: the chips on when it was sent.
     sentSourcesRef.current = chosenChips(chipsNow).length;
@@ -461,15 +503,37 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     const focus = pg?.focus ?? null;
     if (seededRef.current && lastPackRef.current === sig) {
       // A page chat's question about an item carries that item, even when the page itself already rode.
-      return { message: focus !== null ? `${text}${PACK_JOIN}${focusPack(focus)}` : text, sig, diag: false };
+      if (split) return { message: text, sig, diag: false, page: focus !== null ? focusPack(focus) : null };
+      return { message: focus !== null ? `${text}${PACK_JOIN}${focusPack(focus)}` : text, sig, diag: false, page: null };
     }
     const diag = !diagSentRef.current && chipsNow.some((c) => c.kind === 'page' && c.on);
     const pack = buildContextPack({
       ...packInputs.current, chips: chipsNow, omitDiagnostics: !diag,
       ...(pg !== undefined ? { pageLines: pg.data(), focus } : {}),
     });
-    return { message: `${text}${PACK_JOIN}${pack}${pg !== undefined ? `\n${pageChatRules(pg.kind)}` : ''}`, sig, diag };
+    if (split) return { message: pg !== undefined ? `${text}\n\n${pageChatRules(pg.kind)}` : text, sig, diag, page: pack };
+    return { message: `${text}${PACK_JOIN}${pack}${pg !== undefined ? `\n${pageChatRules(pg.kind)}` : ''}`, sig, diag, page: null };
   }, []);
+  /**
+   * DES-CHAT-ARTIFACTS-001 §5.1: the `context` a message carries, on a daemon that takes it: the artifact (the handed-
+   * over message's, else this chat's "Ask about this" document while its chip is on, else the one open in full screen,
+   * a pane or Made) at the version shown once its editor's writes have settled, and the page summary.
+   */
+  const contextFor = useCallback(async (page: string | null): Promise<ChatMessageContext | undefined> => {
+    if (!useCapabilities.getState().chatContext) return undefined;
+    const handed = handoffArtifact.current;
+    handoffArtifact.current = null;
+    const seedOn = aboutSeed !== null && chipsRef.current.some((c) => c.kind === 'doc' && c.on && c.ref === aboutSeed.docId && (c.projectId ?? 'default') === (aboutSeed.projectId ?? 'default'));
+    const beside = inViewAnywhere();
+    const pick = handed !== null ? { ref: handed.ref, anchors: handed.anchors, fallback: null as number | null }
+      : seedOn ? { ref: aboutSeed.ref, anchors: [] as string[], fallback: aboutSeed.version }
+        : beside !== null ? { ref: beside.ref, anchors: [] as string[], fallback: null as number | null } : null;
+    const artifact = pick === null ? null : await artifactContext(pick.ref, pick.anchors, pick.fallback);
+    const pageText = pageField(page);
+    if (artifact === null && pageText === undefined) return undefined;
+    return { ...(artifact !== null ? { artifact } : {}), ...(pageText !== undefined ? { page: pageText } : {}) };
+  }, [aboutSeed]);
+
   /** A message landed: the pack it carried is what the chat has seen. */
   const packLanded = useCallback((id: string, out: { sig: string; diag: boolean }) => {
     lastPackRef.current = out.sig;
@@ -493,10 +557,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         let id = chatIdRef.current;
         if (id !== null && resumed !== null && id === resumed.chatId) {
           try {
-            const out = withPack(text);
+            const out = withPack(text, useCapabilities.getState().chatContext);
             const ids = await upload(id, files);
+            const context = await contextFor(out.page);
             if (ended()) throw new Error('This chat was closed; nothing was sent.');
-            deposit(id, text, await (ids === undefined ? api.sendChatMessage(id, out.message) : api.sendChatMessage(id, out.message, undefined, ids)).catch(plainSendRefusal(id)));
+            deposit(id, text, await postMessage(id, out.message, ids, context).catch(plainSendRefusal(id)));
             packLanded(id, out);
             pageRef.current?.onSent(text, id);
             stepAside(id);
@@ -558,8 +623,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const seats = askPath && workflow === null ? [pick, ...chosenSeats(eligible, dropped, picked).filter((k) => k !== pick)] : [pick];
             // A failed open keeps the page's id for the retry; only a chat the daemon opened spends it.
             id = openIdRef.current ?? crypto.randomUUID();
-            const body: ChatOpenBody & { startedOn?: ChatStartedOn; workflow?: string } = { chatId: id, ...chipsOpenFields(chosen, ambientProjectId(packInputs.current.pathname)), clis: seats };
+            const body: ChatOpenBody & { startedOn?: ChatStartedOn; workflow?: string; seedFromArtifact?: string } = { chatId: id, ...chipsOpenFields(chosen, ambientProjectId(packInputs.current.pathname)), clis: seats };
             if (workflow !== null) body.workflow = workflow;
+            // DES-CHAT-ARTIFACTS-001 §6.3: "Ask about this" on an Unfiled document — crew seeds the chat's repositories
+            // from the document's binding (only a daemon that takes it is sent the field).
+            if (aboutSeed?.seed === true && useCapabilities.getState().chatContext) body.seedFromArtifact = aboutSeed.ref;
             // The page it started on, for past chats (`chatList` only: an older crew's strict schema refuses it).
             if (useCapabilities.getState().chatList) body.startedOn = { route: packInputs.current.pathname, label: packInputs.current.pageLabel };
             if (askPath) body.primary = pick;
@@ -608,10 +676,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             throw openErr;
           }
         }
-        const out = withPack(text);
+        const out = withPack(text, useCapabilities.getState().chatContext);
         const ids = await upload(id, files);
+        const context = await contextFor(out.page);
         if (ended()) throw new Error('This chat was closed; nothing was sent.');
-        deposit(id, text, await (ids === undefined ? api.sendChatMessage(id, out.message) : api.sendChatMessage(id, out.message, undefined, ids)).catch(plainSendRefusal(id)));
+        deposit(id, text, await postMessage(id, out.message, ids, context).catch(plainSendRefusal(id)));
         packLanded(id, out);
         pageRef.current?.onSent(text, id);
         stepAside(id);
@@ -619,7 +688,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `ended` reads the module epoch
-    [resumed, stepAside, withPack, packLanded],
+    [resumed, stepAside, withPack, packLanded, contextFor],
   );
 
   const needRows = useMemo(

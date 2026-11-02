@@ -878,6 +878,7 @@ export function App(): React.ReactElement {
               ...(askHandoff.openChatId !== undefined ? { sendOpenChatId: askHandoff.openChatId } : {}),
               ...(askHandoff.workflow !== undefined ? { sendWorkflow: askHandoff.workflow } : {}),
               ...(askHandoff.repos !== undefined ? { sendRepos: askHandoff.repos } : {}),
+              ...(askHandoff.artifact !== undefined ? { sendArtifact: askHandoff.artifact } : {}),
             } : {})}
             {...(askHandoff === null && askStart !== null ? {
               ...(askStart.projectId !== null ? { startProjectId: askStart.projectId } : {}),

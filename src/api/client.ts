@@ -41,6 +41,7 @@ import { ApiError, apiStatus } from './errors.js';
 import type { GuidanceUpdate } from './guidance.js';
 import type { ElicitationAnswerBody } from './ask.js';
 import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
+import type { ChatMessageContext } from './chatArtifacts-wire.js';
 
 export type * from './types.js';
 export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
@@ -175,6 +176,10 @@ export const api = {
    *  to get the complete history. */
   listRuns: (includeArchived?: boolean) =>
     apiFetch<{ runs: SessionView[] }>(includeArchived ? '/runs?include=archived' : '/runs'),
+  /** The runs that answered one interactive document (`GET /runs?doc=<id>`, crew's doc↔run index): "Ask about this"
+   *  finds the chat a document was made in from its draft run's `chat_id` (DES-CHAT-ARTIFACTS-001 §6.3). */
+  listRunsForDoc: (docId: string) =>
+    apiFetch<{ runs: SessionView[] }>(`/runs?doc=${encodeURIComponent(docId)}`),
 
   /** Archive (or unarchive) a TERMINAL run (crew#265) — write-off, not delete.
    *  404 unknown; 409 when the run is non-terminal. */
@@ -328,11 +333,18 @@ export const api = {
   // daemon predating the turn index.
   // `attachments` (api-types 0.137.0, `capabilities.chatAttachments`): ids from `uploadChatAttachments`;
   // never sent to a daemon without the capability (the caller holds the gate).
-  sendChatMessage: (chatId: string, text: string, targets?: string[], attachments?: string[]) =>
+  // `context` (api-types 0.169.0, `capabilities.chatArtifacts.context`): what studio shows beside the message; never
+  // sent to a daemon without the capability (the caller holds the gate; its strict body would refuse the field).
+  sendChatMessage: (chatId: string, text: string, targets?: string[], attachments?: string[], context?: ChatMessageContext) =>
     apiFetch<ChatMessageResponse>(`/chats/${encodeURIComponent(chatId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, ...(targets !== undefined ? { targets } : {}), ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}) }),
+      body: JSON.stringify({
+        text,
+        ...(targets !== undefined ? { targets } : {}),
+        ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
+        ...(context !== undefined && Object.keys(context).length > 0 ? { context } : {}),
+      }),
     }),
   /** F-W1-005: re-seat NAMED seats on a LIVE chat — the engine's per-seat `chat_ensure` with the
    *  scope recorded at open, same pool key (crew ≥ 0.7.36 `POST /chats/:id/seats`; api-types 0.39.0

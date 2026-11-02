@@ -48,6 +48,10 @@ interface CapabilitiesStore {
   /** `voice` (crew voice mode, DES-VOICE §2a): the daemon serves `/voice/*`. The mic sits beside every composer's Send
    *  only then (not ready → it opens setup; ready → voice mode). Absent or false: no mic. */
   voice: boolean;
+  /** `chatArtifacts.context` (DES-CHAT-ARTIFACTS-001 §14, api-types 0.169.0): a chat message may carry `context` (the
+   *  open artifact, the page summary) and `POST /chats` may carry `seedFromArtifact`. Absent or false (an older daemon,
+   *  whose message body is strict): neither is ever sent, and the page summary rides in the text as before. */
+  chatContext: boolean;
   load: () => Promise<void>;
 }
 
@@ -67,6 +71,7 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   chatWorkflows: [],
   powerMode: false,
   voice: false,
+  chatContext: false,
   load: () => {
     if (get().loaded) return Promise.resolve();
     // The HTTP client is reached lazily: the stores that read a capability (gates, the ask thread)
@@ -74,9 +79,9 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, voice: caps['voice'] === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true });
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false }); })
       .finally(() => { inflight = null; });
     return inflight;
   },
