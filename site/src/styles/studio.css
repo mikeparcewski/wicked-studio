@@ -763,7 +763,7 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
   .ide-sess-full, .ide-sess-s { display: none; }
   .ide-sess-short { display: inline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ide-sess-t { font-size: var(--text-caption); min-width: 0; }
-  .ide-main { height: min(62svh, 470px); }
+  .ide-main { height: clamp(360px, 62svh, 470px); }
   .ide-pane { border-left: 0; border-top: 1px solid var(--hairline); height: 236px; flex-shrink: 0; }
   .explorer { grid-template-columns: 1fr; }
   .ex-side { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--hairline); padding: 2px 2px 10px; gap: 4px; scrollbar-width: none; }
@@ -949,3 +949,8 @@ html.frames-overflow { scroll-snap-type: none; }
    around its content, and the demo keeps a bounded height */
 html.frames-overflow .hero { height: auto; min-height: var(--frame); }
 @media (min-width: 941px) { html.frames-overflow .hero .ide { height: 520px; max-height: none; flex: none; } }
+/* the hero's command chip wraps (at spaces) instead of running out of the window with large text */
+.cta-copy { flex-wrap: wrap; row-gap: 6px; }
+.cta-copy code { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+/* the chat keeps a usable height even when large text makes the header and composer taller */
+@media (max-width: 940px) { .ide-thread { min-height: 160px; } }

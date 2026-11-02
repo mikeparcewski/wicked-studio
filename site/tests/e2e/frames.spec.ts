@@ -215,3 +215,33 @@ test.describe('with a 24px minimum font size', () => {
     await expect(search.locator('[data-n="4"]')).toHaveText('4', { timeout: 6000 });
   });
 });
+
+test.describe('large text on small screens', () => {
+  const BIG = 'body *:not(svg):not(svg *) { font-size: max(24px, 1em) !important; }';
+  test('the phone chat stays usable in a short landscape window, and a decision taps through', async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 667, height: 320 }, hasTouch: true, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    await page.addStyleTag({ content: BIG });
+    const thread = page.locator('[data-thread]');
+    expect(await thread.evaluate((el) => el.clientHeight)).toBeGreaterThanOrEqual(150);
+    const ok = page.locator('[data-ide]').getByRole('button', { name: 'Approve plan' });
+    await ok.scrollIntoViewIfNeeded();
+    await ok.tap();
+    await expect(page.locator('[data-ide] .decided').first()).toContainText('You approved the plan.');
+    await ctx.close();
+  });
+
+  test('the hero command chip stays inside the window', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto('/');
+    await page.addStyleTag({ content: BIG });
+    const m = await page.locator('.cta-copy').evaluate((el) => {
+      const b = el.getBoundingClientRect();
+      const kids = Array.from(el.children).map((c) => c.getBoundingClientRect());
+      return { right: b.right, vw: document.documentElement.clientWidth, out: kids.filter((r) => r.right > b.right + 1 || r.left < b.left - 1).length };
+    });
+    expect(m.right).toBeLessThanOrEqual(m.vw);
+    expect(m.out).toBe(0);
+  });
+});
