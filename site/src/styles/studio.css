@@ -337,7 +337,7 @@ h3 { font-size: var(--text-lead); line-height: 1.25;   }
 .hits th { text-align: left; font-weight: var(--weight-strong); font-family: var(--font-sans); font-size: var(--text-body); padding: 6px 0; }
 .hits td { padding: 6px 0 6px 12px; color: color-mix(in oklab, var(--ink) 76%, transparent); }
 .hits tr { border-top: 1px solid var(--hairline); }
-.reach-limit { font-size: var(--text-body); color: var(--muted) !important; }
+.reach-limit { font-size: var(--text-body) !important; color: var(--muted) !important; }
 
 /* get it */
 .needs { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -351,7 +351,7 @@ h3 { font-size: var(--text-lead); line-height: 1.25;   }
 .get-intro h2 { font-size: var(--text-title); margin: 12px 0 0; }
 .get-intro p { margin: 18px 0 0; font-size: var(--text-lead); line-height: 1.65; color: color-mix(in oklab, var(--ink) 78%, transparent); max-width: 50ch; }
 .get-intro p b { color: var(--ink); }
-.get-alt { font-size: var(--text-body); color: var(--muted) !important; }
+.get-alt { font-size: var(--text-body) !important; color: var(--muted) !important; }
 
 .install { min-width: 0; width: 100%; border: 1px solid var(--hairline-strong); border-radius: 12px; overflow: hidden; background: var(--surface-2); }
 .install__bar { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 50%, transparent); }
