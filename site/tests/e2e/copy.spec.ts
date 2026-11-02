@@ -73,7 +73,9 @@ test.describe('the reviewed messaging', () => {
     const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
     // There is no per-repo rule target: rules apply everywhere or to one project, and can
     // target a language, layer or framework (core crates/wicked-governance/src/conformance.rs).
-    expect(body).not.toMatch(/\b(one|single|per[- ])repo(sitory)?\b/i);
+    expect(body).not.toMatch(/\b(?:one|single)\s+repo(?:sitory)?\b|\bper[- ]repo\b/i);
+    // the pattern itself must catch the old copy, or this test asserts nothing
+    expect('everywhere, one project or one repo').toMatch(/\b(?:one|single)\s+repo(?:sitory)?\b|\bper[- ]repo\b/i);
     await expect(page.locator('.steer')).toContainText('a language, a layer or a framework');
   });
 
