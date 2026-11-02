@@ -112,7 +112,7 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   count, may carry no verdict). A row the share does not count (a type shape, code that is not
   product code, or a file the code index skipped) carries a **not counted** mark with why, and a line
   under the coverage says how many stated rules and placeholders sit on type shapes. The Config &
-  data filter shows only when the repository has config and data rows. When the list is an older graph build than the header's numbers, it says
+  data filter is hidden when crew reports no config and data rows. When the list is an older graph build than the header's numbers, it says
   so. A repo with no requirements graph yet offers **Generate it** (or **Keep mapping** once some real
   requirements are mapped), which opens New job filled in with the generating workflow; while a mapping job
   runs, the view shows its progress with **Open the job** instead. The minimum is a setting (Settings → General → Code graph,
