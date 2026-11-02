@@ -96,11 +96,9 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
     } catch (err: unknown) {
       const refusal = proposalRefusal(err);
       if (refusal.view !== null) keep(refusal.view);
-      // A refusal of the form's own answer that leaves the proposal open is said in the form (still open, editable);
-      // any other (a card answer, or one whose view closes the form: started, interrupted, replaced) under the card.
-      if (edits === undefined || (refusal.view !== null && refusal.view.state !== 'open')) {
-        setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
-      }
+      // The card keeps every refusal; where it shows depends on what is on screen when it renders (the form while it is
+      // open, else under the card), never on the response alone: a live record may already have closed the form.
+      setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
       return refusal.words;
     } finally {
       sending.current = false;
@@ -123,13 +121,14 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
 
   // A3: a real Go takes seconds; while it starts (this tab's request, or a Go recorded moments ago in another tab) the
   // card says so instead of "Interrupted · Go again".
-  const [now, setNow] = useState(() => Date.now());
-  const starting = proposalStarting(view, now, busy);
+  // Judged against the clock at every render; the timer only makes a render happen when the window closes.
+  const [, setTick] = useState(0);
+  const starting = proposalStarting(view, Date.now(), busy);
   useEffect(() => {
     if (view.state !== 'accepting' || busy || view.acceptingAt === undefined) return;
     const left = view.acceptingAt + PROPOSAL_STARTING_MS - Date.now();
     if (left <= 0) return;
-    const t = setTimeout(() => setNow(Date.now()), left + 50);
+    const t = setTimeout(() => setTick((n) => n + 1), left + 50);
     return () => clearTimeout(t);
   }, [view.state, view.acceptingAt, busy]);
   const line = proposalRecordLine(view, starting);
@@ -194,9 +193,13 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
       {open && answering && (
         <NewDocument
           projects={projects}
-          onClose={() => setAnswering(false)}
+          onClose={() => {
+            setAnswering(false);
+            setError(null);
+          }}
           answer={{
             proposal: p,
+            error: error?.words ?? null,
             // The project moves only in a chat filed in no project (crew re-checks); a retry keeps its document.
             projectChangeable: entry.proposal.filedIn.projectId === null && p.artifactRef === undefined,
             fixed: p.artifactRef !== undefined,
@@ -209,7 +212,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
         />
       )}
       {open && note !== null && <p data-testid="artifact-proposal-note" role="status" className="wk-proposal-note">{note}</p>}
-      {error !== null && (!terminal(view.state) || (error.settles && view.state !== 'superseded')) && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error.words}</p>}
+      {error !== null && !(open && answering) && (!terminal(view.state) || (error.settles && view.state !== 'superseded')) && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error.words}</p>}
     </section>
   );
 }

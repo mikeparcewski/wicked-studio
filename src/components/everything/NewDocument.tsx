@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { createDoc, listDocs, UNFILED_MOUNT } from '../../api/interactive.js';
 import type { ArtifactProposal, ProposalEdits } from '../../api/chatArtifacts-wire.js';
-import { formSources, proposalFormEdits, proposalFormOf, repoKeysOf, type ProposalForm } from '../../board/artifactProposal.js';
+import { formSources, proposalFormEdits, proposalFormOf, proposalHelperEligible, repoKeysOf, type ProposalForm } from '../../board/artifactProposal.js';
 import { apiStatus } from '../../api/errors.js';
 import type { Project } from '../../api/types.js';
 import { chosenSeats, defaultDocSeats, docClisJson } from '../../board/docSeats.js';
@@ -29,6 +29,8 @@ export interface AnswerProposal {
   fixed?: boolean;
   /** Answer the proposal with these edits; resolves `null` when crew accepted it, else crew's words. */
   onSubmit: (edits: ProposalEdits) => Promise<string | null>;
+  /** The card's last refusal of this form's answer (the card keeps it, so it survives the form closing). */
+  error?: string | null;
 }
 
 /** New document: the form Made opens, or (A3) the same form answering a chat's proposal. */
@@ -205,7 +207,7 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
   const p = answer.proposal;
   const [form, setForm] = useState<ProposalForm>(() => proposalFormOf(p));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const error = answer.error ?? null;
   const sending = useRef(false);
   const roster = useRoster();
   const labelOf = (id: string | null): string => (id === null ? 'Unfiled' : projects.find((x) => x.id === id)?.name ?? id);
@@ -216,16 +218,15 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
     const s = roster?.find((x) => x.key === key);
     return s === undefined ? key : s.display_name || s.key;
   };
-  const available = (key: string): boolean => roster === null || roster.some((s) => s.key === key);
-  const blocked = form.title.trim() === '' || form.helpers.length !== ANSWER_SEATS || !form.helpers.every(available);
+  // Crew's own rule at Go: a helper must be on the roster AND able to work now (not signed out, not opt-in, …).
+  const eligible = (key: string): boolean => roster !== null && roster.some((s) => s.key === key && proposalHelperEligible(s as never));
+  const blocked = roster === null || form.title.trim() === '' || form.helpers.length !== ANSWER_SEATS || !form.helpers.every(eligible);
   const go = async (): Promise<void> => {
     if (sending.current || blocked) return;
     sending.current = true;
     setBusy(true);
-    setError(null);
     try {
-      const refused = await answer.onSubmit(proposalFormEdits(p, form, labelOf));
-      if (refused !== null) setError(refused);
+      await answer.onSubmit(proposalFormEdits(p, form, labelOf));
     } finally {
       sending.current = false;
       setBusy(false);
@@ -295,17 +296,19 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
       )}
       {moved && (
         <p data-testid="proposal-answer-recheck" role="status" className="wk-made-new-field wk-proposal-note">
-          Filing it in {labelOf(form.project)}: when you press Make it, the conversation, the answers it names and the
-          repositories are checked against {labelOf(form.project)}, and anything outside it is left out.
+          Filing it in {labelOf(form.project)}: when you press Make it, the conversation and the answers it names are
+          checked against {labelOf(form.project)}, and anything outside it is left out. A repository you keep must be in{' '}
+          {labelOf(form.project)}, or Make it is refused with the reason.
         </p>
       )}
       <div data-testid="proposal-answer-seats" role="group" aria-label="Helpers" className="wk-made-new-field">
         <span>Helpers</span>
         <span className="wk-prop-btns">
           {/* The roster's seats, plus any the proposal chose that the roster no longer has (said, and removable). */}
-          {[
-            ...(roster ?? []).filter((s) => s.enabled_for_council || form.helpers.includes(s.key)).map((s) => ({ key: s.key, name: s.display_name || s.key, gone: false })),
-            ...form.helpers.filter((k) => !(roster ?? []).some((s) => s.key === k)).map((k) => ({ key: k, name: k, gone: true })),
+          {roster === null && <span data-testid="proposal-answer-council-reading">Reading which helpers are available…</span>}
+          {roster !== null && [
+            ...roster.filter((s) => proposalHelperEligible(s as never) || form.helpers.includes(s.key)).map((s) => ({ key: s.key, name: s.display_name || s.key, gone: !proposalHelperEligible(s as never) })),
+            ...form.helpers.filter((k) => !roster.some((s) => s.key === k)).map((k) => ({ key: k, name: k, gone: true })),
           ].map((s) => {
             const on = form.helpers.includes(s.key);
             return (
@@ -320,7 +323,7 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
           })}
         </span>
         <span data-testid="proposal-answer-council" role={form.helpers.length !== ANSWER_SEATS ? 'alert' : undefined}>
-          {!form.helpers.every(available)
+          {roster !== null && !form.helpers.every(eligible)
             ? 'A helper on this proposal is no longer available: leave it out and choose another.'
             : form.helpers.length === ANSWER_SEATS
               ? `${seatName(form.helpers[0]!)} and ${seatName(form.helpers[1]!)}: one writes, the other checks`

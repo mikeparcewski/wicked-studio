@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -22,7 +22,7 @@ const { useSheets } = await import('../src/store/sheets.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { makeUnit, makeView } = await import('./factories.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
-const { formSources, proposalFormEdits, proposalFormOf, resetSettledProposals } = await import('../src/board/artifactProposal.js');
+const { formSources, proposalFormEdits, proposalFormOf, repoKeysOf, resetSettledProposals, PROPOSAL_STARTING_MS } = await import('../src/board/artifactProposal.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 
 const T0 = 1_700_000_000_000;
@@ -59,7 +59,7 @@ const TURN = [
 
 let chatBody: Record<string, unknown> = {};
 const posts: Array<{ path: string; body: unknown }> = [];
-let decideAnswer: () => Response = () => new Response('{}', { status: 500 });
+let decideAnswer: () => Response | Promise<Response> = () => new Response('{}', { status: 500 });
 const ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 
 function setup(p: Proposal = proposal()): void {
@@ -297,6 +297,58 @@ describe('Change something on a create card (A3)', () => {
     await waitFor(() => expect(screen.getByTestId('artifact-proposal-error').textContent).toBe('could not start it: the engine is restarting. Go again resumes the same job.'));
     expect(screen.queryByTestId('proposal-answer-form')).toBeNull();
     expect(screen.getAllByText('could not start it: the engine is restarting. Go again resumes the same job.')).toHaveLength(1);
+  });
+
+  it('"Starting it…" ends on the same card when its window closes: Go again appears without a remount', async () => {
+    const now = Date.now();
+    chatBody = { ...chatBody, messages: [
+      ...TURN,
+      { at: now - 2000, turnId: 't1', kind: 'proposal', proposal: proposal() },
+      { at: now - (PROPOSAL_STARTING_MS - 300), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
+    ] };
+    page();
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
+    expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
+    // The window closes ~300 ms later on this same mounted card.
+    await screen.findByTestId('artifact-proposal-go-again', undefined, { timeout: 2000 });
+    expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+  });
+
+  it('a live accepting record closes the form before the answer fails with no view: the refusal shows once, under the card', async () => {
+    let release!: (r: Response) => void;
+    decideAnswer = () => new Promise<Response>((r) => { release = r; }) as unknown as Response;
+    const form = await openForm();
+    fireEvent.click(within(form).getByTestId('proposal-answer-go'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    // The transcript's accepting record arrives first (another read), closing the form.
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: Date.now(), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('accepting'));
+    expect(screen.queryByTestId('proposal-answer-form')).toBeNull();
+    release(new Response(JSON.stringify({ error: 'the gateway dropped the answer' }), { status: 502, headers: { 'content-type': 'application/json' } }));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-error').textContent).toBe('the gateway dropped the answer'));
+    expect(screen.getAllByText('the gateway dropped the answer')).toHaveLength(1);
+  });
+
+  it('a helper that is on the roster but cannot work (signed out) is said, and Make it waits for two that can', async () => {
+    setCachedRoster([
+      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, auth: 'signed_out' } as never,
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true } as never,
+      { key: 'agy', display_name: 'Antigravity', binary: 'agy', enabled_for_council: true } as never,
+    ]);
+    const form = await openForm();
+    const out = within(form).getAllByTestId('proposal-answer-seat').find((s) => s.getAttribute('data-seat') === 'claude')!;
+    expect(out.textContent).toBe('Claude Code (not available)');
+    expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(true);
+    fireEvent.click(out);
+    fireEvent.click(within(form).getAllByTestId('proposal-answer-seat').find((s) => s.getAttribute('data-seat') === 'agy')!);
+    expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(false);
+  });
+
+  it('two repositories that share a name are told apart by their id', () => {
+    expect(repoKeysOf(proposal({ repos: ['shared', 'shared', 'crew'], repoRefs: ['r-a', 'r-b', 'r-c'] }))).toStrictEqual([
+      { key: 'r-a', label: 'shared (r-a)' }, { key: 'r-b', label: 'shared (r-b)' }, { key: 'r-c', label: 'crew' },
+    ]);
   });
 
   it('under the test configuration a create card no longer says it starts nothing; a refine card still does', async () => {

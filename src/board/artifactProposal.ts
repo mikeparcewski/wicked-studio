@@ -50,11 +50,15 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   if (!Array.isArray(p['sources']) || !p['sources'].every(isSource)) return false;
   if (!Array.isArray(p['repos']) || !p['repos'].every(str)) return false;
   const helpers = p['helpers'];
-  if (helpers !== null && (!isObj(helpers) || !str(helpers['label']))) return false;
+  if (helpers !== null && (!isObj(helpers) || !str(helpers['label']) || !Array.isArray(helpers['seats']) || !helpers['seats'].every(str))) return false;
+  // (A3) What the answer form reads: the repositories' ids, a retry's document.
+  const refs = p['repoRefs'];
+  if (refs !== undefined && (!Array.isArray(refs) || !refs.every(str))) return false;
+  if (p['artifactRef'] !== undefined && !str(p['artifactRef'])) return false;
   const time = p['time'];
   if (time !== null && (!isObj(time) || !str(time['label']))) return false;
   const filed = p['filedIn'];
-  if (!isObj(filed) || !str(filed['label'])) return false;
+  if (!isObj(filed) || !str(filed['label']) || !(filed['projectId'] === null || str(filed['projectId']))) return false;
   const target = p['target'];
   if (target !== undefined && (!isObj(target) || !str(target['title']) || typeof target['base'] !== 'number')) return false;
   const theme = p['theme'];
@@ -285,9 +289,20 @@ export function proposalTimeWords(p: ArtifactProposal): string | null {
 
 // ── New document in "answer this proposal" mode (slice A3, DES §4.2 Change something on a create) ─────────────────────
 
-/** The proposal's repositories as the form keys them: the registry id when crew sent one, else the name. */
+/** The proposal's repositories as the form keys them: the registry id when crew sent one, else the name. Two that share
+ *  a name are told apart by their id in the label. */
 export function repoKeysOf(p: ArtifactProposal): Array<{ key: string; label: string }> {
-  return p.repos.map((name, i) => ({ key: p.repoRefs?.[i] ?? name, label: name }));
+  return p.repos.map((name, i) => {
+    const key = p.repoRefs?.[i] ?? name;
+    const shared = p.repos.filter((n) => n === name).length > 1;
+    return { key, label: shared && key !== name ? `${name} (${key})` : name };
+  });
+}
+
+/** Whether a roster seat can be one of a proposal's two helpers: crew's own rule at Go (`rosterEligible`): enabled for
+ *  councils, eligible for work, not signed out, not opt-in. */
+export function proposalHelperEligible(seat: { enabled_for_council?: boolean } & Record<string, unknown>): boolean {
+  return seat.enabled_for_council === true && seat['seat_eligible_for_work'] !== false && seat['auth'] !== 'signed_out' && seat['optIn'] !== true;
 }
 
 /** What the form edits. `project`: the target project id, `null` = Unfiled. `repos`: repository keys ({@link repoKeysOf}). */
