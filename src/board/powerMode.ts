@@ -541,18 +541,10 @@ function stateAt(p: PowerState): number {
  */
 export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | null | undefined, local: PowerState | null = null, localAt: number | null = null): PowerState | null {
   let base = p;
-  // This page's own answer (a flip, a raise, a pause answered) is the newest word on what it changed, until the session
-  // catches up with it.
-  const usedLocal = local !== null && (base === null || historyTip(local) > historyTip(base));
-  // Caught up (the same rigor changes and flips): the session's live progress (turns, the turn log, the outcome,
-  // check-points, hand-off) is the newer word, not the frozen snapshot this page's POST answered with (Copilot on #937:
-  // after a flip the panel stopped updating). Only a pause this page already answered stays answered until the session
-  // says so too (applied after the frames are folded, below).
-  const caughtUp = !usedLocal && local !== null && base !== null && historyTip(local) === historyTip(base);
-  if (usedLocal) base = { ...local! };
+  // This page's own answer (a flip, a raise, a pause answered) is the newest word on what it changed.
+  const usedLocal = local !== null && (base === null || historyTip(local) >= historyTip(base));
+  if (usedLocal) base = p !== null && historyTip(local!) === historyTip(p) ? withLiveProgress(local!, p) : { ...local! };
   if (base === null) return null;
-  // Frames after the session's own state are news: a caught-up session still folds the turns and check-points that
-  // came live before this page's answer (agy on 9d); only this page's own snapshot moves `since` to when it answered.
   const since = Math.max(stateAt(base), usedLocal && localAt !== null ? localAt : 0);
   const history = new Map<number, RigorChange>(base.history.map((c) => [c.seq, c]));
   let toggles = base.toggles;
@@ -597,11 +589,27 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
   const baseNewest = base.toggles.reduce((m, t) => Math.max(m, t.at), -1);
   const on = newest !== undefined && newest.at > baseNewest ? newest.on : base.on;
   const rigor = tip !== undefined && isRigor(tip.to) ? tip.to : base.rigor ?? plan?.rigor ?? null;
-  let pause = framePause === undefined ? base.pause : framePause;
-  // A pause this page answered stays answered when a caught-up session (or a frame it has not yet folded) still shows
-  // it; a pause opened after the answer shows.
-  if (caughtUp && local!.pause === null && localAt !== null && pause != null && pause.at <= localAt) pause = null;
+  const pause = framePause === undefined ? base.pause : framePause;
   return { ...base, on, rigor, plan, history: ordered, toggles, checkpoints, handoff, pause: on ? pause : null };
+}
+
+/**
+ * This page's answer, with the run's live progress from a session read that has caught up with it (the same rigor
+ * changes and flips): the answer is a snapshot taken when it was sent, so its turns, turn log, check-points, hand-off
+ * and outcome froze there (Copilot on #937: after a flip the power panel stopped updating). Each takes whichever side is
+ * further along, never going back; what the answer changed (on, rigor, history, toggles, pause) stays the answer's.
+ */
+function withLiveProgress(local: PowerState, p: PowerState): PowerState {
+  const handoffAt = (h: PowerState['handoff']): number => (h === null ? -1 : h.round * 1e15 + h.steps.reduce((m, st) => Math.max(m, st.at ?? 0), 0));
+  const turnLog = (p.turnLog?.length ?? 0) >= (local.turnLog?.length ?? 0) ? p.turnLog : local.turnLog;
+  return {
+    ...local,
+    orchestrator: p.orchestrator.turns >= local.orchestrator.turns ? p.orchestrator : local.orchestrator,
+    ...(turnLog !== undefined ? { turnLog } : {}),
+    checkpoints: Math.max(p.checkpoints, local.checkpoints),
+    handoff: handoffAt(p.handoff) >= handoffAt(local.handoff) ? p.handoff : local.handoff,
+    outcome: p.outcome ?? local.outcome,
+  };
 }
 
 function historyTip(p: PowerState): number {

@@ -55,8 +55,6 @@ export interface NeedsSourcesState {
   load: (maxAgeMs?: number) => Promise<void>;
   /** The repo register, read through the same freshness rule (the board model's join). */
   loadRepos: (maxAgeMs?: number) => Promise<RepoEntry[]>;
-  /** The pending proposals, read through the same freshness rule (the Desk's memory reading). */
-  loadProposals: (maxAgeMs?: number) => Promise<Proposal[] | null>;
   /** Store writes of a wire another surface already read — zero requests. */
   depositChats: (chats: LiveChatSnapshot[]) => void;
   depositProposals: (pending: Proposal[]) => void;
@@ -65,8 +63,6 @@ export interface NeedsSourcesState {
 
 /** In-flight reads, one per wire. */
 const inflight: Partial<Record<NeedsSource, Promise<void>>> = {};
-/** A read queued behind an in-flight one for a caller that needs an answer newer than it, one per wire. */
-const followUp: Partial<Record<NeedsSource, Promise<void>>> = {};
 
 /** Deferred so a synchronous throw (a client without the route, a partial mock) is a miss. */
 const attempt = <T,>(fn: () => Promise<T>): Promise<T> => Promise.resolve().then(fn);
@@ -92,16 +88,7 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
 
   const read = (source: NeedsSource, maxAgeMs: number): Promise<void> => {
     const running = inflight[source];
-    if (running !== undefined) {
-      if (maxAgeMs > 0) return running;
-      // A read that must be current (the operator came back), asked while an older read is out: that one may predate
-      // the change, so ONE shared read follows it (codex on 9d).
-      const queued = followUp[source];
-      if (queued !== undefined) return queued;
-      const next = running.then(() => { delete followUp[source]; return read(source, 0); });
-      followUp[source] = next;
-      return next;
-    }
+    if (running !== undefined) return running;
     const at = get().readAt[source];
     if (at !== undefined && Date.now() - at < maxAgeMs) return Promise.resolve();
     const p = readers[source]()
@@ -129,7 +116,6 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     readOk: {},
     load: (maxAgeMs = Infinity) => Promise.all(SOURCES.map((s) => read(s, maxAgeMs))).then(() => undefined),
     loadRepos: (maxAgeMs = Infinity) => read('repos', maxAgeMs).then(() => get().repos ?? []),
-    loadProposals: (maxAgeMs = Infinity) => read('proposals', maxAgeMs).then(() => get().proposals),
     depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() }, readOk: { ...s.readOk, chats: true } })),
     depositProposals: (pending) =>
       set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() }, readOk: { ...s.readOk, proposals: true } })),

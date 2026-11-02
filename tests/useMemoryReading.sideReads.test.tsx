@@ -1,7 +1,8 @@
 /**
- * The Desk's memory reading: its side reads (pending memory proposals, indexed repositories) settle to a count or
- * nothing, whatever they answer (CI r9b: `listRepos` answering without `repos` threw inside its success callback,
- * past its own rejection handler, and left unhandled rejections that failed the run).
+ * The Desk's memory reading: the coverage total from GET /memory/coverage, with the memory proposals waiting and the
+ * indexed repositories READ from the Home queue's store (never fetched here). Cold Home reads each queue input once
+ * (needs_shell); a count shows only while the queue's last read of that wire answered; the total never waits on them
+ * (studio#944); nothing rejects unobserved (CI r9b).
  */
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -11,30 +12,61 @@ const memoryCoverage = vi.fn();
 const listProposals = vi.fn();
 vi.mock('../src/api/client.js', () => ({ api: { listRepos } }));
 vi.mock('../src/api/memory.js', () => ({ memoryCoverage, isMemoryUnsupported: () => false }));
-vi.mock('../src/api/proposals.js', () => ({ listProposals, proposalKind: () => 'memory' }));
+vi.mock('../src/api/proposals.js', () => ({ listProposals, proposalKind: (p: { kind?: string }) => p.kind ?? 'memory' }));
 
 const { useMemoryReading } = await import('../src/hooks/useMemoryReading.js');
+const { useNeedsSources } = await import('../src/store/needsSources.js');
 
-describe('useMemoryReading side reads', () => {
+describe('useMemoryReading', () => {
   afterEach(() => vi.clearAllMocks());
 
-  it('a repositories answer without `repos` leaves the count out; the reading still lands', async () => {
-    memoryCoverage.mockResolvedValue({ total: 12 });
-    listProposals.mockResolvedValue([{}, {}]);
-    listRepos.mockResolvedValue({});
-    const { result } = renderHook(() => useMemoryReading(true));
-    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 12, pending: 2 }));
-  });
-
-  it('a proposals answer that is not a list leaves its count out', async () => {
-    memoryCoverage.mockResolvedValue({ total: 3 });
-    listProposals.mockResolvedValue({ proposals: [] });
+  it('reads no queue input itself: a cold Home reads /proposals and /repos once (needs_shell)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 4 });
+    listProposals.mockResolvedValue([{ kind: 'memory' }, { kind: 'policy' }]);
     listRepos.mockResolvedValue({ repos: [{ code_graph_db: '/x/estate.db' }, { code_graph_db: '' }] });
     const { result } = renderHook(() => useMemoryReading(true));
-    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 3, indexedRepos: 1 }));
+    await act(async () => { await useNeedsSources.getState().load(); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 4, pending: 1, indexedRepos: 1 }));
+    expect(listProposals).toHaveBeenCalledTimes(1);
+    expect(listRepos).toHaveBeenCalledTimes(1);
   });
 
-  it('when the coverage read fails, an odd side answer rejects nothing unobserved', async () => {
+  it('the total never waits on the side counts (studio#944)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 12 });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 12 }));
+    expect(listProposals).not.toHaveBeenCalled();
+    expect(listRepos).not.toHaveBeenCalled();
+  });
+
+  it('a malformed or failed queue read leaves its count out, though the queue keeps its last good list (codex + agy on 9d)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 3 });
+    listProposals.mockResolvedValue([{ kind: 'memory' }]);
+    listRepos.mockResolvedValue({ repos: [{ code_graph_db: '/x/estate.db' }] });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await act(async () => { await useNeedsSources.getState().load(); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 3, pending: 1, indexedRepos: 1 }));
+    // the next queue read: /repos answers without a list, /proposals fails
+    listRepos.mockResolvedValue({ repos: {} });
+    listProposals.mockRejectedValue(new Error('503'));
+    await act(async () => { await useNeedsSources.getState().load(0); });
+    expect(useNeedsSources.getState().repos).toHaveLength(1);
+    expect(useNeedsSources.getState().readOk).toMatchObject({ repos: false, proposals: false });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 3 }));
+  });
+
+  it('a 404 on a queue input is an empty list for the queue, but no count here', async () => {
+    const { ApiError } = await import('../src/api/errors.js');
+    memoryCoverage.mockResolvedValue({ total: 2 });
+    listProposals.mockRejectedValue(new ApiError(404, 'no route', {}));
+    listRepos.mockResolvedValue({ repos: [] });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await act(async () => { await useNeedsSources.getState().load(); });
+    expect(useNeedsSources.getState().proposals).toEqual([]);
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, indexedRepos: 0 }));
+  });
+
+  it('when the coverage read fails, nothing rejects unobserved', async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (e: unknown): void => { unhandled.push(e); };
     process.on('unhandledRejection', onUnhandled);
@@ -43,82 +75,12 @@ describe('useMemoryReading side reads', () => {
       listProposals.mockResolvedValue(null);
       listRepos.mockResolvedValue({});
       const { result } = renderHook(() => useMemoryReading(true));
+      await act(async () => { await useNeedsSources.getState().load(); });
       await waitFor(() => expect(result.current).toEqual({ state: 'down', reason: 'daemon down' }));
       await new Promise((r) => setTimeout(r, 20));
       expect(unhandled).toEqual([]);
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
-  });
-
-  it('reads /proposals and /repos once with Home\u2019s queue, not again on its own (needs_shell)', async () => {
-    const { useNeedsSources } = await import('../src/store/needsSources.js');
-    memoryCoverage.mockResolvedValue({ total: 4 });
-    listProposals.mockResolvedValue([{}]);
-    listRepos.mockResolvedValue({ repos: [{ code_graph_db: '/x/estate.db' }] });
-    const home = useNeedsSources.getState().load();
-    const { result } = renderHook(() => useMemoryReading(true));
-    await home;
-    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 4, pending: 1, indexedRepos: 1 }));
-    expect(listProposals).toHaveBeenCalledTimes(1);
-    expect(listRepos).toHaveBeenCalledTimes(1);
-  });
-
-  it('a read that FAILED is left out, though the queue keeps a value: a 404, or a later failure after an answer (codex + agy on 9d)', async () => {
-    const { ApiError } = await import('../src/api/errors.js');
-    memoryCoverage.mockResolvedValue({ total: 2 });
-    listProposals.mockRejectedValue(new ApiError(404, 'no route', {}));
-    listRepos.mockResolvedValue({ repos: [] });
-    const { result, unmount } = renderHook(() => useMemoryReading(true));
-    // the queue reads the 404 as an empty list; the memory reading does not count it as "none"
-    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, indexedRepos: 0 }));
-    unmount();
-  });
-
-  it('coming back to the window reads the side inputs again, whatever their age; a failed re-read is left out (codex + agy on 9d)', async () => {
-    memoryCoverage.mockResolvedValue({ total: 2 });
-    listProposals.mockResolvedValue([]);
-    listRepos.mockResolvedValue({ repos: [] });
-    const { result } = renderHook(() => useMemoryReading(true));
-    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, pending: 0, indexedRepos: 0 }));
-    expect(listProposals).toHaveBeenCalledTimes(1);
-    // the daemon filed a memory proposal meanwhile; the operator comes back within 30 s
-    listProposals.mockResolvedValue([{}]);
-    await act(async () => { window.dispatchEvent(new Event('focus')); });
-    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, pending: 1, indexedRepos: 0 }));
-    expect(listProposals).toHaveBeenCalledTimes(2);
-    // and a re-read that fails is left out, not the old count
-    listProposals.mockRejectedValue(new Error('503'));
-    await act(async () => { window.dispatchEvent(new Event('focus')); });
-    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, indexedRepos: 0 }));
-  });
-
-  it('a malformed answer is a failed read: the queue keeps its last good list, and the count is left out (codex on 9d)', async () => {
-    const { useNeedsSources } = await import('../src/store/needsSources.js');
-    listRepos.mockResolvedValueOnce({ repos: [{ code_graph_db: '/x/estate.db' }] });
-    await useNeedsSources.getState().loadRepos(0);
-    expect(useNeedsSources.getState().repos).toHaveLength(1);
-    listRepos.mockResolvedValueOnce({ repos: {} });
-    await useNeedsSources.getState().loadRepos(0);
-    expect(useNeedsSources.getState().repos).toHaveLength(1);
-    expect(useNeedsSources.getState().readOk.repos).toBe(false);
-    listProposals.mockResolvedValueOnce({ proposals: [] });
-    await useNeedsSources.getState().loadProposals(0);
-    expect(useNeedsSources.getState().readOk.proposals).toBe(false);
-  });
-
-  it('a read that must be current, asked while an older read is out, gets one more read after it (codex on 9d)', async () => {
-    const { useNeedsSources } = await import('../src/store/needsSources.js');
-    let first!: (v: unknown) => void;
-    listRepos.mockReturnValueOnce(new Promise((r) => { first = r; }));
-    listRepos.mockResolvedValueOnce({ repos: [{ code_graph_db: '/x/estate.db' }] });
-    const older = useNeedsSources.getState().loadRepos();
-    const forced = useNeedsSources.getState().loadRepos(0);
-    const forcedToo = useNeedsSources.getState().loadRepos(0);
-    first({ repos: [] });
-    await older;
-    await Promise.all([forced, forcedToo]);
-    expect(listRepos).toHaveBeenCalledTimes(2);
-    expect(useNeedsSources.getState().repos).toHaveLength(1);
   });
 });

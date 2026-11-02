@@ -140,25 +140,13 @@ describe('the state as it stands now', () => {
     expect(merged.orchestrator.turns).toBe(6);
     expect(merged.checkpoints).toBe(4);
     expect(merged.on).toBe(false);
-    // before the session caught up (an older read without the flip), this page's answer still leads
+    // an older session read (taken before this page's answer, at the same tip) never takes the progress back
+    const older = state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 1, inTurn: true, sessionRestarts: 0 }, checkpoints: 1 });
+    const kept = mergePower(older, [], local, at(25))!;
+    expect(kept.orchestrator.turns).toBe(2);
+    expect(kept.checkpoints).toBe(2);
+    // before the session caught up (a read without the flip), this page's answer leads
     expect(mergePower(state(), [], local, at(25))!.on).toBe(false);
-  });
-  it('a pause this page answered stays answered while the caught-up session still shows it; a later pause shows', () => {
-    const pz = (min: number) => ({ at: at(min), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const });
-    const local = state({ pause: null });
-    expect(mergePower(state({ pause: pz(29) }), [], local, at(30))!.pause).toBeNull();
-    expect(mergePower(state({ pause: pz(31) }), [], local, at(30))!.pause).toEqual(pz(31));
-  });
-  it('a caught-up session still folds the frames that came before this page\'s answer; the answered pause stays answered (agy on 9d)', () => {
-    const pz = { at: at(29), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };
-    const cp = { type: 'powerCheckpointReached', session: 'r', ord: 1, checkpoint: 3, turn: 3, trigger: 'turn', head: null, picked: 0, rigor: 'highest', paused: true, pause: pz, ts: at(29) };
-    // the session was read before the check-point; this page answered its pause at 30
-    const merged = mergePower(state({ checkpoints: 2 }), events([cp]), state({ pause: null }), at(30))!;
-    expect(merged.checkpoints).toBe(3);
-    expect(merged.pause).toBeNull();
-    // this page's answer at 30 was something else (its snapshot still shows the pause): the pause that opened at 29,
-    // after the session was read, shows (the old code took 30 as "since" and hid it)
-    expect(mergePower(state({ checkpoints: 2 }), events([cp]), state({ pause: pz }), at(30))!.pause).toEqual(pz);
   });
   it('a checkpoint frame that opened a pause pauses the run until the next turn starts; this page\'s answer clears it', () => {
     const pz = { at: at(29), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };
