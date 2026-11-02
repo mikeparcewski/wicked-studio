@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 /**
  * The merged product (DES-MERGE-001) ships under its own name. These cases pin the
@@ -20,10 +20,10 @@ vi.mock('../src/api/client.js', () => ({
 const { SessionRail } = await import('../src/components/desk/SessionRail.js');
 
 describe('visible product name', () => {
-  it('the session rail brand reads wicked studio', () => {
+  it('the session rail brand is the Wicked Studio lockup', () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
-    // The Desk's rail brand (the classic sidebar's "wicked-studio" button retired with S18d).
-    expect(screen.getByTestId('desk-rail-brand').textContent?.replace(/\s+/g, ' ').trim()).toBe('wicked studio');
+    // The Desk's rail brand (the classic sidebar's "wicked-studio" button retired with S18d); drawn since fonts-v3.
+    expect(within(screen.getByTestId('desk-rail-brand')).getByRole('img', { name: 'Wicked Studio' })).toBeInTheDocument();
   });
 
   it('the document title reads wicked-studio', () => {

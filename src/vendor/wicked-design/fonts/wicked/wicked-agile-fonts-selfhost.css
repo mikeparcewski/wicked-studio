@@ -2,7 +2,7 @@
 
 @font-face {
   font-family: 'Wicked Sans';
-  src: url('./WickedSans-Regular.woff2') format('woff2');
+  src: url('./WickedSansA-Regular.woff2') format('woff2');
   font-weight: 100 499;
   font-style: normal;
   font-display: swap;
@@ -10,7 +10,7 @@
 
 @font-face {
   font-family: 'Wicked Sans';
-  src: url('./WickedSans-SemiBold.woff2') format('woff2');
+  src: url('./WickedSansA-SemiBold.woff2') format('woff2');
   font-weight: 500 900;
   font-style: normal;
   font-display: swap;

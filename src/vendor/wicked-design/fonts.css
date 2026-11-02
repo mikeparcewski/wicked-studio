@@ -1,7 +1,8 @@
 /* wicked-design faces, self-hosted: 0 requests to a font CDN, and a face downloads only when text uses it.
  *
- * The brand's own faces come first in every stack (fonts/wicked/, drawn in code by
- * scripts/fonts/build_wicked_fonts.py, v2, approved 2026-11-01):
+ * The Wicked faces come first in every stack (fonts/wicked/): Wicked Sans is the fonts-v3 cut of Inter
+ * (OFL, scripts/fonts/build_wicked_sans.py, the operator's pick 2026-11-02); Serif and Script are drawn
+ * in code by scripts/fonts/build_wicked_fonts.py (v2, approved 2026-11-01):
  *
  *   --font-sans     'Wicked Sans' 400 + 600  -> Inter           every UI word (500 and up draw the 600)
  *   --font-display  'Wicked Serif'           -> Marcellus       display sizes and brand moments
@@ -10,8 +11,9 @@
  *   (Wicked Serif and Wicked Script have one face each, drawn at every weight: never faux-bolded.)
  *   --font-mono                                 JetBrains Mono  code, ids, data
  *
- * The Wicked faces cover basic Latin, UI punctuation and a few symbols only (no accented letters), so
- * the browser draws any other character in the next face of the stack. Those fallbacks are the
+ * Wicked Sans covers Latin-1, Latin Extended-A and the UI symbols; Serif and Script cover basic Latin,
+ * UI punctuation and a few symbols only (no accented letters). The browser draws any other character in
+ * the next face of the stack. Those fallbacks are the
  * @fontsource 5.3.0 latin + latin-ext subsets, unmodified (Inter and JetBrains Mono are the files
  * wicked-studio already self-hosts). Licences and copyright lines: licenses/LICENSE-*.txt and LICENSE.
  */

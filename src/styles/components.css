@@ -649,8 +649,15 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-rail-brand { font-size: var(--text-lg); color: var(--ink-muted); display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wk-rail-brand b { color: var(--ink-high); }
 .wk-rail-brand-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-/* The wordmark: a yellow dot with a harbor ring (DESIGN-simple §1a). */
-.wk-rail-brand .wk-desk-dot, .wk-desk-avatar .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
+/* The brand marks (fonts-v3, 2026-11-02; BrandMarks.tsx): the vendored SVG as a mask over the ink, so the
+   lockup follows the theme like text. In the rail and the phone top bar it is the high ink. */
+.wk-brand-svg {
+  display: inline-block; flex-shrink: 0; background-color: currentColor;
+  mask-repeat: no-repeat; mask-position: center; mask-size: contain;
+  -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-size: contain;
+}
+.wk-rail-brand .wk-brand-svg, .wk-topbar-brand .wk-brand-svg { color: var(--ink-high); }
+.wk-desk-avatar .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
 /* The action row (DES-SYSTEM-CHAT §1): four equal icon buttons — New job · New project · Chat · Search. */
 .wk-rail-actions { display: flex; align-items: center; gap: 6px; margin: 0 10px 10px; }
 .wk-rail-action {
@@ -1909,7 +1916,6 @@ html :is(input, textarea)::placeholder { color: var(--ink-placeholder); opacity:
   .wk-topbar-menu { width: var(--tap-min); height: var(--tap-min); min-width: var(--tap-min); color: var(--ink-high); }
   .wk-topbar-brand { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
   .wk-topbar-brand b { color: var(--ink-high); }
-  .wk-topbar-brand .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
   .wk-topbar-badge { flex-shrink: 0; padding-right: var(--space-2); }
   .wk-topbar-search { width: var(--tap-min); height: var(--tap-min); min-width: var(--tap-min); color: var(--ink-high); }
   .wk-topbar-checking { color: var(--ink-muted); font-size: var(--text-xs); }

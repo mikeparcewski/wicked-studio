@@ -13,6 +13,12 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Changed
+- **The type and the marks (fonts-v3, the operator's pick 2026-11-02).** The text face is Wicked Sans A, an OFL cut
+  of Inter (same family name and weights; its licence ships as `dist/fonts/LICENSE-WickedSans.txt`). The rail's
+  wordmark and the phone top bar show the Wicked Studio lockup, the Shoreline mark beside the Wave W lettering, in
+  place of the yellow dot and the serif name. A custom site name sits beside the Shoreline mark, and a custom logo
+  beside the lettering. The favicon is the Shoreline mark. The design package is re-vendored from wicked-web
+  77fd34c; its tokens are unchanged.
 - **Memory, Steer and Jobs lists (operator 2026-11-01).**
   - **Memory:** the header's Review proposals and Add a memory buttons are gone. Pills over the list, like Steer's,
     switch between Active, Proposed (N) and Not accepted. Add a memory is the first item in the header's ⋯ menu.

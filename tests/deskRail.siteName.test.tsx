@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 
 /**
  * studio#512 — Theme › Site name promises "the product name shown beside the logo in the chrome";
@@ -35,18 +35,20 @@ describe('the Desk rail brand and Theme › Site name (studio#512)', () => {
     const b = brand();
     expect(b.textContent?.replace(/\s+/g, ' ').trim()).toBe('Reel studio');
     expect(b.textContent).not.toContain('wicked');
+    // the user's words beside the Shoreline mark, not the Wicked Studio lockup
+    expect(b).toContainElement(screen.getByTestId('desk-rail-mark'));
+    expect(screen.queryByTestId('desk-rail-lockup')).toBeNull();
     // The wordmark is the link Home, named "Home" whatever the site is called.
     expect(screen.getByTestId('desk-rail-wordmark')).toContainElement(b);
     expect(screen.getByTestId('desk-rail-wordmark')).toHaveAccessibleName('Home');
   });
 
-  it('blank keeps the default wordmark', () => {
-    expect(brand().textContent?.replace(/\s+/g, ' ').trim()).toBe('wicked studio');
+  it('blank keeps the default wordmark: the drawn Wicked Studio lockup', () => {
+    expect(within(brand()).getByRole('img', { name: 'Wicked Studio' })).toHaveAttribute('data-testid', 'desk-rail-lockup');
   });
 
   it('follows a later change (the Theme page saves while the rail is up)', () => {
-    const b = brand();
-    expect(b.textContent).toContain('wicked');
+    expect(within(brand()).getByRole('img', { name: 'Wicked Studio' })).toBeInTheDocument();
     act(() => { useAppearanceStore.getState().update({ site_name: 'Acme desk' }); });
     expect(screen.getByTestId('desk-rail-brand').textContent?.replace(/\s+/g, ' ').trim()).toBe('Acme desk');
   });

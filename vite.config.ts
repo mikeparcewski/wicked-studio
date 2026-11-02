@@ -28,8 +28,10 @@ function emitTestidInventory(): Plugin {
 // DES-STUDIO-REBUILD-001 S1: the self-hosted fonts are SIL OFL 1.1, whose condition 2 wants the
 // licence text to travel with the font files. Vite fingerprints the woff2 files into dist/assets;
 // this emits each family's licence beside them as dist/fonts/LICENSE-*.txt (crew serves dist/).
+// Wicked Sans (fonts-v3, an OFL cut of Inter) ships from the vendored design package: its licence too.
 function emitFontLicences(): Plugin {
   const dir = new URL('./src/assets/fonts/', import.meta.url);
+  const vendored = new URL('./src/vendor/wicked-design/licenses/LICENSE-WickedSans.txt', import.meta.url);
   return {
     name: 'emit-font-licences',
     apply: 'build',
@@ -37,6 +39,7 @@ function emitFontLicences(): Plugin {
       for (const name of readdirSync(dir).filter((f) => f.startsWith('LICENSE-'))) {
         this.emitFile({ type: 'asset', fileName: `fonts/${name}`, source: readFileSync(new URL(name, dir), 'utf8') });
       }
+      this.emitFile({ type: 'asset', fileName: 'fonts/LICENSE-WickedSans.txt', source: readFileSync(vendored, 'utf8') });
     },
   };
 }

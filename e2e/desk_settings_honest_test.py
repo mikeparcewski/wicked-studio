@@ -4,7 +4,7 @@ desk_settings_honest_test.py — SETTINGS AND THEME SAY WHAT IS TRUE at 1440x700
 (studio#512, #513, #517, #518 — four defects the W12 reel found on the released 0.6.1 Desk).
 
   1. #512 — Theme › Site name is shown under the Desk skin: the rail's brand reads the saved name
-     ("Reel studio"), and follows a change typed on the Theme page; blank keeps "wicked studio".
+     ("Reel studio"), and follows a change typed on the Theme page; blank keeps the Wicked Studio lockup.
   2. #513 — Notifications with the browser permission DENIED: the "permission blocked" line is there
      on load and STAYS after Desktop is picked (`requestPermission()` resolves "default" while the
      permission stays "denied"); a dismissed prompt (permission "default") says the browser did not
@@ -108,10 +108,11 @@ with sync_playwright() as p:
     held(page, "() => document.querySelector('[data-testid=\"desk-rail-brand\"]')?.innerText.includes('Acme desk')")
     typed = page.locator(".wk-rail-brand").inner_text().replace("\n", " ").strip()
     inp.fill("")
-    held(page, "() => /wicked\\s*studio/i.test(document.querySelector('.wk-rail-brand')?.innerText || '')")
-    blank = page.locator(".wk-rail-brand").inner_text().replace("\n", " ").strip()
+    # blank: the default brand, the drawn Wicked Studio lockup (fonts-v3), named for assistive tech
+    held(page, "() => !!document.querySelector('.wk-rail-brand [data-testid=\"desk-rail-lockup\"]')")
+    blank = page.locator('.wk-rail-brand [data-testid="desk-rail-lockup"]').get_attribute("aria-label") or ""
     page.screenshot(path=str(SHOTS / "desk-settings-honest-site-name.png"))
-    check("site-name-on-rail", has_brand and saved == "Reel studio" and typed == "Acme desk" and "wicked" in blank.lower() and "studio" in blank.lower(), has_brand=has_brand, saved=saved, typed=typed, blank=blank)
+    check("site-name-on-rail", has_brand and saved == "Reel studio" and typed == "Acme desk" and blank == "Wicked Studio", has_brand=has_brand, saved=saved, typed=typed, blank=blank)
     ctx.close()
 
     # ── 2. notifications: blocked stays said; a dismissed prompt is named (#513) ─────────────
