@@ -162,7 +162,8 @@ describe('RequirementsModal — coverage label and corroboration (operator rulin
 
   it('crew 0.167.0: a row on a type shape is "not counted", the page says how many, and an empty Config & data filter is gone', async () => {
     const live = { realPct: 80, minPct: 80, behaviorBearing: 4333, real: 3476, placeholders: 836, unmapped: 21, notProduct: 2256 };
-    const shape = { ...validated, key: 'chat::REQ-061', reqId: 'REQ-061', title: 'ChatAttachmentError', uncounted: 'structural',
+    // also a placeholder: "not counted" stands instead of the placeholder mark too (codex r8)
+    const shape = { ...validated, key: 'chat::REQ-061', reqId: 'REQ-061', title: 'ChatAttachmentError', uncounted: 'structural', placeholder: true,
       statement: 'Attachment refusals must use one of attachment_too_large or attachment_type.', risk: true, riskSource: 'data' };
     listRequirements.mockReset().mockResolvedValue({
       ...page([validated, shape] as unknown as RequirementsPage['items'], 2, 2), coverage: live,
