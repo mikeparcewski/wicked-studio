@@ -688,6 +688,9 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .hits-bar { width: 40%; }
 .hits-bar i { display: block; height: 6px; border-radius: 6px; background: var(--ink); transform-origin: left; transform: scaleX(var(--w)); transition: transform .8s var(--ease); }
 .reach-card.is-pre .hits-bar i { transform: scaleX(0); transition: none; }
+/* the summary waits for the counts, so the example never reads "8 hits" over a row of zeros */
+.hits caption { transition: opacity .3s var(--ease); }
+.reach-card.is-pre .hits caption { opacity: 0; transition: none; }
 .hits tr { border-top: 1px solid var(--hairline); }
 .reach-limit { font-size: var(--text-body) !important; color: var(--muted) !important; }
 
