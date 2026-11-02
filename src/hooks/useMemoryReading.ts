@@ -4,7 +4,10 @@ import { proposalKind } from '../api/proposals.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import type { MemoryReading } from '../board/deskModel.js';
 
-type Coverage = { state: 'ok'; total: number } | { state: 'down'; reason: string } | { state: 'unknown' };
+// `forProposals`: the queue's proposals list as it stood when this total was read. A pending count is published only next
+// to a total read at the same moment, so accepting proposals (which empties the list) never pairs a fresh zero with a
+// total read before the memories were saved (codex r8 on 9d).
+type Coverage = { state: 'ok'; total: number; forProposals: unknown } | { state: 'down'; reason: string } | { state: 'unknown' };
 
 /**
  * How much memory the workspace holds (`GET /memory/coverage`, all scopes), for the Desk's setup items
@@ -30,9 +33,12 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
     document.addEventListener('visibilitychange', again);
     return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); };
   }, [enabled]);
+  const proposals = useNeedsSources((s) => (s.readOk.proposals === true ? s.proposals : null));
+  const repos = useNeedsSources((s) => (s.readOk.repos === true ? s.repos : null));
   useEffect(() => {
     if (!enabled) return undefined;
     let live = true;
+    const asOf = proposals;
     // Entering the Desk (or coming back to the window) also asks the Home queue to refresh its inputs under its own
     // 30 s rule, so the counts below follow; a quick walk inside studio re-reads nothing (needs_shell), and a cold Home
     // shares the queue's first read (codex + agy r4/r5 on 9d).
@@ -41,7 +47,7 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
       // A coverage answer without a total says nothing about emptiness.
       (c) => {
         if (!live) return;
-        setCoverage(typeof c.total === 'number' && Number.isFinite(c.total) ? { state: 'ok', total: c.total } : { state: 'unknown' });
+        setCoverage(typeof c.total === 'number' && Number.isFinite(c.total) ? { state: 'ok', total: c.total, forProposals: asOf } : { state: 'unknown' });
       },
       (e: unknown) => {
         if (!live) return;
@@ -49,12 +55,11 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
       },
     );
     return () => { live = false; };
-  }, [enabled, refreshKey, tick]);
-  const proposals = useNeedsSources((s) => (s.readOk.proposals === true ? s.proposals : null));
-  const repos = useNeedsSources((s) => (s.readOk.repos === true ? s.repos : null));
+    // The queue's proposals changed (read again, or some accepted): the total is read again with them.
+  }, [enabled, refreshKey, tick, proposals]);
   return useMemo((): MemoryReading => {
     if (coverage.state !== 'ok') return coverage;
-    const pending = countMemoryProposals(proposals);
+    const pending = coverage.forProposals === proposals ? countMemoryProposals(proposals) : undefined;
     const indexedRepos = countIndexedRepos(repos);
     return { state: 'ok', total: coverage.total, ...(pending !== undefined ? { pending } : {}), ...(indexedRepos !== undefined ? { indexedRepos } : {}) };
   }, [coverage, proposals, repos]);

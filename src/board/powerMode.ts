@@ -602,6 +602,8 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
  * rigor, history, toggles, pause) stays the answer's.
  */
 function withLiveProgress(local: PowerState, p: PowerState): PowerState {
+  // An unreadable session progress block is never inspected or adopted: this page's answer stands (codex r8 on 9d).
+  if (!readableProgress(p)) return { ...local };
   const turns = (s: PowerState): number => (typeof s.orchestrator?.turns === 'number' && Number.isFinite(s.orchestrator.turns) ? s.orchestrator.turns : -1);
   const ahead = turns(p) > turns(local) || stateAt(p) > stateAt(local);
   if (!ahead) return { ...local };
@@ -613,6 +615,19 @@ function withLiveProgress(local: PowerState, p: PowerState): PowerState {
     handoff: p.handoff,
     outcome: p.outcome,
   };
+}
+
+/** The progress fields a session snapshot carries are well formed enough to compare and to render. */
+function readableProgress(p: PowerState): boolean {
+  const obj = (v: unknown): boolean => v !== null && typeof v === 'object';
+  const o = p.orchestrator as unknown;
+  if (!obj(o) || typeof (o as { turns?: unknown }).turns !== 'number') return false;
+  if (p.turnLog !== undefined && (!Array.isArray(p.turnLog) || !p.turnLog.every(obj))) return false;
+  if (typeof p.checkpoints !== 'number') return false;
+  const h = p.handoff as unknown;
+  if (h !== null && (!obj(h) || typeof (h as { round?: unknown }).round !== 'number' || !Array.isArray((h as { steps?: unknown }).steps)
+    || !((h as { steps: unknown[] }).steps).every(obj))) return false;
+  return true;
 }
 
 function historyTip(p: PowerState): number {

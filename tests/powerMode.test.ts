@@ -161,6 +161,16 @@ describe('the state as it stands now', () => {
       expect(kept.handoff).toEqual(local.handoff);
       expect(kept.orchestrator).toEqual(local.orchestrator);
     }
+    // further along but unreadable (a null turn record, steps that are not a list): the answer stands, never a crash (codex r8)
+    for (const bad of [
+      state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 9, inTurn: false, sessionRestarts: 0 }, turnLog: [null] as never }),
+      state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: {} } as never }),
+      state({ on: false, toggles: flip, handoff: { round: 2, maxRounds: 3, steps: [null] } as never }),
+    ]) {
+      const kept = mergePower(bad, [], local, at(25))!;
+      expect(kept.handoff).toEqual(local.handoff);
+      expect(kept.orchestrator.turns).toBe(local.orchestrator.turns);
+    }
     // a later state: the session's hand-off replaces the answer's whole, as a leading session snapshot does
     const later = state({ on: false, toggles: flip, handoff: { round: 2, maxRounds: 3, steps: [step('review', 'running', 30)] } });
     expect(mergePower(later, [], local, at(25))!.handoff).toEqual(later.handoff);

@@ -149,4 +149,22 @@ describe('useMemoryReading', () => {
     expect(useNeedsSources.getState().readOk.repos).toBe(false);
     expect(result.current).toEqual({ state: 'ok', total: 0, pending: 0 });
   });
+
+  it('accepting the last proposals never pairs a fresh zero with a total read before they were saved (codex r8 on 9d)', async () => {
+    memoryCoverage.mockResolvedValueOnce({ total: 0 });
+    listProposals.mockResolvedValue([{ kind: 'memory' }, { kind: 'memory' }]);
+    listRepos.mockResolvedValue({ repos: [] });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await act(async () => { await useNeedsSources.getState().load(); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 0, pending: 2, indexedRepos: 0 }));
+    // both accepted: the queue reads an empty list; the total is being read again
+    let answer!: (v: unknown) => void;
+    memoryCoverage.mockReturnValue(new Promise((r) => { answer = r; }));
+    listProposals.mockResolvedValue([]);
+    await act(async () => { await useNeedsSources.getState().load(0); });
+    // never "empty": the pending count waits for the total read with it
+    expect(result.current).toEqual({ state: 'ok', total: 0, indexedRepos: 0 });
+    await act(async () => { answer({ total: 2 }); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, pending: 0, indexedRepos: 0 }));
+  });
 });
