@@ -48,7 +48,7 @@ export interface NeedsSourcesState {
   repos: RepoEntry[] | null;
   /** When each wire was last read (answered or not), epoch ms. */
   readAt: Partial<Record<NeedsSource, number>>;
-  /** Whether each wire's LAST read answered (true) or failed (false: an error, a 404, a malformed answer). The queue keeps
+  /** Whether each wire's LAST read answered (true; a 404 is an answered empty list) or failed (false: an error, a malformed answer). The queue keeps
    *  its last value either way; a reader that must not present a failed read as a count checks this. A deposit counts as
    *  an answer only while this store has no read of its own; it never certifies a FAILED read (see `answeredBy`). */
   readOk: Partial<Record<NeedsSource, boolean>>;
@@ -109,11 +109,15 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     const p = readers[source]()
       .then(() => { set((s) => ({ readOk: { ...s.readOk, [source]: true } })); })
       .catch((e: unknown) => {
+        // A daemon without this surface (404) has nothing on it that needs you: an ANSWERED empty read, so the honest
+        // count (useSettledNeeds) is complete, not partial, and the Desk's memory reading counts none waiting (a daemon
+        // without /proposals still says "Your memory is empty"; desk_setup_items on 9d). Any other failure: the last
+        // answer stands (null until one ever arrived = a partial count) and the outcome says it failed.
+        if (e instanceof ApiError && e.status === 404 && source !== 'campaigns') {
+          set((s) => ({ [source]: [], readOk: { ...s.readOk, [source]: true } }) as Partial<NeedsSourcesState>);
+          return;
+        }
         set((s) => ({ readOk: { ...s.readOk, [source]: false } }));
-        // A daemon without this surface (404) has nothing on it that needs you: an answered empty
-        // read, so the honest count (useSettledNeeds) is complete, not partial. Any other failure:
-        // the last answer stands (null until one ever arrived = a partial count).
-        if (e instanceof ApiError && e.status === 404 && source !== 'campaigns' && get()[source] === null) set({ [source]: [] } as Partial<NeedsSourcesState>);
       })
       .finally(() => {
         delete inflight[source];

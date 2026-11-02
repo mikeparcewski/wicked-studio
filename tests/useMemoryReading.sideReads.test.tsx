@@ -55,7 +55,7 @@ describe('useMemoryReading', () => {
     await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 3 }));
   });
 
-  it('a 404 on a queue input is an empty list for the queue, but no count here', async () => {
+  it('a 404 on a queue input is an answered empty list: none waiting, so an empty memory says so (desk_setup_items on 9d)', async () => {
     const { ApiError } = await import('../src/api/errors.js');
     memoryCoverage.mockResolvedValue({ total: 2 });
     listProposals.mockRejectedValue(new ApiError(404, 'no route', {}));
@@ -63,7 +63,8 @@ describe('useMemoryReading', () => {
     const { result } = renderHook(() => useMemoryReading(true));
     await act(async () => { await useNeedsSources.getState().load(); });
     expect(useNeedsSources.getState().proposals).toEqual([]);
-    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, indexedRepos: 0 }));
+    expect(useNeedsSources.getState().readOk.proposals).toBe(true);
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, pending: 0, indexedRepos: 0 }));
   });
 
   it('when the coverage read fails, nothing rejects unobserved', async () => {

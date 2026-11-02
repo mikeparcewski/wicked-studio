@@ -19,8 +19,8 @@ type Coverage = { state: 'ok'; total: number; forPending: number | undefined } |
  * With the total, the memory proposals waiting and the repositories estate has a code graph for, so the Desk says
  * what is actually missing. Those two are the Home queue's own inputs (`GET /proposals`, `GET /repos`): they are READ
  * from its store, never fetched here, so a cold Home reads each once (needs_shell) and nothing here writes into the
- * queue. A count shows only while the queue's last read of that wire answered; a failed, absent or malformed read is
- * left out (never "none"). The total never waits for them.
+ * queue. A count shows only while the queue's last read of that wire answered (a daemon without the route answers an
+ * empty list); a failed or malformed read is left out (never "none"). The total never waits for them.
  */
 export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): MemoryReading {
   const [coverage, setCoverage] = useState<Coverage>({ state: 'unknown' });
