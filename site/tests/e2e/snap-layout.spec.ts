@@ -62,16 +62,39 @@ test.describe('scroll-snap layout', () => {
     ).toEqual([]);
   });
 
-  test('snapping is proximity, so tall sections stay scrollable', async ({ page }) => {
+  test('snapping is mandatory only where every frame fits and the shared band snaps', async ({ page }) => {
+    // Mandatory snapping makes anything taller than the viewport unreachable, so studio.css turns it
+    // on only in the media where every frame fits (frames.spec.ts) and the shared platform band is
+    // itself a snap target (SameGarden.astro). Everywhere else the chrome's proximity applies.
+    const snapAt = async (width: number, height: number) => {
+      await page.setViewportSize({ width, height });
+      await page.goto('/');
+      return page.evaluate(() => getComputedStyle(document.documentElement).scrollSnapType);
+    };
+    expect(await snapAt(1440, 700)).toContain('mandatory');
+    expect(await snapAt(1280, 660)).toContain('mandatory');
+    // the band stops snapping at these sizes, so the page must not be mandatory there
+    expect(await snapAt(1280, 640)).not.toContain('mandatory');
+    expect(await snapAt(1024, 700)).not.toContain('mandatory');
+  });
+
+  test('one wheel notch moves exactly one frame', async ({ page }) => {
+    // wicked-web scroll-wheel.js turns a notch into a jump to the next snap point; it reads
+    // scroll-margin-top, which is why the frames carry the topbar offset there and not in html
+    // scroll-padding-top (with the padding, a notch landed back on the frame it started from).
     await page.setViewportSize(LAPTOP);
     await page.goto('/');
-
-    // The hero embeds a live console and is legitimately taller than a laptop viewport. Under
-    // `mandatory` its lower half cannot be reached; under `proximity` it can.
-    const snapType = await page.evaluate(
-      () => getComputedStyle(document.documentElement).scrollSnapType,
+    await page.waitForLoadState('networkidle');
+    await page.mouse.move(LAPTOP.width / 2, 40);
+    const tops = await page.$$eval('section.frame', (ns) =>
+      ns.slice(0, 4).map((n) => Math.round(n.getBoundingClientRect().top + window.scrollY - 64)),
     );
-    expect(snapType).not.toContain('mandatory');
+    for (let k = 1; k < tops.length; k++) {
+      await page.mouse.wheel(0, 100);
+      await settled(page, 1200);
+      await page.waitForTimeout(250);
+      expect(Math.round(await page.evaluate(() => window.scrollY)), `notch ${k}`).toBe(tops[k]);
+    }
   });
 
   test('scrolling top to bottom reaches every section', async ({ page }) => {

@@ -111,14 +111,20 @@ test.describe('the reviewed messaging', () => {
     await expect(page.locator('.steer')).toContainText('a language, a layer or a framework');
   });
 
-  test('under the hero: the default-review small print, three benefits, what is new, what is coming', async ({ page }) => {
+  test('the first screen: the default-review small print, the agents and the one command; then three benefits, what is new, what is coming', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.hero .hero-fine')).toContainText('By default a different agent reviews the work.');
     await expect(page.locator('.hero .hero-fine')).toContainText('reduced assurance');
+    await expect(page.locator('.hero .agent-row li')).toHaveText(['Claude Code', 'Codex', 'Copilot', 'OpenCode', 'Pi']);
+    await expect(page.locator('.hero .cta-copy')).toContainText('npx wicked-crew serve');
     const why = page.locator('.why');
+    // the benefits frame has a visible heading now (it was sr-only)
+    await expect(why.getByRole('heading', { level: 2, name: 'What studio does for you' })).toBeVisible();
     await expect(why.locator('.trio-card')).toHaveCount(3);
-    await expect(why.locator('.tab-grid--4 .tab-tile')).toHaveCount(8);
-    const soon = why.locator('.soon');
+    const news = page.locator('.new');
+    await expect(news.getByRole('tab')).toHaveCount(8);
+    await expect(news.getByRole('tabpanel', { includeHidden: true })).toHaveCount(8);
+    const soon = news.locator('.soon');
     await expect(soon).toContainText('Coming soon:');
     await expect(soon).toContainText('Apps');
     await expect(soon).not.toContainText(/20\d\d|Q[1-4]/);
@@ -143,27 +149,23 @@ test.describe('the reviewed messaging, details', () => {
     await expect(page.locator('body')).not.toContainText(/\b(Steer|Memory) tab\b/);
   });
 
-  test('the Claude subscription token exception is stated where keys are', async ({ page }) => {
+  test('the Claude subscription token exception is stated where keys are, in the approved words', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.reach')).toContainText('a Claude subscription seat gets its sign-in token');
+    await expect(page.locator('.reach')).toContainText(
+      'A Claude subscription’s sign-in token is the one exception, and a guard keeps it out of the delivered work.',
+    );
+    // "seat" is not a public word (COPY rev 5)
+    expect((await page.locator('body').innerText())).not.toMatch(/\bseats?\b/i);
   });
 
-  test('the benefits band fits a 1440x700 laptop', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 700 });
+  test('wherever voice appears, the privacy line sits beside it (N6)', async ({ page }) => {
     await page.goto('/');
-    await page.evaluate(async () => { await document.fonts.ready; });
-    const { content, usable } = await page.evaluate(() => {
-      const el = document.querySelector('.why') as HTMLElement;
-      const cs = getComputedStyle(el);
-      let c = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-      for (const ch of Array.from(el.querySelector('.wrap')!.children)) {
-        const k = getComputedStyle(ch);
-        if (k.position === 'absolute') continue;
-        c += ch.getBoundingClientRect().height + parseFloat(k.marginTop) + parseFloat(k.marginBottom);
-      }
-      const bar = document.querySelector('.topbar, header[class*="topbar"]');
-      return { content: Math.round(c), usable: 700 - (bar ? Math.round(bar.getBoundingClientRect().height) : 0) };
-    });
-    expect(content, `.why content ${content}px in ${usable}px`).toBeLessThanOrEqual(usable);
+    const N6 = 'Speech is turned into text on your machine, and the audio is never stored.';
+    // the hero's "or talk to them"
+    await expect(page.locator('.hero .lede')).toContainText('or talk to them');
+    await expect(page.locator('.hero .hero-voice')).toHaveText(N6);
+    // the Voice mode chip
+    await expect(page.locator('.desk .extras')).toContainText('Voice mode');
+    await expect(page.locator('.desk .voice-note')).toContainText(N6);
   });
 });

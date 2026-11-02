@@ -23,25 +23,22 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
     test.use({ viewport: vp });
 
     test('the hero content fits with slack', async ({ page }) => {
-      // The rendered .hero is clamped by min-height, so it reads "fits" right up until it does
-      // not. Measure the content instead and require slack: CI's Linux runner renders this
-      // page's webfonts ~24px taller than macOS.
+      // The hero is exactly one frame and the demo flexes to fill it, so measure the part that does
+      // not flex: the copy column must end with slack above the frame's bottom (CI's Linux runner
+      // renders this page's webfonts ~24px taller than macOS), and nothing may overflow the hero.
       await page.goto('/');
       await page.evaluate(async () => { await document.fonts.ready; });
-      const { content } = await page.evaluate(() => {
+      const m = await page.evaluate(() => {
         const hero = document.querySelector('.hero') as HTMLElement;
-        const st = getComputedStyle(hero);
-        let total = parseFloat(st.paddingTop) + parseFloat(st.paddingBottom);
-        Array.from(hero.children).forEach((c) => {
-          const el = c as HTMLElement;
-          if (el.classList.contains('amber-floor')) return;
-          const cs = getComputedStyle(el);
-          total += el.getBoundingClientRect().height + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
-        });
-        return { content: Math.round(total) };
+        const copy = document.querySelector('.hero-copy') as HTMLElement;
+        const hr = hero.getBoundingClientRect(), cr = copy.getBoundingClientRect();
+        const pad = parseFloat(getComputedStyle(hero).paddingBottom);
+        return { slack: Math.round(hr.bottom - pad - cr.bottom), sh: hero.scrollHeight, ch: hero.clientHeight, h: Math.round(hr.height) };
       });
       const usable = vp.height - (await barHeight(page));
-      expect(usable - content, `.hero content is ${content}px in ${usable}px of usable height`).toBeGreaterThanOrEqual(20);
+      expect(m.h, `.hero is ${m.h}px in ${usable}px`).toBeLessThanOrEqual(usable);
+      expect(m.sh, 'the hero overflows itself').toBeLessThanOrEqual(m.ch + 1);
+      expect(m.slack, `the copy column ends ${m.slack}px above the frame's bottom`).toBeGreaterThanOrEqual(20);
     });
 
     test('the plan and the gate decisions are on screen without scrolling', async ({ page }) => {

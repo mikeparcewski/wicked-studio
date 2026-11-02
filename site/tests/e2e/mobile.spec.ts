@@ -39,7 +39,7 @@ test.describe('mobile (390×844)', () => {
 
   test('the proof sections and the four-plane map render on a phone', async ({ page }) => {
     await page.goto('/');
-    for (const sel of ['.why .trio', '.why .tab-grid', '.desk .tab-grid', '.receipt', '.steer .trio', '.hits', '.install--primary']) {
+    for (const sel of ['.why .trio', '.desk .explorer', '.receipt', '.steer .trio', '.hits', '.new .news', '.install--primary']) {
       const loc = page.locator(sel);
       await bringIntoView(loc);
       await expect(loc).toBeVisible();
@@ -48,6 +48,42 @@ test.describe('mobile (390×844)', () => {
     await bringIntoView(map);
     await expect(map.locator('.sg-plane')).toHaveCount(4);
     await expect(map.locator('.sg-card--here')).toBeVisible();
+  });
+
+  test('driving the demo never changes the page height (the panel has a fixed height)', async ({ page }) => {
+    // The side panel used to be max-height:300px in an auto-height body, so every tap grew or shrank
+    // the hero by up to 170px and pushed every section below it.
+    await page.goto('/');
+    const ide = page.locator('[data-ide]');
+    await bringIntoView(ide);
+    const heroH = () => page.locator('.hero').evaluate((el) => Math.round(el.getBoundingClientRect().height));
+    await ide.getByRole('button', { name: 'Approve plan' }).waitFor({ timeout: 10_000 });
+    const h0 = await heroH();
+    await ide.getByRole('button', { name: 'Approve plan' }).click();
+    await expect(ide.getByRole('button', { name: 'Send back' })).toBeVisible({ timeout: 10_000 });
+    expect(await heroH()).toBe(h0);
+    await ide.getByRole('tab', { name: 'Receipt' }).click();
+    expect(await heroH()).toBe(h0);
+    await ide.getByRole('tab', { name: /Changes/ }).click();
+    await ide.locator('.files .file').nth(2).click();
+    expect(await heroH()).toBe(h0);
+    await ide.locator('[data-id="flaky"]').click();
+    expect(await heroH()).toBe(h0);
+  });
+
+  test('the jobs are a three-way switcher and every demo control is a 44px target', async ({ page }) => {
+    await page.goto('/');
+    const ide = page.locator('[data-ide]');
+    await bringIntoView(ide);
+    await ide.getByRole('button', { name: 'Approve plan' }).waitFor({ timeout: 10_000 });
+    const tabs = ide.locator('.ide-sess');
+    await expect(tabs).toHaveCount(3);
+    for (let k = 0; k < 3; k++) await expect(tabs.nth(k)).toBeInViewport();
+    const short = await ide.locator('button, input, [role=tab]').evaluateAll((els) =>
+      els.filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 44; })
+        .map((e) => (e.textContent || '').trim().slice(0, 24) + ' ' + Math.round(e.getBoundingClientRect().height)),
+    );
+    expect(short).toEqual([]);
   });
 
   test('the hamburger menu lists studio as a site link', async ({ page }) => {
