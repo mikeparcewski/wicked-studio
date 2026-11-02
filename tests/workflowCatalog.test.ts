@@ -33,7 +33,7 @@ describe('catalogFromWire (WIRE v1)', () => {
       status: 'ready', launches: 14, lastUsedAt: '2026-10-20T10:00:00Z', medianMinutes: 48,
     });
     expect(entry('feature').inputs.map((i) => [i.key, i.kind])).toEqual([['repo', 'repo'], ['problem', 'text'], ['acceptance', 'text']]);
-    expect(entry('create-app')).toMatchObject({ status: 'soon', statusNote: 'Design in progress', launchKind: 'none' });
+    expect(entry('apps')).toMatchObject({ status: 'soon', statusNote: 'Design in progress', launchKind: 'none' });
     expect(entry('validate-docs')).toMatchObject({ status: 'unavailable', statusNote: 'Needs the next engine release' });
   });
 
@@ -43,7 +43,7 @@ describe('catalogFromWire (WIRE v1)', () => {
     expect(entry('document-interactive')).toMatchObject({ launchKind: 'document', docStyle: 'web', launchId: 'document:document-interactive' });
     expect(entry('presentation')).toMatchObject({ launchKind: 'document', docStyle: 'ppt' });
     expect(entry('start-chat')).toMatchObject({ launchKind: 'chat', launchId: 'chat:start-chat' });
-    expect(entry('create-app').launchId).toBe('none:create-app');
+    expect(entry('apps').launchId).toBe('none:apps');
   });
 
   it('a launch kind studio does not know is shown as not available, never offered', () => {
@@ -188,7 +188,7 @@ describe('filters', () => {
     const v = view();
     expect(ids(applyFilters(v.entries, { ...NO_FILTERS, category: 'resolve' }))).toEqual(['bug', 'migration']);
     expect(ids(applyFilters(v.entries, { ...NO_FILTERS, repo: 'without' }))).toEqual([
-      'create-app', 'document-interactive', 'document-static', 'presentation', 'demo-video', 'review-recent-work', 'learn', 'draft-epics', 'start-chat',
+      'apps', 'document-interactive', 'document-static', 'presentation', 'demo-video', 'review-recent-work', 'learn', 'draft-epics', 'start-chat',
     ]);
     expect(applyFilters(v.entries, { ...NO_FILTERS, repo: 'needs' }).every((e) => e.needs.includes('repo'))).toBe(true);
     const ready = applyFilters(v.entries, { ...NO_FILTERS, showSoon: false });

@@ -12,7 +12,7 @@ page-style doc `launch-page`, an unstyled doc `loose-notes` and a written doc `q
      in the plugin frame (the hash-pinned bundle, kind `page`), on the Made list's `open=` address — not the editor test page's sample;
      picking version 1 in its version list shows version 1 (no address to write there).
   3. ESC from full screen comes back to the card (DES §7.3); Esc on the card closes it back to the list.
-  4. SOON (Plugins): "Vibe — app builder · Coming soon" is one card with no link or button.
+  4. SOON (Plugins): "Apps · Coming soon" (the data builder, was "Vibe") is one card with no link or button.
   5. SOON (New job): the grid ends with the same entry as a tile that is not a button.
   6. 0 page errors.
 
@@ -142,21 +142,21 @@ with sync_playwright() as p:
     soon = page.get_by_test_id("plugin-coming-soon")
     soon.wait_for(state="visible", timeout=10000)
     check("plugins-vibe-coming-soon",
-          "Vibe — app builder" in soon.inner_text() and "Coming soon" in soon.inner_text()
-          and "Apps are already built by pipelines today." in soon.inner_text()
+          "Apps" in soon.inner_text() and "Coming soon" in soon.inner_text()
+          and "A live app or dashboard over your APIs and databases." in soon.inner_text()
           and soon.locator("a, button").count() == 0 and soon.get_attribute("aria-disabled") == "true",
           text=soon.inner_text())
 
     # ── 5. … and in New job's catalog: the last card (this daemon has no catalog: today's list), not a button ──
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
-    tile = page.get_by_test_id("launch-catalog-soon-vibe")
+    tile = page.get_by_test_id("launch-catalog-soon-apps")
     tile.wait_for(state="visible", timeout=8000)
     tile.scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-plugins-document-newjob.png"))
     last = page.evaluate("() => document.querySelector('[data-section=\"all\"] .wk-catalog-grid')?.lastElementChild?.dataset.testid ?? null")
     check("newjob-vibe-coming-soon",
-          last == "launch-catalog-soon-vibe" and tile.evaluate("e => e.tagName") != "BUTTON"
+          last == "launch-catalog-soon-apps" and tile.evaluate("e => e.tagName") != "BUTTON"
           and tile.locator("a, button").count() == 0 and "Coming soon" in tile.inner_text(),
           last=last)
 

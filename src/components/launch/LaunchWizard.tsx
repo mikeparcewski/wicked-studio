@@ -66,8 +66,8 @@ const STUDIO_KINDS: readonly CatalogEntry[] = [
   studioEntry({ id: DEMO_VIDEO_ID, launchKind: 'demo', title: 'Demo video', category: 'create', gets: DEMO_VIDEO_LINE, needs: ['running_app'], status: 'ready', delivers: 'video', tags: ['demo', 'video', 'recording', 'walkthrough'] }),
   studioEntry({ id: DRAFT_EPICS_ID, launchKind: 'compose', title: 'Draft epics', category: 'more', gets: DRAFT_EPICS_LINE, needs: ['project', 'requirements'], status: 'ready', delivers: null, tags: ['epics', 'stories', 'backlog', 'requirements', 'planning'] }),
 ];
-/** The app builder that is coming: an older daemon's list shows it (crew's catalog lists its own). */
-const VIBE_ENTRY = studioEntry({ id: 'vibe', launchKind: 'none', title: VIBE_SOON.name, category: null, gets: VIBE_SOON.line, needs: [], status: 'soon', delivers: null, tags: ['app', 'builder', 'dashboard', 'ui'] });
+/** Apps (the data builder) is coming: an older daemon's list shows it (crew's catalog lists its own `apps`). */
+const VIBE_ENTRY = studioEntry({ id: 'apps', launchKind: 'none', title: VIBE_SOON.name, category: null, gets: VIBE_SOON.line, needs: [], status: 'soon', delivers: null, tags: ['app', 'apps', 'dashboard', 'data app', 'internal tool', 'vibe', 'builder'] });
 /**
  * THE LAUNCH WIZARD (operator 2026-10-11 15:15Z: "someone just starts a new job by selecting a
  * workflow and we do the wizard in a modal"). Mounted once by the app shell; opened through

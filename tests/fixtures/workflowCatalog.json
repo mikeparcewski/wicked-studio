@@ -7,8 +7,8 @@
    "summary": "Make something new",
    "subcategories": [
     {
-     "id": "create",
-     "title": "Create"
+     "id": "apps",
+     "title": "Apps"
     },
     {
      "id": "feature",
@@ -102,11 +102,11 @@
  ],
  "entries": [
   {
-   "id": "create-app",
+   "id": "apps",
    "category": "create",
-   "subcategory": "create",
-   "title": "Create",
-   "summary": "Build an app over your data by talking to it",
+   "subcategory": "apps",
+   "title": "Apps",
+   "summary": "A live app or dashboard over your APIs and databases",
    "outcome": "A live app or dashboard over your APIs and databases",
    "useWhen": [],
    "needs": [],
@@ -119,7 +119,13 @@
     "ui",
     "builder"
    ],
-   "synonyms": [],
+   "synonyms": [
+    "dashboard",
+    "data app",
+    "internal tool",
+    "vibe",
+    "create"
+   ],
    "status": "coming_soon",
    "statusNote": "Design in progress",
    "launch": {

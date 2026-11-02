@@ -73,7 +73,7 @@ describe('an older daemon (no catalog)', () => {
     expect(screen.getByTestId('launch-catalog-older')).toHaveTextContent('not grouped');
     expect(document.querySelector('[data-testid="launch-catalog-cat"]')).toBeNull();
     expect(screen.queryByTestId('launch-catalog-top')).toBeNull();
-    expect(cardIds(panel)).toEqual(['bug', 'feature', 'qe-author-tests', 'review-recent-work', 'acme-release', 'demo-video', 'draft-epics', 'vibe']);
+    expect(cardIds(panel)).toEqual(['bug', 'feature', 'qe-author-tests', 'review-recent-work', 'acme-release', 'demo-video', 'draft-epics', 'apps']);
     // Every card says what it gives and that it needs a repository (today's rule).
     const bug = screen.getByTestId('launch-wizard-workflow-bug');
     expect(bug).toHaveTextContent('Reproduce a bug, fix it and prove the fix');
@@ -115,7 +115,7 @@ describe('a daemon with the catalog', () => {
     expect(cardIds(section('top'))).toEqual(['bug', 'feature', 'review-recent-work']);
     expect(cardIds(section('resolve'))).toEqual(['bug', 'migration']);
     expect(cardIds(section('create'))).toEqual([
-      'create-app', 'feature', 'document:docs', 'document:document-interactive', 'document:document-static', 'document:presentation',
+      'apps', 'feature', 'document:docs', 'document:document-interactive', 'document:document-static', 'document:presentation',
       'demo-video', 'phase-plugin', 'editor-plugin', 'mcp-server',
     ].map((x) => (x === 'document:docs' ? 'docs' : x)));
     expect(cardIds(section('more'))).toEqual(['learn', 'draft-epics', 'chat:start-chat']);
@@ -129,7 +129,7 @@ describe('a daemon with the catalog', () => {
 
   it('a coming-soon workflow is shown, never offered: not a button, a click picks nothing', async () => {
     await openCatalog();
-    const vibe = screen.getByTestId('launch-catalog-soon-create-app');
+    const vibe = screen.getByTestId('launch-catalog-soon-apps');
     expect(vibe.tagName).not.toBe('BUTTON');
     expect(vibe).toHaveAttribute('aria-disabled', 'true');
     expect(vibe).toHaveTextContent('Coming soon Design in progress');
@@ -184,9 +184,9 @@ describe('a daemon with the catalog', () => {
     fireEvent.change(screen.getByTestId('launch-catalog-repo'), { target: { value: 'without' } });
     expect(screen.queryByTestId('launch-catalog-top')).toBeNull();
     const shown = cardIds(screen.getByTestId('launch-catalog-results'));
-    expect(shown).toEqual(['create-app', 'document:document-interactive', 'document:document-static', 'document:presentation', 'demo-video', 'review-recent-work', 'learn', 'draft-epics', 'chat:start-chat']);
+    expect(shown).toEqual(['apps', 'document:document-interactive', 'document:document-static', 'document:presentation', 'demo-video', 'review-recent-work', 'learn', 'draft-epics', 'chat:start-chat']);
     fireEvent.click(screen.getByTestId('launch-catalog-soon-toggle'));
-    expect(cardIds(screen.getByTestId('launch-catalog-results'))).not.toContain('create-app');
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))).not.toContain('apps');
     search('migrate');
     expect(screen.getByTestId('launch-catalog-noresults')).toHaveTextContent('with these filters');
     fireEvent.click(screen.getByTestId('launch-catalog-clear-filters'));
@@ -291,7 +291,7 @@ describe('an older daemon whose workflow list never comes', () => {
     render(<LaunchWizard />);
     act(() => openLaunchWizard({}));
     await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).toBe('fallback'));
-    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual(['demo-video', 'draft-epics', 'vibe']);
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual(['demo-video', 'draft-epics', 'apps']);
     act(() => setCachedWorkflows(WF));
     expect(cardIds(screen.getByTestId('launch-catalog-results'))).toContain('feature');
   });
