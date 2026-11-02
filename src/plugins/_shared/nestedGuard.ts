@@ -47,12 +47,15 @@ const IDENTIFIER_PART = /[\w$\u0080-\uFFFF]/;
 /**
  * Whether a directive with no `;` ends before `text[i]` by automatic semicolon insertion: a line ended after it, and
  * what follows cannot continue the expression (end of text, a statement-starting word other than `in`/`instanceof`, a
- * number, a string or a block). Any operator, bracket, dot or template continues it, so it does not count.
+ * number, a string, a block, a unary `!` or `~`, or `++`/`--`, which may not follow a line end). Any binary operator,
+ * bracket, dot or template continues it, so it does not count.
  */
 function endsByAsi(text: string, i: number): boolean {
   if (i >= text.length) return true;
   const c = text[i]!;
-  if (c === '"' || c === "'" || c === '{' || /[0-9]/.test(c)) return true;
+  if (c === '"' || c === "'" || c === '{' || c === '~' || /[0-9]/.test(c)) return true;
+  if (c === '!') return text[i + 1] !== '=';
+  if (c === '+' || c === '-') return text[i + 1] === c;
   if (!IDENTIFIER_PART.test(c)) return false;
   let j = i;
   while (j < text.length && IDENTIFIER_PART.test(text[j]!)) j++;
