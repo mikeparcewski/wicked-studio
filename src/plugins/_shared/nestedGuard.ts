@@ -61,7 +61,7 @@ function endsByAsi(text: string, i: number): boolean {
   if (c === '+' || c === '-') return text[i + 1] === c;
   if (!IDENTIFIER_PART.test(c)) return false;
   let j = i;
-  while (j < text.length && IDENTIFIER_PART.test(text[j]!)) j++;
+  while (j < text.length && IDENTIFIER_PART.test(text[j]!) && !SPACE.test(text[j]!)) j++; // NBSP, LS... end a name
   const word = text.slice(i, j);
   return word !== 'in' && word !== 'instanceof';
 }

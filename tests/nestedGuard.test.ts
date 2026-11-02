@@ -87,7 +87,7 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     expect(withNestedPrelude('"use strict"\n(b)')).toBe(`${P}"use strict"\n(b)`);
     // A unary `!`/`~` or `++`/`--` on the next line starts a new statement; `!=`, `+`, `in`, `instanceof` continue it.
     for (const next of ['!x()', '~x()', '++x', '--x', '.5', '\\u0069n()', 'in\\u0078 = 1']) expect(withNestedPrelude(`"use strict"\n${next}`), next).toBe(`"use strict";${P}\n${next}`);
-    for (const next of ['!= x', '+ x', '- x', 'in x', 'instanceof x', '.toString()']) expect(withNestedPrelude(`"use strict"\n${next}`), next).toBe(`${P}"use strict"\n${next}`);
+    for (const next of ['!= x', '+ x', '- x', 'in x', 'instanceof x', '.toString()', 'in' + String.fromCharCode(0xa0) + 'x']) expect(withNestedPrelude(`"use strict"\n${next}`), next).toBe(`${P}"use strict"\n${next}`);
     const doc = parse(guardNestedHtml('<script>"use strict";window.s=1</script>'));
     const script = Array.from(doc.querySelectorAll('script')).find((s) => s.textContent!.includes('window.s'))!;
     expect(script.textContent).toBe(`"use strict";${P}window.s=1`);
