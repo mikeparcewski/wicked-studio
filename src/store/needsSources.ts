@@ -65,6 +65,8 @@ export interface NeedsSourcesState {
 
 /** In-flight reads, one per wire. */
 const inflight: Partial<Record<NeedsSource, Promise<void>>> = {};
+/** A read queued behind an in-flight one for a caller that needs an answer newer than it, one per wire. */
+const followUp: Partial<Record<NeedsSource, Promise<void>>> = {};
 
 /** Deferred so a synchronous throw (a client without the route, a partial mock) is a miss. */
 const attempt = <T,>(fn: () => Promise<T>): Promise<T> => Promise.resolve().then(fn);
@@ -72,16 +74,34 @@ const attempt = <T,>(fn: () => Promise<T>): Promise<T> => Promise.resolve().then
 export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
   const readers: Record<NeedsSource, () => Promise<void>> = {
     chats: () => attempt(() => api.listChats()).then(({ chats }) => set({ chats })),
+    // A malformed answer is a failed read: the last good value stands and the outcome says it failed, so no consumer
+    // (the queue's rows, the Desk's memory reading) is handed a shape it cannot iterate (codex on 9d).
     proposals: () =>
-      attempt(() => listProposals({ state: 'pending' })).then((proposals) => set({ proposals })),
-    repos: () => attempt(() => api.listRepos()).then(({ repos }) => set({ repos })),
+      attempt(() => listProposals({ state: 'pending' })).then((proposals) => {
+        if (!Array.isArray(proposals)) throw new Error('GET /proposals answered without a list');
+        set({ proposals });
+      }),
+    repos: () => attempt(() => api.listRepos()).then((r) => {
+      const repos = (r as { repos?: unknown } | null | undefined)?.repos;
+      if (!Array.isArray(repos)) throw new Error('GET /repos answered without a list');
+      set({ repos: repos as RepoEntry[] });
+    }),
     // The campaigns store owns the wire, its support probe and its own in-flight guard.
     campaigns: () => useCampaignsStore.getState().refresh(),
   };
 
   const read = (source: NeedsSource, maxAgeMs: number): Promise<void> => {
     const running = inflight[source];
-    if (running !== undefined) return running;
+    if (running !== undefined) {
+      if (maxAgeMs > 0) return running;
+      // A read that must be current (the operator came back), asked while an older read is out: that one may predate
+      // the change, so ONE shared read follows it (codex on 9d).
+      const queued = followUp[source];
+      if (queued !== undefined) return queued;
+      const next = running.then(() => { delete followUp[source]; return read(source, 0); });
+      followUp[source] = next;
+      return next;
+    }
     const at = get().readAt[source];
     if (at !== undefined && Date.now() - at < maxAgeMs) return Promise.resolve();
     const p = readers[source]()

@@ -92,4 +92,33 @@ describe('useMemoryReading side reads', () => {
     await act(async () => { window.dispatchEvent(new Event('focus')); });
     await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, indexedRepos: 0 }));
   });
+
+  it('a malformed answer is a failed read: the queue keeps its last good list, and the count is left out (codex on 9d)', async () => {
+    const { useNeedsSources } = await import('../src/store/needsSources.js');
+    listRepos.mockResolvedValueOnce({ repos: [{ code_graph_db: '/x/estate.db' }] });
+    await useNeedsSources.getState().loadRepos(0);
+    expect(useNeedsSources.getState().repos).toHaveLength(1);
+    listRepos.mockResolvedValueOnce({ repos: {} });
+    await useNeedsSources.getState().loadRepos(0);
+    expect(useNeedsSources.getState().repos).toHaveLength(1);
+    expect(useNeedsSources.getState().readOk.repos).toBe(false);
+    listProposals.mockResolvedValueOnce({ proposals: [] });
+    await useNeedsSources.getState().loadProposals(0);
+    expect(useNeedsSources.getState().readOk.proposals).toBe(false);
+  });
+
+  it('a read that must be current, asked while an older read is out, gets one more read after it (codex on 9d)', async () => {
+    const { useNeedsSources } = await import('../src/store/needsSources.js');
+    let first!: (v: unknown) => void;
+    listRepos.mockReturnValueOnce(new Promise((r) => { first = r; }));
+    listRepos.mockResolvedValueOnce({ repos: [{ code_graph_db: '/x/estate.db' }] });
+    const older = useNeedsSources.getState().loadRepos();
+    const forced = useNeedsSources.getState().loadRepos(0);
+    const forcedToo = useNeedsSources.getState().loadRepos(0);
+    first({ repos: [] });
+    await older;
+    await Promise.all([forced, forcedToo]);
+    expect(listRepos).toHaveBeenCalledTimes(2);
+    expect(useNeedsSources.getState().repos).toHaveLength(1);
+  });
 });
