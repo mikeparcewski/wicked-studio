@@ -60,11 +60,19 @@ test('review: the relay fills the receipt; one agent signed in stops the job wit
   const h0 = await box(receipt);
   const sw = sec.getByRole('switch', { name: 'Two agents signed in' });
   await expect(sw).toHaveAttribute('aria-checked', 'true');
+  await expect(sw).toHaveAccessibleName('Two agents signed in');
+  await expect(receipt.locator('.rv-one').first()).toBeHidden();
+  await expect(receipt.locator('.relay-stop')).toBeHidden();
   await sw.click();
   await expect(sw).toHaveAttribute('aria-checked', 'false');
   await expect(receipt).toHaveClass(/is-stopped/, { timeout: 6000 });
+  // only the state on screen is exposed: the other layer keeps its space but is hidden
+  await expect(receipt.locator('.relay-stop')).toBeVisible();
   await expect(receipt.locator('.relay-stop')).toContainText('reduced assurance');
+  await expect(receipt.locator('.receipt-foot')).toBeHidden();
   await expect(receipt.locator('.rv-one').nth(3)).toBeVisible();
+  await expect(receipt.locator('.rv-two').nth(3)).toBeHidden();
+  await expect(receipt.getByRole('row', { name: /Reviewed by/ })).toHaveAccessibleName(/nobody: no second agent/);
   // both states have the same rows and the same height
   expect(await box(receipt)).toEqual(h0);
   await sw.click();
@@ -91,16 +99,27 @@ test('rules / memory / knowledge: approve a rule, edit and erase a memory, revea
   await input.fill('Track per-key limits in issue 41.');
   await input.press('Enter');
   await expect(mem.locator('[data-mem-text]')).toHaveText('Track per-key limits in issue 41.');
+  // a memory as long as the field allows stays inside its box
+  const longest = 'x'.repeat(200);
+  await mem.getByRole('button', { name: 'Edit' }).click();
+  await input.fill(longest);
+  await expect(input).toHaveValue('x'.repeat(80));
+  await input.press('Enter');
+  expect(await box(trio)).toEqual(h0);
   await mem.getByRole('button', { name: 'Erase' }).click();
   await expect(mem).toHaveAttribute('data-state', 'gone');
+  await expect(mem.locator('.dr-gone')).toBeVisible();
+  await expect(mem.locator('[data-mem-text]')).toBeHidden();
   await expect(mem.getByRole('button', { name: 'Undo' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(mem).toHaveAttribute('data-state', 'in');
 
   const know = steer.locator('[data-drawer="know"]');
   const chip = know.getByRole('button', { name: 'src/http/router.ts:2' });
+  await expect(know.locator('.dr-src')).toBeHidden();
   await chip.focus();
   await expect(chip).toHaveAttribute('aria-expanded', 'true');
+  await expect(know.locator('.dr-src')).toBeVisible();
   await expect(know.locator('.dr-src')).toHaveCSS('opacity', '1');
   await expect(know.locator('.dr-src')).toContainText("rateLimit({ perMinute: 100 })");
 
@@ -145,6 +164,8 @@ test('the hero: the one command copies, and "Watch a job" replays the job to its
   const chip = page.getByRole('button', { name: 'Copy npx wicked-crew serve' });
   await chip.click();
   await expect(chip).toContainText('Copied');
+  // the confirmation is announced too (the visible label is aria-hidden)
+  await expect(page.getByRole('status')).toHaveText('Copied: npx wicked-crew serve');
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('npx wicked-crew serve');
   const ide = page.locator('[data-ide]');
   await expect(ide.getByRole('button', { name: 'Approve plan' })).toBeVisible({ timeout: 10_000 });
@@ -200,4 +221,66 @@ test('topbar tooltips open below the bar, inside the window', async ({ page }) =
     return el.getBoundingClientRect().top + (cs.top === 'auto' ? -1 : parseFloat(cs.top));
   });
   expect(top).toBeGreaterThanOrEqual(0);
+});
+
+test('switching jobs while the prompt types stops the typing and nothing posts by itself', async ({ page }) => {
+  await page.goto('/');
+  const ide = page.locator('[data-ide]');
+  const input = ide.getByRole('textbox', { name: 'Message your agents' });
+  // catch it mid-typing, then switch away
+  await expect.poll(() => input.inputValue(), { timeout: 6000 }).toMatch(/^Add rate/);
+  await ide.locator('[data-id="flaky"]').click();
+  await expect(input).toHaveValue('');
+  await page.waitForTimeout(2500);
+  await expect(input).toHaveValue('');
+  await ide.locator('[data-id="rate"]').click();
+  await expect(ide.locator('.empty')).toBeVisible();
+  await expect(input).toHaveValue('Add rate limiting to the public API: 100 requests a minute per API key.');
+});
+
+test('a re-render keeps focus on the diff, and the side panel never drops focus to the page', async ({ page }) => {
+  await page.goto('/');
+  const ide = page.locator('[data-ide]');
+  await ide.getByRole('button', { name: 'Approve plan' }).click({ timeout: 10_000 });
+  await ide.getByRole('button', { name: 'Send back' }).click({ timeout: 10_000 });
+  const diff = ide.locator('.diff');
+  await diff.focus();
+  // the rebuild re-renders the pane
+  await expect(ide.locator('.diff')).toContainText('x-api-key', { timeout: 10_000 });
+  await expect(ide.locator('.diff')).toBeFocused();
+});
+
+test('the wheel over the demo chat scrolls the chat, not the page', async ({ page }) => {
+  await page.goto('/');
+  const ide = page.locator('[data-ide]');
+  await ide.getByRole('button', { name: 'Approve plan' }).click({ timeout: 10_000 });
+  await expect(ide.getByRole('button', { name: 'Send back' })).toBeVisible({ timeout: 10_000 });
+  const thread = ide.locator('[data-thread]');
+  const scrolls = await thread.evaluate((el) => { el.style.scrollBehavior = 'auto'; el.scrollTop = 0; return el.scrollHeight > el.clientHeight + 20; });
+  expect(scrolls, 'the chat overflows at the gate').toBe(true);
+  const b = (await thread.boundingBox())!;
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.wheel(0, 100);
+  await page.waitForTimeout(600);
+  expect(await thread.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test('Tab into the next frame lands on a frame with the focused control in view', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('.ide-pane-tabs [aria-selected="true"]').focus();
+  for (let k = 0; k < 6; k++) {
+    await page.keyboard.press('Tab');
+    if (await page.evaluate(() => !!document.activeElement?.closest('#why'))) break;
+  }
+  await page.waitForTimeout(1200);
+  const m = await page.evaluate(() => {
+    const r = document.activeElement!.getBoundingClientRect();
+    const why = document.querySelector('#why')!.getBoundingClientRect();
+    return { inWhy: !!document.activeElement!.closest('#why'), top: r.top, bottom: r.bottom, whyTop: Math.round(why.top), vh: innerHeight };
+  });
+  expect(m.inWhy).toBe(true);
+  expect(m.top).toBeGreaterThanOrEqual(64);
+  expect(m.bottom).toBeLessThanOrEqual(m.vh);
+  expect(m.whyTop, 'the frame is snapped under the topbar').toBe(64);
 });

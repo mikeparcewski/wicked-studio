@@ -78,6 +78,9 @@ test.describe('mobile (390×844)', () => {
     await ide.getByRole('button', { name: 'Approve plan' }).waitFor({ timeout: 10_000 });
     const tabs = ide.locator('.ide-sess');
     await expect(tabs).toHaveCount(3);
+    // the short titles are what shows; the full title and status are the tabs' names
+    await expect(ide.getByRole('tab', { name: /^Fix the flaky checkout test, Waiting on you$/ })).toBeVisible();
+    await expect(ide.getByRole('tab', { name: /^Move CI to Node 22, Done$/ })).toBeVisible();
     for (let k = 0; k < 3; k++) await expect(tabs.nth(k)).toBeInViewport();
     const short = await ide.locator('button, input, [role=tab]').evaluateAll((els) =>
       els.filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 44; })

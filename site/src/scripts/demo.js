@@ -72,7 +72,7 @@
   var pane = 'changes';
   var timers = [];
   var userTouched = false;
-  var typing = null;
+  var typing = null, typingPost = null, typingGen = 0;
   var lastNeeds = -1;
 
   function later(ms, fn) { if (reduced) { fn(); return; } timers.push(setTimeout(fn, ms)); }
@@ -93,7 +93,7 @@
       var s = S[id], st = statusOf(s), on = id === cur;
       if (st.cls === 'you') needs++;
       return '<button type="button" role="tab" id="ide-tab-' + id + '" class="ide-sess' + (on ? ' is-on' : '') + '" aria-selected="' + on +
-        '" aria-controls="ide-main" tabindex="' + (on ? '0' : '-1') + '" data-act="open" data-id="' + id + '">' +
+        '" aria-controls="ide-main" aria-label="' + esc(s.title + ', ' + st.t) + '" tabindex="' + (on ? '0' : '-1') + '" data-act="open" data-id="' + id + '">' +
         '<span class="dot dot--' + st.cls + '" aria-hidden="true"></span>' +
         '<span class="ide-sess-t"><span class="ide-sess-full">' + esc(s.title) + '</span><span class="ide-sess-short" aria-hidden="true">' + esc(s.short) + '</span></span>' +
         '<span class="ide-sess-s">' + esc(st.t) + '</span></button>';
@@ -181,7 +181,9 @@
   }
   function renderPane() {
     var s = S[cur];
-    var focusedFile = paneEl.contains(document.activeElement) ? document.activeElement.getAttribute('data-i') : null;
+    var ae = document.activeElement, inPane = paneEl.contains(ae);
+    var focusedFile = inPane ? ae.getAttribute('data-i') : null;
+    var focusedDiff = inPane && ae.classList && ae.classList.contains('diff');
     root.querySelectorAll('[data-pane-tab]').forEach(function (b) {
       var on = b.getAttribute('data-pane-tab') === pane;
       b.classList.toggle('is-on', on); b.setAttribute('aria-selected', on ? 'true' : 'false');
@@ -191,6 +193,7 @@
     if (pane === 'changes') {
       if (!s.files.length) {
         paneEl.innerHTML = '<p class="pane-empty">Nothing changed yet. Files show up here as the agents write them.</p>';
+        if (inPane) focusQuiet(root.querySelector('[data-pane-tab="' + pane + '"]'));
         return;
       }
       var f = s.files[Math.min(s.openFile, s.files.length - 1)];
@@ -201,9 +204,10 @@
         return '<span class="dl dl--' + (l[0] === '+' ? 'a' : l[0] === '-' ? 'd' : 'c') + '">' + esc(l[0] + ' ' + l[1]) + '</span>';
       }).join('') + '</pre>';
       if (focusedFile !== null) focusQuiet(paneEl.querySelector('[data-i="' + focusedFile + '"]'));
+      else if (focusedDiff) focusQuiet(paneEl.querySelector('.diff'));
     } else {
       var r = s.receipt;
-      if (!r) { paneEl.innerHTML = '<p class="pane-empty">The receipt fills in as the job runs: what was required, what ran, and who checked it.</p>'; return; }
+      if (!r) { paneEl.innerHTML = '<p class="pane-empty">The receipt fills in as the job runs: what was required, what ran, and who checked it.</p>'; if (inPane) focusQuiet(root.querySelector('[data-pane-tab="' + pane + '"]')); return; }
       paneEl.innerHTML = '<table class="rc"><tbody>' +
         '<tr><th>Required</th><td>tests pass, a different agent reviews</td></tr>' +
         '<tr><th>Built by</th><td>' + esc(r.built) + '</td></tr>' +
@@ -212,6 +216,7 @@
         '<tr><th>Decision</th><td>' + esc(r.decision || 'pending') + '</td></tr>' +
         '<tr><th>Skipped</th><td>nothing</td></tr></tbody></table>';
     }
+    if (inPane && !paneEl.contains(document.activeElement)) focusQuiet(root.querySelector('[data-pane-tab="' + pane + '"]'));
   }
   function renderAll(keepScroll) { renderRail(); renderSteps(); renderThread(keepScroll); renderPane(); }
   function refresh(id) { if (id === cur) renderAll(); else renderRail(); }
@@ -312,23 +317,41 @@
   }
 
   // ── the prompt types itself in (about 1.2 s), then posts ─────────────
-  function stopTyping() { if (typing) { clearInterval(typing); typing = null; root.classList.remove('is-typing'); } }
+  // A typing run belongs to one generation: switching jobs, focusing the composer, New job or a
+  // replay starts a new generation, which cancels both the typing and its pending post.
+  function stopTyping() {
+    typingGen++;
+    if (typing) { clearInterval(typing); typing = null; }
+    if (typingPost) { clearTimeout(typingPost); typingPost = null; }
+    root.classList.remove('is-typing');
+  }
   function typeThenStart() {
     if (reduced) { input.value = ''; start(PROMPT); return; }
     stopTyping();
-    var i = 0, step = Math.max(1, Math.round(PROMPT.length / 60));
+    var gen = typingGen, i = 0, step = Math.max(1, Math.round(PROMPT.length / 60));
     input.value = '';
     root.classList.add('is-typing');
     typing = setInterval(function () {
+      if (gen !== typingGen || cur !== 'rate') { stopTyping(); return; }
       i = Math.min(PROMPT.length, i + step);
       input.value = PROMPT.slice(0, i);
       if (i >= PROMPT.length) {
-        stopTyping();
-        timers.push(setTimeout(function () {
-          if (S.rate.state === 'draft' && cur === 'rate') { input.value = ''; start(PROMPT); }
-        }, 260));
+        clearInterval(typing); typing = null; root.classList.remove('is-typing');
+        typingPost = setTimeout(function () {
+          typingPost = null;
+          if (gen === typingGen && S.rate.state === 'draft' && cur === 'rate' && input.value === PROMPT) { input.value = ''; start(PROMPT); }
+        }, 260);
       }
     }, 20);
+  }
+  // Switching jobs stops the typing; the composer holds the prompt only for the unsent draft.
+  function openJob(id) {
+    var wasTyping = !!(typing || typingPost);
+    stopTyping();
+    cur = id;
+    if (id === 'rate' && S.rate.state === 'draft') { if (!input.value || wasTyping) input.value = PROMPT; }
+    else if (wasTyping || input.value === PROMPT) input.value = '';
+    renderAll();
   }
   function restart() {
     clearTimers(); S.rate = fresh().rate; cur = 'rate'; pane = 'changes'; input.value = PROMPT; renderAll();
@@ -341,7 +364,7 @@
     userTouched = true;
     if (b.hasAttribute('data-pane-tab')) { pane = b.getAttribute('data-pane-tab'); renderPane(); return; }
     var a = b.getAttribute('data-act');
-    if (a === 'open') { cur = b.getAttribute('data-id'); renderAll(); }
+    if (a === 'open') { openJob(b.getAttribute('data-id')); }
     else if (a === 'restart') { restart(); focusQuiet(input); }
     else if (a === 'plan-ok') planDecision(true);
     else if (a === 'plan-later') planDecision(false);
@@ -373,14 +396,14 @@
       activate(tabs[next]);
     });
   }
-  roving(sessionsEl, '[role="tab"]', true, function (t) { cur = t.getAttribute('data-id'); renderAll(); focusQuiet(sessionsEl.querySelector('[data-id="' + cur + '"]')); });
+  roving(sessionsEl, '[role="tab"]', true, function (t) { openJob(t.getAttribute('data-id')); focusQuiet(sessionsEl.querySelector('[data-id="' + cur + '"]')); });
   var paneTabs = root.querySelector('.ide-pane-tabs');
   roving(paneTabs, '[role="tab"]', false, function (t) { pane = t.getAttribute('data-pane-tab'); renderPane(); focusQuiet(t); });
   sessionsEl.addEventListener('focusin', function (e) {
     var t = e.target.closest && e.target.closest('.ide-sess');
     if (t && t.scrollIntoView) t.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   });
-  input.addEventListener('focus', function () { if (typing) { stopTyping(); input.value = PROMPT; } userTouched = true; });
+  input.addEventListener('focus', function () { if (typing || typingPost) { stopTyping(); input.value = PROMPT; } userTouched = true; });
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     userTouched = true;

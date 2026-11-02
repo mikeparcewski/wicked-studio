@@ -97,6 +97,16 @@ test.describe('scroll-snap layout', () => {
     }
   });
 
+  test('on a phone the wheel scrolls natively (the frame stepper is off)', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.mouse.move(195, 300);
+    await page.mouse.wheel(0, 120);
+    await page.waitForTimeout(700);
+    expect(Math.round(await page.evaluate(() => window.scrollY))).toBe(120);
+  });
+
   test('scrolling top to bottom reaches every section', async ({ page }) => {
     await page.setViewportSize(LAPTOP);
     await page.goto('/');

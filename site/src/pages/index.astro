@@ -211,7 +211,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     <div class="wrap">
       <div class="sec-head sec-head--row">
         <div>
-          <p class="kicker beat">Rate limits for the public API</p>
+          <p class="kicker beat">Example job: rate limits for the public API</p>
           <h2 id="why-h">What studio does for you</h2>
         </div>
         <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the scenes"><span class="pt-ic" aria-hidden="true"></span><span data-play-label>Pause</span></button>
@@ -406,7 +406,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
-          <span class="ex-illus" aria-hidden="true">illustration</span>
+          <span class="ex-illus" aria-hidden="true">illustration · example data</span>
           <div class="ex-progress" aria-hidden="true"><i data-tour-bar></i></div>
         </div>
       </div>
@@ -428,7 +428,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     <div class="wrap review-grid">
       <div class="review-left">
         <div class="sec-head">
-          <p class="kicker beat">Rate limits for the public API · Build, Review, You</p>
+          <p class="kicker beat">Example job: rate limits for the public API · Build, Review, You</p>
           <h2 id="review-h">A different agent checks the work.</h2>
           <p class="sec-sub">By default a different agent reviews the change. A gate’s receipt names who built, reviewed and judged it.</p>
         </div>
@@ -451,9 +451,9 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
       </div>
       <div class="review-right">
         <div class="relay-ctl">
-          <button type="button" class="switch" role="switch" aria-checked="true" data-relay-switch>
+          <button type="button" class="switch" role="switch" aria-checked="true" aria-label="Two agents signed in" data-relay-switch>
             <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
-            <span class="switch-l"><span class="sw-on">Two agents signed in</span><span class="sw-off">Only one agent signed in</span></span>
+            <span class="switch-l" aria-hidden="true"><span class="sw-on">Two agents signed in</span><span class="sw-off">Only one agent signed in</span></span>
           </button>
           <button type="button" class="replay" data-relay-replay>Replay</button>
         </div>
@@ -489,7 +489,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <h3>Rules</h3>
           <p>What a gate checks. Each rule applies to every repository or to one project, and can target a language, a layer or a framework.</p>
           <div class="dr-box" aria-live="polite">
-            <span class="dr-k">Waiting for you</span>
+            <span class="dr-k">Waiting for you · example</span>
             <div class="dr-slot">
               <div class="dr-rule">
                 <span class="dr-from">Suggested by Claude Code</span>
@@ -509,11 +509,11 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <h3>Memory</h3>
           <p>What happened and what you told it. See, edit or erase any of it.</p>
           <div class="dr-box" aria-live="polite">
-            <span class="dr-k">What you said · Rate limits for the public API</span>
+            <span class="dr-k">What you said · example</span>
             <div class="dr-slot">
               <div class="dr-mem">
                 <p class="dr-mem-t" data-mem-text>Track per-key limits in a follow-up issue.</p>
-                <input type="text" class="dr-mem-in" data-mem-input aria-label="Edit the memory" value="Track per-key limits in a follow-up issue." tabindex="-1" />
+                <input type="text" class="dr-mem-in" data-mem-input aria-label="Edit the memory" value="Track per-key limits in a follow-up issue." maxlength="80" tabindex="-1" />
               </div>
               <p class="dr-gone">Erased. Jobs no longer see it.</p>
             </div>
@@ -529,7 +529,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <h3>Knowledge</h3>
           <p>Learned from your code and docs, cited back to the source.</p>
           <div class="dr-box">
-            <span class="dr-k">Cited answer</span>
+            <span class="dr-k">Cited answer · example</span>
             <div class="dr-slot dr-slot--know">
               <p class="dr-cite">The public routes get their limit in the router. <button type="button" class="src-chip" data-src aria-expanded="false" aria-controls="src-router">src/http/router.ts:2</button></p>
               <div class="dr-src-stack">
@@ -610,6 +610,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
                 <span class="news-n" aria-hidden="true">{String(k + 1).padStart(2, '0')} / 08</span>
                 <h3>{n.name}</h3>
                 <p>{n.line}</p>
+                {n.name === 'Voice' && <p class="voice-note"><span class="mic" aria-hidden="true"></span>{VOICE}</p>}
               </div>
               <div class="ex-art news-art" aria-hidden="true">
                 {k === 0 && (
@@ -733,6 +734,8 @@ npx serve dist</code></pre>
 
     <Footer repo={repo} />
   </div>
+
+  <span class="sr-only" role="status" data-copy-status></span>
 
   <script>
     import '../scripts/demo.js';

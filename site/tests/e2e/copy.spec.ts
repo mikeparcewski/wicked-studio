@@ -167,5 +167,7 @@ test.describe('the reviewed messaging, details', () => {
     // the Voice mode chip
     await expect(page.locator('.desk .extras')).toContainText('Voice mode');
     await expect(page.locator('.desk .voice-note')).toContainText(N6);
+    // the Voice release item
+    await expect(page.getByRole('tabpanel', { name: 'Voice', includeHidden: true }).locator('.voice-note')).toHaveText(N6);
   });
 });

@@ -19,8 +19,7 @@ const $$ = (s, r = document) => Array.prototype.slice.call(r.querySelectorAll(s)
    way where it would do harm: outside the media in which studio.css turns mandatory snapping on
    (the same thresholds at which the shared platform band is itself a snap target), on pinch-zoom, and
    over an inner scroller that can still move in the wheel's direction (the demo's chat and diff). */
-const SNAP_MEDIA =
-  '(min-width: 1060px) and (min-height: 647px), (min-width: 1044px) and (min-height: 665px), (min-width: 941px) and (min-height: 721px)';
+const SNAP_MEDIA = '(min-width: 1260px) and (min-height: 660px), (min-width: 941px) and (min-height: 760px)';
 const snapMq = window.matchMedia(SNAP_MEDIA);
 window.addEventListener(
   'wheel',
@@ -57,6 +56,10 @@ window.addEventListener(
     if (!snapMq.matches || getComputedStyle(document.documentElement).scrollSnapType.indexOf('mandatory') < 0) return;
     const y = Math.round(window.scrollY), all = tops();
     if (all.some((t) => Math.abs(t - y) <= 2)) return;
+    // A frame taller than the window (it should never happen where this runs) is read in place.
+    const bar = (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight;
+    const here = $$('.frame, .same-garden').find((el) => { const r = el.getBoundingClientRect(); return r.top <= bar + 1 && r.bottom > bar + 1; });
+    if (here && here.getBoundingClientRect().height > window.innerHeight - bar + 1) return;
     const target = dir > 0 ? all.find((t) => t > y) : all.slice().reverse().find((t) => t < y);
     if (target != null) window.scrollTo({ top: target, behavior: 'smooth' });
   };
@@ -116,6 +119,7 @@ function revealInStrip(strip, child) {
 }
 
 /* ── Copy buttons (hero chip + the install cards): "Copied" for 1.4 s ─────────────────────── */
+const copyStatus = document.querySelector('[data-copy-status]');
 $$('[data-copy]').forEach((b) => {
   const label = b.querySelector('[data-copy-label]') || b;
   let t = null;
@@ -125,8 +129,9 @@ $$('[data-copy]').forEach((b) => {
     navigator.clipboard.writeText(text).then(() => {
       label.textContent = 'Copied';
       b.classList.add('is-copied');
+      if (copyStatus) copyStatus.textContent = 'Copied: ' + text.split('\n')[0];
       clearTimeout(t);
-      t = setTimeout(() => { label.textContent = 'Copy'; b.classList.remove('is-copied'); }, 1400);
+      t = setTimeout(() => { label.textContent = 'Copy'; b.classList.remove('is-copied'); if (copyStatus) copyStatus.textContent = ''; }, 1400);
     });
   });
 });
@@ -273,7 +278,7 @@ $$('[data-tour]').forEach((el) => {
     { lit: 'b', tok: 'b', s: { b: 's1' }, fill: 1 },
     { lit: 'r', tok: 'r', s: { b: 's1', r: 's3' }, fill: 5, stop: true },
   ];
-  const DELAY = [500, 1000, 1200, 1100, 1100, 1000];
+  const DELAY = [400, 900, 1000, 900, 900];
   let mode = 'two', t = null, played = false;
   const apply = (st) => {
     Object.keys(rows).forEach((k) => {
@@ -367,7 +372,7 @@ $$('[data-drawer]').forEach((card) => {
       c.tabIndex = on ? 0 : -1;
     });
     name.textContent = chips[k].getAttribute('data-agent');
-    if (!reduced && box) { box.classList.remove('is-swap'); void box.offsetWidth; box.classList.add('is-swap'); }
+    if (!reduced && box) { box.classList.remove('is-swap', 'is-live'); void box.offsetWidth; box.classList.add('is-swap', 'is-live'); }
   };
   chips.forEach((c, k) => c.addEventListener('click', () => pick(k)));
   roving(list, chips, { vertical: false, onMove: pick });
