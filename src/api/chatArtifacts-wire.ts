@@ -1,5 +1,6 @@
 /**
- * The chat-artifacts wire, slice A1 (DES-CHAT-ARTIFACTS-001 §5.1, §6.3, §14; `wicked-crew-api-types` 0.169.0). A
+ * The chat-artifacts wire, slices A1 and A2 (DES-CHAT-ARTIFACTS-001 §4, §5.1, §6.3, §14; `wicked-crew-api-types`
+ * 0.169.0 and 0.170.0). A
  * VERBATIM mirror of the contract block while studio's pin lags the release: when the pin moves, these become
  * re-exports from the package and this mirror goes. Gated by `GET /health.capabilities.chatArtifacts.context`: an
  * older daemon's message body is strict, so it is never sent any of it.
@@ -13,6 +14,9 @@ export interface ChatArtifactsCapabilities {
   refine: boolean;
   theme: boolean;
   demo: boolean;
+  /** (api-types 0.170.0) The daemon runs the chat-artifacts TEST configuration: Go records a stub dispatch and starts
+   *  nothing. The card says so. */
+  stub?: true;
 }
 
 /** `ChatMessageBody.context` (api-types 0.169.0): what studio shows beside the message. */
@@ -78,3 +82,88 @@ export function parseArtifactRef(ref: string): { mount: string; docId: string; p
 export function isAnchorWid(wid: string): boolean {
   return WID.test(wid);
 }
+
+// ── Chat proposals (api-types 0.170.0, DES-CHAT-ARTIFACTS-001 §4, slice A2) ─────────────────────────────────────────
+
+export type ArtifactProposalKind = 'create' | 'refine' | 'theme' | 'demo';
+
+/** One "From" chip, as crew resolved and authorized it. */
+export interface ProposalSource {
+  token: string;
+  label: string;
+  /** `struck`: the draft never sees it; `reason` says why. */
+  status: 'ok' | 'struck';
+  reason?: string;
+  projectId?: string | null;
+}
+
+export interface ProposalHelpers { seats: string[]; label: string }
+
+export interface ProposalTime {
+  minutes: [number, number] | null;
+  cost: 'low' | 'medium' | 'high' | null;
+  steps: number | null;
+  median: { runs: number; minutes: number; costUsd: number | null; costRuns: number } | null;
+  label: string;
+}
+
+/** A proposal as crew resolved it: every line is crew's. */
+export interface ArtifactProposal {
+  pid: string;
+  chatId: string;
+  turnId: string | null;
+  sourceRunId?: string;
+  kind: ArtifactProposalKind;
+  seat: string;
+  what: { entry: string | null; title: string; label: string; outcome: string | null };
+  brief: string | null;
+  reason: string | null;
+  sources: ProposalSource[];
+  repos: string[];
+  helpers: ProposalHelpers | null;
+  time: ProposalTime | null;
+  stops: string | null;
+  filedIn: { projectId: string | null; label: string };
+  target?: { ref: string; title: string; base: number };
+  touches?: string[];
+  theme?: { name: string; patch: Record<string, string | number | boolean>; changes: string[] };
+  demo?: { url: string; audience: string | null; show: string | null };
+  /** Go is refused with this reason; `null` = Go is open. */
+  blocked: string | null;
+}
+
+export interface ProposalEdits {
+  title?: string; brief?: string; sources?: string[]; repos?: string[]; project?: string | null;
+  ask?: string; allow?: string[];
+  name?: string; patch?: Record<string, string | number | boolean>;
+  url?: string; audience?: string; show?: string;
+  helpers?: string[];
+}
+
+export interface ProposalIdentity { artifactRef: string | null; runId: string }
+
+export interface ProposalResult { runId: string; artifactRef: string | null; adopted: boolean; stub: boolean }
+
+/** A proposal folded from its records. */
+export interface ChatProposalView {
+  proposal: ArtifactProposal;
+  state: 'open' | 'accepting' | 'decided' | 'superseded';
+  decision?: 'go' | 'not_now';
+  result?: ProposalResult | null;
+  decidedAt?: number;
+}
+
+/** The transcript records a proposal is made of (`GET /chats/:id` / `GET /chats/:id/messages`). */
+export type ChatProposalRecord =
+  | { at: number; turnId: string; kind: 'proposal'; proposal: ArtifactProposal }
+  | { at: number; turnId: string; kind: 'proposal_accepting'; pid: string; actor: string; edits: ProposalEdits | null; resolution: ArtifactProposal; identity: ProposalIdentity }
+  | { at: number; turnId: string; kind: 'proposal_decided'; pid: string; actor: string; decision: 'go' | 'not_now'; result: ProposalResult | null };
+
+/** `POST /chats/:id/proposals/:pid` body. */
+export interface ChatProposalDecisionBody { decision: 'go' | 'not_now'; edits?: ProposalEdits }
+
+/** `POST /chats/:id/proposals/:pid` → 200 (and the `view` a 409 carries). */
+export interface ChatProposalDecisionResponse { view: ChatProposalView }
+
+/** `/ws`: a proposal record was appended to chat `chat`. */
+export interface ChatProposalFrame { type: 'chatProposal'; chat: string; turn_id: string; record: ChatProposalRecord; project_id?: string }

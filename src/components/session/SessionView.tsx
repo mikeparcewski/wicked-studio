@@ -18,6 +18,8 @@ import type { ChatCitations } from '../../api/chat-wire.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
+import { ArtifactProposalCard } from '../chat/ArtifactProposalCard.js';
+import { foldChatProposals, type ProposalEntry } from '../../board/artifactProposal.js';
 import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
 import { chatPromotePrefill } from '../../board/chatPromote.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
@@ -137,7 +139,9 @@ type ThreadEntry =
   | { kind: 'typing'; key: string; at: number; who: string; ord: number }
   /** A run's step is executing: the helper on it is working now (studio: the thread shows it). */
   | { kind: 'working'; key: string; at: number; who: string; runId: string; ord: number; step: string }
-  | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
+  | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal }
+  /** DES-CHAT-ARTIFACTS-001 §4.2 (A2): a seat's proposal to make an artifact, as crew resolved it. */
+  | { kind: 'artifact'; key: string; at: number; entry: ProposalEntry };
 
 
 /** How long a just-decided proposal keeps the run's block away while the daemon's status catches up. */
@@ -272,6 +276,26 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     : chatError !== null ? 'unreadable'
       : chatDetail === null ? 'pending' : conversationOf(ref, chatDetail);
   const messages = useMemo(() => chatDetail?.messages ?? [], [chatDetail]);
+  // DES-CHAT-ARTIFACTS-001 §4 (A2): the chat's proposal cards, from the transcript's proposal records. A CLOSED chat's
+  // live transcript is gone, but its kept history holds them (an open proposal stays answerable after it ends).
+  const proposalsOn = useCapabilities((s) => s.chatProposals);
+  const proposalsStub = useCapabilities((s) => s.chatArtifactsStub);
+  const historyOn = useCapabilities((s) => s.chatList);
+  const [kept, setKept] = useState<{ id: string; records: readonly unknown[] } | null>(null);
+  const keptChat = ref.kind === 'chat' && proposalsOn && historyOn && conversation === 'closed' ? ref.chatId : null;
+  useEffect(() => {
+    if (keptChat === null) return;
+    let cancelled = false;
+    api.getChatMessages(keptChat)
+      .then((r) => { if (!cancelled) setKept({ id: keptChat, records: r.messages as readonly unknown[] }); })
+      .catch(() => { /* no kept history: no cards, as before */ });
+    return () => { cancelled = true; };
+  }, [keptChat, chatTry]);
+  const proposalEntries = useMemo<ProposalEntry[]>(() => {
+    if (!proposalsOn || ref.kind !== 'chat') return [];
+    const source = keptChat !== null && kept?.id === keptChat ? kept.records : messages;
+    return foldChatProposals(source);
+  }, [proposalsOn, ref, keptChat, kept, messages]);
   // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
   // live run here is NOT what Send reaches (it starts a separate Ask), and the composer says so.
   const scopeNote = composerScopeNote(mine, ref.kind === 'chat' && conversation === 'live');
@@ -403,7 +427,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // H3: who responded, per thread entry (the roster names the seats).
   const roster = useRoster();
   const whoOfEntry = (e: ThreadEntry): Responder => (e.kind === 'turn' || e.kind === 'typing' || e.kind === 'working' ? turnResponder(e.who, roster)
-    : e.kind === 'proposal' ? turnResponder(e.ask.by, roster) : CREW);
+    : e.kind === 'proposal' ? turnResponder(e.ask.by, roster) : e.kind === 'artifact' ? turnResponder(e.entry.proposal.seat, roster) : CREW);
   // The closed line above the entries is crew's: the first crew entry under it needs no second label.
   const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
@@ -567,6 +591,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
       out.push({ kind: 'run', key: `r:${v.session.id}`, at: launchedMs(v), view: v });
     }
+    // A2: each proposal card sits where crew recorded it (after the reply that carried its block).
+    for (const p of proposalEntries) out.push({ kind: 'artifact', key: `ap:${p.pid}`, at: p.at, entry: p });
     // Something visible while a helper works: a step executing (and not held by Needs you) gets a
     // live line at the thread's foot, so nobody types again or clicks because nothing seems to move.
     // A chat's own "thinking" line already says it for the answering step.
@@ -583,7 +609,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses, proposalEntries]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -1133,7 +1159,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
             // DES-CHAT-NATIVE-RUN: a run's messages carry their own speakers, and the working line names its helper.
             const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && (prev === null || responderKey(prev) !== responderKey(who))
-              ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} at={e.kind === 'line' ? e.line.at : e.kind === 'proposal' ? e.at : null} />
+              ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} at={e.kind === 'line' ? e.line.at : e.kind === 'proposal' || e.kind === 'artifact' ? e.at : null} />
               : null;
             const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
@@ -1162,6 +1188,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               )
               : e.kind === 'proposal'
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />
+              : e.kind === 'artifact' && ref.kind === 'chat'
+                ? <ArtifactProposalCard key={e.key} chatId={ref.chatId} entry={e.entry} seatName={who.name} stub={proposalsStub} onChanged={() => setChatTry((n) => n + 1)} />
+              : e.kind === 'artifact'
+                ? null
                 : e.kind === 'turn'
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})}

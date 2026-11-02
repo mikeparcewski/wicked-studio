@@ -41,7 +41,7 @@ import { ApiError, apiStatus } from './errors.js';
 import type { GuidanceUpdate } from './guidance.js';
 import type { ElicitationAnswerBody } from './ask.js';
 import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
-import type { ChatMessageContext } from './chatArtifacts-wire.js';
+import type { ChatMessageContext, ChatProposalDecisionBody, ChatProposalDecisionResponse } from './chatArtifacts-wire.js';
 
 export type * from './types.js';
 export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
@@ -371,6 +371,13 @@ export const api = {
   },
   /** A chat's messages, open or closed (`capabilities.chatList`); 404 for an id with no history. */
   getChatMessages: (chatId: string) => apiFetch<ChatMessagesResponse>(`/chats/${encodeURIComponent(chatId)}/messages`),
+  /** (api-types 0.170.0, DES-CHAT-ARTIFACTS-001 §4.3) Answer a chat's proposal: the only way one starts anything. A
+   *  repeat of the same decision answers the stored result again, so a retry after a lost response is safe. */
+  decideChatProposal: (chatId: string, pid: string, body: ChatProposalDecisionBody) =>
+    apiFetch<ChatProposalDecisionResponse>(`/chats/${encodeURIComponent(chatId)}/proposals/${encodeURIComponent(pid)}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   /** End a chat and KEEP its history (`capabilities.chatList`) — unlike `closeChat` (DELETE), which
    *  on that daemon also deletes it. Idempotent. */
   endChat: (chatId: string) => apiFetch<ChatCloseResponse>(`/chats/${encodeURIComponent(chatId)}/close`, { method: 'POST' }),
