@@ -21,7 +21,7 @@ const { useGateStore } = await import('../src/store/gates.js');
 const { useSheets } = await import('../src/store/sheets.js');
 const { makeUnit, makeView } = await import('./factories.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
-const { foldChatProposals, proposalAsk, changeRoute, proposalRecordLine } = await import('../src/board/artifactProposal.js');
+const { foldChatProposals, proposalAsk, changeRoute, proposalRecordLine, resetSettledProposals, isProposalRecord } = await import('../src/board/artifactProposal.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 
 const T0 = 1_700_000_000_000;
@@ -66,6 +66,7 @@ function ok(body: unknown): Response {
 
 beforeEach(() => {
   posts.length = 0;
+  resetSettledProposals();
   chatBody = { chatId: 'chat-ask', seats: ['claude'], scope: { kind: 'none' }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() }], path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: null, helpers: [], stepId: 'answer-1' } };
   useCapabilities.setState({ loaded: true, runChatId: true, askPath: true, chatProposals: true, chatArtifactsStub: false, chatList: true });
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, chatClosed: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: { [RUN]: [1] } });
@@ -143,12 +144,14 @@ describe('the card in the chat thread', () => {
     expect(card.getAttribute('data-state')).toBe('open');
     expect(text('artifact-proposal-what')).toBe('Document · Release note');
     const sources = screen.getAllByTestId('artifact-proposal-source');
+    // A struck chip says so in words, read the same aloud as on screen (crew's reason verbatim; no invented one).
     expect(sources.map((s) => [s.getAttribute('data-status'), s.textContent])).toStrictEqual([
       ['ok', 'this conversation'],
       ['ok', 'run 29bbbfb1 · stopped'],
-      ['struck', 'run 1a2b3c4d · not named in this chat'],
+      ['struck', 'Left out: run 1a2b3c4d · not named in this chat'],
     ]);
-    expect(sources[2]!.getAttribute('aria-label')).toBe('run 1a2b3c4d: left out, not named in this chat');
+    expect(sources[2]!.hasAttribute('aria-label')).toBe(false);
+    expect(text('artifact-proposal-brief')).toBe('Briefwhat changed');
     expect(text('artifact-proposal-about')).toBe('Aboutwicked-crew');
     expect(text('artifact-proposal-helpers')).toContain('Codex and Claude Code: one writes, the other checks');
     expect(text('artifact-proposal-time')).toContain('median of 4 past documents here: 9 min, $0.62');
@@ -197,7 +200,7 @@ describe('the card in the chat thread', () => {
     expect(screen.getByTestId('artifact-proposal-confirm')).not.toBeNull();
   });
 
-  it('a reload draws an answered card as its line, a replaced one says so, and the open one is the newest', async () => {
+  it('a reload draws an answered card collapsed to its line (facts behind Details); a replaced one says so', async () => {
     const p2 = proposal({ pid: 'chat-ask:t2', turnId: 't2', what: { entry: 'presentation', title: 'Deck', label: 'Slides · Deck', outcome: null } });
     chatBody = { ...chatBody, messages: [
       ...TURN,
@@ -215,6 +218,70 @@ describe('the card in the chat thread', () => {
     expect(second!.textContent).toContain('You chose: Make it');
     expect(second!.textContent).toContain('Test configuration: recorded, nothing was made');
     expect(screen.queryByTestId('artifact-proposal-confirm')).toBeNull();
+    // Collapsed: no fact sheet until Details is pressed.
+    expect(second!.querySelector('[data-testid="artifact-proposal-lines"]')).toBeNull();
+    fireEvent.click(second!.querySelector('[data-testid="artifact-proposal-details"]')!);
+    expect(second!.querySelector('[data-testid="artifact-proposal-lines"]')).not.toBeNull();
+  });
+
+  it('a settled card never reopens on an older read; an interrupted Go offers Go again', async () => {
+    chatBody = { ...chatBody, messages: [
+      ...TURN,
+      { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() },
+      { at: T0 + 1600, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'local', decision: 'not_now', result: null },
+    ] };
+    const view = page();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));
+    // An older snapshot (another tab's stale read) arrives: the card stays answered, no controls come back.
+    chatBody = { ...chatBody, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() }] };
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided');
+    expect(screen.queryByTestId('artifact-proposal-confirm')).toBeNull();
+    view.unmount();
+    // Interrupted: accepting with no decision.
+    resetSettledProposals();
+    chatBody = { ...chatBody, messages: [
+      ...TURN,
+      { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() },
+      { at: T0 + 1600, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: null, runId: 'r' } },
+    ] };
+    page();
+    await screen.findByTestId('artifact-proposal-go-again');
+    expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+    fireEvent.click(screen.getByTestId('artifact-proposal-go-again'));
+    await waitFor(() => expect(posts.map((p) => p.body)).toStrictEqual([{ decision: 'go' }]));
+  });
+
+  it('Enter in the composer with a card on screen sends a message, never an answer; the card never takes focus', async () => {
+    page();
+    await screen.findByTestId('artifact-proposal');
+    const box = screen.getByTestId('session-composer-input') as HTMLTextAreaElement;
+    box.focus();
+    fireEvent.change(box, { target: { value: 'actually, one more question' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    // A proposal record arriving re-renders the card: focus stays in the composer.
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(document.activeElement).toBe(box);
+    expect(posts.filter((p) => p.path.includes('/proposals/'))).toStrictEqual([]);
+    expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('open');
+  });
+
+  it('a demo card shows what it records and shows; the stub says the click starts nothing; a malformed record is skipped', async () => {
+    useCapabilities.setState({ chatArtifactsStub: true });
+    chatBody = { ...chatBody, messages: [
+      ...TURN,
+      { at: T0 + 1400, turnId: 't0', kind: 'proposal', proposal: { pid: 'broken' } },
+      { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal({ kind: 'demo', sources: [], demo: { url: 'http://localhost:5173/req', audience: 'engineers', show: 'the requirements view' }, what: { entry: 'demo-video', title: 'Req', label: 'Demo video · Req', outcome: null } }) },
+    ] };
+    expect(isProposalRecord({ at: 1, turnId: 't0', kind: 'proposal', proposal: { pid: 'broken' } })).toBe(false);
+    page();
+    await screen.findByTestId('artifact-proposal');
+    expect(screen.getAllByTestId('artifact-proposal')).toHaveLength(1);
+    expect(text('artifact-proposal-demo')).toBe('Recordshttp://localhost:5173/req');
+    expect(text('artifact-proposal-show')).toBe('Showsthe requirements view');
+    expect(screen.getByTestId('artifact-proposal').querySelector('[data-ask-option="go"]')?.textContent).toContain('Records your click; nothing starts');
   });
 
   it('the test configuration says Go starts nothing; a chatProposal frame re-reads the chat', async () => {

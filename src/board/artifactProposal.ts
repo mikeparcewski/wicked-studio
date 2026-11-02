@@ -24,11 +24,32 @@ export interface ProposalEntry extends ChatProposalView {
 
 const KINDS: ReadonlySet<string> = new Set(['proposal', 'proposal_accepting', 'proposal_decided']);
 
-export function isProposalRecord(r: unknown): r is ChatProposalRecord {
-  return typeof r === 'object' && r !== null && KINDS.has(String((r as { kind?: unknown }).kind));
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+/** A proposal shape the card can draw (crew's; a malformed record is skipped, never drawn half). */
+export function isArtifactProposal(p: unknown): p is ArtifactProposal {
+  return isObj(p) && typeof p['pid'] === 'string' && typeof p['kind'] === 'string' && isObj(p['what'])
+    && typeof (p['what'] as Record<string, unknown>)['label'] === 'string' && Array.isArray(p['sources']) && Array.isArray(p['repos'])
+    && isObj(p['filedIn']);
 }
 
-/** The chat's proposals in the order crew first recorded them. Records of other kinds are ignored. */
+export function isProposalRecord(r: unknown): r is ChatProposalRecord {
+  if (!isObj(r) || !KINDS.has(String(r['kind'])) || typeof r['turnId'] !== 'string') return false;
+  if (r['kind'] === 'proposal') return isArtifactProposal(r['proposal']);
+  if (r['kind'] === 'proposal_accepting') return typeof r['pid'] === 'string' && isArtifactProposal(r['resolution']);
+  return typeof r['pid'] === 'string' && (r['decision'] === 'go' || r['decision'] === 'not_now');
+}
+
+/** A view a refusal carried, when it is one the card can draw; else `null`. */
+export function isProposalView(v: unknown): v is ChatProposalView {
+  return isObj(v) && isArtifactProposal(v['proposal']) && ['open', 'accepting', 'decided', 'superseded'].includes(String(v['state']));
+}
+
+/**
+ * The chat's proposals in the order crew first recorded them, folded exactly as crew folds them (`chat-proposals.ts`
+ * `foldProposals`): the newest proposal record is the chat's one open proposal (a new pid, or a re-resolution of an
+ * open or interrupted one) and supersedes every other open one; an accepting (in-flight) one is not open; a decided
+ * or superseded one stays so. Records of other kinds, and malformed ones, are ignored.
+ */
 export function foldChatProposals(records: readonly unknown[]): ProposalEntry[] {
   const byPid = new Map<string, ProposalEntry>();
   for (const r of records) {
@@ -36,13 +57,9 @@ export function foldChatProposals(records: readonly unknown[]): ProposalEntry[] 
     if (r.kind === 'proposal') {
       const pid = r.proposal.pid;
       const held = byPid.get(pid);
-      if (held !== undefined) {
-        // A re-resolution (the document moved under it): the card shows the fresh facts, open again.
-        if (held.state === 'open' || held.state === 'accepting') byPid.set(pid, { pid, turnId: r.turnId, at: held.at, proposal: r.proposal, state: 'open' });
-        continue;
-      }
-      for (const v of byPid.values()) if (v.state === 'open') v.state = 'superseded';
-      byPid.set(pid, { pid, turnId: r.turnId, at: r.at, proposal: r.proposal, state: 'open' });
+      if (held !== undefined && (held.state === 'decided' || held.state === 'superseded')) continue;
+      for (const [other, v] of byPid) if (other !== pid && v.state === 'open') v.state = 'superseded';
+      byPid.set(pid, { pid, turnId: r.turnId, at: held?.at ?? r.at, proposal: r.proposal, state: 'open' });
     } else if (r.kind === 'proposal_accepting') {
       const v = byPid.get(r.pid);
       if (v === undefined || v.state === 'decided') continue;
@@ -58,6 +75,36 @@ export function foldChatProposals(records: readonly unknown[]): ProposalEntry[] 
     }
   }
   return [...byPid.values()];
+}
+
+/**
+ * What this tab knows is settled, per chat and pid: an answered or replaced proposal never reopens, whether the answer
+ * came back on this card's own request or from a transcript read (another tab's answer). A stale read — an older
+ * snapshot of the append-only transcript — is reconciled against it, so it can never redraw the controls.
+ */
+const settled = new Map<string, ProposalEntry>();
+const settledKey = (chatId: string, pid: string): string => `${chatId}\u0000${pid}`;
+const terminal = (s: ChatProposalView['state']): boolean => s === 'decided' || s === 'superseded';
+
+/** Remember a settled view (from a response or a read). Open and accepting views are never remembered. */
+export function noteSettled(chatId: string, e: ProposalEntry): void {
+  if (terminal(e.state)) settled.set(settledKey(chatId, e.pid), e);
+}
+
+/** The entries as this tab should draw them: a settled one stays settled, whatever an older read says. */
+export function reconcileProposals(chatId: string, entries: readonly ProposalEntry[]): ProposalEntry[] {
+  return entries.map((e) => {
+    if (terminal(e.state)) {
+      noteSettled(chatId, e);
+      return e;
+    }
+    return settled.get(settledKey(chatId, e.pid)) ?? e;
+  });
+}
+
+/** Tests: forget what was settled. */
+export function resetSettledProposals(): void {
+  settled.clear();
 }
 
 /** The primary's words per kind (DES §4.2): a refine is "Make the change", a theme is "Preview". */
@@ -117,7 +164,8 @@ export function proposalAsk(e: ProposalEntry, o: { stub: boolean }): Ask {
   const go: AskOption = {
     id: 'go',
     label: GO_WORDS[p.kind],
-    sub: GO_SUB[p.kind],
+    // The test configuration starts nothing, and the option says so too (never "Starts now" beside that notice).
+    sub: o.stub ? 'Records your click; nothing starts' : GO_SUB[p.kind],
     token: 'go',
     tone: 'primary',
     consequence: o.stub
@@ -163,10 +211,9 @@ export function proposalRefusal(err: unknown): { words: string; code: string | n
   if (err instanceof ApiError) {
     const body = (err.body ?? {}) as { code?: unknown; view?: unknown };
     const code = typeof body.code === 'string' ? body.code : null;
-    const view = typeof body.view === 'object' && body.view !== null ? (body.view as ChatProposalView) : null;
-    const words = code === 'proposal_refused' ? 'Only the person who owns this chat can answer its proposals.'
-      : err.status === 404 ? 'This proposal is no longer on Studio’s service.'
-      : err.wire;
+    const view = isProposalView(body.view) ? body.view : null;
+    // Crew's own sentence; only a bare 404 (an older daemon, a gone chat) gets studio's words.
+    const words = err.status === 404 && code === null ? 'This proposal is no longer on Studio’s service.' : err.wire;
     return { words, code, view };
   }
   return { words: err instanceof Error ? err.message : String(err), code: null, view: null };

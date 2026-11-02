@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 288,
-    "occurrences": 4020,
-    "static": 3425,
+    "occurrences": 4027,
+    "static": 3431,
     "dynamic": 93,
     "computed": 44
   },
@@ -736,13 +736,31 @@
       ]
     },
     {
+      "testId": "artifact-proposal-audience",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "artifact-proposal-blocked",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
       ]
     },
     {
+      "testId": "artifact-proposal-brief",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "artifact-proposal-demo",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-details",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
       ]
@@ -790,7 +808,19 @@
       ]
     },
     {
+      "testId": "artifact-proposal-reason",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "artifact-proposal-record",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-show",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
       ]
@@ -827,6 +857,12 @@
     },
     {
       "testId": "artifact-proposal-time",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-touches",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
       ]

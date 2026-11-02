@@ -1,9 +1,9 @@
 /**
  * The chat-artifacts wire, slices A1 and A2 (DES-CHAT-ARTIFACTS-001 §4, §5.1, §6.3, §14; `wicked-crew-api-types`
- * 0.169.0 and 0.170.0). A
- * VERBATIM mirror of the contract block while studio's pin lags the release: when the pin moves, these become
- * re-exports from the package and this mirror goes. Gated by `GET /health.capabilities.chatArtifacts.context`: an
- * older daemon's message body is strict, so it is never sent any of it.
+ * 0.169.0 and 0.170.0). A VERBATIM mirror of the contract blocks while studio's pin lags the release: when the pin
+ * moves, these become re-exports from the package and this mirror goes. Two gates, read separately:
+ * `GET /health.capabilities.chatArtifacts.context` for `ChatMessageBody.context` (an older daemon's message body is
+ * strict, so it is never sent any of it), and `.proposals` for the proposal cards and their answer route.
  */
 
 /** `GET /health.capabilities.chatArtifacts` (api-types 0.169.0): one flag per operation. */

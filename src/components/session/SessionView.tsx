@@ -19,7 +19,7 @@ import { useGateStore } from '../../store/gates.js';
 import { useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { ArtifactProposalCard } from '../chat/ArtifactProposalCard.js';
-import { foldChatProposals, type ProposalEntry } from '../../board/artifactProposal.js';
+import { foldChatProposals, reconcileProposals, type ProposalEntry } from '../../board/artifactProposal.js';
 import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
 import { chatPromotePrefill } from '../../board/chatPromote.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
@@ -283,6 +283,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const historyOn = useCapabilities((s) => s.chatList);
   const [kept, setKept] = useState<{ id: string; records: readonly unknown[] } | null>(null);
   const keptChat = ref.kind === 'chat' && proposalsOn && historyOn && conversation === 'closed' ? ref.chatId : null;
+  // A proposal record on an ended chat (another tab's answer) ticks the chat's re-read too.
+  const keptSeq = useAskThreadStore((s) => (keptChat === null ? 0 : s.replySeq[keptChat] ?? 0));
   useEffect(() => {
     if (keptChat === null) return;
     let cancelled = false;
@@ -290,12 +292,19 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       .then((r) => { if (!cancelled) setKept({ id: keptChat, records: r.messages as readonly unknown[] }); })
       .catch(() => { /* no kept history: no cards, as before */ });
     return () => { cancelled = true; };
-  }, [keptChat, chatTry]);
+  }, [keptChat, chatTry, keptSeq]);
+  // While an ended chat's kept history is being read, the cards it last showed stay (never a blank flash that would
+  // drop what a card just answered); a settled card never reopens on an older read (`reconcileProposals`).
+  const lastEntries = useRef<ProposalEntry[]>([]);
   const proposalEntries = useMemo<ProposalEntry[]>(() => {
     if (!proposalsOn || ref.kind !== 'chat') return [];
+    const waitingForKept = keptChat !== null && kept?.id !== keptChat;
     const source = keptChat !== null && kept?.id === keptChat ? kept.records : messages;
-    return foldChatProposals(source);
+    const folded = foldChatProposals(source);
+    if (waitingForKept && folded.length === 0) return lastEntries.current;
+    return reconcileProposals(ref.chatId, folded);
   }, [proposalsOn, ref, keptChat, kept, messages]);
+  useEffect(() => { lastEntries.current = proposalEntries; }, [proposalEntries]);
   // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
   // live run here is NOT what Send reaches (it starts a separate Ask), and the composer says so.
   const scopeNote = composerScopeNote(mine, ref.kind === 'chat' && conversation === 'live');
@@ -846,7 +855,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const readers = useMemo(() => [...mine].reverse().map((v) => ({
     id: v.session.id, workdir: typeof v.session.workdir === 'string' ? v.session.workdir : null,
   })).filter((r) => r.workdir !== null), [mine]);
-  const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none');
+  // An ended chat whose kept history still holds its proposal cards is not "nothing here".
+  const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none') && proposalEntries.length === 0;
   // studio#631 (2): a chat's thread has its own Stop — the same 10 s-undo stop ⌘K offers ("Stop this
   // session"), on every run of the chat still going. Hidden when nothing in it is running.
   const liveRuns = useMemo(() => mine.filter((v) => !['completed', 'cancelled', 'failed'].includes(v.session.status)).map((v) => v.session.id), [mine]);
@@ -1158,8 +1168,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const who = whoOfEntry(e);
             const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
             // DES-CHAT-NATIVE-RUN: a run's messages carry their own speakers, and the working line names its helper.
-            const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && (prev === null || responderKey(prev) !== responderKey(who))
-              ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} at={e.kind === 'line' ? e.line.at : e.kind === 'proposal' || e.kind === 'artifact' ? e.at : null} />
+            // A proposal card names its seat in its own header (no second speaker line above it).
+            const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && e.kind !== 'artifact' && (prev === null || responderKey(prev) !== responderKey(who))
+              ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} at={e.kind === 'line' ? e.line.at : e.kind === 'proposal' ? e.at : null} />
               : null;
             const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />

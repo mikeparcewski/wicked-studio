@@ -1,29 +1,34 @@
 /* A chat's proposal card (DES-CHAT-ARTIFACTS-001 §4.2, slice A2; mockup design/mockups/chat-artifacts.html state a):
-   crew's facts as label/value lines, struck sources said in words, then the guided ask. Built on `.wk-ask`. */
+   crew's facts as label/value lines, struck sources said in words, then the guided ask. Built on `.wk-ask`. Once
+   answered or replaced it collapses to its headline and one record line, with the facts behind Details. */
 .wk-proposal { margin: 4px 0 8px; max-width: 760px; }
 .wk-proposal .wk-ask-who svg { flex-shrink: 0; }
 .wk-proposal-lines { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 18px; row-gap: 6px; margin: 10px 0 12px; }
 .wk-proposal-row { display: contents; }
 .wk-proposal-row dt { color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.5; }
 .wk-proposal-row dd { margin: 0; color: var(--ink-body); font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
-.wk-proposal-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.wk-proposal-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px; border-radius: 999px; background: var(--surface-base);
-  box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-high); font-size: var(--text-xs); }
-.wk-proposal-chip--struck { color: var(--ink-dim); background: transparent; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--border) 60%, transparent); }
+.wk-proposal-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.wk-proposal-chip { display: inline-flex; flex-wrap: wrap; align-items: center; max-width: 100%; min-height: 24px; padding: 2px 10px; border-radius: 12px;
+  background: var(--surface-base); box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-high); font-size: var(--text-xs); line-height: 1.4; overflow-wrap: anywhere; }
+/* Struck: still readable at AA (muted ink, not dim), the words say why. */
+.wk-proposal-chip--struck { color: var(--ink-muted); background: transparent; }
 .wk-proposal-chip--struck s { text-decoration-thickness: 1px; }
-.wk-proposal-chip-why { white-space: pre; }
+.wk-proposal-chip-why { white-space: normal; }
 .wk-proposal-blocked, .wk-proposal-stub, .wk-proposal-note, .wk-proposal-error { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; font-size: var(--text-sm); line-height: 1.45; }
 .wk-proposal-blocked { background: color-mix(in oklab, var(--status-gate) 14%, transparent); color: var(--ink-body); }
 .wk-proposal-blocked b { color: var(--ink-high); }
 .wk-proposal-stub { background: var(--surface-base); color: var(--ink-muted); }
 .wk-proposal-note { margin: 10px 0 0; background: var(--surface-base); color: var(--ink-body); }
 .wk-proposal-error { margin: 10px 0 0; background: color-mix(in oklab, var(--status-fail) 12%, transparent); color: var(--ink-high); }
-.wk-proposal--settled .wk-proposal-lines { opacity: .8; }
-.wk-proposal-again { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.wk-proposal-again .wk-ask-record { flex: 1 1 auto; }
-.wk-proposal .wk-ask-opts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wk-proposal--settled { padding-bottom: 14px; }
+.wk-proposal--settled .wk-ask-q { font-size: var(--text-md); }
+.wk-proposal-settled, .wk-proposal-again { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 6px; }
+.wk-proposal-settled .wk-ask-record, .wk-proposal-again .wk-ask-record { flex: 1 1 260px; min-width: 0; flex-wrap: wrap; }
+.wk-proposal .wk-ask-record-meta { white-space: normal; margin-left: 0; }
+.wk-proposal .wk-ask-opts { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 @media (max-width: 767px) {
   .wk-proposal-lines { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
   .wk-proposal-row dd { margin-bottom: 6px; }
   .wk-proposal .wk-ask-opts { grid-template-columns: minmax(0, 1fr); }
 }
+.wk-proposal .wk-ask-record-meta { color: var(--ink-muted); }
