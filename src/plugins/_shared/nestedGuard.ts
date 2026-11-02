@@ -91,7 +91,9 @@ export function prologueEnd(text: string): { at: number; afterHashbang: boolean;
   let lineStart = true;
   // HTML-like comments (`<!--`, a line-leading `-->`) are comments only in a classic script. In a module, after an
   // operand, `<!--x` is `< !--x`: code. So they are taken only before the first directive, where in a module they can
-  // only be a syntax error (nothing runs) and in a classic script they are comments.
+  // only be a syntax error (nothing runs) and in a classic script they are comments. This must not depend on whether
+  // the script is classic or a module: a hash does not bind the type, so the same prefixed text can be run as either
+  // (a classic script copied into a child as a module), and what stands before the prelude must be inert under both.
   let beforeDirectives = true;
   /** Past whitespace and whole comments (noting a line end); false at a block comment that never closes. */
   const skip = (): boolean => {
@@ -198,12 +200,18 @@ function scriptsIn(root: ParentNode): Element[] {
   return out;
 }
 
-/** The document's own doctype, written back as it was (none stays none: the document keeps its rendering mode). */
+/** The document's own enforcing CSP metas, including those inside HTML `<template>` contents (cloned in later, they
+ *  would hash the rewritten scripts as they were and refuse them). */
+function cspMetasIn(root: ParentNode): Element[] {
+  const out = Array.from(root.querySelectorAll('meta[http-equiv]')).filter((m) => m.getAttribute('http-equiv')!.trim().toLowerCase() === 'content-security-policy');
+  for (const t of Array.from(root.querySelectorAll('template'))) if (t.namespaceURI === HTML_NS) out.push(...cspMetasIn(t.content));
+  return out;
+}
+
+/** The document's own doctype, written back as it was (none stays none). */
 function doctypeOf(doc: Document): string {
-  // A document the parser put in quirks mode keeps it: written back without a doctype (a re-serialized legacy doctype
-  // can read as a standards one).
-  if (doc.doctype === null || doc.compatMode === 'BackCompat') return '';
-  return new XMLSerializer().serializeToString(doc.doctype);
+  // Written back as it was. (A `srcdoc` document is always rendered in no-quirks mode, whatever its doctype.)
+  return doc.doctype === null ? '' : new XMLSerializer().serializeToString(doc.doctype);
 }
 
 /** `html` as a nested editor frame may show it: the prelude in every script, and a policy that runs only those. */
@@ -219,9 +227,7 @@ export function guardNestedHtml(html: string): string {
   }
   // The document's own enforcing policy would still hash the scripts as they were, and refuse them as rewritten. This
   // frame stays under the bundle's policy and the one written below, so the document's own is dropped.
-  for (const own of Array.from(doc.querySelectorAll('meta[http-equiv]'))) {
-    if (own.getAttribute('http-equiv')!.trim().toLowerCase() === 'content-security-policy') own.remove();
-  }
+  for (const own of cspMetasIn(doc)) own.remove();
   const policy = doc.createElement('meta');
   policy.setAttribute('http-equiv', 'Content-Security-Policy');
   policy.setAttribute(

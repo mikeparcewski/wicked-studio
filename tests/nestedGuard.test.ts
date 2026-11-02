@@ -141,11 +141,11 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     expect(hashesOf(doc)).toContain(node(s.textContent!));
   });
 
-  it('a document the parser put in quirks mode is written back with no doctype (it stays in quirks mode)', () => {
-    const quirks = new DOMParser().parseFromString('<!doctype html PUBLIC><p>x</p>', 'text/html');
-    const out = guardNestedHtml('<!doctype html PUBLIC><p>x</p>');
-    if (quirks.compatMode === 'BackCompat') expect(out.startsWith('<html')).toBe(true);
-    else expect(out.toLowerCase().startsWith('<!doctype')).toBe(true); // a DOM without quirks detection keeps it
+  it("a template's own enforcing CSP is dropped too (cloned in later, it would refuse the template's rewritten script)", () => {
+    const doc = parse(guardNestedHtml('<template id="t"><meta http-equiv="Content-Security-Policy" content="script-src \'sha256-AAAA\'"><script>window.t=1</script></template>'));
+    const content = (doc.getElementById('t') as HTMLTemplateElement).content;
+    expect(content.querySelector('meta[http-equiv]')).toBeNull();
+    expect(content.querySelector('script')!.textContent).toBe(`${P}window.t=1`);
   });
 
   it('inline event handlers stay in the markup but the policy refuses them (no unsafe-hashes)', () => {
