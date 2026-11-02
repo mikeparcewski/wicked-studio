@@ -227,7 +227,7 @@ code {
   .hero { height: var(--frame); min-height: 0; }
   .hero-wrap { flex: 1 1 auto; min-height: 0; }
   .hero-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 32fr) minmax(0, 68fr); grid-template-rows: minmax(0, 1fr); gap: clamp(24px, 2.6vw, 40px); }
-  .hero-copy { align-self: center; }
+  .hero-copy { align-self: safe center; }
   .hero .ide { align-self: center; height: 100%; max-height: 720px; }
 }
 /* 941-1199px: stacked, the copy in two short columns so the demo keeps its height. */
@@ -607,7 +607,7 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .drawer p { margin: 0; }
 .dr-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--hairline); border-radius: 10px; background: color-mix(in oklab, var(--canvas) 55%, transparent); font-size: var(--text-caption); }
 .dr-k { font-weight: var(--weight-strong); color: var(--muted); }
-.dr-slot { display: grid; height: 70px; }
+.dr-slot { display: grid; min-height: 70px; }
 .dr-slot > * { grid-area: 1 / 1; transition: opacity .4s var(--ease), transform .45s var(--ease); }
 .dr-rule { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 10px; border: 1px dashed color-mix(in oklab, var(--you) 60%, transparent); border-radius: 9px; background: var(--surface); }
 .dr-from { color: var(--muted); }
@@ -919,10 +919,10 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
    No snap-align on these, so the margin never moves a snap point. */
 :where(a[href], button, input, [tabindex]) { scroll-margin-top: calc(var(--topbar-h) + 12px); scroll-margin-bottom: 12px; }
 /* each drawer's slot is sized to its largest state (the rule card is the tallest) */
-[data-drawer="rule"] .dr-slot { height: 98px; }
+[data-drawer="rule"] .dr-slot { min-height: 98px; }
 .dr-slot.dr-slot--know { height: auto; }
 .sandbox { height: 118px; padding-top: 10px; }
-@media (pointer: coarse) { .dr-slot { min-height: 0; } [data-drawer="memory"] .dr-slot { height: 78px; } }
+@media (pointer: coarse) { [data-drawer="memory"] .dr-slot { min-height: 78px; } }
 /* narrower schematic boxes wrap more: give them the height their largest panel needs */
 @media (max-width: 1199px) { .news-art { height: 240px; } }
 @media (max-width: 940px) { .ex-art { height: 240px; } .news-art { height: 252px; } }
@@ -942,3 +942,7 @@ html.frames-overflow { scroll-snap-type: none; }
 @media (min-width: 941px) and (max-height: 639px), (min-width: 941px) and (max-width: 1199px) and (max-height: 699px) {
   .hero .ide { height: 480px; flex: none; }
 }
+/* frames that outgrow the window (page.js fit check): the hero gives up its fixed height and grows
+   around its content, and the demo keeps a bounded height */
+html.frames-overflow .hero { height: auto; min-height: var(--frame); }
+@media (min-width: 941px) { html.frames-overflow .hero .ide { height: 520px; max-height: none; flex: none; } }

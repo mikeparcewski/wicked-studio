@@ -28,13 +28,16 @@ const html = document.documentElement;
 const barH = () => (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight;
 const fitCheck = () => {
   const avail = window.innerHeight - barH();
-  html.classList.toggle('frames-overflow', $$('.frame, .same-garden').some((el) => el.getBoundingClientRect().height > avail + 1));
+  // a frame is too big when its box outgrows the window, or (the fixed-height hero) its content outgrows its box
+  html.classList.toggle('frames-overflow', $$('.frame, .same-garden').some((el) =>
+    el.getBoundingClientRect().height > avail + 1 || el.scrollHeight > el.clientHeight + 1));
 };
 const snapping = () => snapMq.matches && !html.classList.contains('frames-overflow');
 fitCheck();
 window.addEventListener('resize', fitCheck, { passive: true });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitCheck);
-if ('ResizeObserver' in window) { const ro = new ResizeObserver(fitCheck); $$('.frame, .same-garden').forEach((el) => ro.observe(el)); }
+// observe the frames and what is inside them, so growth confined to a descendant is seen too
+if ('ResizeObserver' in window) { const ro = new ResizeObserver(fitCheck); $$('.frame, .same-garden, .frame > .wrap, .hero-copy, .hero h1').forEach((el) => ro.observe(el)); }
 window.addEventListener(
   'wheel',
   (e) => {
@@ -378,19 +381,13 @@ $$('[data-drawer]').forEach((card) => {
     });
   } else if (kind === 'know') {
     const chip = card.querySelector('[data-src]');
-    const src = card.querySelector('.dr-src');
-    let pinned = false, over = 0, t = null;
+    const area = card.querySelector('.dr-slot--know');
+    let pinned = false;
     const show = (on) => { card.classList.toggle('is-src', on); chip.setAttribute('aria-expanded', on ? 'true' : 'false'); };
-    // hovering either the chip or the revealed source keeps it open (a short grace bridges the gap)
-    [chip, src].forEach((el) => {
-      el.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'mouse' || (el === src && !card.classList.contains('is-src'))) return; over++; clearTimeout(t); show(true); });
-      el.addEventListener('pointerleave', (e) => {
-        if (e.pointerType !== 'mouse') return;
-        over = Math.max(0, over - 1);
-        clearTimeout(t);
-        t = setTimeout(() => { if (!over && !pinned && document.activeElement !== chip) show(false); }, 180);
-      });
-    });
+    // the chip opens it; it stays open anywhere over the cited line and the source (one hover area, gap
+    // included, so pointer speed never matters) and closes when the pointer leaves that area
+    chip.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') show(true); });
+    area.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !pinned && document.activeElement !== chip) show(false); });
     chip.addEventListener('focus', () => show(true));
     chip.addEventListener('blur', () => { if (!pinned) show(false); });
     chip.addEventListener('click', () => { pinned = !pinned; show(pinned || document.activeElement === chip); });

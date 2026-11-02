@@ -136,8 +136,13 @@ test('rules / memory / knowledge: approve a rule, edit and erase a memory, revea
   await expect(know.locator('.dr-src')).toBeHidden();
   await chip.hover();
   await expect(know.locator('.dr-src')).toBeVisible();
+  // slowly, through the gap: pointer speed never closes it
+  const cb = (await chip.boundingBox())!;
   const sb = (await know.locator('.dr-src').boundingBox())!;
-  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2, { steps: 6 });
+  await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height + 4);
+  await page.waitForTimeout(400);
+  await expect(know.locator('.dr-src')).toBeVisible();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2, { steps: 12 });
   await page.waitForTimeout(400);
   await expect(know.locator('.dr-src')).toBeVisible();
   await page.mouse.move(5, 5);

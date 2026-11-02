@@ -140,3 +140,32 @@ for (const vp of [{ width: 941, height: 600 }, { width: 1280, height: 600 }]) {
     expect(await heroH()).toBe(h0);
   });
 }
+
+test('enlarged text in the hero turns snapping off and the hero grows around it', async ({ page }) => {
+  // text zoom confined to the hero: the fixed-height frame must give way instead of spilling
+  await page.setViewportSize({ width: 1280, height: 660 });
+  await page.goto('/');
+  await page.addStyleTag({ content: '.hero-copy, .hero-copy * { font-size: 26px !important; line-height: 1.4 !important; }' });
+  await expect(page.locator('html')).toHaveClass(/frames-overflow/);
+  const m = await page.evaluate(() => {
+    const hero = document.querySelector('.hero')!.getBoundingClientRect();
+    const copy = document.querySelector('.hero-copy')!.getBoundingClientRect();
+    const why = document.querySelector('#why')!.getBoundingClientRect();
+    return { heroTop: hero.top, heroBottom: hero.bottom, copyTop: copy.top, copyBottom: copy.bottom, whyTop: why.top, snap: getComputedStyle(document.documentElement).scrollSnapType };
+  });
+  expect(m.snap).not.toContain('mandatory');
+  expect(m.copyTop).toBeGreaterThanOrEqual(m.heroTop);
+  expect(m.copyBottom).toBeLessThanOrEqual(m.heroBottom + 1);
+  expect(m.whyTop).toBeGreaterThanOrEqual(m.heroBottom - 1);
+});
+
+test('enlarged text in a drawer pushes its actions down instead of covering the rule', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 660 });
+  await page.goto('/');
+  await page.addStyleTag({ content: '[data-drawer="rule"] * { font-size: 24px !important; }' });
+  const m = await page.locator('[data-drawer="rule"]').evaluate((el) => ({
+    rule: el.querySelector('.dr-rule')!.getBoundingClientRect().bottom,
+    acts: el.querySelector('.dr-stack')!.getBoundingClientRect().top,
+  }));
+  expect(m.rule).toBeLessThanOrEqual(m.acts);
+});
