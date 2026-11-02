@@ -575,11 +575,12 @@ export const api = {
     apiFetch<{ workflows: import('./types.js').WorkflowDef[]; unavailable?: import('./wave6-wire.js').RefusedWorkflow[] }>('/workflows'),
 
   /**
-   * (launch-modal, wf-catalog WIRE) The workflow catalog for New job: categories, each workflow's
-   * metadata and this operator's usage. Read as `unknown` (`catalogFromWire` parses it); an older
+   * (launch-modal, wf-catalog WIRE v1) The workflow catalog for New job: categories, each entry's
+   * metadata and this operator's usage (`?projectId` counts that project's runs and adds its saved presets). Read as `unknown` (`catalogFromWire` parses it); an older
    * daemon answers 404 and New job falls back to `listWorkflows`.
    */
-  getWorkflowCatalog: () => apiFetch<unknown>(WORKFLOW_CATALOG_PATH),
+  getWorkflowCatalog: (projectId?: string | null) =>
+    apiFetch<unknown>(projectId != null && projectId !== '' ? `${WORKFLOW_CATALOG_PATH}?projectId=${encodeURIComponent(projectId)}` : WORKFLOW_CATALOG_PATH),
 
   /** One workflow definition by id; 404 if unknown. */
   getWorkflow: (id: string) => apiFetch<{ workflow: import('./types.js').WorkflowDef }>(`/workflows/${encodeURIComponent(id)}`),

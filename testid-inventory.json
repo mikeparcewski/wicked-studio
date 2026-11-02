@@ -13,7 +13,7 @@
   "counts": {
     "files": 285,
     "occurrences": 3960,
-    "static": 3366,
+    "static": 3367,
     "dynamic": 93,
     "computed": 44
   },
@@ -6594,6 +6594,12 @@
     },
     {
       "testId": "launch-catalog-top",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-unavailable-tag",
       "files": [
         "src/components/launch/WorkflowCatalog.tsx"
       ]

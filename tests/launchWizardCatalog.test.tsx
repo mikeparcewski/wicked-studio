@@ -112,14 +112,16 @@ describe('a daemon with the catalog', () => {
     await openCatalog();
     const sections = [...document.querySelectorAll<HTMLElement>('[data-section]')].map((s) => s.dataset.section);
     expect(sections).toEqual(['top', 'create', 'resolve', 'analyze', 'test', 'more']);
-    expect(cardIds(section('top'))).toEqual(['bug', 'feature', 'review-recent-work', 'migration']);
+    expect(cardIds(section('top'))).toEqual(['bug', 'feature', 'review-recent-work']);
     expect(cardIds(section('resolve'))).toEqual(['bug', 'migration']);
-    // Crew's demo is studio's Demo video (one card), Draft epics and Learn sit under More.
-    expect(cardIds(section('create'))).toEqual(['vibe', 'feature', 'documentation', 'presentation', 'demo-video', 'phase-plugin', 'editor-plugin', 'mcp-server']);
-    expect(cardIds(section('more'))).toEqual(['learn', 'draft-epics']);
+    expect(cardIds(section('create'))).toEqual([
+      'create-app', 'feature', 'document:docs', 'document:document-interactive', 'document:document-static', 'document:presentation',
+      'demo-video', 'phase-plugin', 'editor-plugin', 'mcp-server',
+    ].map((x) => (x === 'document:docs' ? 'docs' : x)));
+    expect(cardIds(section('more'))).toEqual(['learn', 'draft-epics', 'chat:start-chat']);
     const feature = screen.getByTestId('launch-wizard-workflow-feature');
     expect(feature).toHaveTextContent('A pull request with the feature, its tests and a review');
-    expect(feature).toHaveTextContent('Needs a repository · 30–90 min · $$');
+    expect(feature).toHaveTextContent('Needs a repository · 30 min–1.5 h');
     // A top card names its category; a card in its own section does not repeat it.
     expect(screen.getByTestId('launch-catalog-top-bug')).toHaveTextContent('Resolve');
     expect(within(section('resolve')).getByTestId('launch-wizard-workflow-bug')).not.toHaveTextContent('Resolve');
@@ -127,17 +129,17 @@ describe('a daemon with the catalog', () => {
 
   it('a coming-soon workflow is shown, never offered: not a button, a click picks nothing', async () => {
     await openCatalog();
-    const vibe = screen.getByTestId('launch-catalog-soon-vibe');
+    const vibe = screen.getByTestId('launch-catalog-soon-create-app');
     expect(vibe.tagName).not.toBe('BUTTON');
     expect(vibe).toHaveAttribute('aria-disabled', 'true');
-    expect(vibe).toHaveTextContent('Coming soon');
+    expect(vibe).toHaveTextContent('Coming soon Design in progress');
     expect(vibe.querySelector('a, button, [tabindex]')).toBeNull();
     fireEvent.click(vibe);
     expect(useLaunchWizard.getState().draft?.workflowId ?? null).toBeNull();
   });
 
   it('Your top is hidden for a new user', async () => {
-    catalog = { ...fixture, usage: [] };
+    catalog = { ...fixture, entries: fixture.entries.map((e) => ({ ...e, usage: { launches: 0, lastUsedAt: null, medianMinutes: null } })) };
     await openCatalog();
     expect(screen.queryByTestId('launch-catalog-top')).toBeNull();
     expect(section('create')).not.toBeNull();
@@ -147,17 +149,19 @@ describe('a daemon with the catalog', () => {
     await openCatalog();
     search('write docs for the auth service');
     expect(screen.queryByTestId('launch-catalog-top')).toBeNull();
-    expect(cardIds(section('results'))[0]).toBe('documentation');
+    expect(cardIds(section('results'))[0]).toBe('docs');
     expect(screen.getByTestId('launch-catalog-count')).toHaveTextContent(/workflows? match/);
     fireEvent.keyDown(screen.getByTestId('launch-catalog-search'), { key: 'Enter' });
-    expect(useLaunchWizard.getState().draft?.workflowId).toBe('documentation');
+    expect(useLaunchWizard.getState().draft?.workflowId).toBe('docs');
     expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('what');
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('New job: Documentation');
-    // Shaping: what you get, what it needs, and the inputs it asks you to say.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('New job: Write docs in the repo');
+    // Shaping: the words box is named by the workflow; what you get, what it needs, its other inputs.
+    expect(screen.getByLabelText(/What should the docs cover\?/)).toBe(screen.getByTestId('launch-wizard-intent'));
     const shape = screen.getByTestId('launch-wizard-shape');
-    expect(shape).toHaveTextContent('Docs for a service or feature');
+    expect(shape).toHaveTextContent('Docs in your repository, as a pull request');
+    expect(shape).toHaveTextContent('Usually 15–40 min · low cost');
     expect(screen.getByTestId('launch-wizard-shape-needs')).toHaveTextContent('a repository');
-    expect(screen.getByTestId('launch-wizard-shape-inputs')).toHaveTextContent('Who reads it (optional) New engineers');
+    expect(screen.getByTestId('launch-wizard-shape-inputs')).toHaveTextContent('Who reads them (new engineers, operators, customers), if it matters');
   });
 
   it('no results: says so, and Clear search brings the sections back', async () => {
@@ -180,9 +184,9 @@ describe('a daemon with the catalog', () => {
     fireEvent.change(screen.getByTestId('launch-catalog-repo'), { target: { value: 'without' } });
     expect(screen.queryByTestId('launch-catalog-top')).toBeNull();
     const shown = cardIds(screen.getByTestId('launch-catalog-results'));
-    expect(shown).toEqual(['vibe', 'presentation', 'demo-video', 'review-recent-work', 'learn', 'draft-epics']);
+    expect(shown).toEqual(['create-app', 'document:document-interactive', 'document:document-static', 'document:presentation', 'demo-video', 'review-recent-work', 'learn', 'draft-epics', 'chat:start-chat']);
     fireEvent.click(screen.getByTestId('launch-catalog-soon-toggle'));
-    expect(cardIds(screen.getByTestId('launch-catalog-results'))).not.toContain('vibe');
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))).not.toContain('create-app');
     search('migrate');
     expect(screen.getByTestId('launch-catalog-noresults')).toHaveTextContent('with these filters');
     fireEvent.click(screen.getByTestId('launch-catalog-clear-filters'));
@@ -228,7 +232,8 @@ describe('a daemon with the catalog', () => {
   it('a workflow that works without a repository does not ask for one, and offers no pull request', async () => {
     await openCatalog();
     fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
-    expect(screen.getByTestId('launch-wizard-shape-inputs')).toHaveTextContent('Runs to review Name one or more runs');
+    expect(screen.getByTestId('launch-wizard-intent')).toBe(screen.getByLabelText(/Which runs, and what do you want to know\?/));
+    expect(screen.queryByTestId('launch-wizard-shape-inputs')).toBeNull();
     fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'my last three runs' } });
     fireEvent.click(screen.getByTestId('launch-wizard-next'));
     expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('where');
@@ -253,9 +258,87 @@ describe('a daemon with the catalog', () => {
     expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Choose the repository this works in.');
   });
 
+  it('a document entry opens New document on its list, in the draft\'s project; a chat entry is the chat flow', async () => {
+    const navigate = vi.fn();
+    render(<LaunchWizard navigate={navigate} />);
+    act(() => openLaunchWizard({ projectId: 'p1' }));
+    fireEvent.click(await screen.findByTestId('launch-wizard-workflow-document:presentation'));
+    expect(navigate).toHaveBeenCalledWith('/everything?tab=made&project=p1&kind=decks&new=document');
+    expect(useLaunchWizard.getState().open).toBe(false);
+    act(() => openLaunchWizard({}));
+    fireEvent.click(await screen.findByTestId('launch-wizard-workflow-chat:start-chat'));
+    expect(useLaunchWizard.getState().open).toBe(false);
+    expect(useLaunchWizard.getState().draft?.workflowId ?? null).toBeNull();
+  });
+
+  it('an unavailable workflow is shown with why, never offered', async () => {
+    await openCatalog();
+    const v = screen.getByTestId('launch-catalog-soon-validate-docs');
+    expect(v.tagName).not.toBe('BUTTON');
+    expect(v).toHaveTextContent('Not available Needs the next engine release');
+  });
+
   it('Talk it through first leaves for the chat flow', async () => {
     await openCatalog();
     fireEvent.click(screen.getByTestId('launch-wizard-start-chat'));
     expect(useLaunchWizard.getState().open).toBe(false);
+  });
+});
+
+describe('an older daemon whose workflow list never comes', () => {
+  it('still offers studio’s own kinds, and the daemon’s join when they land', async () => {
+    clearCachedWorkflows();
+    render(<LaunchWizard />);
+    act(() => openLaunchWizard({}));
+    await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).toBe('fallback'));
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual(['demo-video', 'draft-epics', 'vibe']);
+    act(() => setCachedWorkflows(WF));
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toContain('feature');
+  });
+});
+
+describe('words a workflow does not require (live catalog: Check documentation, Review recent work)', () => {
+  const ENTRY = (id: string, inputs: unknown[]) => ({
+    id, category: 'analyze', title: id === 'validate-docs' ? 'Check documentation' : 'Review recent work',
+    summary: id === 'validate-docs' ? 'Check your docs against the code. Every claim.' : 'Recommendations across your runs.',
+    outcome: 'A report', needs: id === 'validate-docs' ? ['repo'] : ['runs'], inputs, status: 'available',
+    launch: { kind: 'run', workflow: id }, usage: { launches: 0, lastUsedAt: null, medianMinutes: 283.1 },
+  });
+  beforeEach(() => {
+    catalog = {
+      categories: [{ id: 'analyze', title: 'Analyze', summary: 'Understand', subcategories: [] }],
+      entries: [
+        ENTRY('validate-docs', [{ id: 'intent', label: 'Which docs? (blank = the READMEs and docs/)', kind: 'text', required: false }, { id: 'repo', label: 'Repository', kind: 'repo', required: true }]),
+        ENTRY('review-recent-work', [{ id: 'seats', label: 'Helpers', kind: 'seats', required: false }]),
+      ],
+    };
+  });
+
+  it('an optional first text input: Next with no words, and the launch says the workflow’s summary', async () => {
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-validate-docs'));
+    expect(screen.getByLabelText(/Which docs\? \(blank = the READMEs and docs\/\) \(optional\)/)).toBe(screen.getByTestId('launch-wizard-intent'));
+    expect(screen.getByTestId('launch-wizard-shape')).toHaveTextContent('your runs took about 4.7 h');
+    expect(screen.getByTestId('launch-wizard-next')).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.change(await screen.findByTestId('launch-wizard-repo'), { target: { value: 'repo-1' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    expect(screen.getByTestId('launch-wizard-review')).toHaveTextContent('Check your docs against the code');
+    expect(screen.queryByTestId('launch-wizard-blocker')).toBeNull();
+  });
+
+  it('no text input at all: the words are optional too', async () => {
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    expect(screen.getByLabelText(/Anything to focus on\? \(optional\)/)).toBe(screen.getByTestId('launch-wizard-intent'));
+    expect(screen.getByTestId('launch-wizard-next')).not.toBeDisabled();
+  });
+
+  it('a workflow the catalog does not describe keeps the words required', async () => {
+    catalog = null;
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-feature'));
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
   });
 });

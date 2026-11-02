@@ -92,11 +92,16 @@
    compact: a small drawing beside the title, what you get (two lines) and a meta line. */
 .wk-launch-wizard--cards { width: min(960px, 100%); height: min(720px, calc(100dvh - 48px)); }
 .wk-launch-wizard--cards .wk-launch-wizard-body { overflow: hidden; padding-bottom: var(--space-3); }
+.wk-launch-wizard--cards .wk-launch-wizard-foot { flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); }
+.wk-launch-wizard--cards .wk-launch-wizard-foot > .wk-field-note { margin: 0; }
+/* The skip note stays for screen readers (the checkbox's description) and in the label's tooltip. */
+.wk-launch-wizard--cards .wk-launch-wizard-skip .wk-field-note { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .wk-catalog { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 .wk-catalog-top { display: flex; flex-direction: column; gap: var(--space-2); }
 .wk-catalog-searchrow { display: flex; gap: var(--space-2); align-items: stretch; }
 .wk-launch-wizard input.wk-catalog-search { flex: 1 1 auto; min-width: 0; font-size: var(--text-body); }
 .wk-catalog-chat { flex: 0 0 auto; white-space: nowrap; }
+.wk-catalog-chat-short { display: none; }
 .wk-catalog-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
 .wk-catalog-cats { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .wk-catalog-count { color: var(--ink-muted); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
@@ -123,14 +128,15 @@
 .wk-catalog-card-art .wk-wf-art { max-height: 40px; }
 .wk-catalog-card.wk-launch-wizard-choice--on .wk-catalog-card-art { color: var(--ink-body); }
 .wk-catalog-card-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.wk-catalog-card-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-2); min-width: 0; }
+.wk-catalog-card-name { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
 .wk-catalog-card .wk-launch-wizard-choice-name { font-size: var(--text-lead); line-height: var(--leading-tight); overflow-wrap: anywhere; }
 .wk-catalog-card .wk-launch-wizard-choice-line {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
   font-size: var(--text-body); line-height: 1.35; color: var(--ink-muted);
 }
-.wk-catalog-card-meta { font-size: var(--text-caption); color: var(--ink-dim); }
-.wk-catalog-card-cat { margin-left: auto; font-size: var(--text-caption); color: var(--ink-muted); }
+.wk-catalog-card-meta { font-size: var(--text-caption); color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-catalog-card-meta .wk-tag { margin-right: var(--space-1); }
+.wk-catalog-card-cat { margin-left: auto; flex: 0 0 auto; font-size: var(--text-caption); color: var(--ink-muted); }
 .wk-catalog-card .wk-tag { font-size: var(--text-caption); }
 /* Coming soon: shown, never offered — a card that is not a button (dashed edge, no hover; the arrow
    keys pass over it, they move between buttons only). */
@@ -149,7 +155,8 @@
 .wk-launch-shape { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-raised); }
 .wk-launch-shape-line { margin: 0; font-size: var(--text-body); color: var(--ink-body); }
 .wk-launch-shape-key { font-weight: var(--weight-strong); color: var(--ink-high); margin-right: var(--space-1); }
-.wk-launch-shape-inputs { margin: var(--space-1) 0 0; padding-left: var(--space-4); display: flex; flex-direction: column; gap: 2px; font-size: var(--text-body); color: var(--ink-body); }
+.wk-launch-shape-inputs { margin-top: var(--space-1); font-size: var(--text-body); color: var(--ink-body); }
+.wk-launch-shape-inputs ul { margin: 2px 0 0; padding-left: var(--space-5); display: flex; flex-direction: column; gap: 2px; }
 @media (max-width: 767px) {
   .wk-launch-wizard--cards { width: 100%; height: 100dvh; }
   .wk-launch-wizard--cards .wk-launch-wizard-foot { display: none; }
@@ -157,6 +164,9 @@
   .wk-catalog-cats > .wk-chip { flex: 0 0 auto; }
   .wk-catalog-filters { flex-wrap: wrap; }
   .wk-catalog-filters-toggle { display: inline-flex; flex: 0 0 auto; }
+  .wk-catalog-chat-long { display: none; }
+  .wk-catalog-chat-short { display: inline; }
+  .wk-catalog-card-meta { white-space: normal; }
   .wk-catalog-more { margin-left: 0; width: 100%; flex-wrap: wrap; }
   .wk-catalog-more[data-open='false'] { display: none; }
   .wk-catalog-grid { grid-template-columns: minmax(0, 1fr); }

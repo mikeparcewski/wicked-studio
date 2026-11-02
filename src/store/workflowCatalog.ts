@@ -13,25 +13,30 @@ export type CatalogLoad =
   | { state: 'ready'; view: CatalogView }
   | { state: 'unavailable' };
 
-let last: CatalogLoad = { state: 'loading' };
+// The last answer, shown while the next open re-reads. Per project: its usage and saved presets differ.
+let last: { projectId: string | null; load: CatalogLoad } = { projectId: null, load: { state: 'loading' } };
 
-export function useWorkflowCatalog(): CatalogLoad {
-  const [load, setLoad] = useState<CatalogLoad>(last);
+export function useWorkflowCatalog(projectId: string | null): CatalogLoad {
+  const [got, setGot] = useState<{ projectId: string | null; load: CatalogLoad }>(last);
   useEffect(() => {
     let live = true;
     Promise.resolve()
-      .then(() => api.getWorkflowCatalog())
-      .then((body) => {
+      .then(() => api.getWorkflowCatalog(projectId))
+      .then((body): CatalogLoad => {
         const view = catalogFromWire(body);
-        last = view === null ? { state: 'unavailable' } : { state: 'ready', view };
-      }, () => { last = { state: 'unavailable' }; })
-      .then(() => { if (live) setLoad(last); });
+        return view === null ? { state: 'unavailable' } : { state: 'ready', view };
+      }, (): CatalogLoad => ({ state: 'unavailable' }))
+      .then((load) => {
+        last = { projectId, load };
+        if (live) setGot(last);
+      });
     return () => { live = false; };
-  }, []);
-  return load;
+  }, [projectId]);
+  // Another project's answer is never shown for this one: loading until this one's lands.
+  return got.projectId === projectId ? got.load : { state: 'loading' };
 }
 
 /** Test hook: the cold start (nothing read yet). */
 export function resetWorkflowCatalog(): void {
-  last = { state: 'loading' };
+  last = { projectId: null, load: { state: 'loading' } };
 }

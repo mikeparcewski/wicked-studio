@@ -1,15 +1,19 @@
-"""Journey: the New job cards (operator 2026-10-12) — the Desk's "New job" opens the launch wizard on
-a grid of cards, one per kind of job (the daemon's ordinary workflows, then Draft epics).
+"""Journey: New job's workflow catalog (launch-modal, operator 2026-11-01). The Desk's "New job" opens
+the launch wizard on a catalog: search on top, category chips and filters, "Your top", then a section
+per category; typing a sentence ranks the workflows, Enter picks the best, and the pick lands on the
+step that asks only for what that workflow needs. An older daemon (no catalog route) gets today's
+list, uncategorised and still searchable.
 
-MEASURED, not eyeballed, at 1440x700 and 1920x1080: 4 across and exactly 3 whole rows in the grid's
-view with no partial row (the row height is a third of the room the modal leaves, in CSS); at 860
-wide 2 across; on a phone (390x844) 1 across; past the view the cards scroll inside the grid, and the
-modal itself always fits the window. Every card has a decorative drawing (aria-hidden SVG, no external image), arrow keys move
-across the grid as laid out, the focused card carries the focus ring, and Enter picks it into its
-job's first step. GET /workflows is stubbed with the catalog a real daemon serves (system ones
-included, so the filter is exercised); nothing is posted.
+MEASURED at 1440x700, 1920x1080, 860x900 and 390x844: the dialog fits the window and the document
+never scrolls (the results panel does); 3 cards across on a desktop, 2 at 860, 1 on a phone; every card
+has a decorative drawing (aria-hidden SVG, no external image) and a target of at least 44 px. Keyboard
+at 1440: focus starts in search, Down goes to the cards and follows the layout, Up from the top row
+returns to search, the focused card shows the focus ring.
 
-Captures: e2e/shots/desk-newjob-cards-*.png. Env: FEEDBACK_PORT (default 4523).
+GET /workflows/catalog is stubbed with the WIRE v1 fixture (tests/fixtures/workflowCatalog.json) and
+GET /workflows with the list a real daemon served; nothing is posted.
+
+Captures: e2e/shots/desk-newjob-catalog-*.png. Env: FEEDBACK_PORT (default 4523).
 """
 
 import json
@@ -20,6 +24,7 @@ from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4523"))
 SHOTS = REPO / "e2e" / "shots"
+CATALOG = json.loads((REPO / "tests" / "fixtures" / "workflowCatalog.json").read_text())
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -40,8 +45,8 @@ SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
 posts: list[str] = []
 
-# The catalog a real daemon served on 2026-10-12 (ids, phases, system flag).
-CATALOG = [
+# The workflows a real daemon served on 2026-10-12 (ids, phases, system flag): the older-daemon list.
+DEFS = [
     ("bug", ["triage", "reproduce", "fix", "verify"], False),
     ("capture-learnings", ["churn", "hotspots", "capture"], True),
     ("chat", ["explore"], True),
@@ -55,106 +60,127 @@ CATALOG = [
     ("qe-author-tests", ["recon", "author", "verify", "review"], False),
 ]
 WORKFLOWS = {"workflows": [
-    {"id": i, "is_system": s, "phases": [{"id": p, "executes_code": True} for p in ph]} for (i, ph, s) in CATALOG]}
-# Today's offer: the ordinary workflows in catalog order (at most 8), then studio's own two jobs:
-# Demo video (studio#664) and Draft epics.
-# Since 2026-10-16 the first card is "Start with chat" (the chat flow), then the jobs.
-EXPECTED = ["chat"] + [i for (i, _, s) in CATALOG if not s][:8] + ["demo-video", "draft-epics"]
+    {"id": i, "is_system": s, "phases": [{"id": p, "executes_code": True} for p in ph]} for (i, ph, s) in DEFS]}
+# Older daemon: every ordinary workflow (no 8-row cap), then studio's own kinds, then the app builder (coming soon).
+OLDER = [i for (i, _, s) in DEFS if not s] + ["demo-video", "draft-epics", "vibe"]
 
 MEASURE = r"""() => {
-  const grid = document.querySelector('[data-testid=launch-wizard-cards]');
-  if (!grid) return null;
-  const g = grid.getBoundingClientRect();
-  const cards = [...grid.querySelectorAll('button')];
-  const tops = [...new Set(cards.map((c) => Math.round(c.offsetTop)))].sort((a, b) => a - b);
-  let full = 0, partial = 0;
-  for (const t of tops) {
-    const r = cards.find((c) => Math.round(c.offsetTop) === t).getBoundingClientRect();
-    if (r.top >= g.top - 0.5 && r.bottom <= g.bottom + 0.5) full++;
-    else if (r.bottom > g.top + 0.5 && r.top < g.bottom - 0.5) partial++;
-  }
+  const panel = document.querySelector('[data-testid=launch-catalog-results]');
+  if (!panel) return null;
   const dlg = document.querySelector('[data-testid=launch-wizard]').getBoundingClientRect();
+  const se = document.scrollingElement;
+  const cards = [...panel.querySelectorAll('[data-catalog-card], [data-testid^="launch-catalog-soon-"]:not([data-testid="launch-catalog-soon-tag"])')];
+  const grid = panel.querySelector('[data-section]:not([data-section=top]):not([data-section=fit]) .wk-catalog-grid');
+  const kids = grid ? [...grid.children] : [];
+  const top0 = kids[0]?.getBoundingClientRect().top;
   return {
-    ids: cards.map((c) => c.dataset.testid === 'launch-wizard-start-chat' ? 'chat' : c.dataset.testid.replace('launch-wizard-workflow-', '')),
-    across: cards.filter((c) => Math.round(c.offsetTop) === tops[0]).length,
-    rows: tops.length, full, partial,
-    gridScrolls: grid.scrollHeight > grid.clientHeight + 1, overflowY: getComputedStyle(grid).overflowY,
-    dialogFits: dlg.top >= 0 && dlg.bottom <= innerHeight + 0.5,
+    sections: [...panel.querySelectorAll('[data-section]')].map((s) => s.dataset.section),
+    ids: cards.map((c) => c.dataset.testid.replace(/^launch-(wizard-workflow|catalog-soon|catalog-top|catalog-fit)-/, '')),
+    across: kids.filter((c) => Math.abs(c.getBoundingClientRect().top - top0) < 1).length,
+    dialogFits: dlg.top >= 0 && dlg.bottom <= innerHeight + 0.5 && dlg.left >= 0 && dlg.right <= innerWidth + 0.5,
+    docScrolls: se.scrollHeight > innerHeight + 1 || se.scrollWidth > innerWidth + 1,
+    panelScrolls: panel.scrollHeight > panel.clientHeight + 1, overflowY: getComputedStyle(panel).overflowY,
     minSide: Math.round(Math.min(...cards.map((c) => { const r = c.getBoundingClientRect(); return Math.min(r.width, r.height); }))),
     art: cards.every((c) => { const s = c.querySelector('svg'); return s && s.getAttribute('aria-hidden') === 'true' && !s.querySelector('image'); }),
-    clamped: cards.filter((c) => { const l = c.querySelector('.wk-launch-wizard-choice-line'); return l.scrollHeight > l.clientHeight + 1; }).length,
-    // The grid is bounded by its frame (it never grows to fit its cards): its height is the frame's,
-    // and a row is a third of it less the gaps and padding (codex r1: not just "9 cards fit").
-    frameH: grid.parentElement.getBoundingClientRect().height, gridH: g.height,
-    rowH: cards[0].getBoundingClientRect().height,
-    gap: parseFloat(getComputedStyle(grid).rowGap), pad: parseFloat(getComputedStyle(grid).paddingTop),
+    searchTop: Math.round(document.querySelector('[data-testid=launch-catalog-search]').getBoundingClientRect().top),
+    chips: document.querySelectorAll('[data-testid=launch-catalog-cat]').length,
+    older: !!document.querySelector('[data-testid=launch-catalog-older]'),
   };
 }"""
 
-FOCUSED = "() => { const t = document.activeElement?.dataset?.testid; return t === 'launch-wizard-start-chat' ? 'chat' : t?.replace('launch-wizard-workflow-', '') ?? null; }"
+FOCUSED = "() => document.activeElement?.dataset?.testid ?? null"
+
+
+def new_page(browser, w: int, h: int, catalog: bool):
+    phone = w < 600
+    ctx = browser.new_context(viewport={"width": w, "height": h}, device_scale_factor=1, is_mobile=phone, has_touch=phone)
+    page = ctx.new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("request", lambda r: posts.append(f"{r.method} {r.url}") if r.method == "POST" and ("/runs" in r.url or "/launch" in r.url or "/demo" in r.url or "/compose" in r.url) else None)
+    page.add_init_script(
+        "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
+        f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
+    page.route("**/api/v1/workflows", lambda r: r.fulfill(status=200, json=WORKFLOWS))
+    page.route("**/api/v1/presets*", lambda r: r.fulfill(status=200, json={"presets": []}))
+    if catalog:
+        page.route("**/api/v1/workflows/catalog*", lambda r: r.fulfill(status=200, json=CATALOG))
+    page.goto(f"{origin}/", wait_until="networkidle")
+    # The phone's rail is a drawer: New job is the top bar's there.
+    page.get_by_test_id("topbar-new-job" if phone else "desk-rail-new-job").click()
+    page.wait_for_selector('[data-testid="launch-catalog"]:not([data-source="loading"])', timeout=8000)
+    page.wait_for_timeout(250)
+    return ctx, page
+
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
-    for (w, h, across, rows_in_view) in ((1440, 700, 4, 3), (1920, 1080, 4, 3), (860, 900, 2, 3), (390, 844, 1, None)):
-        phone = w < 600
-        ctx = browser.new_context(viewport={"width": w, "height": h}, device_scale_factor=1, is_mobile=phone, has_touch=phone)
-        page = ctx.new_page()
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        page.on("request", lambda r: posts.append(f"{r.method} {r.url}") if r.method == "POST" and "/launch" in r.url else None)
-        page.add_init_script(
-            "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
-            f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-        page.route("**/api/v1/workflows", lambda r: r.fulfill(status=200, json=WORKFLOWS))
-        page.route("**/api/v1/presets*", lambda r: r.fulfill(status=200, json={"presets": []}))
-        page.goto(f"{origin}/", wait_until="networkidle")
-        # The phone's rail is a drawer: New job is the top bar's there.
-        page.get_by_test_id("topbar-new-job" if phone else "desk-rail-new-job").click()
-        page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
-        page.wait_for_function(f"() => document.querySelectorAll('[data-testid^=\"launch-wizard-workflow-\"]').length >= {len(EXPECTED) - 1}", timeout=8000)  # the jobs; Start with chat is the other card
-        page.wait_for_timeout(200)
-        m = page.evaluate(MEASURE)
-        page.screenshot(path=str(SHOTS / f"desk-newjob-cards-{w}x{h}.png"))
+    for (w, h, across) in ((1440, 700, 3), (1920, 1080, 3), (860, 900, 2), (390, 844, 1)):
         tag = f"{w}x{h}"
-        check(f"{tag}-same-set-same-order", m["ids"] == EXPECTED, ids=m["ids"], expected=EXPECTED)
+        ctx, page = new_page(browser, w, h, True)
+        m = page.evaluate(MEASURE)
+        page.screenshot(path=str(SHOTS / f"desk-newjob-catalog-{tag}.png"))
+        check(f"{tag}-sections", m["sections"] == ["top", "create", "resolve", "analyze", "test", "more"], measured=m)
+        check(f"{tag}-your-top", m["ids"][:3] == ["bug", "feature", "review-recent-work"], ids=m["ids"][:6])
         check(f"{tag}-across", m["across"] == across, measured=m)
-        if rows_in_view is not None:
-            check(f"{tag}-three-whole-rows-none-cut", m["full"] == rows_in_view and m["partial"] == 0, measured=m)
-            third = (m["frameH"] - (rows_in_view - 1) * m["gap"] - 2 * m["pad"]) / rows_in_view
-            check(f"{tag}-row-is-a-third-of-the-frame", abs(m["gridH"] - m["frameH"]) <= 1 and abs(m["rowH"] - third) <= 1,
-                  third=third, measured=m)
-        else:
-            check(f"{tag}-phone-no-cut-row", m["full"] >= 3 and m["partial"] == 0, measured=m)
-        check(f"{tag}-scrolls-inside", m["overflowY"] == "auto" and m["dialogFits"] and (m["gridScrolls"] or m["rows"] <= 3), measured=m)
-        check(f"{tag}-art-and-targets", m["art"] and m["minSide"] >= 44 and m["clamped"] == 0, measured=m)
+        check(f"{tag}-fits-no-document-scroll", m["dialogFits"] and not m["docScrolls"] and m["overflowY"] == "auto" and m["panelScrolls"], measured=m)
+        check(f"{tag}-art-and-targets", m["art"] and m["minSide"] >= 44 and m["chips"] == 6, measured=m)
 
-        if not phone:
-            # Keyboard: focus starts on the first card; arrows follow the layout (Down = one row of
-            # `across`); the focused card matches :focus-visible and its ring differs from a resting card.
+        if w == 1440:
+            # Keyboard: focus in search; Down to the first card (Your top), Down follows the layout into
+            # the next row; Up from the top row returns to search. The focused card shows the ring.
+            start = page.evaluate(FOCUSED)
+            page.keyboard.press("ArrowDown")
             first = page.evaluate(FOCUSED)
-            page.keyboard.press("ArrowRight")
-            right = page.evaluate(FOCUSED)
             page.keyboard.press("ArrowDown")
             down = page.evaluate(FOCUSED)
-            ring = page.evaluate("""() => { const a = document.activeElement; const rest = [...a.parentElement.children].find((c) => c !== a && c.getAttribute('aria-pressed') !== 'true');
+            ring = page.evaluate("""() => { const a = document.activeElement; const rest = document.querySelector('[data-testid="launch-wizard-workflow-docs"]');
               return { visible: a.matches(':focus-visible'), focused: getComputedStyle(a).boxShadow, resting: getComputedStyle(rest).boxShadow }; }""")
-            page.screenshot(path=str(SHOTS / f"desk-newjob-cards-focus-{tag}.png"))
-            check(f"{tag}-keyboard-moves-across-the-grid",
-                  first == EXPECTED[0] and right == EXPECTED[1] and down == EXPECTED[1 + across]
+            page.screenshot(path=str(SHOTS / f"desk-newjob-catalog-focus-{tag}.png"))
+            page.keyboard.press("ArrowUp")
+            up = page.evaluate(FOCUSED)
+            page.keyboard.press("ArrowUp")
+            back = page.evaluate(FOCUSED)
+            check("keyboard-search-cards-search",
+                  start == "launch-catalog-search" and first == "launch-catalog-top-bug" and down == "launch-wizard-workflow-feature"
+                  and (up or "").startswith("launch-catalog-top-") and back == "launch-catalog-search"
                   and ring["visible"] and ring["focused"] not in ("", "none") and ring["focused"] != ring["resting"],
-                  first=first, right=right, down=down, ring=ring)
-        if w == 1440:
-            down = page.evaluate(FOCUSED)
+                  start=start, first=first, down=down, up=up, back=back, ring=ring)
+
+            # A sentence ranks the right workflow; Enter picks it into the step that asks for what it needs.
+            page.get_by_test_id("launch-catalog-search").fill("write docs for the auth service")
+            page.wait_for_timeout(200)
+            ranked = page.evaluate("() => [...document.querySelectorAll('[data-section=results] [data-catalog-card]')].map((c) => c.dataset.testid)")
+            page.screenshot(path=str(SHOTS / "desk-newjob-catalog-search-1440.png"))
+            check("sentence-ranks-docs-first", ranked[:1] == ["launch-wizard-workflow-docs"], ranked=ranked[:5])
             page.keyboard.press("Enter")
             page.get_by_test_id("launch-wizard-intent").wait_for(state="visible", timeout=5000)
             step = page.get_by_test_id("launch-wizard-step").get_attribute("data-step")
             title = page.locator(".wk-launch-wizard-title").inner_text()
-            # The focused card (EXPECTED[1 + across] since Start with chat leads the grid) opens its job's first step.
-            check("enter-picks-into-the-first-step", down == EXPECTED[5] and step == "what" and title.startswith("New job: ") and title != "New job: ",
-                  landed=step, title=title, picked=down)
+            shape = page.get_by_test_id("launch-wizard-shape").inner_text()
+            page.screenshot(path=str(SHOTS / "desk-newjob-catalog-shape-1440.png"))
+            check("enter-picks-into-shaping", step == "what" and title == "New job: Write docs in the repo"
+                  and "Docs in your repository" in shape and "a repository" in shape, landed=step, title=title, shape=shape)
             page.get_by_test_id("launch-wizard-change").click()
+            page.wait_for_timeout(300)
             back = page.evaluate(FOCUSED)
-            check("change-job-returns-to-the-picked-card", back == EXPECTED[5], focused=back)
+            pressed = page.get_by_test_id("launch-wizard-workflow-docs").get_attribute("aria-pressed")
+            check("change-job-returns-to-the-picked-card", back == "launch-wizard-workflow-docs" and pressed == "true", focused=back)
+            page.keyboard.press("Escape")
+            page.get_by_test_id("launch-wizard").wait_for(state="detached", timeout=5000)
+        if w == 390:
+            check("phone-search-on-top", m["searchTop"] < 140, measured=m)
         ctx.close()
+
+    # An older daemon: no catalog route. Today's list, uncategorised, still searchable.
+    ctx, page = new_page(browser, 1440, 700, False)
+    m = page.evaluate(MEASURE)
+    page.screenshot(path=str(SHOTS / "desk-newjob-catalog-older-1440x700.png"))
+    check("older-daemon-flat-list", m["older"] and m["chips"] == 0 and m["sections"] == ["all"] and m["ids"] == OLDER, measured=m)
+    page.get_by_test_id("launch-catalog-search").fill("tests")
+    page.wait_for_timeout(200)
+    hit = page.evaluate("() => document.querySelector('[data-section=results] [data-catalog-card]')?.dataset.testid ?? null")
+    check("older-daemon-searchable", hit == "launch-wizard-workflow-qe-author-tests", hit=hit)
+    ctx.close()
     browser.close()
 
 check("nothing-launched", posts == [], posts=posts)

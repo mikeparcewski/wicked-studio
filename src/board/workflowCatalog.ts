@@ -18,12 +18,16 @@ import { workflowPurpose } from './workflowPurpose.js';
  * filters and the top section are plain functions over the view model.
  */
 
-export type CatalogStatus = 'ready' | 'beta' | 'soon';
+export type CatalogStatus = 'ready' | 'soon' | 'unavailable';
+
+/** How studio starts an entry (wf-catalog WIRE v1 `launch.kind`). */
+export type LaunchKind = 'run' | 'demo' | 'compose' | 'document' | 'chat' | 'none';
 
 export interface CatalogInput {
   key: string;
   label: string;
-  help: string | null;
+  /** `text` inputs are said in words; `repo`, `project`, `url`, `requirements`, `seats` have their own fields. */
+  kind: string;
   required: boolean;
 }
 
@@ -34,31 +38,43 @@ export interface CatalogCategory {
 }
 
 export interface CatalogEntry {
-  /** The catalog's id for the workflow. */
+  /** The catalog's card id. */
   id: string;
-  /** What the wizard sets as the draft's workflow (`demo` launches through studio's Demo video). */
+  /** What the wizard sets as the draft's workflow: the run's workflow, or studio's own kind
+   *  (`demo-video`, `draft-epics`); for a document or chat entry, a key no draft ever carries. */
   launchId: string;
+  launchKind: LaunchKind;
+  /** A document entry's style (`web`, `doc`, `ppt`, `brochure`); null otherwise. */
+  docStyle: string | null;
   title: string;
-  /** null = uncategorised (an older daemon, or a category the catalog did not list: "More"). */
+  /** null = uncategorised (an older daemon). */
   category: string | null;
-  /** What you get, in one line. */
+  /** The subcategory's title (searchable), or null. */
+  subcategory: string | null;
+  /** What you get, in one line (WIRE `outcome`). */
   gets: string;
-  /** What it does (the def's summary), when it says more than `gets`. */
+  /** What it does, and when to use it (searchable). */
   summary: string;
-  /** What it needs before it can start: `repo`, `documents`, `runs`, `url`, `project`, … */
+  /** What it needs before it can start: `repo`, `project`, `running_app`, `requirements`, `document`, `runs`. */
   needs: readonly string[];
   inputs: readonly CatalogInput[];
   time: string | null;
   cost: string | null;
+  /** What it ends with: `pr`, `document`, `video`, `report`, `answer`, `none`; null = not said. */
+  delivers: string | null;
   tags: readonly string[];
   synonyms: readonly string[];
   status: CatalogStatus;
+  /** Why it is coming soon or unavailable. */
+  statusNote: string | null;
   /** Catalog order (ties in ranking fall back to it). */
   order: number;
   /** The drawing key (`WorkflowArt`). */
   artKey: string;
   launches: number;
   lastUsedAt: string | null;
+  /** The median minutes of this operator's completed runs of it, or null. */
+  medianMinutes: number | null;
 }
 
 export interface CatalogView {
@@ -67,14 +83,12 @@ export interface CatalogView {
   entries: readonly CatalogEntry[];
 }
 
-/** The "More" bucket: extras, and any entry whose category the catalog did not list. */
+/** The "More" bucket (crew's own id; studio puts its own kinds here when the catalog has none of them). */
 export const MORE_CATEGORY: CatalogCategory = { id: 'more', title: 'More', blurb: 'Everything else' };
 
 /** Studio's own kinds of job (the wizard launches them through their own routes). */
 export const STUDIO_KIND_DEMO = 'demo-video';
 export const STUDIO_KIND_DRAFT_EPICS = 'draft-epics';
-/** Catalog ids that studio launches through its own kind (crew's `demo` preset is a system flow). */
-const LAUNCH_ALIAS: Readonly<Record<string, string>> = { demo: STUDIO_KIND_DEMO, 'demo-video': STUDIO_KIND_DEMO };
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap((x) => (typeof x === 'string' && x.trim() !== '' ? [x.trim()] : [])) : []);
@@ -82,93 +96,119 @@ const rec = (v: unknown): Record<string, unknown> | null => (v !== null && typeo
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
 
 function statusOf(v: unknown): CatalogStatus {
-  const s = typeof v === 'string' ? v.toLowerCase() : '';
-  if (s === 'soon' || s === 'coming-soon' || s === 'coming_soon' || s === 'planned') return 'soon';
-  if (s === 'beta' || s === 'preview' || s === 'experimental') return 'beta';
+  if (v === 'coming_soon') return 'soon';
+  if (v === 'unavailable') return 'unavailable';
   return 'ready';
 }
 
-/** A needs token in one spelling (`repository` and `repo` are one need). */
-function needOf(raw: string): string {
-  const n = raw.toLowerCase();
-  if (n === 'repository' || n === 'repositories' || n === 'repos' || n === 'code') return 'repo';
-  if (n === 'docs' || n === 'document') return 'documents';
-  if (n === 'run') return 'runs';
-  return n;
+/** "10–30 min", "45 min–2 h", "1–3 h" from a [low, high] in minutes. */
+export function minutesLabel(v: unknown): string | null {
+  if (!Array.isArray(v) || v.length !== 2) return null;
+  const [lo, hi] = v.map(num) as [number, number];
+  if (lo <= 0 || hi < lo) return null;
+  const h = (m: number): string => `${Math.round((m / 60) * 10) / 10}`;
+  if (hi < 90) return lo === hi ? `${lo} min` : `${lo}–${hi} min`;
+  if (lo < 60) return `${lo} min–${h(hi)} h`;
+  return lo === hi ? `${h(lo)} h` : `${h(lo)}–${h(hi)} h`;
 }
+
+/** "25 min", "4.7 h": a median run time, in the unit that reads. */
+export function aboutMinutes(m: number): string {
+  return m < 90 ? `${Math.round(m)} min` : `${Math.round((m / 60) * 10) / 10} h`;
+}
+
+const COST: Readonly<Record<string, string>> = { low: 'low cost', medium: 'medium cost', high: 'high cost' };
 
 function inputsOf(v: unknown): CatalogInput[] {
   if (!Array.isArray(v)) return [];
   return v.flatMap((x) => {
     const r = rec(x);
-    const key = str(r?.['key']) ?? str(r?.['id']);
+    const key = str(r?.['id']);
     if (r === null || key === null) return [];
-    return [{ key, label: str(r['label']) ?? str(r['title']) ?? key, help: str(r['help']) ?? str(r['description']), required: r['required'] === true }];
+    return [{ key, label: str(r['label']) ?? key, kind: str(r['kind']) ?? 'text', required: r['required'] === true }];
   });
 }
 
+/** How an entry launches, and the id the wizard's draft carries for it. */
+function launchOf(id: string, v: unknown): { launchKind: LaunchKind; launchId: string; docStyle: string | null } {
+  const r = rec(v);
+  const kind = str(r?.['kind']);
+  switch (kind) {
+    case 'run': return { launchKind: 'run', launchId: str(r?.['workflow']) ?? id, docStyle: null };
+    case 'demo': return { launchKind: 'demo', launchId: STUDIO_KIND_DEMO, docStyle: null };
+    case 'compose': return { launchKind: 'compose', launchId: STUDIO_KIND_DRAFT_EPICS, docStyle: null };
+    case 'document': return { launchKind: 'document', launchId: `document:${id}`, docStyle: str(r?.['style']) };
+    case 'chat': return { launchKind: 'chat', launchId: `chat:${id}`, docStyle: null };
+    // `none`, or a kind this studio does not know: shown, never launched.
+    default: return { launchKind: 'none', launchId: `none:${id}`, docStyle: null };
+  }
+}
+
 /**
- * The catalog wire as one view model, or null when the body is not a catalog (an older daemon's
- * 404 page, a malformed answer): the caller then falls back to today's list.
+ * The catalog wire (wf-catalog WIRE v1, `GET /workflows/catalog`) as one view model, or null when
+ * the body is not a catalog (an older daemon's 404, a malformed answer): the caller then falls back
+ * to today's list. Every field is read as optional; an entry of a launch kind studio does not know
+ * is shown as not available rather than offered.
  */
 export function catalogFromWire(body: unknown): CatalogView | null {
   const root = rec(body);
-  const rawWorkflows = root?.['workflows'];
-  if (root === null || !Array.isArray(rawWorkflows)) return null;
+  const rawEntries = root?.['entries'];
+  if (root === null || !Array.isArray(rawEntries)) return null;
   const categories: CatalogCategory[] = [];
-  const catOrder: { c: CatalogCategory; o: number }[] = [];
-  (Array.isArray(root['categories']) ? root['categories'] : []).forEach((x, i) => {
+  const subTitle = new Map<string, string>();
+  for (const x of Array.isArray(root['categories']) ? root['categories'] : []) {
     const r = rec(x);
     const id = str(r?.['id']);
-    if (r === null || id === null || catOrder.some((c) => c.c.id === id)) return;
-    catOrder.push({ c: { id, title: str(r['title']) ?? str(r['name']) ?? workflowLabel(id), blurb: str(r['blurb']) ?? str(r['description']) }, o: typeof r['order'] === 'number' ? r['order'] : i });
-  });
-  catOrder.sort((a, b) => a.o - b.o).forEach(({ c }) => categories.push(c));
-  const known = new Set(categories.map((c) => c.id));
-
-  const usage = new Map<string, { launches: number; lastUsedAt: string | null }>();
-  for (const x of Array.isArray(root['usage']) ? root['usage'] : []) {
-    const r = rec(x);
-    const id = str(r?.['workflowId']) ?? str(r?.['workflow']) ?? str(r?.['id']);
-    if (r === null || id === null) continue;
-    usage.set(id, { launches: num(r['launches'] ?? r['count']), lastUsedAt: str(r['lastUsedAt']) ?? str(r['lastUsed']) ?? str(r['last_used_at']) });
+    if (r === null || id === null || categories.some((c) => c.id === id)) continue;
+    categories.push({ id, title: str(r['title']) ?? workflowLabel(id), blurb: str(r['summary']) });
+    for (const sx of Array.isArray(r['subcategories']) ? r['subcategories'] : []) {
+      const sr = rec(sx);
+      const sid = str(sr?.['id']);
+      if (sid !== null) subTitle.set(`${id}/${sid}`, str(sr?.['title']) ?? workflowLabel(sid));
+    }
   }
+  const known = new Set(categories.map((c) => c.id));
 
   const entries: CatalogEntry[] = [];
   const seen = new Set<string>();
-  rawWorkflows.forEach((x, i) => {
+  rawEntries.forEach((x, i) => {
     const r = rec(x);
     const id = str(r?.['id']);
     if (r === null || id === null || seen.has(id)) return;
     seen.add(id);
     const cat = str(r['category']);
-    // Usage may also ride on the workflow itself.
-    const u = usage.get(id) ?? (rec(r['usage']) !== null ? { launches: num(rec(r['usage'])!['launches']), lastUsedAt: str(rec(r['usage'])!['lastUsedAt']) } : null);
-    const summary = str(r['summary']) ?? str(r['description']) ?? '';
-    const launchId = LAUNCH_ALIAS[id] ?? id;
+    const sub = str(r['subcategory']);
+    const u = rec(r['usage']);
+    const summary = [str(r['summary']), ...strs(r['useWhen'])].filter((t): t is string => t !== null).join('. ');
+    const launch = launchOf(id, r['launch']);
+    const status = launch.launchKind === 'none' && statusOf(r['status']) === 'ready' ? 'unavailable' : statusOf(r['status']);
+    const median = typeof u?.['medianMinutes'] === 'number' && u['medianMinutes'] > 0 ? Math.round(u['medianMinutes']) : null;
     entries.push({
       id,
-      launchId,
+      ...launch,
       title: str(r['title']) ?? workflowLabel(id),
-      category: cat !== null && known.has(cat) ? cat : null,
-      gets: str(r['gets']) ?? str(r['whatYouGet']) ?? str(r['output']) ?? (summary !== '' ? summary : workflowPurpose(id, '')),
+      category: cat !== null && known.has(cat) ? cat : MORE_CATEGORY.id,
+      subcategory: cat !== null && sub !== null ? subTitle.get(`${cat}/${sub}`) ?? null : null,
+      gets: str(r['outcome']) ?? str(r['summary']) ?? workflowPurpose(id, ''),
       summary,
-      needs: [...new Set(strs(r['needs']).map(needOf))],
+      needs: [...new Set(strs(r['needs']).filter((n) => n !== 'nothing'))],
       inputs: inputsOf(r['inputs']),
-      time: str(r['time']) ?? str(r['duration']),
-      cost: str(r['cost']),
+      time: minutesLabel(r['typicalMinutes']),
+      cost: COST[str(r['cost']) ?? ''] ?? null,
+      delivers: str(r['delivers']),
       tags: strs(r['tags']),
       synonyms: strs(r['synonyms']),
-      status: statusOf(r['status']),
+      status,
+      statusNote: str(r['statusNote']),
       order: i,
-      artKey: launchId,
-      launches: u?.launches ?? 0,
-      lastUsedAt: u?.lastUsedAt ?? null,
+      artKey: launch.launchKind === 'run' ? launch.launchId : launch.launchKind === 'demo' || launch.launchKind === 'compose' ? launch.launchId : id,
+      launches: num(u?.['launches']),
+      lastUsedAt: str(u?.['lastUsedAt']),
+      medianMinutes: median,
     });
   });
   // An entry whose category the catalog did not list sits under More; More is listed only if used.
-  if (entries.some((e) => e.category === null) && !known.has(MORE_CATEGORY.id)) categories.push(MORE_CATEGORY);
-  for (const e of entries) if (e.category === null) e.category = MORE_CATEGORY.id;
+  if (entries.some((e) => e.category === MORE_CATEGORY.id) && !known.has(MORE_CATEGORY.id)) categories.push(MORE_CATEGORY);
   return { source: 'catalog', categories, entries };
 }
 
@@ -194,25 +234,31 @@ export function catalogFromDefs(defs: readonly WorkflowDef[] | null, presets: re
   const entries = rows.map((r, i): CatalogEntry => {
     const def = (defs ?? []).find((d) => d.id === r.workflowId) as (WorkflowDef & { use_when?: unknown }) | undefined;
     const summary = str(def?.summary) ?? '';
-    const useWhen = str(def?.use_when);
+    const useWhen = Array.isArray(def?.use_when) ? strs(def?.use_when).join('. ') : str(def?.use_when);
     return {
       id: r.workflowId,
       launchId: r.workflowId,
+      launchKind: 'run',
+      docStyle: null,
       title: str(def?.title) ?? workflowLabel(r.key),
       category: null,
+      subcategory: null,
       gets: workflowPurpose(r.key, summary !== '' ? summary : r.line),
       summary: [summary, useWhen].filter((s): s is string => s !== null && s !== '').join(' '),
       needs: ['repo'],
       inputs: [],
       time: null,
       cost: null,
+      delivers: null,
       tags: [],
       synonyms: [],
       status: 'ready',
+      statusNote: null,
       order: i,
       artKey: r.key,
       launches: 0,
       lastUsedAt: null,
+      medianMinutes: null,
     };
   });
   return { source: 'fallback', categories: [], entries };
@@ -223,7 +269,8 @@ export function catalogFromDefs(defs: readonly WorkflowDef[] | null, presets: re
 const DAY_MS = 86_400_000;
 /** Half-weight after this many days without a launch (launches / (1 + days / HALF_DAYS)). */
 export const TOP_HALF_DAYS = 14;
-export const TOP_MAX = 4;
+/** One row of cards at the desktop width (three across). */
+export const TOP_MAX = 3;
 
 /** The recency-weighted use score: launches, discounted by days since the last one. */
 export function usageScore(e: Pick<CatalogEntry, 'launches' | 'lastUsedAt'>, now: number): number {
@@ -236,7 +283,7 @@ export function usageScore(e: Pick<CatalogEntry, 'launches' | 'lastUsedAt'>, now
 /** "Your top": what this operator launches most, recency-weighted; empty for a new user. */
 export function topEntries(entries: readonly CatalogEntry[], now: number, max = TOP_MAX): CatalogEntry[] {
   return entries
-    .filter((e) => e.launches > 0 && e.status !== 'soon')
+    .filter((e) => e.launches > 0 && e.status === 'ready')
     .map((e) => ({ e, s: usageScore(e, now) }))
     .sort((a, b) => b.s - a.s || a.e.order - b.e.order)
     .slice(0, max)
@@ -250,7 +297,7 @@ export interface CatalogFilters {
   /** null = every category. */
   category: string | null;
   repo: RepoFilter;
-  /** Show the workflows that are coming soon (on by default: the operator sees what is coming). */
+  /** Show the workflows that are coming soon or unavailable (on by default: the operator sees what is coming). */
   showSoon: boolean;
 }
 export const NO_FILTERS: CatalogFilters = { category: null, repo: 'any', showSoon: true };
@@ -267,7 +314,7 @@ export function applyFilters(entries: readonly CatalogEntry[], f: CatalogFilters
   return entries.filter((e) =>
     (f.category === null || e.category === f.category)
     && (f.repo === 'any' || (f.repo === 'needs') === needsRepo(e))
-    && (f.showSoon || e.status !== 'soon'));
+    && (f.showSoon || e.status === 'ready'));
 }
 
 // ── Search ─────────────────────────────────────────────────────────────────────────────────────
@@ -361,15 +408,17 @@ function fieldTokens(e: CatalogEntry, categoryTitle: string): { t: Set<string>; 
     { t: new Set([...tokens(e.title), ...tokens(e.id)]), w: FIELD_WEIGHT.title },
     { t: new Set([...e.tags, ...e.synonyms].flatMap(tokens)), w: FIELD_WEIGHT.words },
     { t: new Set([...tokens(e.gets), ...tokens(e.summary)]), w: FIELD_WEIGHT.gets },
-    { t: new Set([...e.needs.flatMap(tokens), ...tokens(categoryTitle), ...e.inputs.flatMap((i) => tokens(i.label))]), w: FIELD_WEIGHT.other },
+    { t: new Set([...e.needs.flatMap(tokens), ...tokens(categoryTitle), ...tokens(e.subcategory ?? ''), ...e.inputs.flatMap((i) => tokens(i.label))]), w: FIELD_WEIGHT.other },
   ];
 }
 
-function tokenScore(q: string, fields: readonly { t: Set<string>; w: number }[]): number {
+/** A token's best field match. `typing` (the last word of the query, still being typed) also
+ *  matches by prefix; a whole earlier word must match whole ("auth" is not "author"). */
+function tokenScore(q: string, fields: readonly { t: Set<string>; w: number }[], typing: boolean): number {
   let best = 0;
   for (const f of fields) {
     if (f.t.has(q)) best = Math.max(best, f.w);
-    else if (q.length >= 3) {
+    else if (typing && q.length >= 3) {
       for (const t of f.t) if (t.startsWith(q) || (t.length >= 4 && q.startsWith(t))) { best = Math.max(best, f.w / 2); break; }
     }
   }
@@ -382,12 +431,19 @@ export function scoreEntry(e: CatalogEntry, query: string, categoryTitle = ''): 
   if (qs.length === 0) return 0;
   const fields = fieldTokens(e, categoryTitle);
   let score = 0;
-  for (const q of qs) {
-    const direct = tokenScore(q, fields);
+  let matched = 0;
+  // The last word is still being typed only when the query does not end in a space or punctuation.
+  const typingLast = /[\p{L}\p{N}]$/u.test(query);
+  for (const [i, q] of qs.entries()) {
+    const direct = tokenScore(q, fields, typingLast && i === qs.length - 1);
     let expanded = 0;
-    for (const x of LEXICON[q] ?? []) expanded = Math.max(expanded, tokenScore(stem(x), fields) * EXPANSION_FACTOR);
-    score += Math.max(direct, expanded);
+    for (const x of LEXICON[q] ?? []) expanded = Math.max(expanded, tokenScore(stem(x), fields, false) * EXPANSION_FACTOR);
+    const best = Math.max(direct, expanded);
+    if (best > 0) matched += 1;
+    score += best;
   }
+  // A workflow that answers more of the sentence beats one that answers one word of it strongly.
+  score *= 0.5 + (0.5 * matched) / qs.length;
   const title = e.title.toLowerCase();
   const whole = query.trim().toLowerCase();
   if (whole.length >= 2 && (title.startsWith(whole) || e.id.toLowerCase().startsWith(whole))) score += 4;
@@ -400,19 +456,27 @@ export function searchCatalog(view: CatalogView, query: string, now: number): Ca
   return view.entries
     .map((e) => ({ e, s: scoreEntry(e, query, title.get(e.category ?? '') ?? '') }))
     .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s || usageScore(b.e, now) - usageScore(a.e, now) || a.e.order - b.e.order)
+    // What can start now ranks above what cannot (coming soon, unavailable), then by score.
+    .sort((a, b) => Number(b.e.status === 'ready') - Number(a.e.status === 'ready') || b.s - a.s || usageScore(b.e, now) - usageScore(a.e, now) || a.e.order - b.e.order)
     .map((x) => x.e);
+}
+
+/** What an entry ends with, in plain words. */
+const DELIVERS_WORDS: Readonly<Record<string, string>> = {
+  pr: 'a pull request', document: 'a document', video: 'a video', report: 'a report', answer: 'an answer', none: 'nothing to deliver',
+};
+export function deliversWord(d: string | null): string | null {
+  return d === null ? null : DELIVERS_WORDS[d] ?? null;
 }
 
 /** The words a card's meta line shows: what it needs, then time and cost. */
 const NEED_WORDS: Readonly<Record<string, string>> = {
   repo: 'a repository',
-  documents: 'documents',
-  runs: 'runs to review',
-  url: 'a running app',
   project: 'a project',
+  running_app: 'a running app',
   requirements: 'requirements',
-  issue: 'an issue',
+  document: 'a document',
+  runs: 'runs to review',
 };
 export function needWord(n: string): string {
   return NEED_WORDS[n] ?? n.replace(/[-_]+/g, ' ');

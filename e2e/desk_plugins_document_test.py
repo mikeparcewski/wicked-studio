@@ -147,16 +147,16 @@ with sync_playwright() as p:
           and soon.locator("a, button").count() == 0 and soon.get_attribute("aria-disabled") == "true",
           text=soon.inner_text())
 
-    # ── 5. … and on the New job grid: the last tile, not a button ──────────────────────────────
+    # ── 5. … and in New job's catalog: the last card (this daemon has no catalog: today's list), not a button ──
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
-    tile = page.get_by_test_id("launch-wizard-soon")
+    tile = page.get_by_test_id("launch-catalog-soon-vibe")
     tile.wait_for(state="visible", timeout=8000)
     tile.scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-plugins-document-newjob.png"))
-    last = page.evaluate("() => document.querySelector('[data-testid=\"launch-wizard-cards\"]').lastElementChild?.dataset.testid ?? null")
+    last = page.evaluate("() => document.querySelector('[data-section=\"all\"] .wk-catalog-grid')?.lastElementChild?.dataset.testid ?? null")
     check("newjob-vibe-coming-soon",
-          last == "launch-wizard-soon" and tile.evaluate("e => e.tagName") != "BUTTON"
+          last == "launch-catalog-soon-vibe" and tile.evaluate("e => e.tagName") != "BUTTON"
           and tile.locator("a, button").count() == 0 and "Coming soon" in tile.inner_text(),
           last=last)
 

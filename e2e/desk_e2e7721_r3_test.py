@@ -68,7 +68,7 @@ def wizard_helpers(page, tag: str):
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
     page.get_by_test_id("launch-wizard").wait_for(state="visible", timeout=10000)
-    if page.get_by_test_id("launch-wizard-cards").count() > 0:
+    if page.get_by_test_id("launch-catalog").count() > 0:
         page.get_by_test_id("launch-wizard-workflow-bug").click()
     intent = page.get_by_test_id("launch-wizard-intent")
     intent.wait_for(state="visible", timeout=8000)

@@ -54,7 +54,7 @@ export function WorkflowCatalog({ view, pickedId, intent, now, onPick, onChat }:
   }, [view, searching, query, now, filtered]);
   const unfiltered = !filtersActive(filters);
   const fit = useMemo(() => (view === null || searching || !unfiltered || intent.trim() === ''
-    ? [] : searchCatalog(view, intent, now).filter((e) => e.status !== 'soon').slice(0, BEST_FIT_MAX)), [view, searching, unfiltered, intent, now]);
+    ? [] : searchCatalog(view, intent, now).filter((e) => e.status === 'ready' && e.launchKind !== 'none').slice(0, BEST_FIT_MAX)), [view, searching, unfiltered, intent, now]);
   const top = useMemo(() => (view === null || searching || filters.category !== null || filters.repo !== 'any' ? [] : topEntries(view.entries, now)), [view, searching, filters, now]);
   const sections = useMemo(() => {
     if (view === null || searching) return [];
@@ -103,26 +103,34 @@ export function WorkflowCatalog({ view, pickedId, intent, now, onPick, onChat }:
 
   const card = (en: CatalogEntry, place: Place): React.ReactElement => {
     const showCat = place !== 'cat' && !older && en.category !== null;
-    const meta = [needsLine(en), en.time, en.cost].filter((x): x is string => x !== null && x !== '');
+    // Needs and time on the card; cost is on the next step (Usually), so the line never truncates.
+    const meta = [needsLine(en), en.time].filter((x): x is string => x !== null && x !== '');
+    const offered = en.status === 'ready' && en.launchKind !== 'none';
+    const metaText = meta.join(' · ');
     const body = (
       <>
         <span className="wk-catalog-card-art"><WorkflowArt workflowKey={en.artKey} /></span>
         <span className="wk-catalog-card-words">
           <span className="wk-catalog-card-name">
             <span className="wk-launch-wizard-choice-name">{en.title}</span>
-            {en.status === 'soon' && <span className="wk-tag" data-testid="launch-catalog-soon-tag">Coming soon</span>}
-            {en.status === 'beta' && <span className="wk-tag">Beta</span>}
             {showCat && <span className="wk-catalog-card-cat">{catTitle.get(en.category!) ?? ''}</span>}
           </span>
           <span className="wk-launch-wizard-choice-line" title={en.gets}>{en.gets}</span>
-          <span className="wk-catalog-card-meta">{meta.join(' · ')}</span>
+          {offered ? (
+            <span className="wk-catalog-card-meta" title={metaText}>{metaText}</span>
+          ) : (
+            <span className="wk-catalog-card-meta" title={en.statusNote ?? undefined}>
+              <span className="wk-tag" data-testid={en.status === 'unavailable' ? 'launch-catalog-unavailable-tag' : 'launch-catalog-soon-tag'}>{en.status === 'unavailable' ? 'Not available' : 'Coming soon'}</span>
+              {en.statusNote !== null && !/^(coming soon|not available)\.?$/i.test(en.statusNote) ? ` ${en.statusNote}` : ''}
+            </span>
+          )}
         </span>
       </>
     );
     const key = `${place}:${en.id}`;
-    if (en.status === 'soon') {
+    if (!offered) {
       return (
-        <div key={key} role="group" aria-disabled="true" aria-label={`${en.title}, coming soon`}
+        <div key={key} role="group" aria-disabled="true" aria-label={`${en.title}, ${en.status === 'unavailable' ? 'not available' : 'coming soon'}`}
           data-testid={`launch-catalog-soon-${en.id}`} data-job={en.id}
           className="wk-launch-wizard-choice wk-catalog-card wk-catalog-card--soon">{body}</div>
       );
@@ -155,7 +163,7 @@ export function WorkflowCatalog({ view, pickedId, intent, now, onPick, onChat }:
 
   const total = view?.entries.length ?? 0;
   const noResults = view !== null && total > 0 && (searching ? results.length === 0 : sections.length === 0);
-  const pickedOnLoad = pickedId !== null && (view?.entries.some((e) => e.launchId === pickedId && e.status !== 'soon') ?? false);
+  const pickedOnLoad = pickedId !== null && (view?.entries.some((e) => e.launchId === pickedId && e.status === 'ready') ?? false);
   const extraFilters = (filters.repo !== 'any' ? 1 : 0) + (filters.showSoon ? 0 : 1);
 
   return (
@@ -180,7 +188,9 @@ export function WorkflowCatalog({ view, pickedId, intent, now, onPick, onChat }:
             onKeyDown={onSearchKey}
           />
           <button type="button" className="wk-btn wk-btn--secondary wk-catalog-chat" data-testid="launch-wizard-start-chat" onClick={onChat}
-            title="Not sure yet? Talk it through first, then start a job from the chat">Talk it through first</button>
+            title="Not sure yet? Talk it through first, then start a job from the chat">
+            <span className="wk-catalog-chat-long">Talk it through first</span><span className="wk-catalog-chat-short" aria-hidden="true">Chat</span>
+          </button>
         </div>
         <div className="wk-catalog-filters" data-testid="launch-catalog-filters">
           {!older && categories.length > 0 && (

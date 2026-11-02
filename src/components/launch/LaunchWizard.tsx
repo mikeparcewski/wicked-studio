@@ -38,9 +38,10 @@ import { UNFILED_MOUNT } from '../../api/interactive.js';
 import { VIBE_SOON } from '../../board/comingSoon.js';
 import { composeProduct } from '../../api/product.js';
 import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from '../product/RequirementsBrowser.js';
-import { catalogFromDefs, needsLine, needsRepo, withStudioKinds, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
+import { aboutMinutes, catalogFromDefs, needsLine, needsRepo, withStudioKinds, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
 import { useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { WorkflowCatalog } from './WorkflowCatalog.js';
+import { everythingPath, madeKindForFormat } from '../../board/everythingModel.js';
 
 type Step = 'workflow' | 'what' | 'where' | 'options' | 'requirements' | 'demo' | 'review';
 const STEP_TITLE: Record<Step, string> = {
@@ -56,14 +57,17 @@ const STEP_TITLE: Record<Step, string> = {
 const DRAFT_EPICS_LINE = 'Turn requirements into epics and stories';
 const INSTRUCTIONS_MAX = 500;
 /** Studio's own kinds in the catalog (launched through their own routes), and the app builder that is coming. */
-const studioEntry = (e: Pick<CatalogEntry, 'id' | 'title' | 'category' | 'gets' | 'needs' | 'status' | 'tags'>): CatalogEntry => ({
-  launchId: e.id, summary: '', inputs: [], time: null, cost: null, synonyms: [], order: 0, artKey: e.id, launches: 0, lastUsedAt: null, ...e,
+const studioEntry = (e: Pick<CatalogEntry, 'id' | 'title' | 'category' | 'gets' | 'needs' | 'status' | 'tags' | 'launchKind' | 'delivers'>): CatalogEntry => ({
+  launchId: e.id, docStyle: null, subcategory: null, summary: '', inputs: [], time: null, cost: null, synonyms: [], statusNote: null,
+  order: 0, artKey: e.id, launches: 0, lastUsedAt: null, medianMinutes: null, ...e,
 });
+/** Studio's own kinds, added when the catalog does not list them (an older daemon never does). */
 const STUDIO_KINDS: readonly CatalogEntry[] = [
-  studioEntry({ id: DEMO_VIDEO_ID, title: 'Demo video', category: 'create', gets: DEMO_VIDEO_LINE, needs: ['url'], status: 'ready', tags: ['demo', 'video', 'recording', 'walkthrough'] }),
-  studioEntry({ id: DRAFT_EPICS_ID, title: 'Draft epics', category: 'more', gets: DRAFT_EPICS_LINE, needs: ['project', 'requirements'], status: 'ready', tags: ['epics', 'stories', 'backlog', 'requirements', 'planning'] }),
-  studioEntry({ id: 'vibe', title: VIBE_SOON.name, category: 'create', gets: VIBE_SOON.line, needs: [], status: 'soon', tags: ['app', 'builder', 'dashboard', 'ui'] }),
+  studioEntry({ id: DEMO_VIDEO_ID, launchKind: 'demo', title: 'Demo video', category: 'create', gets: DEMO_VIDEO_LINE, needs: ['running_app'], status: 'ready', delivers: 'video', tags: ['demo', 'video', 'recording', 'walkthrough'] }),
+  studioEntry({ id: DRAFT_EPICS_ID, launchKind: 'compose', title: 'Draft epics', category: 'more', gets: DRAFT_EPICS_LINE, needs: ['project', 'requirements'], status: 'ready', delivers: null, tags: ['epics', 'stories', 'backlog', 'requirements', 'planning'] }),
 ];
+/** The app builder that is coming: an older daemon's list shows it (crew's catalog lists its own). */
+const VIBE_ENTRY = studioEntry({ id: 'vibe', launchKind: 'none', title: VIBE_SOON.name, category: null, gets: VIBE_SOON.line, needs: [], status: 'soon', delivers: null, tags: ['app', 'builder', 'dashboard', 'ui'] });
 /**
  * THE LAUNCH WIZARD (operator 2026-10-11 15:15Z: "someone just starts a new job by selecting a
  * workflow and we do the wizard in a modal"). Mounted once by the app shell; opened through
@@ -118,11 +122,13 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   useEffect(() => { loadPresets(draft.projectId ?? null); }, [draft.projectId]);
   const rows = useMemo(() => workflowItems('', defs, presets, Number.POSITIVE_INFINITY), [defs, presets]);
   // The catalog (crew's, or today's list on an older daemon), with studio's own kinds added.
-  const catalogLoad = useWorkflowCatalog();
+  const catalogLoad = useWorkflowCatalog(draft.projectId === null || draft.projectId === UNFILED_MOUNT ? null : draft.projectId);
   const catalog: CatalogView | null = useMemo(() => {
     if (catalogLoad.state === 'ready') return withStudioKinds(catalogLoad.view, STUDIO_KINDS);
-    if (catalogLoad.state === 'loading' || defs === null) return null;
-    return withStudioKinds(catalogFromDefs(defs, presets), STUDIO_KINDS);
+    if (catalogLoad.state === 'loading') return null;
+    // An older daemon: today's list. Its defs may never come (no `/workflows`, or the read failed and the
+    // cache keeps "not known"), so studio's own kinds show at once and the daemon's join when they land.
+    return withStudioKinds(catalogFromDefs(defs ?? [], presets), [...STUDIO_KINDS, VIBE_ENTRY]);
   }, [catalogLoad, defs, presets]);
   const [now] = useState(() => Date.now());
   const roster = useRoster();
@@ -178,6 +184,15 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // today's rule (an unknown workflow, a preset, an older daemon's list: a repository is required).
   const repoRequired = entry === null ? true : needsRepo(entry);
   const jobName = entry?.title ?? workflowLabel(row?.key ?? draft.workflowId ?? '');
+  // The catalog's form: its first text input names the words box; any other text input is listed under it.
+  const textInputs = (entry?.inputs ?? []).filter((i) => i.kind === 'text');
+  // Words are required unless the catalog says otherwise: a workflow whose form has no text input,
+  // or whose first one is optional. Crew still needs a problem (`problem` min 1), so a launch with no
+  // words sends the workflow's own summary.
+  const wordsOptional = entry !== null && entry.launchKind === 'run' && entry.inputs.length > 0 && textInputs[0]?.required !== true;
+  const wordsLabel = textInputs[0]?.label ?? (wordsOptional ? 'Anything to focus on?' : 'What do you want done?');
+  const moreWords = textInputs.slice(1);
+  const problemText = draft.intent.trim() !== '' || entry === null ? draft.intent : (entry.summary.split('. ')[0] || entry.title);
   const def = (defs ?? []).find((d) => d.id === draft.workflowId) ?? null;
   const offerQe = qeCap && !demoing && workflowRequiresQe(def);
 
@@ -244,7 +259,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     step === 'requirements' ? draftBlocker
     : step === 'demo' ? demoProblem
     : step === 'workflow' ? (draft.workflowId === null ? 'Choose the kind of job.' : null)
-      : step === 'what' ? (draft.intent.trim() === '' ? 'Say what you want done.' : null)
+      : step === 'what' ? (draft.intent.trim() === '' && !wordsOptional ? 'Say what you want done.' : null)
         : step === 'where' ? (repoRequired && repoRef === null ? 'Choose the repository this works in.' : null)
           : step === 'options' ? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
             : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null)
@@ -254,7 +269,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     drafting ? draftBlocker
     : demoing ? (demoProblem ?? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.' : null))
     : draft.workflowId === null ? 'Choose the kind of job.'
-      : draft.intent.trim() === '' ? 'Say what you want done.'
+      : draft.intent.trim() === '' && !wordsOptional ? 'Say what you want done.'
         : repoRequired && repoRef === null ? 'Choose the repository this works in.'
           : eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
             : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null;
@@ -303,6 +318,20 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   };
 
+  // How each entry starts (wf-catalog WIRE `launch.kind`): a run, studio's Demo video or Draft
+  // epics walk the wizard; a document opens New document on its list; chat is the chat flow.
+  const pickEntry = (e: CatalogEntry): void => {
+    if (e.status !== 'ready' || e.launchKind === 'none') return;
+    if (e.launchKind === 'chat') { startChat(); return; }
+    if (e.launchKind === 'document') {
+      if (launchingRef.current) return;
+      closeStore();
+      const project = filedProject;
+      (navigate ?? goToPath)(everythingPath({ tab: 'made', kind: madeKindForFormat(e.docStyle ?? ''), ...(project !== null ? { project } : {}), new: 'document' }));
+      return;
+    }
+    pickCard(e.launchId);
+  };
   const pickCard = (id: string): void => {
     // codex r1: another kind of job starts its own options; studio#767: and its own words.
     if (id !== draft.workflowId) update(withJobKind(draft, id));
@@ -366,7 +395,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
       const chatId = launchChatId(key, chatIdOnLaunch);
       const body = workflowLaunchBody({
         workflowId: draft.workflowId,
-        intent: draft.intent,
+        intent: problemText,
         seats,
         repoRef,
         projectId: draft.projectId,
@@ -425,14 +454,14 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
               pickedId={draft.workflowId}
               intent={draft.intent}
               now={now}
-              onPick={(e) => pickCard(e.launchId)}
+              onPick={pickEntry}
               onChat={startChat}
             />
           )}
 
           {step === 'what' && (
             <label className="wk-launch-wizard-field">
-              <span className="wk-field-label">What do you want done?</span>
+              <span className="wk-field-label">{wordsLabel}{wordsOptional ? ' (optional)' : ''}</span>
               <textarea
                 data-testid="launch-wizard-intent"
                 data-autofocus="true"
@@ -449,15 +478,16 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
             <div className="wk-launch-shape" data-testid="launch-wizard-shape">
               <p className="wk-launch-shape-line"><span className="wk-launch-shape-key">You get</span> {entry.gets}</p>
               <p className="wk-launch-shape-line" data-testid="launch-wizard-shape-needs"><span className="wk-launch-shape-key">It needs</span> {needsLine(entry).replace(/^Needs /, '')}{entry.needs.length === 0 ? '' : '. The next steps ask for it.'}</p>
-              {(entry.time !== null || entry.cost !== null) && (
-                <p className="wk-launch-shape-line"><span className="wk-launch-shape-key">Usually</span> {[entry.time, entry.cost].filter(Boolean).join(' · ')}</p>
+              {(entry.time !== null || entry.cost !== null || entry.medianMinutes !== null) && (
+                <p className="wk-launch-shape-line"><span className="wk-launch-shape-key">Usually</span> {[entry.time, entry.cost, entry.medianMinutes !== null ? `your runs took about ${aboutMinutes(entry.medianMinutes)}` : null].filter(Boolean).join(' · ')}</p>
               )}
-              {entry.inputs.filter((i) => i.key !== 'intent' && i.key !== 'repo').length > 0 && (
-                <ul className="wk-launch-shape-inputs" data-testid="launch-wizard-shape-inputs" aria-label="Say these in your words">
-                  {entry.inputs.filter((i) => i.key !== 'intent' && i.key !== 'repo').map((i) => (
-                    <li key={i.key}><span className="wk-launch-shape-key">{i.label}{i.required ? '' : ' (optional)'}</span>{i.help !== null ? ` ${i.help}` : ''}</li>
-                  ))}
-                </ul>
+              {moreWords.length > 0 && (
+                <div className="wk-launch-shape-inputs" data-testid="launch-wizard-shape-inputs">
+                  <span className="wk-launch-shape-key">Say in your words</span>
+                  <ul aria-label="Say these in your words">
+                    {moreWords.map((i) => <li key={i.key}>{i.label}{i.required ? '' : ', if it matters'}</li>)}
+                  </ul>
+                </div>
               )}
             </div>
           )}
@@ -732,7 +762,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
           {step === 'review' && !drafting && !demoing && (
             <dl className="wk-launch-wizard-review" data-testid="launch-wizard-review">
               <div><dt>Job</dt><dd>{jobName}</dd></div>
-              <div><dt>What</dt><dd className="wk-launch-wizard-review-intent">{draft.intent.trim()}</dd></div>
+              <div><dt>What</dt><dd className="wk-launch-wizard-review-intent">{problemText.trim()}</dd></div>
               <div><dt>Where</dt><dd>{repoName ?? 'No repository'}{projectName !== null ? ` · in ${projectName}` : ''}</dd></div>
               {seats.length > 0 && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
               {offerLead && <div data-testid="launch-wizard-review-lead"><dt>Lead agent</dt><dd>{lead === null ? 'Random (picked when it starts)' : seatLabel(leadable.find((s) => s.key === lead)!)}</dd></div>}
@@ -763,7 +793,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
           {step === 'workflow' && <p className="wk-field-note wk-launch-wizard-keys" data-testid="launch-wizard-keys">Type to search. Arrow keys move between workflows, Enter picks one and Esc closes.</p>}
           {step === 'workflow' && (
             <div className="wk-launch-wizard-skip" data-testid="launch-wizard-skip">
-              <label className="wk-launch-wizard-skip-label">
+              <label className="wk-launch-wizard-skip-label" title="You can turn New job back on in Settings → View.">
                 <input type="checkbox" data-testid="launch-wizard-skip-toggle" aria-describedby="launch-wizard-skip-note" checked={startInChat}
                   onChange={(e) => setStartInChat(e.target.checked)} />
                 Don’t show this again — start in chat
