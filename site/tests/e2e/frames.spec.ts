@@ -247,8 +247,15 @@ test.describe('large text on small screens', () => {
     });
     expect(m.composerBottom).toBeLessThanOrEqual(m.paneTop + 1);
     expect(m.thread).toBeGreaterThanOrEqual(150);
+    // Reduced motion posts the first prompt on its own, so send a note of our own and look for it.
+    const note = 'Check the limit on the batch routes too.';
+    const input = page.locator('[data-ide] [data-input]');
+    const mine = page.locator('[data-ide] [data-thread] .msg--user', { hasText: note });
+    await input.fill(note);
+    await expect(mine).toHaveCount(0);
     await send.tap();
-    await expect(page.locator('[data-ide] [data-thread]')).toContainText('Add rate limiting to the public API');
+    await expect(mine).toHaveCount(1);
+    await expect(input).toHaveValue('');
     await ctx.close();
   });
 
