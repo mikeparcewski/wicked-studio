@@ -38,20 +38,24 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   asked.set(key, gen);
   const atEpoch = epoch;
   // A retry after a failure is a read in flight, not the failure still standing.
-  if (cache.get(key)?.state !== 'ready' && cache.get(key)?.state !== 'loading') { cache.set(key, { state: 'loading' }); notify(); }
+  if (cache.get(key)?.state === 'error') { cache.set(key, { state: 'loading' }); notify(); }
   let load: CatalogLoad;
+  const prev = cache.get(key);
+  // The rules (xreview r6): a 404 is the route's absence, an older daemon (also after a catalog was
+  // served: the daemon was replaced), so today's list applies. A 200 that is not a catalog is an
+  // older daemon only before this one served its catalog. Anything else failing is transient: keep
+  // a catalog already read, else "couldn't read" (never today's list in its place, cold start included).
+  let routeAbsent = false;
   try {
     const view = catalogFromWire(await api.getWorkflowCatalog(projectId));
+    load = view !== null ? { state: 'ready', view } : prev?.state === 'ready' ? prev : served ? { state: 'error' } : { state: 'unavailable' };
     if (view !== null) served = true;
-    load = view === null ? (served ? { state: 'error' } : { state: 'unavailable' }) : { state: 'ready', view };
   } catch (err) {
-    // A 404 is the route's absence (an older daemon); anything else is transient: keep a catalog
-    // already read, and on a daemon that serves one, say the read failed.
-    const prev = cache.get(key);
-    const routeAbsent = err instanceof ApiError && err.status === 404;
-    load = routeAbsent ? { state: 'unavailable' } : prev?.state === 'ready' ? prev : served ? { state: 'error' } : { state: 'unavailable' };
+    routeAbsent = err instanceof ApiError && err.status === 404;
+    load = routeAbsent ? { state: 'unavailable' } : prev?.state === 'ready' ? prev : { state: 'error' };
   }
   if (atEpoch !== epoch || asked.get(key) !== gen) return null;
+  if (routeAbsent) served = false;
   cache.set(key, load);
   notify();
   return load;
@@ -67,11 +71,6 @@ export function useWorkflowCatalog(projectId: string | null): CatalogLoad {
     return () => { listeners.delete(fn); };
   }, [projectId]);
   return cache.get(key) ?? { state: 'loading' };
-}
-
-/** Has this daemon answered with its catalog this session (so its rules, not today's list, apply)? */
-export function catalogServed(): boolean {
-  return served;
 }
 
 /** What the cache holds for a project now (tests, and nothing else). */

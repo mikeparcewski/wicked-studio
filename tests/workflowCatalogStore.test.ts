@@ -59,11 +59,23 @@ describe('readWorkflowCatalog', () => {
     expect(titleOf(await retry)).toBe('p2 now');
   });
 
-  it('before any catalog, a body that is not one (or a failure) is an older daemon', async () => {
+  it('before any catalog, a body that is not one is an older daemon; a failure is "couldn\'t read" (xreview r6)', async () => {
     const spy = vi.spyOn(api, 'getWorkflowCatalog').mockResolvedValueOnce({ error: 'not a catalog' });
     expect(titleOf(await readWorkflowCatalog(null))).toBe('unavailable');
     spy.mockRejectedValueOnce(new TypeError('network down'));
+    expect(titleOf(await readWorkflowCatalog('p1'))).toBe('error');
+    spy.mockRejectedValueOnce(new ApiError(503, 'busy'));
+    expect(titleOf(await readWorkflowCatalog('p3'))).toBe('error');
+  });
+
+  it('a 404 after a catalog was served: the daemon was replaced by an older one, and its list applies (codex r6)', async () => {
+    const spy = vi.spyOn(api, 'getWorkflowCatalog').mockResolvedValueOnce(catalog('served'));
+    expect(titleOf(await readWorkflowCatalog(null))).toBe('served');
+    spy.mockRejectedValueOnce(new ApiError(404, 'not found'));
     expect(titleOf(await readWorkflowCatalog('p1'))).toBe('unavailable');
+    // And a body that is not a catalog now reads as an older daemon again (nothing served since).
+    spy.mockResolvedValueOnce({ error: 'not a catalog' });
+    expect(titleOf(await readWorkflowCatalog('p2'))).toBe('unavailable');
   });
 
   it('a reset drops reads still in flight', async () => {

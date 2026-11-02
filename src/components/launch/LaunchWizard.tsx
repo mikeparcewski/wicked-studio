@@ -39,7 +39,7 @@ import { VIBE_SOON } from '../../board/comingSoon.js';
 import { composeProduct } from '../../api/product.js';
 import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from '../product/RequirementsBrowser.js';
 import { aboutMinutes, catalogFromDefs, needsLine, needsRepo, withStudioKinds, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
-import { catalogServed, useWorkflowCatalog } from '../../store/workflowCatalog.js';
+import { useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { WorkflowCatalog } from './WorkflowCatalog.js';
 import { everythingPath, isDocFormat, madeKindForFormat } from '../../board/everythingModel.js';
 
@@ -136,16 +136,21 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // Nor does a failed read for the new project swap crew's catalog for today's list (xreview r2): once
   // this daemon has answered with its catalog, the list never replaces it in this open of the modal.
   const catalogKey = draft.projectId === null || draft.projectId === '' || draft.projectId === UNFILED_MOUNT ? '' : draft.projectId;
+  // (Only this project's own answer replaces what is shown: crew's catalog, or a confirmed older daemon.)
   const lastRead = useRef<{ view: CatalogView; key: string } | null>(null);
-  if (read !== null && (read.source === 'catalog' || lastRead.current?.view.source !== 'catalog')) lastRead.current = { view: read, key: catalogKey };
+  if (read !== null) lastRead.current = { view: read, key: catalogKey };
   const catalog = lastRead.current?.view ?? read;
   // What is shown may be the previous project's catalog; it does not say what THIS project offers, so a
   // card picked from it waits for this project's read before it launches (codex r3).
   // (Only crew's catalog says what a project offers; today's list on an older daemon authorizes nothing.)
-  // Held in ANY state until this project's catalog answers (xreview r4: a failed read released it), for
-  // any draft (xreview r5: one opened by workflow id too), and across a close and reopen: once this
-  // daemon has served its catalog, only this project's catalog says what may launch (r5).
-  const scopePending = catalogServed() && !(lastRead.current !== null && lastRead.current.view.source === 'catalog' && lastRead.current.key === catalogKey);
+  // A draft waits until THIS project's answer is the one shown (crew's catalog, or a confirmed older
+  // daemon): while the first read is out, after a project change, after a failed read, across a close
+  // and reopen, for every draft (xreview r4-r6).
+  const scopePending = lastRead.current === null || lastRead.current.key !== catalogKey;
+  const thisCatalog = !scopePending && lastRead.current!.view.source === 'catalog';
+  const holdLine = catalogLoad.state === 'error'
+    ? 'Couldn’t check this workflow for the chosen project. Close New job and open it again to retry.'
+    : lastRead.current === null ? 'Reading the workflows…' : 'Checking this workflow for the chosen project…';
   const [now] = useState(() => Date.now());
   const roster = useRoster();
   // A greyed helper's Sign in opens its sign-in modal over the wizard; closing it re-reads the roster,
@@ -207,8 +212,9 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     e.status === 'ready' && e.launchId === draft.workflowId && (['run', 'demo', 'compose'] as const).includes(e.launchKind as 'run');
   // The catalog may have changed since the pick (a resumed draft, a re-read): what is no longer offered
   // is never launched (codex r1).
+  // With crew's catalog for this project in, every draft (picked or opened by id) needs an offered card.
   const entryBlocker = draft.workflowId !== null && catalog !== null
-    && ((draft.catalogEntryId !== null && catalog.source === 'catalog' && (entry === null || !offered(entry))) || (entry !== null && !offered(entry)))
+    && ((thisCatalog && (entry === null || !offered(entry))) || (entry !== null && !offered(entry)))
     ? 'This workflow is not available now. Change job to pick another.' : null;
   // A workflow the catalog says works without a repository does not ask for one; any other keeps
   // today's rule (an unknown workflow, a preset, an older daemon's list: a repository is required).
@@ -292,9 +298,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     step !== 'workflow' && entryBlocker !== null ? entryBlocker
     // Nothing to shape this draft by (the chosen project's catalog is not in yet, and none was shown in
     // this open): every step says why it waits, rather than a rule guessed without the catalog.
-    : step !== 'workflow' && scopePending && catalog === null
-      ? (catalogLoad.state === 'loading' ? 'Checking this workflow for the chosen project…'
-        : 'Couldn’t check this workflow for the chosen project. Close New job and open it again to retry.')
+    : step !== 'workflow' && scopePending && catalog === null ? holdLine
     : step === 'requirements' ? draftBlocker
     : step === 'demo' ? demoProblem
     : step === 'workflow' ? (draft.workflowId === null ? 'Choose the kind of job.' : null)
@@ -307,9 +311,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // Review re-checks every rule (codex r1: another tab may have dropped the last helper meanwhile).
   const launchBlocker: string | null =
     entryBlocker !== null ? entryBlocker
-    : scopePending
-      ? (catalogLoad.state === 'loading' ? 'Checking this workflow for the chosen project…'
-        : 'Couldn’t check this workflow for the chosen project. Close New job and open it again to retry.')
+    : scopePending ? holdLine
     : projectRequired && filedProject === null ? 'Choose the project this works in.'
     : drafting ? draftBlocker
     : demoing ? (demoProblem ?? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.' : null))

@@ -161,6 +161,10 @@ describe('the New job wizard when QE acceptance is off', () => {
     vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [{ id: 'repo-1', name: 'app', root_path: '/srv/app' }] } as never);
     vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
     vi.spyOn(client.api, 'launchRun').mockResolvedValue({ runId: 'r-new' });
+    // An older daemon (launch-modal): no catalog route, so today's list and its rules apply.
+    vi.spyOn(client.api, 'getWorkflowCatalog').mockRejectedValue(new client.ApiError(404, 'not found'));
+    const { resetWorkflowCatalog } = await import('../src/store/workflowCatalog.js');
+    resetWorkflowCatalog();
   });
 
   it('a skip ticked before health answered neither blocks nor rides the launch once off is known; Force is sent alone and Review says required', async () => {

@@ -751,3 +751,54 @@ describe('round 5: the request snapshot is the whole request', () => {
     expect(screen.getByTestId('launch-wizard-error')).toBeInTheDocument();
   });
 });
+
+describe('round 6 (xreview r6): this project’s own answer first, for every draft', () => {
+  const card = (id: string, workflow: string) => ({
+    id, category: 'analyze', title: id, summary: `${id} summary`, outcome: 'O', needs: ['runs'], inputs: [],
+    status: 'available', launch: { kind: 'run', workflow }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null },
+  });
+  const cats = [{ id: 'analyze', title: 'Analyze' }];
+  const stubCatalog = (fn: (project: string | null) => Promise<Response>): void => {
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const u = new URL(url, 'http://x');
+      return u.pathname.endsWith('/workflows/catalog') ? fn(u.searchParams.get('projectId')) : realFetch(url, init);
+    }));
+  };
+  const json = (b: unknown, status = 200): Response => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
+  const settle = async (): Promise<void> => { await act(async () => { await new Promise((r) => setTimeout(r, 20)); }); };
+
+  it('a draft opened by id on a fresh page waits for the first answer before anything can launch', async () => {
+    stubCatalog(() => new Promise<Response>(() => {}));
+    render(<LaunchWizard />);
+    act(() => openLaunchWizard({ workflowId: 'review-recent-work', intent: 'look at my runs' }));
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Reading the workflows…');
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+  });
+
+  it('a draft opened by id whose workflow the chosen project’s catalog does not offer is blocked once it answers', async () => {
+    stubCatalog((p) => Promise.resolve(json({ categories: cats, entries: p === 'p2' ? [card('other', 'other')] : [card('rr', 'review-recent-work')] })));
+    render(<LaunchWizard />);
+    act(() => openLaunchWizard({ workflowId: 'review-recent-work', intent: 'look at my runs' }));
+    await settle();
+    expect(screen.getByTestId('launch-wizard-next')).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.change(screen.getByTestId('launch-wizard-project'), { target: { value: 'p2' } });
+    await settle();
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('This workflow is not available now.');
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+  });
+
+  it('a failed first read is "couldn’t read", never today’s list, and stays so on a reopen', async () => {
+    stubCatalog(() => Promise.resolve(json({ error: 'busy' }, 503)));
+    render(<LaunchWizard />);
+    act(() => openLaunchWizard({}));
+    await settle();
+    expect(screen.getByTestId('launch-catalog-failed')).toBeInTheDocument();
+    expect(screen.queryByTestId('launch-catalog-older')).toBeNull();
+    act(() => useLaunchWizard.getState().close());
+    act(() => openLaunchWizard({}));
+    await settle();
+    expect(screen.getByTestId('launch-catalog-failed')).toBeInTheDocument();
+  });
+});
