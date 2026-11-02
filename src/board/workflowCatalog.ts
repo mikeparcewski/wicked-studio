@@ -128,14 +128,17 @@ export function aboutMinutes(m: number): string {
 
 const COST: Readonly<Record<string, string>> = { low: 'low cost', medium: 'medium cost', high: 'high cost' };
 
-function inputsOf(v: unknown): CatalogInput[] {
-  if (!Array.isArray(v)) return [];
-  return v.flatMap((x) => {
+/** The form, or null when it is missing or any input in it cannot be read (then the words stay required). */
+function inputsOf(v: unknown): CatalogInput[] | null {
+  if (!Array.isArray(v)) return null;
+  const out = v.flatMap((x) => {
     const r = rec(x);
     const key = str(r?.['id']);
     if (r === null || key === null) return [];
-    return [{ key, label: str(r['label']) ?? key, kind: str(r['kind']) ?? 'text', required: r['required'] === true }];
+    // Fail closed: only an explicit `required: false` makes an input optional.
+    return [{ key, label: str(r['label']) ?? key, kind: str(r['kind']) ?? 'text', required: r['required'] !== false }];
   });
+  return out.length === v.length ? out : null;
 }
 
 /** How an entry launches, and the id the wizard's draft carries for it. */
@@ -196,8 +199,9 @@ export function catalogFromWire(body: unknown): CatalogView | null {
     const u = rec(r['usage']);
     const summary = [str(r['summary']), ...strs(r['useWhen'])].filter((t): t is string => t !== null).join('. ');
     const launch = launchOf(id, r['launch']);
+    const form = inputsOf(r['inputs']);
     const status = launch.launchKind === 'none' && statusOf(r['status']) === 'ready' ? 'unavailable' : statusOf(r['status']);
-    const median = typeof u?.['medianMinutes'] === 'number' && u['medianMinutes'] > 0 ? Math.round(u['medianMinutes']) : null;
+    const median = num(u?.['medianMinutes']) > 0 ? Math.max(1, Math.round(num(u?.['medianMinutes']))) : null;
     entries.push({
       id,
       ...launch,
@@ -206,10 +210,11 @@ export function catalogFromWire(body: unknown): CatalogView | null {
       subcategory: cat !== null && sub !== null ? subTitle.get(`${cat}/${sub}`) ?? null : null,
       gets: str(r['outcome']) ?? str(r['summary']) ?? String(workflowPurpose(launch.launchKind === 'run' ? launch.launchId : id, '')),
       summary,
-      // Fail closed: a missing or malformed `needs` is taken to need a repository (today's rule).
-      needs: Array.isArray(r['needs']) ? [...new Set(strs(r['needs']).filter((n) => n !== 'nothing'))] : ['repo'],
-      inputs: inputsOf(r['inputs']),
-      form: Array.isArray(r['inputs']),
+      // Fail closed: a missing or malformed `needs` (not a list, or any item not a word) needs a repository.
+      needs: Array.isArray(r['needs']) && strs(r['needs']).length === r['needs'].length
+        ? [...new Set(strs(r['needs']).filter((n) => n !== 'nothing'))] : ['repo'],
+      inputs: form ?? [],
+      form: form !== null,
       time: minutesLabel(r['typicalMinutes']),
       cost: own(COST, str(r['cost']) ?? '') ?? null,
       delivers: str(r['delivers']),
@@ -351,7 +356,6 @@ const STOP = new Set([
  */
 const LEXICON: Readonly<Record<string, readonly string[]>> = {
   doc: ['documentation', 'docs', 'document'],
-  docs: ['documentation', 'doc', 'document'],
   document: ['documentation', 'docs'],
   documentation: ['docs', 'document'],
   readme: ['documentation', 'docs'],
@@ -421,7 +425,8 @@ export function stem(w: string): string {
 export function typingWord(query: string): string | null {
   if (!/[\p{L}\p{N}]$/u.test(query)) return null;
   const last = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).pop() ?? '';
-  return last === '' || STOP.has(last) ? null : last;
+  // Stemmed too: "needs" stems to the stop word "need", which `tokens` drops (xreview r2).
+  return last === '' || STOP.has(last) || STOP.has(stem(last)) ? null : last;
 }
 
 export function tokens(text: string): string[] {
@@ -491,14 +496,6 @@ export function searchCatalog(view: CatalogView, query: string, now: number): Ca
     // What can start now ranks above what cannot (coming soon, unavailable), then by score.
     .sort((a, b) => Number(b.e.status === 'ready') - Number(a.e.status === 'ready') || b.s - a.s || usageScore(b.e, now) - usageScore(a.e, now) || a.e.order - b.e.order)
     .map((x) => x.e);
-}
-
-/** What an entry ends with, in plain words. */
-const DELIVERS_WORDS: Readonly<Record<string, string>> = {
-  pr: 'a pull request', document: 'a document', video: 'a video', report: 'a report', answer: 'an answer', none: 'nothing to deliver',
-};
-export function deliversWord(d: string | null): string | null {
-  return d === null ? null : own(DELIVERS_WORDS, d) ?? null;
 }
 
 /** The words a card's meta line shows: what it needs, then time and cost. */

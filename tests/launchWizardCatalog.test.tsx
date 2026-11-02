@@ -450,3 +450,98 @@ describe('launching from the catalog (xreview r1: the wire body, the picked card
     expect(screen.getByTestId('launch-wizard-next')).not.toBeDisabled();
   });
 });
+
+describe('round 2 (xreview r2): the picked card stays the picked card; nothing not offered launches', () => {
+  const card = (id: string, workflow: string, extra: Record<string, unknown> = {}) => ({
+    id, category: 'analyze', title: id, summary: `${id} summary`, outcome: `${id} outcome`, needs: ['runs'],
+    inputs: [], status: 'available', launch: { kind: 'run', workflow }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null }, ...extra,
+  });
+  const cats = [{ id: 'analyze', title: 'Analyze' }];
+  const reopen = async (): Promise<void> => {
+    act(() => useLaunchWizard.getState().close());
+    act(() => openLaunchWizard({}));
+    await waitFor(() => expect(screen.getByTestId('launch-wizard')).toBeInTheDocument());
+  };
+
+  it('a workflow named like an Object.prototype key after another kind: no crash, its own empty words', async () => {
+    catalog = { categories: cats, entries: [card('a', 'feature-x'), card('b', 'constructor')] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-feature-x'));
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'words for a' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-change'));
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-constructor'));
+    expect(screen.getByTestId('launch-wizard-intent')).toHaveValue('');
+    expect(useLaunchWizard.getState().draft?.workflowId).toBe('constructor');
+  });
+
+  it('the picked card removed from the catalog: blocked, not matched to another card for the same workflow', async () => {
+    catalog = { categories: cats, entries: [card('first', 'shared'), card('second', 'shared')] };
+    await openCatalog();
+    fireEvent.click(screen.getAllByTestId('launch-wizard-workflow-shared')[1]!);
+    catalog = { categories: cats, entries: [card('first', 'shared')] };
+    await reopen();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('This workflow is not available now.'));
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+  });
+
+  it('the picked card retargeted to "none": blocked', async () => {
+    catalog = { categories: cats, entries: [card('rr', 'review-recent-work')] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    catalog = { categories: cats, entries: [card('rr', 'review-recent-work', { status: 'coming_soon', launch: { kind: 'none' } })] };
+    await reopen();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('This workflow is not available now.'));
+  });
+
+  it('a required text input after an optional first one keeps the words required', async () => {
+    catalog = { categories: cats, entries: [card('a', 'wf-a', { inputs: [
+      { id: 'scope', label: 'Which part?', kind: 'text', required: false },
+      { id: 'goal', label: 'What for?', kind: 'text', required: true },
+    ] })] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-wf-a'));
+    expect(screen.getByLabelText(/Which part\?/)).toBe(screen.getByTestId('launch-wizard-intent'));
+    expect(screen.queryByText(/Which part\? \(optional\)/)).toBeNull();
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+  });
+
+  it('Change job after the second of two cards for one workflow: that card is pressed, not the first', async () => {
+    catalog = { categories: cats, entries: [card('first', 'shared', { title: 'First' }), card('second', 'shared', { title: 'Second' })] };
+    await openCatalog();
+    fireEvent.click(screen.getAllByTestId('launch-wizard-workflow-shared')[1]!);
+    fireEvent.click(screen.getByTestId('launch-wizard-change'));
+    const [first, second] = screen.getAllByTestId('launch-wizard-workflow-shared');
+    expect(first).toHaveAttribute('aria-pressed', 'false');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(document.activeElement).toBe(second));
+  });
+
+  it('a repository picked for one kind is not carried into a kind that needs none', async () => {
+    catalog = { categories: cats, entries: [card('f', 'feature-x', { needs: ['repo'] }), card('rr', 'review-recent-work')] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-feature-x'));
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.change(await screen.findByTestId('launch-wizard-repo'), { target: { value: 'repo-1' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-back'));
+    fireEvent.click(screen.getByTestId('launch-wizard-change'));
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    expect(screen.getByTestId('launch-wizard-repo')).toHaveValue('');
+  });
+
+  it('a failed read for the newly chosen project keeps crew’s catalog (never today’s list) mid-shaping', async () => {
+    catalog = { categories: cats, entries: [card('rr', 'review-recent-work')] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/workflows/catalog')
+      ? Promise.resolve(new Response(JSON.stringify({ error: 'busy' }), { status: 503, headers: { 'content-type': 'application/json' } }))
+      : realFetch(url, init))));
+    fireEvent.change(screen.getByTestId('launch-wizard-project'), { target: { value: 'p2' } });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.getByTestId('launch-wizard-repo-note')).toHaveTextContent('works without a repository');
+    expect(screen.getByTestId('launch-wizard-next')).not.toBeDisabled();
+  });
+});

@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../src/api/client.js';
-import { readWorkflowCatalog, resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
+import { peekWorkflowCatalog, readWorkflowCatalog, resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
 
 const catalog = (title: string): unknown => ({ entries: [{ id: 'a', title, status: 'available', launch: { kind: 'run', workflow: 'a' } }] });
 const titleOf = (load: Awaited<ReturnType<typeof readWorkflowCatalog>>): string | null =>
@@ -24,12 +24,17 @@ describe('readWorkflowCatalog', () => {
     expect(titleOf(await readWorkflowCatalog(null))).toBe('new');
     releaseOld(catalog('old'));
     expect(await older).toBeNull();
+    // What the cache holds (what the next open shows while it re-reads) is still the newer answer.
+    expect(titleOf(peekWorkflowCatalog(null) ?? null)).toBe('new');
   });
 
   it('projects keep their own answers', async () => {
     vi.spyOn(api, 'getWorkflowCatalog').mockImplementation((p) => Promise.resolve(catalog(`for ${p ?? 'all'}`)));
     expect(titleOf(await readWorkflowCatalog('p1'))).toBe('for p1');
     expect(titleOf(await readWorkflowCatalog(null))).toBe('for all');
+    // Each project's answer is its own slot (codex r2: two fresh reads would pass with one shared slot).
+    expect(titleOf(peekWorkflowCatalog('p1') ?? null)).toBe('for p1');
+    expect(titleOf(peekWorkflowCatalog(null) ?? null)).toBe('for all');
   });
 
   it('a transient failure keeps a catalog already read; a 404 is an older daemon', async () => {

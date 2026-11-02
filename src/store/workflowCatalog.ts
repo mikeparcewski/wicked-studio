@@ -20,6 +20,8 @@ export type CatalogLoad =
 const cache = new Map<string, CatalogLoad>();
 const asked = new Map<string, number>();
 let epoch = 0;
+/** Every mounted reader, told when any answer lands (a newer read from elsewhere included). */
+const listeners = new Set<() => void>();
 const keyOf = (projectId: string | null): string => projectId ?? '';
 
 /** Read one project's catalog; the answer lands in the cache only if no newer read was asked since. */
@@ -39,6 +41,7 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   }
   if (atEpoch !== epoch || asked.get(key) !== gen) return null;
   cache.set(key, load);
+  for (const fn of [...listeners]) fn();
   return load;
 }
 
@@ -46,11 +49,17 @@ export function useWorkflowCatalog(projectId: string | null): CatalogLoad {
   const key = keyOf(projectId);
   const [, setTick] = useState(0);
   useEffect(() => {
-    let live = true;
-    void readWorkflowCatalog(projectId).then((load) => { if (live && load !== null) setTick((n) => n + 1); });
-    return () => { live = false; };
+    const fn = (): void => setTick((n) => n + 1);
+    listeners.add(fn);
+    void readWorkflowCatalog(projectId);
+    return () => { listeners.delete(fn); };
   }, [projectId]);
   return cache.get(key) ?? { state: 'loading' };
+}
+
+/** What the cache holds for a project now (tests, and nothing else). */
+export function peekWorkflowCatalog(projectId: string | null): CatalogLoad | undefined {
+  return cache.get(keyOf(projectId));
 }
 
 /** Test hook: the cold start (nothing read yet; reads still in flight are dropped). */

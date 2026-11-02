@@ -108,9 +108,12 @@ export function withJobKind(draft: LaunchDraft, id: string): LaunchDraft {
   if (id === draft.workflowId) return draft;
   const prev = draft.workflowId;
   const intentsByKind = prev === null ? draft.intentsByKind : { ...draft.intentsByKind, [prev]: draft.intent };
-  const intent = prev === null ? draft.intent : intentsByKind[id] ?? '';
+  // Own keys only (xreview r2): a workflow named `constructor` must not read Object's.
+  const intent = prev === null ? draft.intent : (Object.prototype.hasOwnProperty.call(intentsByKind, id) ? intentsByKind[id]! : '');
   // codex r1 (S5): another kind of job starts its own options (nothing carried over).
-  return { ...draft, workflowId: id, intent, intentsByKind, reduced: false, skipQe: false, skipQeReason: '', catalogEntryId: null };
+  // launch-modal (xreview r2): and its own repository choice (a repository picked for one kind is not
+  // carried into a kind that may need none, nor a "none" into one that needs one).
+  return { ...draft, workflowId: id, intent, intentsByKind, reduced: false, skipQe: false, skipQeReason: '', catalogEntryId: null, repoRef: null };
 }
 
 export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({

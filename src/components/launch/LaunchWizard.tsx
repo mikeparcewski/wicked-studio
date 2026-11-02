@@ -132,9 +132,11 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   }, [catalogLoad, defs, presets]);
   // A project change mid-shaping re-reads the catalog (its usage and presets): the last one read stays
   // shown meanwhile, so the picked workflow's rules (repository, words) never flip while it loads.
+  // Nor does a failed read for the new project swap crew's catalog for today's list (xreview r2): once
+  // this daemon has answered with its catalog, the list never replaces it in this open of the modal.
   const lastRead = useRef<CatalogView | null>(null);
-  if (read !== null) lastRead.current = read;
-  const catalog = read ?? lastRead.current;
+  if (read !== null && (read.source === 'catalog' || lastRead.current?.source !== 'catalog')) lastRead.current = read;
+  const catalog = lastRead.current ?? read;
   const [now] = useState(() => Date.now());
   const roster = useRoster();
   // A greyed helper's Sign in opens its sign-in modal over the wizard; closing it re-reads the roster,
@@ -184,13 +186,20 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   }, []);
 
   const row = rows.find((r) => r.workflowId === draft.workflowId) ?? null;
-  // The card picked (its id, when two cards launch one workflow), else the first card for the workflow.
+  // The card picked from the catalog is THE card: if it is gone or now launches something else, the
+  // draft is blocked, never matched to another card (xreview r2). A draft opened by a workflow id
+  // (a composer's /workflow-<key>, Learn, Settings) takes the card for that workflow, an offered one first.
+  const pickedCard = draft.catalogEntryId === null || catalog === null ? null : (catalog.entries.find((e) => e.id === draft.catalogEntryId) ?? null);
+  const byWorkflow = draft.workflowId === null || catalog === null ? [] : catalog.entries.filter((e) => e.launchId === draft.workflowId || e.id === draft.workflowId);
   const entry = draft.workflowId === null ? null
-    : (catalog?.entries.find((e) => e.id === draft.catalogEntryId && e.launchId === draft.workflowId)
-      ?? catalog?.entries.find((e) => e.launchId === draft.workflowId) ?? null);
+    : draft.catalogEntryId !== null && catalog !== null ? pickedCard
+      : (byWorkflow.find((e) => e.status === 'ready' && e.launchId === draft.workflowId) ?? byWorkflow[0] ?? null);
+  const offered = (e: CatalogEntry): boolean =>
+    e.status === 'ready' && e.launchId === draft.workflowId && (['run', 'demo', 'compose'] as const).includes(e.launchKind as 'run');
   // The catalog may have changed since the pick (a resumed draft, a re-read): what is no longer offered
   // is never launched (codex r1).
-  const entryBlocker = entry !== null && (entry.status !== 'ready' || !(['run', 'demo', 'compose'] as const).includes(entry.launchKind as 'run'))
+  const entryBlocker = draft.workflowId !== null && catalog !== null
+    && ((draft.catalogEntryId !== null && catalog.source === 'catalog' && (entry === null || !offered(entry))) || (entry !== null && !offered(entry)))
     ? 'This workflow is not available now. Change job to pick another.' : null;
   // A workflow the catalog says works without a repository does not ask for one; any other keeps
   // today's rule (an unknown workflow, a preset, an older daemon's list: a repository is required).
@@ -201,7 +210,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // Words are required unless the catalog says otherwise: a workflow whose form has no text input,
   // or whose first one is optional. Crew still needs a problem (`problem` min 1), so a launch with no
   // words sends the workflow's own summary.
-  const wordsOptional = entry !== null && entry.launchKind === 'run' && entry.form && textInputs[0]?.required !== true;
+  const wordsOptional = entry !== null && entry.launchKind === 'run' && entry.form && textInputs.every((i) => !i.required);
   const wordsLabel = textInputs[0]?.label ?? (wordsOptional ? 'Anything to focus on?' : 'What do you want done?');
   const moreWords = textInputs.slice(1);
   const problemText = draft.intent.trim() !== '' || entry === null ? draft.intent : (entry.summary.split('. ')[0] || entry.title);
@@ -354,8 +363,19 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const pickCard = (id: string, entryId: string | null = null): void => {
     // codex r1: another kind of job starts its own options; studio#767: and its own words.
     if (id !== draft.workflowId) update({ ...withJobKind(draft, id), catalogEntryId: entryId });
-    else if (entryId !== draft.catalogEntryId) update({ catalogEntryId: entryId });
+    // Another card for the same workflow: its own options and repository choice (the words are the workflow's).
+    else if (entryId !== draft.catalogEntryId) update({ catalogEntryId: entryId, reduced: false, skipQe: false, skipQeReason: '', repoRef: null });
     setStep(id === DRAFT_EPICS_ID ? 'requirements' : id === DEMO_VIDEO_ID ? 'demo' : 'what');
+  };
+
+  // The newest render's blocker, for a launch that awaited something: the catalog may have stopped
+  // offering the workflow meanwhile (codex r2), and the launch must not post what is no longer offered.
+  const blockerNow = useRef<string | null>(null);
+  blockerNow.current = launchBlocker;
+  const resolveConfirmStill = async (): Promise<Awaited<ReturnType<typeof preview.resolveHumanConfirm>>> => {
+    const confirm = await preview.resolveHumanConfirm();
+    if (blockerNow.current !== null) throw new Error(blockerNow.current);
+    return confirm;
   };
 
   const launch = async (): Promise<void> => {
@@ -419,7 +439,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
         seats,
         repoRef,
         projectId: draft.projectId,
-        humanConfirm: await preview.resolveHumanConfirm(),
+        humanConfirm: await resolveConfirmStill(),
         deliver,
         autoDeliverGate: autoDeliver && deliverGateCap === true,
         reducedAssurance: offerReduced && draft.reduced,
@@ -472,6 +492,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
             <WorkflowCatalog
               view={catalog}
               pickedId={draft.workflowId}
+              pickedEntryId={draft.catalogEntryId}
               intent={draft.intent}
               now={now}
               onPick={pickEntry}

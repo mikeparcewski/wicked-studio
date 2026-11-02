@@ -21,6 +21,8 @@ export interface WorkflowCatalogProps {
   view: CatalogView | null;
   /** The draft's workflow, when one is picked (Change job): its card is pressed and focused. */
   pickedId: string | null;
+  /** The card picked, when the pick came from the catalog (two cards may launch one workflow). */
+  pickedEntryId?: string | null;
   /** The words New job was opened with (the desk ask): "Best fit" ranks the catalog by them. */
   intent: string;
   now: number;
@@ -31,7 +33,9 @@ export interface WorkflowCatalogProps {
 type Place = 'fit' | 'top' | 'cat' | 'result';
 const BEST_FIT_MAX = 3;
 
-export function WorkflowCatalog({ view, pickedId, intent, now, onPick, onChat }: WorkflowCatalogProps): React.ReactElement {
+export function WorkflowCatalog({ view, pickedId, pickedEntryId = null, intent, now, onPick, onChat }: WorkflowCatalogProps): React.ReactElement {
+  const isPicked = (en: CatalogEntry): boolean =>
+    pickedId !== null && en.launchId === pickedId && (pickedEntryId === null || en.id === pickedEntryId);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<CatalogFilters>(NO_FILTERS);
   const [moreFilters, setMoreFilters] = useState(false);
@@ -135,7 +139,7 @@ export function WorkflowCatalog({ view, pickedId, intent, now, onPick, onChat }:
           className="wk-launch-wizard-choice wk-catalog-card wk-catalog-card--soon">{body}</div>
       );
     }
-    const on = pickedId !== null && en.launchId === pickedId;
+    const on = isPicked(en);
     return (
       <button
         key={key}
@@ -163,7 +167,7 @@ export function WorkflowCatalog({ view, pickedId, intent, now, onPick, onChat }:
 
   const total = view?.entries.length ?? 0;
   const noResults = view !== null && total > 0 && (searching ? results.length === 0 : sections.length === 0);
-  const pickedOnLoad = pickedId !== null && (view?.entries.some((e) => e.launchId === pickedId && e.status === 'ready') ?? false);
+  const pickedOnLoad = view?.entries.some((e) => isPicked(e) && e.status === 'ready') ?? false;
   const extraFilters = (filters.repo !== 'any' ? 1 : 0) + (filters.showSoon ? 0 : 1);
 
   return (

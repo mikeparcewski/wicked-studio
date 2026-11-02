@@ -237,11 +237,17 @@ describe('untrusted wire and search text (xreview r1)', () => {
       categories: [{ id: 'constructor' }],
       entries: [{ id: '__proto__', category: 'constructor', status: 'available', cost: 'constructor', delivers: 'toString', needs: ['toString'], launch: { kind: 'run', workflow: 'hasOwnProperty' } }],
     })!;
-    expect(typeof v.categories[0]!.title).toBe('string');
-    expect(typeof v.entries[0]!.title).toBe('string');
-    expect(typeof v.entries[0]!.gets).toBe('string');
+    // Exact values (agy r2: `typeof` passed even for "function hasOwnProperty() { [native code] }").
+    expect(v.categories[0]!.title).toBe('Constructor');
+    expect(v.entries[0]!.title).toBe('Hasownproperty');
+    expect(v.entries[0]!.gets).toBe('');
     expect(v.entries[0]!.cost).toBeNull();
     expect(needsLine(v.entries[0]!)).toBe('Needs toString');
+    // An older daemon's workflows with those names: still words, still searchable.
+    const old = catalogFromDefs([{ id: 'constructor', phases: [] }, { id: 'toString', phases: [] }] as unknown as WorkflowDef[], null);
+    expect(old.entries.map((e) => typeof e.gets)).toEqual(['string', 'string']);
+    expect(() => searchCatalog(old, 'construct', NOW)).not.toThrow();
+    expect(ids(searchCatalog(old, 'constructor', NOW))).toEqual(['constructor']);
   });
 
   it('status fails closed: only "available" is offered', () => {
@@ -276,6 +282,12 @@ describe('untrusted wire and search text (xreview r1)', () => {
       { id: 'd', status: 'available', needs: ['nothing'], launch: { kind: 'run', workflow: 'd' } },
     ] })!;
     expect(v.entries.map((e) => e.needs)).toEqual([['repo'], ['repo'], [], []]);
+    // A list with anything in it that is not a word is malformed too (xreview r2).
+    const bad = catalogFromWire({ entries: [
+      { id: 'e', status: 'available', needs: [null, 7, ' '], launch: { kind: 'run', workflow: 'e' } },
+      { id: 'f', status: 'available', needs: ['runs', 5], launch: { kind: 'run', workflow: 'f' } },
+    ] })!;
+    expect(bad.entries.map((e) => e.needs)).toEqual([['repo'], ['repo']]);
   });
 
   it('a form is a list on the wire (even empty); an older daemon’s list has none', () => {
@@ -284,6 +296,13 @@ describe('untrusted wire and search text (xreview r1)', () => {
       { id: 'b', status: 'available', launch: { kind: 'run', workflow: 'b' } },
     ] })!;
     expect(v.entries.map((e) => e.form)).toEqual([true, false]);
+    // A form with an input that cannot be read is no form (the words stay required); `required` is
+    // only false when the wire says so.
+    const odd = catalogFromWire({ entries: [
+      { id: 'g', status: 'available', inputs: [null], launch: { kind: 'run', workflow: 'g' } },
+      { id: 'h', status: 'available', inputs: [{ id: 'problem', kind: 'text' }], launch: { kind: 'run', workflow: 'h' } },
+    ] })!;
+    expect(odd.entries.map((e) => [e.form, e.inputs.map((i) => i.required)])).toEqual([[false, []], [true, [true]]]);
     expect(catalogFromDefs([{ id: 'bug', phases: [] } as unknown as WorkflowDef], null).entries[0]!.form).toBe(false);
   });
 
@@ -304,5 +323,15 @@ describe('untrusted wire and search text (xreview r1)', () => {
     expect(scoreEntry(author, 'auth')).toBeGreaterThan(0);
     expect(scoreEntry(author, 'auth ')).toBe(0);
     expect(scoreEntry(author, 'auth for')).toBe(0);
+    // "needs" stems to the stop word "need" (xreview r2): "auth" is still not being typed.
+    expect(typingWord('auth needs')).toBeNull();
+    expect(scoreEntry(author, 'auth needs')).toBe(0);
+  });
+});
+
+describe('median run time', () => {
+  it('a run under half a minute reads as about 1 min, never 0', () => {
+    const v = catalogFromWire({ entries: [{ id: 'a', status: 'available', launch: { kind: 'run', workflow: 'a' }, usage: { launches: 1, medianMinutes: 0.2 } }] })!;
+    expect(v.entries[0]!.medianMinutes).toBe(1);
   });
 });

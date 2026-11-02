@@ -792,6 +792,8 @@ function MadeTab({ runs, runsLoaded = true, q, navigate, go }: { runs: SessionVi
       </div>
       {doorOpen && (
         <NewDocument
+          // launch-modal (xreview r2): a new request (New job's card names a format and project) is a new form.
+          key={`${q.format ?? ''}|${q.project ?? ''}`}
           projects={projects}
           initialProject={q.project}
           initialFormat={q.format ?? formatForMadeKind(q.kind)}
