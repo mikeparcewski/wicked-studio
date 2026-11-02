@@ -76,7 +76,8 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
   it('a directive prologue and a hashbang stay first (strict mode is kept); after a lone hashbang the prelude starts a new line', () => {
     expect(withNestedPrelude('"use strict";x()')).toBe(`"use strict";${P}x()`);
     expect(withNestedPrelude('#!/x\ny()')).toBe(`#!/x\n${P}\ny()`);
-    expect(withNestedPrelude('"use strict"\nb()')).toBe(`${P}"use strict"\nb()`);
+    expect(withNestedPrelude('"use strict"\nb()')).toBe(`"use strict";${P}\nb()`);
+    expect(withNestedPrelude('"use strict"\n(b)')).toBe(`${P}"use strict"\n(b)`);
     const doc = parse(guardNestedHtml('<script>"use strict";window.s=1</script>'));
     const script = Array.from(doc.querySelectorAll('script')).find((s) => s.textContent!.includes('window.s'))!;
     expect(script.textContent).toBe(`"use strict";${P}window.s=1`);

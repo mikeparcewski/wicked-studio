@@ -42,31 +42,55 @@ export const NESTED_PRELUDE =
 
 const LINE_END = /[\n\r\u2028\u2029]/;
 const SPACE = /\s/;
+const IDENTIFIER_PART = /[\w$\u0080-\uFFFF]/;
+
+/**
+ * Whether a directive with no `;` ends before `text[i]` by automatic semicolon insertion: a line ended after it, and
+ * what follows cannot continue the expression (end of text, a statement-starting word other than `in`/`instanceof`, a
+ * number, a string or a block). Any operator, bracket, dot or template continues it, so it does not count.
+ */
+function endsByAsi(text: string, i: number): boolean {
+  if (i >= text.length) return true;
+  const c = text[i]!;
+  if (c === '"' || c === "'" || c === '{' || /[0-9]/.test(c)) return true;
+  if (!IDENTIFIER_PART.test(c)) return false;
+  let j = i;
+  while (j < text.length && IDENTIFIER_PART.test(text[j]!)) j++;
+  const word = text.slice(i, j);
+  return word !== 'in' && word !== 'instanceof';
+}
 
 /**
  * Where the prelude goes in a script's text, read the way a JavaScript lexer reads it: past a hashbang line and a
- * directive prologue (each directive a string literal ended by its own `;`), with whitespace and comments between.
- * No regular expression does this: a backtracking pattern can be made to end a comment early or late. Here a block
- * comment ends at its first `*\/` and a line comment at the end of its line, exactly as in JavaScript, so the place
- * found is never inside a comment or a string, and nothing before it is code. Anything else ends the prologue.
+ * directive prologue (string-literal statements, each ended by its own `;` or by automatic semicolon insertion), with
+ * whitespace and comments between. No regular expression does this: a backtracking pattern can be made to end a
+ * comment early or late. Here a block comment ends at its first `*\/` and a line comment at the end of its line, exactly
+ * as in JavaScript, so nothing before the place found is code. `semicolon` says the last directive ended by insertion,
+ * so the prelude must be written after a `;` of its own.
  */
-export function prologueEnd(text: string): { at: number; afterHashbang: boolean } {
+export function prologueEnd(text: string): { at: number; afterHashbang: boolean; semicolon: boolean } {
   const n = text.length;
   let i = 0;
   let at = 0;
   let afterHashbang = false;
+  let semicolon = false;
   if (text.startsWith('#!')) {
     while (i < n && !LINE_END.test(text[i]!)) i++;
     at = i;
     afterHashbang = true;
   }
-  /** Past whitespace and whole comments; false at a block comment that never closes. */
+  let crossed = false;
+  /** Past whitespace and whole comments (noting a line end); false at a block comment that never closes. */
   const skip = (): boolean => {
     for (;;) {
-      while (i < n && SPACE.test(text[i]!)) i++;
+      while (i < n && SPACE.test(text[i]!)) {
+        if (LINE_END.test(text[i]!)) crossed = true;
+        i++;
+      }
       if (text.startsWith('/*', i)) {
         const close = text.indexOf('*/', i + 2);
         if (close < 0) return false;
+        if (LINE_END.test(text.slice(i, close))) crossed = true;
         i = close + 2;
       } else if (text.startsWith('//', i)) {
         while (i < n && !LINE_END.test(text[i]!)) i++;
@@ -88,19 +112,30 @@ export function prologueEnd(text: string): { at: number; afterHashbang: boolean 
       j += 1;
     }
     if (!closed) break;
+    const end = j;
     i = j;
-    if (!skip() || text[i] !== ';') break;
-    i += 1;
-    at = i;
+    crossed = false;
+    if (!skip()) break;
+    if (text[i] === ';') {
+      i += 1;
+      at = i;
+      semicolon = false;
+    } else if (crossed && endsByAsi(text, i)) {
+      at = end;
+      semicolon = true;
+    } else {
+      break;
+    }
     afterHashbang = false;
   }
-  return { at, afterHashbang };
+  return { at, afterHashbang, semicolon };
 }
 
-/** `text` with the prelude before its first statement (see {@link prologueEnd}); after a lone hashbang, on its own line. */
+/** `text` with the prelude before its first statement (see {@link prologueEnd}): after a `;` of its own when the last
+ *  directive ended by insertion, and on its own line after a lone hashbang. */
 export function withNestedPrelude(text: string): string {
-  const { at, afterHashbang } = prologueEnd(text);
-  return text.slice(0, at) + (afterHashbang ? '\n' : '') + NESTED_PRELUDE + text.slice(at);
+  const { at, afterHashbang, semicolon } = prologueEnd(text);
+  return text.slice(0, at) + (semicolon ? ';' : '') + (afterHashbang ? '\n' : '') + NESTED_PRELUDE + text.slice(at);
 }
 
 /** The essences HTML runs as a classic script (HTML "JavaScript MIME type essence match"). */
