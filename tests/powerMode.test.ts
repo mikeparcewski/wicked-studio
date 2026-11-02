@@ -150,7 +150,7 @@ describe('the state as it stands now', () => {
   });
   it('on a caught-up tie the session replaces the answer only where strictly further along; hand-off steps merge by step (codex r4 on 9d)', () => {
     const flip = [{ at: at(25), on: false, by: 'you', reason: null, stayPhased: [] }];
-    const step = (name: string, status: string, min: number) => ({ step: name, status, at: at(min) }) as never;
+    const step = (name: string, status: string, min: number) => ({ step: name, status, at: at(min), seat: null, summary: null, ord: null }) as never;
     const local = state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'passed', 26), step('review', 'running', 26)] } });
     // the same turn count: the answer's orchestrator stands; a session hand-off with the same moment keeps the answer's results
     const session = state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'running', 26)] } });
@@ -177,6 +177,12 @@ describe('the state as it stands now', () => {
     const kept = mergePower(bad, [], { ...local, handoff: { round: 1, maxRounds: 3, steps: [{ step: 'checks', status: 'passed', at: at(26) } as never] } }, at(25))!;
     expect(kept.turnLog).toHaveLength(2);
     expect(kept.handoff!.steps).toHaveLength(1);
+    // partial records (a step without a seat, a turn without a cli) are unreadable too (codex r6)
+    const partial = state({ on: false, toggles: flip, turnLog: [{ turn: 3, attempt: 0, summary: 'x' }] as never,
+      handoff: { round: 1, maxRounds: 3, steps: [{ step: 'review', status: 'running', at: at(30) }] } as never });
+    const safe = mergePower(partial, [], { ...local, handoff: { round: 1, maxRounds: 3, steps: [{ step: 'checks', status: 'passed', at: at(26), seat: null, summary: null, ord: null } as never] } }, at(25))!;
+    expect(safe.turnLog).toHaveLength(2);
+    expect(safe.handoff!.steps.map((st) => st.step)).toEqual(['checks']);
   });
   it('a checkpoint frame that opened a pause pauses the run until the next turn starts; this page\'s answer clears it', () => {
     const pz = { at: at(29), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };

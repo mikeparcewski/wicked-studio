@@ -617,9 +617,7 @@ function withLiveProgress(local: PowerState, p: PowerState): PowerState {
  *  beats an earlier, a tie keeps this page's. An unreadable session log is ignored (codex r5 on 9d). The newest 50
  *  stay, oldest first. */
 function mergeTurnLog(mine: PowerState['turnLog'], theirs: PowerState['turnLog']): PowerState['turnLog'] {
-  const readable = (t: unknown): t is PowerTurnRecord =>
-    t !== null && typeof t === 'object' && typeof (t as PowerTurnRecord).turn === 'number' && typeof (t as PowerTurnRecord).attempt === 'number';
-  if (!Array.isArray(theirs) || !theirs.every(readable)) return mine;
+  if (!Array.isArray(theirs) || !theirs.every(readableTurn)) return mine;
   const key = (t: PowerTurnRecord): string => `${t.attempt}:${t.turn}`;
   const rank = (t: PowerTurnRecord): number => (t.endedAt === null ? -1 : t.endedAt);
   const byKey = new Map<string, PowerTurnRecord>();
@@ -632,10 +630,29 @@ function mergeTurnLog(mine: PowerState['turnLog'], theirs: PowerState['turnLog']
   return merged.slice(-50);
 }
 
+// Session data is adopted into this page's answer only when every field the merge and the panel read is well formed
+// (codex r5/r6 on 9d): an unreadable record leaves this page's answer as it was, never a crash in rendering.
+const strOrNull = (v: unknown): boolean => v === null || typeof v === 'string';
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const STEP_STATUS = new Set(['pending', 'running', 'passed', 'failed', 'skipped']);
+
+function readableTurn(t: unknown): t is PowerTurnRecord {
+  if (t === null || typeof t !== 'object') return false;
+  const r = t as Record<string, unknown>;
+  return finite(r['turn']) && finite(r['attempt']) && typeof r['cli'] === 'string' && finite(r['startedAt'])
+    && (r['endedAt'] === null || finite(r['endedAt'])) && strOrNull(r['summary']) && strOrNull(r['outcome']);
+}
+
+function readableStep(st: unknown): st is HandoffStep {
+  if (st === null || typeof st !== 'object') return false;
+  const r = st as Record<string, unknown>;
+  return typeof r['step'] === 'string' && typeof r['status'] === 'string' && STEP_STATUS.has(r['status']) && finite(r['at'])
+    && strOrNull(r['seat']) && strOrNull(r['summary']) && (r['ord'] === null || r['ord'] === undefined || finite(r['ord']));
+}
+
 function mergeHandoff(mine: PowerState['handoff'], theirs: PowerState['handoff']): PowerState['handoff'] {
   const ok = (h: PowerState['handoff']): h is NonNullable<PowerState['handoff']> =>
-    h !== null && typeof h === 'object' && typeof h.round === 'number' && Array.isArray(h.steps)
-    && h.steps.every((st) => st !== null && typeof st === 'object' && typeof (st as { step?: unknown }).step === 'string');
+    h !== null && typeof h === 'object' && finite(h.round) && Array.isArray(h.steps) && h.steps.every(readableStep);
   if (!ok(theirs)) return mine;
   if (!ok(mine) || theirs.round > mine.round) return theirs;
   if (theirs.round < mine.round) return mine;
