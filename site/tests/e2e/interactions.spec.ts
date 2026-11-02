@@ -130,6 +130,19 @@ test('rules / memory / knowledge: approve a rule, edit and erase a memory, revea
   const cut = await know.locator('.dr-src .dl').evaluateAll((ls) => ls.filter((l) => l.scrollWidth > l.clientWidth + 1).length);
   expect(cut).toBe(0);
 
+  // the reveal stays open while the pointer travels from the chip onto the source
+  await chip.blur();
+  await page.mouse.move(5, 5);
+  await expect(know.locator('.dr-src')).toBeHidden();
+  await chip.hover();
+  await expect(know.locator('.dr-src')).toBeVisible();
+  const sb = (await know.locator('.dr-src').boundingBox())!;
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2, { steps: 6 });
+  await page.waitForTimeout(400);
+  await expect(know.locator('.dr-src')).toBeVisible();
+  await page.mouse.move(5, 5);
+  await expect(know.locator('.dr-src')).toBeHidden();
+
   // none of it moved the cards
   expect(await box(trio)).toEqual(h0);
 });
@@ -328,4 +341,29 @@ test('the side panel is a named tabpanel for the selected tab', async ({ page })
   await ide.getByRole('tab', { name: 'Receipt' }).click();
   await expect(ide.getByRole('tabpanel', { name: 'Receipt' })).toBeVisible();
   await expect(ide.getByRole('tab', { name: 'Receipt' })).toHaveAttribute('aria-controls', 'ide-pane-body');
+});
+
+test('the automatic part of the demo stops moving within five seconds of the prompt starting to type', async ({ page }) => {
+  // WCAG 2.2.2: motion that starts on its own and runs past five seconds needs a pause control.
+  await page.goto('/');
+  const ide = page.locator('[data-ide]');
+  await expect(ide).toHaveClass(/is-typing/, { timeout: 6000 });
+  const t0 = Date.now();
+  await expect(ide.getByRole('button', { name: 'Approve plan' })).toBeVisible({ timeout: 6000 });
+  await page.waitForTimeout(Math.max(0, 5000 - (Date.now() - t0)));
+  const running = await ide.evaluate((el) => el.getAnimations({ subtree: true }).filter((a) => a.playState === 'running').length);
+  expect(running).toBe(0);
+  await expect(ide).not.toHaveClass(/is-typing/);
+});
+
+test.describe('Watch a job on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test('brings the demo in below the topbar', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('link', { name: /Watch a job/ }).click();
+    await page.waitForTimeout(1200);
+    const top = await page.locator('[data-ide]').evaluate((el) => el.getBoundingClientRect().top);
+    expect(top).toBeGreaterThanOrEqual(64);
+    await expect(page.locator('[data-demo-note]')).toBeInViewport();
+  });
 });

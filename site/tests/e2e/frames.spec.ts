@@ -122,3 +122,21 @@ for (const vp of [{ width: 941, height: 600 }, { width: 941, height: 700 }, { wi
     expect(m.whyTop).toBeGreaterThanOrEqual(m.heroBottom - 1);
   });
 }
+
+// Windows too short for the one-frame hero: the hero grows, but driving the demo never moves the page.
+for (const vp of [{ width: 941, height: 600 }, { width: 1280, height: 600 }]) {
+  test(`the demo keeps its height through a whole job at ${vp.width}x${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto('/');
+    const ide = page.locator('[data-ide]');
+    const heroH = () => page.locator('.hero').evaluate((el) => Math.round(el.getBoundingClientRect().height));
+    await ide.getByRole('button', { name: 'Approve plan' }).waitFor({ timeout: 10_000 });
+    const h0 = await heroH();
+    await ide.getByRole('button', { name: 'Approve plan' }).click();
+    await ide.getByRole('button', { name: 'Send back' }).click({ timeout: 10_000 });
+    await expect(ide.locator('.msg--done')).toContainText('Pull request #12 is open.', { timeout: 15_000 });
+    expect(await heroH()).toBe(h0);
+    await ide.locator('[data-id="node"]').click();
+    expect(await heroH()).toBe(h0);
+  });
+}

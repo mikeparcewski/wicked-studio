@@ -21,10 +21,24 @@ const $$ = (s, r = document) => Array.prototype.slice.call(r.querySelectorAll(s)
    over an inner scroller that can still move in the wheel's direction (the demo's chat and diff). */
 const SNAP_MEDIA = '(pointer: fine) and (min-width: 1260px) and (min-height: 660px), (pointer: fine) and (min-width: 941px) and (min-height: 760px)';
 const snapMq = window.matchMedia(SNAP_MEDIA);
+const html = document.documentElement;
+/* Mandatory snapping is only safe while every frame fits. Text zoom, a long translation or a user
+   stylesheet can make one taller than the window: then html.frames-overflow turns snapping off
+   (studio.css) and the stepper and settle step stand down, so every line stays reachable. */
+const barH = () => (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight;
+const fitCheck = () => {
+  const avail = window.innerHeight - barH();
+  html.classList.toggle('frames-overflow', $$('.frame, .same-garden').some((el) => el.getBoundingClientRect().height > avail + 1));
+};
+const snapping = () => snapMq.matches && !html.classList.contains('frames-overflow');
+fitCheck();
+window.addEventListener('resize', fitCheck, { passive: true });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitCheck);
+if ('ResizeObserver' in window) { const ro = new ResizeObserver(fitCheck); $$('.frame, .same-garden').forEach((el) => ro.observe(el)); }
 window.addEventListener(
   'wheel',
   (e) => {
-    if (!snapMq.matches || e.ctrlKey) { e.stopImmediatePropagation(); return; }
+    if (!snapping() || e.ctrlKey) { e.stopImmediatePropagation(); return; }
     // a frame taller than the window keeps the wheel until its end is in view
     const bar = (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight;
     const here = $$('.frame, .same-garden').find((el) => { const r = el.getBoundingClientRect(); return r.top <= bar + 1 && r.bottom > bar + 1; });
@@ -63,7 +77,7 @@ window.addEventListener(
     return t.sort((a, b) => a - b);
   };
   const settle = () => {
-    if (!snapMq.matches || getComputedStyle(document.documentElement).scrollSnapType.indexOf('mandatory') < 0) return;
+    if (!snapping() || getComputedStyle(document.documentElement).scrollSnapType.indexOf('mandatory') < 0) return;
     const y = Math.round(window.scrollY), all = tops();
     if (all.some((t) => Math.abs(t - y) <= 2)) return;
     // A frame taller than the window (it should never happen where this runs) is read in place.
@@ -364,10 +378,19 @@ $$('[data-drawer]').forEach((card) => {
     });
   } else if (kind === 'know') {
     const chip = card.querySelector('[data-src]');
-    let pinned = false;
+    const src = card.querySelector('.dr-src');
+    let pinned = false, over = 0, t = null;
     const show = (on) => { card.classList.toggle('is-src', on); chip.setAttribute('aria-expanded', on ? 'true' : 'false'); };
-    chip.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') show(true); });
-    chip.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !pinned && document.activeElement !== chip) show(false); });
+    // hovering either the chip or the revealed source keeps it open (a short grace bridges the gap)
+    [chip, src].forEach((el) => {
+      el.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'mouse' || (el === src && !card.classList.contains('is-src'))) return; over++; clearTimeout(t); show(true); });
+      el.addEventListener('pointerleave', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        over = Math.max(0, over - 1);
+        clearTimeout(t);
+        t = setTimeout(() => { if (!over && !pinned && document.activeElement !== chip) show(false); }, 180);
+      });
+    });
     chip.addEventListener('focus', () => show(true));
     chip.addEventListener('blur', () => { if (!pinned) show(false); });
     chip.addEventListener('click', () => { pinned = !pinned; show(pinned || document.activeElement === chip); });

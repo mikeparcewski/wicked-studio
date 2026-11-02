@@ -106,6 +106,24 @@ test.describe('scroll-snap layout', () => {
     }
   });
 
+  test('a frame that grows past the window turns hard snapping off, and the wheel reads it to the end', async ({ page }) => {
+    // text zoom or a user stylesheet can make a frame taller than the window; mandatory snapping
+    // would then pull the reader back to its top on every notch
+    await page.setViewportSize({ width: 1280, height: 660 });
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.addStyleTag({ content: '#why { min-height: 900px !important; }' });
+    await expect(page.locator('html')).toHaveClass(/frames-overflow/);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollSnapType)).not.toContain('mandatory');
+    const deskTop = await page.locator('#desk').evaluate((el) => Math.round(el.getBoundingClientRect().top + window.scrollY - 64));
+    await page.mouse.move(640, 300);
+    for (let k = 0; k < 40 && (await page.evaluate(() => window.scrollY)) < deskTop - 2; k++) {
+      await page.mouse.wheel(0, 100);
+      await page.waitForTimeout(120);
+    }
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(deskTop - 2);
+  });
+
   test('on a phone the wheel scrolls natively (the frame stepper is off)', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/');
