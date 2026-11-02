@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 285,
-    "occurrences": 3961,
-    "static": 3368,
+    "occurrences": 3962,
+    "static": 3369,
     "dynamic": 93,
     "computed": 44
   },
@@ -6516,6 +6516,12 @@
     },
     {
       "testId": "launch-catalog-empty",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-failed",
       "files": [
         "src/components/launch/WorkflowCatalog.tsx"
       ]

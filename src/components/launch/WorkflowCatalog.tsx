@@ -19,6 +19,8 @@ import { hasWorkflowArt, WorkflowArt } from './WorkflowArt.js';
 export interface WorkflowCatalogProps {
   /** null while the catalog (or the older daemon's list) is still being read. */
   view: CatalogView | null;
+  /** The daemon serves a catalog but this read failed, and there is none to show. */
+  failed?: boolean;
   /** The draft's workflow, when one is picked (Change job): its card is pressed and focused. */
   pickedId: string | null;
   /** The card picked, when the pick came from the catalog (two cards may launch one workflow). */
@@ -33,7 +35,7 @@ export interface WorkflowCatalogProps {
 type Place = 'fit' | 'top' | 'cat' | 'result';
 const BEST_FIT_MAX = 3;
 
-export function WorkflowCatalog({ view, pickedId, pickedEntryId = null, intent, now, onPick, onChat }: WorkflowCatalogProps): React.ReactElement {
+export function WorkflowCatalog({ view, failed = false, pickedId, pickedEntryId = null, intent, now, onPick, onChat }: WorkflowCatalogProps): React.ReactElement {
   const isPicked = (en: CatalogEntry): boolean =>
     pickedId !== null && en.launchId === pickedId && (pickedEntryId === null || en.id === pickedEntryId);
   const [query, setQuery] = useState('');
@@ -237,7 +239,13 @@ export function WorkflowCatalog({ view, pickedId, pickedEntryId = null, intent, 
       </p>
 
       <div className="wk-catalog-panel" ref={panelRef} data-testid="launch-catalog-results" onKeyDown={onPanelKey}>
-        {view === null && (
+        {view === null && failed && (
+          <div className="wk-catalog-empty" data-testid="launch-catalog-failed" role="alert">
+            <p className="wk-field-note">Couldn’t read the workflows. Close New job and open it again to try again.</p>
+            <button type="button" className="wk-btn wk-btn--secondary" onClick={onChat}>Talk it through first</button>
+          </div>
+        )}
+        {view === null && !failed && (
           <div data-testid="launch-catalog-loading" aria-busy="true">
             <p className="wk-field-note">Reading the workflows…</p>
             <div className="wk-catalog-grid" aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <span key={i} className="wk-catalog-card wk-catalog-card--skeleton" />)}</div>

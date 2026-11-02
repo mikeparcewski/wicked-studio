@@ -47,8 +47,23 @@ describe('readWorkflowCatalog', () => {
     expect(titleOf(await readWorkflowCatalog(null))).toBe('good');
     spy.mockRejectedValueOnce(new ApiError(404, 'not found'));
     expect(titleOf(await readWorkflowCatalog(null))).toBe('unavailable');
-    spy.mockResolvedValueOnce({ error: 'not a catalog' });
-    expect(titleOf(await readWorkflowCatalog('p2'))).toBe('unavailable');
+    // On a daemon that has served its catalog, a failed read for another project is "couldn't read",
+    // never the older-daemon fallback (xreview r5); a retry reads as loading while it is out.
+    spy.mockRejectedValueOnce(new ApiError(503, 'busy'));
+    expect(titleOf(await readWorkflowCatalog('p2'))).toBe('error');
+    let release!: (v: unknown) => void;
+    spy.mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    const retry = readWorkflowCatalog('p2');
+    expect(peekWorkflowCatalog('p2')?.state).toBe('loading');
+    release(catalog('p2 now'));
+    expect(titleOf(await retry)).toBe('p2 now');
+  });
+
+  it('before any catalog, a body that is not one (or a failure) is an older daemon', async () => {
+    const spy = vi.spyOn(api, 'getWorkflowCatalog').mockResolvedValueOnce({ error: 'not a catalog' });
+    expect(titleOf(await readWorkflowCatalog(null))).toBe('unavailable');
+    spy.mockRejectedValueOnce(new TypeError('network down'));
+    expect(titleOf(await readWorkflowCatalog('p1'))).toBe('unavailable');
   });
 
   it('a reset drops reads still in flight', async () => {

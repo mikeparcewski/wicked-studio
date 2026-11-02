@@ -11,18 +11,25 @@ import { catalogFromWire, type CatalogView } from '../board/workflowCatalog.js';
  * One answer per project (`?projectId` changes usage and saved presets). A read is applied only if it
  * is still the newest one asked for that project (a slow read from a closed modal never overwrites a
  * newer answer), and a transient failure (network, 5xx) never downgrades a catalog already read.
+ * Once this daemon has answered with its catalog, a failed read is `error` ("couldn't read"), never
+ * `unavailable`: it is not an older daemon, and today's list must not stand in for its catalog
+ * (xreview r5). A read of a project with no catalog yet reads as `loading` while it is out.
  */
 export type CatalogLoad =
   | { state: 'loading' }
   | { state: 'ready'; view: CatalogView }
-  | { state: 'unavailable' };
+  | { state: 'unavailable' }
+  | { state: 'error' };
 
 const cache = new Map<string, CatalogLoad>();
 const asked = new Map<string, number>();
 let epoch = 0;
+/** This daemon has answered with its catalog at least once this session. */
+let served = false;
 /** Every mounted reader, told when any answer lands (a newer read from elsewhere included). */
 const listeners = new Set<() => void>();
 const keyOf = (projectId: string | null): string => projectId ?? '';
+const notify = (): void => { for (const fn of [...listeners]) fn(); };
 
 /** Read one project's catalog; the answer lands in the cache only if no newer read was asked since. */
 export async function readWorkflowCatalog(projectId: string | null): Promise<CatalogLoad | null> {
@@ -30,18 +37,23 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   const gen = (asked.get(key) ?? 0) + 1;
   asked.set(key, gen);
   const atEpoch = epoch;
+  // A retry after a failure is a read in flight, not the failure still standing.
+  if (cache.get(key)?.state !== 'ready' && cache.get(key)?.state !== 'loading') { cache.set(key, { state: 'loading' }); notify(); }
   let load: CatalogLoad;
   try {
     const view = catalogFromWire(await api.getWorkflowCatalog(projectId));
-    load = view === null ? { state: 'unavailable' } : { state: 'ready', view };
+    if (view !== null) served = true;
+    load = view === null ? (served ? { state: 'error' } : { state: 'unavailable' }) : { state: 'ready', view };
   } catch (err) {
-    // A 404 is an older daemon's real answer; anything else is transient and keeps a catalog already read.
+    // A 404 is the route's absence (an older daemon); anything else is transient: keep a catalog
+    // already read, and on a daemon that serves one, say the read failed.
     const prev = cache.get(key);
-    load = !(err instanceof ApiError && err.status === 404) && prev?.state === 'ready' ? prev : { state: 'unavailable' };
+    const routeAbsent = err instanceof ApiError && err.status === 404;
+    load = routeAbsent ? { state: 'unavailable' } : prev?.state === 'ready' ? prev : served ? { state: 'error' } : { state: 'unavailable' };
   }
   if (atEpoch !== epoch || asked.get(key) !== gen) return null;
   cache.set(key, load);
-  for (const fn of [...listeners]) fn();
+  notify();
   return load;
 }
 
@@ -57,6 +69,11 @@ export function useWorkflowCatalog(projectId: string | null): CatalogLoad {
   return cache.get(key) ?? { state: 'loading' };
 }
 
+/** Has this daemon answered with its catalog this session (so its rules, not today's list, apply)? */
+export function catalogServed(): boolean {
+  return served;
+}
+
 /** What the cache holds for a project now (tests, and nothing else). */
 export function peekWorkflowCatalog(projectId: string | null): CatalogLoad | undefined {
   return cache.get(keyOf(projectId));
@@ -66,5 +83,6 @@ export function peekWorkflowCatalog(projectId: string | null): CatalogLoad | und
 export function resetWorkflowCatalog(): void {
   cache.clear();
   asked.clear();
+  served = false;
   epoch += 1;
 }

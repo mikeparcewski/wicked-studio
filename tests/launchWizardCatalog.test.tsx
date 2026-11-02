@@ -13,6 +13,7 @@ import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 import { resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
+import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
 import { WorkflowCatalog } from '../src/components/launch/WorkflowCatalog.js';
 import fixture from './fixtures/workflowCatalog.json';
 
@@ -63,6 +64,7 @@ beforeEach(() => {
   clearRepoCache();
   resetWorkflowCatalog();
   resetLaunchWizard();
+  clearCachedRoster();
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -648,5 +650,104 @@ describe('round 4 (xreview r4)', () => {
     });
     await waitFor(() => expect(posts.filter((p) => p.path === '/runs')).toHaveLength(1));
     expect(posts.find((p) => p.path === '/runs')!.body.repoRef).toBe('repo-2');
+  });
+});
+
+describe('round 5 (xreview r5): the hold survives a close and reopen, covers drafts opened by id, and sees whole seats', () => {
+  const rr = {
+    id: 'rr', category: 'analyze', title: 'Review recent work', summary: 'Recommendations.', outcome: 'A report', needs: ['runs'], inputs: [],
+    status: 'available', launch: { kind: 'run', workflow: 'review-recent-work' }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null },
+  };
+  const cats = [{ id: 'analyze', title: 'Analyze' }];
+  const toReview = (): void => {
+    for (let i = 0; i < 4 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) fireEvent.click(screen.getByTestId('launch-wizard-next'));
+  };
+  const failCatalogFor = (project: string, how: 'fail' | 'hold'): void => {
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const u = new URL(url, 'http://x');
+      if (u.pathname.endsWith('/workflows/catalog') && u.searchParams.get('projectId') === project) {
+        return how === 'hold' ? new Promise<Response>(() => {})
+          : Promise.resolve(new Response(JSON.stringify({ error: 'busy' }), { status: 503, headers: { 'content-type': 'application/json' } }));
+      }
+      return realFetch(url, init);
+    }));
+  };
+
+  it('closed and reopened after the chosen project’s read failed: still held while the retry fails', async () => {
+    catalog = { categories: cats, entries: [rr] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    failCatalogFor('p2', 'fail');
+    fireEvent.change(screen.getByTestId('launch-wizard-project'), { target: { value: 'p2' } });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    act(() => useLaunchWizard.getState().close());
+    act(() => openLaunchWizard({}));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    // Every step says why it waits, and nothing can go on to a launch.
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Couldn’t check this workflow for the chosen project');
+    expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
+    expect(posts.filter((p) => p.path === '/runs')).toEqual([]);
+  });
+
+  it('the catalog step says when it could not read the workflows (never today’s list in its place)', async () => {
+    catalog = { categories: cats, entries: [rr] };
+    await openCatalog();
+    act(() => useLaunchWizard.getState().close());
+    failCatalogFor('p2', 'fail');
+    act(() => resetLaunchWizard());
+    act(() => openLaunchWizard({ projectId: 'p2' }));
+    await waitFor(() => expect(screen.getByTestId('launch-catalog-failed')).toHaveTextContent('Couldn’t read the workflows.'));
+    expect(screen.queryByTestId('launch-catalog-older')).toBeNull();
+  });
+
+  it('a draft opened by workflow id waits for the chosen project’s catalog too', async () => {
+    catalog = { categories: cats, entries: [rr] };
+    render(<LaunchWizard />);
+    act(() => openLaunchWizard({ workflowId: 'review-recent-work' }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('what');
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    failCatalogFor('p2', 'hold');
+    fireEvent.change(screen.getByTestId('launch-wizard-project'), { target: { value: 'p2' } });
+    toReview();
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Checking this workflow for the chosen project');
+    expect(screen.getByTestId('launch-wizard-launch')).toBeDisabled();
+  });
+});
+
+describe('round 5: the request snapshot is the whole request', () => {
+  it('a seat changed under the same key while the preview is out: not sent (codex r5)', async () => {
+    const seat = (binary: string) => ({ key: 'claude', display_name: 'Claude', binary, enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true });
+    setCachedRoster([seat('claude')] as never);
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [{
+      id: 'rr', category: 'analyze', title: 'Review', summary: 'S.', outcome: 'O', needs: ['repo'], inputs: [], status: 'available',
+      launch: { kind: 'run', workflow: 'review-recent-work' }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null },
+    }] };
+    let releasePreview: ((r: Response) => void) | null = null;
+    const realFetch = globalThis.fetch;
+    const json = (b: unknown): Response => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname;
+      if (path.endsWith('/presets')) return Promise.resolve(json({ presets: [{ name: 'review-recent-work', steps: [{ id: 'analyze' }] }] }));
+      if (path.endsWith('/plans/preview')) return new Promise<Response>((r) => { releasePreview = r; });
+      if (path.endsWith('/roster')) return Promise.resolve(json({ roster: [seat('claude')] }));
+      return realFetch(url, init);
+    }));
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.change(await screen.findByTestId('launch-wizard-repo'), { target: { value: 'repo-1' } });
+    for (let i = 0; i < 4 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(releasePreview).not.toBeNull(), { timeout: 3000 });
+    act(() => setCachedRoster([seat('/opt/other/claude')] as never));
+    await act(async () => {
+      releasePreview!(json({ score: 0, deterministic: 0, reasons: [], destructive: false, band: '0-39', high_risk: false, floor: [], floor_override: null, steps: [{ id: 'analyze' }] }));
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(posts.filter((p) => p.path === '/runs')).toEqual([]);
+    expect(screen.getByTestId('launch-wizard-error')).toBeInTheDocument();
   });
 });
