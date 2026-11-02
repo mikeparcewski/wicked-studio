@@ -173,6 +173,31 @@ test('agents: picking one puts it in the sandbox; the search example counts its 
   await expect(reach.locator('.hits caption')).toContainText('8 hits');
 });
 
+test('the example search never shows its total while its rows still count up', async ({ page }) => {
+  await page.goto('/');
+  // start the sampler before the card comes into view, so it sees the typing, the climb and the reveal
+  const sampled = page.evaluate(() => new Promise<{ frames: number; shown: number; bad: string[] }>((done) => {
+    const card = document.querySelector('[data-search]')!;
+    const cap = card.querySelector('.hits caption')!;
+    const cells = Array.from(card.querySelectorAll('[data-n]'));
+    const bad: string[] = [];
+    let frames = 0, shown = 0;
+    const t0 = performance.now();
+    const tick = () => {
+      frames++;
+      const sum = cells.reduce((a, c) => a + Number(c.textContent), 0);
+      if (parseFloat(getComputedStyle(cap).opacity) > 0.01) { shown++; if (sum !== 8) bad.push(cells.map((c) => c.textContent).join(',')); }
+      if (performance.now() - t0 < 4000) requestAnimationFrame(tick); else done({ frames, shown, bad });
+    };
+    requestAnimationFrame(tick);
+  }));
+  await page.locator('.reach').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  const r = await sampled;
+  expect(r.bad).toEqual([]);
+  expect(r.shown).toBeGreaterThan(0);
+  await expect(page.locator('.reach .hits caption')).toHaveCSS('opacity', '1');
+});
+
 test('what is new: eight items, arrows move, one stacked panel', async ({ page }) => {
   await page.goto('/');
   const news = page.locator('.news');

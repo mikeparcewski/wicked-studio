@@ -30,6 +30,7 @@ test.describe('reduced motion', () => {
     await expect(page.locator('.relay')).toHaveAttribute('data-tok', 'y');
     await expect(page.locator('.receipt tr.is-filled')).toHaveCount(5);
     await expect(page.locator('.hits [data-n="4"]')).toHaveText('4');
+    await expect(page.locator('.hits caption')).toHaveCSS('opacity', '1');
     await expect(page.locator('[data-typed]')).toHaveText('npx wicked-crew serve');
 
     for (const sel of ['.desk', '.review', '.steer', '.reach', '.new', '.same-garden', '.install--primary']) {

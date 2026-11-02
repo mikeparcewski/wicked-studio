@@ -439,7 +439,7 @@ $$('[data-drawer]').forEach((card) => {
     clearInterval(timer);
     q.textContent = '';
     cells.forEach((c) => { c.textContent = '0'; });
-    card.classList.remove('is-done');
+    card.classList.remove('is-done', 'is-counted');
     card.classList.add('is-pre');
   };
   const play = () => {
@@ -457,6 +457,7 @@ $$('[data-drawer]').forEach((card) => {
         const p = Math.min(1, (now - t0) / 700);
         cells.forEach((c) => { c.textContent = String(Math.round(p * +c.getAttribute('data-n'))); });
         if (p < 1) requestAnimationFrame(climb);
+        else card.classList.add('is-counted'); // the total shows only once the rows add up to it
       };
       requestAnimationFrame(climb);
     }, 70);
