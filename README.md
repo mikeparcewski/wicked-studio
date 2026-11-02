@@ -18,9 +18,11 @@ It's the human surface of the [wicked](https://wickedagile.com) platform; the
 Coding agents are fast but unsupervised — they assert "done," grade their own work, and bury the
 reasoning in a scrollback you'll never read. wicked-studio flips that:
 
-- **Start with a chat.** **New job → Start with chat**: describe what you want, the chat proposes a
-  plan, and nothing starts until you confirm it. (Tick "Don't show this again" to go straight to
-  chat next time.)
+- **Pick the job, or talk it through.** **New job** opens a catalog of workflows: search it in your
+  own words ("write docs for the auth service"), filter by category or by whether it needs a
+  repository, and your most-used ones are on top. Each workflow asks only for what it needs. Not sure
+  yet? **Talk it through first**: describe what you want, the chat proposes a plan, and nothing starts
+  until you confirm it. (Tick "Don't show this again" to go straight to chat next time.)
 - **Sign your agents in once.** The **Agents** tab signs each agent in, inside a container. Jobs run
   every agent in a hardened sandbox (crew needs a container runtime: Rancher Desktop, Docker,
   Podman, Colima or OrbStack). Credentials stay in a broker; the sandbox only ever sees placeholders.
