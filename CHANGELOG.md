@@ -12,10 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
-### Fixed
-- **Importing a steering rule the way the dialog says now works, and a refusal shows the service's reason (studio#934, J7).** The Import rules dialog said "one rule per item under ## Rules". A doc written that way was refused, because the service reads a frontmattered doc, and studio showed only "Studio’s service refused it". The dialog now says "a markdown rule doc in the format below", and **The format** opens a copyable starting doc: a `---` block with `id` and `title`, then `## Rules` items written as `` - `ID` (severity): statement ``. That example imports as written. A skipped entry now always ends with what the service said ("Studio’s service said: not a frontmattered rule doc — …"). The plain words come first when studio knows the cause. The table view's assistant uses the same import path.
+## [0.14.0] — 2026-11-02
+
+A minor release: UI v3 (#937), the studio the operator signed off on 2026-11-01, with release fix rounds 9b, 9c and 9d. It brings the Wicked Dark, Wicked Light and Ambient themes, Wicked Sans v2 on one strict type scale, a chat on every page, voice, power mode on the job page, guided asks, Learn and Memory, and the requirements view with real-requirements coverage and not-counted rows. Also: every message in a job's thread says when it was said (#929), and run plugins with the working document in the Phase report (#927, #928). The `wicked-crew-api-types` pin stays at 0.128.0; newer crew wire shapes are mirrored in `src/api/*` and read tolerantly, so an older crew degrades rather than breaks.
 
 ### Added
+
 - **Voice: "show me this job", then "tell it …"** (lane voice-jobs, on voice mode phase 1). On the voice dashboard:
   - **Which job.** "Show me this job" is the job in view, else the run page voice was opened from, else the only
     running one. A name ("the webhook retries job") is fuzzy-matched against running and recent jobs (title words,
@@ -54,7 +56,6 @@ npm publish dates. Every version listed here exists on
 - **A working chat turn says what it is doing, and offers "Check on it?" once it runs long** (operator 2026-10-30: "On the 'studio working' activity in the chat, people get impatient").
   - **Every chat view:** the session thread (under "<seat> is thinking"), the system chat and Ask dock (under the chat session), page chats that run a job (under the now-bar) and a run's working step show the live list: the meter ("Claude · 3 min 12 s · 412k tokens · $0.21": tokens from the engine's live `usageProgress`, wicked-core#1212, else the step's `cliUsage`; cost only when known), a one-line rolling summary of the last half minute that moves every 25 s ("Reading 4 files in packages/crew/src/api", "Ran the tests: passed · edited 2 files in src/board"; derived from the step's own frames, never by a model), the tool rows with their age, and the seat's newest line.
   - **"This has been running 6 min · Check on it?":** after 3 min in a chat and 10 min on a run's step (`localStorage` `wicked.check.chatMinutes` / `wicked.check.stepMinutes`), a guided ask (DES-GUIDED-CHAT's tiles, the recommended one marked) asks crew (`POST /runs/:id/units/:ord/inspect`, crew-api-types 0.155.0): a seat that is not the step's own reads its record, read-only, and the card shows its verdict (Progressing, Looping, Stuck, Wasting tokens), what it is doing, how far along, the evidence, whose answer it is and what the check cost. What now? offers Let it run, Steer it (the suggested note, editable, sent to the step's seat) and Stop (the ordinary Stop with its undo), the recommended one preselected; nothing happens until the person chooses, then one record line. "Not now" asks again a threshold later. On a crew without the check it says so.
-- **Guided asks: every question you answer inline is one card, not a row of buttons in a bubble** (operator-approved mockup learn-and-panels state h, design DES-GUIDED-CHAT). One renderer, `AskCard` (`src/components/ask/`), draws six kinds over one typed `Ask` (`src/api/ask.ts`, mirroring crew-api-types 0.158.0 until the pin moves): choose one, yes / no, pick several, short text, a scale, and confirm-with-reason.
 - **Each page has its own chat, drawn in the page with the page's data** (operator-approved mockup learn-and-panels state f, design DES-LEARN §6.2). Understand, Report, Nerve Center, Evaluate, Steering, Memory and Learn each open a chat beside the page (a 400 px column from 1200 px wide, a bottom sheet below). It is the system chat's engine (the same crew chat, citation check and history), and each page keeps its own conversation. A line under the title says what the page hands it ("Knows this page: …"). The page's data rides the first message, and the item you asked about rides each message about it. An answer is cited text followed by a guided **What next?** (a choice drawn by the shared `AskCard`, never buttons in the bubble). The choice collapses into "You chose: …". A follow-up sits in the thread above its own answer. The floating chat stays, for talking about something else while work runs.
   - **Report:** an **Ask** button opens the chat over all of the page's figures. Clicking any number, chart, table or shipped row (or pressing Enter on it) puts a question about it in the box, with the item as a chip; nothing is sent until you send it.
   - **Nerve Center:** "Chat about system state" (the diagnostics ride as they do in the system chat); a slowing item is askable; What next offers Check again and Open Agents.
@@ -65,7 +66,6 @@ npm publish dates. Every version listed here exists on
   - **Recommended to run:** up to three cards, each saying why. They cover the steering type that let the most bad behaviours through last time, the jobs that failed this week (as behaviours), the system judgment that agrees least with what happened, types never evaluated, and rules no behaviour exercises.
   - **Bring your own behaviours:** upload a file (as before), paste a transcript (split into behaviours by speaker turn or paragraph, which you mark good or bad), or pick past jobs (their finished steps become behaviours, labelled by how review judged them). You review, name and import them as a set for the next run. Home paths never ride into a set.
   - **Past runs:** each run is listed with what it caught, what slipped through and its false alarms, plus **Analyze this run**. That button sends the run's detail (what slipped through, the nearest rules, the false alarms) into the page's chat and ends in a guided choice led by Draft rules for the gaps. Run it again and Ask a follow-up are the other choices.
-- **Guided asks: every question you answer inline is one card, not a row of buttons in a bubble** (operator-approved mockup learn-and-panels state h, design DES-GUIDED-CHAT). One renderer, `AskCard` (`src/components/ask/`), draws six kinds over one typed `Ask` (`src/api/ask.ts`, mirroring crew-api-types 0.156.0 until the pin moves): choose one, yes / no, pick several, short text, a scale, and confirm-with-reason.
 - **Voice mode, phase 1: talk to the system, in the browser** (operator-approved mockup learn-and-panels state g, design
   DES-VOICE). The mic in a composer, or ⌥V from anywhere, opens a centred modal (about 35% of the window; 92% wide on a
   phone) with a live waveform from the mic. It asks, aloud and on screen, "Do you want to enter voice mode?". Ask it
@@ -122,8 +122,17 @@ npm publish dates. Every version listed here exists on
 - **A plugin can observe a job's events and show one live block in its conversation (power mode spike 1).** The first one is the built-in **Phase report**: folded, it is one line ("Fix · step 6 of 10 · checks: 3 of 4 passed (reused from Fix) · 1 decision open"); unfolded, a compact dashboard of what's happening now, the checks (and what was reused), the decisions, the helpers, and the time and cost. The block sits at the job's first step; each later update adds a slim "Phase report updated · <step> · Jump ↑" row at that point of the conversation, which scrolls to the block, unfolds it and highlights it. **Pin** sticks it to the top of the conversation, folded, pulsing on each update; the pin is remembered per job in this browser. The block's foot says where it comes from ("From plugin · Phase report <version> · observes run events").
 - **How it works.** The block is the editor-plugin sandbox (`sandbox="allow-scripts"`, the same `wicked.editor` handshake and MessagePort) on a new **protocol 3**: the host sends `events.batch` (rows on the plugin's granted topics, in the `wicked.run.<noun>.<verb>` names the bus mirror will use) and `host.fold`; the plugin may send `ui.fold`. It gets no request at all: every artifact request is refused `not_granted`, and its page has no network. Rows replay the job's durable log first (`GET /runs/:id/events`, only the event types its topics are made from), then follow `/ws` live, each at most once, and carry no prompt, path, log or environment.
 - **Plugins page: Run plugins.** Each run plugin lists what it hears, in plain words with its reason. The built-in one is pre-granted, and says "Built in · pre-granted" there and on its block.
+- **Requirements rows the coverage share does not count say so (round 9c, crew api-types 0.167.0, read tolerantly).** A
+  row on a type shape, on code that is not product code, or in a file the code index skipped carries a **not counted**
+  mark with its reason in place of the corroboration mark. A line under the coverage says how many stated rules and
+  placeholders sit on type shapes ("441 stated rules and 1,017 placeholders sit on type shapes and are not counted.").
+  The Config & data filter is hidden when crew reports no config and data rows. An older crew without these fields
+  shows neither the marks nor the line, and keeps the filter.
 
 ### Fixed
+
+- **Importing a steering rule the way the dialog says now works, and a refusal shows the service's reason (studio#934, J7).** The Import rules dialog said "one rule per item under ## Rules". A doc written that way was refused, because the service reads a frontmattered doc, and studio showed only "Studio’s service refused it". The dialog now says "a markdown rule doc in the format below", and **The format** opens a copyable starting doc: a `---` block with `id` and `title`, then `## Rules` items written as `` - `ID` (severity): statement ``. That example imports as written. A skipped entry now always ends with what the service said ("Studio’s service said: not a frontmattered rule doc — …"). The plain words come first when studio knows the cause. The table view's assistant uses the same import path.
+
 - **Power-mode re-time UI gaps (crew ea73afc0, core acf30461).**
   - **A running checks floor is not a silent helper.** While the engine runs the repository's checks, the job page says "Running checks · test · 12 min", read from the floor's own 5-minute lines. The header says "Running checks". It no longer says "No output for N min from Claude Code" or offers "Move it to another helper": that warning is about a helper's own turn only.
   - **Activity rows say what the command did.** `sed -i`, `perl -i`, `tee`, `cat > file` and a python/node script that rewrites a file are edits ("Edited tests/x.test.ts"). Only a test runner is "Tests passed/failed". A `sed -n` on `tests/…` is a plain command.
@@ -144,6 +153,22 @@ npm publish dates. Every version listed here exists on
 - **Recent commits no longer push the repository page down.** The list is a fixed-height card (about six rows) that
   scrolls inside; **Show all** opens the full history in a dialog (crew's `git-history?limit=`, up to 500; an older
   daemon gives its 20).
+- **Release fixes from the review of #937 (rounds 9b and 9d).**
+  - A spoken gate answer is pinned to its own gate instance (`commitGateDecision` `expect: {ord, receivedAt}`): a
+    stale voice card sends nothing ("Not sent: the gate … has moved on since you answered it.").
+  - A busy speech engine (`voice_busy`) retries the recording, then says the words were lost, never drops them silently.
+  - The Phase report owns only the lines it wrote, so a person's edit to a generated line is kept.
+  - Memory capture and the memory table's save clear only what they sent; input typed during a save stays. The
+    personality form keeps input typed during a save.
+  - The Desk's memory reading never leaves an unhandled rejection. It reads `/proposals` and `/repos` from the Home
+    queue's store, so a cold Home reads each once. A daemon without `/proposals` answers an empty list, so an empty
+    memory says so.
+  - After this page flips power mode or raises rigor, the power panel's turns, turn log and outcome keep updating
+    once the session catches up.
+  - In Wicked Light, the Needs-you folders and reading pane are no longer white on white. The artifact Versions list no
+    longer covers the lens's Back button, and the walkthrough pane fits at 700 px.
+  - Six desk journeys that still expected the retired dark/light themes or boxed chat messages now expect Wicked Dark
+    and Wicked Light and the unboxed synthesis.
 
 ## [0.13.0] — 2026-10-28
 
@@ -2721,7 +2746,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.3...v0.13.0
 [0.12.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.2...v0.12.3
 [0.12.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.1...v0.12.2
