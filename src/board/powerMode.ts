@@ -547,12 +547,13 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
   // Caught up (the same rigor changes and flips): the session's live progress (turns, the turn log, the outcome,
   // check-points, hand-off) is the newer word, not the frozen snapshot this page's POST answered with (Copilot on #937:
   // after a flip the panel stopped updating). Only a pause this page already answered stays answered until the session
-  // says so too.
+  // says so too (applied after the frames are folded, below).
   const caughtUp = !usedLocal && local !== null && base !== null && historyTip(local) === historyTip(base);
   if (usedLocal) base = { ...local! };
-  else if (caughtUp && base!.pause !== null && local!.pause === null && localAt !== null && base!.pause.at <= localAt) base = { ...base!, pause: null };
   if (base === null) return null;
-  const since = Math.max(stateAt(base), (usedLocal || caughtUp) && localAt !== null ? localAt : 0);
+  // Frames after the session's own state are news: a caught-up session still folds the turns and check-points that
+  // came live before this page's answer (agy on 9d); only this page's own snapshot moves `since` to when it answered.
+  const since = Math.max(stateAt(base), usedLocal && localAt !== null ? localAt : 0);
   const history = new Map<number, RigorChange>(base.history.map((c) => [c.seq, c]));
   let toggles = base.toggles;
   let checkpoints = base.checkpoints;
@@ -596,7 +597,10 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
   const baseNewest = base.toggles.reduce((m, t) => Math.max(m, t.at), -1);
   const on = newest !== undefined && newest.at > baseNewest ? newest.on : base.on;
   const rigor = tip !== undefined && isRigor(tip.to) ? tip.to : base.rigor ?? plan?.rigor ?? null;
-  const pause = framePause === undefined ? base.pause : framePause;
+  let pause = framePause === undefined ? base.pause : framePause;
+  // A pause this page answered stays answered when a caught-up session (or a frame it has not yet folded) still shows
+  // it; a pause opened after the answer shows.
+  if (caughtUp && local!.pause === null && localAt !== null && pause != null && pause.at <= localAt) pause = null;
   return { ...base, on, rigor, plan, history: ordered, toggles, checkpoints, handoff, pause: on ? pause : null };
 }
 
