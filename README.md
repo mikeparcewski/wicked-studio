@@ -113,8 +113,9 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   product code, or a file the code index skipped) carries a **not counted** mark with why, and a line
   under the coverage says how many stated rules and placeholders sit on type shapes. The Config &
   data filter shows only when the repository has config and data rows. When the list is an older graph build than the header's numbers, it says
-  so. A repo with no requirements graph yet offers **Generate it**, which opens New job filled in
-  with the generating workflow. The minimum is a setting (Settings → General → Code graph,
+  so. A repo with no requirements graph yet offers **Generate it** (or **Keep mapping** once some real
+  requirements are mapped), which opens New job filled in with the generating workflow; while a mapping job
+  runs, the view shows its progress with **Open the job** instead. The minimum is a setting (Settings → General → Code graph,
   default 80%).
 - **Plan the product** — a project's page has a Requirements section (its count across the
   project's repositories) and a full list at `/projects/:id/requirements`, grouped by repo and
@@ -139,9 +140,8 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   confirmed on screen before it is sent, and the thread marks it "You (by voice)". The voice
   dashboard's widgets can be removed, added and made from any system number.
 - **Work in projects** — group repos, runs, chats, and docs; "See everything" (`/everything`) lists
-  them, filterable by project, and a project's address (`/p/:id`) opens its scoped Sessions list;
-  deep-linkable
-  routes throughout.
+  them, filterable by project, and a project's page is `/projects/:id`; deep-linkable routes
+  throughout.
 - **Make it yours** — three themes (Wicked Light, Wicked Dark, and **Ambient**, a quiet
   mood on your chosen ground that follows the work: a tint while jobs run, warm when something needs
   you, red when something failed). Text is set in Wicked Sans; the plugins page shows every plugin
