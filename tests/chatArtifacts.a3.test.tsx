@@ -557,6 +557,49 @@ describe('Change something on a create card (A3)', () => {
     await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
   });
 
+  it('a timed-out check whose last reading makes the helpers eligible is still said, with Check again', async () => {
+    setCachedRoster([
+      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, auth: 'signed_out' } as never,
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true } as never,
+    ]);
+    const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => new URL(url, 'http://x').pathname.endsWith('/roster')
+      ? Promise.resolve(ok({ roster: [
+        { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
+        { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true },
+      ], refresh: { key: 'claude', outcome: 'timed_out' } }))
+      : base(url, init)));
+    const form = await openForm();
+    fireEvent.click(within(form).getByTestId('proposal-answer-council-refresh'));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-council-check-failed').textContent).toContain('Claude Code'));
+    expect(within(form).getByTestId('proposal-answer-council-check-again')).toBeTruthy();
+  });
+
+  it('a delayed refusal after another tab’s Go is on screen never reopens the card or puts back the old helpers', async () => {
+    let release: (r: Response) => void = () => {};
+    decideAnswer = () => new Promise<Response>((r) => { release = r; });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    // Tab B's Go, with other helpers, reaches this tab first.
+    const theirs = proposal({ helpers: { seats: ['codex', 'agy'], label: 'Codex and Antigravity: one writes, the other checks' } });
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: Date.now(), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: { helpers: ['codex', 'agy'] }, resolution: theirs, identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('accepting'));
+    const shown = screen.getByTestId('artifact-proposal').textContent;
+    // Then this tab's answer is refused with the view crew had before B's Go.
+    await act(async () => {
+      release(new Response(JSON.stringify({ code: 'chat_busy', error: 'This chat already has a job running.', view: { proposal: proposal(), state: 'open' } }), { status: 409, headers: { 'content-type': 'application/json' } }));
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('accepting');
+    expect(text('artifact-proposal-record')).toBe('Starting it…');
+    // B's Go as it is on screen (its helpers), no answer controls back; this tab's refusal is said under it.
+    expect(screen.getByTestId('artifact-proposal').textContent).toBe(`${shown}This chat already has a job running.`);
+    expect(screen.queryByTestId('artifact-proposal-confirm')).toBeNull();
+  });
+
   it('Cancel puts focus back on Change something', async () => {
     const form = await openForm();
     fireEvent.click(within(form).getByTestId('proposal-answer-cancel'));

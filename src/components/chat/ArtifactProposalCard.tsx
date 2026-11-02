@@ -73,9 +73,6 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   // stale read never reopens it); an open one (a refusal's fresh facts: the document moved) stands until the next read
   // of the chat arrives, which carries the same or newer facts.
   const [answered, setAnswered] = useState<{ view: ProposalEntry; against: ProposalEntry } | null>(null);
-  /** The entry as the chat's records hold it at this render (an answer's handler reads it when the answer lands). */
-  const latest = useRef(entry);
-  latest.current = entry;
   // Compared by content, not identity: a re-read that brings the same (older) facts keeps the refusal's newer ones.
   // Two accepting records of one proposal are told apart by when each was recorded (another tab's Go is a new one).
   const same = (a: ProposalEntry, b: ProposalEntry): boolean =>
@@ -105,13 +102,13 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
     setError(null);
     setNote(null);
     const keep = (v: ChatProposalView): void => {
-      // Crew's view replaces the proposal (with what was accepted, as crew answers it), never the card's place. The
-      // wire view carries no record time: an accepting one keeps the time of the record on screen now.
-      const now = latest.current;
+      // Crew's view replaces the proposal (with what was accepted, as crew answers it), never the card's place. It
+      // stands against the record this answer was sent from: a newer record (another tab's Go, told apart by its time)
+      // wins over it. The wire view carries no record time, so an accepting one keeps that record's.
       const next: ProposalEntry = { pid: entry.pid, turnId: entry.turnId, at: entry.at, ...v,
-        ...(v.state === 'accepting' && now.state === 'accepting' && now.acceptingAt !== undefined ? { acceptingAt: now.acceptingAt } : {}) };
+        ...(v.state === 'accepting' && entry.state === 'accepting' && entry.acceptingAt !== undefined ? { acceptingAt: entry.acceptingAt } : {}) };
       if (terminal(v.state)) noteSettled(chatId, next);
-      setAnswered({ view: next, against: now });
+      setAnswered({ view: next, against: entry });
     };
     try {
       const r = await api.decideChatProposal(chatId, entry.pid, { decision, ...(edits !== undefined ? { edits } : {}) });

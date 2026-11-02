@@ -231,7 +231,8 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
   /** Check the unavailable chosen helpers' sign-in again (crew's bounded `/roster?refresh=<key>`, the Agents page's
    *  Check now): one check at a time, its answer deposited in the shared cache only while this form is open. */
   const [checking, setChecking] = useState(false);
-  const [checkFailed, setCheckFailed] = useState(false);
+  /** The helpers whose last check gave no fresh answer (failed, or crew's `timed_out`), to check again. */
+  const [checkFailed, setCheckFailed] = useState<string[] | null>(null);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -241,20 +242,20 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
   const refreshRoster = async (keys: readonly string[]): Promise<void> => {
     if (checking || keys.length === 0) return;
     setChecking(true);
-    setCheckFailed(false);
+    setCheckFailed(null);
     try {
       let latest: RosterSeat[] | null = null;
-      let fresh = true;
+      const stale: string[] = [];
       for (const key of keys) {
         const r = await api.getRoster(key);
         if (!Array.isArray(r?.roster)) throw new Error('roster: no list');
         latest = r.roster;
         // `timed_out`: no fresh answer, the roster is the last reading (crew's contract) — said, not taken as checked.
-        if (r.refresh?.key === key && r.refresh.outcome === 'timed_out') fresh = false;
+        if (r.refresh?.key === key && r.refresh.outcome === 'timed_out') stale.push(key);
       }
       if (!alive.current || latest === null) return;
       setCachedRoster(latest);
-      if (!fresh) setCheckFailed(true);
+      if (stale.length > 0) setCheckFailed(stale);
       // The control that asked may be gone now (every chosen helper can work): focus stays in the helpers, but only
       // when it was lost with that control, never taken from where the person moved on to meanwhile.
       requestAnimationFrame(() => {
@@ -262,7 +263,7 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
         if (alive.current && (at === null || at === document.body)) seatsRef.current?.focus();
       });
     } catch {
-      if (alive.current) setCheckFailed(true);
+      if (alive.current) setCheckFailed([...keys]);
     } finally {
       if (alive.current) setChecking(false);
     }
@@ -392,12 +393,19 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
           {roster !== null && !form.helpers.every(eligible)
             ? <>A helper on this proposal is no longer available: leave it out and choose another, or{' '}
                 <button type="button" data-testid="proposal-answer-council-refresh" className="wk-since-toggle" disabled={checking}
-                  onClick={() => void refreshRoster(form.helpers.filter((k) => !eligible(k)))}>{checking ? 'checking…' : 'check the helpers again'}</button>.
-                {checkFailed && <span data-testid="proposal-answer-council-check-failed"> Studio couldn’t get a fresh answer; try once more.</span>}</>
+                  onClick={() => void refreshRoster(form.helpers.filter((k) => !eligible(k)))}>{checking ? 'checking…' : 'check the helpers again'}</button>.</>
             : form.helpers.length === ANSWER_SEATS
               ? `${seatName(form.helpers[0]!)} and ${seatName(form.helpers[1]!)}: one writes, the other checks`
               : 'Choose two helpers: one writes the document and another checks it.'}
         </span>
+        {/* Said whatever the roster now says: a reading that is not fresh is never shown as checked. */}
+        {checkFailed !== null && (
+          <span data-testid="proposal-answer-council-check-failed" role="status">
+            Studio couldn’t get a fresh answer for {checkFailed.map(seatName).join(' and ')}; what it shows is the last reading.{' '}
+            <button type="button" data-testid="proposal-answer-council-check-again" className="wk-since-toggle" disabled={checking}
+              onClick={() => void refreshRoster(checkFailed)}>{checking ? 'checking…' : 'Check again'}</button>
+          </span>
+        )}
       </div>
       {error !== null && <p data-testid="proposal-answer-error" role="alert" className="wk-artifact-line wk-artifact-line--bad">{error}</p>}
       <div className="wk-prop-btns">
