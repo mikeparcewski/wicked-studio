@@ -3,7 +3,7 @@
  * nothing, whatever they answer (CI r9b: `listRepos` answering without `repos` threw inside its success callback,
  * past its own rejection handler, and left unhandled rejections that failed the run).
  */
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const listRepos = vi.fn();
@@ -62,5 +62,34 @@ describe('useMemoryReading side reads', () => {
     await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 4, pending: 1, indexedRepos: 1 }));
     expect(listProposals).toHaveBeenCalledTimes(1);
     expect(listRepos).toHaveBeenCalledTimes(1);
+  });
+
+  it('a read that FAILED is left out, though the queue keeps a value: a 404, or a later failure after an answer (codex + agy on 9d)', async () => {
+    const { ApiError } = await import('../src/api/errors.js');
+    memoryCoverage.mockResolvedValue({ total: 2 });
+    listProposals.mockRejectedValue(new ApiError(404, 'no route', {}));
+    listRepos.mockResolvedValue({ repos: [] });
+    const { result, unmount } = renderHook(() => useMemoryReading(true));
+    // the queue reads the 404 as an empty list; the memory reading does not count it as "none"
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, indexedRepos: 0 }));
+    unmount();
+  });
+
+  it('coming back to the window reads the side inputs again, whatever their age; a failed re-read is left out (codex + agy on 9d)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 2 });
+    listProposals.mockResolvedValue([]);
+    listRepos.mockResolvedValue({ repos: [] });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, pending: 0, indexedRepos: 0 }));
+    expect(listProposals).toHaveBeenCalledTimes(1);
+    // the daemon filed a memory proposal meanwhile; the operator comes back within 30 s
+    listProposals.mockResolvedValue([{}]);
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, pending: 1, indexedRepos: 0 }));
+    expect(listProposals).toHaveBeenCalledTimes(2);
+    // and a re-read that fails is left out, not the old count
+    listProposals.mockRejectedValue(new Error('503'));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, indexedRepos: 0 }));
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isMemoryUnsupported, memoryCoverage } from '../api/memory.js';
 import { proposalKind } from '../api/proposals.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
@@ -22,21 +22,30 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
     document.addEventListener('visibilitychange', again);
     return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); };
   }, [enabled]);
+  // The tick the side reads last ran at: a newer one is the operator coming back, and reads them again whatever their
+  // age (codex + agy on 9d). A key change (moving inside studio) keeps the queue's 30 s window, so walking Home ->
+  // a run -> Work -> Home re-reads nothing (needs_shell).
+  const readTick = useRef(0);
   useEffect(() => {
     if (!enabled) return undefined;
     let live = true;
+    const maxAge = tick !== readTick.current ? 0 : HOME_FRESH_MS;
+    readTick.current = tick;
     // With the coverage: the memory proposals waiting (the Memory page's own count) and the repositories estate has a
     // code graph for, so the Desk says what is actually missing. A side read that fails is left out (never "none").
     // Both are the Home queue's own inputs: read through its store (one in-flight read per wire, fresh for 30 s), so a
     // cold Home reads each once (needs_shell). Each settles to a count or undefined, whatever it answers, and never
     // rejects unobserved when the coverage read fails first (CI r9b).
+    // A count only from a read that ANSWERED: the store keeps its last value through a failure (and makes a 404 an empty
+    // list for the queue), so its own outcome decides; a failed, absent or malformed read is left out (codex + agy on 9d).
     const sources = useNeedsSources.getState();
-    const pending = sources.loadProposals(HOME_FRESH_MS)
+    const answered = (source: 'proposals' | 'repos'): boolean => useNeedsSources.getState().readOk[source] === true;
+    const pending = sources.loadProposals(maxAge)
+      .then(() => (answered('proposals') ? useNeedsSources.getState().proposals : null))
       .then((ps) => (Array.isArray(ps) ? ps.filter((p) => proposalKind(p) === 'memory').length : undefined))
       .catch(() => undefined);
-    // The register as the store holds it (null or malformed until a read answers): a missing count is left out, never 0.
-    const indexed = sources.loadRepos(HOME_FRESH_MS)
-      .then(() => useNeedsSources.getState().repos)
+    const indexed = sources.loadRepos(maxAge)
+      .then(() => (answered('repos') ? useNeedsSources.getState().repos : null))
       .then((repos) => (Array.isArray(repos)
         ? repos.filter((x) => typeof (x as { code_graph_db?: unknown }).code_graph_db === 'string' && (x as { code_graph_db: string }).code_graph_db !== '').length
         : undefined))

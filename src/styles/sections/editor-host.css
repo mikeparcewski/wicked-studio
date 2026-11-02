@@ -108,6 +108,6 @@
    absolute right-hand column, which here sat over the lens line and took its "Back" click (desk_plugins_document). */
 .wk-htab-versions { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .wk-htab-versions .wk-artifact-versions { position: static; width: auto; padding: 0; border-left: 0; z-index: auto; background: transparent; }
-.wk-htab-versions > .wk-artifact-body { min-height: 240px; }
+.wk-htab-versions > .wk-artifact-body { height: 240px; }  /* a definite height, so the frame's 100% fills it (agy on 9d) */
 .wk-pcard-lens > .wk-artifact-body { flex: 1 1 auto; display: flex; }
 .wk-pcard-lens .wk-artifact-frame { flex: 1 1 auto; width: 100%; border: 0; }

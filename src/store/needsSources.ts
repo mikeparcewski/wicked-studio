@@ -48,6 +48,9 @@ export interface NeedsSourcesState {
   repos: RepoEntry[] | null;
   /** When each wire was last read (answered or not), epoch ms. */
   readAt: Partial<Record<NeedsSource, number>>;
+  /** Whether each wire's LAST read answered (true) or failed (false: an error, a 404, a malformed answer). The queue keeps
+   *  its last value either way; a reader that must not present a failed read as a count checks this. */
+  readOk: Partial<Record<NeedsSource, boolean>>;
   /** Read every wire not read within `maxAgeMs` (default: only never-read wires). */
   load: (maxAgeMs?: number) => Promise<void>;
   /** The repo register, read through the same freshness rule (the board model's join). */
@@ -82,7 +85,9 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     const at = get().readAt[source];
     if (at !== undefined && Date.now() - at < maxAgeMs) return Promise.resolve();
     const p = readers[source]()
+      .then(() => { set((s) => ({ readOk: { ...s.readOk, [source]: true } })); })
       .catch((e: unknown) => {
+        set((s) => ({ readOk: { ...s.readOk, [source]: false } }));
         // A daemon without this surface (404) has nothing on it that needs you: an answered empty
         // read, so the honest count (useSettledNeeds) is complete, not partial. Any other failure:
         // the last answer stands (null until one ever arrived = a partial count).
@@ -101,18 +106,19 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     proposals: null,
     repos: null,
     readAt: {},
+    readOk: {},
     load: (maxAgeMs = Infinity) => Promise.all(SOURCES.map((s) => read(s, maxAgeMs))).then(() => undefined),
     loadRepos: (maxAgeMs = Infinity) => read('repos', maxAgeMs).then(() => get().repos ?? []),
     loadProposals: (maxAgeMs = Infinity) => read('proposals', maxAgeMs).then(() => get().proposals),
-    depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() } })),
+    depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() }, readOk: { ...s.readOk, chats: true } })),
     depositProposals: (pending) =>
-      set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() } })),
-    depositRepos: (repos) => set((s) => ({ repos, readAt: { ...s.readAt, repos: Date.now() } })),
+      set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() }, readOk: { ...s.readOk, proposals: true } })),
+    depositRepos: (repos) => set((s) => ({ repos, readAt: { ...s.readAt, repos: Date.now() }, readOk: { ...s.readOk, repos: true } })),
   };
 });
 
 /** Test seam: back to never-read (the suite-wide setup calls it before every test). */
 export function resetNeedsSourcesForTest(): void {
   for (const s of SOURCES) delete inflight[s];
-  useNeedsSources.setState({ chats: null, proposals: null, repos: null, readAt: {} });
+  useNeedsSources.setState({ chats: null, proposals: null, repos: null, readAt: {}, readOk: {} });
 }
