@@ -17,7 +17,8 @@ const GENERATED_PLAN = /^wf-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 const GENERATED_ROLE = /^wf-([a-z]+)-[a-z0-9]+-[0-9a-f]{8}(?::[^:\s]+:[a-z0-9]+)?$/i;
 
 export function workflowLabel(key: string): string {
-  const plain = PLAIN[key];
+  // Own keys only: a key from the wire named `constructor` or `__proto__` is not one of ours.
+  const plain = Object.prototype.hasOwnProperty.call(PLAIN, key) ? PLAIN[key] : undefined;
   if (plain !== undefined) return plain;
   if (GENERATED_PLAN.test(key)) return 'Planned for this run';
   const role = GENERATED_ROLE.exec(key);

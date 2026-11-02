@@ -293,6 +293,16 @@ export interface EverythingQuery {
   open?: string | null;
   /** S16a-4d: on the Made tab, the "New document" door open (`?new=document`); other values drop. */
   new?: 'document' | null;
+  /** launch-modal: the format New document starts on (`?format=`, only with `new=document`): New job's
+   *  catalog card names it exactly (a Document is `doc`, not "from the brief"). */
+  format?: DocStyle | null;
+}
+
+/** The document formats New document makes (crew DOC_STYLES). */
+export type DocStyle = 'web' | 'doc' | 'ppt' | 'brochure';
+const DOC_STYLES: readonly string[] = ['web', 'doc', 'ppt', 'brochure'];
+export function isDocFormat(v: unknown): v is DocStyle {
+  return typeof v === 'string' && DOC_STYLES.includes(v);
 }
 
 /** `?tab=` · `?filter=` · `?project=` · `?kind=` off a `location.search`; anything unknown takes the default. */
@@ -311,6 +321,7 @@ export function readEverythingQuery(search: string): EverythingQuery {
     view: isEverythingView(view) ? view : 'grouped',
     open: q.get('open') !== null && q.get('open') !== '' ? q.get('open') : null,
     new: q.get('new') === 'document' ? 'document' : null,
+    format: q.get('new') === 'document' && isDocFormat(q.get('format')) ? q.get('format') as DocStyle : null,
   };
 }
 
@@ -327,6 +338,7 @@ export function everythingPath(q: Partial<EverythingQuery> = {}): string {
   if (q.view !== undefined && q.view !== 'grouped') p.set('view', q.view);
   if (q.open !== undefined && q.open !== null && q.open !== '') p.set('open', q.open);
   if (q.new === 'document') p.set('new', 'document');
+  if (q.new === 'document' && q.format !== undefined && q.format !== null) p.set('format', q.format);
   const s = p.toString();
   return s === '' ? '/everything' : `/everything?${s}`;
 }

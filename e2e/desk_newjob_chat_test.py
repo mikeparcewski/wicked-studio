@@ -68,7 +68,7 @@ with sync_playwright() as p:
     # 1. the picker offers it
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
-    page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
+    page.get_by_test_id("launch-catalog-results").wait_for(state="visible", timeout=8000)
     skip = page.get_by_test_id("launch-wizard-skip")
     text = skip.inner_text()
     page.screenshot(path=str(SHOTS / "desk-newjob-chat-offer.png"))
@@ -108,7 +108,7 @@ with sync_playwright() as p:
           and stored.get("deliverPr") is False, stored=stored)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
-    page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
+    page.get_by_test_id("launch-catalog-results").wait_for(state="visible", timeout=8000)
     page.screenshot(path=str(SHOTS / "desk-newjob-chat-restored.png"))
     check("settings-restores-picker", True)
 
