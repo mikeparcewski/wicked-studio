@@ -199,4 +199,16 @@ describe('useMemoryReading', () => {
       clock.mockRestore();
     }
   });
+
+  it('a poller depositing before the queue ever read counts as the answer: the count shows, no extra read (agy r10 on 9d)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 4 });
+    listProposals.mockReturnValue(new Promise(() => undefined));
+    listRepos.mockReturnValue(new Promise(() => undefined));
+    act(() => { useNeedsSources.getState().depositProposals([{ kind: 'memory' } as never]); });
+    act(() => { useNeedsSources.getState().depositRepos([{ code_graph_db: '/x/estate.db' } as never]); });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 4, pending: 1, indexedRepos: 1 }));
+    expect(listProposals).not.toHaveBeenCalled();
+    expect(listRepos).not.toHaveBeenCalled();
+  });
 });

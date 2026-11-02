@@ -49,8 +49,8 @@ export interface NeedsSourcesState {
   /** When each wire was last read (answered or not), epoch ms. */
   readAt: Partial<Record<NeedsSource, number>>;
   /** Whether each wire's LAST read answered (true) or failed (false: an error, a 404, a malformed answer). The queue keeps
-   *  its last value either way; a reader that must not present a failed read as a count checks this. A deposit (another
-   *  surface's write, possibly a local patch) never sets it: only this store's own read does (codex r7 on 9d). */
+   *  its last value either way; a reader that must not present a failed read as a count checks this. A deposit counts as
+   *  an answer only while this store has no read of its own; it never certifies a FAILED read (see `answeredBy`). */
   readOk: Partial<Record<NeedsSource, boolean>>;
   /** Read every wire not read within `maxAgeMs` (default: only never-read wires). */
   load: (maxAgeMs?: number) => Promise<void>;
@@ -60,6 +60,16 @@ export interface NeedsSourcesState {
   depositChats: (chats: LiveChatSnapshot[]) => void;
   depositProposals: (pending: Proposal[]) => void;
   depositRepos: (repos: RepoEntry[]) => void;
+}
+
+/**
+ * A deposit's effect on a wire's read outcome: the data another surface just read counts as an answered read while this
+ * store has none of its own (agy r10 on 9d: a poller depositing first must not leave the count out for good), but it
+ * never certifies a read of this store that FAILED (a local patch of a stale list; codex r7) - that waits for the
+ * store's own retry.
+ */
+function answeredBy(readOk: Partial<Record<NeedsSource, boolean>>, source: NeedsSource): Partial<Record<NeedsSource, boolean>> {
+  return readOk[source] === false ? readOk : { ...readOk, [source]: true };
 }
 
 /** In-flight reads, one per wire. */
@@ -122,10 +132,10 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     readOk: {},
     load: (maxAgeMs = Infinity) => Promise.all(SOURCES.map((s) => read(s, maxAgeMs))).then(() => undefined),
     loadRepos: (maxAgeMs = Infinity) => read('repos', maxAgeMs).then(() => get().repos ?? []),
-    depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() } })),
+    depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() }, readOk: answeredBy(s.readOk, 'chats') })),
     depositProposals: (pending) =>
-      set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() } })),
-    depositRepos: (repos) => set((s) => ({ repos, readAt: { ...s.readAt, repos: Date.now() } })),
+      set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() }, readOk: answeredBy(s.readOk, 'proposals') })),
+    depositRepos: (repos) => set((s) => ({ repos, readAt: { ...s.readAt, repos: Date.now() }, readOk: answeredBy(s.readOk, 'repos') })),
   };
 });
 
