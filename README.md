@@ -41,12 +41,13 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 - **Teach it how you work.** **Learn** (marked "Start here" in the sidebar until you use it) reads
   your team docs, showcase repos and writing into suggested rules and memories, offers starter
   rules, sets the orchestrator's **Personality** (tone only; never rigor, gates or checks; one for
-  you, overridable per project) and learns your brand colours. Nothing is kept until you accept it.
+  you, overridable per project) and learns your brand colours. Suggested rules and memories become active only when you accept
+  them (the sources you supply and the pending suggestions are stored so you can review them).
 - **Direct, don't babysit.** Launch runs across many repos and projects at once, then let them
   work. Attention comes to *you* when a run hits a gate — you don't sit watching one terminal.
 - **Approve what matters.** Human-in-the-loop gates surface the real decisions as one guided card:
-  every choice the gate offers, the recommended one marked, and what happens if you take it, then
-  one button and a 10 s undo. Keyboard batch triage helps when several pile up.
+  every choice the gate offers, the recommended one marked when there is one and, when supplied,
+  what each choice would do, then one button and a 10 s undo. Keyboard batch triage helps when several pile up.
 - **"Done" is proven, not claimed — and the gate says how.** By default a run requires a distinct
   evaluator and a judge: review goes to a seat other than the creator's. When no such seat exists, the
   run stops at a gate that says why. You can then sign a second seat in, or relaunch with **reduced
@@ -81,18 +82,21 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 
 - **Run governed agents on your repos** — register a local path or clone a URL; studio builds the
   code graph, then you launch runs (ask / balanced / autonomous), pick which agent seats join, and
-  bind a repo with optional PR delivery. On a crew with **power mode**, it is on for new jobs unless
-  Settings says otherwise (a switch on New job and beside the job's name), and one orchestrator
-  builds the whole change: the job page shows its rigor (with ↑ when it rose since intake), its
+  bind a repo with optional PR delivery. On a crew with **power mode**, it is on by default when you
+  launch a preset or a composed plan on a repository, unless Settings says otherwise (a switch on
+  New job and beside the job's name); a chat's own run and a phase-based workflow run phased. The
+  code-writing build step then runs as one orchestrator's checkpointed turns (other required steps
+  can run separately): the job page shows its rigor (with ↑ when it rose since intake), its
   checkpoints, and, when the change grows past its plan, a pause that offers to split it into lanes,
   switch to phased, continue at high rigor or stop.
 - **Steer runs live** — the Desk (the one shell) puts what needs you first; every run or chat
   opens as a **session** (`/s/:id`): one thread with the live record, gate cards you answer in place,
   elicitation prompts, pre-gate guidance notes, and lifecycle controls (cancel, inject a message,
   retry). While a step works, the thread lists what it is doing (tool calls, edits, the seat's
-  meter) and folds to one summary line when it ends; every message says when it was said. A step
-  that runs long offers **Check on it?**: a seat that is not the step's own reads its record and
-  recommends letting it run, steering or stopping, and acts on none of it. The job's Details panel
+  meter) and folds to one summary line when it ends; every message shows when it was said, when that
+  was recorded. A step that runs long offers **Check on it?**: an eligible seat that is not the
+  step's own reads its record and recommends letting it run, steering or stopping; when none can
+  run or finish, crew gives its own reading, labelled as such. Neither acts on any of it. The job's Details panel
   holds a **Phase report** (a plugin section; one per phase in a power build, one for the whole job
   otherwise), and the thread keeps one slim row per update with "Show in Details". The pre-session addresses (`/runs/:id`, `/work`, `/p/:id/…`,
   `/chat/…`) were retired and show the not-found page.
@@ -103,8 +107,9 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 - **See how much of the code is mapped to requirements** — Repositories → a repo → Requirements
   heads the list with "80% real requirements · minimum 80%" and its parts (real, placeholders,
   unmapped, not product code). A placeholder is never counted toward the share and never shows as
-  validated; a real one carries **validated** (with its count of independent sources) or
-  **unconfirmed** with why. When the list is an older graph build than the header's numbers, it says
+  validated; a real one with corroboration data carries **validated** (with its count of
+  independent sources) or **unconfirmed** with why (rows from an older build, or outside the
+  count, may carry no verdict). When the list is an older graph build than the header's numbers, it says
   so. A repo with no requirements graph yet offers **Generate it**, which opens New job filled in
   with the generating workflow. The minimum is a setting (Settings → General → Code graph,
   default 80%).
