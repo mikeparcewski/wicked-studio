@@ -25,13 +25,7 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!enabled) return undefined;
-    // Coming back also refreshes the queue's own inputs, under its 30 s freshness rule, so the counts below follow
-    // (codex + agy r4 on 9d); moving inside studio fires nothing here (needs_shell's route walk re-reads none).
-    const again = (): void => {
-      if (document.visibilityState === 'hidden') return;
-      setTick((n) => n + 1);
-      void useNeedsSources.getState().load(HOME_FRESH_MS);
-    };
+    const again = (): void => { if (document.visibilityState !== 'hidden') setTick((n) => n + 1); };
     window.addEventListener('focus', again);
     document.addEventListener('visibilitychange', again);
     return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); };
@@ -39,6 +33,10 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
   useEffect(() => {
     if (!enabled) return undefined;
     let live = true;
+    // Entering the Desk (or coming back to the window) also asks the Home queue to refresh its inputs under its own
+    // 30 s rule, so the counts below follow; a quick walk inside studio re-reads nothing (needs_shell), and a cold Home
+    // shares the queue's first read (codex + agy r4/r5 on 9d).
+    void useNeedsSources.getState().load(HOME_FRESH_MS);
     memoryCoverage().then(
       // A coverage answer without a total says nothing about emptiness.
       (c) => {
@@ -57,9 +55,7 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
   return useMemo((): MemoryReading => {
     if (coverage.state !== 'ok') return coverage;
     const pending = countMemoryProposals(proposals);
-    const indexedRepos = Array.isArray(repos)
-      ? repos.filter((x) => typeof (x as { code_graph_db?: unknown }).code_graph_db === 'string' && (x as { code_graph_db: string }).code_graph_db !== '').length
-      : undefined;
+    const indexedRepos = countIndexedRepos(repos);
     return { state: 'ok', total: coverage.total, ...(pending !== undefined ? { pending } : {}), ...(indexedRepos !== undefined ? { indexedRepos } : {}) };
   }, [coverage, proposals, repos]);
 }
@@ -73,4 +69,11 @@ function countMemoryProposals(proposals: unknown): number | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** The repositories with a code graph, or undefined when there is no list or an entry is not a repository: an
+ *  unreadable list leaves the count out, never a short count (codex r5 on 9d). */
+function countIndexedRepos(repos: unknown): number | undefined {
+  if (!Array.isArray(repos) || !repos.every((x) => x !== null && typeof x === 'object')) return undefined;
+  return repos.filter((x) => typeof (x as { code_graph_db?: unknown }).code_graph_db === 'string' && (x as { code_graph_db: string }).code_graph_db !== '').length;
 }

@@ -164,6 +164,20 @@ describe('the state as it stands now', () => {
     const partial = mergePower(state({ on: false, toggles: flip, handoff: { round: 1 } as never }), [], local, at(25))!;
     expect(partial.handoff!.steps).toHaveLength(2);
   });
+  it('turn records merge by turn, a completed one over an open one; unreadable session data is ignored (codex r5 on 9d)', () => {
+    const flip = [{ at: at(25), on: false, by: 'you', reason: null, stayPhased: [] }];
+    const rec = (turn: number, ended: number | null) => ({ turn, attempt: 0, cli: 'claude', startedAt: turn, endedAt: ended, outcome: null, summary: ended === null ? null : `turn ${turn} done` });
+    const local = state({ on: false, toggles: flip, turnLog: [rec(1, 10), rec(2, 20)] });
+    // the session's window moved on (turn 3) while its turn 2 is still the open record it saw
+    const session = state({ on: false, toggles: flip, turnLog: [rec(2, null), rec(3, null)] });
+    const merged = mergePower(session, [], local, at(25))!;
+    expect(merged.turnLog!.map((t) => [t.turn, t.endedAt])).toEqual([[1, 10], [2, 20], [3, null]]);
+    // unreadable session turn records or hand-off steps leave this page's intact, never a crash
+    const bad = state({ on: false, toggles: flip, turnLog: [null] as never, handoff: { round: 1, maxRounds: 3, steps: [null] } as never });
+    const kept = mergePower(bad, [], { ...local, handoff: { round: 1, maxRounds: 3, steps: [{ step: 'checks', status: 'passed', at: at(26) } as never] } }, at(25))!;
+    expect(kept.turnLog).toHaveLength(2);
+    expect(kept.handoff!.steps).toHaveLength(1);
+  });
   it('a checkpoint frame that opened a pause pauses the run until the next turn starts; this page\'s answer clears it', () => {
     const pz = { at: at(29), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };
     const cp = { type: 'powerCheckpointReached', session: 'r', ord: 1, checkpoint: 3, turn: 3, trigger: 'turn', head: null, picked: 0, rigor: 'highest', paused: true, pause: pz, ts: at(29) };

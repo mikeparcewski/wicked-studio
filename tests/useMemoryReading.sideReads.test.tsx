@@ -33,10 +33,10 @@ describe('useMemoryReading', () => {
 
   it('the total never waits on the side counts (studio#944)', async () => {
     memoryCoverage.mockResolvedValue({ total: 12 });
+    listProposals.mockReturnValue(new Promise(() => undefined));
+    listRepos.mockReturnValue(new Promise(() => undefined));
     const { result } = renderHook(() => useMemoryReading(true));
     await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 12 }));
-    expect(listProposals).not.toHaveBeenCalled();
-    expect(listRepos).not.toHaveBeenCalled();
   });
 
   it('a malformed or failed queue read leaves its count out, though the queue keeps its last good list (codex + agy on 9d)', async () => {
@@ -104,6 +104,33 @@ describe('useMemoryReading', () => {
     useNeedsSources.setState((s) => ({ readAt: { ...s.readAt, proposals: Date.now() - 60_000, repos: Date.now() - 60_000 } }));
     listProposals.mockResolvedValue([{ kind: 'memory' }, { kind: 'memory' }]);
     await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 1, pending: 2, indexedRepos: 0 }));
+  });
+
+  it('a repository entry that is not a repository leaves the count out, never throws (codex r5 on 9d)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 2 });
+    listProposals.mockResolvedValue([]);
+    listRepos.mockResolvedValue({ repos: [null] });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await act(async () => { await useNeedsSources.getState().load(); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 2, pending: 0 }));
+  });
+
+  it('entering the Desk asks the queue for inputs older than 30 s; a quick return reads nothing (codex r5 on 9d)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 1 });
+    listProposals.mockResolvedValue([{ kind: 'memory' }]);
+    listRepos.mockResolvedValue({ repos: [] });
+    const { result, rerender } = renderHook(({ k }) => useMemoryReading(true, k), { initialProps: { k: 'work' } });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 1, pending: 1, indexedRepos: 0 }));
+    expect(listProposals).toHaveBeenCalledTimes(1);
+    rerender({ k: 'jobs' });
+    rerender({ k: 'work' });
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(listProposals).toHaveBeenCalledTimes(1);
+    // away inside studio for a minute: back on the Desk, the queue's expired inputs are read again
+    useNeedsSources.setState((s) => ({ readAt: { ...s.readAt, proposals: Date.now() - 60_000, repos: Date.now() - 60_000 } }));
+    listProposals.mockResolvedValue([{ kind: 'memory' }, { kind: 'memory' }]);
+    rerender({ k: 'jobs' });
     await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 1, pending: 2, indexedRepos: 0 }));
   });
 });

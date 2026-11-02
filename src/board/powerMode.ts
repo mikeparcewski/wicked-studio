@@ -2,7 +2,7 @@ import type { CoreEvent } from '../api/types.js';
 import { arrivedAt } from '../store/events.js';
 import {
   POWER_EVENT_TYPES, RIGORS, isRigor, rigorRank,
-  type HandoffStep, type PowerActivityEvent, type PowerCheckpointEvent, type PowerState, type PowerToggle, type PowerTurnEvent,
+  type HandoffStep, type PowerActivityEvent, type PowerCheckpointEvent, type PowerState, type PowerToggle, type PowerTurnEvent, type PowerTurnRecord,
   type Rigor, type RigorChange, type RigorPlan,
 } from '../api/power.js';
 
@@ -602,7 +602,7 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
  * ignored. What the answer changed (on, rigor, history, toggles, pause) stays the answer's.
  */
 function withLiveProgress(local: PowerState, p: PowerState): PowerState {
-  const turnLog = (p.turnLog?.length ?? 0) > (local.turnLog?.length ?? 0) ? p.turnLog : local.turnLog;
+  const turnLog = mergeTurnLog(local.turnLog, p.turnLog);
   return {
     ...local,
     orchestrator: p.orchestrator.turns > local.orchestrator.turns ? p.orchestrator : local.orchestrator,
@@ -613,9 +613,29 @@ function withLiveProgress(local: PowerState, p: PowerState): PowerState {
   };
 }
 
+/** The turn records of both, merged by turn (attempt and number): a completed record beats an open one, a later end
+ *  beats an earlier, a tie keeps this page's. An unreadable session log is ignored (codex r5 on 9d). The newest 50
+ *  stay, oldest first. */
+function mergeTurnLog(mine: PowerState['turnLog'], theirs: PowerState['turnLog']): PowerState['turnLog'] {
+  const readable = (t: unknown): t is PowerTurnRecord =>
+    t !== null && typeof t === 'object' && typeof (t as PowerTurnRecord).turn === 'number' && typeof (t as PowerTurnRecord).attempt === 'number';
+  if (!Array.isArray(theirs) || !theirs.every(readable)) return mine;
+  const key = (t: PowerTurnRecord): string => `${t.attempt}:${t.turn}`;
+  const rank = (t: PowerTurnRecord): number => (t.endedAt === null ? -1 : t.endedAt);
+  const byKey = new Map<string, PowerTurnRecord>();
+  for (const t of mine ?? []) byKey.set(key(t), t);
+  for (const t of theirs) {
+    const had = byKey.get(key(t));
+    if (had === undefined || rank(t) > rank(had)) byKey.set(key(t), t);
+  }
+  const merged = [...byKey.values()].sort((a, b) => a.attempt - b.attempt || a.turn - b.turn);
+  return merged.slice(-50);
+}
+
 function mergeHandoff(mine: PowerState['handoff'], theirs: PowerState['handoff']): PowerState['handoff'] {
   const ok = (h: PowerState['handoff']): h is NonNullable<PowerState['handoff']> =>
-    h !== null && typeof h === 'object' && typeof h.round === 'number' && Array.isArray(h.steps);
+    h !== null && typeof h === 'object' && typeof h.round === 'number' && Array.isArray(h.steps)
+    && h.steps.every((st) => st !== null && typeof st === 'object' && typeof (st as { step?: unknown }).step === 'string');
   if (!ok(theirs)) return mine;
   if (!ok(mine) || theirs.round > mine.round) return theirs;
   if (theirs.round < mine.round) return mine;
