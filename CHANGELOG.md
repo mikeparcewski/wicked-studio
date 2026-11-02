@@ -126,8 +126,8 @@ A minor release: UI v3 (#937), the studio the operator signed off on 2026-11-01,
   row on a type shape, on code that is not product code, or in a file the code index skipped carries a **not counted**
   mark with its reason in place of the corroboration mark. A line under the coverage says how many stated rules and
   placeholders sit on type shapes ("441 stated rules and 1,017 placeholders sit on type shapes and are not counted.").
-  The Config & data filter shows only when the repository has such rows. An older crew without the fields shows
-  neither.
+  The Config & data filter is hidden when crew reports no config and data rows. An older crew without these fields
+  shows neither the marks nor the line, and keeps the filter.
 
 ### Fixed
 
