@@ -159,7 +159,7 @@ code {
 .sec-head { max-width: none; margin: 0 0 clamp(20px, 3svh, 34px); }
 .sec-head--wide { text-align: left; }
 .sec-head h2 { font-size: var(--text-title); margin: 12px 0 0; }
-.sec-head h2 code { font-size: var(--text-caption); }
+.sec-head h2 code { font-size: inherit; } /* code in a heading keeps the heading size */
 .sec-sub { margin: 16px 0 0; max-width: 74ch; font-size: var(--text-lead); line-height: 1.62; color: color-mix(in oklab, var(--ink) 76%, transparent); }
 .sec-sub b { color: var(--ink); }
 .sec-sub a { color: var(--link); }
