@@ -12,8 +12,8 @@ import { sha256Base64 } from './sha256.js';
  *
  * {@link guardNestedHtml} is the last step before `srcdoc`:
  *  - {@link NESTED_PRELUDE} goes first in every inline script that runs (after a hashbang line and a directive
- *    prologue whose directives end in their own `;`, which run nothing and keep strict mode; a directive that relies on
- *    automatic semicolon insertion is not kept first). It defines each WebRTC global as a locked `undefined` before
+ *    prologue, which run nothing and keep strict mode; a directive ended by automatic semicolon insertion is kept too,
+ *    with a `;` written before the prelude). It defines each WebRTC global as a locked `undefined` before
  *    the script's own first statement. It has no `try`: if it cannot do that it throws, and the script stops. It checks
  *    that `window` is the window (a module's own `function window(){}` is bound before its first statement), takes
  *    `Object` from a literal, and throws a string, never calling anything a script could have declared.
