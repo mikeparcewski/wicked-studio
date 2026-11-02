@@ -79,6 +79,9 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     expect(withNestedPrelude('"use strict";x()')).toBe(`"use strict";${P}x()`);
     expect(withNestedPrelude('<!-- old\n"use strict";x()')).toBe(`<!-- old\n"use strict";${P}x()`);
     expect(withNestedPrelude('\n--> old\n"use strict";x()')).toBe(`\n--> old\n"use strict";${P}x()`);
+    // After a directive, `<!--` is code in a module: never skipped there, so the prelude goes first (review r7).
+    expect(withNestedPrelude('"a"\n<!--window[rtc()]\n;')).toBe(`${P}"a"\n<!--window[rtc()]\n;`);
+    expect(withNestedPrelude('/*\n*/ --> c\n"use strict";y()')).toBe(`/*\n*/ --> c\n"use strict";${P}y()`);
     expect(withNestedPrelude('#!/x\ny()')).toBe(`#!/x\n${P}\ny()`);
     expect(withNestedPrelude('"use strict"\nb()')).toBe(`"use strict";${P}\nb()`);
     expect(withNestedPrelude('"use strict"\n(b)')).toBe(`${P}"use strict"\n(b)`);
@@ -129,6 +132,20 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     // `language` is HTML's fallback only: an SVG script with language="other" runs, so it is guarded.
     const lang = parse(guardNestedHtml('<svg><script language="other">window.l=1</script></svg>'));
     expect(lang.querySelector('svg script')!.textContent).toBe(`${P}window.l=1`);
+  });
+
+  it('an SVG script with a carriage return is hashed as the browser reads it back (LF)', () => {
+    const doc = parse(guardNestedHtml('<svg><script>window.a=1;&#13;window.b=2</script></svg>'));
+    const s = doc.querySelector('svg script')!;
+    expect(s.textContent).toBe(`${P}window.a=1;\nwindow.b=2`);
+    expect(hashesOf(doc)).toContain(node(s.textContent!));
+  });
+
+  it('a document the parser put in quirks mode is written back with no doctype (it stays in quirks mode)', () => {
+    const quirks = new DOMParser().parseFromString('<!doctype html PUBLIC><p>x</p>', 'text/html');
+    const out = guardNestedHtml('<!doctype html PUBLIC><p>x</p>');
+    if (quirks.compatMode === 'BackCompat') expect(out.startsWith('<html')).toBe(true);
+    else expect(out.toLowerCase().startsWith('<!doctype')).toBe(true); // a DOM without quirks detection keeps it
   });
 
   it('inline event handlers stay in the markup but the policy refuses them (no unsafe-hashes)', () => {

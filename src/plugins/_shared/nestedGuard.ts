@@ -89,6 +89,10 @@ export function prologueEnd(text: string): { at: number; afterHashbang: boolean;
   // At the start of a line (only whitespace and comments since the last line end): where a classic script's `-->`
   // opens a line comment.
   let lineStart = true;
+  // HTML-like comments (`<!--`, a line-leading `-->`) are comments only in a classic script. In a module, after an
+  // operand, `<!--x` is `< !--x`: code. So they are taken only before the first directive, where in a module they can
+  // only be a syntax error (nothing runs) and in a classic script they are comments.
+  let beforeDirectives = true;
   /** Past whitespace and whole comments (noting a line end); false at a block comment that never closes. */
   const skip = (): boolean => {
     for (;;) {
@@ -99,16 +103,19 @@ export function prologueEnd(text: string): { at: number; afterHashbang: boolean;
         }
         i++;
       }
-      if (lineStart && text.startsWith('-->', i)) {
+      if (beforeDirectives && lineStart && text.startsWith('-->', i)) {
         while (i < n && !LINE_END.test(text[i]!)) i++;
         continue;
       }
       if (text.startsWith('/*', i)) {
         const close = text.indexOf('*/', i + 2);
         if (close < 0) return false;
-        if (LINE_END.test(text.slice(i, close))) crossed = true;
+        if (LINE_END.test(text.slice(i, close))) {
+          crossed = true;
+          lineStart = true;
+        }
         i = close + 2;
-      } else if (text.startsWith('//', i) || text.startsWith('<!--', i)) {
+      } else if (text.startsWith('//', i) || (beforeDirectives && text.startsWith('<!--', i))) {
         // `<!--` opens a comment to the end of its line in a classic script (it is a syntax error in a module).
         while (i < n && !LINE_END.test(text[i]!)) i++;
       } else {
@@ -119,6 +126,7 @@ export function prologueEnd(text: string): { at: number; afterHashbang: boolean;
   while (skip()) {
     const quote = text[i];
     if (quote !== '"' && quote !== "'") break;
+    beforeDirectives = false;
     let j = i + 1;
     let closed = false;
     while (j < n) {
@@ -175,8 +183,9 @@ function runsInline(s: Element): boolean {
   const language = s.namespaceURI === SVG_NS ? null : s.getAttribute('language'); // HTML's legacy fallback, not SVG's
   const raw = s.hasAttribute('type') ? s.getAttribute('type')! : language !== null && language !== '' ? `text/${language}` : '';
   if (raw === '') return true;
-  const type = raw.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '').toLowerCase();
-  return type === 'module' || JS_TYPES.has(type);
+  // A JavaScript MIME type is matched with surrounding whitespace stripped; `module` exactly as written (Chromium).
+  if (raw.toLowerCase() === 'module') return true;
+  return JS_TYPES.has(raw.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '').toLowerCase());
 }
 
 /** Every script in the document, including those inside `<template>` contents (a declarative shadow root, or a template
@@ -191,7 +200,10 @@ function scriptsIn(root: ParentNode): Element[] {
 
 /** The document's own doctype, written back as it was (none stays none: the document keeps its rendering mode). */
 function doctypeOf(doc: Document): string {
-  return doc.doctype === null ? '' : new XMLSerializer().serializeToString(doc.doctype);
+  // A document the parser put in quirks mode keeps it: written back without a doctype (a re-serialized legacy doctype
+  // can read as a standards one).
+  if (doc.doctype === null || doc.compatMode === 'BackCompat') return '';
+  return new XMLSerializer().serializeToString(doc.doctype);
 }
 
 /** `html` as a nested editor frame may show it: the prelude in every script, and a policy that runs only those. */
@@ -200,7 +212,8 @@ export function guardNestedHtml(html: string): string {
   const hashes = new Set<string>([sha256Base64(NESTED_PRELUDE)]);
   for (const script of scriptsIn(doc)) {
     if (!runsInline(script)) continue;
-    const text = withNestedPrelude(script.textContent ?? '');
+    // As the browser will read it back from the serialized document: a CR (an SVG script's `&#13;`) becomes LF.
+    const text = withNestedPrelude((script.textContent ?? '').replace(/\r\n?/g, '\n'));
     script.textContent = text;
     hashes.add(sha256Base64(text));
   }
