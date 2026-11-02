@@ -83,6 +83,15 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     expect(hashesOf(doc)).toContain(node(script.textContent!));
   });
 
+  it("the document's own enforcing CSP is dropped (it would refuse the rewritten scripts); a report-only one stays", () => {
+    const own = '<head><meta http-equiv="Content-Security-Policy" content="script-src \'sha256-AAAA\'"><meta http-equiv="content-security-policy-report-only" content="img-src none"></head><body><script>window.x=1</script></body>';
+    const doc = parse(guardNestedHtml(own));
+    const metas = Array.from(doc.querySelectorAll('meta[http-equiv]')).map((m) => m.getAttribute('http-equiv')!.toLowerCase());
+    expect(metas).toEqual(['content-security-policy', 'content-security-policy-report-only']);
+    expect(policyOf(doc)).toMatch(/^script-src 'sha256-/);
+    expect(policyOf(doc)).not.toContain('AAAA');
+  });
+
   it('inline event handlers stay in the markup but the policy refuses them (no unsafe-hashes)', () => {
     const out = guardNestedHtml('<img src="x" onerror="new RTCPeerConnection()">');
     expect(out).toContain('onerror=');
@@ -124,6 +133,16 @@ describe('NESTED_PRELUDE: WebRTC gone from the window, for good, before the docu
     runInContext(`${P}window.ran = true; function Object(){}`, ctx);
     expect(runInContext('window.ran', ctx)).toBe(true);
     expect(runInContext('typeof window.RTCPeerConnection', ctx)).toBe('undefined');
+  });
+
+  it('a comment cannot be read short or long to move the prelude: it still runs before the first statement', () => {
+    for (const body of ['//"a";\nwindow.seen = typeof RTCPeerConnection;', '/* */ window.seen = typeof RTCPeerConnection; /* */ "a";']) {
+      const ctx = win();
+      runInContext(withNestedPrelude(body), ctx);
+      expect(runInContext('window.seen', ctx), body).toBe('undefined');
+    }
+    expect(withNestedPrelude('//"a";\nx()')).toBe(`${P}//"a";\nx()`);
+    expect(withNestedPrelude('/* */ x(); /* */ "a";')).toBe(`${P}/* */ x(); /* */ "a";`);
   });
 
   it('a script with a lone hashbang still runs the prelude first (it is not swallowed by the hashbang comment)', () => {

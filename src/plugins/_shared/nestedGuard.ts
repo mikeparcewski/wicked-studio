@@ -12,7 +12,8 @@ import { sha256Base64 } from './sha256.js';
  *
  * {@link guardNestedHtml} is the last step before `srcdoc`:
  *  - {@link NESTED_PRELUDE} goes first in every inline script that runs (after a hashbang line and a directive
- *    prologue, which run nothing and keep strict mode). It defines each WebRTC global as a locked `undefined` before
+ *    prologue whose directives end in their own `;`, which run nothing and keep strict mode; a directive that relies on
+ *    automatic semicolon insertion is not kept first). It defines each WebRTC global as a locked `undefined` before
  *    the script's own first statement. It has no `try`: if it cannot do that it throws, and the script stops. It checks
  *    that `window` is the window (a module's own `function window(){}` is bound before its first statement), takes
  *    `Object` from a literal, and throws a string, never calling anything a script could have declared.
@@ -39,16 +40,67 @@ export const NESTED_PRELUDE =
   'for(i=0;i!==n.length;i++){o.defineProperty(w,n[i],{value:void 0,writable:false,configurable:false});' +
   'if(w[n[i]]!==void 0)throw ' + JSON.stringify(REFUSAL) + '}})(window,({}).constructor);\n';
 
-/** A hashbang line and a directive prologue (each directive ended by its own `;`), with whitespace and comments. */
-const PROLOGUE =
-  /^(?:#![^\n\r\u2028\u2029]*)?(?:(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n\r\u2028\u2029]*)*(?:"(?:[^"\\\n\r]|\\[\s\S])*"|'(?:[^'\\\n\r]|\\[\s\S])*')(?:\s|\/\*[\s\S]*?\*\/)*;)*/;
+const LINE_END = /[\n\r\u2028\u2029]/;
+const SPACE = /\s/;
 
-/** `text` with the prelude before its first statement. After a lone hashbang the prelude starts on its own line. */
+/**
+ * Where the prelude goes in a script's text, read the way a JavaScript lexer reads it: past a hashbang line and a
+ * directive prologue (each directive a string literal ended by its own `;`), with whitespace and comments between.
+ * No regular expression does this: a backtracking pattern can be made to end a comment early or late. Here a block
+ * comment ends at its first `*\/` and a line comment at the end of its line, exactly as in JavaScript, so the place
+ * found is never inside a comment or a string, and nothing before it is code. Anything else ends the prologue.
+ */
+export function prologueEnd(text: string): { at: number; afterHashbang: boolean } {
+  const n = text.length;
+  let i = 0;
+  let at = 0;
+  let afterHashbang = false;
+  if (text.startsWith('#!')) {
+    while (i < n && !LINE_END.test(text[i]!)) i++;
+    at = i;
+    afterHashbang = true;
+  }
+  /** Past whitespace and whole comments; false at a block comment that never closes. */
+  const skip = (): boolean => {
+    for (;;) {
+      while (i < n && SPACE.test(text[i]!)) i++;
+      if (text.startsWith('/*', i)) {
+        const close = text.indexOf('*/', i + 2);
+        if (close < 0) return false;
+        i = close + 2;
+      } else if (text.startsWith('//', i)) {
+        while (i < n && !LINE_END.test(text[i]!)) i++;
+      } else {
+        return true;
+      }
+    }
+  };
+  while (skip()) {
+    const quote = text[i];
+    if (quote !== '"' && quote !== "'") break;
+    let j = i + 1;
+    let closed = false;
+    while (j < n) {
+      const c = text[j]!;
+      if (c === '\\') { j += 2; continue; }
+      if (c === quote) { closed = true; j += 1; break; }
+      if (c === '\n' || c === '\r') break;
+      j += 1;
+    }
+    if (!closed) break;
+    i = j;
+    if (!skip() || text[i] !== ';') break;
+    i += 1;
+    at = i;
+    afterHashbang = false;
+  }
+  return { at, afterHashbang };
+}
+
+/** `text` with the prelude before its first statement (see {@link prologueEnd}); after a lone hashbang, on its own line. */
 export function withNestedPrelude(text: string): string {
-  const at = PROLOGUE.exec(text)?.[0].length ?? 0;
-  const head = text.slice(0, at);
-  const newline = head.startsWith('#!') && !/[\n\r\u2028\u2029]/.test(head) ? '\n' : '';
-  return head + newline + NESTED_PRELUDE + text.slice(at);
+  const { at, afterHashbang } = prologueEnd(text);
+  return text.slice(0, at) + (afterHashbang ? '\n' : '') + NESTED_PRELUDE + text.slice(at);
 }
 
 /** The essences HTML runs as a classic script (HTML "JavaScript MIME type essence match"). */
@@ -83,6 +135,11 @@ export function guardNestedHtml(html: string): string {
     const text = withNestedPrelude(script.textContent ?? '');
     script.textContent = text;
     hashes.add(sha256Base64(text));
+  }
+  // The document's own enforcing policy would still hash the scripts as they were, and refuse them as rewritten. This
+  // frame stays under the bundle's policy and the one written below, so the document's own is dropped.
+  for (const own of Array.from(doc.querySelectorAll('meta[http-equiv]'))) {
+    if (own.getAttribute('http-equiv')!.trim().toLowerCase() === 'content-security-policy') own.remove();
   }
   const policy = doc.createElement('meta');
   policy.setAttribute('http-equiv', 'Content-Security-Policy');
