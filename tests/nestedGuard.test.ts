@@ -32,8 +32,10 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
 
   it('the policy is the first thing in <head>, then the prelude on its own, then the document as it was', () => {
     const doc = parse(guardNestedHtml(agent));
-    const [policy, prelude, title] = Array.from(doc.head.children);
+    const [policy, inlineOnly, prelude, title] = Array.from(doc.head.children);
     expect(policy!.getAttribute('http-equiv')).toBe('Content-Security-Policy');
+    // A second policy, inline only and no URL: a hash would also admit an external script whose integrity names it.
+    expect(inlineOnly!.getAttribute('content')).toBe("script-src 'unsafe-inline'");
     expect(prelude!.tagName).toBe('SCRIPT');
     expect(prelude!.textContent).toBe(P);
     expect(title!.tagName).toBe('TITLE');
@@ -75,12 +77,13 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
 
   it('a directive prologue and a hashbang stay first (strict mode is kept); after a lone hashbang the prelude starts a new line', () => {
     expect(withNestedPrelude('"use strict";x()')).toBe(`"use strict";${P}x()`);
+    expect(withNestedPrelude('<!-- old\n"use strict";x()')).toBe(`<!-- old\n"use strict";${P}x()`);
     expect(withNestedPrelude('#!/x\ny()')).toBe(`#!/x\n${P}\ny()`);
     expect(withNestedPrelude('"use strict"\nb()')).toBe(`"use strict";${P}\nb()`);
     expect(withNestedPrelude('"use strict"\n(b)')).toBe(`${P}"use strict"\n(b)`);
     // A unary `!`/`~` or `++`/`--` on the next line starts a new statement; `!=`, `+`, `in`, `instanceof` continue it.
-    for (const next of ['!x()', '~x()', '++x', '--x']) expect(withNestedPrelude(`"use strict"\n${next}`), next).toBe(`"use strict";${P}\n${next}`);
-    for (const next of ['!= x', '+ x', '- x', 'in x', 'instanceof x']) expect(withNestedPrelude(`"use strict"\n${next}`), next).toBe(`${P}"use strict"\n${next}`);
+    for (const next of ['!x()', '~x()', '++x', '--x', '.5', '\\u0069n()', 'in\\u0078 = 1']) expect(withNestedPrelude(`"use strict"\n${next}`), next).toBe(`"use strict";${P}\n${next}`);
+    for (const next of ['!= x', '+ x', '- x', 'in x', 'instanceof x', '.toString()']) expect(withNestedPrelude(`"use strict"\n${next}`), next).toBe(`${P}"use strict"\n${next}`);
     const doc = parse(guardNestedHtml('<script>"use strict";window.s=1</script>'));
     const script = Array.from(doc.querySelectorAll('script')).find((s) => s.textContent!.includes('window.s'))!;
     expect(script.textContent).toBe(`"use strict";${P}window.s=1`);
@@ -91,7 +94,7 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     const own = '<head><meta http-equiv="Content-Security-Policy" content="script-src \'sha256-AAAA\'"><meta http-equiv="content-security-policy-report-only" content="img-src none"></head><body><script>window.x=1</script></body>';
     const doc = parse(guardNestedHtml(own));
     const metas = Array.from(doc.querySelectorAll('meta[http-equiv]')).map((m) => m.getAttribute('http-equiv')!.toLowerCase());
-    expect(metas).toEqual(['content-security-policy', 'content-security-policy-report-only']);
+    expect(metas).toEqual(['content-security-policy', 'content-security-policy', 'content-security-policy-report-only']);
     expect(policyOf(doc)).toMatch(/^script-src 'sha256-/);
     expect(policyOf(doc)).not.toContain('AAAA');
   });
@@ -108,11 +111,19 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
     for (const t of texts) expect(hashesOf(doc)).toContain(node(t));
   });
 
+  it('a <template> inside <svg> or <math> (a foreign element, no contents) does not stop the guard; its script is guarded', () => {
+    const out = guardNestedHtml('<svg><template><script>window.t=1</script></template></svg><math><template></template></math>');
+    const doc = parse(out);
+    const t = Array.from(doc.querySelectorAll('svg script'))[0]!;
+    expect(t.textContent).toBe(`${P}window.t=1`);
+  });
+
   it('an SVG script is external by href (src means nothing there), an HTML one by src', () => {
-    const doc = parse(guardNestedHtml('<svg><script src="ignored">window.s=1</script><script href="x.js"></script></svg><script src="y.js"></script>'));
+    const doc = parse(guardNestedHtml('<svg><script src="ignored">window.s=1</script><script href="x.js"></script><script xlink:href="z.js"></script></svg><script src="y.js"></script>'));
     const svgScripts = Array.from(doc.querySelectorAll('svg script'));
     expect(svgScripts[0]!.textContent).toBe(`${P}window.s=1`);
     expect(svgScripts[1]!.textContent).toBe('');
+    expect(svgScripts[2]!.textContent).toBe('');
     expect(doc.querySelector('body > script[src]')!.textContent).toBe('');
   });
 

@@ -42,7 +42,7 @@ export const NESTED_PRELUDE =
 
 const LINE_END = /[\n\r\u2028\u2029]/;
 const SPACE = /\s/;
-const IDENTIFIER_PART = /[\w$\u0080-\uFFFF]/;
+const IDENTIFIER_PART = /[\w$\\\u0080-\uFFFF]/; // `\` too: an identifier may be written with escapes
 
 /**
  * Whether a directive with no `;` ends before `text[i]` by automatic semicolon insertion: a line ended after it, and
@@ -98,7 +98,8 @@ export function prologueEnd(text: string): { at: number; afterHashbang: boolean;
         if (close < 0) return false;
         if (LINE_END.test(text.slice(i, close))) crossed = true;
         i = close + 2;
-      } else if (text.startsWith('//', i)) {
+      } else if (text.startsWith('//', i) || text.startsWith('<!--', i)) {
+        // `<!--` opens a comment to the end of its line in a classic script (it is a syntax error in a module).
         while (i < n && !LINE_END.test(text[i]!)) i++;
       } else {
         return true;
@@ -153,6 +154,7 @@ const JS_TYPES = new Set([
 ]);
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const HTML_NS = 'http://www.w3.org/1999/xhtml';
 
 /** Whether the browser runs this script's text as a classic or module script (not external, not a data block). An SVG
  *  script is external by `href` or `xlink:href`; `src` means nothing there. */
@@ -169,7 +171,9 @@ function runsInline(s: Element): boolean {
  *  the document clones at run time), which `querySelectorAll` does not enter. */
 function scriptsIn(root: ParentNode): Element[] {
   const out: Element[] = Array.from(root.querySelectorAll('script'));
-  for (const t of Array.from(root.querySelectorAll('template'))) out.push(...scriptsIn(t.content));
+  // Only an HTML template has contents: a `<template>` inside <svg> or <math> is a foreign element (its scripts are
+  // ordinary children, already found above).
+  for (const t of Array.from(root.querySelectorAll('template'))) if (t.namespaceURI === HTML_NS) out.push(...scriptsIn(t.content));
   return out;
 }
 
@@ -199,8 +203,13 @@ export function guardNestedHtml(html: string): string {
     'content',
     `script-src ${[...hashes].map((h) => `'sha256-${h}'`).join(' ')}; frame-src 'none'; child-src 'none'; worker-src 'none'; object-src 'none'`,
   );
+  // A second policy: inline scripts only, no URL. A hash would also admit an external script whose `integrity` names it,
+  // fetched before it is checked; the bundle's own policy refuses that too, this keeps the document safe without it.
+  const inlineOnly = doc.createElement('meta');
+  inlineOnly.setAttribute('http-equiv', 'Content-Security-Policy');
+  inlineOnly.setAttribute('content', "script-src 'unsafe-inline'");
   const prelude = doc.createElement('script');
   prelude.textContent = NESTED_PRELUDE;
-  doc.head.prepend(policy, prelude);
+  doc.head.prepend(policy, inlineOnly, prelude);
   return `${doctypeOf(doc)}${doc.documentElement.outerHTML}`;
 }
