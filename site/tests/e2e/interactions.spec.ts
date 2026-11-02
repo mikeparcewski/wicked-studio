@@ -100,12 +100,16 @@ test('rules / memory / knowledge: approve a rule, edit and erase a memory, revea
   await input.press('Enter');
   await expect(mem.locator('[data-mem-text]')).toHaveText('Track per-key limits in issue 41.');
   // a memory as long as the field allows stays inside its box
-  const longest = 'x'.repeat(200);
   await mem.getByRole('button', { name: 'Edit' }).click();
-  await input.fill(longest);
-  await expect(input).toHaveValue('x'.repeat(80));
+  await input.fill('W'.repeat(200));
+  await expect(input).toHaveValue('W'.repeat(80));
   await input.press('Enter');
   expect(await box(trio)).toEqual(h0);
+  // the box keeps its size; a value taller than it scrolls, and the scroller takes keyboard focus
+  const saved = mem.locator('[data-mem-text]');
+  const m = await saved.evaluate((el) => ({ over: el.scrollHeight > el.clientHeight + 1, tab: (el as HTMLElement).tabIndex }));
+  if (m.over) expect(m.tab).toBe(0);
+  await expect(saved).toHaveText('W'.repeat(80));
   await mem.getByRole('button', { name: 'Erase' }).click();
   await expect(mem).toHaveAttribute('data-state', 'gone');
   await expect(mem.locator('.dr-gone')).toBeVisible();
@@ -122,6 +126,9 @@ test('rules / memory / knowledge: approve a rule, edit and erase a memory, revea
   await expect(know.locator('.dr-src')).toBeVisible();
   await expect(know.locator('.dr-src')).toHaveCSS('opacity', '1');
   await expect(know.locator('.dr-src')).toContainText("rateLimit({ perMinute: 100 })");
+  // the whole source line is readable inside the box: it wraps, nothing is cut
+  const cut = await know.locator('.dr-src .dl').evaluateAll((ls) => ls.filter((l) => l.scrollWidth > l.clientWidth + 1).length);
+  expect(cut).toBe(0);
 
   // none of it moved the cards
   expect(await box(trio)).toEqual(h0);
@@ -138,6 +145,11 @@ test('agents: picking one puts it in the sandbox; the search example counts its 
   await page.keyboard.press('ArrowRight');
   await expect(group.getByRole('radio', { name: 'Copilot' })).toBeFocused();
   await expect(reach.locator('[data-agent-name]')).toHaveText('Copilot');
+  // radios take all four arrows
+  await page.keyboard.press('ArrowDown');
+  await expect(group.getByRole('radio', { name: 'OpenCode' })).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('ArrowUp');
+  await expect(group.getByRole('radio', { name: 'Copilot' })).toBeFocused();
   await expect(reach.locator('.hits [data-n="4"]')).toHaveText('4', { timeout: 6000 });
   await expect(reach.locator('.hits [data-n="3"]')).toHaveText('3');
   await expect(reach.locator('.hits caption')).toContainText('8 hits');
@@ -227,15 +239,39 @@ test('switching jobs while the prompt types stops the typing and nothing posts b
   await page.goto('/');
   const ide = page.locator('[data-ide]');
   const input = ide.getByRole('textbox', { name: 'Message your agents' });
-  // catch it mid-typing, then switch away
-  await expect.poll(() => input.inputValue(), { timeout: 6000 }).toMatch(/^Add rate/);
+  const PROMPT = 'Add rate limiting to the public API: 100 requests a minute per API key.';
+  // start a typing run on purpose, and catch it part-way
+  await page.getByRole('link', { name: /Watch a job/ }).click();
+  await expect(ide).toHaveClass(/is-typing/);
+  await expect.poll(async () => { const v = await input.inputValue(); return v.length > 0 && v.length < PROMPT.length; }).toBe(true);
   await ide.locator('[data-id="flaky"]').click();
+  await expect(ide).not.toHaveClass(/is-typing/);
   await expect(input).toHaveValue('');
   await page.waitForTimeout(2500);
   await expect(input).toHaveValue('');
   await ide.locator('[data-id="rate"]').click();
   await expect(ide.locator('.empty')).toBeVisible();
-  await expect(input).toHaveValue('Add rate limiting to the public API: 100 requests a minute per API key.');
+  await expect(input).toHaveValue(PROMPT);
+});
+
+test('switching jobs in the gap between the typed prompt and its post cancels the post', async ({ page }) => {
+  await page.goto('/');
+  const ide = page.locator('[data-ide]');
+  // the moment typing ends (the 260 ms before the prompt posts), switch jobs from inside the page
+  await page.evaluate(() => {
+    const root = document.querySelector('[data-ide]')!;
+    let seen = false;
+    new MutationObserver(() => {
+      if (root.classList.contains('is-typing')) seen = true;
+      else if (seen) { seen = false; (root.querySelector('[data-id="flaky"]') as HTMLElement).click(); }
+    }).observe(root, { attributes: true, attributeFilter: ['class'] });
+  });
+  await page.getByRole('link', { name: /Watch a job/ }).click();
+  await expect(ide.locator('[data-title]')).toHaveText('Fix the flaky checkout test', { timeout: 6000 });
+  await page.waitForTimeout(1500);
+  await ide.locator('[data-id="rate"]').click();
+  await expect(ide.locator('.empty')).toBeVisible();
+  await expect(ide.locator('.msg--user')).toHaveCount(0);
 });
 
 test('a re-render keeps focus on the diff, and the side panel never drops focus to the page', async ({ page }) => {
@@ -283,4 +319,13 @@ test('Tab into the next frame lands on a frame with the focused control in view'
   expect(m.top).toBeGreaterThanOrEqual(64);
   expect(m.bottom).toBeLessThanOrEqual(m.vh);
   expect(m.whyTop, 'the frame is snapped under the topbar').toBe(64);
+});
+
+test('the side panel is a named tabpanel for the selected tab', async ({ page }) => {
+  await page.goto('/');
+  const ide = page.locator('[data-ide]');
+  await expect(ide.getByRole('tabpanel', { name: /Changes/ })).toBeVisible();
+  await ide.getByRole('tab', { name: 'Receipt' }).click();
+  await expect(ide.getByRole('tabpanel', { name: 'Receipt' })).toBeVisible();
+  await expect(ide.getByRole('tab', { name: 'Receipt' })).toHaveAttribute('aria-controls', 'ide-pane-body');
 });

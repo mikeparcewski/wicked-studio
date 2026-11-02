@@ -180,7 +180,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               <div class="ide-sessions" role="tablist" aria-label="Jobs" aria-orientation="vertical" data-sessions></div>
             </aside>
 
-            <div class="ide-main" id="ide-main">
+            <div class="ide-main" id="ide-main" role="tabpanel" aria-labelledby="ide-tab-rate">
               <div class="ide-head">
                 <span class="ide-title" data-title>Rate limits for the public API</span>
                 <ol class="ide-steps" data-steps aria-label="Steps"></ol>
@@ -195,10 +195,10 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
 
             <aside class="ide-pane" aria-label="What changed">
               <div class="ide-pane-tabs" role="tablist" aria-label="Side panel">
-                <button type="button" role="tab" class="is-on" aria-selected="true" tabindex="0" data-pane-tab="changes">Changes <span class="ide-count ide-count--quiet" data-files>0</span></button>
-                <button type="button" role="tab" aria-selected="false" tabindex="-1" data-pane-tab="receipt">Receipt</button>
+                <button type="button" role="tab" id="ide-ptab-changes" class="is-on" aria-selected="true" aria-controls="ide-pane-body" tabindex="0" data-pane-tab="changes">Changes <span class="ide-count ide-count--quiet" data-files>0</span></button>
+                <button type="button" role="tab" id="ide-ptab-receipt" aria-selected="false" aria-controls="ide-pane-body" tabindex="-1" data-pane-tab="receipt">Receipt</button>
               </div>
-              <div class="ide-pane-body" data-pane></div>
+              <div class="ide-pane-body" id="ide-pane-body" role="tabpanel" aria-labelledby="ide-ptab-changes" tabindex="0" data-pane></div>
             </aside>
           </div>
         </div>

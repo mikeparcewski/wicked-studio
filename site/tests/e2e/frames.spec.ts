@@ -88,7 +88,7 @@ for (const vp of [
       await page.evaluate(async () => { await document.fonts.ready; });
       const bad = await page.evaluate(() => {
         const out: string[] = [];
-        for (const box of document.querySelectorAll('.scene, .ex-art, .dr-slot, .dr-src-stack, .sandbox, .sb-foot, .fl-s')) {
+        for (const box of document.querySelectorAll('.scene, .ex-art, .dr-slot, .dr-src-stack, .sandbox, .sb-foot, .flow li')) {
           const b = box.getBoundingClientRect();
           for (const el of box.querySelectorAll('*')) {
             const r = el.getBoundingClientRect();
@@ -101,5 +101,24 @@ for (const vp of [
       });
       expect(bad).toEqual([]);
     });
+  });
+}
+
+// Outside the media where the hero is one fixed frame, it grows with its content: never into the next frame.
+for (const vp of [{ width: 941, height: 600 }, { width: 941, height: 700 }, { width: 1200, height: 640 }, { width: 1280, height: 600 }]) {
+  test(`the hero never runs into the next frame at ${vp.width}x${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto('/');
+    await page.evaluate(async () => { await document.fonts.ready; });
+    const m = await page.evaluate(() => {
+      const hero = document.querySelector('.hero')!.getBoundingClientRect();
+      const ide = document.querySelector('[data-ide]')!.getBoundingClientRect();
+      const copy = document.querySelector('.hero-copy')!.getBoundingClientRect();
+      const why = document.querySelector('#why')!.getBoundingClientRect();
+      return { heroBottom: hero.bottom, ideBottom: ide.bottom, copyBottom: copy.bottom, whyTop: why.top };
+    });
+    expect(m.ideBottom).toBeLessThanOrEqual(m.heroBottom + 1);
+    expect(m.copyBottom).toBeLessThanOrEqual(m.heroBottom + 1);
+    expect(m.whyTop).toBeGreaterThanOrEqual(m.heroBottom - 1);
   });
 }

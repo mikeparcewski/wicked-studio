@@ -42,7 +42,7 @@ body { padding-top: var(--topbar-h); }
 
    MANDATORY only where it is safe: every frame was measured to fit with headroom (frames.spec.ts
    pins the edges of this query: 1260x660, 941x760, 1259x760), and the shared platform band is a snap
-   target there too (SameGarden.astro stops snapping at max-height 646px, at max-width 1059px with
+   target there too (and only with a fine pointer: touch layouts carry 44px controls and run taller) (SameGarden.astro stops snapping at max-height 646px, at max-width 1059px with
    max-height 664px, and at max-width 1043px with max-height 720px; mandatory with a non-snapping band
    would make the band unreachable). Elsewhere the chrome's `proximity` applies, and phones (768px and
    below) and reduced motion get no snapping at all (wicked-web tokens.css, #31): this file never
@@ -59,8 +59,8 @@ body { padding-top: var(--topbar-h); }
   padding: clamp(16px, 2.8svh, 40px) 0;
 }
 html .footer { scroll-snap-align: end; }
-@media (prefers-reduced-motion: no-preference) and (min-width: 1260px) and (min-height: 660px),
-       (prefers-reduced-motion: no-preference) and (min-width: 941px) and (min-height: 760px) {
+@media (prefers-reduced-motion: no-preference) and (pointer: fine) and (min-width: 1260px) and (min-height: 660px),
+       (prefers-reduced-motion: no-preference) and (pointer: fine) and (min-width: 941px) and (min-height: 760px) {
   html { scroll-snap-type: y mandatory; }
 }
 /* The platform band is a frame too wherever it snaps (its own snap rule's thresholds). */
@@ -223,7 +223,7 @@ code {
 .hero-fine { margin: 0; font-size: var(--text-caption); line-height: 1.45; color: var(--muted); padding-top: 12px; border-top: 1px solid var(--hairline); }
 
 /* Desktop 1200px and up: the headline on one line over two columns, the demo at full frame height. */
-@media (min-width: 1200px) and (min-height: 600px) {
+@media (min-width: 1200px) and (min-height: 640px) {
   .hero { height: var(--frame); min-height: 0; }
   .hero-wrap { flex: 1 1 auto; min-height: 0; }
   .hero-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 32fr) minmax(0, 68fr); grid-template-rows: minmax(0, 1fr); gap: clamp(24px, 2.6vw, 40px); }
@@ -231,7 +231,7 @@ code {
   .hero .ide { align-self: center; height: 100%; max-height: 720px; }
 }
 /* 941-1199px: stacked, the copy in two short columns so the demo keeps its height. */
-@media (min-width: 941px) and (max-width: 1199px) and (min-height: 600px) {
+@media (min-width: 941px) and (max-width: 1199px) and (min-height: 700px) {
   .hero { height: var(--frame); min-height: 0; }
   .hero-wrap { flex: 1 1 auto; min-height: 0; }
   .hero-grid { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
@@ -623,7 +623,8 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .dr-state--ok { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 45%, transparent); }
 .dr-mem { display: grid; padding: 8px 10px; border: 1px solid var(--hairline-strong); border-radius: 9px; background: var(--surface); align-items: center; }
 .dr-mem > * { grid-area: 1 / 1; }
-.dr-mem-t { font-size: var(--text-body); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; transition: opacity .2s var(--ease); }
+.dr-mem-t { font-size: var(--text-body); line-height: 1.4; max-height: 2.8em; overflow-y: auto; overflow-wrap: anywhere; overscroll-behavior: contain; transition: opacity .2s var(--ease); }
+.dr-mem-t:focus-visible { outline-offset: 1px; }
 .dr-mem-in { font: inherit; font-size: var(--text-body); color: var(--ink); background: color-mix(in oklab, var(--canvas) 40%, transparent); border: 1px solid var(--border-input); border-radius: 6px; padding: 4px 8px; min-width: 0; width: 100%; opacity: 0; visibility: hidden; }
 .drawer[data-state="edit"] .dr-mem-t { opacity: 0; visibility: hidden; }
 .drawer[data-state="edit"] .dr-mem-in { opacity: 1; visibility: visible; }
@@ -636,11 +637,11 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .dr-cite { font-size: var(--text-body); line-height: 1.5; }
 .src-chip { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink); background: color-mix(in oklab, var(--ink) 6%, transparent); border: 1px solid var(--hairline-strong); border-radius: 6px; padding: 1px 7px; cursor: pointer; transition: border-color .2s var(--ease), background .2s var(--ease); }
 .src-chip:hover, .src-chip[aria-expanded="true"] { border-color: var(--border-strong); background: color-mix(in oklab, var(--ink) 12%, transparent); }
-.dr-src-stack { display: grid; min-height: 52px; }
+.dr-src-stack { display: grid; min-height: 88px; }
 .dr-src-stack > * { grid-area: 1 / 1; transition: opacity .3s var(--ease); }
 .dr-src-hint { color: var(--faint); align-self: center; }
 .dr-src { margin: 0; padding: 6px 0; border: 1px solid var(--hairline); border-radius: 8px; background: color-mix(in oklab, var(--canvas) 50%, transparent); overflow: hidden; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55; opacity: 0; visibility: hidden; }
-.dr-src .dl { overflow: hidden; text-overflow: ellipsis; }
+.dr-src .dl { white-space: pre-wrap; overflow-wrap: anywhere; }
 .drawer.is-src .dr-src { opacity: 1; visibility: visible; }
 .drawer.is-src .dr-src-hint { opacity: 0; visibility: hidden; }
 
@@ -926,3 +927,6 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 @media (max-width: 1199px) { .news-art { height: 240px; } }
 @media (max-width: 940px) { .ex-art { height: 240px; } .news-art { height: 252px; } }
 @media (max-width: 400px) { .ex-art { height: 252px; } .news-art { height: 276px; } }
+/* phones under 360px: the relay rows hold three lines of explanation plus the status */
+@media (max-width: 360px) { .relay { --row: 88px; } }
+.ide-pane-body:focus-visible { outline-offset: -3px; }

@@ -78,6 +78,15 @@ test.describe('scroll-snap layout', () => {
     expect(await snapAt(1024, 700)).not.toContain('mandatory');
   });
 
+  test('a touch screen never gets mandatory snapping (its 44px controls make frames taller)', async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 1024, height: 768 }, hasTouch: true });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollSnapType)).not.toContain('mandatory');
+    await ctx.close();
+  });
+
   test('one wheel notch moves exactly one frame', async ({ page }) => {
     // wicked-web scroll-wheel.js turns a notch into a jump to the next snap point; it reads
     // scroll-margin-top, which is why the frames carry the topbar offset there and not in html

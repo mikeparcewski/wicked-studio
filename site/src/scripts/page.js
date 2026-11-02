@@ -19,12 +19,22 @@ const $$ = (s, r = document) => Array.prototype.slice.call(r.querySelectorAll(s)
    way where it would do harm: outside the media in which studio.css turns mandatory snapping on
    (the same thresholds at which the shared platform band is itself a snap target), on pinch-zoom, and
    over an inner scroller that can still move in the wheel's direction (the demo's chat and diff). */
-const SNAP_MEDIA = '(min-width: 1260px) and (min-height: 660px), (min-width: 941px) and (min-height: 760px)';
+const SNAP_MEDIA = '(pointer: fine) and (min-width: 1260px) and (min-height: 660px), (pointer: fine) and (min-width: 941px) and (min-height: 760px)';
 const snapMq = window.matchMedia(SNAP_MEDIA);
 window.addEventListener(
   'wheel',
   (e) => {
     if (!snapMq.matches || e.ctrlKey) { e.stopImmediatePropagation(); return; }
+    // a frame taller than the window keeps the wheel until its end is in view
+    const bar = (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight;
+    const here = $$('.frame, .same-garden').find((el) => { const r = el.getBoundingClientRect(); return r.top <= bar + 1 && r.bottom > bar + 1; });
+    if (here) {
+      const r = here.getBoundingClientRect();
+      if (r.height > window.innerHeight - bar + 1 && ((e.deltaY > 0 && r.bottom > window.innerHeight + 1) || (e.deltaY < 0 && r.top < bar - 1))) {
+        e.stopImmediatePropagation();
+        return;
+      }
+    }
     for (let el = e.target; el && el.nodeType === 1 && el !== document.body; el = el.parentElement) {
       const cs = getComputedStyle(el);
       if (/(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 1) {
@@ -247,7 +257,8 @@ $$('[data-tour]').forEach((el) => {
   const pin = () => { if (!reduced && g.set && !g.paused) g.set(true); };
   tabs.forEach((tb, k) => {
     tb.addEventListener('click', () => { select(k); pin(); });
-    tb.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') select(k); });
+    // hover previews a page only in the sidebar list; a scrolling tab strip (narrow windows) moves only on a click
+    tb.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && list.scrollWidth <= list.clientWidth + 1) select(k); });
   });
   roving(list, tabs, { vertical, onMove: (k) => { select(k); pin(); } });
   hold(el, (h) => { held = h; player.sync(); });
@@ -336,7 +347,13 @@ $$('[data-drawer]').forEach((card) => {
       if (!b) return;
       const a = b.getAttribute('data-dr');
       if (a === 'edit') { set('edit'); input.value = text.textContent; input.tabIndex = 0; input.focus({ preventScroll: true }); input.select(); return; }
-      if (a === 'save') { const v = input.value.trim(); if (v) text.textContent = v; }
+      if (a === 'save') {
+        const v = input.value.trim();
+        if (v) text.textContent = v;
+        const scrolls = text.scrollHeight > text.clientHeight + 1;
+        if (scrolls) { text.tabIndex = 0; text.setAttribute('role', 'region'); text.setAttribute('aria-label', 'The saved memory'); }
+        else { text.removeAttribute('tabindex'); text.removeAttribute('role'); text.removeAttribute('aria-label'); }
+      }
       input.tabIndex = -1;
       if (a === 'save' || a === 'cancel' || a === 'undo') { set('in'); card.querySelector(a === 'undo' ? '[data-dr="erase"]' : '[data-dr="edit"]').focus({ preventScroll: true }); }
       else if (a === 'erase') { set('gone'); card.querySelector('[data-dr="undo"]').focus({ preventScroll: true }); }
@@ -375,7 +392,7 @@ $$('[data-drawer]').forEach((card) => {
     if (!reduced && box) { box.classList.remove('is-swap', 'is-live'); void box.offsetWidth; box.classList.add('is-swap', 'is-live'); }
   };
   chips.forEach((c, k) => c.addEventListener('click', () => pick(k)));
-  roving(list, chips, { vertical: false, onMove: pick });
+  roving(list, chips, { vertical: true, onMove: pick });
   if (box && !reduced) inView(box, 0.5, () => box.classList.add('is-live'), () => box.classList.remove('is-live'));
 })();
 

@@ -99,6 +99,8 @@ test.describe('the demo', () => {
     await expect(ide.locator('[data-needs]')).toHaveText('1');
     await expect(ide.locator('.diff')).toContainText('clock.now()', { timeout: 10_000 });
 
+    // the chat is the tabpanel of the selected job
+    await expect(ide.getByRole('tabpanel', { name: /Fix the flaky checkout test/ })).toBeVisible();
     await ide.locator('[data-id="node"]').click();
     await expect(ide.locator('.msg--done')).toContainText('Pull request #9 is open.');
     await expect(ide.locator('[data-files]')).toHaveText('2');

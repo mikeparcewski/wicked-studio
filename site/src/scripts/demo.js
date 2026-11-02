@@ -13,7 +13,7 @@
   var $ = function (s) { return root.querySelector(s); };
   var threadEl = $('[data-thread]'), stepsEl = $('[data-steps]'), titleEl = $('[data-title]');
   var sessionsEl = $('[data-sessions]'), paneEl = $('[data-pane]'), needsEl = $('[data-needs]');
-  var filesEl = $('[data-files]'), form = $('[data-composer]'), input = $('[data-input]');
+  var filesEl = $('[data-files]'), form = $('[data-composer]'), input = $('[data-input]'), mainEl = $('#ide-main');
   var STEPS = ['Plan', 'Build', 'Review', 'Test', 'Deliver'];
   var PROMPT = input.value;
 
@@ -99,6 +99,7 @@
         '<span class="ide-sess-s">' + esc(st.t) + '</span></button>';
     }).join('');
     if (focusedId) focusQuiet(sessionsEl.querySelector('[data-id="' + focusedId + '"]'));
+    mainEl.setAttribute('aria-labelledby', 'ide-tab-' + cur);
     needsEl.textContent = String(needs);
     if (lastNeeds !== -1 && needs !== lastNeeds && !reduced) {
       needsEl.classList.remove('is-tick'); void needsEl.offsetWidth; needsEl.classList.add('is-tick');
@@ -188,6 +189,7 @@
       var on = b.getAttribute('data-pane-tab') === pane;
       b.classList.toggle('is-on', on); b.setAttribute('aria-selected', on ? 'true' : 'false');
       b.setAttribute('tabindex', on ? '0' : '-1');
+      if (on) paneEl.setAttribute('aria-labelledby', b.id);
     });
     filesEl.textContent = String(s.files.length);
     if (pane === 'changes') {
