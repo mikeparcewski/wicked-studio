@@ -406,22 +406,81 @@ describe('Change something on a create card (A3)', () => {
     expect(within(form).getAllByTestId('proposal-answer-seat').filter((s) => s.getAttribute('aria-pressed') === 'true').map((s) => s.getAttribute('data-seat')).sort()).toEqual(['agy', 'codex']);
   });
 
-  it('a helper the tab thinks is signed out can be checked again: a fresh roster read lifts it', async () => {
-    setCachedRoster([
-      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, auth: 'signed_out' } as never,
-      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true } as never,
-    ]);
+  it('a helper the tab thinks is signed out is checked again with crew’s keyed sign-in check, not the cached read', async () => {
+    const stale = [
+      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, auth: 'signed_out' },
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true },
+    ];
+    setCachedRoster(stale as never);
+    const reads: string[] = [];
     const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
-    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => new URL(url, 'http://x').pathname.endsWith('/roster')
-      ? Promise.resolve(ok({ roster: [
-        { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
-        { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true },
-      ] }))
-      : base(url, init)));
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const u = new URL(url, 'http://x');
+      if (!u.pathname.endsWith('/roster')) return base(url, init);
+      reads.push(u.search);
+      // The plain read is the daemon's cached reading (still signed out); only the keyed check reads it fresh.
+      return Promise.resolve(ok(u.searchParams.get('refresh') === 'claude'
+        ? { roster: [{ ...stale[0], auth: undefined }, stale[1]], refresh: { key: 'claude', outcome: 'signed_in' } }
+        : { roster: stale }));
+    }));
     const form = await openForm();
     expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(true);
     fireEvent.click(within(form).getByTestId('proposal-answer-council-refresh'));
     await waitFor(() => expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(false));
+    expect(reads).toEqual(['?refresh=claude']);
+    // The control that asked is gone; focus stays in the helpers, and the line is a live status.
+    await waitFor(() => expect(document.activeElement).toBe(within(form).getByTestId('proposal-answer-seats')));
+    expect(within(form).getByTestId('proposal-answer-council').getAttribute('role')).toBe('status');
+  });
+
+  it('one check at a time, and a check that fails is said beside the helpers, with the control kept', async () => {
+    setCachedRoster([
+      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, auth: 'signed_out' } as never,
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true } as never,
+    ]);
+    let release: (r: Response) => void = () => {};
+    let reads = 0;
+    const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!new URL(url, 'http://x').pathname.endsWith('/roster')) return base(url, init);
+      reads += 1;
+      return new Promise<Response>((r) => { release = r; });
+    }));
+    const form = await openForm();
+    const button = within(form).getByTestId('proposal-answer-council-refresh');
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(reads).toBe(1);
+    expect(button.hasAttribute('disabled')).toBe(true);
+    release(new Response('{}', { status: 503 }));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-council-check-failed')).toBeTruthy());
+    expect(within(form).getByTestId('proposal-answer-council-refresh').hasAttribute('disabled')).toBe(false);
+  });
+
+  it('a refusal before accepting never marks another tab’s fresh Go as interrupted', async () => {
+    let release: (r: Response) => void = () => {};
+    decideAnswer = () => new Promise<Response>((r) => { release = r; });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    // Another tab's Go is recorded while this tab's answer is on its way; then this one is refused (the chat is busy).
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: Date.now(), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    release(new Response(JSON.stringify({ code: 'chat_busy', error: 'This chat already has a job running (run 0bad0bad). Wait, or stop that run.' }), { status: 409, headers: { 'content-type': 'application/json' } }));
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
+    expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
+  });
+
+  it('Go again after a launch_failed says Starting while its answer is on the way', async () => {
+    decideAnswer = () => new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: Date.now(), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    const again = await screen.findByTestId('artifact-proposal-go-again');
+    decideAnswer = () => new Promise<Response>(() => {});
+    fireEvent.click(again);
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
   });
 
   it('Cancel puts focus back on Change something', async () => {

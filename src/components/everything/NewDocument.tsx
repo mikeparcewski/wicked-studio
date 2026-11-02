@@ -5,7 +5,7 @@ import { setCachedRoster } from '../../store/rosterCache.js';
 import type { ArtifactProposal, ProposalEdits } from '../../api/chatArtifacts-wire.js';
 import { formSources, proposalFormEdits, proposalFormOf, proposalHelperEligible, repoKeysOf, type ProposalForm } from '../../board/artifactProposal.js';
 import { apiStatus } from '../../api/errors.js';
-import type { Project } from '../../api/types.js';
+import type { Project, RosterSeat } from '../../api/types.js';
 import { chosenSeats, defaultDocSeats, docClisJson } from '../../board/docSeats.js';
 import { newDocBody, newDocName } from '../../board/newDocument.js';
 import { useRoster } from '../../hooks/useRoster.js';
@@ -228,13 +228,38 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
     return () => { cancelled = true; };
   }, [roster, rosterTry]);
   const only = answer.helpersOnly === true;
-  /** Read the roster again (a helper may have signed in since this tab's copy); the shared cache tells every reader. */
-  const refreshRoster = (): void => {
-    setRosterError(false);
-    Promise.resolve()
-      .then(() => api.getRoster())
-      .then(({ roster: r }) => setCachedRoster(r))
-      .catch(() => setRosterError(true));
+  /** Check the unavailable chosen helpers' sign-in again (crew's bounded `/roster?refresh=<key>`, the Agents page's
+   *  Check now): one check at a time, its answer deposited in the shared cache only while this form is open. */
+  const [checking, setChecking] = useState(false);
+  const [checkFailed, setCheckFailed] = useState(false);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+  const seatsRef = useRef<HTMLDivElement | null>(null);
+  const refreshRoster = async (keys: readonly string[]): Promise<void> => {
+    if (checking || keys.length === 0) return;
+    setChecking(true);
+    setCheckFailed(false);
+    try {
+      let latest: RosterSeat[] | null = null;
+      for (const key of keys) {
+        const r = await api.getRoster(key);
+        if (!Array.isArray(r?.roster)) throw new Error('roster: no list');
+        latest = r.roster;
+      }
+      if (!alive.current || latest === null) return;
+      setCachedRoster(latest);
+      // The control that asked may be gone now (every chosen helper can work): focus stays in the helpers.
+      requestAnimationFrame(() => {
+        if (alive.current && !seatsRef.current?.contains(document.activeElement)) seatsRef.current?.focus();
+      });
+    } catch {
+      if (alive.current) setCheckFailed(true);
+    } finally {
+      if (alive.current) setChecking(false);
+    }
   };
   // Opened from a control that is now gone: focus goes to the form itself (never to Make it).
   const formRef = useRef<HTMLDivElement | null>(null);
@@ -330,7 +355,7 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
           {labelOf(form.project)}, or Make it is refused with the reason.
         </p>
       )}
-      <div data-testid="proposal-answer-seats" role="group" aria-label="Helpers" className="wk-made-new-field">
+      <div data-testid="proposal-answer-seats" ref={seatsRef} tabIndex={-1} role="group" aria-label="Helpers" className="wk-made-new-field">
         <span>Helpers</span>
         <span className="wk-prop-btns">
           {/* The roster's seats, plus any the proposal chose that the roster no longer has (said, and removable). */}
@@ -357,10 +382,12 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
             );
           })}
         </span>
-        <span data-testid="proposal-answer-council" role={form.helpers.length !== ANSWER_SEATS ? 'alert' : undefined}>
+        <span data-testid="proposal-answer-council" role={form.helpers.length !== ANSWER_SEATS ? 'alert' : 'status'}>
           {roster !== null && !form.helpers.every(eligible)
             ? <>A helper on this proposal is no longer available: leave it out and choose another, or{' '}
-                <button type="button" data-testid="proposal-answer-council-refresh" className="wk-since-toggle" onClick={refreshRoster}>check the helpers again</button>.</>
+                <button type="button" data-testid="proposal-answer-council-refresh" className="wk-since-toggle" disabled={checking}
+                  onClick={() => void refreshRoster(form.helpers.filter((k) => !eligible(k)))}>{checking ? 'checking…' : 'check the helpers again'}</button>.
+                {checkFailed && <span data-testid="proposal-answer-council-check-failed"> Studio couldn’t check them again; try once more.</span>}</>
             : form.helpers.length === ANSWER_SEATS
               ? `${seatName(form.helpers[0]!)} and ${seatName(form.helpers[1]!)}: one writes, the other checks`
               : 'Choose two helpers: one writes the document and another checks it.'}

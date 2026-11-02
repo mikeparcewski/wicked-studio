@@ -48,6 +48,8 @@ const terminal = (s: ChatProposalView['state']): boolean => s === 'decided' || s
 
 export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged }: ArtifactProposalCardProps): React.ReactElement {
   const [busy, setBusy] = useState(false);
+  /** A Go of this tab is on its way (from the card or its helpers-only form). */
+  const [going, setGoing] = useState(false);
   // A refusal's words, and whether its own view settled the card (only then does it stay beside a settled card: a stale
   // refusal never hangs under an answer another tab gave meanwhile).
   const [error, setError] = useState<{ words: string; settles: boolean } | null>(null);
@@ -92,6 +94,9 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
     if (sending.current) return 'An answer to this proposal is already on its way.';
     sending.current = true;
     setBusy(true);
+    setGoing(decision === 'go');
+    // A new answer starts clean: the last one's refusal no longer says anything about this one.
+    setRefusedAt(null);
     setError(null);
     setNote(null);
     const keep = (v: ChatProposalView): void => {
@@ -110,11 +115,15 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
       // The card keeps every refusal; where it shows depends on what is on screen when it renders (the form while it is
       // open, else under the card), never on the response alone: a live record may already have closed the form.
       setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
-      setRefusedAt(Date.now());
+      // Only crew's launch_failed says THIS Go's accepting record stopped. A refusal before accepting recorded nothing
+      // of this Go's, and a transport failure proves nothing: an accepting record on screen then is someone else's Go
+      // (another tab), or this one still starting.
+      if (refusal.code === 'launch_failed') setRefusedAt(Date.now());
       return refusal.words;
     } finally {
       sending.current = false;
       setBusy(false);
+      setGoing(false);
       onChanged();
     }
   };
@@ -135,11 +144,12 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   // card says so instead of "Interrupted · Go again".
   // Judged against the clock at every render; the timer only makes a render happen when the window closes.
   const [, setTick] = useState(0);
-  // A Go that crew answered with a refusal (launch_failed, helper_unavailable, …) is not starting, whatever its age: the
+  // A Go whose launch crew said failed (launch_failed) is not starting, whatever its age: the
   // card offers Go again at once. A newer accepting record (another Go) starts the window again.
   const [refusedAt, setRefusedAt] = useState<number | null>(null);
   const refused = refusedAt !== null && view.state === 'accepting' && (view.acceptingAt ?? 0) <= refusedAt;
-  const starting = !refused && proposalStarting(view, Date.now(), busy && !answering);
+  // This tab's Go on its way is starting whatever came before it (from the card or the helpers-only form alike).
+  const starting = going || (!refused && proposalStarting(view, Date.now(), false));
   useEffect(() => {
     if (view.state !== 'accepting' || busy || view.acceptingAt === undefined) return;
     // Never skipped: a window that closed between the render and this effect still gets its render (delay 0).
