@@ -303,6 +303,12 @@ describe('untrusted wire and search text (xreview r1)', () => {
       { id: 'h', status: 'available', inputs: [{ id: 'problem', kind: 'text' }], launch: { kind: 'run', workflow: 'h' } },
     ] })!;
     expect(odd.entries.map((e) => [e.form, e.inputs.map((i) => i.required)])).toEqual([[false, []], [true, [true]]]);
+    // An input of a kind studio cannot ask for (or with no kind) makes the form unreadable (codex r3).
+    const unknown = catalogFromWire({ entries: [
+      { id: 'i', status: 'available', inputs: [{ id: 'goal', kind: 'future-text', required: true }], launch: { kind: 'run', workflow: 'i' } },
+      { id: 'j', status: 'available', inputs: [{ id: 'goal', required: false }], launch: { kind: 'run', workflow: 'j' } },
+    ] })!;
+    expect(unknown.entries.map((e) => e.form)).toEqual([false, false]);
     expect(catalogFromDefs([{ id: 'bug', phases: [] } as unknown as WorkflowDef], null).entries[0]!.form).toBe(false);
   });
 

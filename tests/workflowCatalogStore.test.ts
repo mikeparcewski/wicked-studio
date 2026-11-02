@@ -3,9 +3,10 @@
  * is still the newest asked for that project; a transient failure keeps a catalog already read; a
  * 404 is an older daemon's answer.
  */
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../src/api/client.js';
-import { peekWorkflowCatalog, readWorkflowCatalog, resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
+import { peekWorkflowCatalog, readWorkflowCatalog, resetWorkflowCatalog, useWorkflowCatalog } from '../src/store/workflowCatalog.js';
 
 const catalog = (title: string): unknown => ({ entries: [{ id: 'a', title, status: 'available', launch: { kind: 'run', workflow: 'a' } }] });
 const titleOf = (load: Awaited<ReturnType<typeof readWorkflowCatalog>>): string | null =>
@@ -57,5 +58,24 @@ describe('readWorkflowCatalog', () => {
     resetWorkflowCatalog();
     release(catalog('stale'));
     expect(await pending).toBeNull();
+  });
+});
+
+describe('useWorkflowCatalog', () => {
+  it('two mounted readers of one project both show the newer answer, and keep it after a stale one lands (codex r3)', async () => {
+    let releaseFirst!: (v: unknown) => void;
+    let releaseSecond!: (v: unknown) => void;
+    vi.spyOn(api, 'getWorkflowCatalog')
+      .mockImplementationOnce(() => new Promise((r) => { releaseFirst = r; }))
+      .mockImplementationOnce(() => new Promise((r) => { releaseSecond = r; }));
+    const a = renderHook(() => useWorkflowCatalog('p1'));
+    const b = renderHook(() => useWorkflowCatalog('p1'));
+    expect(a.result.current.state).toBe('loading');
+    await act(async () => { releaseSecond(catalog('newer')); await Promise.resolve(); });
+    expect(titleOf(a.result.current)).toBe('newer');
+    expect(titleOf(b.result.current)).toBe('newer');
+    await act(async () => { releaseFirst(catalog('stale')); await Promise.resolve(); });
+    expect(titleOf(a.result.current)).toBe('newer');
+    expect(titleOf(b.result.current)).toBe('newer');
   });
 });

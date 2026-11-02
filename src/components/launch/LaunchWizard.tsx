@@ -134,9 +134,15 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // shown meanwhile, so the picked workflow's rules (repository, words) never flip while it loads.
   // Nor does a failed read for the new project swap crew's catalog for today's list (xreview r2): once
   // this daemon has answered with its catalog, the list never replaces it in this open of the modal.
-  const lastRead = useRef<CatalogView | null>(null);
-  if (read !== null && (read.source === 'catalog' || lastRead.current?.source !== 'catalog')) lastRead.current = read;
-  const catalog = lastRead.current ?? read;
+  const catalogKey = draft.projectId === null || draft.projectId === '' || draft.projectId === UNFILED_MOUNT ? '' : draft.projectId;
+  const lastRead = useRef<{ view: CatalogView; key: string } | null>(null);
+  if (read !== null && (read.source === 'catalog' || lastRead.current?.view.source !== 'catalog')) lastRead.current = { view: read, key: catalogKey };
+  const catalog = lastRead.current?.view ?? read;
+  // What is shown may be the previous project's catalog; it does not say what THIS project offers, so a
+  // card picked from it waits for this project's read before it launches (codex r3).
+  // (Only crew's catalog says what a project offers; today's list on an older daemon authorizes nothing.)
+  const scopePending = catalogLoad.state === 'loading' && lastRead.current !== null && lastRead.current.view.source === 'catalog'
+    && lastRead.current.key !== catalogKey;
   const [now] = useState(() => Date.now());
   const roster = useRoster();
   // A greyed helper's Sign in opens its sign-in modal over the wizard; closing it re-reads the roster,
@@ -290,6 +296,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // Review re-checks every rule (codex r1: another tab may have dropped the last helper meanwhile).
   const launchBlocker: string | null =
     entryBlocker !== null ? entryBlocker
+    : scopePending && draft.catalogEntryId !== null ? 'Checking this workflow for the chosen project…'
     : drafting ? draftBlocker
     : demoing ? (demoProblem ?? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.' : null))
     : draft.workflowId === null ? 'Choose the kind of job.'

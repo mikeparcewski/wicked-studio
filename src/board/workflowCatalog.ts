@@ -128,15 +128,20 @@ export function aboutMinutes(m: number): string {
 
 const COST: Readonly<Record<string, string>> = { low: 'low cost', medium: 'medium cost', high: 'high cost' };
 
-/** The form, or null when it is missing or any input in it cannot be read (then the words stay required). */
+/** The input kinds WIRE v1 defines; any other kind is an input studio cannot ask for. */
+const INPUT_KINDS: readonly string[] = ['text', 'repo', 'project', 'url', 'requirements', 'seats'];
+
+/** The form, or null when it is missing or any input in it cannot be read (then the words stay required):
+ *  no id, or a kind studio does not know (codex r3: a required unknown kind must not relax the words). */
 function inputsOf(v: unknown): CatalogInput[] | null {
   if (!Array.isArray(v)) return null;
   const out = v.flatMap((x) => {
     const r = rec(x);
     const key = str(r?.['id']);
-    if (r === null || key === null) return [];
+    const kind = str(r?.['kind']);
+    if (r === null || key === null || kind === null || !INPUT_KINDS.includes(kind)) return [];
     // Fail closed: only an explicit `required: false` makes an input optional.
-    return [{ key, label: str(r['label']) ?? key, kind: str(r['kind']) ?? 'text', required: r['required'] !== false }];
+    return [{ key, label: str(r['label']) ?? key, kind, required: r['required'] !== false }];
   });
   return out.length === v.length ? out : null;
 }

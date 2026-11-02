@@ -545,3 +545,25 @@ describe('round 2 (xreview r2): the picked card stays the picked card; nothing n
     expect(screen.getByTestId('launch-wizard-next')).not.toBeDisabled();
   });
 });
+
+describe('round 3 (codex r3): a card picked from another project’s catalog waits for this project’s', () => {
+  it('a project switch with this project’s read still out: the launch says it is checking, and waits', async () => {
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [{
+      id: 'rr', category: 'analyze', title: 'Review recent work', summary: 'Recommendations.', outcome: 'A report', needs: ['runs'], inputs: [],
+      status: 'available', launch: { kind: 'run', workflow: 'review-recent-work' }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null },
+    }] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-review-recent-work'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/workflows/catalog')
+      ? new Promise<Response>(() => {}) : realFetch(url, init))));
+    fireEvent.change(screen.getByTestId('launch-wizard-project'), { target: { value: 'p2' } });
+    // The rules stay (Next is not held), but the launch waits for p2's answer.
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('review');
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Checking this workflow for the chosen project');
+    expect(screen.getByTestId('launch-wizard-launch')).toBeDisabled();
+  });
+});
