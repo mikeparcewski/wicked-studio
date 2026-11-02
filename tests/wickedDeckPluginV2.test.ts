@@ -5,6 +5,7 @@ import surfaces from '../src/plugins/wicked-deck/surfaces.json';
 import { canonicalSurfaces, parseSurfaces } from '../src/editors/surfaces.js';
 import { SAMPLE_DECK } from '../src/editors/fakeAdapter.js';
 import { copyTokens, THEMES } from '../src/plugins/_shared/style.js';
+import { NESTED_PRELUDE } from '../src/plugins/_shared/nestedGuard.js';
 
 type Message = { type?: string; id?: string; re?: string; ok?: boolean; payload?: Record<string, unknown> };
 const env = (type: string, payload: unknown, id?: string) => ({ p: 'wicked.editor', v: 1, type, payload, ...(id === undefined ? {} : { id }) });
@@ -88,6 +89,10 @@ describe('wicked-deck protocol 2 card and full', () => {
     window.dispatchEvent(new Event('resize'));
     expect(stageFrame().srcdoc).toContain('__wickedInstrumentBridge');
     expect(stageFrame().srcdoc).toContain("type:'deck-extents'");
+    // The slide's scripts run only after the WebRTC prelude (nestedGuard.ts): the policy leads <head>.
+    const slide = new DOMParser().parseFromString(stageFrame().srcdoc, 'text/html');
+    expect(slide.head.firstElementChild!.getAttribute('http-equiv')).toBe('Content-Security-Policy');
+    expect(Array.from(slide.querySelectorAll('script')).every((s) => (s.textContent ?? '').startsWith(NESTED_PRELUDE))).toBe(true);
     expect(stageFrame().style.width).toBe('1280px'); expect(stageFrame().style.height).toBe('720px');
     expect(stageFrame().style.transform).toBe('scale(0.75)');
     expect(document.querySelector<HTMLElement>('#slide-box')!.style.width).toBe('960px');
