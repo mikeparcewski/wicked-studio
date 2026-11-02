@@ -582,11 +582,12 @@ $$('[data-drawer]').forEach((card) => {
   g.players.push({ sync: step });
   hold(card, (h) => { held = h; step(); });
   begin(0);
+  card.classList.add('is-still'); // off screen until the observer says otherwise
   inView(card, 0.6, () => {
     seen = true;
     if (g.paused) finish(0); else begin(0);
     step();
-  }, () => { seen = false; stop(); begin(0); });
+  }, () => { seen = false; stop(); begin(0); card.classList.add('is-still'); });
 })();
 
 /* ── Get it: the recommended command types itself in each time it comes on screen ─────────── */

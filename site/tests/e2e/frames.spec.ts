@@ -213,6 +213,34 @@ test('enlarged text in a drawer pushes its actions down instead of covering the 
 
 // A minimum font size (a low-vision setting) makes every text larger: nothing may be cut off inside
 // its box, the relay rows may not run into each other, and the scenes and counts must still start.
+// A phone with a large minimum font size: the search table, the demo's Pause and Claude Code's sandbox
+// line stay inside their boxes (motion on, so the Pause button is there).
+test.describe('a 320px phone with a 28px minimum font size', () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+  test('the search table, the demo Pause and the sandbox text stay inside their boxes', async ({ page }) => {
+    await page.goto('/');
+    await page.addStyleTag({ content: 'body *:not(svg):not(svg *) { font-size: max(28px, 1em) !important; }' });
+    await page.evaluate(async () => { await document.fonts.ready; await new Promise((r) => setTimeout(r, 200)); });
+    await page.locator('.agent-chip[data-agent="Claude Code"]').evaluate((el) => (el as HTMLElement).click());
+    const bad = await page.evaluate(() => {
+      const out: string[] = [];
+      const inside = (el: Element, box: Element, label: string) => {
+        const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+        const over = Math.max(b.left - r.left, r.right - b.right);
+        if (over > 1.5) out.push(`${label} by ${over.toFixed(1)}px`);
+      };
+      const card = document.querySelector('[data-search]')!;
+      inside(card.querySelector('.hits')!, card, 'search table');
+      document.querySelectorAll('.hits th, .hits td').forEach((c) => inside(c, card, 'search cell'));
+      inside(document.querySelector('[data-demo-pause]')!, document.querySelector('[data-ide]')!, 'demo Pause');
+      const sbx = document.querySelector('.sbx')!;
+      document.querySelectorAll('.sbx-agent > span, .sbx-sees > span').forEach((s) => { if (getComputedStyle(s).visibility !== 'hidden') inside(s, sbx, 'sandbox text'); });
+      return out;
+    });
+    expect(bad).toEqual([]);
+  });
+});
+
 test.describe('with a 24px minimum font size', () => {
   test.use({ viewport: { width: 1280, height: 660 } });
   const BIG = 'body *:not(svg):not(svg *) { font-size: max(24px, 1em) !important; }';

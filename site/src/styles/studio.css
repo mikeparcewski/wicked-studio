@@ -1104,13 +1104,17 @@ html[data-theme="light"] .amber-floor {
 .sbx-agent { display: grid; }
 .sbx-agent > span { grid-area: 1 / 1; }
 .sbx-sizer { visibility: hidden; }
+.sbx-sees, .sbx-agent { grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .sbx-sees { display: grid; }
-.sbx-sees > span { grid-area: 1 / 1; }
+.sbx-sees > span, .sbx-agent > span { grid-area: 1 / 1; min-width: 0; overflow-wrap: anywhere; }
+.sbx { min-width: 0; }
 .sbx-s2 { visibility: hidden; }
 .sandbox[data-sub] .sbx-s1 { visibility: hidden; }
 .sandbox[data-sub] .sbx-s2 { visibility: visible; }
-.hits th { white-space: nowrap; }
-@media (max-width: 600px) { .hits-bar { width: 28%; } }
+/* phones: a shorter bar leaves the repo column room for "wicked-studio" on one line; the names may
+   still wrap when a large minimum font size needs it, so the table never outgrows its card */
+@media (max-width: 600px) { .hits-bar { width: 24%; } .hits th { width: auto; } }
+.hits th, .hits td { overflow-wrap: anywhere; }
 
 /* what's new: a second, quieter line where an item needs one */
 .news-panel p.news-sub { font-size: var(--text-body); line-height: 1.5; color: var(--muted); }
@@ -1133,3 +1137,9 @@ html[data-theme="light"] .amber-floor {
 /* a stopped search (paused, held, off screen) stops its caret; a stopped tour stops its waveform */
 .reach-card.is-still .sq-caret { animation-play-state: paused; }
 .news.is-still .av-wave i { animation-play-state: paused; }
+/* phones: the demo's title bar wraps (the note shrinks first) so its Pause button is never cut off by
+   the demo's edge, even with a large minimum font size */
+@media (max-width: 600px) {
+  .ide-bar { flex-wrap: wrap; row-gap: 6px; }
+  .ide-url { flex: 1 1 0; min-width: 0; max-width: none; overflow-wrap: anywhere; }
+}

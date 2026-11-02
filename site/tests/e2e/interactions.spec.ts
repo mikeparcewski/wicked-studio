@@ -651,12 +651,21 @@ test('a paused search stops its caret, and a paused tour stops its waveform', as
   await reach.getByRole('button', { name: 'Pause the examples' }).click();
   const caret = reach.locator('.sq-caret');
   await expect.poll(() => caret.evaluate((el) => el.getAnimations().map((a) => a.playState).join(','))).toBe('paused');
+  // the caret is still off screen too
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(reach.locator('.reach-card[data-search]')).toHaveClass(/is-still/);
   const news = page.locator('.new');
   await news.evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await page.mouse.move(5, 690);
   await news.getByRole('button', { name: 'Pause the tour of what is new' }).click();
+  // pick Voice again while paused: its waveform starts over, and it must be held, not running
+  await news.getByRole('tab', { name: 'Guided asks' }).click();
+  await news.getByRole('tab', { name: 'Voice' }).click();
+  await page.mouse.move(5, 690);
   const wave = news.locator('.av-wave i').first();
-  await expect.poll(() => wave.evaluate((el) => el.getAnimations().map((a) => a.playState).join(','))).toMatch(/^(paused|)$/);
+  const states = await wave.evaluate((el) => el.getAnimations().map((a) => a.playState));
+  expect(states.length, 'the waveform has an animation to hold').toBeGreaterThan(0);
+  expect(states.every((st) => st === 'paused'), states.join(',')).toBe(true);
 });
 
 test('opening the Experiments menu with the mouse hides the button tooltip over it', async ({ page }) => {
