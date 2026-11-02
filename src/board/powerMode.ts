@@ -541,11 +541,18 @@ function stateAt(p: PowerState): number {
  */
 export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | null | undefined, local: PowerState | null = null, localAt: number | null = null): PowerState | null {
   let base = p;
-  // This page's own answer (a flip, a raise, a pause answered) is the newest word on what it changed.
-  const usedLocal = local !== null && (base === null || historyTip(local) >= historyTip(base));
+  // This page's own answer (a flip, a raise, a pause answered) is the newest word on what it changed, until the session
+  // catches up with it.
+  const usedLocal = local !== null && (base === null || historyTip(local) > historyTip(base));
+  // Caught up (the same rigor changes and flips): the session's live progress (turns, the turn log, the outcome,
+  // check-points, hand-off) is the newer word, not the frozen snapshot this page's POST answered with (Copilot on #937:
+  // after a flip the panel stopped updating). Only a pause this page already answered stays answered until the session
+  // says so too.
+  const caughtUp = !usedLocal && local !== null && base !== null && historyTip(local) === historyTip(base);
   if (usedLocal) base = { ...local! };
+  else if (caughtUp && base!.pause !== null && local!.pause === null && localAt !== null && base!.pause.at <= localAt) base = { ...base!, pause: null };
   if (base === null) return null;
-  const since = Math.max(stateAt(base), usedLocal && localAt !== null ? localAt : 0);
+  const since = Math.max(stateAt(base), (usedLocal || caughtUp) && localAt !== null ? localAt : 0);
   const history = new Map<number, RigorChange>(base.history.map((c) => [c.seq, c]));
   let toggles = base.toggles;
   let checkpoints = base.checkpoints;

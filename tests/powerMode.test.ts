@@ -131,6 +131,24 @@ describe('the state as it stands now', () => {
     const local = state({ on: false, toggles: [{ at: at(25), on: false, by: 'you', reason: null, stayPhased: [] }] });
     expect(mergePower(state(), [], local)!.on).toBe(false);
   });
+  it('once the session caught up with this page\'s flip, its live progress shows, not the flip answer\'s frozen snapshot (Copilot on #937)', () => {
+    const flip = [{ at: at(25), on: false, by: 'you', reason: null, stayPhased: [] }];
+    const local = state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 2, inTurn: true, sessionRestarts: 0 }, checkpoints: 2 });
+    // the session read after the flip: the same flip, and the run has moved on since
+    const session = state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 6, inTurn: false, sessionRestarts: 0 }, checkpoints: 4 });
+    const merged = mergePower(session, [], local, at(25))!;
+    expect(merged.orchestrator.turns).toBe(6);
+    expect(merged.checkpoints).toBe(4);
+    expect(merged.on).toBe(false);
+    // before the session caught up (an older read without the flip), this page's answer still leads
+    expect(mergePower(state(), [], local, at(25))!.on).toBe(false);
+  });
+  it('a pause this page answered stays answered while the caught-up session still shows it; a later pause shows', () => {
+    const pz = (min: number) => ({ at: at(min), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const });
+    const local = state({ pause: null });
+    expect(mergePower(state({ pause: pz(29) }), [], local, at(30))!.pause).toBeNull();
+    expect(mergePower(state({ pause: pz(31) }), [], local, at(30))!.pause).toEqual(pz(31));
+  });
   it('a checkpoint frame that opened a pause pauses the run until the next turn starts; this page\'s answer clears it', () => {
     const pz = { at: at(29), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };
     const cp = { type: 'powerCheckpointReached', session: 'r', ord: 1, checkpoint: 3, turn: 3, trigger: 'turn', head: null, picked: 0, rigor: 'highest', paused: true, pause: pz, ts: at(29) };
