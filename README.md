@@ -2,14 +2,19 @@
 
 > [![npm](https://img.shields.io/npm/v/wicked-studio)](https://www.npmjs.com/package/wicked-studio) · [![CI](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml) · [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-**Where you direct your coding agents.** *Your coding agents do the work. A different agent checks
-it against your rules. You get the evidence.* wicked-studio is the browser UI for running the
-coding-agent CLIs you already use (Claude Code, Codex, GitHub Copilot, OpenCode, Pi) as checked
-workers: you start a job, the agents do the work in sandboxes behind verification gates, and you
-approve the decisions that matter — with the evidence behind every "done" one click away.
+**The IDE for running a team of coding agents.** *Your coding agents do the work. A different agent
+checks it against your rules. You get the evidence.* By default a different agent reviews the work.
+When none can, the job stops unless you launch it as "reduced assurance", which is labelled on the
+job, every gate and the delivery. A saved workflow may require fewer checks; its requirements are
+listed in the receipts.
 
-It's the human surface of the [wicked](https://wickedagile.com) platform; the
-[wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon runs the jobs and bundles studio.
+wicked-studio is the browser app where you run Claude Code, Codex, GitHub Copilot, OpenCode and Pi
+as a team. Start a job with a chat: it proposes a plan, and once you confirm it the agents work in
+sandboxes while you watch. With whisper.cpp installed, you can ask questions out loud and steer jobs
+already running, each instruction confirmed on screen first. Gate decisions come to you as one
+card, and each job's evidence is a click away. Learn suggests rules and memories from how your team
+works, for you to accept, and jobs can propose what they learned for your approval.
+The [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon runs the jobs and bundles studio.
 
 ---
 
@@ -21,13 +26,15 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 - **Start with a chat.** **New job → Start with chat**: describe what you want, the chat proposes a
   plan, and nothing starts until you confirm it. (Tick "Don't show this again" to go straight to
   chat next time.)
-- **Sign your agents in once.** The **Agents** page signs each agent in, inside a container. Jobs run
-  every agent in a hardened sandbox (crew needs a container runtime: Rancher Desktop, Docker,
-  Podman, Colima or OrbStack). Credentials stay in a broker and the sandbox sees placeholders,
+- **Sign your agents in once.** The **Agents** page signs each agent in: Claude Code and GitHub
+  Copilot through a login container; Codex, Pi and OpenCode with their host CLIs and a temporary
+  home (wicked-core `src/seat_login.rs`). Jobs run every agent in a hardened sandbox (crew needs a
+  container runtime: Rancher Desktop, Docker, Podman, Colima or OrbStack). Credentials stay in a broker and the sandbox sees placeholders,
   except a Claude Code seat on a Claude subscription, which receives its sign-in token (if a step writes it
   into the work, the step fails and its delivery is blocked).
 - **Rules and memory, kept apart.** **Steering** holds your rules, each with an explicit reach
-  (everywhere, one project, or one repo). **Memory** is its own page: what happened and what you told
+  (every repository or one project; a rule can also target a language, a layer or a framework).
+  **Memory** is its own page: what happened and what you told
   it, with your own memories applying across projects. Agents suggest both; you approve. A finished
   job says what it learned ("3 learnings proposed · 2 waiting for you"), and each proposal in
   Memory's queue names the job it came from.
