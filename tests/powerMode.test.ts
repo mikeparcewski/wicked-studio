@@ -148,41 +148,23 @@ describe('the state as it stands now', () => {
     // before the session caught up (a read without the flip), this page's answer leads
     expect(mergePower(state(), [], local, at(25))!.on).toBe(false);
   });
-  it('on a caught-up tie the session replaces the answer only where strictly further along; hand-off steps merge by step (codex r4 on 9d)', () => {
+  it('on a caught-up tie the session\'s progress replaces the answer\'s whole only when strictly further along (codex r4-r7 on 9d)', () => {
     const flip = [{ at: at(25), on: false, by: 'you', reason: null, stayPhased: [] }];
     const step = (name: string, status: string, min: number) => ({ step: name, status, at: at(min), seat: null, summary: null, ord: null }) as never;
     const local = state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'passed', 26), step('review', 'running', 26)] } });
-    // the same turn count: the answer's orchestrator stands; a session hand-off with the same moment keeps the answer's results
-    const session = state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'running', 26)] } });
-    const merged = mergePower(session, [], local, at(25))!;
-    expect(merged.handoff!.steps.map((st) => [st.step, st.status])).toEqual([['checks', 'passed'], ['review', 'running']]);
-    expect(merged.orchestrator).toEqual(local.orchestrator);
-    // a later session record of a step wins; a new round wins whole
-    const later = mergePower(state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('review', 'passed', 27)] } }), [], local, at(25))!;
-    expect(later.handoff!.steps.map((st) => [st.step, st.status])).toEqual([['checks', 'passed'], ['review', 'passed']]);
-    // a session hand-off that is not well formed is ignored, never a crash
-    const partial = mergePower(state({ on: false, toggles: flip, handoff: { round: 1 } as never }), [], local, at(25))!;
-    expect(partial.handoff!.steps).toHaveLength(2);
-  });
-  it('turn records merge by turn, a completed one over an open one; unreadable session data is ignored (codex r5 on 9d)', () => {
-    const flip = [{ at: at(25), on: false, by: 'you', reason: null, stayPhased: [] }];
-    const rec = (turn: number, ended: number | null) => ({ turn, attempt: 0, cli: 'claude', startedAt: turn, endedAt: ended, outcome: null, summary: ended === null ? null : `turn ${turn} done` });
-    const local = state({ on: false, toggles: flip, turnLog: [rec(1, 10), rec(2, 20)] });
-    // the session's window moved on (turn 3) while its turn 2 is still the open record it saw
-    const session = state({ on: false, toggles: flip, turnLog: [rec(2, null), rec(3, null)] });
-    const merged = mergePower(session, [], local, at(25))!;
-    expect(merged.turnLog!.map((t) => [t.turn, t.endedAt])).toEqual([[1, 10], [2, 20], [3, null]]);
-    // unreadable session turn records or hand-off steps leave this page's intact, never a crash
-    const bad = state({ on: false, toggles: flip, turnLog: [null] as never, handoff: { round: 1, maxRounds: 3, steps: [null] } as never });
-    const kept = mergePower(bad, [], { ...local, handoff: { round: 1, maxRounds: 3, steps: [{ step: 'checks', status: 'passed', at: at(26) } as never] } }, at(25))!;
-    expect(kept.turnLog).toHaveLength(2);
-    expect(kept.handoff!.steps).toHaveLength(1);
-    // partial records (a step without a seat, a turn without a cli) are unreadable too (codex r6)
-    const partial = state({ on: false, toggles: flip, turnLog: [{ turn: 3, attempt: 0, summary: 'x' }] as never,
-      handoff: { round: 1, maxRounds: 3, steps: [{ step: 'review', status: 'running', at: at(30) }] } as never });
-    const safe = mergePower(partial, [], { ...local, handoff: { round: 1, maxRounds: 3, steps: [{ step: 'checks', status: 'passed', at: at(26), seat: null, summary: null, ord: null } as never] } }, at(25))!;
-    expect(safe.turnLog).toHaveLength(2);
-    expect(safe.handoff!.steps.map((st) => st.step)).toEqual(['checks']);
+    // not further along (the same turns, the same moment): the answer's progress stands, whatever the session holds
+    for (const session of [
+      state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'running', 26)] } }),
+      state({ on: false, toggles: flip, handoff: { round: 1 } as never, turnLog: [null] as never }),
+    ]) {
+      const kept = mergePower(session, [], local, at(25))!;
+      expect(kept.handoff).toEqual(local.handoff);
+      expect(kept.orchestrator).toEqual(local.orchestrator);
+    }
+    // a later state: the session's hand-off replaces the answer's whole, as a leading session snapshot does
+    const later = state({ on: false, toggles: flip, handoff: { round: 2, maxRounds: 3, steps: [step('review', 'running', 30)] } });
+    expect(mergePower(later, [], local, at(25))!.handoff).toEqual(later.handoff);
+    expect(mergePower(later, [], local, at(25))!.on).toBe(false);
   });
   it('a checkpoint frame that opened a pause pauses the run until the next turn starts; this page\'s answer clears it', () => {
     const pz = { at: at(29), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };

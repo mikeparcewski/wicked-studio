@@ -49,7 +49,8 @@ export interface NeedsSourcesState {
   /** When each wire was last read (answered or not), epoch ms. */
   readAt: Partial<Record<NeedsSource, number>>;
   /** Whether each wire's LAST read answered (true) or failed (false: an error, a 404, a malformed answer). The queue keeps
-   *  its last value either way; a reader that must not present a failed read as a count checks this. */
+   *  its last value either way; a reader that must not present a failed read as a count checks this. A deposit (another
+   *  surface's write, possibly a local patch) never sets it: only this store's own read does (codex r7 on 9d). */
   readOk: Partial<Record<NeedsSource, boolean>>;
   /** Read every wire not read within `maxAgeMs` (default: only never-read wires). */
   load: (maxAgeMs?: number) => Promise<void>;
@@ -116,10 +117,10 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     readOk: {},
     load: (maxAgeMs = Infinity) => Promise.all(SOURCES.map((s) => read(s, maxAgeMs))).then(() => undefined),
     loadRepos: (maxAgeMs = Infinity) => read('repos', maxAgeMs).then(() => get().repos ?? []),
-    depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() }, readOk: { ...s.readOk, chats: true } })),
+    depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() } })),
     depositProposals: (pending) =>
-      set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() }, readOk: { ...s.readOk, proposals: true } })),
-    depositRepos: (repos) => set((s) => ({ repos, readAt: { ...s.readAt, repos: Date.now() }, readOk: { ...s.readOk, repos: true } })),
+      set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() } })),
+    depositRepos: (repos) => set((s) => ({ repos, readAt: { ...s.readAt, repos: Date.now() } })),
   };
 });
 

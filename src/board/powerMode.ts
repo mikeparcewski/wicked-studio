@@ -2,7 +2,7 @@ import type { CoreEvent } from '../api/types.js';
 import { arrivedAt } from '../store/events.js';
 import {
   POWER_EVENT_TYPES, RIGORS, isRigor, rigorRank,
-  type HandoffStep, type PowerActivityEvent, type PowerCheckpointEvent, type PowerState, type PowerToggle, type PowerTurnEvent, type PowerTurnRecord,
+  type HandoffStep, type PowerActivityEvent, type PowerCheckpointEvent, type PowerState, type PowerToggle, type PowerTurnEvent,
   type Rigor, type RigorChange, type RigorPlan,
 } from '../api/power.js';
 
@@ -596,72 +596,23 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
 /**
  * This page's answer, with the run's live progress from a session read that has caught up with it (the same rigor
  * changes and flips): the answer is a snapshot taken when it was sent, so its turns, turn log, check-points, hand-off
- * and outcome froze there (Copilot on #937: after a flip the power panel stopped updating). The session's value
- * replaces the answer's only where it is STRICTLY further along; on a tie the answer's stands, as before. Hand-off steps
- * merge by step (the later record wins, a tie keeps the answer's); a session hand-off that is not well formed is
- * ignored. What the answer changed (on, rigor, history, toggles, pause) stays the answer's.
+ * and outcome froze there (Copilot on #937: after a flip the power panel stopped updating). When the session is
+ * STRICTLY further along (more turns started, or a later state), its progress replaces the answer's whole, exactly as a
+ * session snapshot is used when it leads; otherwise the answer stands, as at ca561f8. What the answer changed (on,
+ * rigor, history, toggles, pause) stays the answer's.
  */
 function withLiveProgress(local: PowerState, p: PowerState): PowerState {
-  const turnLog = mergeTurnLog(local.turnLog, p.turnLog);
+  const turns = (s: PowerState): number => (typeof s.orchestrator?.turns === 'number' && Number.isFinite(s.orchestrator.turns) ? s.orchestrator.turns : -1);
+  const ahead = turns(p) > turns(local) || stateAt(p) > stateAt(local);
+  if (!ahead) return { ...local };
   return {
     ...local,
-    orchestrator: p.orchestrator.turns > local.orchestrator.turns ? p.orchestrator : local.orchestrator,
-    ...(turnLog !== undefined ? { turnLog } : {}),
-    checkpoints: Math.max(p.checkpoints, local.checkpoints),
-    handoff: mergeHandoff(local.handoff, p.handoff),
-    outcome: local.outcome ?? p.outcome,
+    orchestrator: p.orchestrator,
+    ...(p.turnLog !== undefined ? { turnLog: p.turnLog } : {}),
+    checkpoints: p.checkpoints,
+    handoff: p.handoff,
+    outcome: p.outcome,
   };
-}
-
-/** The turn records of both, merged by turn (attempt and number): a completed record beats an open one, a later end
- *  beats an earlier, a tie keeps this page's. An unreadable session log is ignored (codex r5 on 9d). The newest 50
- *  stay, oldest first. */
-function mergeTurnLog(mine: PowerState['turnLog'], theirs: PowerState['turnLog']): PowerState['turnLog'] {
-  if (!Array.isArray(theirs) || !theirs.every(readableTurn)) return mine;
-  const key = (t: PowerTurnRecord): string => `${t.attempt}:${t.turn}`;
-  const rank = (t: PowerTurnRecord): number => (t.endedAt === null ? -1 : t.endedAt);
-  const byKey = new Map<string, PowerTurnRecord>();
-  for (const t of mine ?? []) byKey.set(key(t), t);
-  for (const t of theirs) {
-    const had = byKey.get(key(t));
-    if (had === undefined || rank(t) > rank(had)) byKey.set(key(t), t);
-  }
-  const merged = [...byKey.values()].sort((a, b) => a.attempt - b.attempt || a.turn - b.turn);
-  return merged.slice(-50);
-}
-
-// Session data is adopted into this page's answer only when every field the merge and the panel read is well formed
-// (codex r5/r6 on 9d): an unreadable record leaves this page's answer as it was, never a crash in rendering.
-const strOrNull = (v: unknown): boolean => v === null || typeof v === 'string';
-const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const STEP_STATUS = new Set(['pending', 'running', 'passed', 'failed', 'skipped']);
-
-function readableTurn(t: unknown): t is PowerTurnRecord {
-  if (t === null || typeof t !== 'object') return false;
-  const r = t as Record<string, unknown>;
-  return finite(r['turn']) && finite(r['attempt']) && typeof r['cli'] === 'string' && finite(r['startedAt'])
-    && (r['endedAt'] === null || finite(r['endedAt'])) && strOrNull(r['summary']) && strOrNull(r['outcome']);
-}
-
-function readableStep(st: unknown): st is HandoffStep {
-  if (st === null || typeof st !== 'object') return false;
-  const r = st as Record<string, unknown>;
-  return typeof r['step'] === 'string' && typeof r['status'] === 'string' && STEP_STATUS.has(r['status']) && finite(r['at'])
-    && strOrNull(r['seat']) && strOrNull(r['summary']) && (r['ord'] === null || r['ord'] === undefined || finite(r['ord']));
-}
-
-function mergeHandoff(mine: PowerState['handoff'], theirs: PowerState['handoff']): PowerState['handoff'] {
-  const ok = (h: PowerState['handoff']): h is NonNullable<PowerState['handoff']> =>
-    h !== null && typeof h === 'object' && finite(h.round) && Array.isArray(h.steps) && h.steps.every(readableStep);
-  if (!ok(theirs)) return mine;
-  if (!ok(mine) || theirs.round > mine.round) return theirs;
-  if (theirs.round < mine.round) return mine;
-  const steps = new Map(mine.steps.map((st) => [st.step, st]));
-  for (const st of theirs.steps) {
-    const had = steps.get(st.step);
-    if (had === undefined || (st.at ?? 0) > (had.at ?? 0)) steps.set(st.step, st);
-  }
-  return { ...mine, steps: [...steps.values()] };
 }
 
 function historyTip(p: PowerState): number {

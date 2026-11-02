@@ -133,4 +133,20 @@ describe('useMemoryReading', () => {
     rerender({ k: 'jobs' });
     await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 1, pending: 2, indexedRepos: 0 }));
   });
+
+  it('a deposit (another surface\'s write, maybe a local patch) never marks a failed register read as answered (codex r7 on 9d)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 0 });
+    listProposals.mockResolvedValue([]);
+    listRepos.mockResolvedValue({ repos: [{ code_graph_db: '/x/estate.db' }] });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await act(async () => { await useNeedsSources.getState().load(); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 0, pending: 0, indexedRepos: 1 }));
+    listRepos.mockRejectedValue(new Error('503'));
+    await act(async () => { await useNeedsSources.getState().load(0); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 0, pending: 0 }));
+    // the Repositories page adds one locally to its stale list
+    act(() => { useNeedsSources.getState().depositRepos([...(useNeedsSources.getState().repos ?? []), { code_graph_db: '' } as never]); });
+    expect(useNeedsSources.getState().readOk.repos).toBe(false);
+    expect(result.current).toEqual({ state: 'ok', total: 0, pending: 0 });
+  });
 });
