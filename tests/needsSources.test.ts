@@ -89,4 +89,18 @@ describe('needsSources', () => {
     expect(listCampaigns).toHaveBeenCalledTimes(1);
     expect(useNeedsSources.getState().proposals).toEqual([]);
   });
+
+  it('a 404 is the daemon answering it has no such surface: an empty list, read OK (desk_setup_items on 9d)', async () => {
+    const { ApiError } = await import('../src/api/errors.js');
+    await useNeedsSources.getState().load();
+    listProposals.mockRejectedValue(new ApiError(404, 'no route', {}));
+    listRepos.mockRejectedValue(new ApiError(404, 'no route', {}));
+    listChats.mockRejectedValue(new Error('503'));
+    await useNeedsSources.getState().load(0);
+    const st = useNeedsSources.getState();
+    expect(st.proposals).toEqual([]);
+    expect(st.repos).toEqual([]);
+    expect(st.readOk).toMatchObject({ proposals: true, repos: true, chats: false });
+    expect(st.chats?.map((c) => c.chatId)).toEqual(['c1']);
+  });
 });

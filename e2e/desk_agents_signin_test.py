@@ -99,7 +99,7 @@ def row_ready(page, key: str) -> str:
 def sign_in(page, theme: str) -> dict:
     """Sign in → the login terminal → Enter → signed in. Returns what it saw."""
     open_modal(page, "claude")
-    want = "light" if theme == "light" else None
+    want = f"wicked-{theme}"  # a stored dark/light renders as Wicked Dark/Light (appearance.ts LEGACY_THEMES)
     page.wait_for_function(f"() => document.documentElement.getAttribute('data-theme') === {json.dumps(want)}", timeout=10000)
     modal = page.get_by_test_id("agents-modal")
     seen = {"name": modal.locator("h2").inner_text(), "cmd": modal.get_by_test_id("agents-command").count(),
@@ -178,7 +178,7 @@ with sync_playwright() as p:
     set_fixture(origin, appearance={**DEFAULT_APPEARANCE, "theme": "light"})
     light = sign_in(page, "light")
     theme = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
-    check("signin-light", theme == "light" and f"{name} is signed in." in light["result"] and light["after"] not in (None, "Not ready"), **light, theme=theme)
+    check("signin-light", theme == "wicked-light" and f"{name} is signed in." in light["result"] and light["after"] not in (None, "Not ready"), **light, theme=theme)
 
     # ── 6. close early: crew's ingest refused it, and the modal says why ─────────
     set_fixture(origin, roster_signed_in={"claude": False, "codex": False})

@@ -145,7 +145,7 @@ with sync_playwright() as p:
 
     # Both themes at 1440x900 over every size; then a narrow 960x700 card (the words wrap) at inline.
     for theme, (vw, vh), sizes in (("dark", (W, H), ("inline", "pane", "full")), ("light", (W, H), ("inline", "pane", "full")), ("dark", (960, 700), ("inline",))):
-        attr = None if theme == "dark" else theme  # the default (dark) theme is the bare stylesheet: no data-theme on <html>
+        attr = f"wicked-{theme}"  # a stored dark/light renders as Wicked Dark/Light (appearance.ts LEGACY_THEMES)
         tag = theme if vw == W else f"{theme}-narrow"
         page.set_viewport_size({"width": vw, "height": vh})
         set_fixture(origin, sessions=True, run_chat_id=True, walkthrough=True, walk_recorded=3, extra_frames=[], reset_walkthrough=True,

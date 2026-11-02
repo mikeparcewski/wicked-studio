@@ -543,7 +543,7 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
   let base = p;
   // This page's own answer (a flip, a raise, a pause answered) is the newest word on what it changed.
   const usedLocal = local !== null && (base === null || historyTip(local) >= historyTip(base));
-  if (usedLocal) base = { ...local! };
+  if (usedLocal) base = p !== null && historyTip(local!) === historyTip(p) ? withLiveProgress(local!, p) : { ...local! };
   if (base === null) return null;
   const since = Math.max(stateAt(base), usedLocal && localAt !== null ? localAt : 0);
   const history = new Map<number, RigorChange>(base.history.map((c) => [c.seq, c]));
@@ -591,6 +591,50 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
   const rigor = tip !== undefined && isRigor(tip.to) ? tip.to : base.rigor ?? plan?.rigor ?? null;
   const pause = framePause === undefined ? base.pause : framePause;
   return { ...base, on, rigor, plan, history: ordered, toggles, checkpoints, handoff, pause: on ? pause : null };
+}
+
+/**
+ * This page's answer, with the run's live progress from a session read that has caught up with it (the same rigor
+ * changes and flips): the answer is a snapshot taken when it was sent, so its turns, turn log, check-points, hand-off
+ * and outcome froze there (Copilot on #937: after a flip the power panel stopped updating). When the session is
+ * STRICTLY further along (more turns started, or a later state), its progress replaces the answer's whole, exactly as a
+ * session snapshot is used when it leads; otherwise the answer stands, as at ca561f8. What the answer changed (on,
+ * rigor, history, toggles, pause) stays the answer's.
+ */
+function withLiveProgress(local: PowerState, p: PowerState): PowerState {
+  // An unreadable session progress block is never inspected or adopted: this page's answer stands (codex r8 on 9d).
+  if (!readableProgress(p)) return { ...local };
+  const turns = (s: PowerState): number => (typeof s.orchestrator?.turns === 'number' && Number.isFinite(s.orchestrator.turns) ? s.orchestrator.turns : -1);
+  const ahead = turns(p) > turns(local) || stateAt(p) > stateAt(local);
+  if (!ahead) return { ...local };
+  return {
+    ...local,
+    orchestrator: p.orchestrator,
+    ...(p.turnLog !== undefined ? { turnLog: p.turnLog } : {}),
+    checkpoints: p.checkpoints,
+    handoff: p.handoff,
+    outcome: p.outcome,
+  };
+}
+
+/** The progress fields a session snapshot carries are well formed enough to compare and to render: every field the
+ *  merge and the panel read (codex r8/r9 on 9d). */
+function readableProgress(p: PowerState): boolean {
+  const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object';
+  const finite = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
+  const strOrNull = (v: unknown): boolean => v === null || typeof v === 'string';
+  const o = p.orchestrator as unknown;
+  if (!obj(o) || !finite(o['turns']) || !strOrNull(o['cli']) || !(o['ord'] === null || finite(o['ord'])) || typeof o['inTurn'] !== 'boolean') return false;
+  const turnOk = (t: unknown): boolean => obj(t) && finite(t['turn']) && finite(t['attempt']) && typeof t['cli'] === 'string'
+    && finite(t['startedAt']) && (t['endedAt'] === null || finite(t['endedAt'])) && strOrNull(t['summary']) && strOrNull(t['outcome']);
+  if (p.turnLog !== undefined && (!Array.isArray(p.turnLog) || !p.turnLog.every(turnOk))) return false;
+  if (!finite(p.checkpoints)) return false;
+  const STATUS = new Set(['pending', 'running', 'passed', 'failed', 'skipped']);
+  const stepOk = (st: unknown): boolean => obj(st) && typeof st['step'] === 'string' && typeof st['status'] === 'string' && STATUS.has(st['status'])
+    && finite(st['at']) && strOrNull(st['seat']) && strOrNull(st['summary']) && (st['round'] === undefined || finite(st['round']));
+  const h = p.handoff as unknown;
+  if (h !== null && (!obj(h) || !finite(h['round']) || !Array.isArray(h['steps']) || !(h['steps'] as unknown[]).every(stepOk))) return false;
+  return true;
 }
 
 function historyTip(p: PowerState): number {

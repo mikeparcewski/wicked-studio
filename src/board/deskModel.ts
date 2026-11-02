@@ -459,7 +459,9 @@ export function setupChores(agents: { known: boolean; usable: readonly { name: s
       line: 'Helpers suggested what to remember; nothing is saved until you keep it.',
       action: { label: 'Review them', path: paths.proposals ?? paths.memory },
     });
-  } else if (memory.state === 'ok' && memory.total === 0 && (memory.indexedRepos ?? 0) === 0) {
+  // Empty only when the repositories are KNOWN to have no graph and no memory is KNOWN to wait: an unknown count (still
+  // being read, or a failed read) never says "empty" (codex r6/r7 on 9d).
+  } else if (memory.state === 'ok' && memory.total === 0 && memory.indexedRepos === 0 && memory.pending === 0) {
     out.push({
       key: 'memory-empty', tone: 'gate',
       title: 'Your memory is empty — helpers start without your project’s history',

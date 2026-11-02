@@ -28,7 +28,11 @@ describe('setupChores', () => {
   });
 
   it('memory: empty asks to build it; a failed read says unreachable with the reason; unknown says nothing', () => {
-    expect(setupChores(agents(['a', 'b'], 2), ok(0), PATHS)).toMatchObject([{ key: 'memory-empty', action: { label: 'Build memory', path: PATHS.memory } }]);
+    expect(setupChores(agents(['a', 'b'], 2), { state: 'ok', total: 0, pending: 0, indexedRepos: 0 }, PATHS)).toMatchObject([{ key: 'memory-empty', action: { label: 'Build memory', path: PATHS.memory } }]);
+    // proposals not counted yet: no "empty" either (codex r7 on 9d)
+    expect(setupChores(agents(['a', 'b'], 2), { state: 'ok', total: 0, indexedRepos: 0 }, PATHS)).toEqual([]);
+    // the repositories not counted yet (still being read, or a failed read): never "empty" (codex r6 on 9d)
+    expect(setupChores(agents(['a', 'b'], 2), ok(0), PATHS)).toEqual([]);
     expect(setupChores(agents(['a', 'b'], 2), { state: 'down', reason: 'estate unreachable' }, PATHS)).toMatchObject([{ key: 'memory-down', line: 'estate unreachable' }]);
     expect(setupChores(agents(['a', 'b'], 2), { state: 'unknown' }, PATHS)).toEqual([]);
   });

@@ -135,7 +135,9 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"desk-chat-native-art-doc-{theme}.png"))
         check(f"{theme}-doc-in-bubble", d["inBubble"] and re.match(r"^studio · made this( · [0-9:–A-Za-z ]+)?$", d["who"] or "") is not None and "Version 1" in (d["text"] or "")
               and d["bubble"]["l"] >= d["thread"]["l"] and d["bubble"]["r"] <= d["thread"]["r"] and d["bubble"]["w"] <= 768
-              and d["bubbleBg"] not in (None, "rgba(0, 0, 0, 0)") and not d["hscroll"], where=d)
+              # The Wicked synthesis unboxes messages (no fill; wicked-synthesis.css "Messages"): the card sits in an
+              # unfilled message body.
+              and d["bubbleBg"] == "rgba(0, 0, 0, 0)" and not d["hscroll"], where=d)
         page.locator('[data-testid="plugin-card"][data-editor="wicked-page"]').get_by_test_id("plugin-card-full").click()
         page.get_by_test_id("full-shell").wait_for(state="visible", timeout=8000)
         page.wait_for_timeout(500)
