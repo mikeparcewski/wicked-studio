@@ -232,6 +232,26 @@ test.describe('large text on small screens', () => {
     await ctx.close();
   });
 
+  test('a very large text size grows the phone chat instead of pushing the composer over the side panel', async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 320, height: 568 }, hasTouch: true, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    await page.addStyleTag({ content: 'body *:not(svg):not(svg *) { font-size: max(32px, 1em) !important; }' });
+    const send = page.locator('[data-ide] [data-send]');
+    await send.scrollIntoViewIfNeeded();
+    const m = await page.evaluate(() => {
+      const c = document.querySelector('[data-composer]')!.getBoundingClientRect();
+      const p = document.querySelector('.ide-pane')!.getBoundingClientRect();
+      const t = document.querySelector('[data-thread]') as HTMLElement;
+      return { composerBottom: c.bottom, paneTop: p.top, thread: t.clientHeight };
+    });
+    expect(m.composerBottom).toBeLessThanOrEqual(m.paneTop + 1);
+    expect(m.thread).toBeGreaterThanOrEqual(150);
+    await send.tap();
+    await expect(page.locator('[data-ide] [data-thread]')).toContainText('Add rate limiting to the public API');
+    await ctx.close();
+  });
+
   test('the hero command chip stays inside the window', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto('/');

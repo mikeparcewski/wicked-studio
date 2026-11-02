@@ -952,5 +952,10 @@ html.frames-overflow .hero { height: auto; min-height: var(--frame); }
 /* the hero's command chip wraps (at spaces) instead of running out of the window with large text */
 .cta-copy { flex-wrap: wrap; row-gap: 6px; }
 .cta-copy code { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
-/* the chat keeps a usable height even when large text makes the header and composer taller */
-@media (max-width: 940px) { .ide-thread { min-height: 160px; } }
+/* phones and tablets: the chat has a floor height, not a fixed one. The transcript's flex basis is 0px,
+   so messages never grow the chat (they scroll inside it); only a header and composer made taller by
+   large text can, and then the chat grows instead of pushing the composer over the side panel. */
+@media (max-width: 940px) {
+  .ide-main { height: auto; min-height: clamp(360px, 62svh, 470px); }
+  .ide-thread { flex: 1 1 0px; min-height: 160px; }
+}
