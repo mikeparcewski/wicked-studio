@@ -14,6 +14,7 @@ import { NotificationSettings } from './NotificationSettings.js';
 import { Segmented } from './ui/Segmented.js';
 import { scrollBehavior } from './ui/motion.js';
 import { QE_SETTING_ANCHOR } from '../board/qeRefusal.js';
+import { useCapabilities } from '../store/capabilities.js';
 
 /**
  * Client-side mirror of the daemon's worker_config_root rule (empty or absolute).
@@ -23,8 +24,22 @@ function isAbsolutePathLike(p: string): boolean {
   return p.startsWith('/') || p.startsWith('\\\\') || /^[A-Za-z]:[\\/]/.test(p);
 }
 
-/** The daemon's settings (`deliverIdentityLogin`, `councilSize` and `qeAcceptance` are all typed by api-types 0.120.0). */
-type LocalSettings = Settings;
+/** The daemon's settings (`deliverIdentityLogin`, `councilSize` and `qeAcceptance` are all typed by api-types 0.120.0).
+ *  `requirementsGraph` is api-types 0.159.0 (operator ruling 2026-10-31), read here ahead of the pin. */
+type LocalSettings = Settings & {
+  /** "Power mode for new jobs" (api-types 0.149.0, spelled here until studio's pin carries it): the default of a launch's
+   *  `power`. ABSENT = on (the shipped default). */
+  powerModeDefault?: boolean;
+  requirementsGraph?: { minCoveragePct?: number };
+};
+
+/** The requirements graph's minimum coverage when the daemon has none set (crew and core default). */
+const DEFAULT_MIN_COVERAGE_PCT = 80;
+
+/** Mirror of the daemon's rule (a whole percentage 1..100); the daemon stays authoritative. */
+function isMinCoveragePct(n: number): boolean {
+  return Number.isInteger(n) && n >= 1 && n <= 100;
+}
 
 /**
  * Client-side mirror of the daemon's deliver-identity rule (crew#549): a GitHub login — letters,
@@ -59,6 +74,8 @@ interface SystemSettingsProps {
 
 export function SystemSettings({ navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); } }: SystemSettingsProps): React.ReactElement {
   const [settings, setSettings] = useState<LocalSettings | null>(null);
+  const powerCap = useCapabilities((s) => s.powerMode);
+  useEffect(() => { void useCapabilities.getState().load(); }, []);
   const [dirty, setDirty] = useState<Partial<LocalSettings>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -139,6 +156,9 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
 
   useEffect(() => () => { if (savedTimerRef.current) clearTimeout(savedTimerRef.current); }, []);
 
+  const [unsupported, setUnsupported] = useState<string[]>([]);
+  const [minCoverageText, setMinCoverageText] = useState<string | null>(null);
+
   function patch<K extends keyof LocalSettings>(key: K, value: LocalSettings[K]): void {
     setDirty((d) => ({ ...d, [key]: value }));
     setSaved(false);
@@ -151,9 +171,15 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
     setWorkerRootError(null);
     setDeliverIdentityError(null);
     try {
-      const { settings: next } = await api.updateSettings(dirty as Partial<Settings>);
+      const res = await api.updateSettings(dirty as Partial<Settings>);
+      const next = res.settings;
+      // A daemon from before a setting drops it and names it in `ignored` (crew#323): say so at the
+      // field instead of showing a value that was never stored.
+      const ignored = (res as { ignored?: unknown }).ignored;
+      setUnsupported(Array.isArray(ignored) ? ignored.filter((k): k is string => typeof k === 'string') : []);
       setSettings(next);
       setDirty({});
+      setMinCoverageText(null);
       setSaved(true);
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
       savedTimerRef.current = setTimeout(() => setSaved(false), 2500);
@@ -170,6 +196,10 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   }
 
   const merged: LocalSettings = { graphNodeLimit: 150, ...settings, ...dirty };
+  const minCoverage = merged.requirementsGraph?.minCoveragePct ?? DEFAULT_MIN_COVERAGE_PCT;
+  // The field holds what is typed (it may be empty mid-edit); only a whole 1..100 reaches the patch.
+  const minCoverageShown = minCoverageText ?? String(minCoverage);
+  const minCoverageInvalid = minCoverageText !== null && !isMinCoveragePct(Number(minCoverageText));
   const councilSizeOptions = ['1', '2', '3', '4', '5'];
   if (settings?.councilSize !== undefined && !councilSizeOptions.includes(String(settings.councilSize))) {
     councilSizeOptions.push(String(settings.councilSize));
@@ -239,6 +269,15 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
             ? 'Off: jobs that change the application deliver without waiting for a QE check. Each job, its gates and its delivery say it was skipped. A job already started keeps the setting it started with.'
             : 'Jobs that change the application wait for a QE acceptance pass before they deliver.'} />
         </div>
+        {/* DES-POWER-MODE §2: the default of the New job switch; each job's header has the same switch. */}
+        {powerCap && (
+          <Switch label={`Power mode for new jobs: ${merged.powerModeDefault !== false ? 'On' : 'Off'}`} data-testid="power-mode-default-toggle" checked={merged.powerModeDefault !== false}
+            onChange={(checked) => patch('powerModeDefault', checked)}
+            disabled={settings === null ? 'Reading this setting…' : null}
+            hint={merged.powerModeDefault !== false
+              ? 'One orchestrator builds the change with you in its conversation, re-checked at every commit; rigor applies once, at hand-off. Each job\u2019s header and the New job form have the same switch.'
+              : 'Off: new jobs run phased, step by step, with a gate after each phase. Each job\u2019s header and the New job form can still turn it on.'} />
+        )}
         <Switch label="Open a PR when a build run finishes" data-testid="deliver-pr-toggle" checked={deliverPr}
           onChange={(checked) => updateComposerPrefs({ deliverPr: checked })}
           hint="Push the finished branch and open a pull request when a workflow and repository are selected; you decide when to merge." />
@@ -258,6 +297,26 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         <SettingRow label="Graph node limit" description="The most symbols shown in a repository's code graph. Reopen the graph after changing this.">
           <input type="number" className="wk-field" aria-label="Graph node limit" min={20} max={500} step={10} value={merged.graphNodeLimit}
             onChange={(e) => { const n = Number(e.target.value); if (!Number.isNaN(n)) patch('graphNodeLimit', Math.max(20, Math.min(500, n))); }} />
+        </SettingRow>
+        {/* Operator ruling 2026-10-31: a repository's requirements graph is built, and shown with its
+            coverage, once this share of its code is mapped. Studio's service exports it to the engine. */}
+        <SettingRow label="Requirements graph minimum coverage"
+          description="A repository's requirements graph is built once this share of its behaviours is mapped, and shows how much it covers. Below it, the job says how far it got and the next one continues.">
+          <span className="flex items-center gap-1.5">
+            <input type="number" className="wk-field" aria-label="Requirements graph minimum coverage" data-testid="settings-min-coverage"
+              min={1} max={100} step={5} value={minCoverageShown}
+              onChange={(e) => {
+                const text = e.target.value;
+                setMinCoverageText(text);
+                const n = Number(text);
+                if (text.trim() !== '' && isMinCoveragePct(n)) patch('requirementsGraph', { minCoveragePct: n });
+              }} />
+            <span aria-hidden="true">%</span>
+          </span>
+          {minCoverageInvalid && <p className="wk-field-note" data-testid="settings-min-coverage-invalid">A whole percentage from 1 to 100.</p>}
+          {unsupported.includes('requirementsGraph') && <p className="wk-field-note" data-testid="settings-min-coverage-unsupported">
+            Studio’s service doesn’t have this setting yet, so the minimum stays {DEFAULT_MIN_COVERAGE_PCT}%.
+          </p>}
         </SettingRow>
       </section>
 
@@ -287,7 +346,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       </section>
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={save} disabled={!hasDirty || saving || settings === null} className="wk-btn wk-btn--primary">{saving ? 'Saving…' : 'Save'}</button>
+          <button type="button" onClick={save} disabled={!hasDirty || saving || settings === null || minCoverageInvalid} className="wk-btn wk-btn--primary">{saving ? 'Saving…' : 'Save'}</button>
           {saved && <span role="status">Saved</span>}
         </div>
         {(!hasDirty || saving || settings === null) && <p className="wk-field-note">{saving ? 'Wait for these changes to finish saving.' : settings === null ? 'Settings must load before changes can be saved.' : 'Change a setting before saving.'}</p>}

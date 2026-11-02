@@ -36,11 +36,11 @@ function ChipsInput({ testid, label, values, onChange, placeholder }: {
     setDraft('');
   };
   return (
-    <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+    <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
       {label}
       <span className="flex flex-wrap items-center gap-1 rounded px-2 py-1" style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)' }}>
         {values.map((v) => (
-          <span key={v} data-testid={`${testid}-chip`} className="inline-flex items-center gap-1 rounded px-1.5 text-[10px] font-mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
+          <span key={v} data-testid={`${testid}-chip`} className="inline-flex items-center gap-1 rounded px-1.5 text-xs font-mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
             {v}
             <button
               type="button"
@@ -63,7 +63,7 @@ function ChipsInput({ testid, label, values, onChange, placeholder }: {
             if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit(); }
           }}
           onBlur={commit}
-          className="min-w-[8rem] flex-1 bg-transparent text-[11px] focus:outline-none"
+          className="min-w-[8rem] flex-1 bg-transparent text-xs focus:outline-none"
           style={{ color: 'var(--ink-high)' }}
         />
       </span>
@@ -180,17 +180,17 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
         style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
       >
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>
+          <span className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>
             {create ? (showMcp ? 'New MCP policy' : 'New rule') : `Edit ${form.base.id}`}
           </span>
-          <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+          <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>
             type: {STEERING_TYPE_LABELS[type]}{create ? '' : ' (this page)'}
           </span>
           <button
             data-testid="steering-form-cancel"
             type="button"
             onClick={onClose}
-            className="ml-auto text-[10px] hover:underline"
+            className="ml-auto text-xs hover:underline"
             style={{ color: 'var(--ink-dim)' }}
           >
             Cancel
@@ -200,18 +200,18 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
         <div className="flex flex-wrap items-end gap-2">
           {/* Coverage exception X6 (operator ruling): the rule type is never chosen here — it was a
               select disabled for every rule. It is said, read-only, as what it is. */}
-          <div className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
             <span id="steering-form-rule-type-caption">Rule type</span>
             <span
               data-testid="steering-form-rule-type-label"
               aria-labelledby="steering-form-rule-type-caption"
-              className="rounded px-1.5 py-1 text-[11px]"
+              className="rounded px-1.5 py-1 text-xs"
               style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             >
               {form.rule_type}
             </span>
           </div>
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
             Id
             <input
               data-testid="steering-form-id"
@@ -220,7 +220,7 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
               readOnly={!create}
               spellCheck={false}
               onChange={(e) => onChange({ ...form, id: e.target.value })}
-              className="w-28 rounded px-2 py-1 font-mono text-[11px] focus:outline-none"
+              className="w-28 rounded px-2 py-1 font-mono text-xs focus:outline-none"
               style={{
                 background: 'var(--surface-base)',
                 border: `1px solid ${idOk ? 'var(--surface-raised)' : 'var(--status-fail)'}`,
@@ -228,14 +228,14 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
               }}
             />
           </label>
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
             Severity
             <select
               data-testid="steering-form-severity"
               aria-label="Severity"
               value={form.severity}
               onChange={(e) => onChange({ ...form, severity: e.target.value })}
-              className="rounded px-1.5 py-1 text-[11px] focus:outline-none"
+              className="rounded px-1.5 py-1 text-xs focus:outline-none"
               style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             >
               {['info', 'warn', 'error', 'critical'].map((s) => (
@@ -243,7 +243,7 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
             Weight
             <input
               data-testid="steering-form-weight"
@@ -253,20 +253,20 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
               aria-label="Weight"
               value={form.weight}
               onChange={(e) => onChange({ ...form, weight: e.target.value })}
-              className="w-20 rounded px-2 py-1 font-mono text-[11px] focus:outline-none"
+              className="w-20 rounded px-2 py-1 font-mono text-xs focus:outline-none"
               style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             />
           </label>
         </div>
 
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
           Statement
           <textarea
             data-testid="steering-form-statement"
             value={form.statement}
             onChange={(e) => onChange({ ...form, statement: e.target.value })}
             placeholder="The prescriptive sentence this rule enforces"
-            className="min-h-[3rem] resize-y rounded px-2 py-1 text-[11px] focus:outline-none"
+            className="min-h-[3rem] resize-y rounded px-2 py-1 text-xs focus:outline-none"
             style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
           />
         </label>
@@ -295,14 +295,14 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
         )}
 
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
             Effect (optional — none = recall-only)
             <select
               data-testid="steering-form-effect"
               aria-label="Effect"
               value={form.effect}
               onChange={(e) => onChange({ ...form, effect: e.target.value as FormState['effect'] })}
-              className="rounded px-1.5 py-1 text-[11px] focus:outline-none"
+              className="rounded px-1.5 py-1 text-xs focus:outline-none"
               style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             >
               <option value="">none (recall-only)</option>
@@ -312,7 +312,7 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
               <option value="allow">allow</option>
             </select>
           </label>
-          <label className="flex flex-1 flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <label className="flex flex-1 flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
             Trigger text (optional; needs an effect)
             <input
               data-testid="steering-form-trigger"
@@ -322,14 +322,14 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
               spellCheck={false}
               onChange={(e) => onChange({ ...form, triggerContains: e.target.value })}
               placeholder='e.g. "rm -rf" — the effect fires when the evaluated context contains this'
-              className="rounded px-2 py-1 font-mono text-[11px] focus:outline-none disabled:opacity-50"
+              className="rounded px-2 py-1 font-mono text-xs focus:outline-none disabled:opacity-50"
               style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             />
           </label>
         </div>
 
         {error !== null && (
-          <p data-testid="steering-form-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
+          <p data-testid="steering-form-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
             {error}
           </p>
         )}
@@ -339,23 +339,23 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
             type="button"
             disabled={!valid || busy}
             onClick={() => void save()}
-            className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
+            className="rounded px-3 py-1 text-xs font-semibold disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             {busy ? 'Saving…' : create ? 'Create rule' : 'Save changes'}
           </button>
           {triggerProblem !== null && (
-            <span data-testid="steering-form-trigger-issue" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>
+            <span data-testid="steering-form-trigger-issue" className="text-xs" style={{ color: 'var(--status-fail)' }}>
               trigger: {triggerProblem}
             </span>
           )}
           {!scopeOk && (
-            <span data-testid="steering-form-scope-issue" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>
+            <span data-testid="steering-form-scope-issue" className="text-xs" style={{ color: 'var(--status-fail)' }}>
               a rule with an effect needs at least one Applies to token
             </span>
           )}
           {!idOk && (
-            <span className="text-[10px]" style={{ color: 'var(--status-fail)' }}>
+            <span className="text-xs" style={{ color: 'var(--status-fail)' }}>
               {create && existingIds.includes(form.id.trim()) ? 'that id is taken' : <>id must match {form.rule_type === 'pattern' ? 'PAT' : 'POL'}-&lt;3–6 digits&gt;</>}
             </span>
           )}

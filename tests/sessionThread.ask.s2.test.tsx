@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { takeProposal } from './askGateHelpers.js';
 import type { TeamRow } from '../src/api/teamPlan.js';
 
 /**
@@ -124,9 +125,10 @@ describe('the proposal card in the thread', () => {
     expect(c.getAttribute('data-first-creator')).toBe('true');
     expect(c.querySelector('[data-testid="session-proposal-text"]')!.textContent).toBe('Continue in Build? claude proposes: Build → Check (required).');
     expect(c.querySelector('[data-testid="session-proposal-why"]')!.textContent).toContain('band 20–39 · touches 1 declared path · 3 dependents');
-    // (mockup ui-v2-gate) One primary; Not now and End under Other options.
+    // (guided asks) The three answers are cards — Continue in Build marked and preselected — and one primary names it.
     expect(c.querySelector('[data-testid="session-proposal-go"]')!.textContent).toBe('Continue in Build');
-    expect([...c.querySelectorAll('[data-testid="session-proposal-menu"] button')].map((b) => b.textContent)).toStrictEqual(['Not now', 'End']);
+    expect([...c.querySelectorAll('[data-testid="session-proposal-choices"] [role="radio"] .wk-ask-opt-label')].map((b) => b.textContent)).toStrictEqual(['Continue in Build', 'Not now', 'End']);
+    expect(c.querySelector('[data-testid="session-proposal-choices"] [aria-checked="true"]')!.getAttribute('data-option')).toBe('go');
     expect(screen.queryByTestId('session-run')).toBeNull();
     expect(screen.queryByTestId('chain')).toBeNull();
     // After the reply bubble, in time order.
@@ -146,7 +148,7 @@ describe('the proposal card in the thread', () => {
   it('Not now posts the ACCEPTED rev’s steps (no build); the card keeps the proposal and Bring it back prefills the composer', async () => {
     page();
     await card();
-    fireEvent.click(screen.getByTestId('session-proposal-not-now'));
+    takeProposal('session-proposal-not-now');
     const gate = await gatePosts(1);
     expect(gate[0]!.body).toMatchObject({ approve: true, plan: { steps: [{ catalog: 'understand', id: 'answer-1' }] } });
     await waitFor(() => expect(screen.getByTestId('session-proposal-no').textContent).toContain('Not now — the conversation goes on'));
@@ -157,9 +159,10 @@ describe('the proposal card in the thread', () => {
   it('End posts ONE reject', async () => {
     page();
     await card();
-    fireEvent.click(screen.getByTestId('session-proposal-end'));
+    // End asks why first (guided asks); the words ride the reject.
+    takeProposal('session-proposal-end', 'not needed after all');
     const gate = await gatePosts(1);
-    expect(gate[0]!.body).toMatchObject({ approve: false });
+    expect(gate[0]!.body).toMatchObject({ approve: false, amend: 'not needed after all' });
   });
 
   it('a refused answer keeps the THREE explicit choices — nothing re-sends an approve for a Not now or an End (codex on ASK-S2 #3)', async () => {
@@ -175,10 +178,10 @@ describe('the proposal card in the thread', () => {
     }));
     page();
     const c = await card();
-    fireEvent.click(screen.getByTestId('session-proposal-not-now'));
+    takeProposal('session-proposal-not-now');
     await act(async () => { await flushDecisionsForTest(); });
     await waitFor(() => expect(c.querySelector('[data-testid="session-proposal"]')!.getAttribute('data-state')).toBe('fail'));
-    expect([...c.querySelectorAll('.wk-prop-btns button')].map((b) => b.textContent)).toStrictEqual(['Continue in Build', 'Not now', 'End']);
+    expect([...c.querySelectorAll('[data-testid="session-proposal-choices"] [role="radio"] .wk-ask-opt-label')].map((b) => b.textContent)).toStrictEqual(['Continue in Build', 'Not now', 'End']);
     expect(c.querySelector('[data-testid="session-proposal-reason"]')!.textContent).toContain('refused');
   });
 

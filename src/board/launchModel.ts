@@ -206,6 +206,9 @@ export interface WorkflowLaunchChoices {
   chatId: string | null;
   /** The lead agent the operator chose (a key among `seats`, on a daemon that takes it); null = Random. */
   primary?: string | null;
+  /** Power mode for this job (DES-POWER-MODE §2), on a daemon that runs it; null/absent = say nothing (the daemon's
+   *  Settings default applies, and an older daemon's strict schema never sees the key). */
+  power?: boolean | null;
 }
 
 export function workflowLaunchBody(c: WorkflowLaunchChoices): LaunchBodyWithDeliver {
@@ -221,6 +224,7 @@ export function workflowLaunchBody(c: WorkflowLaunchChoices): LaunchBodyWithDeli
   if (c.skipQeReason !== null && c.skipQeReason.trim() !== '') body.skipQeAcceptance = { reason: c.skipQeReason.trim() };
   if (c.chatId !== null) body.chatId = c.chatId;
   if (c.primary != null && c.seats.some((s) => s.key === c.primary)) body.primary = c.primary;
+  if (c.power != null) (body as LaunchBodyWithDeliver & { power?: boolean }).power = c.power;
   return body;
 }
 

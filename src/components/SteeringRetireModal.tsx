@@ -56,13 +56,13 @@ export function SteeringRetireModal({ rule, onClose, onRetired }: {
         <h3 className="text-sm font-semibold" style={{ color: 'var(--status-fail)' }}>
           Retire {rule.id}
         </h3>
-        <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>
           Withdraws this rule from recall and enforcement <em>now</em>. The record stays listed —
           past gate decisions cite it, and deleting it would break that audit trail. A doc-ingested
           rule&rsquo;s doctrine still lives in its source doc: carry your reason into the doc PR that
           retires it there.
         </p>
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
           Type the rule id to confirm
           <input
             data-testid="steering-retire-confirm-input"
@@ -71,23 +71,23 @@ export function SteeringRetireModal({ rule, onClose, onRetired }: {
             onChange={(e) => setTyped(e.target.value)}
             placeholder={rule.id}
             spellCheck={false}
-            className="rounded px-2 py-1 font-mono text-[11px] focus:outline-none"
+            className="rounded px-2 py-1 font-mono text-xs focus:outline-none"
             style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
           />
         </label>
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
           Reason (required)
           <textarea
             data-testid="steering-retire-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Why this rule must stop steering now"
-            className="min-h-[3.5rem] resize-y rounded px-2 py-1 text-[11px] focus:outline-none"
+            className="min-h-[3.5rem] resize-y rounded px-2 py-1 text-xs focus:outline-none"
             style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
           />
         </label>
         {error !== null && (
-          <p data-testid="steering-retire-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
+          <p data-testid="steering-retire-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
             {error}
           </p>
         )}
@@ -96,7 +96,7 @@ export function SteeringRetireModal({ rule, onClose, onRetired }: {
             data-testid="steering-retire-cancel"
             type="button"
             onClick={onClose}
-            className="rounded px-3 py-1 text-[11px]"
+            className="rounded px-3 py-1 text-xs"
             style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
           >
             Cancel
@@ -106,7 +106,7 @@ export function SteeringRetireModal({ rule, onClose, onRetired }: {
             type="button"
             disabled={!armed}
             onClick={() => void confirm()}
-            className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
+            className="rounded px-3 py-1 text-xs font-semibold disabled:opacity-40"
             style={{ background: 'var(--status-fail)', color: 'var(--surface-base)' }}
           >
             {busy ? 'Retiring…' : 'Retire rule'}

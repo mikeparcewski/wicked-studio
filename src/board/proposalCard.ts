@@ -140,6 +140,11 @@ export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenG
     return `${chain.total > 0 && chain.done === 0 ? 'Failed before any step finished' : 'Failed'}${count}`;
   }
   if (s === 'cancelled') return `Cancelled${count}`;
+  // Power mode: paused at a checkpoint ("this grew") — waiting on you, though no engine gate is open.
+  const pause = (view.session as unknown as { power?: { pause?: { checkpoint?: unknown } | null } | null }).power?.pause;
+  if (pause !== null && pause !== undefined && typeof pause === 'object') {
+    return `Paused${typeof pause.checkpoint === 'number' ? ` at checkpoint ${pause.checkpoint}` : ''} — waiting on you${count}`;
+  }
   const running = chain.steps.find((x) => x.state === 'running');
   // (J4 0.16.6) A step silent past crew's quiet mark is not "running" in words: it says how long it has said nothing.
   if (silentMinutes !== null) return `${running !== undefined ? stepWords(running.label) : 'The step'} has had no output for ${silentMinutes} min${count}`;

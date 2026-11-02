@@ -21,7 +21,7 @@ export function RunIntentAmendments({ session }: { session: AgentSession }): Rea
     <div
       data-testid="run-intent-amendments"
       data-count={amendments.length}
-      className="px-6 py-1.5 text-[11px] font-mono shrink-0 flex flex-col gap-0.5"
+      className="px-6 py-1.5 text-xs font-mono shrink-0 flex flex-col gap-0.5"
       style={{
         color: 'var(--status-gate)',
         background: 'var(--status-gate-dim)',
@@ -32,7 +32,7 @@ export function RunIntentAmendments({ session }: { session: AgentSession }): Rea
     >
       {amendments.map((a, i) => (
         <p key={`${a.at}-${i}`} data-testid="run-intent-amendment">
-          <span style={{ fontWeight: 600 }}>Intent amended</span>
+          <span style={{ fontWeight: 'var(--weight-strong)' }}>Intent amended</span>
           {a.ord > 0 && <span style={{ color: 'var(--ink-muted)' }}> at unit #{a.ord}</span>}
           {a.at > 0 && (
             <span style={{ color: 'var(--ink-muted)' }}> · {new Date(a.at).toLocaleString()}</span>

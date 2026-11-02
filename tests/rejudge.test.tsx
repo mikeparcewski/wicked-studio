@@ -134,18 +134,19 @@ describe('the judge-unavailable gate row', () => {
   });
   afterEach(() => cleanup());
 
-  /** The row's choice labels; the suggested one carries its "suggested" tag. */
-  const labels = () => screen.getAllByTestId('session-gate-choice').map((b) => b.textContent ?? '');
+  /** The row's choice labels (each card's name; the suggested one also carries its Recommended badge). */
+  const labels = () => screen.getAllByTestId('session-gate-choice').map((b) => b.querySelector('.wk-ask-opt-label')?.textContent ?? '');
   const renderRow = () =>
     render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human', clis: ['claude', 'codex', 'pi'] } as never, UNITS)} gate={GATE} navigate={vi.fn()} />);
 
   it('a judge seat can rule: the Re-run choice, and the line says what each way forward does', async () => {
     vi.spyOn(client.api, 'getGate').mockResolvedValue({ runId: RUN, ord: 4, prompt: PROMPT, lifecycle: 'open', receivedAt: '', rejudge: AVAILABLE } as never);
     renderRow();
-    // (mockup ui-v2-gate) The suggested choice is the one primary button (no "suggested" tag), the rest are Other options.
+    // (guided asks) Every choice is a card; the suggested one is marked and preselected.
     await waitFor(() => expect(labels()).toContain(REJUDGE_LABEL));
     expect(labels()).toEqual([REJUDGE_LABEL, 'Send back', OPERATOR_JUDGMENT_LABEL, 'Stop']);
     expect(screen.getAllByTestId('session-gate-choice')[0]!.dataset['recommended']).toBe('true');
+    expect(screen.getAllByTestId('session-gate-choice')[0]!.getAttribute('aria-checked')).toBe('true');
     const line = screen.getByTestId('session-gate-judge-wait');
     expect(line.getAttribute('data-rejudge')).toBe('available');
     expect(line.textContent).toMatch(/Pi, Copilot can run it now/);

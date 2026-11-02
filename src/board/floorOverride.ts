@@ -114,6 +114,17 @@ export interface FloorOverrideView {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/**
+ * Where an override was made, in words (operator 2026-10-29: no raw result ids on the face): "the Fix step's checks
+ * (attempt 2)". `stepOf` names a unit by its ord (the plan's word); without one, "step 2".
+ */
+export function overrideWhere(o: Pick<FloorOverrideView, 'ord' | 'attempt' | 'layer'>, stepOf: (ord: number) => string | null): string {
+  const name = o.ord !== null ? stepOf(o.ord) : null;
+  const what = o.layer === 'repo_checks' || o.layer === '' ? 'checks' : o.layer.replace(/_/g, ' ');
+  const at = name !== null ? `the ${name} step’s ${what}` : o.ord !== null ? `step ${o.ord}’s ${what}` : `the ${what}`;
+  return o.attempt !== null ? `${at} (attempt ${o.attempt + 1})` : at;
+}
+
 export function floorOverrideOf(v: unknown): FloorOverrideView | null {
   if (!isRecord(v)) return null;
   const label = typeof v['label'] === 'string' && v['label'].trim() !== '' ? v['label'].trim() : 'floor overridden by operator';

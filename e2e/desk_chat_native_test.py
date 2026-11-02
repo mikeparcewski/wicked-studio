@@ -28,7 +28,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, proposal_menu_item, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, proposal_menu_item, take_proposal, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4483"))
 W, H = 1440, 900
@@ -137,7 +137,9 @@ with sync_playwright() as p:
               and d["finalInView"] and not d["oldCard"] and d["details"] and not d["detailsOpen"]
               and d["panel"] is not None and d["panel"]["r"] == W and not d["handle"], page=d)
         check(f"{theme}-chat-measure", d["measure"] is not None and 700 <= d["measure"] <= 768 and not d["hscroll"], measure=d["measure"])
-        check(f"{theme}-agent-bubbles", d["stepBubble"] not in (None, d["pageBg"], "rgba(0, 0, 0, 0)"), bubble=d["stepBubble"], page_bg=d["pageBg"])
+        # The Wicked synthesis (the only themes since round 4) unboxes messages: spacing groups them, no fill, border or
+        # shadow (src/styles/themes/wicked-synthesis.css "Messages"). A stored dark/light renders as Wicked Dark/Light.
+        check(f"{theme}-agent-turns-unboxed", d["stepBubble"] in ("rgba(0, 0, 0, 0)", d["pageBg"]), bubble=d["stepBubble"], page_bg=d["pageBg"])
 
         # ── 2. the final message in plain words ─────────────────────────────────────────────────
         d = open_session(page, "/s/run%3Ar-cn-bug", theme, '[data-testid="chat-final"]')
@@ -173,11 +175,11 @@ with sync_playwright() as p:
               plan=d["plan"])
         if theme == "light":
             # ui-v2 gate: Edit the plan is under the card's Other options.
-            proposal_menu_item(page, "session-proposal-edit").click()
+            take_proposal(page, "session-proposal-edit")
             page.locator('[data-testid="run-artifacts"]').wait_for(state="visible", timeout=8000)
             page.screenshot(path=str(SHOTS / "desk-chat-native-plan-edit-light.png"))
             check("plan-edit-opens-editor", page.get_by_test_id("session-proposal-edit").get_attribute("aria-expanded") == "true")
-            proposal_menu_item(page, "session-proposal-edit").click()
+            take_proposal(page, "session-proposal-edit")
             before = len(gate_posts("r-cn-plan"))
             page.get_by_test_id("session-proposal-go").click()
             deadline = time.time() + UNDO_S + 8
@@ -194,7 +196,8 @@ with sync_playwright() as p:
         check(f"{theme}-working-step-menu", d["workingMenu"] == 1, menus=d["workingMenu"])
         d = open_session(page, "/s/chat-cn-qa", theme, '[data-testid="session-turn"][data-who="helper"]')
         page.screenshot(path=str(SHOTS / f"desk-chat-native-qa-{theme}.png"))
-        check(f"{theme}-qa-bubbles", len(d["you"]) == 2 and d["helperBubble"] not in (None, d["pageBg"], "rgba(0, 0, 0, 0)")
+        # The helper's answer is unboxed in the Wicked synthesis (no fill), like every message.
+        check(f"{theme}-qa-bubbles", len(d["you"]) == 2 and d["helperBubble"] in ("rgba(0, 0, 0, 0)", d["pageBg"])
               and d["codeCopy"] == 1, you=d["you"], helper_bg=d["helperBubble"])
         ctx.close()
 

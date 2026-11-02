@@ -63,29 +63,29 @@ export function SteeringMcpBuilder({ appliesTo, onAppliesTo, onTrigger }: {
 
   return (
     <fieldset data-testid="steering-mcp-builder" className="flex flex-col gap-2 rounded p-2" style={{ border: '1px solid var(--surface-raised)' }}>
-      <legend className="px-1 text-[11px] font-semibold" style={{ color: 'var(--ink-muted)' }}>MCP policy</legend>
+      <legend className="px-1 text-xs font-semibold" style={{ color: 'var(--ink-muted)' }}>MCP policy</legend>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
           Subject: server
           <select
             data-testid="steering-mcp-server"
             value={server}
             onChange={(e) => { setServer(e.target.value); setTool(''); }}
-            className="rounded px-1.5 py-1 text-[11px] focus:outline-none"
+            className="rounded px-1.5 py-1 text-xs focus:outline-none"
             style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
           >
             <option value="">every MCP call (mcp)</option>
             {(servers ?? []).map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
           tool
           <select
             data-testid="steering-mcp-tool"
             value={tool}
             disabled={picked === null}
             onChange={(e) => setTool(e.target.value)}
-            className="rounded px-1.5 py-1 text-[11px] focus:outline-none disabled:opacity-50"
+            className="rounded px-1.5 py-1 text-xs focus:outline-none disabled:opacity-50"
             style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
           >
             <option value="">the whole server</option>
@@ -98,17 +98,17 @@ export function SteeringMcpBuilder({ appliesTo, onAppliesTo, onTrigger }: {
           type="button"
           data-testid="steering-mcp-add-subject"
           onClick={addSubject}
-          className="rounded px-2 py-1 text-[11px] font-semibold"
+          className="rounded px-2 py-1 text-xs font-semibold"
           style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
         >
           Add to applies to
         </button>
         {subjects.length > 0 && (
-          <span className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>governs {subjects.join(', ')}</span>
+          <span className="font-mono text-xs" style={{ color: 'var(--ink-dim)' }}>governs {subjects.join(', ')}</span>
         )}
       </div>
       {loadError !== null && (
-        <p data-testid="steering-mcp-registry-error" className="text-[10px]" style={{ color: 'var(--status-warn)' }}>
+        <p data-testid="steering-mcp-registry-error" className="text-xs" style={{ color: 'var(--status-warn)' }}>
           The MCP registry is unavailable ({loadError}); type an mcp:&lt;server&gt;/&lt;tool&gt; token into Applies to instead.
         </p>
       )}
@@ -138,7 +138,7 @@ export function SteeringMcpBuilder({ appliesTo, onAppliesTo, onTrigger }: {
             ))}
           </span>
         </div>
-        <label className="flex flex-col gap-1 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
           Argument pattern (a regex over the call&rsquo;s arguments, optional)
           <input
             data-testid="steering-mcp-args"
@@ -147,12 +147,12 @@ export function SteeringMcpBuilder({ appliesTo, onAppliesTo, onTrigger }: {
             spellCheck={false}
             onChange={(e) => setWhen({ ...when, argPattern: e.target.value })}
             placeholder={'e.g. "project":"PAY"'}
-            className="rounded px-2 py-1 font-mono text-[11px] focus:outline-none"
+            className="rounded px-2 py-1 font-mono text-xs focus:outline-none"
             style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
           />
         </label>
         <div className="flex flex-wrap items-center gap-2">
-          <code data-testid="steering-mcp-compiled" className="max-w-full overflow-x-auto rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ background: 'var(--surface-base)', color: 'var(--ink-muted)' }}>
+          <code data-testid="steering-mcp-compiled" className="max-w-full overflow-x-auto rounded px-1.5 py-0.5 font-mono text-xs" style={{ background: 'var(--surface-base)', color: 'var(--ink-muted)' }}>
             {compiled === '' ? '(no trigger: fires on the subject alone)' : compiled}
           </code>
           <button

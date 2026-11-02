@@ -225,6 +225,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import chat_native_corpus  # noqa: E402 — e2e/ is on sys.path for every rig (they import this module from there)
+import power_mode_corpus  # noqa: E402 — the power-mode run page (switch `power_mode`)
 
 REPO = Path(__file__).resolve().parent.parent
 SHOTS = REPO / "e2e" / "shots" / "uxfix"
@@ -296,57 +297,71 @@ def run_panel_item_ids(page) -> list:
     return page.locator('[data-testid="host-panel"] [data-testid="run-panel-item"]').evaluate_all("els => els.map(e => e.dataset.item)")
 
 
-# ── The decision dock's user path (mockup ui-v2-gate, 2026-10-27) ───────────────────────────────────────────────────
-# A gate shows ONE recommended move; every other choice is under "Other options ▾" (a menu, hidden while closed, so
-# each choice keeps its one element), and the explanation, the receipt, the watch line and Technical details are under
-# "More about this". On a session page the open decision is portalled into the dock above the composer; the thread
-# keeps a marker. These helpers take the operator's path: open the menu / the fold, then act.
+# ── The decision dock's user path (guided asks: mockup learn-and-panels state h, 2026-10-31) ───────────────────────────
+# Every gate choice is a CARD in one radio group (`session-gate-choices`): the recommended one is marked and preselected,
+# the option you are on says what it does on one line under the cards (`session-gate-consequence`, "If you choose this:
+# …"), and ONE primary sends it (`session-gate-confirm`; a choice that asks for words — send back, steer, the floor
+# override, skip QE, Stop's reason — opens its box `session-gate-note` and sends from `session-gate-send`). Nothing is
+# sent on a pick. The explanation, the receipt, the watch line and Technical details stay under "More about this". On a
+# session page the open decision is portalled into the dock above the composer; the thread keeps a marker.
 
 def _scope(page, scope):
     return scope if scope is not None else page
 
 
 def open_other_options(page, scope=None) -> None:
-    """Open the gate's "Other options" menu (no-op when it is open or the gate has none)."""
-    btn = _scope(page, scope).locator('[data-testid="session-gate-more"]').first
-    if btn.count() == 0:
-        return
-    if btn.get_attribute("aria-expanded") != "true":
-        btn.click()
-    _scope(page, scope).locator('[data-testid="session-gate-menu"]').first.wait_for(state="visible", timeout=5000)
+    """(ui-v2) Opened the gate's "Other options" menu. Every choice is a card on the face now: nothing to open."""
+    return None
 
 
 def close_other_options(page, scope=None) -> None:
-    btn = _scope(page, scope).locator('[data-testid="session-gate-more"]').first
-    if btn.count() > 0 and btn.get_attribute("aria-expanded") == "true":
-        btn.click()
+    return None
 
 
 def gate_choice(page, key: str, scope=None, timeout: int = 10000):
-    """The gate choice `key`, made visible the user's way: the primary is on the face; any other is in Other options."""
+    """The gate choice `key`: its card, on the face."""
     loc = _scope(page, scope).locator(f'[data-testid="session-gate-choice"][data-choice-key="{key}"]').first
-    loc.wait_for(state="attached", timeout=timeout)
-    if not loc.is_visible():
-        open_other_options(page, scope)
     loc.wait_for(state="visible", timeout=timeout)
     return loc
 
 
-def click_gate_choice(page, key: str, scope=None, timeout: int = 10000) -> None:
+def pick_gate_choice(page, key: str, scope=None, timeout: int = 10000) -> None:
+    """Select the card `key` (sends nothing): its consequence shows, and the primary names it."""
     gate_choice(page, key, scope, timeout).click()
 
 
+STOP_REASON = "e2e: stopping this job"
+
+
+def click_gate_choice(page, key: str, scope=None, timeout: int = 10000, reason: str | None = None) -> None:
+    """Take the choice `key` the person's way: pick its card, then press the one primary. A choice that asks for words
+    opens its box: with `reason` (or for Stop, which always asks why) the words are typed and sent; otherwise the box is
+    left open for the caller to fill and send (`session-gate-note`, `session-gate-send`)."""
+    s = _scope(page, scope)
+    gate_choice(page, key, scope, timeout).click()
+    note = s.locator('[data-testid="session-gate-note"]').first
+    page.wait_for_timeout(50)
+    if note.count() > 0 and note.is_visible():
+        if reason is None and key != "stop":
+            return
+        note.fill(reason if reason is not None else STOP_REASON)
+        s.locator('[data-testid="session-gate-send"]').first.click()
+        return
+    s.locator('[data-testid="session-gate-confirm"]').first.click()
+
+
 def choice_consequence(page, key: str, scope=None) -> str:
-    """What a gate choice says it does BEFORE it is taken, where the operator reads it: an item under Other options says
-    it as its own second line (data-sub, drawn by CSS — the S16a-2a pointer line stays quiet while the menu is open);
-    the face's one button says it on the line above the buttons (session-gate-consequence). "" when nothing is drawn."""
+    """What a gate choice says it does BEFORE it is taken, where the person reads it: the line under the cards for the
+    option under the pointer ("If you choose this: …"), without the lead-in. "" when nothing is drawn."""
     loc = gate_choice(page, key, scope)
-    if loc.get_attribute("role") == "menuitem":
-        sub = loc.get_attribute("data-sub") or ""
-        drawn = loc.evaluate("e => getComputedStyle(e, '::after').content")
-        return sub if sub != "" and sub in drawn else ""
-    line = _scope(page, scope).locator('[data-testid="session-gate-consequence"]').first
-    return (line.text_content() or "").strip() if line.count() else ""
+    loc.hover()
+    line = _scope(page, scope).locator(f'[data-testid="session-gate-consequence"][data-option="{key}"]').first
+    try:
+        line.wait_for(state="attached", timeout=3000)
+    except Exception:
+        return ""
+    text = (line.text_content() or "").strip()
+    return text[len("If you choose this:"):].strip() if text.startswith("If you choose this:") else text
 
 
 def open_more_about(page, scope=None) -> None:
@@ -367,17 +382,27 @@ def open_tech_details(page, scope=None) -> None:
 
 
 def proposal_menu_item(page, testid: str, scope=None, timeout: int = 10000):
-    """A plan/hand-over card's secondary move (Not now, End, Edit the plan, Drop the changes), the user's way: in the
-    card's Other options menu since ui-v2 (the in-place card keeps its own buttons on the face)."""
-    s = _scope(page, scope)
-    loc = s.locator(f'[data-testid="{testid}"]').first
-    loc.wait_for(state="attached", timeout=timeout)
-    if not loc.is_visible():
-        btn = s.locator('[data-testid="session-proposal-more"]').first
-        if btn.get_attribute("aria-expanded") != "true":
-            btn.click()
+    """A plan/hand-over card's way on (Not now, End, Change something, Drop the changes): since guided asks, a CARD on the
+    face (no Other options menu). Clicking it SELECTS it; `take_proposal` also presses the primary."""
+    loc = _scope(page, scope).locator(f'[data-testid="{testid}"]').first
     loc.wait_for(state="visible", timeout=timeout)
     return loc
+
+
+PROPOSAL_REASON = "e2e: not this one"
+
+
+def take_proposal(page, testid: str, scope=None, reason: str | None = None, timeout: int = 10000) -> None:
+    """Take the card's way on `testid` the person's way: pick its card, give the reason End / Stop asks for, then press the
+    one primary (`session-proposal-go`; `session-proposal-primary` while crew refuses the delivery)."""
+    s = _scope(page, scope)
+    proposal_menu_item(page, testid, scope, timeout).click()
+    box = s.locator('[data-testid="session-proposal-reason-text"]').first
+    page.wait_for_timeout(50)
+    if box.count() > 0 and box.is_visible():
+        box.fill(reason if reason is not None else PROPOSAL_REASON)
+    primary = s.locator('[data-testid="session-proposal-go"]:not([role="radio"]), [data-testid="session-proposal-primary"]').first
+    primary.click()
 
 
 def open_proposal_more_about(page, scope=None) -> None:
@@ -608,6 +633,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # standing chat rigs (uxfix slice 4, feedback slice C) assert a
          # fan-out with NO replies, and must keep seeing exactly that.
          "chat_replies": False,
+         # DES-LEARN §5 (Evaluate, state e): an eval history of three runs (GET /testing/evals[/:id]) and the
+         # corpus import (POST /testing/corpora/import, recorded at GET /__fixture/eval-imports). Default False.
+         "eval_plan": False,
          # Slice L (DES-FEEDBACK-002 §9): the batch-gates corpus — two extra
          # projects each holding one awaiting_human SIMPLE-gate run, so the
          # board has §9.5's "3 simple gates" (with r-q3) beside the complex
@@ -909,6 +937,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   Bug run with its steps' outputs and PR #12, a run at its plan approval, a run in progress, a plain chat
          #   Q&A (chat-cn-qa) and an old archived run whose chat crew reclaimed (r-cn-old / chat-cn-gone).
          "chat_native": False,
+         # power_mode — program DES-POWER-MODE (e2e/desk_power_mode_test.py, e2e/power_mode_corpus.py): GET /health says
+         #   capabilities.powerMode; five runs on the api-types 0.149.0 wire (building, at hand-off, paused "this grew",
+         #   phased required, delivered); GET|POST /runs/:id/power and POST /runs/:id/rigor, the pause gate tapped
+         #   (GET /__fixture/power-posts; POST /__fixture {reset_power: true} clears them). Stands alone, like chat_native.
+         "power_mode": False,
          # gate_move — brainstorm-actionable ideas 1+2 (e2e/gate_move_test.py): r-review, paused at an
          #   evaluator NOT PASS escalation (the engine's recorded `VERDICT: FAIL` frames), rides GET
          #   /runs; its events, gate and the creator phase's transcript are served for the card.
@@ -1011,6 +1044,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   ask_one_seat — the roster has no distinct seat: member.joined{seat:null,status:failed} and, after the
          #   reply, plan.refused NoEligibleSeat (the §4.7 one-seat line).
          "ask_path": False, "ask_one_seat": False,
+         # live-chat (operator 2026-10-30): `ask_hold` keeps an ask turn "thinking" (up to 3 min) after its
+         # claim, having sent the engine frames a working turn sends (a dispatch dated `ask_hold_started_ago_s`
+         # back, tool calls, a live usage total), so a journey sees its live activity and the in-flight check;
+         # POST /__fixture/broadcast sends more frames; POST /__fixture {ask_release: true} lets the turn end.
+         "ask_hold": False, "ask_hold_started_ago_s": 240,
          # sheets — S11 (e2e/desk_sheets_test.py): every run's units name a seat
          #   ("claude" where the corpus left none), so a session shows its helpers; POST
          #   /runs/:id/cancel answers crew's 200 and is recorded (GET /__fixture/cancel-posts).
@@ -1108,6 +1146,9 @@ resumed_runs: set = set()
 # corpus appends to that run's trail — crew writes one per decision; GET /runs/:id/events serves it after the
 # recorded events. Cleared with `reset_gate_posts`.
 walk_gate_decided: dict = {}
+# live-chat: the in-flight checks asked (POST /runs/:id/units/:ord/inspect) and their records.
+inspections: dict = {}
+inspect_post_log: list = []
 # Every POST /runs/:id/inject (a message to the team on a live run; GET /__fixture/inject-posts).
 inject_post_log: list = []
 # S9: every `feedback.submitted` batch the bridge received — {pid, doc, version, items} — so a
@@ -2832,8 +2873,8 @@ def _wd_propose(rid: str, body: dict) -> tuple[int, dict]:
     author = body.get("author")
     plugin = body.get("plugin") or {}
     wanted = body.get("sections") or {}
-    if author == "plugin" and any(k != "decisions" for k in wanted):
-        return 403, {"error": "a plugin writes only its own section (decisions)"}
+    if author == "plugin" and any(k not in ("decisions", "questions", "next") for k in wanted):
+        return 403, {"error": "a plugin writes only its own section (decisions, questions, next)"}
     changed = [k for k in WD_SECTIONS if k in wanted and wanted[k] != d["sections"][k]]
     if not changed:
         return 200, {"version": None, "unchanged": True, "steer": None, "view": _wd_view(rid)}
@@ -5026,6 +5067,8 @@ def assemble_runs() -> list:
     with state_lock:
         if state["chat_native"] and not state["no_runs"]:
             runs = chat_native_corpus.corpus(NOW0)["runs"]
+        if state["power_mode"] and not state["no_runs"]:
+            runs = power_mode_corpus.corpus(NOW0)["runs"]
     return runs
 
 
@@ -5119,6 +5162,35 @@ ws_chat_queues: list = []
 ask_lock = threading.Lock()
 ask_chats: dict = {}       # chat_id -> {run_id, eligible, primary, pa, reviewer, turns, rows, messages, scope, status}
 ask_posts: list = []       # every POST /chats/:id/messages the ask path received (GET /__fixture/ask-posts)
+eval_imports: list = []    # every POST /testing/corpora/import under `eval_plan` (GET /__fixture/eval-imports)
+
+
+def _eval_plan_runs() -> list:
+    """Three past evaluations (newest first): all types with gaps, a security corpus, a clean testing run."""
+    now = int(time.time())
+    def pt(total, caught, gaps, fp):
+        return {"total": total, "caught": caught, "gaps": gaps, "false_positives": fp}
+    return [
+        {"id": "ev-all", "created_at": now - 9 * 86400, "actor": "operator", "corpus": None, "type_filter": None, "rule_store": "fixture",
+         "summary": pt(64, 56, 6, 2), "per_type": {"development": pt(24, 18, 6, 0), "security": pt(12, 10, 0, 2), "testing": pt(28, 28, 0, 0)}, "degraded": None},
+        {"id": "ev-sec", "created_at": now - 16 * 86400, "actor": "operator", "corpus": "evals:payments-incidents", "type_filter": "security", "rule_store": "fixture",
+         "summary": pt(18, 17, 1, 0), "per_type": {"security": pt(18, 17, 1, 0)}, "degraded": None},
+        {"id": "ev-test", "created_at": now - 21 * 86400, "actor": "operator", "corpus": None, "type_filter": "testing", "rule_store": "fixture",
+         "summary": pt(12, 12, 0, 0), "per_type": {"testing": pt(12, 12, 0, 0)}, "degraded": None},
+    ]
+
+
+def _eval_plan_detail(run_id: str):
+    run = next((r for r in _eval_plan_runs() if r["id"] == run_id), None)
+    if run is None:
+        return None
+    results = []
+    for i, d in enumerate(["A helper pushes straight to main", "A helper commits a token in a test fixture"]):
+        results.append({"sample": {"id": f"gap-{i}", "description": d, "kind": "bad", "steering_type": "development", "signals": {}},
+                        "expected": "deny", "fired": [], "verdict": "gap", "nearest_rules": [{"rule_id": "POL-3", "similarity": 0.41}]})
+    results.append({"sample": {"id": "ok-1", "description": "A helper opens a pull request", "kind": "good", "steering_type": "development", "signals": {}},
+                    "expected": "allow", "fired": [], "verdict": "caught"})
+    return {**run, "results": results}
 ask_seq = [0]
 ask_eid = [5000]
 
@@ -5352,6 +5424,28 @@ def ask_message(chat_id: str, text: str):
                                             seat=None, role="monitor", status="failed", reason="team plan monitors=1",
                                             error="no seat distinct from the PA"))
         time.sleep(0.6)  # the thread shows "<pa> is thinking" here
+        with state_lock:
+            hold, ago = state["ask_hold"], state["ask_hold_started_ago_s"]
+        if hold:
+            now_ms = int(time.time() * 1000)
+            t0 = now_ms - ago * 1000
+            base = {"session": run_id, "ord": ord_, "attempt": 0}
+            for f in (
+                {"type": "unitDispatched", "ts": t0},
+                {"type": "unitExecuting", "ts": t0},
+                {"type": "toolActivity", "at": now_ms - 50_000, "ts": now_ms - 50_000, "id": "h1", "state": "finished", "kind": "read", "tool": "Read", "target": "packages/crew/src/api/routes.ts", "ok": True, "durationMs": 40},
+                {"type": "toolActivity", "at": now_ms - 20_000, "ts": now_ms - 20_000, "id": "h2", "state": "finished", "kind": "read", "tool": "Read", "target": "packages/crew/src/api/server.ts", "ok": True, "durationMs": 30},
+                {"type": "toolActivity", "at": now_ms - 12_000, "ts": now_ms - 12_000, "id": "h3", "state": "finished", "kind": "read", "tool": "Read", "target": "packages/crew/src/api/audit.ts", "ok": True, "durationMs": 30},
+                {"type": "toolActivity", "at": now_ms - 4_000, "ts": now_ms - 4_000, "id": "h4", "state": "started", "kind": "search", "tool": "Grep", "target": "isHumanOperator", "ok": None, "durationMs": None},
+                {"type": "usageProgress", "at": now_ms - 3_000, "ts": now_ms - 3_000, "inputTokens": 412_000, "outputTokens": 3_100, "costUsd": 0.21},
+                {"type": "unitOutputDelta", "text": "Reading how crew decides who may answer a gate."},
+            ):
+                broadcast_chat({**base, **f})
+            for _ in range(900):
+                with state_lock:
+                    if not state["ask_hold"]:
+                        break
+                time.sleep(0.2)
         if n >= 2 and reviewer is not None:
             _ask_emit(chat_id, _ask_row(run_id, "help.requested", t + 600, ord=ord_, attempt=0, by=pa, help_id=f"h-{n}", help_seq=1,
                                         question=ASK_HELP_Q, context=""))
@@ -6269,6 +6363,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             if served is not None:
                 self._json(served[0], served[1])
                 return True
+        with state_lock:
+            pm_on = state["power_mode"]
+        if pm_on:
+            served = power_mode_corpus.get(path, NOW0)
+            if served is not None:
+                self._json(served[0], served[1])
+                return True
         # Behaviour 10: GET /standing-orders. Switch off: fall through to the ideas 7/8/13 handler
         # below (its orders, or the unknown-route 404 of a daemon predating the surface).
         if path == "/api/v1/standing-orders":
@@ -6291,6 +6392,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                     caps["walkthroughRoots"] = True  # WT-W1 (api-types 0.74.0)
                 if state["chat_native"]:
                     caps["launchPrimary"] = True  # the Lead agent (crew#1077, api-types 0.128.0)
+                if state["power_mode"]:
+                    caps["powerMode"] = True  # program DES-POWER-MODE (api-types 0.149.0)
+                    # GET /system answers as crew will once wicked-crew#1206 lands: a paused power run waits on you.
+                    caps["system"] = True
+                    caps["attentionRanked"] = True
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong", "capabilities": caps})
             return True
         # Idea 15: the delivery freeze switch (crew#694).
@@ -6509,7 +6615,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 served = (state["requirements"] or {}).get(rid)
             if served is None:
-                self._json(404, {"error": f"no requirements for {rid}"})
+                # crew's typed answer for a repo whose requirements graph was never generated (api-types 0.154.0).
+                self._json(404, {"error": "No requirements graph yet for this repository", "code": "notGenerated",
+                                 "workflow": "domain-extraction"})
                 return True
             qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             offset = int((qs.get("offset") or ["0"])[0])
@@ -6563,10 +6671,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             elif leaf == "graph":
                 self._json(200, {"graph": REPO_GRAPH})
             elif leaf == "git-history":
+                # crew's `?limit=` (default 20): the page reads the latest 20, "Show all" asks for more.
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                limit = int((qs.get("limit") or ["20"])[0])
                 self._json(200, {"commits": [
                     {"sha": f"{i:07x}{'0' * 33}", "shortSha": f"{i:07x}",
                      "message": msg, "author": "Mika Ellis", "date": date}
-                    for i, (date, msg) in enumerate(REPO_COMMITS)
+                    for i, (date, msg) in enumerate(REPO_COMMITS[:limit])
                 ]})
             else:
                 self._json(200, {"contributors": REPO_CONTRIBUTORS})
@@ -6632,6 +6743,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                           if s["key"] in boxed else s for s in roster]
                 # api-types 0.115.0 (A6): every seat carries crew's coded issues, derived like crew's seatIssues.
                 roster = [s if "issues" in s else {**s, "issues": crew_issues(s)} for s in roster]
+                # power_mode: the display names the live roster carries ("Claude Code", not "claude").
+                with state_lock:
+                    pm_names = state["power_mode"]
+                if pm_names:
+                    roster = [{**s, "display_name": power_mode_corpus.DISPLAY.get(s["key"], s["display_name"])} for s in roster]
                 self._json(200, {"roster": roster, **({"refresh": {"key": refresh, "outcome": "probed"}} if refresh is not None else {})})
             return True
         if path == "/api/v1/roster/record":
@@ -8550,6 +8666,17 @@ class W2Handler(SimpleHTTPRequestHandler):
             with ask_lock:
                 posts = list(ask_posts)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/eval-imports":
+            with state_lock:
+                got = list(eval_imports)
+            return self._json(200, {"imports": got})
+        with state_lock:
+            eval_plan = state["eval_plan"]
+        if eval_plan and path == "/api/v1/testing/evals":
+            return self._json(200, {"runs": _eval_plan_runs()})
+        if eval_plan and path.startswith("/api/v1/testing/evals/"):
+            detail = _eval_plan_detail(urllib.parse.unquote(path[len("/api/v1/testing/evals/"):]))
+            return self._json(200, detail) if detail is not None else self._json(404, {"error": "no eval run"})
         if path == "/__fixture/launch-posts":
             with state_lock:
                 posts = list(session_launch_log)
@@ -8562,6 +8689,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 rposts = list(reassign_post_log)
             return self._json(200, {"posts": rposts})
+        if path == "/__fixture/power-posts":
+            return self._json(200, {"posts": list(power_mode_corpus.POSTS)})
         if path == "/__fixture/gate-posts":
             with state_lock:
                 posts = list(gate_post_log)
@@ -8570,6 +8699,15 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(resume_post_log)
             return self._json(200, {"posts": posts})
+        parts_g = path.split("/")
+        if len(parts_g) == 8 and parts_g[3] == "runs" and parts_g[5] == "units" and parts_g[7] == "inspections":
+            with state_lock:
+                got = list(inspections.get((urllib.parse.unquote(parts_g[4]), int(parts_g[6])), []))
+            return self._json(200, {"inspections": got})
+        if path == "/__fixture/inspect-posts":
+            with state_lock:
+                got_posts = list(inspect_post_log)
+            return self._json(200, {"posts": got_posts})
         if path == "/__fixture/inject-posts":
             with state_lock:
                 posts = list(inject_post_log)
@@ -8911,6 +9049,13 @@ class W2Handler(SimpleHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if path.startswith("/api/v1/mcp-inspect/") and self._mcp_inspect("POST", path, body):
             return None
+        if path == "/api/v1/testing/corpora/import":
+            with state_lock:
+                on = state["eval_plan"]
+                if on:
+                    eval_imports.append(body)
+            if on:
+                return self._json(200, {"imported": len(body.get("samples") or []), "scope": f"evals:{body.get('name')}", "embedded": True})
         if self._container_post(path, body):
             return None
         wdp = re.match(r"^/api/v1/runs/([^/]+)/working-doc(/versions)?$", path)
@@ -8932,7 +9077,54 @@ class W2Handler(SimpleHTTPRequestHandler):
                 if d and d["steers"]:
                     d["steers"][-1]["pickedUp"] = {"ord": body.get("ord"), "step": body.get("step"), "at": int(time.time() * 1000)}
             return self._json(200, {"ok": True})
+        with state_lock:
+            pm_post = state["power_mode"]
+        if pm_post:
+            served = power_mode_corpus.post(path, body, NOW0)
+            if served is not None:
+                return self._json(served[0], served[1])
+        if path == "/__fixture/broadcast":
+            # live-chat: frames for every open /ws, as crew fans them out.
+            for f in body.get("frames") or []:
+                broadcast_chat(f)
+            return self._json(200, {"ok": True})
+        # live-chat: crew's in-flight check (POST /runs/:id/units/:ord/inspect, GET …/inspections, api-types 0.155.0):
+        # 202 with the record checking on codex, then 2 s later its answer as a `unitInspection` frame.
+        parts_i = path.split("/")
+        if len(parts_i) == 8 and parts_i[3] == "runs" and parts_i[5] == "units" and parts_i[7] == "inspect":
+            rid, ord_i = urllib.parse.unquote(parts_i[4]), int(parts_i[6])
+            now_ms = int(time.time() * 1000)
+            rec = {"id": f"insp-{now_ms}", "runId": rid, "ord": ord_i, "attempt": 0, "state": "checking", "requestedBy": "human-1",
+                   "requestedAt": now_ms, "finishedAt": None, "workerSeat": "claude", "seat": "codex", "checkRunId": f"chk-{now_ms}",
+                   "source": None, "why": None, "verdict": None, "doing": None, "progress": None, "evidence": [], "action": None,
+                   "note": None, "reading": {}, "cost": None}
+            with state_lock:
+                inspections.setdefault((rid, ord_i), []).insert(0, rec)
+                inspect_post_log.append({"runId": rid, "ord": ord_i})
+
+            def answer() -> None:
+                time.sleep(2.0)
+                done = {**rec, "state": "done", "finishedAt": int(time.time() * 1000), "source": "seat", "verdict": "looping",
+                        "doing": "Reading the same three route files again and searching for the same name",
+                        "progress": "Early: it has not changed anything yet after 4 minutes",
+                        "evidence": ["Read packages/crew/src/api/routes.ts 4 times", "Searched isHumanOperator 5 times, same result"],
+                        "action": "steer", "note": "You have the auth check already: isHumanOperator in watch-routes.ts. Stop searching and answer with it.",
+                        "cost": {"inputTokens": 38_000, "outputTokens": 420, "costUsd": 0.04}}
+                with state_lock:
+                    inspections[(rid, ord_i)][0] = done
+                broadcast_chat({"type": "unitInspection", "session": rid, "ord": ord_i, "inspection": done})
+            threading.Thread(target=answer, daemon=True).start()
+            return self._json(202, {"inspection": rec})
         if path == "/__fixture":
+            if body.get("ask_release"):
+                with state_lock:
+                    state["ask_hold"] = False
+            if body.get("reset_inspections"):
+                with state_lock:
+                    inspections.clear()
+                    inspect_post_log.clear()
+            if body.get("reset_power"):
+                power_mode_corpus.reset()
             if body.get("reset_working_doc"):
                 with state_lock:
                     working_docs.clear()

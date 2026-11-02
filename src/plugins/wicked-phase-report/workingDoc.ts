@@ -4,6 +4,7 @@
  */
 
 import { stepLabelOf } from '../../board/chainModel.js';
+import { clock as clockOf, gateWord, openGates, type PauseChoice, type Report } from './model.js';
 
 export type SectionId = 'goal' | 'approach' | 'decisions' | 'constraints' | 'questions' | 'next';
 export const SECTIONS: readonly SectionId[] = ['goal', 'approach', 'decisions', 'constraints', 'questions', 'next'];
@@ -25,7 +26,9 @@ export const SECTION_EFFECT: Readonly<Record<SectionId, string>> = {
 
 export const STEER_NOTE = 'Edits steer the next step. They can raise rigor, never lower it.';
 
-export interface Author { kind: 'human' | 'plugin' | 'system'; id: string }
+/** Who wrote a version: a person, a plugin, crew (the job's request), or an AGENT — the orchestrator's own Approach and
+ *  Decisions, written by crew as `agent:<seat>` (power-mode-engine's contract). Only a person's edit steers. */
+export interface Author { kind: 'human' | 'plugin' | 'system' | 'agent'; id: string }
 export interface TrailEntry { version: number; author: Author; surface: string | null; sections: SectionId[]; at: number; steerId: string | null }
 export interface Steer { id: string; kind: 'next' | 'standing'; pickedUp: { ord: number | null; step: string | null; at: number } | null; queuedAt: number | null; error: string | null }
 export interface DocView {
@@ -33,22 +36,47 @@ export interface DocView {
   sections: Record<SectionId, string> | null;
   trail: TrailEntry[];
   steers: Steer[];
+  /** Crew writes the event-derived Decisions, Open questions and Next lines itself (engine-gaps, 2026-10-30), so a run
+   *  nobody views gets them too. Then this plugin writes none: it renders the document and saves a person's edits. */
+  eventLines?: boolean;
 }
 
-/** "You", a plugin's own name, or crew. */
+/** The plugin writes its own lines only while crew does not (an older crew: absent). */
+export function pluginWritesLines(view: Pick<DocView, 'eventLines'> | null): boolean {
+  return view?.eventLines !== true;
+}
+
+const SEAT_NAMES: Readonly<Record<string, string>> = {
+  claude: 'Claude Code', codex: 'Codex', agy: 'Antigravity', antigravity: 'Antigravity', pi: 'Pi CLI', opencode: 'OpenCode', copilot: 'Copilot',
+};
+
+/** "You", a plugin's own name, an agent's seat ("Claude Code (agent)"), or crew. */
 export function authorWord(a: Author): string {
   if (a.kind === 'human') return a.id === 'local' ? 'You' : a.id;
   if (a.kind === 'plugin') return /^plugin:wicked-phase-report@/u.test(a.id) ? 'Phase report (plugin)' : `${a.id.replace(/^plugin:/u, '').replace(/@.*$/u, '')} (plugin)`;
+  if (a.kind === 'agent') {
+    const seat = a.id.replace(/^agent:/u, '');
+    return `${SEAT_NAMES[seat] ?? seat} (agent)`;
+  }
   return 'From the job’s request';
 }
 
-/** Who last wrote a section, by the trail. */
+/** A trail entry's author kind as crew may send it: an `agent:<seat>` id is an agent whatever the kind says. */
+function kindOf(a: Author): Author {
+  return a.kind !== 'agent' && /^agent:/u.test(a.id) ? { kind: 'agent', id: a.id } : a;
+}
+
+/** Who wrote a section, by the trail: every author, newest first ("Phase report (plugin), You"), so a section with a
+ *  person's lines and a plugin's lines names both. */
 export function sectionAuthor(view: DocView, id: SectionId): string | null {
+  const who: string[] = [];
   for (let i = view.trail.length - 1; i >= 0; i -= 1) {
     const t = view.trail[i]!;
-    if (t.sections.includes(id)) return authorWord(t.author);
+    if (!t.sections.includes(id)) continue;
+    const w = authorWord(kindOf(t.author));
+    if (!who.includes(w)) who.push(w);
   }
-  return null;
+  return who.length > 0 ? who.join(', ') : null;
 }
 
 const clock = (ms: number): string => {
@@ -56,27 +84,139 @@ const clock = (ms: number): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
+/**
+ * The step that picked a steer up, in words. Crew's `pickedUp.step` is sometimes the ENGINE's unit id
+ * ("wf-<run>:unit-2"), not a plan step id: that is never shown. The step is named from the run's own step at `ord`
+ * (`stepOfOrd`, the label the thread gives it), else from a plan step id, else "step N".
+ */
+export function pickedUpStep(p: { ord: number | null; step: string | null }, stepOfOrd: (ord: number) => string | null = () => null): string {
+  const named = p.ord !== null ? stepOfOrd(p.ord) : null;
+  if (named !== null && named !== '') return named;
+  if (p.step !== null && p.step !== '' && !p.step.includes(':')) return stepLabelOf(p.step);
+  return p.ord !== null ? `step ${p.ord}` : 'a step';
+}
+
 /** Where a steer stands: picked up at a step, waiting for the next one, or why it was not sent. */
-export function steerWords(s: Steer | undefined): string | null {
+export function steerWords(s: Steer | undefined, stepOfOrd?: (ord: number) => string | null): string | null {
   if (s === undefined) return null;
   if (s.error !== null) return `not sent: ${s.error}`;
-  if (s.pickedUp !== null) return `picked up at ${s.pickedUp.step !== null ? stepLabelOf(s.pickedUp.step) : `step ${s.pickedUp.ord ?? '?'}`} ${clock(s.pickedUp.at)}`;
+  if (s.pickedUp !== null) return `picked up at ${pickedUpStep(s.pickedUp, stepOfOrd)} ${clock(s.pickedUp.at)}`;
   return 'waiting for the next step';
 }
 
 /** "v3 · You · Constraints and steering · 14:32 · picked up at Review 14:40", newest first. */
-export function trailLines(view: DocView, max = 6): string[] {
+export function trailLines(view: DocView, max = 6, stepOfOrd?: (ord: number) => string | null): string[] {
   return view.trail.slice(-max).reverse().map((t) => {
-    const parts = [`v${t.version}`, authorWord(t.author), t.sections.map((s) => SECTION_LABELS[s]).join(', '), clock(t.at)];
-    const s = steerWords(view.steers.find((x) => x.id === t.steerId));
+    const a = kindOf(t.author);
+    const parts = [`v${t.version}`, authorWord(a), t.sections.map((s) => SECTION_LABELS[s]).join(', '), clock(t.at)];
+    const s = steerWords(view.steers.find((x) => x.id === t.steerId), stepOfOrd);
     if (s !== null) parts.push(s);
+    // A plugin's or an agent's text is recorded, never sent to a step.
+    else if (a.kind === 'plugin' || a.kind === 'agent') parts.push('not sent to a step');
     return parts.join(' · ');
   });
 }
 
-/** The Decisions text with a line the plugin writes for an answered decision, or null when it is there already. */
-export function withDecisionLine(current: string, line: string): string | null {
+
+// ── the lines the Phase report writes as itself (operator 2026-10-30: "the plugin should fill it from events") ──
+//
+// Decisions: each decision answered (a gate, a checkpoint pause: who and what) — kept, never taken back.
+// Open questions: what waits on a person now (an open gate, a pause) — gone once answered.
+// Next and trailing work: what the newest hand-off round left (a step that failed or was skipped) — gone once a later
+// round passes it.
+// A person's own lines in those sections are never touched. Only a person's edit steers (crew decides that).
+
+const PAUSE_KIND_WORDS: Readonly<Record<string, string>> = {
+  longer_than_estimated: 'taking much longer than estimated', tests_failing: 'the tests kept failing',
+  changes_undone: 'changes were undone', rigor_jumped: 'rigor jumped two levels at once', spread: 'the change spread into another product',
+  other: 'it grew more complex than planned',
+};
+const CHOICE_WORDS: Readonly<Record<PauseChoice, string>> = {
+  continue_high: 'continue at high rigor', continue: 'continue as planned', switch_phased: 'switch to phased steps', stop: 'stop the job',
+};
+const HANDOFF_WORDS: Readonly<Record<string, { failed: string; skipped: string }>> = {
+  checks: { failed: 'the checks failed: fix them and hand off again', skipped: 'the checks were skipped' },
+  review: { failed: 'the review asked for changes: make them and hand off again', skipped: 'the review was skipped' },
+  security: { failed: 'the security check found problems: fix them and hand off again', skipped: 'the security check was skipped' },
+  qe: { failed: 'QE acceptance did not pass: fix it and hand off again', skipped: 'QE acceptance was skipped' },
+  compliance: { failed: 'the compliance check did not pass', skipped: 'the compliance check was skipped' },
+};
+
+const why = (kinds: readonly string[]): string => (kinds.length > 0 ? ` (${kinds.map((k) => PAUSE_KIND_WORDS[k] ?? k).join('; ')})` : '');
+
+/** What the plugin's own lines say now, per section, from the run's events. */
+export function docLines(r: Report): { decisions: string[]; questions: string[]; next: string[] } {
+  // Decisions in the order they were made.
+  const made: Array<{ at: number; line: string }> = [];
+  const questions: string[] = [];
+  const next: string[] = [];
+  for (const g of r.gates) if (g.answeredAt !== null) made.push({ at: g.answeredAt, line: `${gateWord(g.kind)} · answered ${clockOf(g.answeredAt)}` });
+  const p = r.power;
+  for (const pz of p?.pauses ?? []) {
+    if (pz.choice !== null && pz.answeredAt !== null) {
+      made.push({ at: pz.answeredAt, line: `Checkpoint ${pz.n} pause${why(pz.kinds)} · ${pz.byPerson ? 'you chose' : 'answered'}: ${CHOICE_WORDS[pz.choice]} · ${clockOf(pz.answeredAt)}` });
+    } else if (r.finished === null) {
+      questions.push(`Waiting on you · checkpoint ${pz.n} paused${why(pz.kinds)}: split it, switch to phased steps, continue at high rigor, or stop? · since ${clockOf(pz.at)}`);
+    }
+  }
+  for (const g of openGates(r)) questions.push(`Waiting on you · ${gateWord(g.kind)} · since ${clockOf(g.openedAt)}`);
+  if (p?.handoff != null) {
+    for (const [step, st] of p.handoff.steps) {
+      const w = HANDOFF_WORDS[step];
+      if (w === undefined) continue;
+      if (st.status === 'failed') next.push(`After hand-off round ${p.handoff.round} · ${w.failed}`);
+      else if (st.status === 'skipped') next.push(`After hand-off round ${p.handoff.round} · ${w.skipped}`);
+    }
+  }
+  const decisions = made.sort((a, b) => a.at - b.at).map((d) => d.line);
+  return { decisions, questions, next };
+}
+
+/**
+ * Every open-question line the plugin has written or would write for this run, exactly: one per decision and per
+ * checkpoint pause it has seen, open or answered. A question line is the plugin's only when it is one of these: a line
+ * a person edited, even inside the gate's name or the pause's reason, is theirs (codex + agy on #937).
+ */
+export function ownQuestionLines(r: Report): string[] {
+  const out = r.gates.map((g) => `Waiting on you · ${gateWord(g.kind)} · since ${clockOf(g.openedAt)}`);
+  for (const pz of r.power?.pauses ?? []) {
+    out.push(`Waiting on you · checkpoint ${pz.n} paused${why(pz.kinds)}: split it, switch to phased steps, continue at high rigor, or stop? · since ${clockOf(pz.at)}`);
+  }
+  return out;
+}
+
+/** Whether a saved line stands for a generated one: it is that line, or a person's edit that kept its words. */
+export function represents(saved: string, generated: string): boolean {
+  return saved === generated || saved.startsWith(generated);
+}
+
+/**
+ * The generated lines a write of `wanted` would ADD to a section's saved text: those no saved line stands for. Only
+ * these become the plugin's own (codex r7 on #937): a line already there, a person's even in the plugin's words, is
+ * never claimed.
+ */
+export function addedLines(current: string, wanted: readonly string[]): string[] {
+  const saved = current.split('\n').map((l) => l.trim());
+  return wanted.filter((w) => !saved.some((k) => represents(k, w)));
+}
+
+/**
+ * A section's new text with the plugin's lines brought up to date, or null when nothing changes. A person's lines stay
+ * as they are, in place. Decisions only ever gain lines; in Open questions and Next, the plugin's own lines that no
+ * longer hold are taken out.
+ */
+export function reconcileSection(
+  section: 'decisions' | 'questions' | 'next', current: string, wanted: readonly string[], ownQuestions: readonly string[] = [],
+  ownNext: readonly string[] = [],
+): string | null {
   const lines = current.split('\n').map((l) => l.trim()).filter((l) => l !== '');
-  if (lines.includes(line)) return null;
-  return [...lines, line].join('\n');
+  // A Next line is the plugin's to take back only when it is, word for word, a line the plugin wrote (`ownNext`): a
+  // template never establishes ownership, so a person's edit is never deleted, this round or a later one (codex r4/r6
+  // on #937). A stale line the plugin wrote before a page reload stays until someone removes it.
+  const mine = (l: string): boolean => (section === 'next' ? ownNext.includes(l) : ownQuestions.includes(l));
+  const kept = section === 'decisions' ? lines : lines.filter((l) => !mine(l) || wanted.includes(l));
+  // A person's edit that kept the line's words ("After hand-off round 1 · … — check the retry path first") stands for it.
+  const add = wanted.filter((w) => !kept.some((k) => represents(k, w)));
+  const out = [...kept, ...add];
+  return out.join('\n') === lines.join('\n') ? null : out.join('\n');
 }

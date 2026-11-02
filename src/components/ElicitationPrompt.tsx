@@ -1,9 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api, apiStatus } from '../api/client.js';
-import { askerOf, useElicitationStore, type OpenElicitation } from '../store/elicitations.js';
+import type { AskAnswer } from '../api/ask.js';
+import { askFromElicitation, elicitationContent, recordLine } from '../board/askModel.js';
+import { answerShapeOf, askerOf, useElicitationStore, type OpenElicitation } from '../store/elicitations.js';
+import { useAnsweredAsks } from '../store/answeredAsks.js';
+import { AskCard } from './ask/AskCard.js';
 
 /**
- * The operator's answer surface for an MCP server's mid-session question (DES-002).
+ * The operator's answer surface for an MCP server's mid-session question (DES-002), drawn as a guided ask
+ * (DES-GUIDED-CHAT): free text, a yes / no, choose one (the producer's recommendation marked and preselected), or pick
+ * several when the engine says `multi` (answered with `content.values`). Once answered, the thread keeps one line
+ * ("You picked: main, develop") where the question was (`store/answeredAsks`, drawn by ThreadQuestions).
  *
  * Before this existed the daemon cached the elicitation and exposed it over REST, and answering
  * one meant a hand-written `curl`. This is the tap on that plumbing.
@@ -19,18 +26,17 @@ import { askerOf, useElicitationStore, type OpenElicitation } from '../store/eli
  * server has moved on. The recovery is to refetch and swap, guarded on the stale id so a
  * WebSocket-delivered newer prompt is never clobbered by the recovery (v0.22).
  */
-export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactElement {
-  const [text, setText] = useState('');
-  const [choice, setChoice] = useState<string | null>(null);
+export function ElicitationPrompt({ e, who = null }: { e: OpenElicitation; who?: string | null }): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const swapFromGet = useElicitationStore((s) => s.swapFromGet);
   const clearElicitation = useElicitationStore((s) => s.clearElicitation);
+  const remember = useAnsweredAsks((s) => s.remember);
+  const ask = useMemo(() => askFromElicitation(e, who === null ? 'A question, not a gate' : `${who} asks · a question, not a gate`), [e, who]);
 
-  const answer = choice ?? text.trim();
-  const canAccept = e.options === null ? answer.length > 0 : choice !== null;
-
-  async function send(action: 'accept' | 'decline' | 'cancel'): Promise<void> {
+  async function send(action: 'accept' | 'decline' | 'cancel', answer?: AskAnswer): Promise<void> {
+    const content = action === 'accept' && answer !== undefined ? elicitationContent(ask, answer) : null;
+    if (action === 'accept' && content === null) return;
     setBusy(true);
     setError(null);
     try {
@@ -38,8 +44,9 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
         elicitationId: e.elicitationId,
         action,
         // `content` must be ABSENT for decline/cancel — the route rejects it otherwise.
-        ...(action === 'accept' ? { content: { response: answer } } : {}),
+        ...(content !== null ? { content } : {}),
       });
+      remember(e.runId, { askId: e.elicitationId, line: answer !== undefined ? recordLine(ask, answer) : 'You declined to answer', at: Date.now() });
       clearElicitation(e.runId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -68,6 +75,7 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
                 options: fresh.options,
                 receivedAt: fresh.receivedAt,
                 ...askerOf(fresh),
+                ...answerShapeOf(fresh),
               },
         );
         // If the swap was refused, a newer prompt arrived by WS and already owns the slot —
@@ -82,77 +90,26 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
   }
 
   return (
-    <div
-      className="flex flex-col gap-2 rounded p-3"
-      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
-      data-testid="elicitation-prompt"
-    >
-      <p className="text-[11px] font-semibold uppercase tracking-wider font-mono"
-         style={{ color: 'var(--ink-dim)' }}>
-        Input requested
-      </p>
-      <p className="text-sm" style={{ color: 'var(--ink-high)' }}>{e.message}</p>
-
-      {e.options === null ? (
-        <input
-          type="text"
-          value={text}
-          disabled={busy}
-          onChange={(ev) => setText(ev.target.value)}
-          placeholder="Your answer"
-          aria-label="Your answer"
-          className="rounded px-2 py-1 text-sm"
-          style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-        />
-      ) : (
-        <div className="flex flex-wrap gap-1">
-          {e.options.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              disabled={busy}
-              onClick={() => setChoice(opt)}
-              className="rounded px-2 py-0.5 text-xs font-mono"
-              style={{
-                background: choice === opt ? 'var(--accent-subtle)' : 'var(--surface-rail)',
-                border: `1px solid ${choice === opt ? 'var(--accent)' : 'var(--surface-raised)'}`,
-                color: 'var(--ink-high)',
-              }}
-            >
-              {opt}
-            </button>
-          ))}
+    <div data-testid="elicitation-prompt" data-kind={ask.kind} className="wk-elicit">
+      <AskCard
+        ask={ask}
+        tag="Question"
+        busy={busy}
+        onAnswer={(a) => void send('accept', a)}
+        aside={
+          <button type="button" data-testid="elicitation-decline" disabled={busy} onClick={() => void send('decline')} className="wk-btn wk-btn--quiet wk-btn--sm">
+            Don’t answer
+          </button>
+        }
+      />
+      {ask.kind === 'confirm' && (
+        <div className="wk-ask-go">
+          <button type="button" data-testid="elicitation-decline" disabled={busy} onClick={() => void send('decline')} className="wk-btn wk-btn--quiet wk-btn--sm">
+            Don’t answer
+          </button>
         </div>
       )}
-
-      {error !== null && (
-        <p className="text-xs" style={{ color: 'var(--status-fail)' }}>{error}</p>
-      )}
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={busy || !canAccept}
-          onClick={() => void send('accept')}
-          className="rounded px-2 py-0.5 text-xs font-semibold"
-          style={{
-            background: canAccept ? 'var(--status-run-dim)' : 'var(--surface-raised)',
-            border: `1px solid ${canAccept ? 'var(--status-run-dim)' : 'var(--surface-raised)'}`,
-            color: canAccept ? 'var(--status-run)' : 'var(--ink-dim)',
-          }}
-        >
-          Send
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void send('decline')}
-          className="rounded px-2 py-0.5 text-xs"
-          style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-        >
-          Decline
-        </button>
-      </div>
+      {error !== null && <p role="alert" data-testid="elicitation-error" className="wk-session-gate-error">{error}</p>}
     </div>
   );
 }

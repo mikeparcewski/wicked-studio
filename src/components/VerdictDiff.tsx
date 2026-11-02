@@ -25,13 +25,13 @@ export function VerdictDiff({ runId, units, reviewedOrd, items }: {
         data-testid="verdict-diff-toggle"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="text-[10px] font-mono"
+        className="text-xs font-mono"
         style={{ color: 'var(--ink-dim)' }}
       >
         {open ? '▾' : '▸'} Why it failed — the reviewer&apos;s {items.length} failing item{items.length === 1 ? '' : 's'} beside what {diff.creator ?? 'the creator'} claimed
       </button>
       {open && (
-        <table className="w-full mt-1 text-[10px] font-mono" style={{ borderCollapse: 'collapse', color: 'var(--ink-body)' }}>
+        <table className="w-full mt-1 text-xs font-mono" style={{ borderCollapse: 'collapse', color: 'var(--ink-body)' }}>
           <thead>
             <tr style={{ color: 'var(--ink-dim)', textAlign: 'left' }}>
               <th className="pr-2 font-normal" style={{ width: '50%' }}>Reviewer: failing</th>
@@ -53,7 +53,7 @@ export function VerdictDiff({ runId, units, reviewedOrd, items }: {
         </table>
       )}
       {open && diff.note !== null && (
-        <p data-testid="verdict-diff-note" className="text-[10px] font-mono mt-1" style={{ color: 'var(--ink-dim)' }}>
+        <p data-testid="verdict-diff-note" className="text-xs font-mono mt-1" style={{ color: 'var(--ink-dim)' }}>
           {showText(diff.note)}
         </p>
       )}

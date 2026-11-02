@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
 import { useHostChrome } from './editors/hostApi.js';
 import { AskDock } from './components/AskDock.js';
+import { PageChatColumn } from './components/chat/PageChat.js';
 import { endSystemChat, useAskDock, type AskRequest } from './store/askDock.js';
 import { useSearchModal } from './store/searchModal.js';
 import { usePhone } from './hooks/usePhone.js';
@@ -16,7 +17,7 @@ import { NotFoundPage } from './components/NotFoundPage.js';
 import { SkipLink } from './components/SkipLink.js';
 import { ProjectDesk } from './components/desk/ProjectDesk.js';
 import { RepositoriesPanel } from './components/RepositoriesPanel.js';
-import { LearnPage } from './components/learn/LearnPage.js';
+import { LearnHub } from './components/learn/LearnHub.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
@@ -24,7 +25,7 @@ import { RunRawView } from './components/RunRawView.js';
 import { SkillsPage } from './components/SkillsPage.js';
 import { ProjectRequirementsPage } from './components/product/ProjectRequirementsPage.js';
 import { CampaignsRedirect, RouteRedirect } from './components/RouteRedirect.js';
-import { PluginsPage } from './components/editors/EditorPluginsSettings.js';
+import { PluginsPage } from './components/editors/PluginsPage.js';
 import { McpInspectPage } from './components/editors/McpInspectPage.js';
 import { AGENTS_PATH, AgentsPage } from './components/agents/AgentsPage.js';
 import { useFirstUseLanding } from './components/agents/useFirstUseLanding.js';
@@ -37,6 +38,7 @@ import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
 import { PeekCard } from './components/PeekCard.js';
 import { UndoToasts } from './components/UndoToasts.js';
+import { VoiceRoot } from './components/voice/VoiceRoot.js';
 import { LaunchWizard } from './components/launch/LaunchWizard.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SettingsPage } from './components/SettingsPage.js';
@@ -60,7 +62,7 @@ import { needRunId } from './board/deskModel.js';
 import { markHeld } from './board/heldRuns.js';
 import { objectCommands, type ObjectCommands } from './components/sheets/objectCommands.js';
 import { cmdkObject, trackPointedObject } from './store/sheets.js';
-import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
+import { useNeedsClock, useNeedsRows, useSettledNeeds } from './hooks/useNeedsRows.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { publishCoreEvent } from './hooks/eventTap.js';
@@ -103,9 +105,11 @@ import { useNotifPrefsStore } from './store/notifPrefs.js';
 import { useComposerPrefsStore } from './store/composerPrefs.js';
 import { useViewPrefsStore } from './store/viewPrefs.js';
 import { useDeliveryFreezeStore } from './store/deliveryFreeze.js';
+import { POWER_CHANGED } from './hooks/usePower.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
 import { parseSessionId, sessionIdOf, sessionPath } from './board/sessionModel.js';
 import { sizeOf, versionOf } from './board/artifactAddress.js';
+import { useAmbientMood } from './hooks/useAmbientMood.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -121,6 +125,12 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
   'runCancelled',
   'sessionFailed',
   'sessionCompleted',
+  // Power mode: a checkpoint can pause the run (no engine gate opens) and a turn, a flip or a hand-off step ends the
+  // pause — the run list carries `power.pause`, which every surface reads to say the run waits on you.
+  'powerCheckpointReached',
+  'powerTurnStarted',
+  'powerHandoffStepped',
+  'powerToggled',
 ]);
 
 /** Terminal run states — a run here can no longer be cancelled. */
@@ -133,6 +143,12 @@ const DESK_COMPOSER_PX = 96;
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, artifactId, showLaunch, campaignId, testingPage, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
+  // This page changed a run's power state (a flip, a raise, a pause answered): re-read the run list.
+  useEffect(() => {
+    const on = (): void => refresh();
+    window.addEventListener(POWER_CHANGED, on);
+    return () => window.removeEventListener(POWER_CHANGED, on);
+  }, [refresh]);
   const navCollapsed = useHostChrome((s) => s.navCollapsed);
   const phone = usePhone();
   const ingestGate = useGateStore((s) => s.ingest);
@@ -523,6 +539,9 @@ export function App(): React.ReactElement {
   // studio#805: the Desk's surfaces read a held live run as waiting on you (statusWord reads the mark).
   // Needs-you rows above are folded from the raw runs; gate logic and actions keep the raw runs too.
   const shownRuns = useMemo(() => markHeld(runs, heldByNeeds), [runs, heldByNeeds]);
+  // Ambient (operator 2026-11-01): the mood the work sets, from the runs and the settled needs-you count already held.
+  const ambientNeeds = useSettledNeeds(needRows, runsLoaded, runsError !== null).count ?? 0;
+  useAmbientMood(shownRuns, ambientNeeds);
 
   // ── Studio wave 2a: peek (P), jump (G), back (B) — and the panels "back" reopens ──
   const peek = usePeekJump(runs, navigate, needRows);
@@ -685,7 +704,7 @@ export function App(): React.ReactElement {
     // `/insights` — Run insights (crew DES-RUNS-REVIEW-001): the first-party plugin over every review of recent work.
     if (panel === 'insights') return <InsightsPage navigate={navigate} />;
     if (panel === 'learn') {
-      return <LearnPage navigate={navigate} />;
+      return <LearnHub navigate={navigate} search={search} />;
     }
     if (panel === 'plugins') {
       return (
@@ -813,6 +832,9 @@ export function App(): React.ReactElement {
         )}
         <div className="flex flex-1 overflow-hidden min-h-0">
           {renderCenter()}
+          {/* DES-LEARN §6.2: the chat of the page on screen (Report, Nerve Center, Evaluate, Steering, Memory,
+              Learn), beside it from 1200 px and a bottom sheet below. Understand draws its own in the page. */}
+          <PageChatColumn runs={shownRuns} navigate={navigate} />
         </div>
       </div>
 
@@ -892,6 +914,8 @@ export function App(): React.ReactElement {
       {/* Wave 2a: the peek card (P) and the gate-decision Undo toasts — skins over
           usePeekJump and board/undoQueue. */}
       <PeekCard view={peek} />
+      {/* Voice mode (DES-VOICE): the modal, then full screen; ⌥V or a composer's mic opens it. */}
+      <VoiceRoot />
       <UndoToasts />
 
       {/* The launch wizard (operator 2026-10-11): every start point opens this one modal. */}

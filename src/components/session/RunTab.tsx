@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import type { ChainModel, ChainStep } from '../../board/chainModel.js';
@@ -28,6 +28,8 @@ import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js
 import { deliverySummary, outcomeLine, statusSentence } from '../../board/proposalCard.js';
 import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
+import { useRunningFloor } from '../../hooks/useRunningFloor.js';
+import { floorWords } from '../../board/floorRun.js';
 import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
 import { deliveryOf } from '../delivery.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
@@ -44,6 +46,11 @@ import { ActivityTail, EvidenceTab, GoalBrief, HelpersList, RunSection, SignIns,
 import { PANEL_SECTIONS, panelStateKind, quietSections, sectionOpen, type PanelSectionId } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
 import { TeamRosterLines } from './TeamRosterLines.js';
+import { panelRows, pluginSections } from '../../board/runPluginPanels.js';
+import { RUN_PLUGINS } from '../../plugins/runPlugins.js';
+import { useRunPhases } from '../../hooks/useRunPhases.js';
+import { useRunPluginView } from '../../store/runPluginView.js';
+import { RunPluginSection } from './RunThreadPlugin.js';
 
 function isTerminal(view: SessionView): boolean {
   return ['completed', 'cancelled', 'failed'].includes(view.session.status);
@@ -124,6 +131,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   // (J4 0.16.6) The step silent past crew's quiet mark: the Now section says so, as the header does.
   const silent = useSilentStep(view);
+  const floor = useRunningFloor(view);
   const coverage = useRunCoverage(view);
   const delivery = deliveryOf(view);
   const recorded = deliveryAssuranceOf(view);
@@ -226,10 +234,11 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
     </div>
   );
 
-  return (
-    <>
-      {glance}
-      <Section id="now" {...fold} summary={silent !== null ? silentWords(silent) : chatStatusWord([view]).word}>
+  // The panel's rows: the core sections at their places (Now first), the run plugins' sections between them by their
+  // manifest's `order`, a pinned plugin section at the top (DES-LEARN §1.2).
+  const core: Record<PanelSectionId, React.ReactElement> = {
+    now: (
+      <Section id="now" {...fold} summary={silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word}>
         <div data-testid="run-tab-now" className="wk-run-tab-block">
           <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(view, chain, gate, action, silent?.minutes ?? null)}</p>
           {(started !== null || ended !== null) && (
@@ -275,7 +284,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         )}
         <Item section="now" id="goal">{() => <div data-testid="sheet-goal" className="wk-sheet-section"><GoalBrief problem={session.problem} /></div>}</Item>
       </Section>
-
+    ),
+    plan: (
       <Section id="plan" {...fold} summary={chain.steps.length === 0 ? 'No steps yet' : `${doneSteps} of ${chain.steps.length} done${current !== undefined ? ` · ${current.label}` : ''}`}>
         <div data-testid="run-tab-phases" className="wk-run-tab-block">
           {chain.transportLine !== null && <p data-testid="run-tab-transport" className="wk-run-tab-warning">{chain.transportLine}</p>}
@@ -293,7 +303,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         {planItem && <Item section="plan" id="plan">{() => <RunSection id="plan" view={view} runs={allRuns} navigate={go} />}</Item>}
         <Item section="plan" id="steps">{() => <StepsList view={view} />}</Item>
       </Section>
-
+    ),
+    changes: (
       <Section id="changes" {...fold} summary={deliverySummary(view) ?? (delivered ? 'Nothing pushed' : quiet.has('changes') ? 'Nothing changed yet' : 'Nothing delivered yet')}>
         {/* A run still going has nothing delivered to say ("in-flight" is only "it has a deliver step"). */}
         {delivered && (
@@ -302,7 +313,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
             {delivery.url !== null && <p className="wk-run-tab-line"><a data-testid="run-tab-pr" href={delivery.url} target="_blank" rel="noreferrer">Pull request{prNumber !== null ? ` #${prNumber}` : ''} ↗</a></p>}
             {delivery.pushed !== undefined && <p data-testid="run-tab-branch" className="wk-run-tab-line">Branch <code>{delivery.pushed.branch}</code></p>}
             {delivery.reason !== null && delivery.state !== 'delivered' && <p data-testid="run-tab-delivery-reason" className="wk-run-tab-muted">{delivery.reason}</p>}
-            {receipt !== null && <AssuranceReceipt receipt={receipt} passed={recorded !== null && !recorded.verified ? null : true} testId="run-tab-assurance" />}
+            {receipt !== null && <AssuranceReceipt receipt={receipt} passed={recorded !== null && !recorded.verified ? null : true} testId="run-tab-assurance" units={view.units} />}
             <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-tab" />
             {panelShown && <DeliverCredentialsNotice view={view} />}
           </div>
@@ -312,7 +323,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         {deliveryItem && <Item section="changes" id="delivery">{() => <RunSection id="delivery" view={view} runs={allRuns} navigate={go} />}</Item>}
         <Item section="changes" id="files">{() => <RunSection id="files" view={view} runs={allRuns} navigate={go} />}</Item>
       </Section>
-
+    ),
+    checks: (
       <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === false ? 'Not passed' : overridden !== null ? 'Overridden by you' : acceptancePassed === true ? 'Passed' : ''}>
         <div data-testid="run-tab-checks" className="wk-run-tab-block">
           <RunAssuranceLabel view={view} />
@@ -329,7 +341,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         <Item section="checks" id="governance">{() => <RunSection id="governance" view={view} runs={allRuns} navigate={go} />}</Item>
         <Item section="checks" id="steering">{() => <RunSection id="steering" view={view} runs={allRuns} navigate={go} />}</Item>
       </Section>
-
+    ),
+    agents: (
       <Section id="agents" {...fold} summary={`${agentsWord(clis.length)}${spend !== null ? ` · ${spend}` : ''}`}>
         <div data-testid="run-tab-agents" className="wk-run-tab-block">
           <TeamRosterLines runId={id} roster={roster} />
@@ -354,7 +367,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         <Item section="agents" id="signins">{() => <SignIns roster={roster} navigate={go} />}</Item>
         <Item section="agents" id="burn">{() => <RunSection id="burn" view={view} runs={allRuns} navigate={go} />}</Item>
       </Section>
-
+    ),
+    record: (
       <Section id="record" {...fold} summary="">
         {panelShown && open('record') && (
           <div data-testid="run-tab-record" className="wk-run-tab-block">
@@ -373,6 +387,34 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
           <p className="wk-run-tab-line">Agents: <code>{session.clis.join(', ')}</code></p>
         </details>
       </Section>
+    ),
+  };
+
+  return (
+    <>
+      {glance}
+      <RunPanelRows view={view} core={core} />
+    </>
+  );
+}
+
+/**
+ * The panel's sections in order: Now, the run plugins' sections (a power build's Phase report: one per phase), then the
+ * core sections; a plugin may sit between core ones by its `order`, and a pinned plugin section leads.
+ */
+function RunPanelRows({ view, core }: { view: SessionView; core: Record<PanelSectionId, React.ReactElement> }): React.ReactElement {
+  const id = view.session.id;
+  const phases = useRunPhases(view);
+  const sections = useMemo(() => pluginSections(RUN_PLUGINS, phases), [phases]);
+  const blocks = useRunPluginView((s) => s.blocks);
+  const pinned = (key: string): boolean => blocks[`${id}::${key}`]?.pinned ?? useRunPluginView.getState().view(id, key).pinned;
+  const rows = panelRows(sections, pinned);
+  const live = !isTerminal(view);
+  return (
+    <>
+      {rows.map((r) => (r.kind === 'core'
+        ? <Fragment key={r.id}>{core[r.id]}</Fragment>
+        : <RunPluginSection key={`${id}:${r.section.key}:${pinned(r.section.key) ? 'pin' : 'place'}`} runId={id} plugin={RUN_PLUGINS.find((p) => p.id === r.section.pluginId)!} section={r.section} live={live} />))}
     </>
   );
 }

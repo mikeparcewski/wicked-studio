@@ -50,16 +50,16 @@ afterEach(() => {
 });
 
 describe('the theme list', () => {
-  it('offers dark, light, wicked-light and wicked-dark; the default stays dark', () => {
-    expect(THEMES.map((t) => t.id)).toEqual(['dark', 'light', 'wicked-light', 'wicked-dark']);
-    expect(DEFAULT_APPEARANCE.theme).toBe('dark');
-    expect([DEFAULT_APPEARANCE.accent_h, DEFAULT_APPEARANCE.accent_s, DEFAULT_APPEARANCE.accent_l]).toEqual([230, 74, 68]);
+  it('offers Wicked Dark and Wicked Light only (operator 2026-10-31); the default is Wicked Dark on the Wicked preset', () => {
+    expect(THEMES.map((t) => [t.id, t.label])).toEqual([['wicked-dark', 'Wicked Dark'], ['wicked-light', 'Wicked Light']]);
+    expect(DEFAULT_APPEARANCE.theme).toBe('wicked-dark');
+    expect([DEFAULT_APPEARANCE.accent_h, DEFAULT_APPEARANCE.accent_s, DEFAULT_APPEARANCE.accent_l]).toEqual([200, 47, 25]);
   });
 
-  it('a stored wicked theme survives sanitize; junk still falls back to dark', () => {
+  it('a stored wicked theme survives sanitize; junk falls back to Wicked Dark', () => {
     expect(sanitizeAppearance({ theme: 'wicked-light' }).theme).toBe('wicked-light');
     expect(sanitizeAppearance({ theme: 'wicked-dark' }).theme).toBe('wicked-dark');
-    expect(sanitizeAppearance({ theme: 'wicked' }).theme).toBe('dark');
+    expect(sanitizeAppearance({ theme: 'wicked' }).theme).toBe('wicked-dark');
   });
 
   it('the harbor preset IS #224A5E in the primitives the store keeps', () => {
@@ -100,24 +100,20 @@ describe('chooseTheme', () => {
     expect(useAppearanceStore.getState().appearance.accent_h).toBe(120);
   });
 
-  it('dark and light leave the accent alone, except that the untouched harbor preset goes back to the default', () => {
-    useAppearanceStore.getState().update({ accent_h: 10, accent_s: 20, accent_l: 30 });
-    useAppearanceStore.getState().chooseTheme('light');
-    expect(useAppearanceStore.getState().appearance.accent_h).toBe(10);
-    expect(root().getAttribute('data-theme')).toBe('light');
-
-    useAppearanceStore.getState().chooseTheme('wicked-light');
-    useAppearanceStore.getState().chooseTheme('dark');
-    const a = useAppearanceStore.getState().appearance;
-    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 74, 68]);
-    expect(root().hasAttribute('data-theme')).toBe(false);
+  it('a stored dark / light (retired) moves to its Wicked counterpart; an untouched old default accent takes the Wicked preset', async () => {
+    const { sanitizeAppearance } = await import('../src/theming/appearance.js');
+    const old = sanitizeAppearance({ theme: 'dark', accent_h: 230, accent_s: 74, accent_l: 68 });
+    expect(old.theme).toBe('wicked-dark');
+    expect([old.accent_h, old.accent_s, old.accent_l]).toEqual([HARBOR_ACCENT.accent_h, HARBOR_ACCENT.accent_s, HARBOR_ACCENT.accent_l]);
+    const mine = sanitizeAppearance({ theme: 'light', accent_h: 10, accent_s: 20, accent_l: 30 });
+    expect(mine.theme).toBe('wicked-light');
+    expect([mine.accent_h, mine.accent_s, mine.accent_l]).toEqual([10, 20, 30]);
+    expect(sanitizeAppearance({ theme: 'neon' }).theme).toBe('wicked-dark');
   });
 });
 
 describe('toggledTheme (the ⌘K "Toggle Theme")', () => {
   it('flips ground within a family', () => {
-    expect(toggledTheme('dark')).toBe('light');
-    expect(toggledTheme('light')).toBe('dark');
     expect(toggledTheme('wicked-light')).toBe('wicked-dark');
     expect(toggledTheme('wicked-dark')).toBe('wicked-light');
   });
@@ -138,13 +134,30 @@ describe('resetAccent under a wicked theme', () => {
     }
   });
 
-  it('under dark and light it still restores 230/74/68', () => {
-    for (const t of ['dark', 'light'] as const) {
-      useAppearanceStore.getState().chooseTheme(t);
-      useAppearanceStore.getState().update({ accent_h: 10, accent_s: 90, accent_l: 70 });
-      useAppearanceStore.getState().resetAccent();
-      const a = useAppearanceStore.getState().appearance;
-      expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 74, 68]);
-    }
+});
+
+// The synthesis (2026-10-31): while a wicked theme still holds the default preset it paints the design
+// system's own action colour; a user-picked accent (Settings → Appearance, a learned brand) takes over,
+// marked data-accent="custom" so themes/wicked-*.css switches to the primitives.
+describe('data-accent: the user-picked accent under the wicked themes', () => {
+  it('the default preset under a wicked theme carries no data-accent', () => {
+    useAppearanceStore.getState().chooseTheme('wicked-light');
+    expect(root().hasAttribute('data-accent')).toBe(false);
+    useAppearanceStore.getState().chooseTheme('wicked-dark');
+    expect(root().hasAttribute('data-accent')).toBe(false);
+  });
+
+  it('moving the picker marks the accent custom; reset clears it', () => {
+    useAppearanceStore.getState().chooseTheme('wicked-light');
+    useAppearanceStore.getState().update({ accent_h: 120 });
+    expect(root().getAttribute('data-accent')).toBe('custom');
+    useAppearanceStore.getState().resetAccent();
+    expect(root().hasAttribute('data-accent')).toBe(false);
+  });
+
+  it('hasCustomAccent is the rule', async () => {
+    const { hasCustomAccent } = await import('../src/theming/appearance.js');
+    expect(hasCustomAccent({ theme: 'wicked-dark', ...HARBOR_ACCENT })).toBe(false);
+    expect(hasCustomAccent({ theme: 'wicked-dark', ...HARBOR_ACCENT, accent_l: 40 })).toBe(true);
   });
 });

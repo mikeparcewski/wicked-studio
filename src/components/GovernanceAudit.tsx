@@ -29,7 +29,7 @@ function DecisionBadge({ decision }: { decision: Decision }): React.ReactElement
   const s = styles[decision];
   return (
     <span
-      className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold font-mono"
+      className="inline-flex rounded px-1.5 py-0.5 text-xs font-semibold font-mono"
       style={{ background: s.bg, color: s.color }}
     >
       {labels[decision]}
@@ -44,7 +44,7 @@ function ClaimRow({ claim }: { claim: GovernanceClaim }): React.ReactElement {
 
   return (
     <li
-      className="rounded p-2 text-[11px]"
+      className="rounded p-2 text-xs"
       style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
     >
       <div className="flex items-center justify-between gap-2">
@@ -69,7 +69,7 @@ function ClaimRow({ claim }: { claim: GovernanceClaim }): React.ReactElement {
       </div>
 
       {open && (
-        <div className="mt-2 flex flex-col gap-1.5 text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+        <div className="mt-2 flex flex-col gap-1.5 text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
           {claim.criteria && (
             <p>
               <span className="font-semibold" style={{ color: 'var(--ink-muted)' }}>criteria: </span>
@@ -114,7 +114,7 @@ function ConformanceClaimRow({ claim }: { claim: AcceptanceConformanceClaim }): 
   return (
     <li
       data-testid="conformance-claim"
-      className="rounded p-2 text-[11px]"
+      className="rounded p-2 text-xs"
       style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
     >
       <div className="flex items-center justify-between gap-2">
@@ -122,7 +122,7 @@ function ConformanceClaimRow({ claim }: { claim: AcceptanceConformanceClaim }): 
           <DecisionBadge decision={claim.decision} />
           {claim.advisory && (
             <span
-              className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-mono"
+              className="inline-flex rounded px-1.5 py-0.5 text-xs font-mono"
               style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
               title="Blocked and audited, but not unit-fatal: a boundary READ deny leaks nothing."
             >
@@ -155,7 +155,7 @@ function ConformanceClaimRow({ claim }: { claim: AcceptanceConformanceClaim }): 
             <li
               key={`${r.ruleId}-${r.statement}`}
               data-testid="conformance-rule-citation"
-              className="rounded px-1.5 py-1 text-[10px] font-mono"
+              className="rounded px-1.5 py-1 text-xs font-mono"
               style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
             >
               <span className="font-semibold">{r.ruleId}</span>
@@ -167,7 +167,7 @@ function ConformanceClaimRow({ claim }: { claim: AcceptanceConformanceClaim }): 
       )}
 
       {open && (
-        <div className="mt-2 flex flex-col gap-1.5 text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+        <div className="mt-2 flex flex-col gap-1.5 text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
           {claim.policyIds.length > 0 && (
             <div>
               <p className="font-semibold">policies matched:</p>
@@ -298,17 +298,17 @@ function EnforcementBannerView({ banner }: { banner: Exclude<EnforcementBanner, 
         className="rounded p-2 flex flex-col gap-1"
         style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)' }}
       >
-        <p className="text-[11px] font-mono font-semibold" style={{ color: 'var(--status-fail)' }}>
+        <p className="text-xs font-mono font-semibold" style={{ color: 'var(--status-fail)' }}>
           UNENFORCED — governed unit(s) ran with unchecked tool calls
         </p>
         <ul className="flex flex-col gap-0.5">
           {banner.rows.map((r) => (
-            <li key={r.ord} data-testid="governance-unenforced-unit" className="text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+            <li key={r.ord} data-testid="governance-unenforced-unit" className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
               unit #{r.ord} · {r.cli} — {r.reason}
             </li>
           ))}
         </ul>
-        <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+        <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
           This run is not guardrailed. Phase-boundary output gating still applied.
         </p>
       </div>
@@ -329,8 +329,8 @@ function EnforcementBannerView({ banner }: { banner: Exclude<EnforcementBanner, 
       className="rounded p-2 flex flex-col gap-0.5"
       style={{ background: s.bg, border: '1px solid var(--surface-raised)' }}
     >
-      <p className="text-[11px] font-mono font-semibold" style={{ color: s.color }}>{s.label}</p>
-      <p className="text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>{banner.detail}</p>
+      <p className="text-xs font-mono font-semibold" style={{ color: s.color }}>{s.label}</p>
+      <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>{banner.detail}</p>
     </div>
   );
 }
@@ -339,7 +339,7 @@ function EnforcementBannerView({ banner }: { banner: Exclude<EnforcementBanner, 
  *  "guardrailed" can never read as a blanket property of every seat. */
 function CoverageBoundaryNote(): React.ReactElement {
   return (
-    <p data-testid="governance-coverage-boundary" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+    <p data-testid="governance-coverage-boundary" className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
       Coverage boundary: deterministic per-tool-call guardrails (gate-hook injection) exist for
       claude seats only. A governed unit routed to any other CLI runs with phase-boundary
       output-gate coverage only — advisory relative to mid-flight tool-call blocking — and is
@@ -416,7 +416,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
     <button
       type="button"
       onClick={() => void load()}
-      className="self-start text-[10px] font-mono hover:underline"
+      className="self-start text-xs font-mono hover:underline"
       style={{ color: 'var(--ink-dim)' }}
     >
       Refresh
@@ -448,7 +448,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
         {banner !== null && <EnforcementBannerView banner={banner} />}
 
         {/* The QE verdict BESIDE the governance one — deny-dominates on each side. */}
-        <p data-testid="acceptance-gate-line" className="text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+        <p data-testid="acceptance-gate-line" className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
           <span
             className="font-semibold"
             style={{ color: acceptance.gate.satisfied ? 'var(--status-run)' : 'var(--status-fail)' }}
@@ -461,7 +461,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
         {!conf.claimsAvailable && (
           <p
             data-testid="governance-claims-unavailable"
-            className="rounded px-2 py-1 text-[10px] font-mono"
+            className="rounded px-2 py-1 text-xs font-mono"
             style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
           >
             Conformance claims unreadable{conf.claimsError !== undefined ? `: ${conf.claimsError}` : ''} — not
@@ -471,7 +471,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
 
         {conf.claims.length > 0 ? (
           <>
-            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
               {conf.claims.length} decision{conf.claims.length !== 1 ? 's' : ''}
               {conf.denials > 0 && (
                 <span className="ml-1 font-semibold" style={{ color: 'var(--status-fail)' }}>· {conf.denials} denied</span>
@@ -488,7 +488,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
           </>
         ) : (
           conf.claimsAvailable && (
-            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
               No conformance claims scoped to this run.
             </p>
           )
@@ -517,7 +517,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
             claims scoped to this run.
           </p>
           <div data-testid="governance-run-record" className="flex flex-col gap-1.5">
-            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
               The run’s own decision record DOES show governance activity — the full
               gate record is in the Decisions panel:
             </p>
@@ -526,11 +526,11 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
                 <li
                   key={i}
                   data-testid="governance-run-decision"
-                  className="rounded p-2 text-[11px] font-mono"
+                  className="rounded p-2 text-xs font-mono"
                   style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
                 >
                   <span
-                    className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold font-mono mr-2"
+                    className="inline-flex rounded px-1.5 py-0.5 text-xs font-semibold font-mono mr-2"
                     style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
                   >
                     DENY
@@ -551,7 +551,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
         <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
           No governance claims recorded for this run.
         </p>
-        <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+        <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
           {/* §7.10: issue numbers are internal notes, not user copy. */}
           Claims appear once wicked-core runs governance decisions for a run.
         </p>
@@ -568,7 +568,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
     <div className="flex flex-col gap-2">
       {banner !== null && <EnforcementBannerView banner={banner} />}
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+        <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
           {claims.length} decision{claims.length !== 1 ? 's' : ''}
           {denies > 0 && <span className="ml-1 font-semibold" style={{ color: 'var(--status-fail)' }}>· {denies} denied</span>}
           {conditioned > 0 && <span className="ml-1" style={{ color: 'var(--status-gate)' }}>· {conditioned} with obligations</span>}

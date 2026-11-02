@@ -54,7 +54,35 @@ describe('fonts are self-hosted', () => {
     }
     expect([...seen].sort()).toEqual([
       'Archivo/normal', 'Inter/italic', 'Inter/normal', 'JetBrains Mono/italic', 'JetBrains Mono/normal',
+      'Wicked Sans/normal', 'Wicked Script/normal', 'Wicked Serif/normal',
     ]);
+  });
+
+  // Operator 2026-11-01 (round 5): Wicked Sans v2 is the text and UI face (Regular 400, SemiBold for 500-700, Inter as
+  // the per-character fallback), Wicked Serif the default wordmark, JetBrains Mono the code face.
+  it('the body and UI are Wicked Sans (two weights, no faked bold); the wordmark is Wicked Serif', () => {
+    const css = readFileSync(FONTS_CSS, 'utf8');
+    // One source: the vendored design package (wicked-web packages/design-system/fonts/wicked).
+    for (const f of ['WickedSans-Regular', 'WickedSans-SemiBold', 'WickedSerif-Regular', 'WickedScript-Regular']) {
+      expect(existsSync(join(REPO, 'src', 'vendor', 'wicked-design', 'fonts', 'wicked', `${f}.woff2`)), f).toBe(true);
+      expect(css).toContain(`url('../vendor/wicked-design/fonts/wicked/${f}.woff2')`);
+    }
+    expect(existsSync(join(REPO, 'src', 'assets', 'fonts', 'wicked'))).toBe(false);
+    const sans = [...css.matchAll(/@font-face\s*\{([^}]*)\}/gu)].map((m) => m[1]!).filter((f) => /'Wicked Sans'/u.test(f));
+    expect(sans.map((f) => [/font-weight:\s*([^;]+);/u.exec(f)?.[1], /WickedSans-(\w+)\.woff2/u.exec(f)?.[1]])).toEqual([['100 499', 'Regular'], ['500 900', 'SemiBold']]);
+    expect(css).toMatch(/html \{ font-synthesis-weight: none; \}/u);
+    expect(css).toMatch(/\.wk-wordmark \{ font-family: var\(--font-display\)/u);
+    const sansStack = /--font-sans: 'Wicked Sans', 'Inter',/u;
+    expect(readFileSync(join(REPO, 'src', 'styles', 'tokens.css'), 'utf8')).toMatch(sansStack);
+    for (const t of ['wicked-dark', 'wicked-light']) expect(readFileSync(join(REPO, 'src', 'styles', 'themes', `${t}.css`), 'utf8')).toMatch(sansStack);
+    expect(readFileSync(join(REPO, 'src', 'styles', 'tokens.css'), 'utf8')).toMatch(/--font-display: 'Wicked Serif'/u);
+    expect(readFileSync(join(REPO, 'src', 'styles', 'tokens.css'), 'utf8')).toMatch(/--font-mono: 'JetBrains Mono'/u);
+    // Only the wordmark reads --font-display, and the rail's catch-all text-face rule leaves it alone (round 4).
+    const all = readdirSync(join(REPO, 'src', 'styles'), { recursive: true }).filter((p) => String(p).endsWith('.css'))
+      .map((p) => readFileSync(join(REPO, 'src', 'styles', String(p)), 'utf8')).join('\n');
+    const uses = [...all.matchAll(/([^{}]+)\{[^}]*var\(--font-display\)/gu)].map((m) => m[1]!.replace(/\/\*[\s\S]*?\*\//gu, '').trim());
+    expect(uses).toEqual(['.wk-wordmark']);
+    expect(all).toMatch(/\[data-testid="desk"\]\) :not\([^)]*\.wk-wordmark, \.wk-wordmark \*\)/u);
   });
 
   it('each font family ships its OFL licence beside the files', () => {

@@ -138,12 +138,14 @@ describe('S16a-1b — GateRow renders the depth', () => {
       expect(b).toBeDefined();
       return b!;
     });
-    // (mockup ui-v2-gate) Under Other options, in plain words: "Redo from the build step".
+    // (guided asks) A card, in plain words: "Redo from the build step".
     expect(rerun).toHaveTextContent('Redo from the build step');
     await user.click(rerun);
     expect(confirm).not.toHaveBeenCalled();
-    expect(screen.getByTestId('session-gate-rerun-consequence').textContent).toMatch(/redoes build/);
-    await user.click(screen.getByTestId('session-gate-rerun-confirm'));
+    // Selected: what it does is said first, and the primary names the move.
+    expect(screen.getByTestId('session-gate-consequence').textContent).toMatch(/If you choose this:.*redoes build/);
+    expect(screen.getByTestId('session-gate-confirm')).toHaveTextContent('Rerun from build');
+    await user.click(screen.getByTestId('session-gate-confirm'));
     // The 10 s undo window: the decision is queued, then sent once.
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1), { timeout: 15_000 });
     const [runId, decision] = confirm.mock.calls[0]!;
@@ -164,7 +166,7 @@ describe('S16a-1b — the rewind is offered only where Send back is an arm', () 
 
 describe('S16a-2a — the row says a choice\'s consequence before it is taken; the whole verdict', () => {
   afterEach(() => { cleanup(); });
-  it('hovering an escalation arm says what it does on the line under the choices; leaving clears it', async () => {
+  it('hovering an escalation arm says what it does on the line under the choices; leaving goes back to the selected one', async () => {
     vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' });
     const RUN = 'run-peek';
     const units: WorkUnit[] = [
@@ -178,15 +180,18 @@ describe('S16a-2a — the row says a choice\'s consequence before it is taken; t
     useRunEventStore.setState({ byRun: { [RUN]: [] } });
     render(<GateRow view={view} gate={gate} />);
     const stop = await waitFor(() => screen.getAllByTestId('session-gate-choice').find((b) => b.dataset.choiceKey === 'stop')!);
-    const line = screen.getByTestId('session-gate-choice-consequence');
-    expect(line.textContent).toBe('');
+    // (guided asks) The line says what the option you are on does: the preselected suggestion, else the hovered one.
+    const line = screen.getByTestId('session-gate-consequence');
+    const before = line.getAttribute('data-option');
+    expect(before).not.toBe('stop');
     await userEvent.hover(stop);
-    expect(line).toHaveTextContent('Cancel the run; the work stops here.');
-    expect(line).toHaveAttribute('data-choice-key', 'stop');
+    expect(line).toHaveTextContent('If you choose this: Cancel the run; the work stops here.');
+    expect(line).toHaveAttribute('data-option', 'stop');
     // Below the choices: the line never moves the button under the pointer.
     expect(screen.getByTestId('session-gate-choices').compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.unhover(stop);
-    expect(line.textContent).toBe('');
+    expect(line.getAttribute('data-option')).toBe(before);
+    expect(line.textContent).not.toMatch(/Cancel the run/);
   });
 
   it('studio#430: a head-cut verdict is read whole — the send-back note carries the first findings', () => {

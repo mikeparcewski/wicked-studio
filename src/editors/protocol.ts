@@ -133,13 +133,22 @@ export const EVENTS = {
   /** Protocol 3: a run-thread plugin asks to fold or unfold its own block (the host owns the state and answers
    *  with `host.fold`). */
   'ui.fold': null,
+  /** Protocol 3, a plugin shown as a section of a panel (`host.hello` `observe.panel`): the one line the folded
+   *  section's heading shows (DES-LEARN §1.2 `summary: "plugin"`). Plain text, at most 80 characters. */
+  'panel.summary': null,
 } as const satisfies Record<string, PermissionId | null>;
 export type EventType = keyof typeof EVENTS;
 
 /** Message types a plugin may send only on a port that negotiated protocol 2. */
 export const V2_ONLY: ReadonlySet<string> = new Set(['theme.set', 'options.values', 'ui.height']);
 /** Message types a plugin may send only on a port that negotiated protocol 3. */
-export const V3_ONLY: ReadonlySet<string> = new Set(['ui.fold', 'doc.read', 'doc.propose_edit', 'steer.propose']);
+export const V3_ONLY: ReadonlySet<string> = new Set(['ui.fold', 'panel.summary', 'doc.read', 'doc.propose_edit', 'steer.propose']);
+
+/** The tones a panel section's summary may take (its dot): nothing, working, waiting on you, done, failed. */
+export const PANEL_TONES = ['none', 'run', 'wait', 'ok', 'fail'] as const;
+export type PanelTone = (typeof PANEL_TONES)[number];
+/** Most characters of a panel section's summary line. */
+export const PANEL_SUMMARY_CHARS = 80;
 
 /** Most characters of one working-document section (crew's own cap) and of a suggested steering note. */
 export const DOC_LIMITS = { sectionChars: 4_000, steerChars: 600 } as const;
@@ -233,6 +242,7 @@ function payloadOk(type: string, p: Record<string, unknown>, protocol: number): 
     }
     case 'ui.height': return isNum(p['px']);
     case 'ui.fold': return typeof p['folded'] === 'boolean';
+    case 'panel.summary': return isLine(p['text'], PANEL_SUMMARY_CHARS) && (p['tone'] === undefined || (PANEL_TONES as readonly unknown[]).includes(p['tone']));
     case 'doc.read': return true;
     case 'doc.propose_edit':
       return Number.isInteger(p['base']) && (DOC_SECTIONS as readonly string[]).includes(p['section'] as string)

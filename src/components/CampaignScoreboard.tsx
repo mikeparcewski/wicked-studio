@@ -73,7 +73,7 @@ const HEAD: React.CSSProperties = {
   textAlign: 'left',
   color: 'var(--ink-dim)',
   fontSize: 'var(--text-xs)',
-  fontWeight: 500,
+  fontWeight: 'var(--weight-strong)',
 };
 
 function Chip({ label, color, testid, title, extra }: {

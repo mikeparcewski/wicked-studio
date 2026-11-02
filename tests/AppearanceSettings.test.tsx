@@ -39,7 +39,7 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
 
     const wheel = screen.getByTestId('hue-wheel');
     expect(wheel).toHaveAttribute('role', 'slider');
-    expect(wheel).toHaveAttribute('aria-valuenow', '230');
+    expect(wheel).toHaveAttribute('aria-valuenow', '200');
     expect(screen.getByTestId('hue-handle')).toBeInTheDocument();
     expect(screen.getByTestId('accent-sat')).toHaveValue('60');
     expect(screen.getByTestId('accent-lgt')).toHaveValue('55');
@@ -67,9 +67,9 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
   it('the wheel moves the hue from the keyboard too', () => {
     render(<AppearanceSettings />);
     fireEvent.keyDown(screen.getByTestId('hue-wheel'), { key: 'ArrowRight' });
-    expect(useAppearanceStore.getState().appearance.accent_h).toBe(231);
+    expect(useAppearanceStore.getState().appearance.accent_h).toBe(201);
     fireEvent.keyDown(screen.getByTestId('hue-wheel'), { key: 'ArrowLeft' });
-    expect(useAppearanceStore.getState().appearance.accent_h).toBe(230);
+    expect(useAppearanceStore.getState().appearance.accent_h).toBe(200);
   });
 
   it('reset restores the accent primitives and leaves the logo alone (§3.5)', () => {
@@ -80,9 +80,25 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
     render(<AppearanceSettings />);
     fireEvent.click(screen.getByTestId('accent-reset'));
     const a = useAppearanceStore.getState().appearance;
-    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 74, 68]);
+    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([200, 47, 25]);
     expect(a.logo_url).toBe('/l.png');
-    expect(root().style.getPropertyValue('--_accent-h')).toBe('230');
+    expect(root().style.getPropertyValue('--_accent-h')).toBe('200');
+  });
+
+  it('Ambient keeps a ground of its own and a still switch; leaving it turns the mood layer off', () => {
+    render(<AppearanceSettings />);
+    expect(screen.queryByTestId('ambient-settings')).toBeNull();
+    fireEvent.click(screen.getByTestId('theme-ambient'));
+    expect(root().getAttribute('data-ambient')).toBe('on');
+    expect(screen.getByTestId('theme-ambient')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByTestId('ambient-ground-light'));
+    expect(root().getAttribute('data-theme')).toBe('wicked-light');
+    expect(screen.getByTestId('theme-ambient')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('switch', { name: /Keep Ambient still/u }));
+    expect(root().getAttribute('data-ambient-still')).toBe('on');
+    fireEvent.click(screen.getByTestId('theme-wicked-dark'));
+    expect(root().hasAttribute('data-ambient')).toBe(false);
+    expect(root().getAttribute('data-theme')).toBe('wicked-dark');
   });
 
   it('logo by URL: apply sets --logo-url; Remove reverts to the default mark', () => {
@@ -122,23 +138,14 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
     expect(screen.queryByTestId('logo-error')).toBeNull();
   });
 
-  it('theme picker: light sets data-theme, dark removes it; the active choice is checked', () => {
+  it('theme picker: Wicked Dark, Wicked Light and Ambient (operators 2026-10-31, 2026-11-01); the active choice is checked', () => {
     render(<AppearanceSettings />);
     expect(screen.getByRole('radiogroup', { name: 'Theme' })).toHaveClass('wk-segmented');
-    expect(screen.getByTestId('theme-dark')).toHaveAttribute('role', 'radio');
-    expect(screen.getByTestId('theme-dark')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getAllByRole('radio').map((r) => r.textContent)).toEqual(['Wicked Dark', 'Wicked Light', 'Ambient']);
+    expect(screen.queryByTestId('theme-dark')).toBeNull();
+    expect(screen.queryByTestId('theme-light')).toBeNull();
+    expect(screen.getByTestId('theme-wicked-dark')).toHaveAttribute('aria-checked', 'true');
 
-    fireEvent.click(screen.getByTestId('theme-light'));
-    expect(root().getAttribute('data-theme')).toBe('light');
-    expect(screen.getByTestId('theme-light')).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByTestId('theme-dark')).toHaveAttribute('aria-checked', 'false');
-
-    fireEvent.click(screen.getByTestId('theme-dark'));
-    expect(root().hasAttribute('data-theme')).toBe(false);
-  });
-
-  it('theme picker: the wicked themes sit beside dark and light and write the harbor accent', () => {
-    render(<AppearanceSettings />);
     fireEvent.click(screen.getByTestId('theme-wicked-light'));
     expect(root().getAttribute('data-theme')).toBe('wicked-light');
     expect(root().style.getPropertyValue('--_accent-h')).toBe('200');

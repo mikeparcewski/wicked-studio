@@ -77,6 +77,9 @@
      lightness clamps to one end or the other around 58%, so a customized accent stays legible. */
   --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((58% - var(--_accent-l)) * 100), 98%));
   --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 5%));
+  /* A primary button's hover: a step AWAY from its own words (darker under light words, lighter under dark ones), so
+     the words keep their contrast. The wicked themes set it to a design-package token (gen-wicked-themes.mjs). */
+  --primary-hover: color-mix(in oklab, var(--accent) 60%, hsl(from var(--accent-fg) h 0% calc(100 - l)));
   --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);   /* selected / tinted fills */
 
   /* Signal yellow, the spark (DESIGN-simple §1a): a small mark only, never text or a fill — the
@@ -153,23 +156,41 @@
   --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;
   --space-12: 48px; --space-16: 64px;
 
-  /* ── Type scale (§2.8) — two faces, one rule: prose/labels in sans,
-     data/narration in mono. The face contrast is the product's visual rhythm. */
-  --font-sans: 'Archivo', system-ui, -apple-system, sans-serif; /* the Desk's face (S18c — was set by the desk skin) */
+  /* ── Type (§2.8, round 6): one sans for prose, labels and data; mono only for real code. */
+  /* The three swap points (operator 2026-11-01): text is Wicked Sans v2, with self-hosted Inter as the per-character
+     fallback (Wicked Sans has no accented letters); code JetBrains Mono; --font-display is Wicked Serif, the default
+     wordmark only. All self-hosted (fonts.css), no CDN. */
+  --font-sans: 'Wicked Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-display: 'Wicked Serif', Georgia, serif;
 
-  --text-2xs: 11px;   /* the floor: nothing on a decision surface is smaller (was 10px) */
-  --text-xs:  11px;
-  --text-sm:  13px;
-  --text-md:  15px;
-  --text-lg:  18px;
-  --text-xl:  22px;
-  --text-2xl: 28px;
+  /* THE TYPE SCALE (operator 2026-11-01, round 6: "the fonts look a little all over the map"). Six sizes, two weights,
+     one tracking value; every font-size, font-weight and letter-spacing in studio is one of these tokens
+     (tests/typeScale.lint.test.ts fails on anything else). */
+  --text-caption: 12px;   /* captions and meta: times, counts, steps, durations, dates (tabular digits) */
+  --text-body:    14px;   /* body, the default */
+  --text-lead:    16px;   /* emphasis, lead lines, row titles */
+  --text-section: 20px;   /* section heads */
+  --text-title:   28px;   /* page titles */
+  --text-code:    13px;   /* code only: code blocks, paths, hashes, commands, ids (JetBrains Mono) */
+  --weight-regular: 400;  /* body */
+  --weight-strong:  600;  /* labels, row titles, headings (Wicked Sans SemiBold) */
+  --tracking-title: -0.02em;  /* page titles only */
 
-  --weight-normal: 400;
-  --weight-medium: 500;
-  --weight-semi:   600;
-  --weight-bold:   700;
+  /* The older names, kept as aliases onto the scale so no rule can step off it. */
+  --text-2xs: var(--text-caption);
+  --text-xs:  var(--text-caption);
+  --text-sm:  var(--text-body);
+  --text-md:  var(--text-body);
+  --text-base: var(--text-body);
+  --text-lg:  var(--text-lead);
+  --text-xl:  var(--text-section);
+  --text-2xl: var(--text-title);
+
+  --weight-normal: var(--weight-regular);
+  --weight-medium: var(--weight-strong);
+  --weight-semi:   var(--weight-strong);
+  --weight-bold:   var(--weight-strong);
 
   --leading-tight:  1.2;
   --leading-body:   1.5;

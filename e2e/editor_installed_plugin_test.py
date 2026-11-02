@@ -12,7 +12,7 @@ type, summary and PR fields that render a CHANGELOG line; sha256 9bb3121a…, pi
 is crew 0.16.3's own `GET /api/v1/editors` row for it after `install.py --from-run --target daemon`
 registered it. The fixture (`installed_editor`) serves both, the entry hash-pinned with crew's bundle CSP.
 
-  1. LISTED: /plugins shows the row "Changelog entry" tagged Installed (not Built in), version 0.1.0,
+  1. LISTED: /plugins shows the card "Changelog entry" tagged You installed (not Built in); its details say version 0.1.0,
      with its one permission in plain words.
   2. OPENS: its "Try it on a sample page" opens the editor test page for exactly that editor, version and
      hash; the host draws the card from the plugin's declaration (protocol 2, actions Clear form + Ask
@@ -106,19 +106,25 @@ with sync_playwright() as p:
 
         # ── 1. listed on the Plugins page as installed ──────────────────────────────────────────────
         page.goto(f"{origin}/plugins", wait_until="networkidle")
-        row = page.locator(f'[data-testid="editor-plugin-row"][data-editor="{EDITOR}"]')
+        # The Plugins page is cards (DES-LEARN §2): the installed one's card, then its details.
+        tile = page.locator(f'[data-testid="plugin-tile"][data-plugin="{EDITOR}"]')
         try:
-            row.wait_for(state="visible", timeout=15000)
+            tile.wait_for(state="visible", timeout=15000)
         except Exception as e:  # noqa: BLE001
             page.screenshot(path=str(SHOTS / f"editor-installed-plugin-missing-{theme}.png"))
-            fail(f"{theme}-listed", f"no row for the installed plugin: {e}")
-        row.scroll_into_view_if_needed()
-        text = row.inner_text()
+            fail(f"{theme}-listed", f"no card for the installed plugin: {e}")
+        tile.scroll_into_view_if_needed()
+        tile_text = tile.inner_text()
+        tile.click()
+        details = page.get_by_test_id("plugin-details")
+        details.wait_for(state="visible", timeout=10000)
+        row = details.locator(f'[data-testid="editor-plugin-row"][data-editor="{EDITOR}"]')
+        head = details.locator(".wk-plugdetail-name").inner_text()
         page.screenshot(path=str(SHOTS / f"editor-installed-plugin-list-{theme}.png"))
         check(f"{theme}-listed-as-installed",
-              text.startswith("Changelog entry") and row.get_by_test_id("editor-plugin-source").inner_text() == "Installed"
-              and "Version 0.1.0" in text and row.get_by_test_id("editor-plugin-permissions").inner_text().strip() == "Can: go full screen",
-              text=text[:300])
+              tile.get_by_test_id("plugin-tile-title").inner_text() == "Changelog entry" and tile.get_by_test_id("plugin-tile-source").inner_text() == "You installed"
+              and "0.1.0" in head and details.get_by_test_id("editor-plugin-permissions").inner_text().strip() == "Can: go full screen",
+              text=tile_text[:300], head=head)
 
         # ── 2. opens in the editor host: this editor, this version, this hash ───────────────────────
         door = row.get_by_test_id("editor-plugin-open")

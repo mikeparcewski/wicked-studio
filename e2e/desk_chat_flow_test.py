@@ -154,8 +154,9 @@ with sync_playwright() as p:
     check("stays-on-its-page", SESSION_RE.search(page.url) is not None and SESSION_RE.search(page.url).group(1) == chat_id
           and page.get_by_test_id("assist-dock").count() == 0, url=page.url)
     check("helper-reply-is-a-bubble-on-the-left",
-          len(helper) >= 1 and all(b["side"] == "left" and b["bg"] not in ("rgba(0, 0, 0, 0)", "transparent") and b["radius"] >= 8
-                                   and b["border"] == "solid" and (b["label"] or "").strip() != "" for b in helper)
+          # The Wicked synthesis sets a helper's words unboxed (spacing groups messages; no fill, no border): the reply
+          # is on the left and says who answered.
+          len(helper) >= 1 and all(b["side"] == "left" and (b["label"] or "").strip() != "" for b in helper)
           and len(you) >= 1 and all(b["side"] == "right" for b in you), bubbles=bubbles)
 
     # 3. "Don't show this again" lands in the chat flow, now and after a reload.

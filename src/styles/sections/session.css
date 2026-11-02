@@ -25,7 +25,7 @@
 .wk-viewer--inline { flex: 1; min-height: 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); }
 .wk-session-verdict { padding: var(--space-3); border-radius: var(--radius-md); font-family: var(--font-sans); font-size: var(--text-sm); }
 .wk-session-verdict > .wk-verdict-head { margin: 0 0 var(--space-2); font-weight: var(--weight-semi); }
-.wk-session-verdict-details { font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.wk-session-verdict-details { font-family: var(--font-sans); font-size: var(--text-caption); overflow-wrap: anywhere; font-variant-numeric: tabular-nums;}
 .wk-session-verdict-details p { margin: var(--space-2) 0; }
 .wk-sheet-tabs > .wk-tabs { width: 100%; }
 .wk-sheet-brief, .wk-sheet-brief-full { overflow-wrap: anywhere; }

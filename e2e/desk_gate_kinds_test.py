@@ -4,8 +4,8 @@ desk_gate_kinds_test.py — every gate kind answerable in the session thread (S1
 on the Desk at 1440x700 against the in-process fixture:
 
   1. DEF GATE IN THREAD: navigating to a run's session thread at #gate
-     renders `session-gate-row` (in the decision dock) with its verbs (Approve on the face; Approve and
-     steer / Stop under Other options); `session-gate-question` shows the gate prompt.
+     renders `session-gate-row` (in the decision dock) with its verbs as cards (guided asks: Approve, Approve
+     and steer, Stop; a pick selects, the primary sends); `session-gate-question` shows the gate prompt.
   2. STEER OPENS NOTE (no send yet): clicking "Approve and steer" opens the note field
      without sending.
   3. APPROVE SENDS: clicking Approve submits, the row transitions to the chosen state;
@@ -45,7 +45,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import REPO, click_gate_choice, ensure_build, gate_choice, open_other_options, open_proposal_more_about, set_fixture, start_server
+from uxfix_fixture import REPO, STOP_REASON, click_gate_choice, ensure_build, gate_choice, open_other_options, open_proposal_more_about, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4358"))
 W, H = 1440, 700
@@ -118,7 +118,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-def.png"))
 
     # ── 2. STEER OPENS NOTE (no send yet) ───────────────────────────────────
-    steer = gate_choice(page, "steer")  # Approve and steer: under Other options (ui-v2 gate)
+    steer = gate_choice(page, "steer")  # Approve and steer: a card (guided asks); picking it opens its note
     steer.click()
     try:
         page.get_by_test_id("session-gate-note").wait_for(state="visible", timeout=5_000)
@@ -134,16 +134,16 @@ with sync_playwright() as p:
 
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-steer-note.png"))
 
-    # Close the note by cancelling
-    page.get_by_text("Cancel").click()
+    # Leave the note (Escape): the box closes, nothing is sent.
+    page.get_by_test_id("session-gate-note").press("Escape")
+    check("steer-note-escape-closes", page.get_by_test_id("session-gate-note").count() == 0 and len(gate_posts()) == 0)
 
     # ── 3. APPROVE SENDS ─────────────────────────────────────────────────────
     set_fixture(origin, home_paths=True, reset_gate_posts=True)
     page.goto(f"{origin}/s/run%3Ar-home-gate#gate", wait_until="networkidle")
     page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15_000)
 
-    approve = gate_choice(page, "approve")  # Approve: the primary
-    approve.click()
+    click_gate_choice(page, "approve")  # Approve: pick the card, then the primary
     try:
         page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
     except Exception:
@@ -172,7 +172,7 @@ with sync_playwright() as p:
     except Exception:
         fail("undo-setup", {"why": "chosen state did not appear for undo test"})
 
-    # Fold wording during the undo window must be "You chose: <label> · Undo N s" (with colon)
+    # Fold wording during the undo window: "You chose: <label>" (with colon), then "Sends in N s" and Undo
     chosen_text = page.get_by_test_id("session-gate-chosen").inner_text()
     check("chosen-wording", "You chose: Approve" in chosen_text, got=chosen_text)
 
@@ -446,7 +446,8 @@ with sync_playwright() as p:
     check("seat-stop-post",
           len(seat_stop_posts) > 0
           and seat_stop_body.get("approve") is False
-          and "ord" in seat_stop_body,
+          and "ord" in seat_stop_body
+          and seat_stop_body.get("amend") == STOP_REASON,  # Stop asks why (guided asks): the reason rides along
           posts=seat_stop_posts)
 
     # Approve and steer → {approve:true, amend}
@@ -542,7 +543,7 @@ with sync_playwright() as p:
           found_keys=all_timeout_keys)
 
     if extend_btn.count() > 0:
-        extend_btn.click()
+        click_gate_choice(page, "offer:extend")
         try:
             page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
         except Exception:
@@ -593,7 +594,7 @@ with sync_playwright() as p:
           found_keys=all_suggest_keys)
 
     if suggest_btn.count() > 0:
-        suggest_btn.click()
+        click_gate_choice(page, "offer:accept_suggestion")
         try:
             page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
         except Exception:
@@ -630,12 +631,12 @@ with sync_playwright() as p:
           got=denied_approve.get_attribute("data-recommended"), why="floor PASS + judge PASS ⇒ the re-run is the suggested arm")
     denied_q = page.get_by_test_id("session-gate-question").inner_text()
     # (live nit 2026-10-27) The headline is the plain cause, the action is on the button ("Approve and re-run this step").
-    denied_label = (denied_approve.text_content() or "").strip()
+    denied_label = (denied_approve.locator(".wk-ask-opt-label").text_content() or "").strip()
     check("denied-question", denied_q == "A Bash call was blocked by the job’s rules" and denied_label.startswith("Approve and re-run this step"),
           got=denied_q, label=denied_label)
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-denied.png"))
 
-    denied_approve.click()
+    click_gate_choice(page, "approve")
     try:
         page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
     except Exception:
@@ -708,7 +709,8 @@ with sync_playwright() as p:
     stop_posts = gate_posts("r-retry")
     stop_body = stop_posts[-1].get("body", {}) if stop_posts else {}
     check("retry-stop-post",
-          len(stop_posts) == 1 and stop_body.get("approve") is False and "ord" in stop_body,
+          len(stop_posts) == 1 and stop_body.get("approve") is False and "ord" in stop_body
+          and stop_body.get("amend") == STOP_REASON,
           posts=stop_posts)
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-retry-done.png"))
 

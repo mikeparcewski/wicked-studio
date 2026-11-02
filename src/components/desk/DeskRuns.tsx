@@ -10,6 +10,7 @@ import { absTime, relTime } from '../../board/relTime.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { OverflowMenu, Segmented, type MenuItem } from '../ui/index.js';
 import { QuietEmpty, QuietFilter, QuietHead, QuietLoading } from '../ui/QuietPage.js';
+import { PageAskButton, usePageChatFor } from '../chat/PageChat.js';
 
 const PAGE = 40;
 
@@ -46,6 +47,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
   /** Clears the refine bar's project, agent and workflow (they live with the Desk, shared with Report). */
   onClearRefine?: () => void;
 }): React.ReactElement {
+  usePageChatFor('jobs', 'Knows Jobs: what is running, what finished and how each ended.', 'desk-runs');
   const [group, setGroup] = useState<JobGroup>('active');
   const [status, setStatus] = useState<RunStatusFilter>('all');
   const [query, setQuery] = useState('');
@@ -79,6 +81,7 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
     <div role="tabpanel" id={panelId} aria-labelledby={labelledBy} aria-label={labelledBy === undefined ? 'Jobs' : undefined} data-testid="desk-runs" className="wk-jr">
       <div className="wk-jr-col">
         <QuietHead title="Jobs" level={showProject ? 1 : 2} sentence={sentence} testId="desk-runs-sentence"
+          titleAside={showProject ? <PageAskButton kind="jobs" testId="jobs-page-ask" /> : undefined}
           action={onNewJob !== undefined ? <button type="button" className="wk-jr-btn wk-jr-btn--primary" data-testid="desk-runs-new" onClick={onNewJob}>New job</button> : undefined} />
 
         <section className="wk-jr-sec" aria-labelledby="desk-runs-title" data-testid="desk-runs-list" data-group={group}>

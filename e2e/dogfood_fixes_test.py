@@ -28,7 +28,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, open_proposal_more_about, proposal_menu_item,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, open_proposal_more_about, proposal_menu_item, take_proposal,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4391"))
@@ -162,16 +162,15 @@ with sync_playwright() as p:
               and page.locator('[data-testid="session-gate-choice"][data-choice-key="steer"]').count() == 0)
         plan = page.locator('[data-testid="artifact"][data-kind="plan"]')
         # DES-CHAT-NATIVE-RUN: the plan's editor opens from the plan message's Edit (nothing to scroll past until then).
-        # ui-v2 gate: Edit the plan and Not now are under the card's Other options; Approve plan is on the face.
+        # guided asks: Change something and Not now are cards; Approve plan is the preselected card and the primary.
         edit = page.get_by_test_id("session-proposal-edit")
         closed_before = plan.count() == 0
-        proposal_menu_item(page, "session-proposal-edit").click()
+        take_proposal(page, "session-proposal-edit")
         plan.first.wait_for(state="visible", timeout=8000)
         not_now = proposal_menu_item(page, "session-proposal-not-now")
         check("d11-plan-actions", page.get_by_test_id("session-proposal-go").is_visible()
               and not_now.is_visible()
               and closed_before and edit.get_attribute("aria-expanded") == "true" and plan.count() > 0)
-        page.get_by_test_id("session-proposal-more").click()  # close the menu again
         composer = page.get_by_test_id("composer")
         check("d11-composer-is-a-team-message", composer.count() > 0
               and "approves gate" not in (composer.first.text_content() or ""))

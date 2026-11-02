@@ -425,10 +425,15 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
         `Failure triaged: ${str(event.decision) || '?'}${str(event.analysis) ? ` — ${clip(str(event.analysis), 120)}` : ''}`,
         'info',
       );
+    // (crew api-types 0.161.0) crew stamps `input: "voice"` on a note that was said: "You (by voice): …".
     case 'workerMessageQueued':
-      return line(`Your message is queued for ${str(event['target']) || 'all'}'s next turn`, 'human');
+      return line(event['input'] === 'voice'
+        ? `You (by voice): your message is queued for ${str(event['target']) || 'all'}'s next turn`
+        : `Your message is queued for ${str(event['target']) || 'all'}'s next turn`, 'human');
     case 'workerMessageInjected':
-      return line(`Your message was delivered to ${str(event['target']) || 'all'}`, 'human');
+      return line(event['input'] === 'voice'
+        ? `You (by voice): your message was delivered to ${str(event['target']) || 'all'}`
+        : `Your message was delivered to ${str(event['target']) || 'all'}`, 'human');
     case 'elicitationCreated':
       return line(`The agent asks: ${promptHeadline(str(event.message) || str(event.prompt)) || '(a question)'}`, 'gate');
     case 'elicitationResolved':

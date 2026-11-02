@@ -133,6 +133,30 @@ describe('the receipt model', () => {
     expect(agg.operatorJudges?.map((j) => j.note)).toEqual(['judged it myself', 'unit 1 flakes', 'unit 2 flakes']);
   });
 
+  it('a unit whose logged receipt carries a floor override still counts its later judge-unavailable judgment (ui-gaps-2, run ea73afc0: "at 2 gates" when it was 3)', () => {
+    const units = [1, 2, 3].map((ord) => makeUnit({ id: `${RUN}:u${ord}`, session_id: RUN, ord, role: 'creator', status: 'done', stage: 'build', assigned_cli: 'claude' }));
+    const ju = (ord: number) => ({ by: 'local (human)', at: 100 + ord, note: null });
+    const carried = { by: 'local (human)', at: 50, note: 'flaky in untouched files',
+      floorOverride: { layer: 'repo_checks', resultId: `${RUN}:unit-1:attempt-1:repo_checks`, label: 'override carried from Build (unit 1), same tree', ord: 1, attempt: 1 } };
+    // Unit 3's record: the carried override (also on its logged receipt) AND the operator's later judgment of its gate.
+    (units[2] as unknown as { assurance: unknown }).assurance = wire({ ran: ['repo_checks', 'operator_judge'], attempt: 0, operatorJudges: [carried, ju(3)] });
+    const view = makeView({ id: RUN, status: 'awaiting_human', assurance: { mode: 'full', required: ['judge'] } } as never, units);
+    const log = [
+      { type: 'gateEvaluated', ord: 1, assurance: wire({ ran: ['repo_checks', 'operator_judge'], operatorJudges: [ju(1)] }) },
+      { type: 'gateEvaluated', ord: 2, assurance: wire({ ran: ['repo_checks', 'operator_judge'], operatorJudges: [ju(2)] }) },
+      { type: 'gateEvaluated', ord: 3, assurance: wire({ ran: ['repo_checks'], attempt: 0, operatorJudges: [carried] }) },
+    ] as unknown as CoreEvent[];
+    expect(gateReceiptFor(log, units, 3)!.operatorJudges?.map((j) => j.at)).toEqual([50, 103]);
+    const agg = deliveryReceiptOf(view, log)!;
+    expect(agg.operatorJudges?.filter((j) => j.floorOverride === undefined)).toHaveLength(3);
+    expect(agg.operatorJudges?.filter((j) => j.floorOverride !== undefined)).toHaveLength(1);
+    render(<ReceiptView receipt={agg} />);
+    expect(screen.getByTestId('assurance-operator-judged-line').textContent).toMatch(/^At 3 gates the judge could not rule/u);
+    // A later attempt's record is not this receipt's: nothing joins.
+    (units[2] as unknown as { assurance: unknown }).assurance = wire({ attempt: 1, operatorJudges: [ju(3)] });
+    expect(gateReceiptFor(log, units, 3)!.operatorJudges?.map((j) => j.at)).toEqual([50]);
+  });
+
   it('codex r1: a delivery is independent only when each gate was (the names are display only)', () => {
     const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
     // One gate judged on its creator's own seat, another floor-only: joined names must not read as separate seats.

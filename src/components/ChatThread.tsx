@@ -303,7 +303,7 @@ function userBubble(m: UserMsg, key: React.Key): React.ReactElement {
       key={key}
       data-testid="user-bubble"
       data-turn={m.turn}
-      className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[13px]"
+      className="self-end max-w-[70%] rounded-xl px-4 py-2 text-sm"
       style={{ background: 'transparent', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
     >
       <OperatorMessage text={m.text} />
@@ -322,14 +322,14 @@ function bubbleBody(m: SeatMsg): React.ReactElement {
       data-agent={m.cliKey}
       data-turn={m.turn}
       data-pending={m.pending}
-      className="rounded-xl px-4 py-2 text-[13px] min-w-[60px]"
+      className="rounded-xl px-4 py-2 text-sm min-w-[60px]"
       style={{
         background: 'var(--surface-card)',
         border: `1px solid ${m.pending ? 'var(--status-run-dim)' : m.ok ? 'var(--surface-raised)' : 'var(--status-fail-dim)'}`,
       }}
     >
       {m.pending && m.text === '' ? (
-        <span className="opacity-50 font-mono text-[11px] animate-pulse">thinking…</span>
+        <span className="opacity-50 font-mono text-xs animate-pulse">thinking…</span>
       ) : (
         // crew#561: the seat's text, unedited — with the daemon's verdicts marked ON the citations
         // it backticked (`marks`), so a fabricated SHA cannot be read as a confirmed one.
@@ -343,7 +343,7 @@ function bubbleBody(m: SeatMsg): React.ReactElement {
         <div
           data-testid="seat-usage"
           data-metered="false"
-          className="mt-1.5 font-mono text-[10px]"
+          className="mt-1.5 font-mono text-xs"
           style={{ color: 'var(--ink-dim)' }}
           title="This seat reported no token usage for the turn, so its cost is not known"
         >
@@ -357,7 +357,7 @@ function bubbleBody(m: SeatMsg): React.ReactElement {
         <div
           data-testid="seat-usage"
           data-metered="true"
-          className="mt-1.5 font-mono text-[10px]"
+          className="mt-1.5 font-mono text-xs"
           style={{ color: 'var(--ink-dim)' }}
           title={`cache read ${m.usage.cacheReadTokens} · cache creation ${m.usage.cacheCreationTokens}`}
         >
@@ -373,7 +373,7 @@ function seatRow(m: SeatMsg, key: React.Key): React.ReactElement {
   return (
     <div key={key} className="self-start max-w-[80%] flex gap-2">
       <span
-        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-mono font-bold mt-0.5"
+        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-mono font-bold mt-0.5"
         style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg }}
       >
         {m.cliKey.slice(0, 2).toUpperCase()}
@@ -389,12 +389,12 @@ function columnHeader(cliKey: string): React.ReactElement {
   return (
     <span className="inline-flex items-center gap-1.5 min-w-0">
       <span
-        className="shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-mono font-bold"
+        className="shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-xs font-mono font-bold"
         style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg }}
       >
         {cliKey.slice(0, 2).toUpperCase()}
       </span>
-      <span className="truncate text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>{cliKey}</span>
+      <span className="truncate text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>{cliKey}</span>
     </span>
   );
 }
@@ -437,20 +437,20 @@ export function ChatThread({ messages, view, layout, seatOrder, items }: Props):
           {...(item.seat !== null ? { 'data-agent': item.seat } : {})}
           className="flex items-center gap-2 px-1"
         >
-          <span aria-hidden="true" className="shrink-0 text-[10px] font-mono" style={{ color: TONE_COLOR[item.tone] }}>
+          <span aria-hidden="true" className="shrink-0 text-xs font-mono" style={{ color: TONE_COLOR[item.tone] }}>
             {TONE_GLYPH[item.tone]}
           </span>
           {item.seat !== null && (
             <span
               data-testid="chat-narration-seat"
-              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-mono"
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-xs font-mono"
               style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg }}
             >
               {item.seat}
             </span>
           )}
           <span
-            className="text-[12.5px] font-mono leading-relaxed min-w-0"
+            className="text-xs font-mono leading-relaxed min-w-0"
             style={{ color: item.tone === 'info' ? 'var(--ink-muted)' : 'var(--ink-body)' }}
           >
             {item.text}
@@ -536,7 +536,7 @@ export function ChatThread({ messages, view, layout, seatOrder, items }: Props):
                   >
                     {columnHeader(cliKey)}
                     <div
-                      className="rounded-xl px-4 py-2 text-[13px] font-mono"
+                      className="rounded-xl px-4 py-2 text-sm font-mono"
                       style={{ border: '1px dashed var(--surface-raised)', color: 'var(--ink-dim)' }}
                     >
                       —

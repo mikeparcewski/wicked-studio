@@ -62,11 +62,11 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
       data-kind={kind}
       onClick={() => onSelect(session.id)}
       className={`w-full text-left px-3 py-2 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-dim ${
-        isActive ? 'bg-surface-raised' : 'bg-transparent hover:bg-surface-card focus-visible:bg-surface-card'
+ isActive ? 'bg-surface-raised' : 'bg-transparent hover:bg-surface-card focus-visible:bg-surface-card'
       }`}
     >
       <div className="flex items-center gap-2">
-        <span aria-hidden className="shrink-0 text-[11px]" title={rowKind.label}>
+        <span aria-hidden className="shrink-0 text-xs" title={rowKind.label}>
           {RUN_ROW_GLYPHS[kind]}
         </span>
         {/* The status sits beside the name it describes, and takes a SHAPE per state (a ring
@@ -79,7 +79,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
         />
         <span
           data-testid="run-title"
-          className="flex-1 truncate text-[13px] leading-tight"
+          className="flex-1 truncate text-sm leading-tight"
           style={{ color: isActive ? 'var(--ink-high)' : 'var(--ink-body)' }}
           title={showText(session.problem)}
         >
@@ -88,7 +88,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
         {/* studio#230: a delivered run says so on the row, not only on its run page. */}
         <DeliveryChip view={view} />
       </div>
-      <p className="text-[11px] mt-0.5 font-mono" style={{ color: 'var(--ink-dim)' }}>
+      <p className="text-xs mt-0.5 font-mono" style={{ color: 'var(--ink-dim)' }}>
         {rowKind.label} · {unitCount} task{unitCount === 1 ? '' : 's'} ·{' '}
         {/* Idea 14: an absent or impossible clock is a pill that says so (the row itself opens the run). */}
         {ageVerdict(runClockMs, now).kind === 'ok'

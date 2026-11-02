@@ -22,7 +22,7 @@ interface Props {
 function SectionHead({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
     <p
-      className="text-[10px] uppercase tracking-widest font-semibold mb-2"
+      className="text-xs font-semibold mb-2"
       style={{ color: 'var(--ink-dim)' }}
     >
       {children}
@@ -90,7 +90,7 @@ export function ContextPopover({
                 <span>{seatLabel(seat)}</span>
                 {seat.health?.status === 'inactive' && (
                   <span
-                    className="rounded-full border px-1.5 text-[11px]"
+                    className="rounded-full border px-1.5 text-xs"
                     style={{ color: 'var(--status-fail)', borderColor: 'var(--status-fail-dim)' }}
                     title={seat.health.message ?? 'marked inactive by the platform'}
                     data-testid={`seat-health-${seat.key}`}
@@ -102,7 +102,7 @@ export function ContextPopover({
                     a seat the daemon marks `auth: not_required` never reads "sign in needed". */}
                 {seatStandingWord(seat).kind === 'signed-out' && (
                   <span
-                    className="rounded-full border px-1.5 text-[11px]"
+                    className="rounded-full border px-1.5 text-xs"
                     style={{ color: 'var(--status-fail)', borderColor: 'var(--status-fail-dim)' }}
                     title={`${seatLabel(seat)} isn't signed in — runs routed there will fall back or fail. Sign it in on the Agents page.`}
                     data-testid={`seat-signin-${seat.key}`}
@@ -188,7 +188,7 @@ export function ContextPopover({
       <div className="px-4 py-3">
         <SectionHead>Add repos</SectionHead>
         {repos.length === 0 ? (
-          <p className="text-[11px] font-mono italic" style={{ color: 'var(--ink-dim)' }}>No repos registered.</p>
+          <p className="text-xs font-mono italic" style={{ color: 'var(--ink-dim)' }}>No repos registered.</p>
         ) : (
           <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
             {repos.map((r) => {
@@ -208,7 +208,7 @@ export function ContextPopover({
                     }}
                     className="w-3.5 h-3.5 shrink-0" style={{ accentColor: 'var(--accent)' }}
                   />
-                  <span className="text-[11px] font-mono truncate" style={{ color: 'var(--ink-high)' }}>
+                  <span className="text-xs font-mono truncate" style={{ color: 'var(--ink-high)' }}>
                     {r.name}
                   </span>
                 </label>

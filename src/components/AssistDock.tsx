@@ -1,4 +1,5 @@
 import { ExternalLink, Paperclip } from 'lucide-react';
+import { VoiceMicButton } from './voice/VoiceMicButton.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { apiStatus } from '../api/errors.js';
@@ -15,6 +16,8 @@ import { useCapabilities } from '../store/capabilities.js';
 import { Markdown } from './Markdown.js';
 import { NarratorFeed, phaseName } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
+import { LiveActivity } from './session/LiveActivity.js';
+import { workingOrdOf } from '../board/liveTurn.js';
 import {
   deriveArtifacts,
   lastNarration,
@@ -94,7 +97,7 @@ export interface AssistVerbs {
 }
 
 type ThreadItem =
-  | { kind: 'user'; text: string; files: string[] }
+  | { kind: 'user'; text: string; files: string[]; chip?: string }
   | { kind: 'note'; tone: NarrationTone; text: string }
   | { kind: 'run'; runId: string }
   | { kind: 'chat'; chatId: string; resumed?: boolean };
@@ -205,7 +208,7 @@ function DockRun({ runId }: { runId: string }): React.ReactElement {
       style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
     >
       {view === null || session === undefined ? (
-        <p data-testid="assist-run-waiting" className="px-3 py-2 font-mono text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <p data-testid="assist-run-waiting" className="px-3 py-2 font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>
           Run <span className="font-semibold">{runId.slice(0, 8)}</span> launched — it narrates here
           the moment its events arrive, and its gates pin below.
         </p>
@@ -220,6 +223,12 @@ function DockRun({ runId }: { runId: string }): React.ReactElement {
             artifacts={artifacts}
             onJumpToLatest={jumpToLatest}
           />
+          {/* What its working step is doing now, its meter, and the in-flight check (operator 2026-10-30). */}
+          {executingUnitOrd !== null && (
+            <div className="wk-assist-live">
+              <LiveActivity runId={runId} ord={executingUnitOrd} kind="chat" seat={byOrd.get(executingUnitOrd)?.assigned_cli ?? null} label="this job" />
+            </div>
+          )}
           {/* The feed scrolls INSIDE this fixed-height block — the dock's thread stays one column. */}
           <div className="flex h-72 flex-col overflow-hidden">
             <NarratorFeed
@@ -250,7 +259,12 @@ interface DockChatMsg {
   foot?: string | null;
   /** An operator turn's attached files, by name (a replayed transcript's `attachments`). */
   files?: string[];
+  /** A page chat's operator turn: the item it asked about. */
+  chip?: string;
 }
+
+/** A page chat's follow-up turn, drawn inside its chat block so it sits above its own answer. */
+export interface InlineTurn { id: number; text: string; files: string[]; chip?: string }
 
 /**
  * One launched CHAT session (the retired chat page's seat machinery's wire — `POST /chats` +
@@ -286,8 +300,11 @@ type ResumeProbe = { kind: 'gone' } | { kind: 'ended' } | { kind: 'error'; messa
 /** A chat's kept history (the system chat's past chats): its records, and whether it has ended. */
 export type ChatHistoryLoader = (chatId: string) => Promise<{ records: readonly unknown[]; closed: boolean }>;
 
-function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory }: {
+function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns }: {
   chatId: string;
+  /** A page chat's follow-ups (AssistDock `inlineTurns`): each joins the block in order, so a question sits
+   *  above its answer. */
+  turns?: readonly InlineTurn[] | undefined;
   resumed?: boolean;
   /** Resumed blocks only: the probe found the session reclaimed, or could not tell. */
   onResumeProbe?: ((outcome: ResumeProbe) => void) | undefined;
@@ -307,6 +324,31 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
   footRef.current = answerFooter;
   const [seats, setSeats] = useState<Record<string, DockSeatState>>({});
   const [msgs, setMsgs] = useState<DockChatMsg[]>([]);
+  /** The chat's ask run (its `path`, once the first message launched it): its working step shows live below. */
+  const [pathRun, setPathRun] = useState<string | null>(null);
+  const [pathPa, setPathPa] = useState<string | null>(null);
+  const pathEvents = useRunEventStore((s) => (pathRun !== null ? s.byRun[pathRun] : undefined));
+  const liveOrd = useMemo(() => workingOrdOf(pathEvents), [pathEvents]);
+  const waiting = msgs.length === 0 || msgs.some((m) => m.pending) || msgs[msgs.length - 1]?.cliKey === 'you';
+  // Until the path is known, read the chat again while it may be answering (a fresh chat has no path at first).
+  useEffect(() => {
+    if (pathRun !== null || !useCapabilities.getState().askPath) return;
+    let live = true;
+    const read = (): void => {
+      api.getChat(chatId)
+        .then((d) => {
+          const path = (d as { path?: { runId?: unknown; pa?: unknown } }).path;
+          if (live && typeof path?.runId === 'string') {
+            setPathRun(path.runId);
+            if (typeof path.pa === 'string') setPathPa(path.pa);
+          }
+        })
+        .catch(() => undefined);
+    };
+    read();
+    const t = waiting ? setInterval(read, 5000) : null;
+    return () => { live = false; if (t !== null) clearInterval(t); };
+  }, [chatId, pathRun, waiting]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // §11.5: gates/elicitations the daemon keys by THIS chat id must survive the
@@ -414,6 +456,15 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
     });
   };
 
+  // A page chat's follow-up joins the block where it was asked: after what has streamed so far.
+  const turnsSeen = useRef(0);
+  useEffect(() => {
+    if (turns === undefined || turns.length <= turnsSeen.current) return;
+    const fresh = turns.slice(turnsSeen.current);
+    turnsSeen.current = turns.length;
+    setMsgs((prev) => [...prev, ...fresh.map((t) => ({ cliKey: 'you', text: t.text, pending: false, ok: true, ...(t.files.length > 0 ? { files: t.files } : {}), ...(t.chip !== undefined ? { chip: t.chip } : {}) }))]);
+  }, [turns]);
+
   useEventStream((ev: CoreEvent) => {
     const frame = ev as { type: string; chat?: string; cliKey?: string; text?: string; ok?: boolean; reason?: string };
     if (frame.chat !== chatId) return;
@@ -457,7 +508,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
       style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: 'var(--ink-dim)' }}>
+        <span className="font-mono text-xs " style={{ color: 'var(--ink-dim)' }}>
           chat session
         </span>
         {Object.entries(seats).map(([k, st]) => (
@@ -467,7 +518,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
             data-agent={k}
             data-state={st}
             title={st === 'failed' ? `${k} could not hold a session` : `${k} — connected`}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px]"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs"
             style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', opacity: st === 'failed' ? 0.5 : 1 }}
           >
             <span
@@ -481,20 +532,21 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
       </div>
       <div ref={scrollRef} className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
         {msgs.length === 0 ? (
-          <p data-testid="assist-chat-waiting" className="font-mono text-[11px]" style={{ color: 'var(--ink-dim)' }}>
+          <p data-testid="assist-chat-waiting" className="font-mono text-xs" style={{ color: 'var(--ink-dim)' }}>
             Sent — the agents answer here as their replies stream in.
           </p>
         ) : (
           msgs.map((m, i) => (
             // A helper's reply is a bubble on the left (operator 2026-10-16), the operator's own on the right.
-            <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending} className="self-start max-w-[92%] rounded-2xl rounded-tl-md px-3 py-2" style={{ background: 'var(--surface-raised)' }}>
-              <span className="font-mono text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
+            <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending} className={m.cliKey === 'you' ? 'wk-assist-you self-end max-w-[88%] rounded-2xl rounded-tr-md px-3 py-2' : 'self-start max-w-[92%] rounded-2xl rounded-tl-md px-3 py-2'} style={{ background: m.cliKey === 'you' ? 'var(--accent-subtle)' : 'var(--surface-raised)' }}>
+              {m.chip !== undefined && <span className="wk-assist-chip" data-testid="assist-msg-chip">{m.chip}</span>}
+              <span className="font-mono text-xs font-semibold" style={{ color: 'var(--accent)' }}>
                 {m.cliKey}
               </span>
               {!m.pending && !m.ok ? (
                 // A failed turn's text is the daemon's error prose — it stays
                 // verbatim in the fail ink, never dressed as markdown.
-                <p className="whitespace-pre-wrap text-[11px] leading-relaxed" style={{ color: 'var(--status-fail)' }}>
+                <p className="whitespace-pre-wrap text-xs leading-relaxed" style={{ color: 'var(--status-fail)' }}>
                   {m.text}
                 </p>
               ) : (
@@ -502,7 +554,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
                 // SAME component the chat thread already uses (react-markdown +
                 // GFM; raw HTML is never parsed, so nothing injects), not
                 // dumped as ##-visible raw text.
-                <div className="text-[11px] leading-relaxed">
+                <div className="text-xs leading-relaxed">
                   <Markdown>{m.text}</Markdown>
                   {m.pending && <span aria-hidden className="animate-pulse"> …</span>}
                 </div>
@@ -511,12 +563,16 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
                 <p data-testid="assist-answer-footer" className="wk-assist-answer-foot">{m.foot}</p>
               )}
               {m.files !== undefined && m.files.length > 0 && (
-                <p data-testid="assist-chat-msg-files" className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>📎 {m.files.join(' · ')}</p>
+                <p data-testid="assist-chat-msg-files" className="mt-1 font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>📎 {m.files.join(' · ')}</p>
               )}
             </div>
           ))
         )}
       </div>
+      {/* Outside the reply box's own scroll, so the check never hides inside it. */}
+      {pathRun !== null && liveOrd !== null && (
+        <LiveActivity runId={pathRun} ord={liveOrd} kind="chat" seat={pathPa} label="this answer" />
+      )}
     </div>
   );
 }
@@ -525,7 +581,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
 
 const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice, fileMode = false, loadHistory }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice, fileMode = false, loadHistory, variant, threadTail, seed, onSeedTaken, sendChip, composerRef }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -579,7 +635,21 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   fileMode?: boolean;
   /** A resumed chat's kept history (the system chat's past chats). */
   loadHistory?: ChatHistoryLoader | undefined;
+  /** `page`: drawn inside a page (DES-LEARN §6.2): the context label is its own line under the header, the
+   *  chat block is not boxed or capped, follow-ups sit above their answers, and the thread follows the tail. */
+  variant?: 'page' | undefined;
+  /** Drawn at the end of the thread (a page chat's "What next?" after an answer). */
+  threadTail?: React.ReactNode;
+  /** Words to put in the box now (a page's "Ask about this"), sent when `send` (the person pressed Ask). */
+  seed?: { nonce: number; text: string; send: boolean } | null | undefined;
+  /** The seed was taken (put in the box, or sent). */
+  onSeedTaken?: ((nonce: number) => void) | undefined;
+  /** The item the next message is about: shown on its bubble. */
+  sendChip?: string | null | undefined;
+  /** The composer's text box (a page chat's "Ask a follow-up" focuses it). */
+  composerRef?: React.MutableRefObject<HTMLTextAreaElement | null> | undefined;
 }): React.ReactElement {
+  const page = variant === 'page';
   const [items, setItems] = useState<ThreadItem[]>(() =>
     resumeChatId !== null
       ? [
@@ -589,6 +659,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       : [],
   );
   const [text, setText] = useState(initialText);
+  /** A page chat's follow-ups, by chat: drawn inside that chat's block. */
+  const [inlineTurns, setInlineTurns] = useState<Record<string, InlineTurn[]>>({});
+  const turnSeq = useRef(0);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   /** File mode: the files the next send uploads (removable chips above the input). Each has its own id:
    *  two different files may share a name and a size. */
@@ -598,7 +671,11 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const setTextarea = useCallback((el: HTMLTextAreaElement | null) => {
+    textareaRef.current = el;
+    if (composerRef !== undefined) composerRef.current = el;
+  }, [composerRef]);
 
   // Opened by typing (§5.6 rule 4): the typed letters are already in the box — keep typing there.
   const typedOpen = useRef(initialText !== '');
@@ -651,6 +728,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     ta.style.height = `${Math.min(ta.scrollHeight, 20 * 5)}px`;
   }, [text]);
 
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   const push = (item: ThreadItem): void => setItems((cur) => [...cur, item]);
   const note = (tone: NarrationTone, textLine: string): void => push({ kind: 'note', tone, text: textLine });
 
@@ -717,8 +796,15 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     const fileNames = [...documents.map((d) => d.name), ...sentFiles.map((f) => f.name)];
     try {
       // Files ride only in file mode (the system chat); every other surface keeps its two-argument send.
+      const chip = sendChip ?? undefined;
       const launched = await (fileMode ? verbs.send(body, documents, sentFiles) : verbs.send(body, documents));
-      push({ kind: 'user', text: body, files: fileNames });
+      const into = 'chatId' in launched ? launched.chatId : null;
+      // A page chat's follow-up into a chat already on screen joins that chat's block (above its answer).
+      if (page && into !== null && itemsRef.current.some((it) => it.kind === 'chat' && it.chatId === into)) {
+        setInlineTurns((cur) => ({ ...cur, [into]: [...(cur[into] ?? []), { id: (turnSeq.current += 1), text: body, files: fileNames, ...(chip !== undefined ? { chip } : {}) }] }));
+      } else {
+        push({ kind: 'user', text: body, files: fileNames, ...(chip !== undefined ? { chip } : {}) });
+      }
       if ('chatId' in launched) {
         // One chat block per SESSION: a later send into the same warm session streams
         // into the block that already exists — never a duplicate block per message.
@@ -753,6 +839,37 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     void send();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount, with the handed-over text
   }, []);
+
+  // A page's seed (its "Ask about this", or a question pressed there): into the box, or sent when pressed.
+  const onSeedTakenRef = useRef(onSeedTaken);
+  onSeedTakenRef.current = onSeedTaken;
+  useEffect(() => {
+    if (seed === null || seed === undefined) return;
+    onSeedTakenRef.current?.(seed.nonce);
+    setText(seed.text);
+    if (seed.send && seed.text.trim() !== '') {
+      void send(seed.text);
+      return;
+    }
+    const el = textareaRef.current;
+    if (el !== null) {
+      el.focus();
+      el.setSelectionRange(seed.text.length, seed.text.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per seed
+  }, [seed?.nonce]);
+
+  // A page chat follows its tail while an answer streams in, unless the person scrolled up to read.
+  useEffect(() => {
+    const el = threadRef.current;
+    if (!page || el === null || typeof MutationObserver === 'undefined') return undefined;
+    let pinned = true;
+    const onScroll = (): void => { pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 48; };
+    const mo = new MutationObserver(() => { if (pinned) el.scrollTop = el.scrollHeight; });
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    el.addEventListener('scroll', onScroll);
+    return () => { mo.disconnect(); el.removeEventListener('scroll', onScroll); };
+  }, [page]);
 
   /** studio#328: a resumed block's probe answered. Reclaimed → drop the resumed block
    *  (and its "still on the line" note), say so, and let the surface forget it; could
@@ -802,7 +919,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           «
         </button>
         <span
-          className="select-none font-mono text-[10px] uppercase tracking-widest"
+          className="select-none font-mono text-xs "
           style={{ color: 'var(--ink-dim)', writingMode: 'vertical-rl' }}
         >
           {context.title}
@@ -816,7 +933,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       data-testid="assist-dock"
       data-surface={context.surface}
       aria-label={context.title}
-      className={`flex h-full ${fill ? 'w-full min-w-0' : 'w-96 shrink-0'} flex-col overflow-hidden`}
+      data-variant={variant}
+      className={`flex h-full ${fill ? 'w-full min-w-0' : 'w-96 shrink-0'} flex-col overflow-hidden${page ? ' wk-assist--page' : ''}`}
       style={{
         borderLeft: `1px solid ${dragOver ? 'var(--accent)' : 'var(--surface-raised)'}`,
         background: 'var(--surface-rail)',
@@ -832,15 +950,17 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       {/* Header */}
       <div {...headerProps} data-testid="assist-header" className="wk-assist-header flex shrink-0 items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--surface-raised)' }}>
         {headerStart}
-        <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>{context.title}</span>
+        <span className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>{context.title}</span>
+        {!page && (
         <span
           data-testid="assist-context"
           title={context.contextLabel}
-          className="min-w-0 text-[11px]"
+          className="min-w-0 text-xs"
           style={{ color: 'var(--ink-muted)', minWidth: 0, overflowWrap: 'anywhere' }}
         >
           {context.contextLabel}
         </span>
+        )}
         {onExpandChat !== undefined && latestChatId !== null && (
           <button
             type="button"
@@ -849,7 +969,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             aria-label="Open in full chat"
             title="Open this conversation in the full chat interface"
             onClick={() => onExpandChat(latestChatId)}
-            className={compactHeader ? 'ml-auto wk-chatwin-btn' : 'ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] focus:outline-none focus-visible:ring-1'}
+            className={compactHeader ? 'ml-auto wk-chatwin-btn' : 'ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-xs focus:outline-none focus-visible:ring-1'}
             style={compactHeader ? undefined : { color: 'var(--accent)', border: '1px solid var(--surface-overlay)' }}
           >
             {compactHeader ? <ExternalLink size={14} aria-hidden /> : 'Open in full chat ↗'}
@@ -875,11 +995,15 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         )}
       </div>
 
+      {page && context.contextLabel !== '' && (
+        <p data-testid="assist-context" className="wk-pagechat-scope">{context.contextLabel}</p>
+      )}
+
       {/* Thread — the ONE scrolling region (run blocks scroll inside themselves). */}
       <div ref={threadRef} data-testid="assist-thread" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
         {items.length === 0 && (
           <>
-            <p data-testid="assist-empty" className="text-[11px] leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
+            <p data-testid="assist-empty" className="text-xs leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
               {context.hint ?? 'Type below, or drop documents here.'}
             </p>
             {context.controls}
@@ -901,7 +1025,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                       setText(p.text);
                       textareaRef.current?.focus();
                     }}
-                    className="wk-assist-prompt rounded-full px-2.5 py-1 text-left text-[11px] focus:outline-none focus-visible:ring-1"
+                    className="wk-assist-prompt rounded-full px-2.5 py-1 text-left text-xs focus:outline-none focus-visible:ring-1"
                     style={{ border: '1px solid var(--surface-overlay)', color: 'var(--accent)', background: 'transparent' }}
                   >
                     {p.label}
@@ -915,9 +1039,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           if (item.kind === 'user') {
             return (
               <div key={i} data-testid="assist-user-msg" className="self-end max-w-[85%] rounded-2xl px-3 py-2" style={{ background: 'var(--accent-subtle)', color: 'var(--ink-high)' }}>
-                <p className="whitespace-pre-wrap text-[11px] leading-relaxed">{item.text}</p>
+                {item.chip !== undefined && <span className="wk-assist-chip" data-testid="assist-msg-chip">{item.chip}</span>}
+                <p className="whitespace-pre-wrap text-xs leading-relaxed">{item.text}</p>
                 {item.files.length > 0 && (
-                  <p className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                  <p className="mt-1 font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>
                     📎 {item.files.join(' · ')}
                   </p>
                 )}
@@ -926,7 +1051,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           }
           if (item.kind === 'note') {
             return (
-              <p key={i} data-testid="assist-note" data-tone={item.tone} className="font-mono text-[11px] leading-relaxed" style={{ color: TONE_COLOR[item.tone] }}>
+              <p key={i} data-testid="assist-note" data-tone={item.tone} className="font-mono text-xs leading-relaxed" style={{ color: TONE_COLOR[item.tone] }}>
                 · {item.text}
               </p>
             );
@@ -941,11 +1066,13 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                 onStatus={onStatus}
                 answerFooter={answerFooter}
                 loadHistory={loadHistory}
+                turns={page ? inlineTurns[item.chatId] : undefined}
               />
             );
           }
           return <DockRun key={item.runId} runId={item.runId} />;
         })}
+        {threadTail}
       </div>
 
       {/* S16a-4g: what the ACTIVE run or chat asks of the human is answered in its session thread;
@@ -961,7 +1088,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         <div className="flex shrink-0 flex-col gap-1 px-3 pt-2">
           {attachments.map((a, i) => (
             <div key={`${a.name}-${i}`} data-testid="assist-attachment-chip" data-mode={a.mode} className="flex flex-wrap items-center gap-1.5 rounded px-2 py-1" style={{ background: 'var(--surface-raised)' }}>
-              <span className="min-w-0 flex-1 truncate font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>{a.name}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>{a.name}</span>
               {a.mode === 'ask' ? (
                 <>
                   <button
@@ -969,7 +1096,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                     data-testid="assist-import-now"
                     title="POST this file through the import wire now — results echo into the thread"
                     onClick={() => importNow(a)}
-                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold focus:outline-none focus-visible:ring-1"
+                    className="rounded px-1.5 py-0.5 text-xs font-semibold focus:outline-none focus-visible:ring-1"
                     style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
                   >
                     Import directly
@@ -979,20 +1106,20 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                     data-testid="assist-analyze"
                     title="Attach as source material for the next message's governed run"
                     onClick={() => setAttachments((cur) => cur.map((x) => (x === a ? { ...x, mode: 'analyze' } : x)))}
-                    className="rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-1"
+                    className="rounded px-1.5 py-0.5 text-xs focus:outline-none focus-visible:ring-1"
                     style={{ color: 'var(--accent)', border: '1px solid var(--surface-overlay)' }}
                   >
                     Analyze with chat
                   </button>
                 </>
               ) : (
-                <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>analysis — rides the next message</span>
+                <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>analysis — rides the next message</span>
               )}
               <button
                 type="button"
                 aria-label={`Remove ${a.name}`}
                 onClick={() => setAttachments((cur) => cur.filter((x) => x !== a))}
-                className="text-[11px] leading-none"
+                className="text-xs leading-none"
                 style={{ color: 'var(--ink-dim)' }}
               >
                 ×
@@ -1046,11 +1173,11 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         </>}
         <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl px-3 py-2" style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}>
           <textarea
-            ref={textareaRef}
+            ref={setTextarea}
             data-testid="assist-input"
             {...(typeTarget !== undefined ? { 'data-type-target': typeTarget } : {})}
             aria-label={context.placeholder}
-            className="min-w-0 flex-1 resize-none border-0 bg-transparent text-[12px] leading-5 outline-none"
+            className="min-w-0 flex-1 resize-none border-0 bg-transparent text-xs leading-5 outline-none"
             style={{ minHeight: '20px', color: 'var(--ink-high)' }}
             placeholder={context.placeholder}
             value={text}
@@ -1072,13 +1199,14 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
               }
             }}
           />
+          <VoiceMicButton size="xs" testId="assist-voice-open" />
           <button
             type="button"
             data-testid="assist-send"
             aria-label="Send"
             disabled={text.trim() === '' || sending}
             onClick={() => void send()}
-            className="shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-opacity disabled:opacity-40"
+            className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-opacity disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             {sending ? '…' : 'Send'}

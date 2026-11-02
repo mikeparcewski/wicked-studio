@@ -11,7 +11,7 @@ export function DataUsed({ model }: Props): React.ReactElement {
   const showPath = useDisplayPath();
 
   return (
-    <div data-testid="data-used" className="flex flex-col gap-2 text-[11px]">
+    <div data-testid="data-used" className="flex flex-col gap-2 text-xs">
       {withFiles.length === 0 ? (
         <p style={{ color: 'var(--ink-dim)' }} data-testid="data-used-empty">
           No files-read captured yet — populated from claude <code>tool_use</code> blocks via{' '}

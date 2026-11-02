@@ -296,6 +296,8 @@ describe('Evals — corpus import', () => {
       },
     });
     page();
+    // The upload is one of the ways to bring behaviours (DES-LEARN §5): open it first.
+    await user.click(await screen.findByTestId('evaluate-byo-file'));
 
     await user.type(screen.getByTestId('testing-corpus-name'), 'dev-behaviors');
     await user.upload(
@@ -318,6 +320,8 @@ describe('Evals — corpus import', () => {
       '/testing/corpora/import': () => Promise.resolve({ imported: 1, scope: 'evals:x', embedded: false }),
     });
     page();
+    // The upload is one of the ways to bring behaviours (DES-LEARN §5): open it first.
+    await user.click(await screen.findByTestId('evaluate-byo-file'));
 
     await user.type(screen.getByTestId('testing-corpus-name'), 'x');
     await user.upload(
@@ -333,6 +337,8 @@ describe('Evals — corpus import', () => {
       '/testing/corpora/import': () => Promise.reject(new ApiError(501, 'governanceCorpusImport is not a function')),
     });
     page();
+    // The upload is one of the ways to bring behaviours (DES-LEARN §5): open it first.
+    await user.click(await screen.findByTestId('evaluate-byo-file'));
 
     await user.upload(
       screen.getByTestId('testing-corpus-file-input'),
@@ -351,6 +357,8 @@ describe('Evals — corpus import', () => {
       },
     });
     page();
+    // The upload is one of the ways to bring behaviours (DES-LEARN §5): open it first.
+    await user.click(await screen.findByTestId('evaluate-byo-file'));
 
     await user.upload(
       screen.getByTestId('testing-corpus-file-input'),

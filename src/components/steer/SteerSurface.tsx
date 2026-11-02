@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
+import { usePageChat, usePageChatOpen } from '../../store/pageChat.js';
 import { ChevronDown, Plus } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { RULES_PATH, rulePath } from '../../api/decisions.js';
@@ -29,7 +31,8 @@ import { RULE_EVAL_WORDS, ruleEvalStatus, storeMatch, type RuleEvalStatus } from
 import { relTime } from '../../board/relTime.js';
 import { fromYourWords, groupOf, rulesSentence } from '../../board/rulesPage.js';
 import { ruleSentence } from '../../board/ruleOrigin.js';
-import { importRuleFile } from '../../board/steerImport.js';
+import { importExampleDoc, importRuleFile } from '../../board/steerImport.js';
+import { CopyButton } from '../CopyButton.js';
 import { effectWord, firesWord, ruleFires, ruleReach, ruleTitle, ruleTypeWord, steerSentence } from '../../board/calmSteer.js';
 import { governedRuns, ruleUsage, usageWindows, USAGE_WINDOW_DAYS } from '../../board/steeringUsage.js';
 import { useGovernanceClaims } from '../../hooks/useGovernanceClaims.js';
@@ -288,8 +291,23 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   const openChat = (): void => {
     if (dock === null) setDock({ text: '', key: Date.now() });
     setDockOpen(true);
+    // One chat on the right at a time: the assistant (which writes rules) takes the page chat's place.
+    usePageChat.getState().setOpen('steering', false);
   };
   const closeChat = (): void => setDockOpen(false);
+  // DES-LEARN §6.2: the page's own chat answers questions about the rules on screen; Add with chat stays the
+  // steering assistant, which drafts rules. Opening the page chat steps the assistant aside.
+  const pageChatOpen = usePageChatOpen('steering');
+  useEffect(() => { if (pageChatOpen) setDockOpen(false); }, [pageChatOpen]);
+  const scrollText = useCallback(() => pageTextLines(scrollRef.current), []);
+  usePageChatHostPage('steering', {
+    knows: `Knows this page: ${read.kind === 'ok' ? `${live.length} ${live.length === 1 ? 'rule' : 'rules'} in force` : 'your rules'}${type !== null ? `, showing ${STEERING_TYPE_LABELS[type]}` : ''}, and the last evaluation.`,
+    data: scrollText,
+    onMove: (m) => {
+      if (m === 'steer-assist') { openChat(); return true; }
+      return false;
+    },
+  });
   // A dialog: focus in on open, back to the opener on close; on a phone it covers the page, so the
   // page behind is inert and Tab stays inside (codex r1 #8).
   useDialogFocus(dockOpen, dockRef, { modal: phone, background: scrollRef, prefer: 'textarea', key: dock?.key });
@@ -343,9 +361,11 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     { id: 'refresh', label: 'Refresh', testId: 'steer-refresh', onSelect: refreshAll },
   ];
   const action = (
+    <>
     <CalmAction label="Add a rule" testId="steer-add-rule" icon={<Plus size={16} aria-hidden />} onClick={addRule} disabled={read.kind !== 'ok'}
       title={read.kind === 'ok' ? undefined : 'Available once the rules have loaded (a new id must not collide with one in force)'}
       menu={moreMoves} menuLabel="More ways to add and manage rules" menuTestId={/* testid */ 'steer-more'} />
+    </>
   );
 
   // The seven steering types are sub-pages of one layout: a quiet picker stands in for the list's label.
@@ -504,7 +524,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     <div className="wk-se wk-se--calm" data-testid="steer-surface" data-steering-type={type ?? 'all'}>
       <div className="wk-se-scroll wk-calm" ref={scrollRef}>
         <div className="wk-calm-col">
-          <CalmHead title={title ?? 'Steering'} sentence={sentence} sentenceTestId={/* testid */ 'steer-sentence'} action={action} />
+          <CalmHead title={title ?? 'Steering'} titleAside={<PageAskButton kind="steering" testId="steer-page-ask" />} sentence={sentence} sentenceTestId={/* testid */ 'steer-sentence'} action={action} />
           {list}
           {health}
         </div>
@@ -573,7 +593,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
 }
 
 /** Import rule files: a markdown doctrine doc or a JSON batch, filed under one steering type. */
-function ImportDialog({ defaultType, background, onClose, onImported }: {
+export function ImportDialog({ defaultType, background, onClose, onImported }: {
   defaultType: SteeringType;
   /** The page behind: inert while the dialog is open (codex r2 #8). */
   background: React.RefObject<HTMLElement | null>;
@@ -588,6 +608,7 @@ function ImportDialog({ defaultType, background, onClose, onImported }: {
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState<{ tone: string; text: string }[]>([]);
   const [error, setError] = useState<unknown>(null);
+  const example = useMemo(() => importExampleDoc(), []);
   const run = async (): Promise<void> => {
     if (file === null || busy) return;
     setBusy(true); setError(null); setNotes([]);
@@ -608,7 +629,13 @@ function ImportDialog({ defaultType, background, onClose, onImported }: {
     <div className="wk-se-scrim" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="steer-import-title" className="wk-card wk-se-dialog" data-testid="steer-import-dialog">
         <h2 id="steer-import-title" className="wk-se-dialog-title">Import rules</h2>
-        <p className="wk-se-dialog-sub">A markdown doctrine doc (one rule per item under “## Rules”) or a JSON list of rules. Nothing already in force changes unless an id matches.</p>
+        <p className="wk-se-dialog-sub">A markdown rule doc in the format below, or a JSON list of rules. Nothing already in force changes unless an id matches.</p>
+        <details className="wk-se-format" data-testid="steer-import-format">
+          <summary>The format</summary>
+          <p>The doc opens with a <code>---</code> block that gives it an <code>id</code> and a <code>title</code>. Under <code>## Rules</code>, each rule is one item: its id in backticks, a severity (info, warn, error or critical), then the rule. “File them under” sets the type.</p>
+          <pre data-testid="steer-import-example">{example}</pre>
+          <CopyButton command={example} label="copy the example rule doc" />
+        </details>
         <label className="wk-se-field">
           <span>File them under</span>
           <select className="wk-field" value={t} onChange={(e) => setT(e.target.value as SteeringType)} data-testid="steer-import-type">

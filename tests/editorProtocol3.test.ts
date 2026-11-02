@@ -17,7 +17,7 @@ const NO_ARTIFACT: HostAdapter = {
   fork: async () => ({ error: 'refused', message: 'no' }),
 };
 
-function makeHost(opts: { events?: boolean } = {}) {
+function makeHost(opts: { events?: boolean; scope?: HostEvents['scope'] } = {}) {
   const fold = vi.fn<(folded: boolean) => void>();
   const cardHeight = vi.fn<(px: number) => void>();
   const ui: HostUi = {
@@ -26,7 +26,7 @@ function makeHost(opts: { events?: boolean } = {}) {
   };
   let deliver: ((b: EventsBatch) => void) | null = null;
   const unsubscribe = vi.fn();
-  const events: HostEvents = { runId: 'r1', topics: ['wicked.run.unit.*'], subscribe: (d) => { deliver = d; return unsubscribe; } };
+  const events: HostEvents = { runId: 'r1', topics: ['wicked.run.unit.*'], ...(opts.scope !== undefined ? { scope: opts.scope } : {}), subscribe: (d) => { deliver = d; return unsubscribe; } };
   const container = document.createElement('div');
   document.body.appendChild(container);
   const host = new EditorHost({
@@ -80,6 +80,15 @@ describe('protocol 3 (observe)', () => {
     expect(seen.find((m) => m.type === 'events.batch')?.payload).toMatchObject({ replay: true, rows: [{ id: 's1' }] });
     h.host.teardown('done');
     expect(h.unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('a power run\'s phase instance is told its phase in host.hello (observe.scope); a run-level one has none', () => {
+    const h = makeHost({ scope: { phase: 'review', label: 'Review', ords: [5] } });
+    h.ready([3]);
+    expect(h.hello[0]).toMatchObject({ observe: { runId: 'r1', scope: { phase: 'review', label: 'Review', ords: [5] } } });
+    const whole = makeHost();
+    whole.ready([3]);
+    expect((whole.hello[0]!['observe'] as Record<string, unknown>)).not.toHaveProperty('scope');
   });
 
   it('a protocol-2 plugin never hears events, even with events offered', () => {

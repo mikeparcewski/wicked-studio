@@ -79,7 +79,8 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
       // to it, not selected. Option-drag always selects, and right-click keeps that selection.
       macOptionClickForcesSelection: true,
       rightClickSelectsWord: false,
-      fontSize: 12,
+      // The code size (--text-code); xterm needs a number, so it is read from the token at mount.
+      fontSize: Number.parseFloat(resolveToken('--text-code')) || 13,
       fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
       // xterm parses concrete colors (no var() support) — resolve the tokens
       // through the cascade at mount time (§2.11's escape hatch).
@@ -244,11 +245,11 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
 
   return (
     <div data-testid="terminal" className="flex flex-col gap-1">
-      <div className="flex items-center justify-between text-[11px]">
+      <div className="flex items-center justify-between text-xs">
         <span className="font-semibold font-mono" style={{ color: 'var(--ink-dim)' }}>Terminal</span>
         <span
           data-testid="terminal-governed"
-          style={{ color: governed ? 'var(--ink-dim)' : 'var(--status-gate)', fontWeight: governed ? undefined : 600 }}
+          style={{ color: governed ? 'var(--ink-dim)' : 'var(--status-gate)', fontWeight: governed ? undefined : 'var(--weight-strong)' }}
         >
           {governed ? 'governed' : 'ungoverned operator shell'}
         </span>

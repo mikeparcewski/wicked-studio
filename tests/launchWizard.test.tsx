@@ -356,3 +356,82 @@ describe('the Lead agent (DES-TEAMING-002 §8.1)', () => {
     expect(workflowLaunchBody({ ...base, primary: 'claude' })).toMatchObject({ primary: 'claude' });
   });
 });
+
+describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
+  let settings: Record<string, unknown> = {};
+  beforeEach(() => {
+    settings = {};
+    const inner = (globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (path === '/settings' && init?.method !== 'POST' && init?.method !== 'PUT' && init?.method !== 'PATCH') {
+        return Promise.resolve(new Response(JSON.stringify({ settings }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      return inner(url, init);
+    }));
+  });
+  afterEach(() => { useCapabilities.setState({ powerMode: false }); });
+
+  async function toOptions(): Promise<void> {
+    render(<Harness />);
+    act(() => { openLaunchWizard({ workflowId: 'mcp-server' }); });
+    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
+    next();
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    next();
+  }
+  async function launched(): Promise<Record<string, unknown>> {
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    return posts.find((p) => p.path === '/runs')!.body;
+  }
+
+  it('is not offered, and `power` is never sent, on a daemon without capabilities.powerMode', async () => {
+    await toOptions();
+    expect(screen.queryByTestId('launch-wizard-power')).toBeNull();
+    next();
+    expect(await launched()).not.toHaveProperty('power');
+  });
+
+  it('is preset On from Settings (absent = on): the Ask me choice gives way to the one hand-off question; power: true is sent', async () => {
+    useCapabilities.setState({ powerMode: true });
+    await toOptions();
+    const sw = screen.getByTestId('launch-wizard-power-toggle');
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByTestId('launch-wizard-gate')).toBeNull();
+    expect(screen.getByTestId('launch-wizard-power-gates').textContent).toMatch(/once, at hand-off/);
+    next();
+    expect(screen.getByTestId('launch-wizard-review-power').textContent).toContain('On');
+    expect(await launched()).toMatchObject({ power: true });
+  });
+
+  it('is preset Off when Settings say "Power mode for new jobs: Off", and can be turned on for this job', async () => {
+    settings = { powerModeDefault: false };
+    useCapabilities.setState({ powerMode: true });
+    await toOptions();
+    const sw = screen.getByTestId('launch-wizard-power-toggle');
+    await waitFor(() => expect(sw.getAttribute('aria-checked')).toBe('false'));
+    expect(screen.getByTestId('launch-wizard-gate')).toBeTruthy();
+    fireEvent.click(sw);
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+    next();
+    expect(await launched()).toMatchObject({ power: true });
+  });
+
+  it('turned off for this job, it sends power: false and the gate posture again', async () => {
+    useCapabilities.setState({ powerMode: true });
+    await toOptions();
+    fireEvent.click(screen.getByTestId('launch-wizard-power-toggle'));
+    expect(screen.getByTestId('launch-wizard-gate')).toBeTruthy();
+    next();
+    expect(await launched()).toMatchObject({ power: false, humanConfirm: expect.any(String) });
+  });
+
+  it('workflowLaunchBody sends power only when chosen', () => {
+    const base = { workflowId: 'bug', intent: 'x', seats: [seat('claude')], repoRef: null, projectId: null, humanConfirm: undefined, deliver: null, autoDeliverGate: false, reducedAssurance: false, skipQeReason: null, chatId: null };
+    expect(workflowLaunchBody(base)).not.toHaveProperty('power');
+    expect(workflowLaunchBody({ ...base, power: null })).not.toHaveProperty('power');
+    expect(workflowLaunchBody({ ...base, power: false })).toMatchObject({ power: false });
+  });
+});
+

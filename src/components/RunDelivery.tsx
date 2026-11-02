@@ -119,7 +119,7 @@ export function DeliveryBadge({ view }: Props): React.ReactElement | null {
     <span
       data-testid="run-delivery-badge"
       data-state={claim}
-      className="text-[9px] font-mono px-1 py-0.5 rounded"
+      className="text-xs font-mono px-1 py-0.5 rounded"
       style={{ background: 'var(--surface-raised)', color: DELIVERY_COLOR[claim] }}
     >
       {DELIVERY_LABEL[claim]}
@@ -353,7 +353,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
   const remedyLicensed = runClassLicensed(view.session, isSystemWorkflow);
 
   return (
-    <div data-testid="run-delivery" data-state={claim} className="flex flex-col gap-1.5 text-[11px]">
+    <div data-testid="run-delivery" data-state={claim} className="flex flex-col gap-1.5 text-xs">
       {/*
         * The `'none'` headline is a CLASSIFICATION claim ("this run has no deliver phase"), so it
         * needs the same `is_system === false` licence the remedy does. The rail already withholds
@@ -545,7 +545,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
         * deliver-ord frame. */}
       {/* EX-04: a post-hoc hand-over superseded the engine's lift — that story is an earlier attempt's. */}
       {lift !== null && recorded?.via !== 'post_hoc' && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
-      {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && !unverified ? true : null} testId="run-delivery-assurance" />}
+      {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && !unverified ? true : null} testId="run-delivery-assurance" units={view.units} />}
       <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-delivery" />
       {/* crew#720: the credentials-missing state, and the final-codebase zip in every outcome. */}
       <DeliverCredentialsNotice view={view} />

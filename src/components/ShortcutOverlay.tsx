@@ -133,7 +133,7 @@ export function ShortcutOverlay(): React.ReactElement | null {
           <h2 className="text-sm font-semibold font-mono" style={{ color: 'var(--ink-high)' }}>
             Keyboard shortcuts
           </h2>
-          <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+          <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
             what's registered on this surface · ⌥/ or Esc closes
           </span>
         </div>
@@ -141,7 +141,7 @@ export function ShortcutOverlay(): React.ReactElement | null {
           {groups.map(({ group, rows }) => (
             <section key={group} data-testid={`shortcut-group-${group}`}>
               <h3
-                className="text-[10px] font-mono uppercase tracking-widest mb-1.5"
+                className="text-xs font-mono mb-1.5"
                 style={{ color: 'var(--ink-dim)' }}
               >
                 {GROUP_LABEL[group]}
@@ -156,7 +156,7 @@ export function ShortcutOverlay(): React.ReactElement | null {
                       {row.keys.map((k) => (
                         <kbd
                           key={k}
-                          className="text-[10px] font-mono rounded px-1.5 py-0.5"
+                          className="text-xs font-mono rounded px-1.5 py-0.5"
                           style={{
                             background: 'var(--surface-raised)',
                             color: 'var(--ink-high)',

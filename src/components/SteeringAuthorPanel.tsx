@@ -66,14 +66,14 @@ export function AuthorPanel({ type, onClose, onAuthored }: {
       style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
     >
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>
+        <span className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>
           Add {STEERING_TYPE_LABELS[type]} rules with chat
         </span>
         <button
           data-testid="steering-author-close"
           type="button"
           onClick={onClose}
-          className="ml-auto text-[10px] hover:underline"
+          className="ml-auto text-xs hover:underline"
           style={{ color: 'var(--ink-dim)' }}
         >
           Close

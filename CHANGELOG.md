@@ -12,11 +12,138 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **Importing a steering rule the way the dialog says now works, and a refusal shows the service's reason (studio#934, J7).** The Import rules dialog said "one rule per item under ## Rules". A doc written that way was refused, because the service reads a frontmattered doc, and studio showed only "Studio’s service refused it". The dialog now says "a markdown rule doc in the format below", and **The format** opens a copyable starting doc: a `---` block with `id` and `title`, then `## Rules` items written as `` - `ID` (severity): statement ``. That example imports as written. A skipped entry now always ends with what the service said ("Studio’s service said: not a frontmattered rule doc — …"). The plain words come first when studio knows the cause. The table view's assistant uses the same import path.
+
 ### Added
+- **Voice: "show me this job", then "tell it …"** (lane voice-jobs, on voice mode phase 1). On the voice dashboard:
+  - **Which job.** "Show me this job" is the job in view, else the run page voice was opened from, else the only
+    running one. A name ("the webhook retries job") is fuzzy-matched against running and recent jobs (title words,
+    plurals, a prefix, one letter off). Several close matches ask which with a guided choose-one ("the second one",
+    a name, or a tap). "Show me the other one" swaps; "close it" closes; "pin it" keeps it there when another job
+    needs you, and across voice sessions. A decision arriving brings its job into view unless another is pinned.
+  - **The live tile.** A large tile beside the transcript (a short one above it on a phone): the job's state, phase,
+    rigor (power mode), its newest repository checks, the newest line it said, a decision waiting, and the run page's
+    own live activity (tool calls, edits, the quiet seat's working row, the step's meter).
+  - **"Tell it …".** Mapped to one action without a model where the words say it: a steer note ("tell it to keep the
+    old URL working"), a Constraint or Next for its working document, stop (a reason said, or asked for), raise rigor
+    (one level, or the level said; a phased job says it has none), answer its open decision (the existing confirm and
+    10 s undo), or check on it (crew's in-flight analyzer; its suggested steer or stop is offered, never taken). Words
+    that match none of these, said while a job is in view, get ONE cheap classification by the system chat. Every
+    action is confirmed on screen (Confirm / Not that, by voice or tap) before anything is sent, and goes through the
+    same human-operator routes as a click: inject with `input: "voice"` (an older crew gets the plain note), the
+    working-document version with `input: "voice"`, the ordinary Stop with its 10 s undo and `{reason, input}`, the
+    rigor raise with the words heard as its reason.
+  - **The thread says "You (by voice)"** on a note or working-document edit crew stamped as said by voice (crew
+    api-types 0.161.0).
+  - Tests: `tests/voice.jobs.test.ts` (reference resolution: focused, only running, fuzzy, ambiguous; intent mapping;
+    the tile's facts; the thread rows), `tests/voice.jobsFlow.test.tsx` (fake mic + stub STT: show, pick, swap, close,
+    and every action confirmed before it is sent), journey `desk_voice_jobs` (Chromium's fake capture device, a stub
+    transcribe route: "show me the webhook retries job" then "tell it to keep the old URL working" → one inject with
+    `input: "voice"` only after "confirm").
+- **Phase reports live in the job's Details panel, as sections a plugin registers (program DES-LEARN §1.2).**
+  - **The manifest registers them.** A run plugin's manifest declares `panels: [{slot: "run.details", id, title, instances, order, defaultOpen, summary}]`. The slot list is closed (v1: `run.details`). `order` runs 1–99: Now stays first at 0, the core sections keep 20–60, a tie puts the core section first, and plugins tie-break by id. `instances: "per-phase"` gives one section per phase of a power build. `defaultOpen` is `always`, `never`, `current` (the running phase open, the rest folded) or `while-live`.
+  - **The host draws the chrome; the plugin draws the body.** Studio draws the fold, the phase's title, a "Plugin" mark, Pin and the attribution line. The body is the same sandboxed plugin on protocol 3 (`events.batch`), one instance per phase. A new `panel.summary {text, tone}` message gives the folded heading its line ("checkpoint 3 · rigor high · working"); `host.hello`'s `observe.panel` tells the plugin it is a section body, so it hides its own summary line.
+  - **Open, folded and pinned are remembered per job** (open state at most 100 jobs, this browser). Pin moves a section to the top of the panel.
+  - **The thread keeps one slim row per update.** "Phase report · Build updated · checkpoint 3 · Show in Details", or "· Intake finished". Show in Details opens the panel on that job (the overlay on a phone), opens the section, brings it into view and lights it. The thread's pin strip and Jump rows are gone.
+- **Plugins page as cards (program DES-LEARN §2).**
+  - **Cards.** Every plugin is a card: a preview, its icon on its colour, its title and tag (Built in · You installed · Coming soon), one line, and where it shows. A filter picks All · Job details · Editors · You installed.
+  - **Previews.** The Phase report's preview is live: its own sandboxed frame replays its sample events, never a real job's, and is granted nothing. An editor shows its preview image, else a miniature of what it opens.
+  - **Details.** A card opens its details: the preview, On (an editor's switch, human-only on crew; a built-in run plugin is always on), where it shows (the panel slot in words), the events it was granted (plain words plus each topic), what it may do and never does, and its manifest. An editor's details keep "Open a document in it" and the test-page door.
+  - **Where the looks come from.** Editor looks arrive on `GET /editors` (`description`, `visuals`, crew-api-types 0.157.0). A built-in editor falls back to studio's own (`src/plugins/firstPartyLooks.json` + `<id>/icon.svg`), which `scripts/build-editors.mjs` also writes into each `editor.json`.
+- **A working chat turn says what it is doing, and offers "Check on it?" once it runs long** (operator 2026-10-30: "On the 'studio working' activity in the chat, people get impatient").
+  - **Every chat view:** the session thread (under "<seat> is thinking"), the system chat and Ask dock (under the chat session), page chats that run a job (under the now-bar) and a run's working step show the live list: the meter ("Claude · 3 min 12 s · 412k tokens · $0.21": tokens from the engine's live `usageProgress`, wicked-core#1212, else the step's `cliUsage`; cost only when known), a one-line rolling summary of the last half minute that moves every 25 s ("Reading 4 files in packages/crew/src/api", "Ran the tests: passed · edited 2 files in src/board"; derived from the step's own frames, never by a model), the tool rows with their age, and the seat's newest line.
+  - **"This has been running 6 min · Check on it?":** after 3 min in a chat and 10 min on a run's step (`localStorage` `wicked.check.chatMinutes` / `wicked.check.stepMinutes`), a guided ask (DES-GUIDED-CHAT's tiles, the recommended one marked) asks crew (`POST /runs/:id/units/:ord/inspect`, crew-api-types 0.155.0): a seat that is not the step's own reads its record, read-only, and the card shows its verdict (Progressing, Looping, Stuck, Wasting tokens), what it is doing, how far along, the evidence, whose answer it is and what the check cost. What now? offers Let it run, Steer it (the suggested note, editable, sent to the step's seat) and Stop (the ordinary Stop with its undo), the recommended one preselected; nothing happens until the person chooses, then one record line. "Not now" asks again a threshold later. On a crew without the check it says so.
+- **Guided asks: every question you answer inline is one card, not a row of buttons in a bubble** (operator-approved mockup learn-and-panels state h, design DES-GUIDED-CHAT). One renderer, `AskCard` (`src/components/ask/`), draws six kinds over one typed `Ask` (`src/api/ask.ts`, mirroring crew-api-types 0.158.0 until the pin moves): choose one, yes / no, pick several, short text, a scale, and confirm-with-reason.
+- **Each page has its own chat, drawn in the page with the page's data** (operator-approved mockup learn-and-panels state f, design DES-LEARN §6.2). Understand, Report, Nerve Center, Evaluate, Steering, Memory and Learn each open a chat beside the page (a 400 px column from 1200 px wide, a bottom sheet below). It is the system chat's engine (the same crew chat, citation check and history), and each page keeps its own conversation. A line under the title says what the page hands it ("Knows this page: …"). The page's data rides the first message, and the item you asked about rides each message about it. An answer is cited text followed by a guided **What next?** (a choice drawn by the shared `AskCard`, never buttons in the bubble). The choice collapses into "You chose: …". A follow-up sits in the thread above its own answer. The floating chat stays, for talking about something else while work runs.
+  - **Report:** an **Ask** button opens the chat over all of the page's figures. Clicking any number, chart, table or shipped row (or pressing Enter on it) puts a question about it in the box, with the item as a chip; nothing is sent until you send it.
+  - **Nerve Center:** "Chat about system state" (the diagnostics ride as they do in the system chat); a slowing item is askable; What next offers Check again and Open Agents.
+  - **Understand:** the chat is the page. Your question starts a new read-only analysis (crew's `analyze` workflow, on the repositories you chose), and the cited answer and follow-ups come in on the page. Recent answers reopen in place.
+  - **Memory:** Add with chat is the page's chat. The memories it would keep come back as a pick-several, and each one you pick is filed as a proposal for your approval (never written directly).
+  - **Steering:** the page's chat answers questions about the rules on screen. Add with chat stays the steering assistant, which drafts rules; one of the two is open at a time.
+- **Evaluate shows what to run, how to bring your own behaviours, and every past run** (mockup learn-and-panels state e, DES-LEARN §5).
+  - **Recommended to run:** up to three cards, each saying why. They cover the steering type that let the most bad behaviours through last time, the jobs that failed this week (as behaviours), the system judgment that agrees least with what happened, types never evaluated, and rules no behaviour exercises.
+  - **Bring your own behaviours:** upload a file (as before), paste a transcript (split into behaviours by speaker turn or paragraph, which you mark good or bad), or pick past jobs (their finished steps become behaviours, labelled by how review judged them). You review, name and import them as a set for the next run. Home paths never ride into a set.
+  - **Past runs:** each run is listed with what it caught, what slipped through and its false alarms, plus **Analyze this run**. That button sends the run's detail (what slipped through, the nearest rules, the false alarms) into the page's chat and ends in a guided choice led by Draft rules for the gaps. Run it again and Ask a follow-up are the other choices.
+- **Guided asks: every question you answer inline is one card, not a row of buttons in a bubble** (operator-approved mockup learn-and-panels state h, design DES-GUIDED-CHAT). One renderer, `AskCard` (`src/components/ask/`), draws six kinds over one typed `Ask` (`src/api/ask.ts`, mirroring crew-api-types 0.156.0 until the pin moves): choose one, yes / no, pick several, short text, a scale, and confirm-with-reason.
+- **Voice mode, phase 1: talk to the system, in the browser** (operator-approved mockup learn-and-panels state g, design
+  DES-VOICE). The mic in a composer, or ⌥V from anywhere, opens a centred modal (about 35% of the window; 92% wide on a
+  phone) with a live waveform from the mic. It asks, aloud and on screen, "Do you want to enter voice mode?". Ask it
+  about voice first ("is my voice recorded?") and it answers, then asks again. No, Esc or the close button returns to
+  the page; Yes opens full screen.
+  - **Full screen:** a constrained transcript in the middle, framed by a live system dashboard. Its first question is
+    "How should I listen?": **Streaming** (a partial line with a caret while you speak; it answers when you pause) or
+    **Space bar** (it hears you only while Space or the mic button is held).
+  - **Local speech to text:** recordings go to crew's `POST /voice/transcribe` (whisper.cpp on this machine) as 16 kHz
+    mono WAVs, held in page memory and dropped. If the engine or model is missing, the modal says so; the model is
+    fetched only when you press Download. Replies are read aloud by the browser's speech synthesis (toggle "Captions
+    only"); captions are always on.
+  - **What it does:** questions go to the system chat. "Tell the dark mode job to …" proposes a steer with Send / Not
+    that. A gate arriving is read out and its tile pulses; a spoken answer ("approve it and ship it", "send it back
+    with a note …", "reject it") always stops at an on-screen Confirm (the guided-ask card), then the usual 10 s undo
+    (shown inline), and goes out with `input: "voice"`: "Approved by you · by voice, confirmed".
+  - **Dashboard widgets you can remove, add and make:** machine load, health, helpers, running jobs, waiting decisions
+    and the last 24 h's cost are built in. Each widget has a remove button; Add widget opens a pick-several picker;
+    "Make a metric widget" builds one from any number in `/system` or `/diagnostics`, shown as a number or a chart. A
+    widget is a plugin section in the `voice-dashboard` panel slot; the ones you make are declarative user plugins,
+    saved with your layout per person on crew (`GET|PUT /voice/dashboard`), or in this browser on an older crew.
+  - **Accessibility:** everything is reachable by keyboard (a "type instead" box goes where spoken words go), Esc
+    leaves, reduced motion stills the waveform and the pulse.
+- **Guided asks: every question you answer inline is one card, not a row of buttons in a bubble** (operator-approved mockup learn-and-panels state h, design DES-GUIDED-CHAT). One renderer, `AskCard` (`src/components/ask/`), draws six kinds over one typed `Ask` (`src/api/ask.ts`, mirroring crew-api-types 0.153.0 until the pin moves): choose one, yes / no, pick several, short text, a scale, and confirm-with-reason.
+  - **Choose:** option cards in a radio group. The recommended one is marked and preselected. The option you are on (hovered, else selected) says what happens on one line under the cards ("If you choose this: …"), with room kept so a hover never moves a card. Nothing is sent until the one primary button.
+  - **Reasons:** a danger option asks why before it goes. Stop now does, and the reason rides the decision into the Decisions ledger. Send back, steer, the floor override and skip QE keep their own boxes. A box opens only when you take the option, so a preselected Send back never sends a prefilled note unread.
+  - **Gates keep their governance:** only a person answers, every answer still goes through the one gate wire with its 10 s Undo, and evaluator ≠ creator is unchanged. Every choice the gate offers is a card on the face (no Other options menu), with Stop last. Helpers that cannot take the step stay listed under them, with why and Sign in. The answered gate collapses to one line ("You chose: …", "Sends in 8 s", Undo).
+  - **Questions from a helper** (an MCP server's or a seat's `ask`) draw as free text, yes / no, choose one (the producer's recommendation preselected) or, when crew says `multi`, pick several as chips. A pick-several answer goes as `content.values`. The answered question stays as one line where it was ("You picked: main, develop").
+  - **Plan approval and the hand-over** are guided asks too. "Here's the plan…" offers Approve plan (marked and preselected), Change something (opens the plan editor), Not now and Don't start. The hand-over offers Deliver, Not now and Stop the run, each saying what it does. One primary takes the selected card through the same handlers and the 10 s undo; Deliver still asks "Are you sure?". Don't start and Stop ask why, and the reason rides the reject into the Decisions ledger. A hand-over that crew refuses for QE keeps Deliver as a disabled card with why, beside Run QE again, Skip QE with a reason (its reason box in the card) and Start again with QE skipped. The ask path's Continue in Build, Not now and End, and a refused answer's retry, use the same cards.
+  - **A pick-several ask may allow none:** an explicit `multi.min: 0` lets the person send an empty pick, said as "Keep none" (the default stays at least one).
+  - **The power-mode pause** ("This grew") is four cards with the recommendation preselected. Stop asks why, and the answer collapses to one line with its undo countdown.
+  - **Keyboard and screen readers:** one Tab stop per group. Arrows, Home / End and a digit move the selection without sending; Enter answers. Every card, chip, slider and box has its own accessible name, and a disabled option says why.
+- **Power mode on the job page (behind `capabilities.powerMode`, crew-api-types 0.149.0).** Nothing of it shows on a service without power mode.
+  - **Header:** the power switch beside the job's name, then the state, then the rigor chip ("Rigor high ↑" when it rose since intake). The chip opens the rigor history and a Raise. On → Off asks first and is always allowed (the rest goes phased); Off → On says which phases stay phased; when phased is required the switch is Off and disabled, with the reason in its tooltip.
+  - **Thread:** the intake QE-plan card ("QE plan · set at intake", what hand-off will apply, Raise rigor, More about this), the orchestrator's turns as "<seat> · orchestrator · 14:03" messages, slim activity rows (edited files with +/−, commits with their short sha), checkpoint markers ("Checkpoint 1 · commit 1 · rigor stays standard (score 34 → 36)", "Checkpoint 2 · commit 2 · picked up your note"), rigor markers ("Rigor ↑ standard → high · sign-in module touched — hand-off now runs the full suite") and, at hand-off, one card of steps (checks, the reviewer on its own seat, QE, compliance), each with its status, before the deliver dock.
+  - **"This grew":** a checkpoint pause docks as a decision: Split into lanes (a New job prefilled with the rest; this job finishes the original change), Switch to phased, Continue at high rigor or Stop, answered on `POST /runs/:id/power/pause` after the undo window. The engine's recommendation leads.
+  - **Settings and New job:** "Power mode for new jobs: On" in Settings; the New job form has the same switch, preset from it, and sends `power`.
+  - **Phase report:** the built-in plugin hears the power topics (`wicked.run.intake.planned`, `rigor.rescored`, `checkpoint.reached`, `turn.*`, `handoff.stepped`, `power.toggled`) as closed rows (rigor words, numbers and seat ids; never reasons or summaries) and shows the stage, the rigor history, the checkpoint, the orchestrator's turn and the hand-off steps.
+- **A finished job says what it learned, and the Memory queue says where each learning came from.** The job's last
+  message in its conversation reads "3 learnings proposed · 2 waiting for you · Review" (crew `GET /runs/:id/learnings`,
+  crew api-types 0.152.0); while the distil seat is still reading the run it says "Distilling what this run learned…"
+  and reads again every 15 s. Review opens the Memory page's queue narrowed to that job's learnings (`?run=<id>`), with
+  "Show every proposal" to go back. Each proposal now names who proposed it (the engine's `run_agent`; "crew (from the
+  run's record)" for one crew worded) and links the run it came from ("Open its run"). Nothing shows on a crew without the route.
+- **A requirements graph says how much of the code it covers, and each item whether it is corroborated** (operator
+  ruling 2026-10-31; crew api-types 0.159.0, read ahead of the pin and absent on an older daemon). Repositories → a
+  repo → Requirements: the header shows "82% of behaviours mapped · minimum 80%" (the hover says how many are not
+  mapped yet and that the next run continues from them) and "N validated · M unconfirmed". Each item carries
+  **validated · 3** (its count of independent sources: callers, tests, docs, agreeing extractors) or **unconfirmed**,
+  and an unconfirmed item says why on the item itself ("Unconfirmed: src/actor.rs names it, but the code index skipped
+  that file…"); the edit rail repeats it in full. Settings → General → Code graph: **Requirements graph minimum
+  coverage** (default 80%, a whole percentage 1 to 100); a daemon without the setting says so at the field.
 - **Every message in a job's conversation says when it was said.** The time follows the speaker: "Claude Code · Fix · 14:16–14:21" for a step (the span its last attempt ran), "You · 14:02" for what you typed, "studio · 16:14" for the final message, and the day too when it was not today. Times come from what crew recorded; a frame that came over the live socket is dated when the page received it, and a message with no recorded time shows none.
 - **A plugin can observe a job's events and show one live block in its conversation (power mode spike 1).** The first one is the built-in **Phase report**: folded, it is one line ("Fix · step 6 of 10 · checks: 3 of 4 passed (reused from Fix) · 1 decision open"); unfolded, a compact dashboard of what's happening now, the checks (and what was reused), the decisions, the helpers, and the time and cost. The block sits at the job's first step; each later update adds a slim "Phase report updated · <step> · Jump ↑" row at that point of the conversation, which scrolls to the block, unfolds it and highlights it. **Pin** sticks it to the top of the conversation, folded, pulsing on each update; the pin is remembered per job in this browser. The block's foot says where it comes from ("From plugin · Phase report <version> · observes run events").
 - **How it works.** The block is the editor-plugin sandbox (`sandbox="allow-scripts"`, the same `wicked.editor` handshake and MessagePort) on a new **protocol 3**: the host sends `events.batch` (rows on the plugin's granted topics, in the `wicked.run.<noun>.<verb>` names the bus mirror will use) and `host.fold`; the plugin may send `ui.fold`. It gets no request at all: every artifact request is refused `not_granted`, and its page has no network. Rows replay the job's durable log first (`GET /runs/:id/events`, only the event types its topics are made from), then follow `/ws` live, each at most once, and carry no prompt, path, log or environment.
 - **Plugins page: Run plugins.** Each run plugin lists what it hears, in plain words with its reason. The built-in one is pre-granted, and says "Built in · pre-granted" there and on its block.
+
+### Fixed
+- **Power-mode re-time UI gaps (crew ea73afc0, core acf30461).**
+  - **A running checks floor is not a silent helper.** While the engine runs the repository's checks, the job page says "Running checks · test · 12 min", read from the floor's own 5-minute lines. The header says "Running checks". It no longer says "No output for N min from Claude Code" or offers "Move it to another helper": that warning is about a helper's own turn only.
+  - **Activity rows say what the command did.** `sed -i`, `perl -i`, `tee`, `cat > file` and a python/node script that rewrites a file are edits ("Edited tests/x.test.ts"). Only a test runner is "Tests passed/failed". A `sed -n` on `tests/…` is a plain command.
+  - **A retry's turn shows its own activity.** Each attempt restarts its turn numbers at 1. The live list and each turn's summary now read that attempt's turn, so a retry's tool calls show while they run, and a retry's summary is no longer a copy of the first turn's. A finished call stays in the list for about a minute after its turn ends.
+  - **The Plan (architecture or design) step has its own phase report**, and it is the current phase while it runs. Before, the Review block read "not started" as the open block.
+  - **The Checks block resolves from the floor's result** ("Checks · failed" once the floor failed), never "running" after the floor ended.
+  - **Working document:** a gate answered by a resume at another step (a review sent back to the build) leaves Open questions. When crew writes the event lines itself (its working-doc view says `eventLines`, crew#1224), the Phase report writes none: it renders them and saves a person's edits. An older crew still gets the plugin's lines.
+  - **A quiet helper says it is working.** When a helper sends no output for 15 s, the engine sends a "working" frame (core#1207). The live list shows one row, "Codex · working · last output 40 s ago", counted up live. The row goes away when the helper does something or its turn ends, and the turn summary never counts it. Codex's and Pi's commands, file changes and reads show as rows, the same as Claude Code's. An MCP call reads "Used estate search".
+  - **The judge before the checks is shown.** Between a hand-off and the checks, a judge reviews the change (core#1211). The page now says "studio · A judge seat is reviewing the change · 1 min", and the header says "Judge reviewing", where before there was 1.5 min of silence. It shows no silence warning and offers no reassign.
+  - **The deliver gate counts every gate the judge could not rule on.** A step whose receipt already carried a floor override hid the operator's later judgment at the same step. The card said "At 2 gates the judge could not rule" where the engine's own receipt had 3.
+- **A repository with no requirements graph says so, and offers to generate it.** Repositories → a repo → Requirements
+  read, in red, "the daemon refused this — requirements_graph.json not generated for this repo yet". It now says "No
+  requirements graph yet for this repository", what the view would show, and **Generate it**. Generating takes a
+  governed run, so the button starts nothing: it opens New job filled in with the generating workflow (crew names it in
+  its typed 404, `code: notGenerated`, api-types 0.154.0) and the repository, and the operator launches it there. An
+  older daemon's sentence is read the same way. The empty-corpus case's "Run domain extraction", which launched a run
+  directly, now goes the same way.
+- **Recent commits no longer push the repository page down.** The list is a fixed-height card (about six rows) that
+  scrolls inside; **Show all** opens the full history in a dialog (crew's `git-history?limit=`, up to 500; an older
+  daemon gives its 20).
 
 ## [0.13.0] — 2026-10-28
 

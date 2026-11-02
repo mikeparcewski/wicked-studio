@@ -34,13 +34,13 @@ const LIVE = normalizeSnapshot({
 describe('the disk reading', () => {
   it("prefers crew's freeDisk block (free bytes, the volume, the floor jobs stop at), then the row's own bytes", () => {
     expect(diskReading({ freeBytes: 10, totalBytes: 20, freeDisk: { freeBytes: 24e9, volumeBytes: 460e9, floorBytes: 5e9 } }))
-      .toEqual({ freeBytes: 24e9, totalBytes: 460e9, floorBytes: 5e9 });
-    expect(diskReading({ freeBytes: 55e9, totalBytes: 494e9 })).toEqual({ freeBytes: 55e9, totalBytes: 494e9, floorBytes: null });
-    expect(diskReading({ freeDisk: 7e9, totalBytes: 9e9 })).toEqual({ freeBytes: 7e9, totalBytes: 9e9, floorBytes: null });
+      .toEqual({ freeBytes: 24e9, totalBytes: 460e9, floorBytes: 5e9, availableBytes: null });
+    expect(diskReading({ freeBytes: 55e9, totalBytes: 494e9 })).toEqual({ freeBytes: 55e9, totalBytes: 494e9, floorBytes: null, availableBytes: null });
+    expect(diskReading({ freeDisk: 7e9, totalBytes: 9e9 })).toEqual({ freeBytes: 7e9, totalBytes: 9e9, floorBytes: null, availableBytes: null });
     // Nothing measured is absent, never 0.
     expect(diskReading({ freeDisk: { freeBytes: null } })).toBeNull();
     expect(diskReading({})).toBeNull();
-    expect(LIVE.infra.find((r) => r.key === 'disk')!.disk).toEqual({ freeBytes: 55_020_527_616, totalBytes: 494_384_795_648, floorBytes: null });
+    expect(LIVE.infra.find((r) => r.key === 'disk')!.disk).toEqual({ freeBytes: 55_020_527_616, totalBytes: 494_384_795_648, floorBytes: null, availableBytes: null });
     expect(LIVE.infra.find((r) => r.key === 'load')!.load).toEqual({ load1: 25.84, cores: 14 });
   });
 
@@ -103,5 +103,25 @@ describe('the tidy-up line', () => {
     expect(tidyWords(16, 4.2)).toBe('16 jobs to tidy up ($4.20 spent)');
     expect(tidyWords(1, null)).toBe('1 job to tidy up');
     expect(tidyWords(0, 3)).toBeNull();
+  });
+});
+
+describe('free disk, free now and available (operator 2026-10-29: Finder said 70 GB, crew said 13 GB)', () => {
+  it('says both when macOS can make much more available, else free alone', async () => {
+    const { diskWords } = await import('../src/board/nerveOverview.js');
+    expect(diskWords({ freeBytes: 6e9, availableBytes: 70e9 })).toBe('6 GB free now · 70 GB available once macOS clears purgeable space');
+    expect(diskWords({ freeBytes: 15e9, availableBytes: 15.4e9 })).toBe('15 GB free');
+    expect(diskWords({ freeBytes: 15e9, availableBytes: null })).toBe('15 GB free');
+  });
+  it('the disk reading carries crew\'s availableBytes, null when crew does not report it', async () => {
+    const { diskReading } = await import('../src/api/system.js');
+    expect(diskReading({ freeBytes: 6e9, totalBytes: 460e9, availableBytes: 70e9 })).toEqual({ freeBytes: 6e9, totalBytes: 460e9, floorBytes: null, availableBytes: 70e9 });
+    expect(diskReading({ freeBytes: 6e9, totalBytes: 460e9 })!.availableBytes).toBeNull();
+  });
+  it('Check again stamps when crew was read: just now, then minutes', async () => {
+    const { checkedWords } = await import('../src/components/nerve/NerveOverview.js');
+    expect(checkedWords(1_000_000, 1_000_000 + 20_000)).toBe('Checked just now');
+    expect(checkedWords(1_000_000, 1_000_000 + 3 * 60_000)).toBe('Checked 3 min ago');
+    expect(checkedWords(null, 1)).toBeNull();
   });
 });

@@ -15,7 +15,7 @@
 //
 // Cross-platform: pure Node, no shell built-ins.
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -138,6 +138,19 @@ export function externalReferences(html) {
   return out;
 }
 
+/** How a first-party plugin looks on the Plugins page (`src/plugins/firstPartyLooks.json` + `<id>/icon.svg`):
+ *  the `description` and `visuals` its editor.json carries (crew's registry reads the icon file beside it). */
+export function looksOf(id) {
+  const all = JSON.parse(readFileSync(join(root, 'src', 'plugins', 'firstPartyLooks.json'), 'utf8'));
+  const own = all[id] ?? {};
+  const icon = existsSync(join(root, 'src', 'plugins', id, 'icon.svg')) ? 'icon.svg' : undefined;
+  const visuals = { ...(icon !== undefined ? { icon } : {}), ...(typeof own.color === 'string' ? { color: own.color } : {}) };
+  return {
+    ...(typeof own.description === 'string' ? { description: own.description } : {}),
+    ...(Object.keys(visuals).length > 0 ? { visuals } : {}),
+  };
+}
+
 /** Bundle one plugin's entry to a single IIFE script (Vite's library build, in memory). */
 async function bundleScript(entry) {
   const { build } = await import('vite');
@@ -176,8 +189,10 @@ export async function buildEditors(outDir, { version } = {}) {
     // Protocol 2 (DES-EDITOR-PLUGIN-CONTRACT-001 §5.1): the surfaces live in the plugin's own `surfaces.json`, which
     // its `plugin.ts` imports for `plugin.ready` too, so the manifest and the bundle can't disagree.
     const surfaces = e.protocol.includes(2) ? surfacesOf(e.id) : undefined;
-    const manifest = { id: e.id, title: e.title, version: v, protocol: e.protocol, kinds: e.kinds, entry: 'index.html', sizes: e.sizes, permissions: e.permissions, ...(surfaces !== undefined ? { surfaces } : {}) };
+    const looks = looksOf(e.id);
+    const manifest = { id: e.id, title: e.title, version: v, protocol: e.protocol, kinds: e.kinds, entry: 'index.html', sizes: e.sizes, permissions: e.permissions, ...(surfaces !== undefined ? { surfaces } : {}), ...looks };
     writeFileSync(join(target, 'index.html'), html, 'utf8');
+    if (looks.visuals?.icon !== undefined) copyFileSync(join(dir, looks.visuals.icon), join(target, looks.visuals.icon));
     writeFileSync(join(target, 'editor.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
     written.push({ id: e.id, version: v, bytes: Buffer.byteLength(html, 'utf8'), sha256: createHash('sha256').update(html, 'utf8').digest('hex'), dir: target });
   }

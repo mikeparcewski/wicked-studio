@@ -153,7 +153,7 @@ export function VerdictDetail({ runId, units, completed = false }: Props): React
         <div className="wk-session-verdict-details" data-tech="on">
 
       {deciding.criterion !== null && (
-        <p className="text-[11px] font-mono" data-testid="verdict-criterion" style={{ color: 'var(--ink-muted)' }}>
+        <p className="text-xs font-mono" data-testid="verdict-criterion" style={{ color: 'var(--ink-muted)' }}>
           criterion: {showText(deciding.criterion)}
         </p>
       )}
@@ -186,7 +186,7 @@ export function VerdictDetail({ runId, units, completed = false }: Props): React
       )}
 
       {/* Which governance layers actually ran — never overclaimed (FINDING-025). */}
-      <p className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+      <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
         {deciding.hasDeterministicFloor
           ? `deterministic floor: ${deciding.deterministicPass ? 'pass' : 'fail'}`
           : 'no deterministic floor'}
@@ -203,7 +203,7 @@ export function VerdictDetail({ runId, units, completed = false }: Props): React
       {/* Wave 6 (F-7R2-005 / -017): the engine's own word that no judge could be convened. */}
       {deciding.ungated && (
         <p
-          className="text-[11px] font-mono font-semibold"
+          className="text-xs font-mono font-semibold"
           data-testid="verdict-ungated"
           {...(deciding.ungatedReason !== null ? { 'data-ungated-reason': deciding.ungatedReason } : {})}
           style={{ color: 'var(--status-gate)' }}

@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project, RepoEntry, RosterSeat, SessionView, WorkflowDef } from '../src/api/types.js';
-import { Composer, shortPlaceholder } from '../src/components/session/Composer.js';
+import { Composer, shortPlaceholder, placeholderFits } from '../src/components/session/Composer.js';
 import { useComposerChips } from '../src/store/composerChips.js';
 import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { resetComposerSeats } from '../src/store/composerSeats.js';
@@ -117,6 +117,22 @@ describe('S3: one name per helper, the same list in @ and the helpers row', () =
     type('/workflow-feature');
     fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
     expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'feature', contextRepo: null });
+  });
+
+  it('a placeholder wider than its one-row box is not shown whole: it would wrap and lose its second line', () => {
+    const el = document.createElement('textarea');
+    Object.defineProperty(el, 'clientWidth', { value: 447, configurable: true });
+    const spy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      { font: '', measureText: (t: string) => ({ width: t.length * 6.75 }) } as unknown as CanvasRenderingContext2D);
+    try {
+      // the old run-page placeholder (93 characters) at the 1280 run page with its panel open: it wrapped and clipped
+      expect(placeholderFits(el, 'Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper')).toBe(false);
+      expect(placeholderFits(el, "Ask about this, or say what's next — / adds a step, @ a helper")).toBe(true);
+      Object.defineProperty(el, 'clientWidth', { value: 0 });
+      expect(placeholderFits(el, 'x'.repeat(500))).toBe(true); // not laid out yet: no guess
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('the 390 px placeholder is the first clause with an ellipsis, never a cut sentence', () => {

@@ -71,7 +71,7 @@ describe('the client-side appearance cache (studio#517)', () => {
   it('a corrupt cache is ignored: the defaults stand until the read', async () => {
     localStorage.setItem('studio.appearance.cache', '{not json');
     const { useAppearanceStore } = await import('../src/theming/appearance.js');
-    expect(useAppearanceStore.getState().appearance.theme).toBe('dark');
+    expect(useAppearanceStore.getState().appearance.theme).toBe('wicked-dark');
     expect(root().getAttribute('data-theme')).toBeNull();
   });
 });

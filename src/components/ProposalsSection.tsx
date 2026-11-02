@@ -15,7 +15,7 @@ import { readErrorKind } from '../api/errors.js';
 import { shortContent } from './ProposalChips.js';
 import { EmptyState, StateBanner } from './ui/index.js';
 
-export function ProposalsSection({ kind, heading, onDecision, editable = false, revision = 0 }: {
+export function ProposalsSection({ kind, heading, onDecision, editable = false, revision = 0, runId = null, onShowAll }: {
   /** Which proposals this section reviews: Steer reviews policies, Memory reviews memories. */
   kind: 'memory' | 'policy';
   /** The section title, e.g. "Rule proposals" / "Memory proposals". */
@@ -27,6 +27,10 @@ export function ProposalsSection({ kind, heading, onDecision, editable = false, 
   /** Fired after a successful approve/reject — lets a host (the dashboard) refresh its own
    *  headline count, which this self-contained section otherwise cannot know changed. */
   onDecision?: (() => void) | undefined;
+  /** Only the proposals one run filed (its learnings: `provenance.run_id`), from the run's end card. */
+  runId?: string | null;
+  /** Leave the one-run filter. */
+  onShowAll?: (() => void) | undefined;
 }): React.ReactElement {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,8 +68,8 @@ export function ProposalsSection({ kind, heading, onDecision, editable = false, 
   }, [loadProposals, revision]);
 
   const visible = useMemo(
-    () => proposals.filter((p) => proposalKind(p) === kind),
-    [proposals, kind],
+    () => proposals.filter((p) => proposalKind(p) === kind && (runId === null || p.provenance['run_id'] === runId)),
+    [proposals, kind, runId],
   );
 
   const decide = useCallback((id: string, verb: 'approve' | 'reject', content?: string): void => {
@@ -114,6 +118,12 @@ export function ProposalsSection({ kind, heading, onDecision, editable = false, 
         </h2>
         <button type="button" data-testid="proposals-section-refresh" onClick={() => void loadProposals()} className="wk-btn wk-btn--quiet wk-btn--sm">Refresh</button>
       </div>
+      {runId !== null && (
+        <p data-testid="proposals-section-run-filter" className="wk-gk-muted">
+          What one run learned.{' '}
+          {onShowAll !== undefined && <button type="button" data-testid="proposals-section-show-all" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={onShowAll}>Show every proposal</button>}
+        </p>
+      )}
       {note !== null && <p data-testid="proposals-section-note" role="status" className="wk-gk-note">{note}</p>}
       {decisionError !== null && (
         <div data-testid="proposals-section-note">

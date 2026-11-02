@@ -156,6 +156,49 @@ export function decisionMessages(events: readonly CoreEvent[] | null | undefined
 }
 
 const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g;
+
+/** A filesystem path outside the repository (home, temp, absolute): never on a message's face. */
+const FS_PATH = /(?:`)?(?:~|\/(?:Users|home|private|tmp|var|Volumes|opt))\/[^\s`'")\],;:!?]*[^\s`'")\],;:!?.](?:`)?/g;
+
+export interface EvaluatorFace {
+  /** The bubble's one plain sentence (the report's first), with no filesystem path. */
+  sentence: string | null;
+  /** "QE: 2 of 2 items pass", "Review: 1 of 2 items pass", "QE passed". */
+  verdictLine: string | null;
+  tone: 'pass' | 'fail' | null;
+}
+
+/**
+ * An evaluator's (review, security, QE) report as a bubble's face (operator 2026-10-29: "a wall of engine text"): its
+ * first plain sentence and one verdict line from its own `ITEM n: PASS` lines and `VERDICT:`. The rest stays behind
+ * "Show all" / "What it did". Null when the report has neither a verdict nor items (it is read as any step's words).
+ */
+export function evaluatorFace(raw: string, label: string): EvaluatorFace | null {
+  const text = raw.replace(ANSI, '').replace(/\r\n?/g, '\n');
+  const items = [...text.matchAll(/^\s*ITEM\s+\d+\s*:\s*(PASS|FAIL|NOT PASS)\b/gim)].map((m) => m[1]!.toUpperCase() === 'PASS');
+  const verdicts = [...text.matchAll(/^\s*VERDICT:\s*(PASS|FAIL|NOT PASS)\s*$/gim)];
+  const verdict = verdicts.length > 0 ? verdicts[verdicts.length - 1]![1]!.toUpperCase() === 'PASS' : null;
+  if (items.length === 0 && verdict === null) return null;
+  // Machine lines (ITEM, VERDICT, evidence, lists, headings) go line by line, so a sentence next to one is still read
+  // and none of them is ever read into the sentence.
+  const machine = /^\s*(ITEM\s+\d+|VERDICT|QE-EVIDENCE|ADVICE|Counts|Commands run|#|[-*]\s|\d+\.\s|```)/i;
+  const prose = text.split('\n').map((l) => (machine.test(l) ? '' : l)).join('\n');
+  const first = prose.split(/\n\s*\n/).map((p) => p.trim()).find((p) => p !== '') ?? null;
+  let sentence: string | null = null;
+  if (first !== null) {
+    const flat = first.replace(/\s*\n\s*/g, ' ').replace(FS_PATH, '').replace(/\s{2,}/g, ' ').replace(/\s+([.,;:!?])/g, '$1').trim();
+    const end = /^(.+?[.!?])(\s|$)/.exec(flat);
+    sentence = (end !== null ? end[1]! : flat).trim() || null;
+  }
+  const passed = items.filter(Boolean).length;
+  const ok = verdict ?? (items.length > 0 && passed === items.length);
+  const counted = `${passed} of ${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+  // The verdict leads: a FAIL with every item passing is still said as not passing.
+  const verdictLine = items.length === 0 ? `${label} ${ok ? 'passed' : 'did not pass'}`
+    : ok ? `${label}: ${counted} ${items.length === 1 ? 'passes' : 'pass'}`
+      : `${label} did not pass (${counted} passed)`;
+  return { sentence, verdictLine, tone: ok ? 'pass' : 'fail' };
+}
 /** A step output's own verdict header ("VERDICT: PASS") — said by the message in words, not shouted. */
 const VERDICT = /^\s*VERDICT:\s*(PASS|FAIL|NOT PASS)\s*$/im;
 
@@ -307,8 +350,10 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
   else if (tested !== null) sentences.push(`${tested}.`);
   else if (reviewed !== null) sentences.push(`Reviewed and approved by ${reviewed}.`);
   else if (checks.nothing) sentences.push('Nothing checked this work.');
+  // A delivery that needed your approval of a failed floor leads with where it went, then what you approved.
+  const leadPr = s === 'completed' && pr !== null && overridden !== null && d.state !== 'stranded' && d.state !== 'failed';
   if (s === 'completed') {
-    if (pr !== null) sentences.push(pr.number !== null ? `Pull request #${pr.number} is open.` : 'A pull request is open.');
+    if (pr !== null && !leadPr) sentences.push(pr.number !== null ? `Pull request #${pr.number} is open.` : 'A pull request is open.');
     else if (d.state === 'pushed') sentences.push(branch !== null ? `The work is on branch ${branch}.` : 'The branch was pushed.');
     else if (d.state === 'stranded') sentences.push('The work hasn’t been pushed anywhere yet: “Deliver — open a PR” on its delivery card pushes it.');
     else if (d.state === 'nothing-to-deliver') sentences.push('There was nothing to deliver.');
@@ -316,6 +361,7 @@ export function finalWords(view: SessionView, steps: { done: number; total: numb
     else if (d.state === 'delivered' && !shipped) sentences.push('No pull request or pushed branch is recorded.');
   }
   // A finished run whose hand-over did not land is not "Done" (J4): it says so first.
-  const lead = s !== 'completed' ? 'Stopped' : d.state === 'stranded' || d.state === 'failed' ? 'Not delivered' : 'Done';
+  const lead = s !== 'completed' ? 'Stopped' : d.state === 'stranded' || d.state === 'failed' ? 'Not delivered'
+    : leadPr ? (pr!.number !== null ? `Delivered as pull request #${pr!.number}` : 'Delivered as a pull request') : 'Done';
   return { lead, line: sentences.join(' '), pr, branch };
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_SITE_NAME, THEMES, useAppearanceStore } from '../theming/appearance.js';
 import { SectionTitle } from './ui/PageFrame.js';
 import { Segmented } from './ui/Segmented.js';
+import { Switch } from './ui/Switch.js';
 import { FilePick } from './ui/FilePick.js';
 import { WickedLogo } from './WickedLogo.js';
 
@@ -21,9 +22,9 @@ import { WickedLogo } from './WickedLogo.js';
  * (EC12: accent vs status, side by side). Reset restores 258/72/62 (§3.5) and
  * persists; the logo is independent of the accent reset.
  *
- * Theme (§2.14): dark is tokens.css itself; light, wicked-light and wicked-dark are theme
- * instances, applied as `data-theme` on <html> and persisted with the rest. A wicked theme
- * writes the harbor accent preset (DES-STUDIO-REBUILD-001 S1); the wheel owns it after.
+ * Theme: Wicked Dark and Wicked Light (operator 2026-10-31), applied as `data-theme` on <html> and persisted with
+ * the rest; a stored dark / light reads as its Wicked counterpart. The wheel owns the accent (the Wicked preset by
+ * default).
  *
  * Status colors are FIXED semantic signals (§2.6) — deliberately absent here.
  */
@@ -154,10 +155,7 @@ export function AppearanceSettings(): React.ReactElement {
 
   return (
     <section data-testid="appearance-settings" className="wk-card wk-pg-set-stack" ref={(root) => {
-      // Preserve hooks on the primitive's option and upload controls.
-      for (const option of root?.querySelectorAll<HTMLButtonElement>('[data-value]') ?? []) {
-        option.dataset.testid = `theme-${option.dataset.value}`;
-      }
+      // Preserve the upload control's hook (the theme options carry their own test ids).
       const upload = root?.querySelector<HTMLButtonElement>('.wk-filepick button');
       if (upload) upload.dataset.testid = 'logo-upload';
     }}>
@@ -194,7 +192,24 @@ export function AppearanceSettings(): React.ReactElement {
       <div className="wk-pg-set-stack">
         <SectionTitle>Theme</SectionTitle>
         <p className="wk-field-note">Choose a light or dark appearance; the Wicked themes also set the accent color.</p>
-        <Segmented label="Theme" data-testid="theme-picker" value={appearance.theme} options={THEMES.map((t) => ({ value: t.id, label: t.label }))} onChange={chooseTheme} />
+        {/* Ambient (operator 2026-11-01): a third choice; it keeps a ground of its own (Dark / Light) under it. */}
+        <Segmented label="Theme" data-testid="theme-picker" value={appearance.ambient === true ? 'ambient' : appearance.theme}
+          options={[...THEMES.map((t) => ({ value: t.id as string, label: t.label as string, testId: `theme-${t.id}` })), { value: 'ambient', label: 'Ambient', testId: 'theme-ambient' }]}
+          onChange={(v) => {
+            if (v === 'ambient') { update({ ambient: true }); return; }
+            update({ ambient: false });
+            chooseTheme(v as (typeof THEMES)[number]['id']);
+          }} />
+        {appearance.ambient === true && (
+          <div className="wk-pg-set-stack" data-testid="ambient-settings">
+            <p className="wk-field-note">Ambient follows your work: a quiet line and tint while jobs run, warm when something needs you, red when something failed, a brief green when something is delivered. Text never changes colour.</p>
+            <Segmented label="Ambient ground" data-testid="ambient-ground" value={appearance.theme}
+              options={[{ value: 'wicked-dark', label: 'Dark', testId: 'ambient-ground-dark' }, { value: 'wicked-light', label: 'Light', testId: 'ambient-ground-light' }]}
+              onChange={(v) => chooseTheme(v as (typeof THEMES)[number]['id'])} />
+            <Switch label="Keep Ambient still (no breathing, no settle)" checked={appearance.ambient_still === true}
+              onChange={(v) => update({ ambient_still: v })} data-testid="ambient-still" />
+          </div>
+        )}
       </div>
 
       {/* Accent section */}

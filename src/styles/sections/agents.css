@@ -126,7 +126,7 @@
   color: var(--ink-body); font-size: var(--text-sm);
 }
 .wk-agents-modal-head { flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 16px 18px 6px; background: var(--surface-overlay); }
-.wk-agents-modal-title { margin: 0; flex: 1; font-size: var(--text-lg); font-weight: 650; color: var(--ink-high); }
+.wk-agents-modal-title { margin: 0; flex: 1; font-size: var(--text-lg); font-weight: var(--weight-strong); color: var(--ink-high); }
 .wk-agents-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 0 18px 18px; }
 .wk-agents-count { margin: 0; color: var(--ink-muted); font-size: var(--text-xs); }
 .wk-agents-toc { list-style: none; margin: -6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -151,7 +151,7 @@
 .wk-agents-cmd { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .wk-agents-cmd code {
   flex: 1 1 0; min-width: 0; padding: 6px 8px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);
-  background: var(--surface-base); color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-xs);
+  background: var(--surface-base); color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-code);
 }
 .wk-agents-cmd code { overflow-x: auto; white-space: nowrap; }
 .wk-agents-safe { display: block; margin-top: 6px; font-size: var(--text-xs); color: var(--ink-muted); }

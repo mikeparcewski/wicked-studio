@@ -105,16 +105,15 @@ with sync_playwright() as p:
         return page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choice"]')].map(e => e.dataset.choiceKey)""")
 
     def peek(key: str) -> str:
-        # ui-v2 gate: a choice says what it does BEFORE it is taken — on its menu item, or above the face's buttons.
+        # Guided asks: a choice says what it does BEFORE it is taken — the line under the cards, for the card you are on.
         return choice_consequence(page, key)
 
     def consequence_on(key: str) -> bool:
-        """The consequence is ON the choice (its menu item's second line) or above the face's buttons — never a line
-        that appears under the buttons and moves them."""
-        loc = page.locator(CHOICE.format(key)).first
-        if loc.get_attribute("role") == "menuitem":
-            return loc.is_visible() and (loc.get_attribute("data-sub") or "") != ""
-        return page.evaluate(ABOVE_SEL, ['[data-testid="session-gate-consequence"]', '[data-testid="session-gate-choices"]'])
+        """The consequence of the card under the pointer is on the one line under the cards (its room reserved, so it
+        never moves a card), naming that card."""
+        page.locator(CHOICE.format(key)).first.hover()
+        return (page.locator(f'[data-testid="session-gate-consequence"][data-option="{key}"]').count() == 1
+                and page.evaluate(ABOVE_SEL, ['[data-testid="session-gate-choices"]', '[data-testid="session-gate-consequence"]']))
 
     def section_timeout() -> None:
         # S16a-2a: the gate is answered in the session thread's row (/s/run%3Ar-timeout).

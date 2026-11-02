@@ -249,27 +249,27 @@ function FilePath({ path, opKind, runId, root }: {
 
   return (
     <li title={shown} className="group flex items-start gap-1.5 min-w-0">
-      <span className="shrink-0 mt-0.5 text-[9px] font-mono select-none" style={{ color: glyphColor }}>
+      <span className="shrink-0 mt-0.5 text-xs font-mono select-none" style={{ color: glyphColor }}>
         {glyph}
       </span>
       <button
         type="button"
         ref={rowRef}
         onClick={() => setViewerOpen(true)}
-        className="min-w-0 flex-1 leading-5 font-mono text-[10px] break-all text-left transition-opacity hover:opacity-70"
+        className="min-w-0 flex-1 leading-5 font-mono text-xs break-all text-left transition-opacity hover:opacity-70"
         title={`View ${shown}`}
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
       >
         {dir && <span style={{ color: 'var(--ink-dim)' }}>{dir}</span>}
         <span style={{ color: nameColor }}>{name}</span>
         {feedback === 'opened' && (
-          <span className="ml-1 text-[9px]" style={{ color: 'var(--status-run)' }}>✓ opened</span>
+          <span className="ml-1 text-xs" style={{ color: 'var(--status-run)' }}>✓ opened</span>
         )}
         {feedback === 'copied' && (
-          <span className="ml-1 text-[9px]" style={{ color: 'var(--status-run)' }}>✓ copied</span>
+          <span className="ml-1 text-xs" style={{ color: 'var(--status-run)' }}>✓ copied</span>
         )}
         {feedback === 'open-failed' && (
-          <span className="ml-1 text-[9px]" style={{ color: 'var(--status-gate)' }}>
+          <span className="ml-1 text-xs" style={{ color: 'var(--status-gate)' }}>
             open unavailable — path copied
           </span>
         )}
@@ -279,7 +279,7 @@ function FilePath({ path, opKind, runId, root }: {
         onClick={handleOpen}
         aria-label={`Open externally: ${shown}`}
         title={`Open with system default app: ${shown}`}
-        className="shrink-0 mt-0.5 text-[9px] font-mono leading-5 transition-opacity hover:opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="shrink-0 mt-0.5 text-xs font-mono leading-5 transition-opacity hover:opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-dim)' }}
       >
         ↗
@@ -289,7 +289,7 @@ function FilePath({ path, opKind, runId, root }: {
         onClick={handleCopy}
         aria-label={`Copy path ${shown}`}
         title="Copy path"
-        className="shrink-0 mt-0.5 text-[9px] font-mono leading-5 transition-opacity hover:opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="shrink-0 mt-0.5 text-xs font-mono leading-5 transition-opacity hover:opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-dim)' }}
       >
         ⧉
@@ -362,11 +362,11 @@ export function RunTranscriptView({ runId, units, onOpenShell, live = null }: {
       )}
       {captured.map((unit) => (
         <div key={unit.id}>
-          <p className="text-[10px] font-mono mb-1 uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>
+          <p className="text-xs font-mono mb-1 " style={{ color: 'var(--ink-dim)' }}>
             unit #{unit.ord} · {unit.stage} · {unit.status}
           </p>
           <pre
-            className="rounded-lg p-2 text-[10px] leading-tight whitespace-pre-wrap font-mono overflow-x-auto"
+            className="rounded-lg p-2 text-xs leading-tight whitespace-pre-wrap font-mono overflow-x-auto"
             style={{ background: 'var(--surface-base)', color: 'var(--ink-body)' }}
           >
             {showText(texts[unit.ord] ?? 'Loading…')}
@@ -378,7 +378,7 @@ export function RunTranscriptView({ runId, units, onOpenShell, live = null }: {
           type="button"
           data-testid="term-open-shell"
           onClick={onOpenShell}
-          className="text-[11px] font-mono underline transition-opacity hover:opacity-70"
+          className="text-xs font-mono underline transition-opacity hover:opacity-70"
           style={{ color: 'var(--ink-muted)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
         >
           Open operator shell (ungoverned) instead
@@ -449,13 +449,13 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
           ref={fullDiffBtnRef}
           data-testid="files-full-diff"
           onClick={() => { setFullDiffUnsupported(false); setFullDiffOpen(true); }}
-          className="text-[10px] font-mono px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
+          className="text-xs font-mono px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
           style={{ color: 'var(--accent)', background: 'var(--accent-subtle)' }}
         >
           Full diff
         </button>
         {fullDiffUnsupported && (
-          <span className="text-[9px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+          <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
             diff unavailable — this daemon predates the diff route
           </span>
         )}
@@ -483,7 +483,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
           {isActive ? 'No files changed yet.' : 'No files recorded by the units.'}
         </p>
         {!isActive && (
-          <p className="text-[10px] font-mono leading-snug" style={{ color: 'var(--ink-dim)' }}>
+          <p className="text-xs font-mono leading-snug" style={{ color: 'var(--ink-dim)' }}>
             the units recorded no file reads — the run&apos;s changeset, if any, is on its branch: open the full diff
           </p>
         )}
@@ -505,7 +505,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
           delivered change. Run 665a9aeb reported 13 files here while its deliver
           phase pushed a branch with zero commits; the Delivery section below
           carries the outcome claim, and this one stops making it. */}
-      <p data-testid="files-scope-note" className="text-[10px] font-mono leading-snug" style={{ color: 'var(--ink-dim)' }}>
+      <p data-testid="files-scope-note" className="text-xs font-mono leading-snug" style={{ color: 'var(--ink-dim)' }}>
         files the agents read or wrote in the worktree — not a delivered changeset
       </p>
 
@@ -515,11 +515,11 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
       {/* Modified / Created section */}
       {(hasModified || isActive) && (
         <div>
-          <p className="text-[10px] font-mono mb-2 uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>
+          <p className="text-xs font-mono mb-2 " style={{ color: 'var(--ink-dim)' }}>
             Modified / Created
           </p>
           {!hasModified ? (
-            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
               No files changed yet.
             </p>
           ) : (
@@ -538,7 +538,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
       {/* Referenced section */}
       {sortedReferenced.length > 0 && (
         <div>
-          <p className="text-[10px] font-mono mb-2 uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>
+          <p className="text-xs font-mono mb-2 " style={{ color: 'var(--ink-dim)' }}>
             Referenced
           </p>
           <ul className="flex flex-col gap-1">
@@ -549,7 +549,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
         </div>
       )}
 
-      <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+      <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
         {allFiles.size} file{allFiles.size !== 1 ? 's' : ''} total
       </p>
     </div>
@@ -712,7 +712,7 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
           aria-label="Collapse insights panel"
         >
           <span className="text-sm leading-none shrink-0" style={{ color: 'var(--ink-dim)' }}>›</span>
-          <span className="text-[10px] font-semibold uppercase tracking-widest font-mono" style={{ color: 'var(--ink-dim)' }}>
+          <span className="text-xs font-semibold font-mono" style={{ color: 'var(--ink-dim)' }}>
             Insights
           </span>
         </button>
@@ -729,7 +729,7 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
             : view.units.some((u) => u.status === 'done' || u.status === 'rejected')
               ? "View this run's transcript"
               : 'Open terminal'}
-          className="rounded px-2 py-0.5 text-[11px] font-mono"
+          className="rounded px-2 py-0.5 text-xs font-mono"
           style={{ color: 'var(--ink-muted)' }}
         >
           Term
@@ -739,7 +739,7 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
           onClick={() => setCoverageOpen(true)}
           title="Coverage"
           aria-label="Open coverage report"
-          className="rounded px-2 py-0.5 text-[11px] font-mono"
+          className="rounded px-2 py-0.5 text-xs font-mono"
           style={{ color: 'var(--ink-muted)' }}
         >
           Cov
@@ -764,7 +764,7 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
                 <span className="text-xs font-medium font-mono">{label}</span>
                 {id === 'files' && fileCount !== null && fileCount > 0 && (
                   <span
-                    className="text-[9px] font-mono px-1 py-0.5 rounded"
+                    className="text-xs font-mono px-1 py-0.5 rounded"
                     style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
                   >
                     {fileCount}

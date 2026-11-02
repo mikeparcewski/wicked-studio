@@ -40,9 +40,11 @@ export interface AskSession {
 
 export const ASK_SESSION_KEY = 'wicked.ask.session';
 
-export function readAskSession(): AskSession | null {
+/** `key`: whose session — the system chat's ({@link ASK_SESSION_KEY}, the default) or a page chat's
+ *  (`pageChatSessionKey`): each page keeps its own conversation. */
+export function readAskSession(key: string = ASK_SESSION_KEY): AskSession | null {
   try {
-    const raw = sessionStorage.getItem(ASK_SESSION_KEY);
+    const raw = sessionStorage.getItem(key);
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as Partial<AskSession> | null;
     if (parsed === null || typeof parsed.chatId !== 'string' || parsed.chatId === '') return null;
@@ -62,19 +64,19 @@ export function readAskSession(): AskSession | null {
   }
 }
 
-export function writeAskSession(session: AskSession): void {
+export function writeAskSession(session: AskSession, key: string = ASK_SESSION_KEY): void {
   try {
-    sessionStorage.setItem(ASK_SESSION_KEY, JSON.stringify(session));
+    sessionStorage.setItem(key, JSON.stringify(session));
   } catch {
     /* storage unavailable — the session still works, it just is not resumable */
   }
 }
 
 /** Forget the persisted session — only when it IS `chatId` (absent ⇒ unconditionally). */
-export function forgetAskSession(chatId?: string): void {
+export function forgetAskSession(chatId?: string, key: string = ASK_SESSION_KEY): void {
   try {
-    if (chatId !== undefined && readAskSession()?.chatId !== chatId) return;
-    sessionStorage.removeItem(ASK_SESSION_KEY);
+    if (chatId !== undefined && readAskSession(key)?.chatId !== chatId) return;
+    sessionStorage.removeItem(key);
   } catch {
     /* nothing to forget */
   }

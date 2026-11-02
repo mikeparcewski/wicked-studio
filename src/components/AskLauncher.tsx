@@ -145,7 +145,7 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx 
           cursor: 'pointer',
         }}
       >
-        {open ? <span aria-hidden style={{ fontSize: '20px', lineHeight: 1 }}>×</span> : <ChatGlyph />}
+        {open ? <span aria-hidden style={{ fontSize: 'var(--text-section)', lineHeight: 1 }}>×</span> : <ChatGlyph />}
       </button>}
     </>
   );

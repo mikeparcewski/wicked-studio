@@ -91,20 +91,20 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       </p>
 
       {view.judgeCli !== null && view.judgeDistinct === false && (
-        <p className="text-[11px]" data-testid="gate-verdict-judge-same-seat" style={{ color: 'var(--status-gate)' }}>
+        <p className="text-xs" data-testid="gate-verdict-judge-same-seat" style={{ color: 'var(--status-gate)' }}>
           same seat as the creator — evaluator ≠ creator is not held on this verdict: the judge fell back to the
           single default runner, so its independence is prompt-only
         </p>
       )}
 
       {view.criterion !== null && (
-        <p className="text-[11px]" data-testid="gate-verdict-criterion" style={{ color: 'var(--ink-muted)' }}>
+        <p className="text-xs" data-testid="gate-verdict-criterion" style={{ color: 'var(--ink-muted)' }}>
           criterion: {showText(view.criterion)}
         </p>
       )}
 
       {(view.agentVerdict !== null || view.agentReasoning !== null) && (
-        <p className="text-[11px]" data-testid="gate-verdict-judge" style={{ color: 'var(--ink-body)' }}>
+        <p className="text-xs" data-testid="gate-verdict-judge" style={{ color: 'var(--ink-body)' }}>
           {view.agentVerdict !== null && <span className="font-semibold">judge: {view.agentVerdict}</span>}
           {view.agentVerdict !== null && view.agentReasoning !== null && ' — '}
           {view.agentReasoning !== null ? showText(view.agentReasoning) : null}
@@ -113,7 +113,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
 
       {/* studio#430: the judge passed and the evaluator's own verdict denied — said, by name. */}
       {layerLine(view) !== null && (
-        <p className="text-[11px]" data-testid="gate-verdict-who-denied" style={{ color: 'var(--status-fail)' }}>
+        <p className="text-xs" data-testid="gate-verdict-who-denied" style={{ color: 'var(--status-fail)' }}>
           {layerLine(view)}
         </p>
       )}
@@ -121,7 +121,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       {/* studio#306: the engine deliberately ran no judge — say so, never as a verdict chip. */}
       {view.judgeSkipped !== null && (
         <p
-          className="text-[11px]"
+          className="text-xs"
           data-testid="gate-verdict-judge-skipped"
           data-judge-distinct={view.judgeDistinct === null ? 'unknown' : String(view.judgeDistinct)}
           style={{ color: 'var(--status-gate)' }}
@@ -133,7 +133,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
 
       {view.denial !== null && (
         <p
-          className="wk-verdict-denial text-[11px]"
+          className="wk-verdict-denial text-xs"
           data-testid="gate-verdict-denial"
           // The recorded remedy carries a 40-hex tree id inside one <code> span — an unbreakable
           // token that overflows a narrow dock unless it may wrap anywhere. Body ink; the
@@ -156,7 +156,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       )}
 
       {view.mutation !== null && (
-        <p className="text-[11px]" data-testid="gate-verdict-mutation" style={{ color: 'var(--ink-body)' }}>
+        <p className="text-xs" data-testid="gate-verdict-mutation" style={{ color: 'var(--ink-body)' }}>
           worktree changed by <span className="font-semibold">{view.mutation.cli || 'the seat'}</span>
           {view.mutation.phase !== '' && <> during <span className="font-semibold">{view.mutation.phase}</span></>}
           {': '}
@@ -177,7 +177,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
           and hand over the pinned ref so the discarded edit can still be read. */}
       {view.mutation !== null && view.mutation.restored === true && (
         <p
-          className="text-[11px]"
+          className="text-xs"
           data-testid="gate-verdict-restored"
           {...(view.restore !== null && view.restore.suggestionRef !== null ? { 'data-suggestion-ref': view.restore.suggestionRef } : {})}
           style={{ color: 'var(--ink-body)', overflowWrap: 'anywhere' }}
@@ -218,7 +218,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       )}
 
       {view.mutation !== null && view.mutation.restored === false && (
-        <p className="text-[11px]" data-testid="gate-verdict-restore-failed" style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }}>
+        <p className="text-xs" data-testid="gate-verdict-restore-failed" style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }}>
           the creator&apos;s tree was NOT restored
           {view.mutation.restoreError !== null && `: ${showText(view.mutation.restoreError)}`}
           {' — the manual remedy in the denial stands; approving retries against the tree as it is'}
@@ -229,7 +229,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
         <div
           data-testid="gate-verdict-floor"
           data-floor={view.floor.passed ? 'pass' : 'fail'}
-          className="text-[11px] flex flex-col gap-0.5"
+          className="text-xs flex flex-col gap-0.5"
           style={{ color: 'var(--ink-body)' }}
         >
           <p>
@@ -282,7 +282,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       )}
 
       {/* Which governance layers actually ran — the same never-overclaim line as VerdictDetail. */}
-      <p className="text-[10px]" data-testid="gate-verdict-layers" style={{ color: 'var(--ink-muted)' }}>
+      <p className="text-xs" data-testid="gate-verdict-layers" style={{ color: 'var(--ink-muted)' }}>
         {view.hasDeterministicFloor
           ? `deterministic floor: ${view.deterministicPass ? 'pass' : 'fail'}`
           : 'no deterministic floor'}
@@ -307,7 +307,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
           fold's own copy. */}
       {outcome === 'ungated' && (
         <p
-          className="text-[11px]"
+          className="text-xs"
           data-testid="gate-verdict-ungated"
           {...(view.ungatedReason !== null ? { 'data-ungated-reason': view.ungatedReason } : {})}
           style={{ color: view.ungated ? 'var(--status-gate)' : 'var(--ink-muted)' }}

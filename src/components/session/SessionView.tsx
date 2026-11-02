@@ -1,5 +1,7 @@
 import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
+import { useRunningFloor } from '../../hooks/useRunningFloor.js';
+import { floorBadge, floorWords } from '../../board/floorRun.js';
 import { beginChatOpen, chatOpened, useChatFlow } from '../../store/chatFlow.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -28,8 +30,6 @@ import { quoteLabel } from '../../board/aboutChips.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import { claimSessionSheet, openSheet, stopRun, useSheets } from '../../store/sheets.js';
 import { stepLabelOf } from '../../board/chainModel.js';
-import { useRunPluginView } from '../../store/runPluginView.js';
-import { PinnedRunPlugins, runPluginBlockId } from './RunThreadPlugin.js';
 import { OverflowMenu } from '../ui/OverflowMenu.js';
 
 /** The working step in the chain's own word (`walkthrough_review#2` → its step word: a repeat's `#n` is the unit
@@ -61,6 +61,11 @@ import { executingOrd } from '../../api/run-state.js';
 import { phaseLabel } from '../gateVerdictModel.js';
 import { CREW, responderKey, turnResponder, type Responder } from '../../board/responder.js';
 import { TurnWho } from './TurnWho.js';
+import { PowerSwitchButton, RigorChipButton } from './PowerMode.js';
+import { LiveActivity } from './LiveActivity.js';
+import { usePower } from '../../hooks/usePower.js';
+import { powerOf } from '../../api/power.js';
+import { mergePower } from '../../board/powerMode.js';
 import { RunRibbon, RunTab } from './RunTab.js';
 import { useRunHostValue } from './RunHost.js';
 import { HostPanel, useNarrow } from '../editorHost/HostPanel.js';
@@ -74,7 +79,9 @@ import { switchWords, useReplyRoute } from '../../board/replyRoute.js';
 import { useDraftRouter } from '../../hooks/useDraftRouter.js';
 import { useElicitationStore } from '../../store/elicitations.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
-import { askingResponder, builderResponder } from '../../board/responder.js';
+import { askingResponder, builderResponder, seatResponder } from '../../board/responder.js';
+import { useRunEventStore } from '../../store/events.js';
+import { headlineProgress } from '../../board/repeatProgress.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { needTone } from '../../board/needTone.js';
 
@@ -127,7 +134,7 @@ type ThreadEntry =
     clock?: number | null }
   | { kind: 'run'; key: string; at: number; view: RunView }
   | { kind: 'line'; key: string; at: number; line: AskLine }
-  | { kind: 'typing'; key: string; at: number; who: string }
+  | { kind: 'typing'; key: string; at: number; who: string; ord: number }
   /** A run's step is executing: the helper on it is working now (studio: the thread shows it). */
   | { kind: 'working'; key: string; at: number; who: string; runId: string; ord: number; step: string }
   | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
@@ -406,7 +413,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // (J4 0.16.6) A step silent past crew's quiet mark is not "Working": the header says how long it has said nothing.
   const silent = useSilentStep(mine.length > 0 ? mine[mine.length - 1] : undefined);
   const silentRunId = silent !== null ? mine[mine.length - 1]!.session.id : null;
-  const badge = mine.length > 0 ? (state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headerBadge(mine, state)) : null;
+  // The engine's checks floor is running: the seat is idle on purpose; the page says what runs (retime 0.16.11).
+  const floor = useRunningFloor(mine.length > 0 ? mine[mine.length - 1] : undefined);
+  const floorRunId = floor !== null ? mine[mine.length - 1]!.session.id : null;
+  // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
+  const powerRun = mine.length === 1 ? mine[0]! : null;
+  const power = usePower(powerRun);
+  const badge = mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(mine, state)) : null;
   // The banner below the header: each thing here that waits on the operator (the Needs-you rows about these runs).
   const gates = useGateStore((s) => s.gates);
   const waiting = useMemo(() => waitingItems(needRows, mine, gates, Date.now()), [needRows, mine, gates]);
@@ -426,6 +439,24 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     return () => { cancelled = true; };
   }, [ref, runsLoaded, runInIndex, detailTry]);
 
+  // Power mode: a run paused at a checkpoint ("this grew") waits on you, though it stays executing and no engine gate
+  // opens for it — the dock holds its decision, the header says Waiting, and no "working" line runs under it.
+  const powerCap = useCapabilities((s) => s.powerMode);
+  const eventsByRun = useRunEventStore((s) => s.byRun);
+  // domain-graph-3: a job that keeps going (page after page) says where it got to in its headline — the step's own
+  // line, "Mapping wicked-crew · 3% → 12% → 19% · target 80% · page 4 · about 2 h left" — not only in its details.
+  // Only a run still going says it, the newest first (a finished one's badge says it ended).
+  const progressLine = useMemo(() => headlineProgress(mine, eventsByRun), [mine, eventsByRun]);
+  const pauses = useMemo(() => {
+    const out = new Map<string, { at: number; who: string | null }>();
+    if (!powerCap) return out;
+    for (const v of mine) {
+      if (['completed', 'cancelled', 'failed'].includes(v.session.status)) continue;
+      const p = mergePower(powerOf(v.session), eventsByRun[v.session.id]);
+      if (p?.pause != null) out.set(v.session.id, { at: p.pause.at, who: p.orchestrator.cli !== null ? seatResponder(p.orchestrator.cli, roster).name : null });
+    }
+    return out;
+  }, [powerCap, mine, eventsByRun, roster]);
   const entries = useMemo<ThreadEntry[]>(() => {
     const out: ThreadEntry[] = [];
     const seatAt = new Map<string, number>(); // `${turnId}:${cliKey}` → the reply's index in `out`
@@ -513,7 +544,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     if (!streaming) {
       for (const th of thinking) {
         if ((liveTurns ?? []).some((t) => t.who !== 'you' && t.ord === th.ord)) continue;
-        out.push({ kind: 'typing', key: `typing:${th.ord}`, at: th.at, who: th.by });
+        out.push({ kind: 'typing', key: `typing:${th.ord}`, at: th.at, who: th.by, ord: th.ord });
       }
     }
     // What started each run, as the operator's own bubble: a run launched from New job (or a step
@@ -541,7 +572,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // A chat's own "thinking" line already says it for the answering step.
     if (!out.some((e) => e.kind === 'typing')) {
       for (const v of mine) {
-        if (isHeldRun(v.session)) continue;
+        if (isHeldRun(v.session) || pauses.has(v.session.id)) continue;
         const ord = executingOrd(v.session, v.units);
         if (ord === null) continue;
         const unit = v.units.find((u) => u.ord === ord);
@@ -552,7 +583,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -690,23 +721,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
     target.focus({ preventScroll: true });
   };
-  // A run-thread plugin's "updated · Jump" row (DES-PLUGIN-EVENTS spike 1): its block comes into view at its place,
-  // and the thread stops following — the operator is reading there now (as the banner's "Go to it" does).
-  const pluginJump = useRunPluginView((s) => s.lastJump);
-  useEffect(() => {
-    const el = scroller.current;
-    if (pluginJump === null || el === null) return;
-    const target = document.getElementById(runPluginBlockId(pluginJump.runId, pluginJump.pluginId));
-    if (target === null || !el.contains(target)) return;
-    nearBottom.current = false;
-    restore.current.pending = false;
-    const top = Math.max(0, el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 8);
-    setScroll(sessionId, top);
-    glide(el, top);
-    // Spent: a later visit to this session never scrolls to an old jump.
-    useRunPluginView.getState().clearJump();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pluginJump]);
   useLayoutEffect(() => {
     if (!ready) return;
     const el = scroller.current;
@@ -899,6 +913,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       } else if (el !== undefined) {
         const who = askingResponder(v, roster, el);
         out.push({ key: id, who: who.role === 'seat' ? who.name : null, since: null, question: el.message, tone: blocking(id) ? 'blocking' : 'waiting' });
+      } else if (pauses.has(id)) {
+        const pz = pauses.get(id)!;
+        out.push({ key: id, who: pz.who, since: pz.at > 0 ? pz.at : null, question: 'This change grew past its plan. How should it go on?', tone: blocking(id) ? 'blocking' : 'waiting' });
       }
     }
     if (ref.kind === 'chat') {
@@ -907,7 +924,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       if (g !== undefined || el !== undefined) out.push({ key: ref.chatId, who: null, since: g?.receivedAt ?? null, question: g !== undefined ? plainGateQuestion(g.prompt, g.gateKind) : el!.message, tone: 'waiting' });
     }
     return out;
-  }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref]);
+  }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref, pauses]);
   const dockWho = dockItems[0]?.who ?? null;
 
   // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
@@ -934,7 +951,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     started: entries.length > 0,
     navigate,
     ariaLabel: 'Ask or tell studio what to do next',
-    placeholder: 'Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper',
+    placeholder: "Ask about this, or say what's next — / adds a step, @ a helper",
     variant: 'session' as const,
   };
   // H3 (HOST-API §6): full screen's chat drawer is this run's own thread, compact — its conversation turns,
@@ -973,6 +990,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           {ready || mine.length > 0 || conversation === 'fresh'
             ? <h1 data-testid="session-title" className="wk-session-title">{title}</h1>
             : <div data-testid="session-title-loading" className="wk-session-title-skeleton"><Skeleton rows={1} variant="line" /></div>}
+          {powerRun !== null && power !== null && <PowerSwitchButton view={powerRun} power={power} />}
           {/* UI-CONTRACT §5: the one status vocabulary (never "Quiet" for a cancelled run); a failed, stopped or cancelled
               run reads red. "Waiting on you" is the banner's, below. */}
           {badge !== null && (
@@ -980,6 +998,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               {badge.word}
             </span>
           )}
+          {powerRun !== null && power !== null && <RigorChipButton view={powerRun} power={power} />}
           {conversation === 'fresh' && mine.length === 0 && (
             <span data-testid="session-status" data-tone="quiet" className="wk-state-badge wk-state-badge--quiet">
               <span data-testid="session-fresh-status">{freshOpening || awaitingOpenRead || (fresh === null) ? 'Starting the chat…'
@@ -1014,6 +1033,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           </span>
         )}
       </header>
+      {/* domain-graph-3: a job that keeps going says where it got to, on its own line under the header (the header row
+          stays one line at desk widths). */}
+      {progressLine !== null && <p data-testid="session-progress-line" className="wk-session-progress wk-measure wk-measure--thread">{progressLine}</p>}
       {/* Operator 2026-10-18: what waits on you is a banner below the header, in the page's flow (the thread reflows). */}
       {/* What the dock already holds is not said again above the thread. */}
       {ready && <NeedsBanner items={waiting.filter((w) => !dockItems.some((d) => d.key === w.runId))} onJump={jumpToItem} />}
@@ -1061,9 +1083,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             if (label !== null) addAboutChip(sessionId, { kind: 'about', key: `q:${label}`, label });
           }}
         >
-          {/* Run-thread plugins (DES-PLUGIN-EVENTS spike 1): a PINNED block sticks to the top of the thread, under the
-              header, folded to its summary (its unpinned place is the run's first unit, in RunBlock). */}
-          <PinnedRunPlugins runIds={mine.map((v) => v.session.id)} />
           {conversation === 'fresh' && liveTurns === undefined && mine.length === 0 && (
             <p data-testid="session-fresh" className="wk-session-grey wk-session-fresh">Ask anything, or say what you want done. Your first message starts this chat; a job starts only when you choose one.</p>
           )}
@@ -1119,17 +1138,27 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const node = (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
             : e.kind === 'typing'
-              ? <AskTyping key={e.key} who={e.who} />
+              ? (
+                <Fragment key={e.key}>
+                  <AskTyping who={e.who} />
+                  {/* A chat turn says what it is doing while it works (operator 2026-10-30), not a bare "thinking". */}
+                  {askRunId !== null && <LiveActivity runId={askRunId} ord={e.ord} kind="chat" seat={e.who} label="this answer" />}
+                </Fragment>
+              )
               : e.kind === 'working'
               ? (
-                <div key={e.key} data-testid="session-working" data-run-id={e.runId} data-object={`step:${e.runId}:${e.ord}`} className="wk-chat-working">
+                <Fragment key={e.key}>
+                <div data-testid="session-working" data-run-id={e.runId} data-object={`step:${e.runId}:${e.ord}`} className="wk-chat-working">
                   <span aria-hidden className="wk-chat-working-dots"><i /><i /><i /></span>
                   {/* rig 0.15.8: the step in the chain's own word ("Check", never "Verify" beside it). */}
-                  <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' ? 'studio' : who.name}</span> {e.runId === silentRunId && silent !== null ? `· ${silentWords(silent)} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
+                  <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' || (e.runId === floorRunId && floor !== null && floor.ord === e.ord) ? 'studio' : who.name}</span> {e.runId === floorRunId && floor !== null && floor.ord === e.ord ? <span data-testid="session-working-floor">· {floorWords(floor)}</span> : e.runId === silentRunId && silent !== null ? `· ${silentWords(silent)} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
                   {/* rig 0.15.8: the composer says "message a working step from its ⋯" — this is that ⋯. */}
                   <OverflowMenu label={`More for ${workingStepWord(e.step)}`} data-testid="session-working-menu"
                     items={[{ id: 'message', label: MESSAGE_STEP_LABEL, onSelect: () => openSheet({ kind: 'step', runId: e.runId, ord: e.ord }, undefined, { compose: true }) }]} />
                 </div>
+                {/* What it is doing right now, live (operator 2026-10-30). */}
+                <LiveActivity runId={e.runId} ord={e.ord} kind={ref.kind === 'chat' ? 'chat' : 'step'} seat={e.who === 'helper' ? null : e.who} label={ref.kind === 'chat' ? 'this step' : 'the job'} />
+                </Fragment>
               )
               : e.kind === 'proposal'
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />

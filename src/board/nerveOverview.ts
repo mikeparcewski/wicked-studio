@@ -97,13 +97,25 @@ export function servicesTile(infra: readonly SystemInfra[]): Tile {
   return { ...base, state: off.length === 0 ? `All ${ok.length} running` : `${ok.length} running`, tone: 'ok', line: offLine ?? names(ok) };
 }
 
+/**
+ * Free disk in a person's words. Where crew also reports what the volume can take for important use (macOS: free plus
+ * the purgeable space it clears on demand, Finder's "available"), both: "6 GB free now · 70 GB available once macOS
+ * clears purgeable space". Otherwise, or when the two are about the same, "15 GB free".
+ */
+export function diskWords(d: { freeBytes: number; availableBytes: number | null }): string {
+  if (d.availableBytes !== null && d.availableBytes - d.freeBytes >= 1e9) {
+    return `${bytesWords(d.freeBytes)} free now · ${bytesWords(d.availableBytes)} available once macOS clears purgeable space`;
+  }
+  return `${bytesWords(d.freeBytes)} free`;
+}
+
 /** This machine: free disk and the host's load. */
 export function machineTile(infra: readonly SystemInfra[]): Tile {
   const disk = infra.find((r) => r.key === 'disk') ?? null;
   const load = infra.find((r) => r.key === 'load') ?? null;
   const base = { id: 'machine', name: 'This machine', tab: 'infra' as const };
   if (disk === null && load === null) return { ...base, state: 'Not reported', tone: 'quiet', line: null };
-  const free = disk?.disk != null ? `${bytesWords(disk.disk.freeBytes)} free` : null;
+  const free = disk?.disk != null ? diskWords(disk.disk) : null;
   const busy = load !== null && isProblem(load.state);
   const loadWords = load === null ? null : busy ? 'Load is high' : load.state === 'ok' ? 'Load is normal' : null;
   if (disk !== null && isProblem(disk.state)) {
@@ -157,7 +169,12 @@ export function slowingLine(a: SystemAttention, infra: readonly SystemInfra[] | 
   // The disk row in a person's words: what is left, and where jobs stop (crew's floor, when it says).
   if (a.panel === 'infra' && /disk/i.test(a.id)) {
     const d = infra?.find((r) => r.key === 'disk')?.disk ?? null;
-    if (d != null) return `${bytesWords(d.freeBytes)} left${d.floorBytes !== null ? `; jobs stop below ${bytesWords(d.floorBytes)}` : ''}.`;
+    if (d != null) {
+      const left = d.availableBytes !== null && d.availableBytes - d.freeBytes >= 1e9
+        ? `${bytesWords(d.freeBytes)} free now, ${bytesWords(d.availableBytes)} once macOS clears purgeable space`
+        : `${bytesWords(d.freeBytes)} left`;
+      return `${left}${d.floorBytes !== null ? `; jobs stop below ${bytesWords(d.floorBytes)}` : ''}.`;
+    }
   }
   // Under a gate's cause headline (`rowHeadline`), the line names the job; else crew's reason.
   return rowLead(a, cause);

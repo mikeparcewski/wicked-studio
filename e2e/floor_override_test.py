@@ -93,14 +93,13 @@ with sync_playwright() as p:
         set_fixture(origin, **{"floor_override": True, "reset_gate_posts": True, "appearance": {**DEFAULT_APPEARANCE}})
         page.goto(f"{origin}/s/run%3A{RID}", wait_until="networkidle")
         page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
-        # ui-v2 gate: it is one of the gate's Other options (unless crew suggests it): open them, as the operator does.
+        # Guided asks: it is one of the gate's cards, on the face.
         own = gate_choice(page, "operator-judgment")
         # It renders: in the gate's choices, named for what it is, Stop still last.
         ks = keys()
         check("renders-inline", "operator-judgment" in ks and ks[-1] == "stop", keys=ks, labels=labels())
         check("named", (own.text_content() or "").startswith("Approve as your own judgment"), label=own.text_content())
-        # It says the consequence before it is taken: its menu item's second line (the hover line under the buttons
-        # stays quiet while Other options is open), or the line above the buttons when it is the face's one move.
+        # It says the consequence before it is taken: the line under the cards, for the card under the pointer.
         peek = choice_consequence(page, "operator-judgment")
         check("consequence-first-on-hover", peek.startswith(CONSEQUENCE), peek=peek)
         page.screenshot(path=str(SHOTS / "floor-override-desk-card.png"))

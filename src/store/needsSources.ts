@@ -48,6 +48,10 @@ export interface NeedsSourcesState {
   repos: RepoEntry[] | null;
   /** When each wire was last read (answered or not), epoch ms. */
   readAt: Partial<Record<NeedsSource, number>>;
+  /** Whether each wire's LAST read answered (true; a 404 is an answered empty list) or failed (false: an error, a malformed answer). The queue keeps
+   *  its last value either way; a reader that must not present a failed read as a count checks this. A deposit counts as
+   *  an answer only while this store has no read of its own; it never certifies a FAILED read (see `answeredBy`). */
+  readOk: Partial<Record<NeedsSource, boolean>>;
   /** Read every wire not read within `maxAgeMs` (default: only never-read wires). */
   load: (maxAgeMs?: number) => Promise<void>;
   /** The repo register, read through the same freshness rule (the board model's join). */
@@ -58,8 +62,21 @@ export interface NeedsSourcesState {
   depositRepos: (repos: RepoEntry[]) => void;
 }
 
+/**
+ * A deposit's effect on a wire's read outcome: the data another surface just read counts as an answered read while this
+ * store has none of its own (agy r10 on 9d: a poller depositing first must not leave the count out for good), but it
+ * never certifies a read of this store that FAILED (a local patch of a stale list; codex r7) - that waits for the
+ * store's own retry.
+ */
+function answeredBy(readOk: Partial<Record<NeedsSource, boolean>>, source: NeedsSource): Partial<Record<NeedsSource, boolean>> {
+  return readOk[source] === false ? readOk : { ...readOk, [source]: true };
+}
+
 /** In-flight reads, one per wire. */
 const inflight: Partial<Record<NeedsSource, Promise<void>>> = {};
+/** When this store last TRIED each wire itself: a failed read is retried after the freshness window even while other
+ *  surfaces deposit (a deposit renews `readAt` but never certifies a failed read; codex r9 on 9d). */
+const attemptAt: Partial<Record<NeedsSource, number>> = {};
 
 /** Deferred so a synchronous throw (a client without the route, a partial mock) is a miss. */
 const attempt = <T,>(fn: () => Promise<T>): Promise<T> => Promise.resolve().then(fn);
@@ -67,9 +84,18 @@ const attempt = <T,>(fn: () => Promise<T>): Promise<T> => Promise.resolve().then
 export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
   const readers: Record<NeedsSource, () => Promise<void>> = {
     chats: () => attempt(() => api.listChats()).then(({ chats }) => set({ chats })),
+    // A malformed answer is a failed read: the last good value stands and the outcome says it failed, so no consumer
+    // (the queue's rows, the Desk's memory reading) is handed a shape it cannot iterate (codex on 9d).
     proposals: () =>
-      attempt(() => listProposals({ state: 'pending' })).then((proposals) => set({ proposals })),
-    repos: () => attempt(() => api.listRepos()).then(({ repos }) => set({ repos })),
+      attempt(() => listProposals({ state: 'pending' })).then((proposals) => {
+        if (!Array.isArray(proposals)) throw new Error('GET /proposals answered without a list');
+        set({ proposals });
+      }),
+    repos: () => attempt(() => api.listRepos()).then((r) => {
+      const repos = (r as { repos?: unknown } | null | undefined)?.repos;
+      if (!Array.isArray(repos)) throw new Error('GET /repos answered without a list');
+      set({ repos: repos as RepoEntry[] });
+    }),
     // The campaigns store owns the wire, its support probe and its own in-flight guard.
     campaigns: () => useCampaignsStore.getState().refresh(),
   };
@@ -78,16 +104,24 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     const running = inflight[source];
     if (running !== undefined) return running;
     const at = get().readAt[source];
-    if (at !== undefined && Date.now() - at < maxAgeMs) return Promise.resolve();
+    const since = get().readOk[source] === false ? attemptAt[source] : at;
+    if (since !== undefined && Date.now() - since < maxAgeMs) return Promise.resolve();
     const p = readers[source]()
+      .then(() => { set((s) => ({ readOk: { ...s.readOk, [source]: true } })); })
       .catch((e: unknown) => {
-        // A daemon without this surface (404) has nothing on it that needs you: an answered empty
-        // read, so the honest count (useSettledNeeds) is complete, not partial. Any other failure:
-        // the last answer stands (null until one ever arrived = a partial count).
-        if (e instanceof ApiError && e.status === 404 && source !== 'campaigns' && get()[source] === null) set({ [source]: [] } as Partial<NeedsSourcesState>);
+        // A daemon without this surface (404) has nothing on it that needs you: an ANSWERED empty read, so the honest
+        // count (useSettledNeeds) is complete, not partial, and the Desk's memory reading counts none waiting (a daemon
+        // without /proposals still says "Your memory is empty"; desk_setup_items on 9d). Any other failure: the last
+        // answer stands (null until one ever arrived = a partial count) and the outcome says it failed.
+        if (e instanceof ApiError && e.status === 404 && source !== 'campaigns') {
+          set((s) => ({ [source]: [], readOk: { ...s.readOk, [source]: true } }) as Partial<NeedsSourcesState>);
+          return;
+        }
+        set((s) => ({ readOk: { ...s.readOk, [source]: false } }));
       })
       .finally(() => {
         delete inflight[source];
+        attemptAt[source] = Date.now();
         set((s) => ({ readAt: { ...s.readAt, [source]: Date.now() } }));
       });
     inflight[source] = p;
@@ -99,17 +133,18 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     proposals: null,
     repos: null,
     readAt: {},
+    readOk: {},
     load: (maxAgeMs = Infinity) => Promise.all(SOURCES.map((s) => read(s, maxAgeMs))).then(() => undefined),
     loadRepos: (maxAgeMs = Infinity) => read('repos', maxAgeMs).then(() => get().repos ?? []),
-    depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() } })),
+    depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() }, readOk: answeredBy(s.readOk, 'chats') })),
     depositProposals: (pending) =>
-      set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() } })),
-    depositRepos: (repos) => set((s) => ({ repos, readAt: { ...s.readAt, repos: Date.now() } })),
+      set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() }, readOk: answeredBy(s.readOk, 'proposals') })),
+    depositRepos: (repos) => set((s) => ({ repos, readAt: { ...s.readAt, repos: Date.now() }, readOk: answeredBy(s.readOk, 'repos') })),
   };
 });
 
 /** Test seam: back to never-read (the suite-wide setup calls it before every test). */
 export function resetNeedsSourcesForTest(): void {
-  for (const s of SOURCES) delete inflight[s];
-  useNeedsSources.setState({ chats: null, proposals: null, repos: null, readAt: {} });
+  for (const s of SOURCES) { delete inflight[s]; delete attemptAt[s]; }
+  useNeedsSources.setState({ chats: null, proposals: null, repos: null, readAt: {}, readOk: {} });
 }

@@ -250,9 +250,12 @@ describe('the gate card, compact (review of the dock)', () => {
     rosterWith(true);
     render(<GateRow view={viewWith(['claude', 'codex', 'pi'])} gate={{ ...GATE, prompt: REFUSAL }} navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('session-gate-question').textContent).toBe('Pi CLI can review this instead'));
+    // (guided asks) The move is the first card, marked and preselected; the primary names it.
     const primary = screen.getAllByTestId('session-gate-choice')[0]!;
-    expect(primary.textContent).toBe('Approve and retry with Pi CLI');
-    expect(primary.className).toMatch(/wk-gate2-btn--primary/);
+    expect(primary.querySelector('.wk-ask-opt-label')!.textContent).toBe('Approve and retry with Pi CLI');
+    expect(primary.getAttribute('aria-checked')).toBe('true');
+    expect(within(primary).getByTestId('ask-recommended')).toBeTruthy();
+    expect(screen.getByTestId('session-gate-confirm').textContent).toBe('Approve and retry with Pi CLI');
   });
 
   it('a distinct seat is signed in but outside the job (crew re-seats only within it): start again with it, never a builder', async () => {
@@ -266,40 +269,46 @@ describe('the gate card, compact (review of the dock)', () => {
     expect(peekRetryPrefill()?.clis).toEqual(['claude', 'codex', 'pi']);
   });
 
-  it('every other choice stays reachable under Other options', async () => {
+  it('every choice stays reachable: each is a card on the face, Stop last', async () => {
     render(<GateRow view={live()} gate={GATE} navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('session-gate-more')).toBeTruthy());
-    const menu = screen.getByTestId('session-gate-menu');
-    expect(menu.hidden).toBe(true);
-    fireEvent.click(screen.getByTestId('session-gate-more'));
-    expect(menu.hidden).toBe(false);
-    const keys = [...menu.querySelectorAll('[data-testid="session-gate-choice"]')].map((b) => (b as HTMLElement).dataset['choiceKey']);
+    const group = await screen.findByTestId('session-gate-choices');
+    expect(screen.queryByTestId('session-gate-more')).toBeNull();
+    const keys = [...group.querySelectorAll('[data-testid="session-gate-choice"]')].map((b) => (b as HTMLElement).dataset['choiceKey']);
     expect(keys).toContain('stop');
     expect(keys.length).toBeGreaterThan(1);
-    // Stop is the menu's last way on (mockup ui-v2-gate), after a rerun from the overflow (gate_move journey).
+    // Stop is the last way on (mockup ui-v2-gate, kept by the guided ask), after a rerun (gate_move journey).
     expect(keys[keys.length - 1]).toBe('stop');
+    for (const b of group.querySelectorAll<HTMLElement>('[data-testid="session-gate-choice"]')) expect(b.hidden).toBe(false);
   });
 
-  it('the face\'s one button says what it does ABOVE the buttons, so hovering it never grows the dock under the pointer', async () => {
+  it('the selected move says what it does on one line that keeps its room, so hovering never grows the dock under the pointer', async () => {
     render(<GateRow view={live()} gate={GATE} navigate={vi.fn()} />);
     const choices = await screen.findByTestId('session-gate-choices');
-    const primary = choices.querySelector<HTMLElement>(':scope > [data-testid="session-gate-choice"]');
-    expect(primary).not.toBeNull();
+    // Nothing preselected without a suggestion (none is invented): the person picks the first.
+    if (choices.querySelector('[aria-checked="true"]') === null) fireEvent.click(choices.querySelector<HTMLElement>('[data-testid="session-gate-choice"]:not(:disabled)')!);
+    const selected = choices.querySelector<HTMLElement>('[aria-checked="true"]');
+    expect(selected).not.toBeNull();
     const line = screen.getByTestId('session-gate-consequence');
-    expect(line.textContent).not.toBe('');
-    // The line is before the buttons in the row's order.
-    expect(line.compareDocumentPosition(choices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.mouseEnter(primary!);
-    expect(screen.getByTestId('session-gate-choice-consequence').textContent).toBe('');
+    expect(line.textContent).toMatch(/^If you choose this: /);
+    expect(line.getAttribute('data-option')).toBe(selected!.dataset['choiceKey']);
+    // One line under the cards, the same element whatever is hovered (its height is reserved in ask-card.css).
+    expect(choices.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.className).toBe('wk-ask-cons');
+    const other = choices.querySelector<HTMLElement>('[aria-checked="false"]:not(:disabled)')!;
+    fireEvent.mouseEnter(other);
+    expect(screen.getByTestId('session-gate-consequence')).toBe(line);
+    expect(line.getAttribute('data-option')).toBe(other.dataset['choiceKey']);
+    fireEvent.mouseLeave(other);
+    expect(line.getAttribute('data-option')).toBe(selected!.dataset['choiceKey']);
   });
 
-  it('pr-xreview on #924: Enter / Space on Other options keeps its own activation and never sends the remembered pick', async () => {
+  it('pr-xreview on #924: Enter / Space on another control keeps its own activation and never sends the selection', async () => {
     render(<GateRow view={live()} gate={GATE} navigate={vi.fn()} />);
     const choices = await screen.findByTestId('session-gate-choices');
-    const primary = choices.querySelector<HTMLElement>(':scope > [data-testid="session-gate-choice"]')!;
-    // A remembered pick: an arrow moved it, so Enter on the ROW would send it.
+    const primary = choices.querySelector<HTMLElement>('[data-testid="session-gate-choice"]')!;
+    // An arrow moves the selection (a guided ask never sends on a move).
     fireEvent.keyDown(primary, { key: 'ArrowRight' });
-    const more = screen.getByTestId('session-gate-more');
+    const more = screen.getByTestId('session-gate-more-about').querySelector('summary')!;
     for (const key of ['Enter', ' ']) {
       const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
       more.dispatchEvent(ev);
@@ -344,7 +353,7 @@ describe('the phone sheet, folded (live nit 2026-10-27: act without expanding th
     expect(slot.dataset.folded).toBe('true');
     expect(within(dock).getByTestId('decision-dock-eyebrow').textContent).toMatch(/^Your decision/);
     expect(within(slot).getByTestId('session-gate-question').textContent).not.toBe('');
-    const primary = slot.querySelector('.wk-gate2-choices > .wk-gate2-btn, [data-testid="session-gate-lead-act"]');
+    const primary = slot.querySelector('[data-testid="session-gate-confirm"], [data-testid="session-gate-send"], [data-testid="session-gate-lead-act"]');
     expect(primary).not.toBeNull();
     await waitFor(() => expect(within(dock).queryByTestId('decision-dock-peek')).toBeNull());
   });

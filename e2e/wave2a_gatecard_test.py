@@ -84,8 +84,10 @@ with sync_playwright() as p:
     approve.wait_for(state="visible", timeout=15000)
 
     # ── approve from the session's gate row ─────────────────────────────────────
-    pressed = time.monotonic()
+    # Guided asks: pick the card (Approve is preselected as the suggestion), then the one primary sends it.
     approve.click()
+    pressed = time.monotonic()
+    page.get_by_test_id("session-gate-confirm").click()
     shown = toast_shown(page)
     check("card-approve-shows-toast", shown, browser_posts_after_click=len(posts),
           server_posts_after_click=len(server_posts(origin)))
@@ -106,10 +108,12 @@ with sync_playwright() as p:
           and page.locator(APPROVE).is_enabled())
     page.screenshot(path=str(SHOTS / "wave2a-gatecard-undo.png"))
 
-    # ── the row's keyboard (digit 1 = its first choice, Approve): same window, then exactly one POST ──
+    # ── the row's keyboard (digit 1 = its first choice, Approve; a digit selects, Enter answers): same window, then
+    #    exactly one POST ──
     page.get_by_test_id("session-gate-row").focus()
-    pressed = time.monotonic()
     page.keyboard.press("1")
+    pressed = time.monotonic()
+    page.keyboard.press("Enter")
     check("key-a-shows-toast", toast_shown(page))
     page.wait_for_timeout(max(0, int((pressed + 9.3 - time.monotonic()) * 1000)))
     check("key-nothing-before-window", len(posts) == 0, browser_posts=len(posts))

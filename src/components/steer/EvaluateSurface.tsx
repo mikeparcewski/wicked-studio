@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { rulePath } from '../../api/decisions.js';
@@ -26,6 +26,13 @@ import { EVAL_FACET_MATCH_EXPLANATION, EvalHistory } from '../EvalHistory.js';
 import { readFileText } from '../fileText.js';
 import { FilePick, Segmented, Skeleton, StateBanner, TechDetails } from '../ui/index.js';
 import { SystemJudgments } from './SystemJudgments.js';
+import { BringYourOwn, EvalRecommended, PastRuns, type ByoMode } from './EvalPlan.js';
+import { pastRunTitle } from '../../board/evalPlan.js';
+import type { EvalRec } from '../../board/evalPlan.js';
+import type { EvalRunSummary, SessionView } from '../../api/types.js';
+import { runDefaultEvals } from '../../api/defaultEvals.js';
+import { askPage, PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
+import type { PageFocus } from '../../board/pageChat.js';
 
 /**
  * EVALUATE (the calm page; desk-pages-redesign mockup, operator 2026-10-26: "needs more whitespace,
@@ -38,7 +45,11 @@ import { SystemJudgments } from './SystemJudgments.js';
  *  - a row opens that type's detail: its numbers, its gaps with Draft rules (the steering assistant
  *    opens on Steer with the uncovered behaviours typed in; the operator sends it), and every
  *    behaviour with its verdict and nearest rules. "See every behaviour" opens all types at once;
- *  - folded away: what to run (type and corpus), bringing your own behaviours, and past runs.
+ *  - Recommended to run, each with why (the weakest type in past results, types never run, rules nothing tests,
+ *    jobs that failed this week, the system judgment that agrees least); Bring your own behaviours (a file, a
+ *    pasted transcript, a past job's steps); Past runs, each with "Analyze this run", which asks the page's chat
+ *    about it and ends in a guided choice (DES-LEARN §5, mockup learn-and-panels state e);
+ *  - folded away: what to run (type and corpus), and comparing past runs in detail.
  *
  * The two writes (`POST /testing/evals/run`, `POST /testing/corpora/import`) are the ones the page
  * always had.
@@ -105,7 +116,7 @@ function NearestRules({ result, navigate, foreign, rules }: {
 }
 
 /** The run's settings and the import, folded under the list: a roomy summary row with a chevron. */
-function Fold({ title, sub, testId, toggleId, open, onToggle, children }: { title: string; sub: string; testId: string; toggleId: string; open: boolean; onToggle: (open: boolean) => void; children: React.ReactNode }): React.ReactElement {
+function Fold({ title, sub, testId, toggleId, open, onToggle, children }: { title: string; sub: React.ReactNode; testId: string; toggleId: string; open: boolean; onToggle: (open: boolean) => void; children: React.ReactNode }): React.ReactElement {
   return (
     <details className="wk-ue-fold" data-testid={testId} open={open} onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; if (o !== open) onToggle(o); }}>
       <summary className="wk-ue-fold-sum" data-testid={toggleId}>
@@ -117,10 +128,40 @@ function Fold({ title, sub, testId, toggleId, open, onToggle, children }: { titl
   );
 }
 
-export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE }: {
+const NO_RUNS: readonly SessionView[] = [];
+
+/** An evaluation as the page chat's focus: its numbers, what slipped through, what was blocked by mistake. */
+export function evalFocus(r: EvalRunSummary, results: readonly EvalResult[], rules: ReadonlyMap<string, SteeringRule>, foreign: boolean): PageFocus {
+  const gaps = results.filter((x) => x.verdict === 'gap');
+  const fps = results.filter((x) => x.verdict === 'false_positive');
+  const typeOf = (x: EvalResult): string => STEERING_TYPE_LABELS[x.sample.steering_type as SteeringType] ?? x.sample.steering_type;
+  const lines = [
+    `evaluation ${r.id} · ${absTime(r.created_at * 1000)} · ${pastRunTitle(r)}`,
+    `${r.summary.total} behaviours: ${r.summary.caught} caught, ${r.summary.gaps} slipped through, ${r.summary.false_positives} false alarms`,
+    `judged against: ${foreign ? 'another rule store (its rule ids are not this daemon’s)' : 'this daemon’s steering rules'}`,
+    ...gaps.slice(0, 20).map((x) => {
+      const near = x.nearest_rules?.[0];
+      return `slipped through [${typeOf(x)}] ${x.sample.description}${near !== undefined ? ` · nearest rule: ${ruleWords(near.rule_id, rules)} (similarity ${near.similarity.toFixed(2)})` : ' · no rule is near it'}`;
+    }),
+    ...(gaps.length > 20 ? [`and ${gaps.length - 20} more that slipped through`] : []),
+    ...fps.slice(0, 10).map((x) => `false alarm [${typeOf(x)}] ${x.sample.description} · fired: ${x.fired.map((id) => ruleWords(id, rules)).join('; ') || '—'}`),
+  ];
+  return { key: `eval:${r.id}`, label: `${pastRunTitle(r)} · ${relTime(r.created_at * 1000)}`, lines };
+}
+
+/** The question "Analyze this run" asks. */
+export function analysisQuestion(s: EvalRunSummary['summary']): string {
+  if (s.gaps > 0) return `Analyze this evaluation: why did ${s.gaps} bad ${s.gaps === 1 ? 'behaviour' : 'behaviours'} slip through, and which rules would catch ${s.gaps === 1 ? 'it' : 'them'}?`;
+  if (s.false_positives > 0) return `Analyze this evaluation: why did rules block ${s.false_positives} good ${s.false_positives === 1 ? 'behaviour' : 'behaviours'}, and how should they change?`;
+  return 'Analyze this evaluation: is anything here worth acting on?';
+}
+
+export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE, runs = NO_RUNS }: {
   navigate: Navigate;
   title?: string;
   intro?: string;
+  /** The jobs the app holds: recent failures are recommended, and a past job's steps can become behaviours. */
+  runs?: readonly SessionView[];
 }): React.ReactElement {
   const [historyKey, setHistoryKey] = useState(0);
   const latest = useLatestEval(historyKey);
@@ -132,17 +173,21 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
   const [type, setType] = useState('');
   const [corpus, setCorpus] = useState('');
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [judgesOpen, setJudgesOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [run, setRun] = useState<RunState>({ kind: 'idle' });
-  const doRun = async (): Promise<void> => {
+  const doRun = async (over?: { type?: string; corpus?: string }): Promise<void> => {
     if (run.kind === 'busy') return;
     setRun({ kind: 'busy' });
-    const corpusUsed = corpus.trim() !== '' ? corpus.trim() : null;
+    const t = over?.type ?? type;
+    const c = (over?.corpus ?? corpus).trim();
+    const corpusUsed = c !== '' ? c : null;
     try {
-      const report = await runEvals({ ...(type !== '' ? { type } : {}), ...(corpusUsed !== null ? { corpus: corpusUsed } : {}) });
+      const report = await runEvals({ ...(t !== '' ? { type: t } : {}), ...(corpusUsed !== null ? { corpus: corpusUsed } : {}) });
       useEvalReportStore.getState().deposit(report, corpusUsed);
       setRun({ kind: 'idle' });
+      setResultsOpen(true); // a run made here opens its results by steering type
       setHistoryKey((k) => k + 1);
     } catch (e) {
       setRun(isTestingUnsupported(e) ? { kind: 'unsupported' } : { kind: 'failed', error: e });
@@ -207,6 +252,58 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
     navigate(policiesPath(t));
   };
 
+  // ── State e (DES-LEARN §5): recommended, bring your own, past runs with "Analyze this run" ─────────────
+  const [byo, setByo] = useState<ByoMode | null>(null);
+  const [jobPick, setJobPick] = useState<string[]>([]);
+  const [judgeKey, setJudgeKey] = useState(0);
+  const [analyzing, setAnalyzing] = useState<string | null>(null);
+  const [analyzeBusy, setAnalyzeBusy] = useState<string | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const analysed = useRef(new Map<string, { run: EvalRunSummary; gaps: EvalResult[] }>());
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const toByo = (m: ByoMode): void => {
+    setByo(m);
+    setTimeout(() => document.getElementById('evaluate-byo')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }), 0);
+  };
+  const onRec = (rec: EvalRec): void => {
+    const a = rec.act;
+    if (a.kind === 'run-type') void doRun({ type: a.type, corpus: '' });
+    else if (a.kind === 'run-all') void doRun({ type: '', corpus: '' });
+    else if (a.kind === 'run-suite') void runDefaultEvals({ suites: [a.suite] }).then(() => setJudgeKey((k) => k + 1), () => setJudgeKey((k) => k + 1));
+    else if (a.kind === 'from-jobs') { setJobPick(a.runIds); toByo('job'); }
+    else toByo('paste');
+  };
+  const analyze = (r: EvalRunSummary): void => {
+    setAnalyzeBusy(r.id); setAnalyzeError(null);
+    getEvalRun(r.id).then((d) => {
+      const results = d.results as unknown as EvalResult[];
+      analysed.current.set(r.id, { run: r, gaps: results.filter((x) => x.verdict === 'gap') });
+      const foreign = storeMatch(r.rule_store ?? null, daemonStore ?? null) === 'other';
+      askPage('evaluate', { focus: evalFocus(r, results, ruleMap, foreign), text: analysisQuestion(r.summary), send: true });
+      setAnalyzing(r.id); setAnalyzeBusy(null);
+    }, (e: unknown) => { setAnalyzeBusy(null); setAnalyzeError(e instanceof Error ? e.message : String(e)); });
+  };
+  const runOf = (focus: PageFocus | null): { run: EvalRunSummary; gaps: EvalResult[] } | null =>
+    focus !== null && focus.key.startsWith('eval:') ? analysed.current.get(focus.key.slice(5)) ?? null : null;
+  usePageChatHostPage('evaluate', {
+    knows: `Knows Evaluate: ${history.length} past ${history.length === 1 ? 'run' : 'runs'}${ev !== null ? `, the last one ${relTime(ev.at)}` : ''}${rules !== null ? `, ${rules.length} rules` : ''}.`,
+    data: () => pageTextLines(rootRef.current),
+    gaps: (focus) => runOf(focus)?.gaps.length ?? 0,
+    onMove: (m, focus) => {
+      const got = runOf(focus);
+      if (m === 'draft-rules' && got !== null && got.gaps.length > 0) {
+        // The type with the most uncovered behaviours; Draft rules writes one type's rules at a time.
+        const by = new Map<SteeringType, EvalResult[]>();
+        for (const g of got.gaps) { const t = g.sample.steering_type as SteeringType; by.set(t, [...(by.get(t) ?? []), g]); }
+        const [t, gs] = [...by.entries()].sort((a, b) => b[1].length - a[1].length)[0]!;
+        draft(t, gs);
+        return true;
+      }
+      if (m === 'rerun' && got !== null) { void doRun({ type: got.run.type_filter ?? '', corpus: got.run.corpus ?? '' }); return true; }
+      return false;
+    },
+  });
+
   const lastRun = (
     <span data-testid="evaluate-last-run">
       {ev !== null
@@ -261,11 +358,11 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
   const settingsWords = `${type === '' ? 'All steering types' : `${STEERING_TYPE_LABELS[type as SteeringType] ?? type} only`} · ${corpus.trim() === '' ? 'the built-in behaviours' : corpus.trim()}`;
 
   return (
-    <div className="wk-ue" data-testid="evaluate-surface">
+    <div className="wk-ue" data-testid="evaluate-surface" ref={rootRef}>
       <div className="wk-ue-col">
         <header className="wk-ue-head">
           <div className="wk-ue-head-words">
-            <h1 className="wk-ue-title">{title}</h1>
+            <div className="wk-pagetitle"><h1 className="wk-ue-title">{title}</h1><PageAskButton kind="evaluate" testId="evaluate-page-ask" /></div>
             <p className="wk-ue-sentence">{intro}</p>
           </div>
           <div className="wk-ue-head-acts">{runButton}</div>
@@ -273,11 +370,60 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
         {runNotes}
         {summaryLine}
 
-        <section className="wk-ue-sec" aria-labelledby="evaluate-results-title" data-testid="evaluate-results">
-          <div className="wk-ue-sec-head">
-            <h2 id="evaluate-results-title" className="wk-ue-label">Last results</h2>
-            <span className="wk-ue-note">{lastRun}</span>
-          </div>
+        <EvalRecommended history={history} historyRead={latest.kind !== 'loading'} ruleCount={rules?.length ?? null} runs={runs} busy={run.kind === 'busy'} onAct={onRec} />
+
+        {/* What the numbers can and cannot say (TESTING.md § What an eval measures): beside them, never folded away. */}
+        {caveats.length > 0 && (
+          <section className="wk-ue-sec" data-testid="evaluate-measures" aria-labelledby="evaluate-measures-title" data-store={store}>
+            <h2 id="evaluate-measures-title" className="wk-ue-label">Read these numbers with this in mind</h2>
+            <ul className="wk-ue-caveats">
+              {caveats.map((c) => <li key={c.key} data-testid="evaluate-caveat" data-caveat={c.key} className="wk-ue-note">{c.text}</li>)}
+            </ul>
+            {store === 'other' && ev !== null && ev.ruleStore !== null && (
+              <TechDetails summary="Rule stores" text={`This run: ${ev.ruleStore}\nThis daemon: ${daemonStore ?? 'unknown'}`} />
+            )}
+          </section>
+        )}
+
+        <BringYourOwn mode={byo} onMode={setByo} runs={runs} jobPick={jobPick}
+          onImported={(r) => { setCorpus(r.scope); setOptionsOpen(true); }}
+          file={<>
+            <p className="wk-ue-note">A JSON list of samples, each good or bad. It is set as the behaviours for the next run.</p>
+            <TechDetails summary="The file’s format" text={'A JSON array of samples, or {name, samples}. Each sample: {id, description, kind: good|bad, steering_type, signals}.'} />
+            <label className="wk-ue-field">
+              <span>Name</span>
+              <input id="evals-corpus-name" data-testid="testing-corpus-name" className="wk-field" value={corpusName} onChange={(e) => setCorpusName(e.target.value)} placeholder="Optional; the file's name otherwise" />
+            </label>
+            <FilePick data-testid="testing-corpus-file" label="Choose a file…" accept=".json,application/json" file={corpusFile}
+              onChange={(f) => { setCorpusFile(f); if (f !== null) onCorpusPick(f); }} />
+            {imp.kind === 'busy' && <p data-testid="testing-corpus-busy" className="wk-ue-note" role="status">Importing {imp.filename}…</p>}
+            {imp.kind === 'unsupported' && <p data-testid="testing-corpus-unsupported" className="wk-ue-note">{TESTING_UNSUPPORTED_COPY}</p>}
+            {imp.kind === 'failed' && (
+              <div data-testid="testing-corpus-error">
+                {imp.error instanceof Error && imp.error.message.includes('not an eval corpus') ? (
+                  <><p className="wk-field-note wk-field-note--bad">That file isn&rsquo;t an eval corpus.</p><TechDetails text={imp.error.message} /></>
+                ) : (
+                  <StateBanner kind={readErrorKind(imp.error)} what="the corpus" error={imp.error instanceof Error ? imp.error.message : String(imp.error)}
+                    onRetry={() => { if (corpusFile !== null) onCorpusPick(corpusFile); }} />
+                )}
+              </div>
+            )}
+            {imp.kind === 'done' && (
+              <p data-testid="testing-corpus-summary" className="wk-ue-note" role="status">
+                {imp.filename}: imported {imp.result.imported} sample{imp.result.imported === 1 ? '' : 's'} into <b>{imp.result.scope}</b>
+                {imp.result.embedded ? ' (embedded)' : ' · tags only'}. It is set as the behaviours for the next run.
+              </p>
+            )}
+          </>} />
+
+        <PastRuns history={history} read={latest.kind !== 'loading'} analyzing={analyzing} busy={analyzeBusy} onAnalyze={analyze} />
+        {analyzeError !== null && <p className="wk-ue-note" data-tone="fail" role="alert" data-testid="evaluate-analyze-error">Couldn’t read that run: {analyzeError}</p>}
+
+        <div className="wk-ue-folds">
+          {/* Mockup e: Recommended, Bring your own, Past runs; the last run by steering type and the system's own
+              judgments are folded under the list. */}
+          <Fold title="The last run, by steering type" sub={lastRun} testId="evaluate-results-fold" toggleId="evaluate-results-toggle" open={resultsOpen} onToggle={setResultsOpen}>
+          <div data-testid="evaluate-results">
           {reading ? (
             <div aria-busy="true" data-testid="evaluate-results-loading"><Skeleton rows={3} variant="row" /></div>
           ) : ev === null ? (
@@ -309,24 +455,12 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
             </>
           )}
           {ev?.degraded === 'facet-only' && <p data-testid="testing-evals-degraded" className="wk-ue-note"><b>Tags only:</b> {EVAL_FACET_MATCH_EXPLANATION}</p>}
-        </section>
+          </div>
 
-        {/* What the numbers can and cannot say (TESTING.md § What an eval measures): beside them, never folded away. */}
-        {caveats.length > 0 && (
-          <section className="wk-ue-sec" data-testid="evaluate-measures" aria-labelledby="evaluate-measures-title" data-store={store}>
-            <h2 id="evaluate-measures-title" className="wk-ue-label">Read these numbers with this in mind</h2>
-            <ul className="wk-ue-caveats">
-              {caveats.map((c) => <li key={c.key} data-testid="evaluate-caveat" data-caveat={c.key} className="wk-ue-note">{c.text}</li>)}
-            </ul>
-            {store === 'other' && ev !== null && ev.ruleStore !== null && (
-              <TechDetails summary="Rule stores" text={`This run: ${ev.ruleStore}\nThis daemon: ${daemonStore ?? 'unknown'}`} />
-            )}
-          </section>
-        )}
-
-        <SystemJudgments />
-
-        <div className="wk-ue-folds">
+          </Fold>
+          <Fold title="How well the system judges" sub="What needs you, floor decisions, QE verdicts, who built it" testId="evaluate-judgments-fold" toggleId="evaluate-judgments-toggle" open={judgesOpen} onToggle={setJudgesOpen}>
+            <SystemJudgments key={judgeKey} folded />
+          </Fold>
           <Fold title="What to run" sub={settingsWords} testId="evaluate-options" toggleId="evaluate-options-toggle" open={optionsOpen} onToggle={setOptionsOpen}>
             <div className="wk-ue-fields">
               <label className="wk-ue-field">
@@ -343,35 +477,7 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
               </label>
             </div>
           </Fold>
-          <Fold title="Bring your own behaviours" sub="The built-in set is generic. Import behaviours that mirror your own rules." testId="evaluate-import" toggleId="evaluate-import-toggle" open={importOpen} onToggle={setImportOpen}>
-            <p className="wk-ue-note">A JSON list of samples, each good or bad. It is set as the behaviours for the next run.</p>
-            <TechDetails summary="The file’s format" text={'A JSON array of samples, or {name, samples}. Each sample: {id, description, kind: good|bad, steering_type, signals}.'} />
-            <label className="wk-ue-field">
-              <span>Name</span>
-              <input id="evals-corpus-name" data-testid="testing-corpus-name" className="wk-field" value={corpusName} onChange={(e) => setCorpusName(e.target.value)} placeholder="Optional; the file's name otherwise" />
-            </label>
-            <FilePick data-testid="testing-corpus-file" label="Choose a file…" accept=".json,application/json" file={corpusFile}
-              onChange={(f) => { setCorpusFile(f); if (f !== null) onCorpusPick(f); }} />
-            {imp.kind === 'busy' && <p data-testid="testing-corpus-busy" className="wk-ue-note" role="status">Importing {imp.filename}…</p>}
-            {imp.kind === 'unsupported' && <p data-testid="testing-corpus-unsupported" className="wk-ue-note">{TESTING_UNSUPPORTED_COPY}</p>}
-            {imp.kind === 'failed' && (
-              <div data-testid="testing-corpus-error">
-                {imp.error instanceof Error && imp.error.message.includes('not an eval corpus') ? (
-                  <><p className="wk-field-note wk-field-note--bad">That file isn&rsquo;t an eval corpus.</p><TechDetails text={imp.error.message} /></>
-                ) : (
-                  <StateBanner kind={readErrorKind(imp.error)} what="the corpus" error={imp.error instanceof Error ? imp.error.message : String(imp.error)}
-                    onRetry={() => { if (corpusFile !== null) onCorpusPick(corpusFile); }} />
-                )}
-              </div>
-            )}
-            {imp.kind === 'done' && (
-              <p data-testid="testing-corpus-summary" className="wk-ue-note" role="status">
-                {imp.filename}: imported {imp.result.imported} sample{imp.result.imported === 1 ? '' : 's'} into <b>{imp.result.scope}</b>
-                {imp.result.embedded ? ' (embedded)' : ' · tags only'}. It is set as the behaviours for the next run.
-              </p>
-            )}
-          </Fold>
-          <Fold title="Past runs" sub={history.length > 0 ? `${history.length} ${history.length === 1 ? 'run' : 'runs'} saved` : 'Every evaluation is saved here.'} testId="evaluate-history" toggleId="evaluate-history-toggle" open={historyOpen} onToggle={setHistoryOpen}>
+          <Fold title="Compare runs" sub={history.length > 0 ? `${history.length} ${history.length === 1 ? 'run' : 'runs'} saved: each in detail, and two side by side` : 'Every evaluation is saved here.'} testId="evaluate-history" toggleId="evaluate-history-toggle" open={historyOpen} onToggle={setHistoryOpen}>
             <EvalHistory refreshKey={historyKey} daemonStore={daemonStore ?? null} />
           </Fold>
         </div>

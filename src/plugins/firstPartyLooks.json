@@ -1,0 +1,23 @@
+{
+  "$doc": "How studio's first-party EDITORS look on the Plugins page (program DES-LEARN §2): one line and a colour each; the icon is <id>/icon.svg. scripts/build-editors.mjs writes these into each editor's editor.json (`description`, `visuals`) for crew's registry; studio falls back to them for a crew that predates the fields. A run plugin declares its own in its manifest.json.",
+  "wicked-insights": {
+    "description": "What the weekly review found: patterns across runs and what to change.",
+    "color": "#0f766e"
+  },
+  "wicked-deck": {
+    "description": "Opens decks: edit slides in place, reorder them, export PowerPoint.",
+    "color": "#c2410c"
+  },
+  "wicked-doc": {
+    "description": "Opens documents: write in place, compare versions, export PDF.",
+    "color": "#1d4ed8"
+  },
+  "wicked-page": {
+    "description": "Opens pages: point at any element and change it, at any device size.",
+    "color": "#7c3aed"
+  },
+  "wicked-video": {
+    "description": "Opens demo recordings: chapters, narration, trim, export.",
+    "color": "#be185d"
+  }
+}

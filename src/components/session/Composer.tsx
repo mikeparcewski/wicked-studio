@@ -28,6 +28,7 @@ import { takeComposerSeed, useComposerSeed } from '../../store/composerSeed.js';
 import { SlashMenu, type AtItem } from './SlashMenu.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { usePhone } from '../../hooks/usePhone.js';
+import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
 export interface ComposerSend {
@@ -101,6 +102,17 @@ function useDraftTarget(runs: readonly SessionView[]): { target: DraftTarget; ga
  *
  * Typing never answers a question and never reshapes the chain: only a picked `/` command does.
  */
+/** Whether `text` fits the box on one line, as rendered (a one-row box clips a wrapped placeholder's second line, and
+ *  Chrome draws no ellipsis on a textarea's placeholder). True when it cannot be measured. */
+export function placeholderFits(el: HTMLTextAreaElement, text: string): boolean {
+  const ctx = typeof document === 'undefined' ? null : document.createElement('canvas').getContext?.('2d') ?? null;
+  if (ctx === null) return true;
+  const cs = getComputedStyle(el);
+  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const room = el.clientWidth - (Number.parseFloat(cs.paddingLeft) || 0) - (Number.parseFloat(cs.paddingRight) || 0);
+  return room <= 0 || ctx.measureText(text).width <= room;
+}
+
 /** A phone's one-row placeholder: the first clause (before a comma or dash), at most ~18 characters
  *  on a word boundary, with an ellipsis when anything was cut. */
 export function shortPlaceholder(text: string, max = 18): string {
@@ -168,6 +180,20 @@ export function Composer({
   // never a sentence cut mid-word with no mark (UX audit row 32, the 390 px gate).
   const phone = usePhone();
   const box = inputRef ?? own;
+  // Any width: when the whole placeholder does not fit on the one row (a run page with its panel open on a laptop),
+  // the same first clause and ellipsis stand in, never a second line cut off (operator 2026-11-01).
+  const [roomy, setRoomy] = useState(true);
+  useEffect(() => {
+    const el = box.current;
+    if (el === null || typeof ResizeObserver === 'undefined') return;
+    let live = true;
+    const check = (): void => { if (live) setRoomy(placeholderFits(el, placeholder)); };
+    check();
+    void document.fonts?.ready.then(check);
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => { live = false; ro.disconnect(); };
+  }, [box, placeholder]);
   const [caret, setCaret] = useState(0);
   const [cursor, setCursor] = useState(0);
   const [closedAt, setClosedAt] = useState<string | null>(null);
@@ -467,9 +493,10 @@ export function Composer({
             if (e.key === 'Backspace' && text === '' && backspaceAboutChip(composerKey, text)) { e.preventDefault(); return; }
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
           }}
-          placeholder={wfChip !== null ? 'Describe the work to launch' : phone ? shortPlaceholder(placeholder) : placeholder}
+          placeholder={wfChip !== null ? 'Describe the work to launch' : phone || !roomy ? shortPlaceholder(placeholder) : placeholder}
           className="wk-desk-input"
         />
+        <VoiceMicButton size="xs" testId={variant === 'desk' ? 'desk-composer-voice' : 'session-composer-voice'} focus={variant === 'session' ? runs[runs.length - 1]?.session.id ?? null : null} />
         <button type="submit" data-testid={variant === 'desk' ? 'desk-composer-send' : 'session-composer-send'} aria-label={wfChip !== null ? 'Launch' : 'Send'} disabled={!canSend} className="wk-desk-send">↑</button>
       </form>
       {(hint || footer !== null) && (

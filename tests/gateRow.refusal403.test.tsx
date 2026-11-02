@@ -180,7 +180,7 @@ describe('a refused hand-over whose re-verify failed — the operator\'s judgmen
 
   it('sends the judgment with its rationale', async () => {
     render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human', clis: ['claude'] } as never, UNITS)} gate={gate(REVERIFY_PROMPT)} navigate={vi.fn()} />);
-    fireEvent.click(await screen.findByText(OPERATOR_JUDGMENT_LABEL, { selector: `[data-choice-key="${FLOOR_OVERRIDE_KEY}"]` }));
+    fireEvent.click(await screen.findByText(OPERATOR_JUDGMENT_LABEL, { selector: `[data-choice-key="${FLOOR_OVERRIDE_KEY}"] b` }));
     const note = await screen.findByTestId('session-gate-note') as HTMLTextAreaElement;
     const send = screen.getByTestId('session-gate-send') as HTMLButtonElement;
     expect(send.disabled).toBe(true);

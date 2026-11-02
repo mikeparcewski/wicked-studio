@@ -12,7 +12,27 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client.js';
 import type { RequirementSummary, RequirementDetail, RequirementsPage, RequirementPatch } from '../api/types.js';
 import { useModalEscape } from './Modal.js';
-import { useProvenanceStore } from '../store/provenance.js';
+import { openLaunchWizard } from '../store/launchWizard.js';
+import {
+  DOMAIN_EXTRACTION_ID,
+  corroborationOf,
+  corroborationSentence,
+  configDataCountOf,
+  coverageOf,
+  graphBuildNote,
+  graphBuildOf,
+  isPlaceholder,
+  pageUncountedOf,
+  PLACEHOLDER_NOTE,
+  UNCOUNTED_TITLE,
+  uncountedLine,
+  uncountedOf,
+  requirementsNotGenerated,
+  type RequirementsCoverage,
+} from '../board/requirementsState.js';
+import { workflowLabel } from '../board/workflowNames.js';
+import { isLiveStatus, repeatLineOf } from '../board/repeatProgress.js';
+import { RequirementsCoverageSummary } from './RequirementsCoverageSummary.js';
 
 const T = {
   canvas: 'var(--surface-base)',
@@ -38,9 +58,39 @@ interface Props {
   onClose: () => void;
   /** Navigate to a component symbol in the code graph (requirement → code). */
   onNavigateComponent?: (symbol: string) => void;
+  /** Open a job's page (the domain-extraction job mapping this repository). */
+  onOpenRun?: (runId: string) => void;
 }
 
-export function RequirementsModal({ repoId, repoName, onClose, onNavigateComponent }: Props): React.ReactElement {
+/** A domain-extraction job mapping the repository, as the requirements view knows it: `undefined` while it is being
+ *  looked up, `null` when none is going, `'unknown'` when the daemon could not say. */
+type MappingJob = { runId: string; line: string | null } | null | 'unknown' | undefined;
+
+/** How often the view re-reads the share and the job while a job is mapping (a page takes minutes). */
+const MAPPING_REFRESH_MS = 30_000;
+
+/** The newest domain-extraction job for `repoId` that is still going, with its progress line (null before its first
+ *  page finished); `null` when none is; `'unknown'` when the job list could not be read. */
+async function liveMappingJob(repoId: string): Promise<MappingJob> {
+  let runs: Awaited<ReturnType<typeof api.listRuns>>['runs'];
+  try {
+    ({ runs } = await api.listRuns());
+  } catch {
+    return 'unknown';
+  }
+  const live = runs
+    .filter((v) => v.session.repo_ref === repoId
+      && (v.session as { workflow_id?: unknown }).workflow_id === DOMAIN_EXTRACTION_ID
+      && isLiveStatus(v.session.status))
+    .sort((a, b) => (b.session.created_at ?? 0) - (a.session.created_at ?? 0));
+  const run = live[0];
+  if (run === undefined) return null;
+  const { events } = await api.getRunEvents(run.session.id, ['stepRepeated', 'awaitingHuman', 'resumed', 'unitExecuting'])
+    .catch(() => ({ events: [] }));
+  return { runId: run.session.id, line: repeatLineOf(events) };
+}
+
+export function RequirementsModal({ repoId, repoName, onClose, onNavigateComponent, onOpenRun }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const [risk, setRisk] = useState<'all' | 'risk' | 'no-risk'>('all');
   // Functional by default: statements extracted from lockfiles/manifests/data fixtures
@@ -48,14 +98,30 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const [category, setCategory] = useState<'functional' | 'config-data' | 'all'>('functional');
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<RequirementsPage | null>(null);
+  // "Config & data" is a filter only when the corpus holds some (crew 0.167.0 categories); a daemon from before the
+  // count keeps it, and nothing shows before the first read.
+  const configData = configDataCountOf(page);
+  const hasConfigData = page !== null && (configData === null || configData > 0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Lane repo-page: no requirements graph yet is a state with its own panel, never a red refusal.
+  // Holds the workflow that generates it (crew's typed 404 names it).
+  const [notGenerated, setNotGenerated] = useState<{ workflow: string; share: RequirementsCoverage | null } | null>(null);
+  // domain-graph-3: a domain-extraction job for this repository that is still going, and its own progress line.
+  // `undefined` while it is being looked up: the launch button waits for the answer, so it never flashes up beside a
+  // job that is already mapping.
+  const [mapping, setMapping] = useState<MappingJob>(undefined);
+  const [mappingAsk, setMappingAsk] = useState(0);
+  useEffect(() => { setMapping(undefined); }, [repoId]);
+  useEffect(() => {
+    if (notGenerated === null) {
+      setMapping(undefined);
+      return;
+    }
+    let live = true;
+    void liveMappingJob(repoId).then((m) => { if (live) setMapping(m); });
+    return () => { live = false; };
+  }, [notGenerated, repoId, mappingAsk]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [extracting, setExtracting] = useState(false);
-  const [extractError, setExtractError] = useState<string | null>(null);
-  // The run a successful launch started. The guard must outlive the POST: `launchRun` resolves
-  // in tens of ms while the extraction runs for minutes, so re-enabling on settle let a second
-  // click spawn a duplicate run (studio#324 D2). Once launched, the button stays disabled.
-  const [extractRunId, setExtractRunId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(
@@ -69,11 +135,32 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
         .then((p) => {
           setPage(p);
           setLoadError(null);
+          setNotGenerated(null);
         })
-        .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
+        .catch((e: unknown) => {
+          const missing = requirementsNotGenerated(e);
+          setNotGenerated(missing);
+          setLoadError(missing !== null ? null : e instanceof Error ? e.message : String(e));
+        });
     },
     [repoId],
   );
+
+  // domain-graph-3: while a job is mapping, the share, the job's line and a graph it builds are read again every
+  // half minute (the view never shows an opening snapshot as live).
+  const mappingLive = mapping !== null && mapping !== undefined && mapping !== 'unknown';
+  useEffect(() => {
+    if (!mappingLive) return;
+    const t = setInterval(() => fetchPage(query, risk, category, offset), MAPPING_REFRESH_MS);
+    return () => clearInterval(t);
+  }, [mappingLive, fetchPage, query, risk, category, offset]);
+  // …and once more when the job it watched ends (codex r2 on the branch): the read that saw no graph may have come just
+  // before the job built it, and the view must not keep saying there is none.
+  const wasMapping = useRef(false);
+  useEffect(() => {
+    if (wasMapping.current && mapping === null) fetchPage(query, risk, category, offset);
+    wasMapping.current = mappingLive;
+  }, [mapping, mappingLive, fetchPage, query, risk, category, offset]);
 
   // One debounced (250ms) server fetch covers search, filter, and pagination changes.
   useEffect(() => {
@@ -93,6 +180,10 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     setCategory(c);
     setOffset(0);
   }
+  // The corpus no longer holds config and data (its filter is gone): a view still on it moves to Functional.
+  useEffect(() => {
+    if (!hasConfigData && page !== null && category === 'config-data') setCategoryFilter('functional');
+  }, [hasConfigData, page, category]);
 
   // Patch a row in place after the edit rail saves (no full refetch needed).
   function absorbUpdate(updated: RequirementDetail): void {
@@ -114,8 +205,18 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   }, [selectedKey, onClose]);
   useModalEscape(handleEscape);
 
-  const totalPages = page !== null ? Math.max(1, Math.ceil(page.total / PAGE_SIZE)) : 1;
-  const pageNo = Math.floor(offset / PAGE_SIZE) + 1;
+  /** Generating needs a governed run, so this never starts one: it opens New job filled in with the
+   *  generating workflow and this repository, and the operator launches it there (lane repo-page). */
+  function generate(workflow: string): void {
+    onClose();
+    openLaunchWizard({
+      workflowId: workflow,
+      intent: `Map the domain of ${repoName}: the requirements its code implements, grouped by domain, and how much of the code they cover.`,
+      contextRepo: repoId,
+      composerKey: `repo:${repoId}`,
+    });
+  }
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
@@ -124,18 +225,12 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
         style={{ background: T.surface, border: `1px solid ${T.hairlineS}` }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
-          <span className="font-mono text-sm font-semibold" style={{ color: T.ink }}>{repoName}</span>
-          <span className="font-mono text-[11px] px-2 py-0.5 rounded" style={{ background: T.surface2, color: T.muted }}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 border-b shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
+          <span className=" text-sm font-semibold" style={{ color: T.ink }}>{repoName}</span>
+          <span className=" text-xs px-2 py-0.5 rounded" style={{ background: T.surface2, color: T.muted }}>
             requirements
           </span>
-          {page !== null && (
-            <span className="font-mono text-[11px]" style={{ color: T.faint }}>
-              {page.total === page.corpus
-                ? `${page.corpus} total`
-                : `${page.total} matching · ${page.corpus} total`}
-            </span>
-          )}
+          {page !== null && <GraphCoverage page={page} />}
           <button
             type="button"
             onClick={onClose}
@@ -147,8 +242,9 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
           </button>
         </div>
 
-        {/* Toolbar: search (server-side) + risk filter */}
-        <div className="flex items-center gap-3 px-5 py-2.5 border-b shrink-0" style={{ borderColor: T.hairline }}>
+        {/* Toolbar: search (server-side) + risk filter. Nothing to search before the graph exists. */}
+        {notGenerated === null && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5 border-b shrink-0" style={{ borderColor: T.hairline }}>
           <input
             type="text"
             value={query}
@@ -156,18 +252,18 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               setQuery(e.target.value);
               setOffset(0);
             }}
-            placeholder="Search requirements (server-side: id, domain, title, description)…"
-            className="flex-1 text-[12px] font-mono px-3 py-1.5 rounded-lg border outline-none"
+            placeholder="Search id, domain, title or statement…"
+            className="flex-1 basis-full sm:basis-auto min-w-0 text-sm px-3 py-1.5 rounded-lg border outline-none"
             style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
           />
           <div className="flex items-center gap-1" role="group" aria-label="Category filter">
-            {(['functional', 'config-data', 'all'] as const).map((c) => (
+            {(['functional', 'config-data', 'all'] as const).filter((c) => c !== 'config-data' || hasConfigData).map((c) => (
               <button
                 key={c}
                 type="button"
                 onClick={() => setCategoryFilter(c)}
                 aria-pressed={category === c}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold"
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold"
                 style={{
                   background: category === c ? T.surface2 : 'transparent',
                   color: category === c ? T.ink : T.faint,
@@ -178,7 +274,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               </button>
             ))}
           </div>
-          <div className="w-px h-4" style={{ background: T.hairline }} />
+          <div className="hidden sm:block w-px h-4" style={{ background: T.hairline }} />
           <div className="flex items-center gap-1" role="group" aria-label="Risk filter">
             {(['all', 'risk', 'no-risk'] as const).map((r) => (
               <button
@@ -186,7 +282,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                 type="button"
                 onClick={() => setFilter(r)}
                 aria-pressed={risk === r}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold"
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold"
                 style={{
                   background: risk === r ? (r === 'risk' ? 'var(--status-fail-dim)' : T.surface2) : 'transparent',
                   color: risk === r ? (r === 'risk' ? T.deny : T.ink) : T.faint,
@@ -198,65 +294,26 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
             ))}
           </div>
         </div>
+        )}
 
         {/* Body: list + edit rail */}
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-y-auto">
-            {loadError !== null ? (
-              <p className="text-[12px] font-mono p-6" style={{ color: T.deny }}>{loadError}</p>
+            {notGenerated !== null ? (
+              <NotGenerated repoName={repoName} workflow={notGenerated.workflow} onGenerate={generate} share={notGenerated.share} mapping={mapping} onOpenRun={onOpenRun} onRetryMapping={() => setMappingAsk((n) => n + 1)} />
+            ) : loadError !== null ? (
+              <p className="text-xs p-6" style={{ color: T.deny }}>{loadError}</p>
             ) : page === null ? (
-              <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>Loading…</p>
+              <p className="text-xs p-6" style={{ color: T.faint }}>Loading…</p>
             ) : page.corpus === 0 ? (
               // An EMPTY CORPUS is not a failed search. "No requirements match" asserts that
               // something was searched and the filters excluded it — for a repo whose extraction
               // has never run, that sentence is false and it hides the only action that would
               // help. `corpus === 0` means there is nothing to search at all, so no filter can be
               // responsible and the distinction is decidable here (FINDING-065).
-              <div className="p-6 space-y-2">
-                <p className="text-[12px] font-mono" style={{ color: T.ink }}>
-                  No requirements have been extracted for this repo.
-                </p>
-                <button
-                  type="button"
-                  disabled={extracting || extractRunId !== null}
-                  className="text-[12px] font-mono font-semibold rounded px-3 py-1.5 disabled:opacity-50"
-                  style={{ color: T.accent, border: `1px solid ${T.accent}` }}
-                  onClick={() => {
-                    if (extracting || extractRunId !== null) return;
-                    setExtracting(true);
-                    setExtractError(null);
-                    api.launchRun({
-                      repoRef: repoId,
-                      workflow: 'domain-extraction',
-                      problem: `Run domain extraction for ${repoName}`,
-                    })
-                      .then(({ runId }) => {
-                        // Same provenance witness ChatInput records for a launch from studio.
-                        useProvenanceStore.getState().markLaunchedHere(runId);
-                        setExtractRunId(runId);
-                      })
-                      // A failed launch re-arms the button so the operator can retry.
-                      .catch((e: unknown) => setExtractError(e instanceof Error ? e.message : String(e)))
-                      .finally(() => setExtracting(false));
-                  }}
-                >
-                  {extracting
-                    ? 'Launching…'
-                    : extractRunId !== null
-                      ? 'Extraction launched'
-                      : 'Run domain extraction'}
-                </button>
-                {extractRunId !== null && (
-                  <p className="text-[11px] font-mono" style={{ color: T.faint }}>
-                    Domain extraction is running as {extractRunId}. Reopen this view once it completes to see the extracted requirements.
-                  </p>
-                )}
-                {extractError !== null && (
-                  <p className="text-[11px] font-mono" style={{ color: T.deny }}>{extractError}</p>
-                )}
-              </div>
+              <NotGenerated repoName={repoName} workflow={DOMAIN_EXTRACTION_ID} onGenerate={generate} empty />
             ) : page.items.length === 0 ? (
-              <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>No requirements match.</p>
+              <p className="text-xs p-6" style={{ color: T.faint }}>No requirements match.</p>
             ) : (
               <div className="divide-y" style={{ borderColor: T.hairline }}>
                 {page.items.map((r) => (
@@ -270,25 +327,25 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               </div>
             )}
             {/* Pagination */}
-            {page !== null && page.total > PAGE_SIZE && (
+            {notGenerated === null && page !== null && page.total > PAGE_SIZE && (
               <div className="flex items-center justify-center gap-4 py-3">
                 <button
                   type="button"
                   disabled={offset === 0}
                   onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                  className="text-[11px] font-mono px-3 py-1 rounded disabled:opacity-40"
+                  className="text-xs px-3 py-1 rounded disabled:opacity-40"
                   style={{ color: T.link }}
                 >
                   ← Prev
                 </button>
-                <span className="text-[11px] font-mono" style={{ color: T.faint }}>
-                  page {pageNo} of {totalPages}
+                <span data-testid="requirements-range" className="text-xs tabular-nums" style={{ color: T.faint }}>
+                  Requirements {(offset + 1).toLocaleString('en-US')}–{Math.min(offset + PAGE_SIZE, page.total).toLocaleString('en-US')} of {page.total.toLocaleString('en-US')}
                 </span>
                 <button
                   type="button"
                   disabled={offset + PAGE_SIZE >= page.total}
                   onClick={() => setOffset(offset + PAGE_SIZE)}
-                  className="text-[11px] font-mono px-3 py-1 rounded disabled:opacity-40"
+                  className="text-xs px-3 py-1 rounded disabled:opacity-40"
                   style={{ color: T.link }}
                 >
                   Next →
@@ -308,6 +365,116 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * No requirements to show yet, said plainly with what this view would show and how to get it
+ * (lane repo-page). `empty`: a graph was generated but holds no requirements (FINDING-065).
+ */
+function NotGenerated({ repoName, workflow, onGenerate, empty = false, share = null, mapping, onOpenRun, onRetryMapping }: {
+  repoName: string;
+  workflow: string;
+  onGenerate: (workflow: string) => void;
+  empty?: boolean;
+  /** The real share so far against the minimum (crew's notGenerated answer, api-types 0.164.0). */
+  share?: RequirementsCoverage | null;
+  /** domain-graph-3: the domain-extraction job mapping it now and its own progress line (`undefined` while looked
+   *  up, `'unknown'` when the daemon could not say). */
+  mapping?: MappingJob;
+  onOpenRun?: ((runId: string) => void) | undefined;
+  onRetryMapping?: (() => void) | undefined;
+}): React.ReactElement {
+  return (
+    <div data-testid="requirements-not-generated" data-state={empty ? 'empty' : 'not-generated'} className="wk-req-none">
+      <h3 className="wk-req-none-title">
+        {empty ? 'No requirements have been extracted for this repository' : 'No requirements graph yet for this repository'}
+      </h3>
+      {share !== null && share.behaviorBearing > 0 && (
+        <RequirementsCoverageSummary
+          coverage={share}
+          testId="requirements-real-share"
+          bar
+          note="the graph is built once the minimum is reached; the real requirements found so far are kept"
+        />
+      )}
+      {mapping === 'unknown' && (
+        <p data-testid="requirements-mapping-unknown" className="wk-req-none-share">
+          Could not check whether a job is mapping {repoName} now.
+          {onRetryMapping !== undefined && (
+            <>{' '}<button type="button" data-testid="requirements-mapping-retry" className="wk-link" onClick={onRetryMapping}>Check again</button></>
+          )}
+        </p>
+      )}
+      {mapping !== null && mapping !== undefined && mapping !== 'unknown' && (
+        <p data-testid="requirements-mapping-job" className="wk-req-none-share">
+          {mapping.line ?? `A job is mapping ${repoName} now.`}
+          {onOpenRun !== undefined && (
+            <>{' '}<button type="button" data-testid="requirements-open-mapping-job" className="wk-link" onClick={() => onOpenRun(mapping.runId)}>Open the job</button></>
+          )}
+        </p>
+      )}
+      <p className="wk-req-none-body">
+        Once it is generated, this lists what {repoName} does as requirements, grouped by business domain: each one with
+        the code that implements it, its business rules, and whether it carries risk. You can search, filter and edit
+        them here.
+      </p>
+      {(mapping === null || mapping === 'unknown' || empty) && (
+        <div className="wk-req-none-actions">
+          <button type="button" data-testid="requirements-generate" className="wk-btn wk-btn--primary" onClick={() => onGenerate(workflow)}>
+            {share !== null && share.real > 0 ? 'Keep mapping' : 'Generate it'}
+          </button>
+          <span className="wk-field-note">
+            Opens a new {workflowLabel(workflow)} job for this repository, filled in. It maps page after page until the
+            target, and asks before it spends more. Nothing starts until you launch it.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The graph's one coverage line (operator 2026-11-01: one set of numbers): the REAL-requirements share against the
+ * minimum and what the rest of the behaviour is. Nothing renders for a graph (or a daemon) from before these fields.
+ */
+function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement | null {
+  const cov = coverageOf(page);
+  if (cov === null) return null;
+  // When the list is an older graph build than the store the header counts, it says so (crew 0.165.0 graphBuild).
+  const behind = graphBuildNote(cov, graphBuildOf(page));
+  // Rules and placeholders on type shapes are listed but not in the share (crew 0.167.0): said once, here.
+  const uncounted = uncountedLine(pageUncountedOf(page));
+  // Its own row under the title row, at every width: the breakdown is a sentence, not a chip.
+  return (
+    <div className="order-last basis-full min-w-0">
+      <RequirementsCoverageSummary coverage={cov} inline />
+      {behind !== null && (
+        <p data-testid="requirements-graph-behind" className="text-xs mt-1" style={{ color: 'var(--status-warn)' }}>{behind}</p>
+      )}
+      {uncounted !== null && <p data-testid="requirements-uncounted" className="text-xs mt-1" style={{ color: T.muted }}>{uncounted}</p>}
+    </div>
+  );
+}
+
+/** An item's mark: validated (with its count of independent sources) or unconfirmed. */
+function CorroborationMark({ req }: { req: unknown }): React.ReactElement | null {
+  const c = corroborationOf(req);
+  if (c === null) return null;
+  const validated = c.status === 'validated';
+  return (
+    <span
+      data-testid="requirement-corroboration"
+      data-status={c.status}
+      className="text-xs px-1.5 py-0.5 rounded shrink-0"
+      style={{
+        background: validated ? 'var(--status-ok-dim)' : 'var(--status-warn-dim)',
+        color: validated ? 'var(--status-ok)' : 'var(--status-warn)',
+      }}
+      title={corroborationSentence(c)}
+    >
+      {validated ? `validated · ${c.sources}` : 'unconfirmed'}
+    </span>
   );
 }
 
@@ -335,45 +502,103 @@ function RequirementRow({
   selected: boolean;
   onSelect: () => void;
 }): React.ReactElement {
+  const placeholder = isPlaceholder(req);
+  const uncounted = uncountedOf(req);
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="w-full text-left px-5 py-2.5 flex items-center gap-3 shrink-0"
+      data-testid="requirement-row"
+      data-placeholder={placeholder ? 'true' : 'false'}
+      className="wk-req-row"
       style={{ background: selected ? T.canvas2 : 'transparent', borderColor: T.hairline }}
     >
-      <span className="text-[10px] font-mono shrink-0 w-16" style={{ color: T.faint }}>{req.reqId}</span>
-      <span className="flex-1 min-w-0">
-        <span className="block text-[12px] truncate" style={{ color: T.ink }}>{req.title}</span>
+      <span className="wk-req-row-id font-mono" style={{ color: T.faint }}>{req.reqId}</span>
+      <span className="wk-req-row-main">
+        <span className="block text-sm font-semibold truncate" style={{ color: T.ink }}>{req.title}</span>
         {req.statement.trim() !== '' && (
-          <span className="block text-[11px] truncate" style={{ color: T.muted }}>{req.statement.trim()}</span>
+          <span className="block text-xs truncate" style={{ color: T.muted }}>{req.statement.trim()}</span>
         )}
-        <span className="block text-[10px] font-mono truncate" style={{ color: T.faint }}>{req.domain}</span>
+        <span className="block text-xs truncate" style={{ color: T.faint }}>{req.domain}</span>
+        {!placeholder && uncounted === null && <UnconfirmedWhy req={req} />}
       </span>
-      {req.edited && (
-        <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded shrink-0" style={{ background: T.surface2, color: T.link }}>
-          edited
-        </span>
-      )}
-      {req.risk && (
+      {/* The chips stack under the title on a narrow screen (operator 2026-11-01: titles collapsed beside them). */}
+      <span className="wk-req-row-chips">
+        {uncounted !== null ? <NotCountedMark why={uncounted} /> : placeholder ? <PlaceholderMark /> : <CorroborationMark req={req} />}
+        {req.edited && (
+          <span className="text-xs px-1.5 py-0.5 rounded shrink-0" style={{ background: T.surface2, color: T.link }}>
+            edited
+          </span>
+        )}
+        {req.risk && (
+          <span
+            className="text-xs font-semibold px-1.5 py-0.5 rounded shrink-0"
+            style={{ background: 'var(--status-fail-dim)', color: T.deny }}
+            title={req.riskSource === 'operator' ? 'Marked risk by operator' : 'placeholder: the engine does not resolve it'}
+          >
+            risk{req.riskSource === 'operator' ? ' ●' : ''}
+          </span>
+        )}
         <span
-          className="text-[9px] uppercase font-semibold font-mono px-1.5 py-0.5 rounded shrink-0"
-          style={{ background: 'var(--status-fail-dim)', color: T.deny }}
-          title={req.riskSource === 'operator' ? 'Marked risk by operator' : 'Risk derived from business rules'}
+          className="text-xs px-1.5 py-0.5 rounded shrink-0"
+          style={{
+            background: req.status === 'active' ? 'var(--status-run-dim)' : req.status === 'deprecated' ? 'var(--status-fail-dim)' : T.surface2,
+            color: req.status === 'active' ? T.ok : req.status === 'deprecated' ? T.deny : T.muted,
+          }}
         >
-          risk{req.riskSource === 'operator' ? ' ●' : ''}
+          {req.status}
         </span>
-      )}
-      <span
-        className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded shrink-0"
-        style={{
-          background: req.status === 'active' ? 'var(--status-run-dim)' : req.status === 'deprecated' ? 'var(--status-fail-dim)' : T.surface2,
-          color: req.status === 'active' ? T.ok : req.status === 'deprecated' ? T.deny : T.muted,
-        }}
-      >
-        {req.status}
       </span>
     </button>
+  );
+}
+
+/** Not counted in the coverage share (crew 0.167.0): a type shape, code that is not the product, or an unindexed
+ *  file. It stands instead of any corroboration or placeholder mark, which would be about a share it is not in. */
+function NotCountedMark({ why }: { why: keyof typeof UNCOUNTED_TITLE }): React.ReactElement {
+  return (
+    <span
+      data-testid="requirement-not-counted"
+      data-why={why}
+      className="text-xs px-1.5 py-0.5 rounded shrink-0"
+      style={{ background: T.surface2, color: T.muted }}
+      title={UNCOUNTED_TITLE[why]}
+    >
+      not counted
+    </span>
+  );
+}
+
+/** A placeholder's mark: unconfirmed by definition, so never a corroboration badge ("validated · 2" on an empty
+ *  statement contradicted itself; operator 2026-11-01). */
+function PlaceholderMark(): React.ReactElement {
+  return (
+    <span
+      data-testid="requirement-placeholder"
+      className="text-xs px-1.5 py-0.5 rounded shrink-0"
+      style={{ background: 'var(--status-warn-dim)', color: 'var(--status-warn)' }}
+      title={PLACEHOLDER_NOTE}
+    >
+      placeholder
+    </span>
+  );
+}
+
+/** The reason an item is unconfirmed, shown on the item itself (operator ruling 2026-10-31). */
+function UnconfirmedWhy({ req }: { req: unknown }): React.ReactElement | null {
+  const c = corroborationOf(req);
+  if (c === null || c.status !== 'unconfirmed' || c.why === undefined) return null;
+  return (
+    <span
+      data-testid="requirement-unconfirmed-why"
+      data-code={c.why.code}
+      className="block text-xs"
+      // Two lines, not one: on a phone a one-line clip would cut the reason down to its first word.
+      style={{ color: 'var(--status-warn)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+      title={c.why.text}
+    >
+      Unconfirmed: {c.why.text}
+    </span>
   );
 }
 
@@ -462,52 +687,52 @@ function RequirementEditRail({
   return (
     <div className="w-[420px] shrink-0 border-l flex flex-col" style={{ borderColor: T.hairlineS, background: T.surface2 }}>
       <div className="px-4 py-2.5 border-b flex items-center gap-2 shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
-        <span className="text-[11px] font-mono truncate" style={{ color: T.ink }}>{reqKey}</span>
+        <span className="text-xs font-mono truncate" style={{ color: T.ink }}>{reqKey}</span>
         <button type="button" onClick={onClose} aria-label="Close requirement editor" className="ml-auto text-sm px-1 shrink-0" style={{ color: T.muted }}>
           ×
         </button>
       </div>
-      {error !== null && <p className="text-[11px] font-mono px-4 py-2" style={{ color: T.deny }}>{error}</p>}
+      {error !== null && <p className="text-xs px-4 py-2" style={{ color: T.deny }}>{error}</p>}
       {detail === null && error === null ? (
-        <p className="text-[11px] font-mono px-4 py-3" style={{ color: T.faint }}>Loading…</p>
+        <p className="text-xs px-4 py-3" style={{ color: T.faint }}>Loading…</p>
       ) : detail !== null ? (
         <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Title</span>
+            <span className="text-xs" style={{ color: T.faint }}>Title</span>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="text-[12px] font-mono px-3 py-1.5 rounded-lg border outline-none"
+              className="text-xs px-3 py-1.5 rounded-lg border outline-none"
               style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
             />
           </label>
           {detail.title !== detail.sourceTitle && (
-            <p className="text-[10px] font-mono" style={{ color: T.faint }}>source title: {detail.sourceTitle}</p>
+            <p className="text-xs" style={{ color: T.faint }}>source title: {detail.sourceTitle}</p>
           )}
           <div>
-            <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Description (source)</span>
-            <p className="text-[11px] mt-1 whitespace-pre-wrap" style={{ color: T.muted }}>
+            <span className="text-xs" style={{ color: T.faint }}>Description (source)</span>
+            <p className="text-xs mt-1 whitespace-pre-wrap" style={{ color: T.muted }}>
               {detail.description === '' ? '(none recorded)' : detail.description.slice(0, 1200)}
             </p>
           </div>
           <label className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Notes (operator)</span>
+            <span className="text-xs" style={{ color: T.faint }}>Notes (operator)</span>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={4}
-              className="text-[11px] font-mono px-3 py-1.5 rounded-lg border outline-none resize-y"
+              className="text-xs px-3 py-1.5 rounded-lg border outline-none resize-y"
               style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
             />
           </label>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Status</span>
+              <span className="text-xs" style={{ color: T.faint }}>Status</span>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as 'active' | 'deprecated' | 'review')}
-                className="text-[11px] font-mono px-2 py-1 rounded-lg border outline-none"
+                className="text-xs px-2 py-1 rounded-lg border outline-none"
                 style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
               >
                 <option value="active">active</option>
@@ -519,7 +744,7 @@ function RequirementEditRail({
               type="button"
               onClick={toggleRisk}
               disabled={saving}
-              className="text-[11px] font-mono font-semibold px-3 py-1 rounded-lg disabled:opacity-50"
+              className="text-xs font-semibold px-3 py-1 rounded-lg disabled:opacity-50"
               style={{
                 background: detail.risk ? 'var(--status-fail-dim)' : T.canvas2,
                 color: detail.risk ? T.deny : T.muted,
@@ -530,13 +755,13 @@ function RequirementEditRail({
             </button>
           </div>
           {detail.riskSource === 'data' && (
-            <p className="text-[10px] font-mono" style={{ color: T.faint }}>
+            <p className="text-xs" style={{ color: T.faint }}>
               risk derived from business rules — an operator toggle overrides it
             </p>
           )}
           {detail.businessRules.length > 0 && (
             <div>
-              <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Business rules</span>
+              <span className="text-xs" style={{ color: T.faint }}>Business rules</span>
               <ol className="mt-1 flex flex-col gap-1.5">
                 {detail.businessRules.map((r, i) => {
                   const rule = r as { statement?: unknown; confidence?: unknown };
@@ -544,10 +769,10 @@ function RequirementEditRail({
                   const st = raw !== '' ? raw : JSON.stringify(r);
                   const conf = typeof rule.confidence === 'number' ? rule.confidence : null;
                   return (
-                    <li key={i} className="text-[11px] leading-snug" style={{ color: T.ink }}>
+                    <li key={i} className="text-xs leading-snug" style={{ color: T.ink }}>
                       {st}
                       {conf !== null && (
-                        <span className="text-[9px] font-mono ml-1.5" style={{ color: T.faint }}>conf {conf}</span>
+                        <span className="text-xs ml-1.5" style={{ color: T.faint }}>conf {conf}</span>
                       )}
                     </li>
                   );
@@ -555,7 +780,8 @@ function RequirementEditRail({
               </ol>
             </div>
           )}
-          <div className="text-[10px] font-mono flex gap-3 flex-wrap" style={{ color: T.faint }}>
+          <RailCorroboration detail={detail} />
+          <div className="text-xs tabular-nums flex gap-3 flex-wrap" style={{ color: T.faint }}>
             <span>{detail.ruleCount} rules</span>
             <span>{detail.componentCount} components</span>
             <span>{detail.validationCount} validations</span>
@@ -563,14 +789,14 @@ function RequirementEditRail({
           </div>
           {detail.legacyComponents.length > 0 && (
             <div>
-              <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Components</span>
+              <span className="text-xs" style={{ color: T.faint }}>Components</span>
               <ul className="mt-1 flex flex-col gap-0.5">
                 {detail.legacyComponents.map((c, i) => {
                   const label = typeof c === 'string' ? c : JSON.stringify(c);
                   // 'path#symbol' components navigate by the symbol part; bare paths by themselves.
                   const symbol = typeof c === 'string' ? (c.includes('#') ? c.split('#')[1]! : c) : '';
                   return (
-                    <li key={i} className="text-[10px] font-mono truncate">
+                    <li key={i} className="text-xs font-mono truncate">
                       {onNavigateComponent !== undefined && symbol !== '' ? (
                         <button
                           type="button"
@@ -595,17 +821,40 @@ function RequirementEditRail({
               type="button"
               onClick={() => save()}
               disabled={saving}
-              className="px-4 py-1.5 rounded-lg text-[12px] font-mono font-semibold disabled:opacity-50"
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
               style={{ background: T.accent, color: 'var(--surface-base)' }}
             >
               {saving ? 'Saving…' : 'Save'}
             </button>
             {savedAt !== null && !saving && (
-              <span className="text-[10px] font-mono" style={{ color: T.ok }}>saved ✓</span>
+              <span className="text-xs" style={{ color: T.ok }}>saved ✓</span>
             )}
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function RailCorroboration({ detail }: { detail: RequirementDetail }): React.ReactElement | null {
+  if (isPlaceholder(detail)) {
+    return (
+      <div data-testid="requirement-rail-corroboration" data-status="placeholder">
+        <span className="text-xs" style={{ color: T.faint }}>Placeholder</span>
+        <p className="text-xs mt-1" style={{ color: 'var(--status-warn)' }}>{PLACEHOLDER_NOTE}</p>
+      </div>
+    );
+  }
+  const c = corroborationOf(detail);
+  if (c === null) return null;
+  return (
+    <div data-testid="requirement-rail-corroboration" data-status={c.status}>
+      <span className="text-xs" style={{ color: T.faint }}>
+        {c.status === 'validated' ? 'Validated' : 'Unconfirmed'}
+      </span>
+      <p className="text-xs mt-1" style={{ color: c.status === 'validated' ? T.ink : 'var(--status-warn)' }}>
+        {corroborationSentence(c)}
+      </p>
     </div>
   );
 }

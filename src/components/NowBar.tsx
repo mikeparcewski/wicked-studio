@@ -96,7 +96,7 @@ export function NowBar({
   return (
     <div
       data-testid="now-bar"
-      className="flex items-center gap-2.5 px-6 py-2 shrink-0 font-mono text-[12px] relative"
+      className="flex items-center gap-2.5 px-6 py-2 shrink-0 font-mono text-xs relative"
       style={{ borderBottom: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
     >
       <span
@@ -116,7 +116,7 @@ export function NowBar({
         data-testid="now-bar-narration"
         className="flex-1 min-w-0 truncate"
         // Prose in the sans; the bar's status word and phase stay mono (machine words).
-        style={{ color: nowColor, fontFamily: 'var(--font-sans)', fontSize: '13px' }}
+        style={{ color: nowColor, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-body)' }}
         title={nowText}
       >
         {nowText}
@@ -129,7 +129,7 @@ export function NowBar({
             onClick={() => setArtifactsOpen((v) => !v)}
             aria-expanded={artifactsOpen}
             title={`${artifacts.length} artifact${artifacts.length === 1 ? '' : 's'} so far — files touched, deliverables`}
-            className="rounded-full px-2.5 py-0.5 text-[11px]"
+            className="rounded-full px-2.5 py-0.5 text-xs"
             style={{
               background: 'var(--surface-raised)',
               color: 'var(--ink-body)',
@@ -162,7 +162,7 @@ export function NowBar({
         data-testid="now-bar-jump"
         onClick={onJumpToLatest}
         title="Scroll the feed to the latest activity"
-        className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px]"
+        className="shrink-0 rounded-full px-2.5 py-0.5 text-xs"
         style={{
           background: 'var(--surface-raised)',
           color: 'var(--ink-muted)',

@@ -2,6 +2,22 @@
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
+    // THE TYPE SCALE (round 6): Tailwind's sizes and weights are the scale's tokens (styles/tokens.css), never its own
+    // numbers. A size class is one of six steps; a weight is regular or strong; tracking is the theme's.
+    fontSize: {
+      xs: ['var(--text-caption)', { lineHeight: '1rem' }],
+      sm: ['var(--text-body)', { lineHeight: '1.25rem' }],
+      base: ['var(--text-body)', { lineHeight: '1.5rem' }],
+      lg: ['var(--text-lead)', { lineHeight: '1.5rem' }],
+      xl: ['var(--text-section)', { lineHeight: '1.75rem' }],
+      '2xl': ['var(--text-title)', { lineHeight: '2rem' }],
+      code: ['var(--text-code)', { lineHeight: '1.25rem' }],
+    },
+    fontWeight: {
+      light: 'var(--weight-regular)', normal: 'var(--weight-regular)',
+      medium: 'var(--weight-strong)', semibold: 'var(--weight-strong)', bold: 'var(--weight-strong)',
+    },
+    letterSpacing: {},
     extend: {
       colors: {
         // DES-VISION-001 §2.12 — every color class below is a SEMANTIC ALIAS

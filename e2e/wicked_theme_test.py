@@ -7,13 +7,14 @@ in a real browser at 1440x700.
      the body's computed font is Archivo (the base --font-sans in styles/tokens.css since S18c),
      that face is actually loaded (document.fonts), and the
      computed --accent is the default accent (230/74/68).
-  2. WICKED-LIGHT: on /theme, choosing "Wicked light" stamps data-theme="wicked-light",
-     writes the harbor preset inline (200 / 47% / 25%), the computed --accent is #224A5E
-     (rgb(34, 74, 94)), the body font is Archivo and Archivo is loaded; the debounced PUT
-     carries theme "wicked-light" with the preset.
-  3. THE ACCENT PICKER STILL WORKS: ArrowRight x10 on the hue wheel moves --_accent-h and
-     the computed --accent, and the theme stays wicked-light.
-  5. WICKED-DARK stamps data-theme="wicked-dark".
+  2. WICKED-LIGHT: on /theme, choosing "Wicked light" stamps data-theme="wicked-light" and writes the
+     default preset inline (200 / 47% / 25%). The wicked themes are the design council's synthesis
+     (operator's pick, 2026-10-31; the wicked-design package): with the preset untouched, the computed
+     --accent is the system's own near-black #18181A (rgb(24, 24, 26)), there is no data-accent, the body
+     font is Inter and Inter is loaded; the debounced PUT carries theme "wicked-light" with the preset.
+  3. THE ACCENT PICKER STILL WORKS: ArrowRight x10 on the hue wheel moves --_accent-h, marks the accent
+     custom (data-accent="custom") and changes the computed --accent; the theme stays wicked-light.
+  5. WICKED-DARK stamps data-theme="wicked-dark", keeps the user's accent (still custom), Inter.
   6. 0 FONT CDN REQUESTS over the whole session, and at least one woff2 served same-origin.
   7. THE OFL LICENCES SHIP: dist/fonts/LICENSE-{Inter,Archivo,JetBrainsMono}.txt are served.
 
@@ -58,6 +59,7 @@ STATE = """async () => {
   const fam = getComputedStyle(document.body).fontFamily;
   return {
     theme: root.getAttribute('data-theme'),
+    custom: root.getAttribute('data-accent'),
     h: root.style.getPropertyValue('--_accent-h'),
     s: root.style.getPropertyValue('--_accent-s'),
     l: root.style.getPropertyValue('--_accent-l'),
@@ -65,6 +67,7 @@ STATE = """async () => {
     defaultAccent: probe('hsl(230 74% 68%)'),
     bodyFont: fam.split(',')[0].trim().replace(/['"]/g, ''),
     interLoaded: [...document.fonts].some(f => f.family.replace(/['"]/g, '') === 'Inter' && f.status === 'loaded'),
+    wickedSansLoaded: [...document.fonts].some(f => f.family.replace(/['"]/g, '') === 'Wicked Sans' && f.status === 'loaded'),
     archivoLoaded: [...document.fonts].some(f => f.family.replace(/['"]/g, '') === 'Archivo' && f.status === 'loaded'),
   }; }"""
 
@@ -86,18 +89,18 @@ with sync_playwright() as p:
     page.on("request", lambda r: puts.append(json.loads(r.post_data or "{}").get("studio.appearance") or {})
             if r.method == "PUT" and r.url.endswith("/api/v1/settings") else None)
 
-    # 1. the default theme is unchanged
+    # 1. a stored pre-pair dark (the fixture's old default: dark, 230/74/68) opens as Wicked Dark on the Wicked preset,
+    #    in Inter (operator 2026-10-31: Wicked Dark and Wicked Light are the only themes; dark / light users move across)
     page.goto(f"{origin}/theme", wait_until="domcontentloaded")
     page.get_by_test_id("appearance-settings").wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.wait_for_function("() => document.documentElement.style.getPropertyValue('--_accent-h') !== ''", timeout=15000)
     s0 = page.evaluate(STATE)
-    # S18c moved the Desk's face into styles/tokens.css (--font-sans Archivo): the default body font.
-    face, face_loaded = "Archivo", s0["archivoLoaded"]
-    check("default_unchanged", s0["theme"] is None and s0["bodyFont"] == face and face_loaded
-          and s0["accent"] == s0["defaultAccent"], state=s0)
+    # The text face is Wicked Sans since round 5 (operator 2026-11-01); Inter stays behind it as the fallback.
+    check("legacy_dark_moves_to_wicked_dark", s0["theme"] == "wicked-dark" and s0["custom"] is None and s0["bodyFont"] == "Wicked Sans"
+          and (s0["h"], s0["s"], s0["l"]) == ("200", "47%", "25%"), state=s0)
 
-    # 2. wicked-light writes the harbor accent; computed --accent is #224A5E
+    # 2. wicked-light writes the default preset; the synthesis paints its own near-black action colour
     try:
         page.locator('[data-testid="theme-picker"] [data-value="wicked-light"]').click(timeout=10000)
     except Exception as e:  # noqa: BLE001
@@ -107,7 +110,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(700)  # the 400 ms persist debounce
     last_put = puts[-1] if puts else {}
     check("wicked_light_harbor", (s1["h"], s1["s"], s1["l"]) == ("200", "47%", "25%")
-          and s1["accent"] == "rgb(34, 74, 94)" and s1["bodyFont"] == "Archivo" and s1["archivoLoaded"]
+          and s1["accent"] == "rgb(24, 24, 26)" and s1["custom"] is None and s1["bodyFont"] == "Wicked Sans" and s1["wickedSansLoaded"]
           and last_put.get("theme") == "wicked-light" and last_put.get("accent_h") == 200,
           state=s1, put=last_put)
     page.wait_for_timeout(1000)  # let colour transitions settle before the capture
@@ -119,14 +122,16 @@ with sync_playwright() as p:
     for _ in range(10):
         page.keyboard.press("ArrowRight")
     s2 = page.evaluate(STATE)
-    check("accent_picker_works", s2["h"] == "210" and s2["accent"] != s1["accent"] and s2["theme"] == "wicked-light",
+    check("accent_picker_works", s2["h"] == "210" and s2["accent"] != s1["accent"] and s2["theme"] == "wicked-light"
+          and s2["custom"] == "custom",
           state=s2)
 
     # 5. wicked-dark
     page.locator('[data-testid="theme-picker"] [data-value="wicked-dark"]').click()
     page.wait_for_function("() => document.documentElement.getAttribute('data-theme') === 'wicked-dark'", timeout=5000)
     s4 = page.evaluate(STATE)
-    check("wicked_dark", s4["theme"] == "wicked-dark" and s4["h"] == "210" and s4["bodyFont"] == "Archivo", state=s4)
+    check("wicked_dark", s4["theme"] == "wicked-dark" and s4["h"] == "210" and s4["custom"] == "custom"
+          and s4["bodyFont"] == "Wicked Sans", state=s4)
     page.wait_for_timeout(1000)  # let colour transitions settle before the capture
     page.screenshot(path=str(SHOTS / "wicked-dark-theme.png"))
 

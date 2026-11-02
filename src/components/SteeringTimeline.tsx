@@ -27,7 +27,7 @@ export function SteeringTimeline({ runId }: Props): React.ReactElement {
 
   return (
     <div className="flex flex-col gap-2">
-      <p data-testid="steering-scope-note" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+      <p data-testid="steering-scope-note" className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
         Client-recorded, this session only — daemon keeps no per-action history, cleared on reload.
       </p>
       <ol data-testid="steering-timeline" className="flex flex-col gap-2">
@@ -37,7 +37,7 @@ export function SteeringTimeline({ runId }: Props): React.ReactElement {
             <li
               key={e.seq}
               data-testid="steering-entry"
-              className="rounded p-2 text-[11px]"
+              className="rounded p-2 text-xs"
               style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
             >
               <div className="flex items-center justify-between">
@@ -54,7 +54,7 @@ export function SteeringTimeline({ runId }: Props): React.ReactElement {
                   <span className="font-medium" style={{ color: 'var(--ink-high)' }}>amended instruction:</span> {e.amend}
                 </p>
               )}
-              <p className="mt-1 text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+              <p className="mt-1 text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                 effect: {e.action === 'approve-with-steer'
                   ? 'steers the next unit'
                   : e.action === 'approve'

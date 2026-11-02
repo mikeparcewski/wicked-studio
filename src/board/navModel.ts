@@ -38,7 +38,7 @@ export const BUILD_PATH = '/build';
 /** The projects page (for now the projects list; a designed Projects home follows its mockup). */
 export const PROJECTS_PATH = '/projects';
 
-export type NavId = 'home' | 'projects' | 'jobs' | 'repos' | 'report' | 'understand' | 'evaluate' | 'steering' | 'memory' | 'agents' | 'build';
+export type NavId = 'home' | 'projects' | 'jobs' | 'repos' | 'report' | 'understand' | 'evaluate' | 'steering' | 'memory' | 'agents' | 'build' | 'learn';
 
 export interface NavItem {
   id: NavId;
@@ -49,6 +49,8 @@ export interface NavItem {
   under: readonly string[];
   /** The group's primary entry (Projects): drawn a little stronger, never louder than the current page. */
   primary?: true;
+  /** A short mark after the label ("Start here"). */
+  mark?: string;
 }
 
 export interface NavGroup { id: 'work' | 'insight' | 'govern'; label: string; items: readonly NavItem[] }
@@ -71,6 +73,25 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   ] },
 ];
 
+/** Learn's address (program DES-LEARN §3): Style · Rules · Personality · Brand. */
+export const LEARN_PATH = '/learn';
+
+/** Learn's sidebar entry; where it sits depends on whether it has been used (`navGroups`). */
+export const LEARN_ITEM: NavItem = { id: 'learn', label: PAGE_NAMES.learn, path: LEARN_PATH, testId: 'nav-learn', under: [LEARN_PATH] };
+
+/**
+ * The sidebar's groups with Learn in its place (DES-LEARN §3.0): until it is used, first in Work, above
+ * Projects, marked "Start here"; once used, in Insight below Evaluate, unmarked. It never moves back
+ * (`studio.firstRun.learnUsedAt` is set once).
+ */
+export function navGroups(placement: 'start' | 'insight'): readonly NavGroup[] {
+  return NAV_GROUPS.map((g) => {
+    if (placement === 'start' && g.id === 'work') return { ...g, items: [{ ...LEARN_ITEM, mark: 'Start here' }, ...g.items] };
+    if (placement === 'insight' && g.id === 'insight') return { ...g, items: [...g.items, LEARN_ITEM] };
+    return g;
+  });
+}
+
 /** Build & settings' links, in order: the rail's old Workspace group. */
 export const BUILD_LINKS: readonly { id: string; label: string; path: string; testId: string; hint: string }[] = [
   { id: 'skills', label: PAGE_NAMES.skills, path: skillsPath(), testId: 'build-link-skills', hint: 'What your agents know how to do, and what they are given when they start' },
@@ -91,7 +112,7 @@ const within = (pathname: string, prefix: string): boolean => pathname === prefi
  *  wordmark: Home and Needs you in full. A project's own page is under Projects. */
 export function navCurrent(pathname: string): NavId | null {
   if (pathname === '/' || within(pathname, '/needs')) return 'home';
-  for (const item of [...NAV_GROUPS.flatMap((g) => g.items), BUILD_ITEM]) {
+  for (const item of [...NAV_GROUPS.flatMap((g) => g.items), LEARN_ITEM, BUILD_ITEM]) {
     if (item.under.some((p) => within(pathname, p))) return item.id;
   }
   return null;

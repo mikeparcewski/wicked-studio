@@ -110,7 +110,7 @@ interface TimeChartProps {
   'data-testid'?: string;
 }
 
-const AXIS_TICK = { fill: 'var(--ink-dim)', fontSize: 11 } as const;
+const AXIS_TICK = { fill: 'var(--ink-dim)', fontSize: 'var(--text-caption)' } as const;
 
 /** The one tooltip: the bucket's title, each series' value with its swatch, and the total. */
 function TipContent({ active, payload, label, format, titles, series }: {

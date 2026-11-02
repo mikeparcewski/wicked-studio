@@ -3512,7 +3512,9 @@ def run_scenarios(rig: Rig, page) -> None:
         row, API) and persists (the recorded run still names the corpus after a full reload)."""
         goto(page, "/testing/evals")
         tid(page, "evaluate-surface").wait_for(timeout=20_000)
-        open_fold("evaluate-import")
+        # Bring your own behaviours (DES-LEARN §5): the upload is one of three ways in.
+        tid(page, "evaluate-byo-file").click()
+        tid(page, "testing-corpus-name").wait_for(timeout=10_000)
         samples = [
             {"id": f"seed-{STAMP}-bad", "description": f"seed-surfaces {STAMP}: a wire body that never names its project",
              "kind": "bad", "steering_type": "architecture",

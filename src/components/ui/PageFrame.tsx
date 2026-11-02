@@ -6,14 +6,16 @@ export type PageWidth = 'wide' | 'narrow' | 'full';
 /** The page frame every routed page uses (design/UI-CONTRACT.md §4.6): a title, one plain intro
  *  sentence, actions (right on desktop, own row on phone), then the page's sections — centred in the
  *  main column at the page measure (operator 2026-10-16). */
-export function PageFrame({ title, intro, actions, children, width = 'wide', 'data-testid': testId = 'page-frame' }: {
+export function PageFrame({ title, intro, actions, children, width = 'wide', 'data-testid': testId = 'page-frame', titleAside }: {
   title: string; intro?: string; actions?: React.ReactNode; children: React.ReactNode; width?: PageWidth; 'data-testid'?: string;
+  /** Beside the title: the page chat's icon. */
+  titleAside?: React.ReactNode;
 }): React.ReactElement {
   return (
     <div data-testid={testId} data-width={width} className={width === 'wide' ? 'wk-page' : `wk-page wk-page--${width}`}>
       <header className="wk-page-head">
         <div className="wk-page-head-text">
-          <h1 className="wk-page-title">{title}</h1>
+          <div className="wk-pagetitle"><h1 className="wk-page-title">{title}</h1>{titleAside}</div>
           {intro !== undefined && <p className="wk-page-intro">{intro}</p>}
         </div>
         {actions !== undefined && <div className="wk-page-actions">{actions}</div>}
@@ -23,7 +25,7 @@ export function PageFrame({ title, intro, actions, children, width = 'wide', 'da
   );
 }
 
-/** A section heading inside a page (sentence case; never an uppercase micro-label). */
+/** A section heading inside a page (sentence case; never an  micro-label). */
 export function SectionTitle({ children }: { children: React.ReactNode }): React.ReactElement {
   return <h2 className="wk-section-title">{children}</h2>;
 }

@@ -22,6 +22,8 @@ export interface LaunchDraft {
   reduced: boolean;
   /** The seat that leads the job (the primary agent); null = Random, the engine picks. */
   lead: string | null;
+  /** Power mode for this job; null = the Settings default ("Power mode for new jobs"). */
+  power: boolean | null;
   skipQe: boolean;
   skipQeReason: string;
   /** The composer that opened it (a chat's composer launches into its chat). */
@@ -80,6 +82,7 @@ export function freshDraft(init: OpenLaunchWizard): LaunchDraft {
     deliverOn: true,
     reduced: false,
     lead: null,
+    power: null,
     skipQe: false,
     skipQeReason: '',
     composerKey: init.composerKey ?? null,

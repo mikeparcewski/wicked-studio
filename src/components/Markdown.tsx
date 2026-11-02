@@ -177,7 +177,7 @@ const components: Components = {
   li: ({ children }) => <li className="text-sm leading-relaxed">{children}</li>,
   table: ({ children }) => (
     <div className="overflow-x-auto my-2">
-      <table className="text-xs w-full border-collapse font-mono">{children}</table>
+      <table className="text-xs w-full border-collapse">{children}</table>
     </div>
   ),
   thead: ({ children }) => <thead style={{ borderBottom: '1px solid var(--surface-raised)' }}>{children}</thead>,

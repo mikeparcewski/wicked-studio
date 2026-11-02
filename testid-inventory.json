@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 257,
-    "occurrences": 3512,
-    "static": 2993,
-    "dynamic": 75,
-    "computed": 33
+    "files": 284,
+    "occurrences": 3941,
+    "static": 3347,
+    "dynamic": 90,
+    "computed": 44
   },
   "static": [
     {
@@ -48,6 +48,12 @@
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoGraphModal.tsx",
         "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "activity-summary",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
       ]
     },
     {
@@ -279,6 +285,12 @@
       ]
     },
     {
+      "testId": "agents-page-ask",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
       "testId": "agents-panel",
       "files": [
         "src/components/agents/AgentsPage.tsx"
@@ -480,6 +492,36 @@
       "testId": "alt-peek",
       "files": [
         "src/components/sheets/AltPeek.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-ground",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-ground-dark",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-ground-light",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-settings",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "ambient-still",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
       ]
     },
     {
@@ -736,6 +778,30 @@
       ]
     },
     {
+      "testId": "ask-card",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-confirm",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-consequence",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-count",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
       "testId": "ask-launcher",
       "files": [
         "src/components/AskLauncher.tsx"
@@ -772,10 +838,118 @@
       ]
     },
     {
+      "testId": "ask-option",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-option-meta",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-option-why",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-options",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-options-off",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
       "testId": "ask-panel",
       "files": [
         "src/components/AskLauncher.tsx",
         "src/components/chat/ChatWindow.tsx"
+      ]
+    },
+    {
+      "testId": "ask-question",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-reason",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-reason-label",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-reason-text",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-recommended",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-record",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-record-row",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-scale",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-scale-value",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-select-all",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-send",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-skip",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "testId": "ask-text",
+      "files": [
+        "src/components/ask/AskCard.tsx"
       ]
     },
     {
@@ -911,6 +1085,12 @@
       ]
     },
     {
+      "testId": "assist-msg-chip",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
       "testId": "assist-note",
       "files": [
         "src/components/AssistDock.tsx"
@@ -960,6 +1140,12 @@
     },
     {
       "testId": "assist-user-msg",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-voice-open",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -1058,6 +1244,18 @@
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "brand-tab",
+      "files": [
+        "src/components/learn/BrandTab.tsx"
+      ]
+    },
+    {
+      "testId": "brand-theme-link",
+      "files": [
+        "src/components/learn/BrandTab.tsx"
       ]
     },
     {
@@ -1884,6 +2082,12 @@
     },
     {
       "testId": "chat-step-check",
+      "files": [
+        "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-step-face",
       "files": [
         "src/components/session/RunConversation.tsx"
       ]
@@ -2999,6 +3203,12 @@
       ]
     },
     {
+      "testId": "desk-ask-voice",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
       "testId": "desk-block-agents",
       "files": [
         "src/components/desk/DeskV2.tsx"
@@ -3138,6 +3348,12 @@
     },
     {
       "testId": "desk-composer-send",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "desk-composer-voice",
       "files": [
         "src/components/session/Composer.tsx"
       ]
@@ -4172,6 +4388,12 @@
       ]
     },
     {
+      "testId": "domain-graph-coverage",
+      "files": [
+        "src/components/RepoGraphModal.tsx"
+      ]
+    },
+    {
       "testId": "editor-artifact-frame",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
@@ -4240,13 +4462,15 @@
     {
       "testId": "editor-plugin-elsewhere",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugin-internet",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -4258,19 +4482,22 @@
     {
       "testId": "editor-plugin-open",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugin-permissions",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugin-row",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -4282,25 +4509,27 @@
     {
       "testId": "editor-plugins-create",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-devhost",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-empty",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-error",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -4312,25 +4541,21 @@
     {
       "testId": "editor-plugins-loading",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-mcp-inspect",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
-      ]
-    },
-    {
-      "testId": "editor-plugins-settings",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "editor-plugins-unsupported",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx",
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -4367,6 +4592,18 @@
       "testId": "editor-torn",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "elicitation-decline",
+      "files": [
+        "src/components/ElicitationPrompt.tsx"
+      ]
+    },
+    {
+      "testId": "elicitation-error",
+      "files": [
+        "src/components/ElicitationPrompt.tsx"
       ]
     },
     {
@@ -4472,9 +4709,45 @@
       ]
     },
     {
+      "testId": "evaluate-analysis-open",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-analyze",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-analyze-error",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-back",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-behaviour",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-byo",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-byo-panel",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -4538,9 +4811,15 @@
       ]
     },
     {
-      "testId": "evaluate-import",
+      "testId": "evaluate-job",
       "files": [
-        "src/components/steer/EvaluateSurface.tsx"
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-job-read",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -4610,6 +4889,12 @@
       ]
     },
     {
+      "testId": "evaluate-judgments-fold",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-judgments-options",
       "files": [
         "src/components/steer/SystemJudgments.tsx"
@@ -4676,9 +4961,75 @@
       ]
     },
     {
+      "testId": "evaluate-page-ask",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-past",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-past-empty",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-past-run",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-paste-split",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-paste-text",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-read-error",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-rec",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-rec-none",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-rec-run",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-rec-why",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-recommended",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -4700,9 +5051,45 @@
       ]
     },
     {
+      "testId": "evaluate-results-fold",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-results-loading",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review-done",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review-import",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review-name",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-review-unmarked",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -5135,6 +5522,84 @@
       "testId": "files-scope-note",
       "files": [
         "src/components/RightPanel.tsx"
+      ]
+    },
+    {
+      "testId": "first-run",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-error",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-flow",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-hidden",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-ignore",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-known",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-live",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-reading",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-row",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-row-words",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-save-failed",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-setup",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "first-run-undo",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
       ]
     },
     {
@@ -5690,6 +6155,78 @@
       ]
     },
     {
+      "testId": "inflight-check",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-by",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-doing",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-evidence",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-later",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-progress",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-q",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-record",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-refused",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-verdict",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-why",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
+      "testId": "inflight-check-yes",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
+      ]
+    },
+    {
       "testId": "insights-accept",
       "files": [
         "src/components/insights/InsightsPage.tsx"
@@ -5831,6 +6368,36 @@
       "testId": "insights-trends",
       "files": [
         "src/plugins/wicked-insights/plugin.ts"
+      ]
+    },
+    {
+      "testId": "jobs-page-ask",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "known-agents",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "known-git",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "known-languages",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
+      "testId": "known-repos",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
       ]
     },
     {
@@ -6284,6 +6851,24 @@
       ]
     },
     {
+      "testId": "launch-wizard-power",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-power-gates",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-power-toggle",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-progress",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -6345,6 +6930,12 @@
     },
     {
       "testId": "launch-wizard-review-lead",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-review-power",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -6476,6 +7067,12 @@
       ]
     },
     {
+      "testId": "learn-hub",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
+      ]
+    },
+    {
       "testId": "learn-input",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -6490,6 +7087,18 @@
     {
       "testId": "learn-new",
       "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-no-repos",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "testId": "learn-no-topics",
+      "files": [
         "src/components/learn/LearnPage.tsx"
       ]
     },
@@ -6497,6 +7106,12 @@
       "testId": "learn-page",
       "files": [
         "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "testId": "learn-page-ask",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
       ]
     },
     {
@@ -6518,9 +7133,93 @@
       ]
     },
     {
-      "testId": "learn-repo",
+      "testId": "learn-rule",
       "files": [
-        "src/components/learn/LearnPage.tsx"
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-author",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-chat",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-count",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-empty",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-error",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-evaluate",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-import",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-list",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-loading",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-rules-note",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-setup-resume",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
+      ]
+    },
+    {
+      "testId": "learn-setup-resume-link",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
+      ]
+    },
+    {
+      "testId": "learn-starter",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
       ]
     },
     {
@@ -6530,9 +7229,21 @@
       ]
     },
     {
+      "testId": "learn-style",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
       "testId": "learn-submit",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "learn-tabs",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
       ]
     },
     {
@@ -6590,6 +7301,36 @@
       ]
     },
     {
+      "testId": "live-activity",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-earlier",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-row",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-said",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-meter",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
       "testId": "live-output",
       "files": [
         "src/components/LiveNarration.tsx"
@@ -6599,6 +7340,12 @@
       "testId": "live-output-label",
       "files": [
         "src/components/LiveNarration.tsx"
+      ]
+    },
+    {
+      "testId": "live-rolling",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
       ]
     },
     {
@@ -7736,13 +8483,44 @@
       ]
     },
     {
+      "testId": "memory-add-chat",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-close",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-add-dialog",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
+      "testId": "memory-add-import",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-add-project",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx",
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-record",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-retired",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -7754,9 +8532,40 @@
       ]
     },
     {
-      "testId": "memory-add-text",
+      "testId": "memory-add-send",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-table",
       "files": [
         "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-text",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx",
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-thread",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-turn",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-working",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
       ]
     },
     {
@@ -7802,6 +8611,18 @@
       ]
     },
     {
+      "testId": "memory-import-files",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-import-pick",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-intro",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -7844,6 +8665,12 @@
       ]
     },
     {
+      "testId": "memory-page-ask",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-proposals",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -7880,6 +8707,48 @@
       ]
     },
     {
+      "testId": "memory-retired",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-back",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-bring",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-close",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-empty",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-erased",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-row",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-row",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -7895,6 +8764,42 @@
       "testId": "memory-sentence",
       "files": [
         "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-close",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-note",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-row",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-save",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-table-text",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
       ]
     },
     {
@@ -7941,6 +8846,12 @@
     },
     {
       "testId": "nav-jobs",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-learn",
       "files": [
         "src/board/navModel.ts"
       ]
@@ -8030,9 +8941,17 @@
       ]
     },
     {
+      "testId": "nc-chat",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx",
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
       "testId": "nc-checked",
       "files": [
-        "src/components/nerve/NerveCenterPage.tsx"
+        "src/components/nerve/NerveCenterPage.tsx",
+        "src/components/nerve/NerveOverview.tsx"
       ]
     },
     {
@@ -9102,6 +10021,66 @@
       ]
     },
     {
+      "testId": "page-ask",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-close",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-engine",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-focus",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-focus-clear",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-new",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-next",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-record",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
+      "testId": "page-chat-wait",
+      "files": [
+        "src/components/chat/PageChat.tsx"
+      ]
+    },
+    {
       "testId": "page-edit-input",
       "files": [
         "src/plugins/_shared/pageEditor.ts"
@@ -9277,6 +10256,120 @@
       "testId": "peek-subject",
       "files": [
         "src/components/PeekCard.tsx"
+      ]
+    },
+    {
+      "testId": "persona-answer",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-colour",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-error",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-habit",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-loading",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-name",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-preview",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-preview-name",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-question",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-remove-override",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-save",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-scope",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-scope-me",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-scope-note",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-scope-project",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-status",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-tab",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-told",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
+      ]
+    },
+    {
+      "testId": "persona-unsupported",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
       ]
     },
     {
@@ -9612,13 +10705,85 @@
     {
       "testId": "plugin-coming-soon",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
       "testId": "plugin-coming-soon-tag",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-close",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-hears",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-live",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-manifest",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-may",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-preview",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-slot",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-switch",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-switch-error",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-switch-row",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-title",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
@@ -9671,6 +10836,60 @@
       ]
     },
     {
+      "testId": "plugin-tile",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-icon",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-line",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-live",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-off",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-preview",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-source",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-title",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-tile-where",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
       "testId": "plugin-torn",
       "files": [
         "src/components/editorHost/PluginCard.tsx",
@@ -9678,9 +10897,207 @@
       ]
     },
     {
+      "testId": "plugins-filter",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugins-grid",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
       "testId": "plugins-page",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "power-act",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-acts",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-checkpoint",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff-block",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff-divider",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff-result",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-handoff-row",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-intake",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-intake-line",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-intake-more",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-mode-default-toggle",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-ask",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-choice",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-chosen",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-confirm",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-error",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-eyebrow",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-question",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-reason",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-reasons",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-pause-undo",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-rigor-mark",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch-confirm",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch-error",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch-keep",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-switch-yes",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-toggle-mark",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "power-turn",
+      "files": [
+        "src/components/session/PowerMode.tsx"
       ]
     },
     {
@@ -9800,6 +11217,12 @@
     },
     {
       "testId": "project-ask-start",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-ask-voice",
       "files": [
         "src/components/desk/ProjectHome.tsx"
       ]
@@ -10125,6 +11548,12 @@
     },
     {
       "testId": "project-open-repo",
+      "files": [
+        "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-personality",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
       ]
@@ -10632,6 +12061,12 @@
       ]
     },
     {
+      "testId": "proposal-source-run",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
       "testId": "proposals-empty",
       "files": [
         "src/components/ProposalsList.tsx"
@@ -10669,6 +12104,18 @@
     },
     {
       "testId": "proposals-section-refresh",
+      "files": [
+        "src/components/ProposalsSection.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-section-run-filter",
+      "files": [
+        "src/components/ProposalsSection.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-section-show-all",
       "files": [
         "src/components/ProposalsSection.tsx"
       ]
@@ -11058,6 +12505,30 @@
       ]
     },
     {
+      "testId": "repo-commits",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-commits-all",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-commits-all-note",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-commits-show-all",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
       "testId": "repo-detail-error",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -11263,6 +12734,12 @@
     },
     {
       "testId": "report-agents-table",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-ask",
       "files": [
         "src/components/report/ReportPage.tsx"
       ]
@@ -11550,6 +13027,12 @@
       ]
     },
     {
+      "testId": "repos-page-ask",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repos-range",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -11580,9 +13063,45 @@
       ]
     },
     {
+      "testId": "requirement-corroboration",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-not-counted",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirement-pick",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-placeholder",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-rail-corroboration",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-row",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-unconfirmed-why",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -11595,6 +13114,12 @@
       "testId": "requirements-browser",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-coverage",
+      "files": [
+        "src/components/RequirementsCoverageSummary.tsx"
       ]
     },
     {
@@ -11616,9 +13141,39 @@
       ]
     },
     {
+      "testId": "requirements-generate",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-graph-behind",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirements-loading",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-mapping-job",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-mapping-retry",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-mapping-unknown",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -11628,9 +13183,33 @@
       ]
     },
     {
+      "testId": "requirements-not-generated",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-open-mapping-job",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirements-prev",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-range",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-real-share",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -11664,9 +13243,63 @@
       ]
     },
     {
+      "testId": "requirements-uncounted",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "rework-badge",
       "files": [
         "src/components/DecisionsLedger.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-chip",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-history",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-history-row",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise-done",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise-error",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise-menu",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
+      "testId": "rigor-raise-to",
+      "files": [
+        "src/components/session/PowerMode.tsx"
       ]
     },
     {
@@ -12056,6 +13689,18 @@
       ]
     },
     {
+      "testId": "run-learnings-line",
+      "files": [
+        "src/components/session/RunLearningsLine.tsx"
+      ]
+    },
+    {
+      "testId": "run-learnings-review",
+      "files": [
+        "src/components/session/RunLearningsLine.tsx"
+      ]
+    },
+    {
       "testId": "run-link",
       "files": [
         "src/components/RepoDetailPage.tsx",
@@ -12159,27 +13804,9 @@
       ]
     },
     {
-      "testId": "run-plugin-row",
+      "testId": "run-plugin-summary",
       "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugin-row-grant",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugin-row-permissions",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugin-row-topics",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
+        "src/components/session/RunThreadPlugin.tsx"
       ]
     },
     {
@@ -12198,30 +13825,6 @@
       "testId": "run-plugin-updated",
       "files": [
         "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugins",
-      "files": [
-        "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugins-pinned",
-      "files": [
-        "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugins-pinned-run",
-      "files": [
-        "src/components/session/RunThreadPlugin.tsx"
-      ]
-    },
-    {
-      "testId": "run-plugins-settings",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
       ]
     },
     {
@@ -12919,6 +14522,12 @@
       ]
     },
     {
+      "testId": "session-composer-voice",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "session-failed-resume",
       "files": [
         "src/components/session/RunConversation.tsx"
@@ -12967,6 +14576,12 @@
       ]
     },
     {
+      "testId": "session-gate-ask",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-assurance",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -12985,18 +14600,6 @@
       ]
     },
     {
-      "testId": "session-gate-choice-consequence",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-choice-default",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
       "testId": "session-gate-choices",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -13004,6 +14607,18 @@
     },
     {
       "testId": "session-gate-chosen",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-chosen-wait",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-confirm",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -13075,12 +14690,6 @@
       ]
     },
     {
-      "testId": "session-gate-detail",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
       "testId": "session-gate-error",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -13112,6 +14721,18 @@
     },
     {
       "testId": "session-gate-failing-base-words",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-group",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-less",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -13189,18 +14810,6 @@
       ]
     },
     {
-      "testId": "session-gate-menu",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-more",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
       "testId": "session-gate-more-about",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -13208,6 +14817,12 @@
     },
     {
       "testId": "session-gate-note",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-note-label",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -13262,24 +14877,6 @@
     },
     {
       "testId": "session-gate-refusal-changed",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-rerun",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-rerun-confirm",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
-      "testId": "session-gate-rerun-consequence",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -13531,6 +15128,12 @@
       ]
     },
     {
+      "testId": "session-progress-line",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -13544,6 +15147,12 @@
     },
     {
       "testId": "session-proposal-acceptance-detail",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-ask",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -13567,6 +15176,12 @@
       ]
     },
     {
+      "testId": "session-proposal-choices",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-confirm",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -13580,6 +15195,12 @@
     },
     {
       "testId": "session-proposal-confirm-yes",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-consequence",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -13669,18 +15290,6 @@
       ]
     },
     {
-      "testId": "session-proposal-menu",
-      "files": [
-        "src/components/session/ProposalCard.tsx"
-      ]
-    },
-    {
-      "testId": "session-proposal-more",
-      "files": [
-        "src/components/session/ProposalCard.tsx"
-      ]
-    },
-    {
       "testId": "session-proposal-more-about",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -13694,6 +15303,12 @@
     },
     {
       "testId": "session-proposal-not-now",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-option",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -13743,6 +15358,12 @@
       ]
     },
     {
+      "testId": "session-proposal-reason-text",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-relaunch-skip-qe",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -13755,19 +15376,7 @@
       ]
     },
     {
-      "testId": "session-proposal-skip-qe-cancel",
-      "files": [
-        "src/components/session/ProposalCard.tsx"
-      ]
-    },
-    {
       "testId": "session-proposal-skip-qe-consequence",
-      "files": [
-        "src/components/session/ProposalCard.tsx"
-      ]
-    },
-    {
-      "testId": "session-proposal-skip-qe-form",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -14064,6 +15673,12 @@
       ]
     },
     {
+      "testId": "session-working-floor",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-working-menu",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -14077,6 +15692,24 @@
     },
     {
       "testId": "settings-council-size",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "settings-min-coverage",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "settings-min-coverage-invalid",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "settings-min-coverage-unsupported",
       "files": [
         "src/components/SystemSettings.tsx"
       ]
@@ -15504,7 +17137,19 @@
       ]
     },
     {
+      "testId": "steer-import-example",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-import-file",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-import-format",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
@@ -15541,6 +17186,12 @@
     },
     {
       "testId": "steer-more",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-page-ask",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]
@@ -16626,6 +18277,138 @@
       ]
     },
     {
+      "testId": "style-add",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-decide-error",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-drop",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-file",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-go",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-input",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-kind",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-launch-error",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-memories-record",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-nothing",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-pipeline",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-repo",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-reset",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-results",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-rules-record",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-runline",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-source",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-source-remove",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-sources",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-station",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-ticker",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-waiting",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
       "testId": "surfaces-mock-chat",
       "files": [
         "src/components/editorHost/EditorSurfacesView.tsx"
@@ -17179,6 +18962,24 @@
       ]
     },
     {
+      "testId": "theme-ambient",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "theme-brand-link",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-learn-brand",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
       "testId": "theme-page-link",
       "files": [
         "src/components/SystemSettings.tsx"
@@ -17305,6 +19106,18 @@
       ]
     },
     {
+      "testId": "understand-ask-voice",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-chat",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
       "testId": "understand-compare",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
@@ -17342,6 +19155,12 @@
     },
     {
       "testId": "understand-graph-repo",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-new-question",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -17578,6 +19397,325 @@
       "testId": "viewer-truncation-banner",
       "files": [
         "src/components/FileViewer.tsx"
+      ]
+    },
+    {
+      "testId": "voice-ask-record",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-chart",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-field",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-filter",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-preview",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-save",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-builder-title",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-close",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-engine-missing",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-exit",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-foot",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-full",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-fwave",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-gates-count",
+      "files": [
+        "src/components/voice/VoiceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "voice-heard",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-hold",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-checks",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-close",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-gates",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-phase",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-pin",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-rigor",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-said",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-state",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-job-title",
+      "files": [
+        "src/components/voice/JobPreview.tsx"
+      ]
+    },
+    {
+      "testId": "voice-make-widget",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-mic-error",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-mic-state",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx",
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-modal",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-modal-thread",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-modal-type",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-mode",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-model-consent",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-model-download",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-model-downloading",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-model-failed",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-my-widgets",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-open",
+      "files": [
+        "src/components/voice/VoiceMicButton.tsx"
+      ]
+    },
+    {
+      "testId": "voice-picker",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-picker-close",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-picker-empty",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-picker-scrim",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "testId": "voice-read-aloud",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-scrim",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "testId": "voice-setup",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-trans",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-type",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-undo",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-undo-button",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-wave",
+      "files": [
+        "src/components/voice/VoiceWave.tsx"
+      ]
+    },
+    {
+      "testId": "voice-widget-add",
+      "files": [
+        "src/components/voice/VoiceDashboard.tsx"
       ]
     },
     {
@@ -18072,6 +20210,12 @@
       ]
     },
     {
+      "pattern": "*-breakdown",
+      "files": [
+        "src/components/RequirementsCoverageSummary.tsx"
+      ]
+    },
+    {
       "pattern": "*-button",
       "files": [
         "src/components/ui/OverflowMenu.tsx"
@@ -18142,12 +20286,19 @@
       ]
     },
     {
+      "pattern": "*-headline",
+      "files": [
+        "src/components/RequirementsCoverageSummary.tsx"
+      ]
+    },
+    {
       "pattern": "*-input",
       "files": [
         "src/components/FacetAutocomplete.tsx",
         "src/components/SteeringGrid.tsx",
         "src/components/ui/Combobox.tsx",
-        "src/components/ui/FilePick.tsx"
+        "src/components/ui/FilePick.tsx",
+        "src/components/voice/VoiceModal.tsx"
       ]
     },
     {
@@ -18167,6 +20318,12 @@
       "pattern": "*-list",
       "files": [
         "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
+      "pattern": "*-mark",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -18357,9 +20514,21 @@
       ]
     },
     {
+      "pattern": "evaluate-byo-*",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
+      ]
+    },
+    {
       "pattern": "evaluate-judgments-scope-*",
       "files": [
         "src/components/steer/SystemJudgments.tsx"
+      ]
+    },
+    {
+      "pattern": "evaluate-mark-*",
+      "files": [
+        "src/components/steer/EvalPlan.tsx"
       ]
     },
     {
@@ -18369,9 +20538,21 @@
       ]
     },
     {
+      "pattern": "first-run-record-*",
+      "files": [
+        "src/components/desk/FirstRun.tsx"
+      ]
+    },
+    {
       "pattern": "graph-stat-*",
       "files": [
         "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "pattern": "inflight-check-opt-*",
+      "files": [
+        "src/components/session/InflightCheck.tsx"
       ]
     },
     {
@@ -18435,6 +20616,12 @@
       ]
     },
     {
+      "pattern": "learn-panel-*",
+      "files": [
+        "src/components/learn/LearnHub.tsx"
+      ]
+    },
+    {
       "pattern": "learn-source-*",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -18468,6 +20655,18 @@
       "pattern": "match-theme-*",
       "files": [
         "src/components/editorPorts/MatchTheme.tsx"
+      ]
+    },
+    {
+      "pattern": "memory-*",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "pattern": "persona-dial-*",
+      "files": [
+        "src/components/learn/PersonaTab.tsx"
       ]
     },
     {
@@ -18513,6 +20712,12 @@
       ]
     },
     {
+      "pattern": "theme-*",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
       "pattern": "unit-output-*",
       "files": [
         "src/components/NarratorFeed.tsx"
@@ -18522,6 +20727,30 @@
       "pattern": "unit-output-toggle-*",
       "files": [
         "src/components/NarratorFeed.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-line-*",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-widget-*",
+      "files": [
+        "src/components/voice/VoiceDashboard.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-widget-delete-*",
+      "files": [
+        "src/components/voice/WidgetPicker.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-widget-remove-*",
+      "files": [
+        "src/components/voice/VoiceDashboard.tsx"
       ]
     }
   ],
@@ -18577,9 +20806,21 @@
       ]
     },
     {
+      "expression": "open ? tid(testIds, 'send', /* testid */ 'ask-send') : tid(testIds, 'confirm', /* testid */ 'ask-confirm')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
       "expression": "openTestId",
       "files": [
         "src/components/calm/Calm.tsx"
+      ]
+    },
+    {
+      "expression": "reasonCfg.labelTestId ?? tid(testIds, 'reasonLabel', /* testid */ 'ask-reason-label')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
       ]
     },
     {
@@ -18607,7 +20848,9 @@
         "src/components/ProvenanceLine.tsx",
         "src/components/QeOffNote.tsx",
         "src/components/QeRefusalWarning.tsx",
+        "src/components/RepoDetailPage.tsx",
         "src/components/RepoFindings.tsx",
+        "src/components/RequirementsCoverageSummary.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/SkillChips.tsx",
         "src/components/SkillFindings.tsx",
@@ -18616,13 +20859,16 @@
         "src/components/WhatWhere.tsx",
         "src/components/agents/AgentsPage.tsx",
         "src/components/agents/SetupPanel.tsx",
+        "src/components/ask/AskCard.tsx",
         "src/components/calm/Calm.tsx",
         "src/components/charts/CategoryBars.tsx",
         "src/components/charts/Chart.tsx",
+        "src/components/chat/PageChat.tsx",
         "src/components/dashboardKit.tsx",
         "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskParts.tsx",
         "src/components/desk/UnderstandPage.tsx",
+        "src/components/editors/PluginLivePreview.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
         "src/components/insights/InsightsLine.tsx",
         "src/components/memory/MemoryPage.tsx",
@@ -18630,6 +20876,7 @@
         "src/components/report/ReportPage.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
+        "src/components/session/PowerMode.tsx",
         "src/components/session/RunConversation.tsx",
         "src/components/steer/EvaluateSurface.tsx",
         "src/components/steer/SeStat.tsx",
@@ -18646,7 +20893,10 @@
         "src/components/ui/StateBanner.tsx",
         "src/components/ui/Switch.tsx",
         "src/components/ui/Tabs.tsx",
-        "src/components/ui/TechDetails.tsx"
+        "src/components/ui/TechDetails.tsx",
+        "src/components/voice/VoiceMicButton.tsx",
+        "src/components/voice/VoiceModal.tsx",
+        "src/components/voice/VoiceWave.tsx"
       ]
     },
     {
@@ -18767,6 +21017,54 @@
       ]
     },
     {
+      "expression": "tid(props.testIds, 'root', /* testid */ 'ask-card')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'confirm', /* testid */ 'ask-confirm')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'consequence', /* testid */ 'ask-consequence')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'group', /* testid */ 'ask-options')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'option', /* testid */ 'ask-option')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'option', /* testid */ 'ask-scale')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'reason', /* testid */ 'ask-reason-text')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
+      "expression": "tid(testIds, 'reason', /* testid */ 'ask-text')",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
       "expression": "titleTestId",
       "files": [
         "src/components/calm/Calm.tsx"
@@ -18783,6 +21081,12 @@
       "expression": "triggerTestId",
       "files": [
         "src/components/ProjectSwitcher.tsx"
+      ]
+    },
+    {
+      "expression": "w?.testid",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
       ]
     }
   ]

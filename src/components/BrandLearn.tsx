@@ -65,10 +65,15 @@ function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export function BrandLearn(): React.ReactElement {
+export function BrandLearn({ onApplied, initialUrl }: {
+  /** DES-LEARN §3.0: an applied brand counts as using Learn. */
+  onApplied?: () => void;
+  /** A website to start from (first run's "Use your site's colours?"). */
+  initialUrl?: string;
+} = {}): React.ReactElement {
   const projects = useProjectsStore((s) => s.projects);
   const [kind, setKind] = useState<LearnKind>('url');
-  const [source, setSource] = useState('');
+  const [source, setSource] = useState(initialUrl ?? '');
   const [projectId, setProjectId] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
   const [status, setStatus] = useState<string | null>(null);
@@ -222,6 +227,7 @@ export function BrandLearn(): React.ReactElement {
     });
     setPhase('applied');
     setStatus('Applied — your workspace appearance is saved.');
+    onApplied?.();
   }
 
   function onDiscard(): void {
@@ -241,7 +247,7 @@ export function BrandLearn(): React.ReactElement {
       className="wk-card wk-pg-set-stack"
     >
       <SectionTitle>Learn from a brand</SectionTitle>
-      <p className="wk-field-note">Learn colors from a website, PDF, or image, then preview and apply them to your workspace; choose a logo separately above.</p>
+      <p className="wk-field-note">Point it at your website, a brand PDF or an image. It reads the colours and maps them onto studio, and the whole page previews them before you apply. No logo is learned; add one in Settings → Theme.</p>
       <div className="flex items-center gap-4 flex-wrap mb-2">
         {LEARN_KINDS.map((k) => (
           <label key={k} className="flex items-center gap-1.5 text-xs cursor-pointer">

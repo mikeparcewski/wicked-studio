@@ -26,6 +26,7 @@ import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useHandoverProgress } from '../../store/visit.js';
 import { QeSettingOffer } from '../QeRefusalWarning.js';
 import { Skeleton, StateBanner } from '../ui/index.js';
+import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 
 /** In progress shows at most this many jobs; "All jobs" has the rest. */
 const PROGRESS_MAX = 3;
@@ -140,6 +141,7 @@ export function DeskHome({
             <label htmlFor={askId} className="wk-visually-hidden">What do you want done?</label>
             <input id={askId} type="text" value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="What do you want done?"
               autoComplete="off" className="wk-home-ask-input" data-testid="desk-ask-input" />
+            <VoiceMicButton size="xs" testId="desk-ask-voice" />
             <button type="submit" className="wk-home-btn wk-home-btn--primary" data-testid="desk-ask-start">Start</button>
           </form>
         </header>

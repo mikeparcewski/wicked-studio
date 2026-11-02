@@ -303,7 +303,7 @@ export function RunTimes({
       title={`derived from the run's event log (the run record carries no timestamps) — started: ${iso(started)} · ended: ${iso(ended)}`}
     >
       {rows.map(([label, value, title]) => (
-        <div key={label} className="flex gap-2 text-[11px]">
+        <div key={label} className="flex gap-2 text-xs">
           <span className="w-20 shrink-0 font-mono" style={{ color: 'var(--ink-dim)' }}>{label}</span>
           <span className="font-mono" style={{ color: 'var(--ink-muted)' }} {...(title !== undefined ? { title } : {})}>{value}</span>
         </div>

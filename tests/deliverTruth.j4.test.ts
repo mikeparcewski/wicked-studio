@@ -83,7 +83,9 @@ describe('J4: "The checks passed" only of the tree that shipped', () => {
     const posthoc = run('completed', 'rejected', { delivery: 'delivered', deliverUrl: PR });
     const overridden = 'Overridden by you: test failed on this change and its base.';
     const w = finalWords(posthoc, { done: 2, total: 2 }, { ...PASSED, overridden, deliveryVerified: false });
-    expect(w.line).toBe(`${overridden} Nothing re-checked the tree that was delivered. Pull request #1117 is open.`);
+    // Operator 2026-10-29: an approved floor's delivery leads with where it went ("Delivered as pull request #N").
+    expect(w.lead).toBe('Delivered as pull request #1117');
+    expect(w.line).toBe(`${overridden} Nothing re-checked the tree that was delivered.`);
   });
 
   it('a run with no deliver step keeps its acceptance sentence', () => {

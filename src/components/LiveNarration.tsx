@@ -63,7 +63,7 @@ export function LiveNarration({ runId, ord, phase }: { runId: string; ord: numbe
               not the durable record — say exactly that, house grammar. */}
           <p
             data-testid="live-output-label"
-            className="mb-1 text-[10px] font-mono"
+            className="mb-1 text-xs font-mono"
             style={{ color: 'var(--ink-dim)' }}
           >
             Live output — the full transcript lands when the unit completes.
@@ -72,7 +72,7 @@ export function LiveNarration({ runId, ord, phase }: { runId: string; ord: numbe
             <pre
               ref={scrollRef}
               data-testid={`live-narration-text-${ord}`}
-              className="max-h-64 overflow-auto rounded-lg p-2.5 text-[11px] leading-snug whitespace-pre-wrap break-words font-mono"
+              className="max-h-64 overflow-auto rounded-lg p-2.5 text-xs leading-snug whitespace-pre-wrap break-words font-mono"
               style={{ background: 'var(--surface-base)', color: 'var(--ink-body)', border: '1px solid var(--surface-raised)' }}
             >
               {tail}

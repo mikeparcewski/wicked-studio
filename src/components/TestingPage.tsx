@@ -53,7 +53,7 @@ export function TestingPage({ page, campaignId, runs, navigate, launchIntent = n
         )
       ) : (
         // Evals is hosted by the Desk's Evaluate tab, which names it; no page title of its own.
-        <EvaluateSurface navigate={navigate} />
+        <EvaluateSurface navigate={navigate} runs={runs} />
       )}
     </div>
   );

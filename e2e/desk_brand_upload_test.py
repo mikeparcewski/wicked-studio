@@ -86,7 +86,7 @@ with sync_playwright() as p:
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-    page.goto(f"{origin}/theme", wait_until="networkidle")
+    page.goto(f"{origin}/learn?tab=brand", wait_until="networkidle")
     section = page.get_by_test_id("brand-learn")
     section.wait_for(state="visible", timeout=15000)
 
@@ -145,7 +145,7 @@ with sync_playwright() as p:
     ctx = browser.new_context(viewport={"width": 1440, "height": 700}, device_scale_factor=1)
     page = ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(f"{origin}/theme", wait_until="networkidle")
+    page.goto(f"{origin}/learn?tab=brand", wait_until="networkidle")
     page.get_by_test_id("brand-learn").wait_for(state="visible", timeout=15000)
     page.get_by_test_id("learn-source-image").check()
     page.get_by_test_id("learn-file-input").set_input_files(BRAND)
@@ -161,7 +161,7 @@ with sync_playwright() as p:
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1, is_mobile=True, has_touch=True)
     page = ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(f"{origin}/theme", wait_until="networkidle")
+    page.goto(f"{origin}/learn?tab=brand", wait_until="networkidle")
     page.get_by_test_id("brand-learn").wait_for(state="visible", timeout=15000)
     page.get_by_test_id("learn-source-image").check()
     page.get_by_test_id("learn-file-input").set_input_files(BRAND)

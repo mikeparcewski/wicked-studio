@@ -28,8 +28,8 @@ function DetailRow({ label, testid, children }: {
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <div className="flex gap-2 text-[11px]">
-      <span className="w-24 shrink-0 text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>{label}</span>
+    <div className="flex gap-2 text-xs">
+      <span className="w-24 shrink-0 text-xs " style={{ color: 'var(--ink-dim)' }}>{label}</span>
       <span data-testid={testid} className="min-w-0 break-words" style={{ color: 'var(--ink-muted)' }}>{children}</span>
     </div>
   );
@@ -39,7 +39,7 @@ function ChipList({ values }: { values: string[] }): React.ReactElement {
   return (
     <span className="inline-flex flex-wrap gap-1">
       {values.map((v) => (
-        <span key={v} className="rounded px-1.5 text-[10px] font-mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
+        <span key={v} className="rounded px-1.5 text-xs font-mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}>
           {v}
         </span>
       ))}
@@ -136,7 +136,7 @@ function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: Stee
                   onChange={(e) => setPicked((p) => (e.target.checked ? [...p, v.token] : p.filter((t) => t !== v.token)))}
                 />
                 <span>{v.label}</span>
-                <code className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>{v.token}</code>
+                <code className="font-mono text-xs" style={{ color: 'var(--ink-dim)' }}>{v.token}</code>
               </label>
             ))}
             <div className="flex gap-2">
@@ -145,7 +145,7 @@ function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: Stee
                 data-testid="steering-rule-hold-confirm"
                 disabled={pick === null || busy}
                 onClick={() => { if (pick !== null) void write(pick); }}
-                className="rounded px-2 py-1 text-[10px] font-semibold"
+                className="rounded px-2 py-1 text-xs font-semibold"
                 style={{ background: 'var(--accent)', color: 'var(--on-accent)', opacity: pick === null || busy ? 0.5 : 1 }}
               >
                 Hold
@@ -154,7 +154,7 @@ function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: Stee
                 type="button"
                 data-testid="steering-rule-hold-cancel"
                 onClick={() => setPicking(false)}
-                className="rounded px-2 py-1 text-[10px]"
+                className="rounded px-2 py-1 text-xs"
                 style={{ border: '1px solid var(--border)', color: 'var(--ink-muted)' }}
               >
                 Cancel
@@ -206,7 +206,7 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired,
       <div className="flex items-center gap-2">
         <span className="font-mono text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>{rule.id}</span>
         <SeverityChip severity={rule.severity} />
-        <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>{rule.rule_type}</span>
+        <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>{rule.rule_type}</span>
         <button
           data-testid="steering-drawer-close"
           type="button"
@@ -220,7 +220,7 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired,
       </div>
 
       {/* DC-S8 (B11): scope and effect as one sentence, before the field rows. */}
-      <p data-testid="rule-sentence" className="m-0 text-[12px]" style={{ color: 'var(--ink-body)' }}>{ruleSentence(rule, projectName)}</p>
+      <p data-testid="rule-sentence" className="m-0 text-xs" style={{ color: 'var(--ink-body)' }}>{ruleSentence(rule, projectName)}</p>
 
       <div data-testid="steering-rule-detail" className="flex flex-col gap-1.5">
         <DetailRow label="Statement" testid="steering-rule-statement">{rule.statement}</DetailRow>
@@ -241,7 +241,7 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired,
             <span className="inline-flex items-center gap-2">
               <EffectBadge effect={rule.effect} />
               {rule.trigger?.contains != null && rule.trigger.contains !== '' && (
-                <span className="font-mono text-[10px]" title="trigger.contains — the regex tested over the evaluated context">
+                <span className="font-mono text-xs" title="trigger.contains — the regex tested over the evaluated context">
                   when /{rule.trigger.contains}/
                 </span>
               )}
@@ -292,7 +292,7 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired,
 
       <div className="flex items-center justify-end gap-2 pt-1">
         {rule.retired === true ? (
-          <span data-testid="steering-rule-retired-note" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+          <span data-testid="steering-rule-retired-note" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
             retired — withdrawn from recall and enforcement; kept listed because past decisions cite it
           </span>
         ) : (
@@ -301,7 +301,7 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired,
               data-testid="steering-edit-open"
               type="button"
               onClick={() => onEdit(rule)}
-              className="rounded px-2 py-1 text-[10px] font-semibold"
+              className="rounded px-2 py-1 text-xs font-semibold"
               style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
             >
               Edit…
@@ -310,7 +310,7 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired,
               data-testid="steering-retire-open"
               type="button"
               onClick={() => setRetiring(true)}
-              className="rounded px-2 py-1 text-[10px] font-semibold"
+              className="rounded px-2 py-1 text-xs font-semibold"
               style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
             >
               Retire…

@@ -69,11 +69,11 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
             <li key={u.ord} data-testid="ledger-row" data-ord={u.ord} style={rowStyle}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1">
-                  <span className="font-semibold text-[11px] font-mono" style={{ color: 'var(--ink-high)' }}>unit #{u.ord}</span>
+                  <span className="font-semibold text-xs font-mono" style={{ color: 'var(--ink-high)' }}>unit #{u.ord}</span>
                   {(u.role === 'creator' || u.role === 'evaluator') && (
                     <span
                       data-testid="role-badge"
-                      className="text-[10px] font-mono px-1 rounded"
+                      className="text-xs font-mono px-1 rounded"
                       style={{
                         background: u.role === 'evaluator' ? 'var(--accent-subtle)' : 'var(--status-run-dim)',
                         color: u.role === 'evaluator' ? 'var(--accent)' : 'var(--status-run)',
@@ -85,7 +85,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                   {u.gate != null && u.gate !== 'auto' && (
                     <span
                       data-testid="gate-badge"
-                      className="text-[10px] font-mono px-1 rounded"
+                      className="text-xs font-mono px-1 rounded"
                       style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
                     >
                       {typeof u.gate === 'string' && u.gate === 'human_confirm'
@@ -98,21 +98,21 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                   {u.attempts.length > 1 && (
                     <span
                       data-testid="rework-badge"
-                      className="text-[10px] font-mono px-1 rounded"
+                      className="text-xs font-mono px-1 rounded"
                       style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
                     >
                       ×{u.attempts.length}
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+                <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                   {u.resolved ? u.stage : 'resolving…'}
                 </span>
               </div>
 
               <RoutingProvenance routing={u.routing} />
               {u.skillRef && (
-                <p className="text-[11px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+                <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                   skill: <span style={{ color: 'var(--ink-muted)' }}>{u.skillRef}</span>
                 </p>
               )}
@@ -123,7 +123,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                   className="mt-1 rounded p-1.5"
                   style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
                 >
-                  <p className="text-[11px] font-mono">
+                  <p className="text-xs font-mono">
                     <span
                       className="font-semibold"
                       style={{ color: g.combined ? 'var(--status-run)' : 'var(--status-fail)' }}
@@ -139,19 +139,19 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                     </span>
                   </p>
                   {g.hasDeterministicFloor && (
-                    <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+                    <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                       deterministic: {g.deterministicPass ? 'pass' : 'fail'}
                     </p>
                   )}
                   {g.agentVerdict !== null && (
-                    <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+                    <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                       agent: {g.agentVerdict}
                       {g.agentReasoning ? ` — ${g.agentReasoning}` : ''}
                     </p>
                   )}
                   {/* studio#306: a judge the engine deliberately did not run is no verdict. */}
                   {g.judgeSkipped !== null && (
-                    <p data-testid="ledger-judge-skipped" className="text-[10px] font-mono" style={{ color: 'var(--status-gate)' }}>
+                    <p data-testid="ledger-judge-skipped" className="text-xs font-mono" style={{ color: 'var(--status-gate)' }}>
                       judge skipped — {g.judgeSkipped}
                     </p>
                   )}
@@ -160,7 +160,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                       repeating it dressed as an evaluator verdict is the theater review
                       #7 flagged. A fail, or a pass that names its policies, still shows. */}
                   {g.evaluatorPass !== null && !(g.evaluatorPass && g.evaluatorPolicies.length === 0) && (
-                    <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+                    <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                       evaluator: {g.evaluatorPass ? 'pass' : 'fail'}
                       {g.evaluatorPolicies.length > 0
                         ? ` — ${g.evaluatorPolicies.join(', ')}`
@@ -168,7 +168,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                     </p>
                   )}
                   {g.denialReason && (
-                    <p className="text-[10px] font-mono" style={{ color: 'var(--status-fail)' }}>
+                    <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>
                       reason: {g.denialReason}
                     </p>
                   )}
@@ -176,7 +176,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
               ))}
 
               {u.denialReason && u.gateEvals.length === 0 && (
-                <p className="mt-1 text-[11px] font-mono" style={{ color: 'var(--status-fail)' }} data-testid="ledger-denial">
+                <p className="mt-1 text-xs font-mono" style={{ color: 'var(--status-fail)' }} data-testid="ledger-denial">
                   denied: {u.denialReason}
                 </p>
               )}
@@ -186,7 +186,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
           {pendingGate !== null && (
             <li
               data-testid="ledger-pending"
-              className="rounded p-2 text-[11px] font-mono"
+              className="rounded p-2 text-xs font-mono"
               style={{
                 background: 'var(--status-gate-dim)',
                 border: '1px dashed var(--status-gate)',
@@ -201,7 +201,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
           {nextUnitOrd !== null && (
             <li
               data-testid="ledger-next"
-              className="rounded p-2 text-[11px] font-mono"
+              className="rounded p-2 text-xs font-mono"
               style={{
                 border: '1px dashed var(--surface-raised)',
                 color: 'var(--ink-dim)',

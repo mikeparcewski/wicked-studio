@@ -104,25 +104,28 @@ with sync_playwright() as p:
         sheet_tab(page, "whatwhere")
 
     def section_rerun() -> None:
-        # S16a-1b: "Rerun from <step>" is one more choice on the session thread's gate row (under Other options).
+        # S16a-1b: "Rerun from <step>" is one more choice on the session thread's gate row (a card, guided asks).
         page.goto(f"{origin}/s/run%3Ar-rerun", wait_until="networkidle")
         page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
         choice = page.locator('[data-testid="session-gate-choice"][data-choice-key="rerun"]')
         choice.wait_for(state="attached", timeout=10000)
-        labels = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choice"][data-choice-key="rerun"]')].map(e => e.textContent.trim())""")
-        # ui-v2 gate: the rerun is one of the gate's Other options, labelled in plain words ("Redo from the build
-        # step", never the phase list); still exactly one, naming the rewind target.
+        labels = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choice"][data-choice-key="rerun"] .wk-ask-opt-label')].map(e => e.textContent.trim())""")
+        # Guided asks: the rerun is one of the gate's cards, labelled in plain words ("Redo from the build step", never
+        # the phase list); still exactly one, naming the rewind target.
         check("only-the-rewind-target-offers", labels == ["Redo from the build step"], labels=labels)
-        check("no-preview-before-asked", page.get_by_test_id("session-gate-rerun").count() == 0)
-        click_gate_choice(page, "rerun")
-        page.get_by_test_id("session-gate-rerun-consequence").wait_for(state="visible")
-        consequence = text(page, "session-gate-rerun-consequence")
+        check("no-preview-before-asked", page.locator('[data-testid="session-gate-consequence"][data-option="rerun"]').count() == 0)
+        # Picking the card is the preview: what it keeps and redoes, and the primary that takes it — nothing is sent.
+        page.locator('[data-testid="session-gate-choice"][data-choice-key="rerun"]').click()
+        line = page.locator('[data-testid="session-gate-consequence"][data-option="rerun"]')
+        line.wait_for(state="visible")
+        page.mouse.move(0, 0)
+        consequence = (line.text_content() or "").strip().removeprefix("If you choose this:").strip()
         check("preview-names-kept-and-redone", consequence == CONSEQUENCE, consequence=consequence)
-        check("preview-on-screen", on_screen(page, "session-gate-rerun-consequence") and on_screen(page, "session-gate-rerun-confirm"))
+        check("preview-on-screen", on_screen(page, "session-gate-consequence") and on_screen(page, "session-gate-confirm"))
         check("nothing-sent-by-the-preview", fixture_posts(origin, "gate-posts") == [])
         page.screenshot(path=str(SHOTS / f"wavec-runpage-desk-rerun.png"))
-        label = text(page, "session-gate-rerun-confirm")
-        page.get_by_test_id("session-gate-rerun-confirm").click()
+        label = text(page, "session-gate-confirm")
+        page.get_by_test_id("session-gate-confirm").click()
         # The 10 s undo window, then the one POST; the row folds to its receipt.
         page.wait_for_function("""() => (document.querySelector('[data-testid="session-gate-chosen"]')?.textContent || '').includes('Rerun from build,')""", timeout=25000)
         posts = fixture_posts(origin, "gate-posts")

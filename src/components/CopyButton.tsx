@@ -50,7 +50,7 @@ export function CopyButton({ command, label }: { command: string; label?: string
       data-testid="copy-command"
       data-command={command}
       data-state={state}
-      className="px-1.5 rounded text-[10px] font-mono font-semibold align-baseline"
+      className="px-1.5 rounded text-xs font-mono font-semibold align-baseline"
       style={{
         background: 'var(--surface-raised)',
         color: state === 'failed' ? 'var(--status-fail)' : 'var(--ink-muted)',

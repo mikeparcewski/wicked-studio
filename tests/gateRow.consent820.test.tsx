@@ -3,7 +3,7 @@
  * workers (default, marked, never preselected) / Also install into my CLIs / Decline — and each
  * shows the files it writes, `~/` form, the operator's own files said so.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { CoreEvent } from '../src/api/types.js';
@@ -13,6 +13,7 @@ import { setUndoWindowForTest } from '../src/board/undoQueue.js';
 import { GateRow } from '../src/components/session/GateRow.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
+import { chooseGate } from './askGateHelpers.js';
 import { makeUnit, makeView } from './factories.js';
 
 const RUN = 'r-820';
@@ -110,13 +111,18 @@ describe('core#820 — the row', () => {
     const buttons = await screen.findAllByTestId('session-gate-choice');
     expect(buttons.map((b) => b.dataset['choiceKey'])).toEqual(['consent:worker', 'consent:operator', 'decline']);
     expect(buttons.every((b) => b.dataset['recommended'] === 'false')).toBe(true);
-    expect(screen.getAllByTestId('session-gate-choice-default')).toHaveLength(1);
+    // The producer's default is marked, never preselected: consent is asked every time.
+    expect(buttons.every((b) => b.getAttribute('aria-checked') === 'false')).toBe(true);
+    // the default is marked exactly once, on its own card
+    const marks = screen.getAllByTestId('ask-option-meta');
+    expect(marks.map((m) => m.textContent)).toEqual(['default']);
+    expect(buttons.map((b) => (b.textContent ?? '').match(/default/g)?.length ?? 0).reduce((x, y) => x + y, 0)).toBe(1);
     const lists = screen.getAllByTestId('session-gate-consent-writes');
     expect(lists.map((l) => l.dataset['choiceKey'])).toEqual(['consent:worker', 'consent:operator']);
     const own = screen.getAllByTestId('session-gate-consent-write').filter((li) => li.dataset['own'] === 'true');
     expect(own).toHaveLength(1);
     expect(own[0]!.textContent).toMatch(/^your own /);
-    fireEvent.click(buttons[1]!);
+    chooseGate(buttons[1]!);
     await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalled());
     expect(vi.mocked(client.api.confirmGate).mock.calls[0]![1]).toMatchObject({ approve: true, action: 'consent:operator', ord: 9 });
   });

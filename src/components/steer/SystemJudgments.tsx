@@ -33,7 +33,8 @@ type Load =
   | { kind: 'failed'; error: unknown }
   | { kind: 'ok'; report: DefaultEvalReport | null };
 
-export function SystemJudgments(): React.ReactElement {
+/** `folded`: inside Evaluate's fold, whose summary already names it, so no heading of its own. */
+export function SystemJudgments({ folded = false }: { folded?: boolean } = {}): React.ReactElement {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
   const [runError, setRunError] = useState<unknown>(null);
@@ -86,16 +87,16 @@ export function SystemJudgments(): React.ReactElement {
 
   if (load.kind === 'absent') {
     return (
-      <section className="wk-ue-sec" data-testid="evaluate-judgments" aria-labelledby="evaluate-judgments-title">
-        <h2 id="evaluate-judgments-title" className="wk-ue-label">How well the system judges</h2>
+      <section className="wk-ue-sec" data-testid="evaluate-judgments" {...(folded ? { 'aria-label': 'How well the system judges' } : { 'aria-labelledby': 'evaluate-judgments-title' })}>
+        {!folded && <h2 id="evaluate-judgments-title" className="wk-ue-label">How well the system judges</h2>}
         <p className="wk-ue-quiet" data-testid="evaluate-judgments-absent">This crew does not score its own judgments yet (it needs a crew with the default evals).</p>
       </section>
     );
   }
 
   return (
-    <section className="wk-ue-sec" data-testid="evaluate-judgments" aria-labelledby="evaluate-judgments-title">
-      <h2 id="evaluate-judgments-title" className="wk-ue-label">How well the system judges</h2>
+    <section className="wk-ue-sec" data-testid="evaluate-judgments" {...(folded ? { 'aria-label': 'How well the system judges' } : { 'aria-labelledby': 'evaluate-judgments-title' })}>
+      {!folded && <h2 id="evaluate-judgments-title" className="wk-ue-label">How well the system judges</h2>}
       <p className="wk-ue-note wk-ue-judge-when" data-testid="evaluate-judgments-when">
         {report !== null
           ? <><span title={absTime(Date.parse(report.createdAt))}>Last run {relTime(Date.parse(report.createdAt))}</span> · <span data-testid="evaluate-judgments-sentence">{judgeSentence(report)}</span></>

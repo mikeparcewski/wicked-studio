@@ -78,7 +78,7 @@ export function HotspotsView({ nodes, selectedId, onSelect }: Props): React.Reac
                     {displayName}
                   </span>
                   {filePart && (
-                    <span className="text-[11px] truncate font-mono" style={{ color: 'var(--ink-dim)' }}>
+                    <span className="text-xs truncate font-mono" style={{ color: 'var(--ink-dim)' }}>
                       {n.kind && <span style={{ color: 'var(--ink-muted)', marginRight: '4px' }}>{n.kind}</span>}
                       {filePart}
                     </span>

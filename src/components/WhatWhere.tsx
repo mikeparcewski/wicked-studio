@@ -24,7 +24,7 @@ function Row({ label, value, mono, title, testId }: {
   label: string; value: string; mono?: boolean; title?: string; testId?: string;
 }): React.ReactElement {
   return (
-    <div className="flex gap-2 text-[11px]" {...(testId !== undefined ? { 'data-testid': testId } : {})}>
+    <div className="flex gap-2 text-xs" {...(testId !== undefined ? { 'data-testid': testId } : {})}>
       <span className="w-20 shrink-0 font-mono" style={{ color: 'var(--ink-dim)' }}>{label}</span>
       <span
         className={mono ? 'font-mono break-all' : ''}

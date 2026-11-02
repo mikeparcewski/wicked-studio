@@ -111,6 +111,7 @@ with sync_playwright() as p:
     gate_sent_at.clear()
     clicked_at = time.monotonic()
     page.locator('[data-testid="session-gate-choice"][data-choice-key="approve"]').click()
+    page.get_by_test_id("session-gate-confirm").click()  # guided asks: the primary sends the picked card
     page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10000)
     # The one POST and the settled receipt, polled (a loaded runner's timer may lag) …
     posts: list = []

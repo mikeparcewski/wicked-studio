@@ -39,6 +39,7 @@ import type {
 
 import { ApiError, apiStatus } from './errors.js';
 import type { GuidanceUpdate } from './guidance.js';
+import type { ElicitationAnswerBody } from './ask.js';
 import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
 
 export type * from './types.js';
@@ -282,8 +283,12 @@ export const api = {
   },
 
   /** Cancel a running or paused run (the distinct third action, §11.1). */
-  cancelRun: (id: string) =>
-    apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  /** (crew api-types 0.161.0 `CancelRunRequest`) `reason` and `input` ride the `run.cancelled` audit line; with neither,
+   *  the POST stays bodiless (an older crew reads no body). */
+  cancelRun: (id: string, body?: { reason?: string; input?: 'voice' }) =>
+    apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/cancel`, body !== undefined && (body.reason !== undefined || body.input !== undefined)
+      ? { method: 'POST', body: JSON.stringify(body) }
+      : { method: 'POST' }),
 
   /**
    * Upsert the run's ONE durable operator guidance note (CREW-UX-7, crew#312 —
@@ -396,7 +401,7 @@ export const api = {
   },
 
   /** Answer an open elicitation. A 409 means our elicitationId was stale (DES-002 v0.22). */
-  respondToElicitation: (id: string, body: ElicitationResponse) =>
+  respondToElicitation: (id: string, body: ElicitationResponse | ElicitationAnswerBody) =>
     apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/elicitation`, {
       method: 'POST',
       body: JSON.stringify(body),
@@ -544,10 +549,18 @@ export const api = {
    * `target` is either `"all"` (broadcast) or a session-specific discriminator.
    * Used by the manager dashboard's send-to-agents panel (crew#73).
    */
-  injectMessage: (runId: string, message: string, target: string) =>
+  /** The in-flight check on a working step (crew `POST /runs/:id/units/:ord/inspect`, api-types 0.153.0): a seat that is
+   *  not the step's own reads its record and says how it is going. A person only; 404 on a crew without it. */
+  inspectUnit: (runId: string, ord: number) =>
+    apiFetch<{ inspection: import('./inspect.js').UnitInspection }>(`/runs/${encodeURIComponent(runId)}/units/${ord}/inspect`, { method: 'POST', body: '{}' }),
+  /** The step's checks, newest first (`GET /runs/:id/units/:ord/inspections`). */
+  getInspections: (runId: string, ord: number) =>
+    apiFetch<{ inspections: import('./inspect.js').UnitInspection[] }>(`/runs/${encodeURIComponent(runId)}/units/${ord}/inspections`),
+
+  injectMessage: (runId: string, message: string, target: string, opts?: { input?: 'voice' }) =>
     apiFetch<{ status: string }>(`/runs/${encodeURIComponent(runId)}/inject`, {
       method: 'POST',
-      body: JSON.stringify({ message, target }),
+      body: JSON.stringify(opts?.input !== undefined ? { message, target, input: opts.input } : { message, target }),
     }),
 
   // ── Workflow viewer + domain-model browser (crew#44) ─────────────────────────
@@ -608,8 +621,11 @@ export const api = {
     apiFetch<import('./types.js').BlastRadius>(`/repos/${encodeURIComponent(repoId)}/graph/blast-radius?name=${encodeURIComponent(name)}`),
 
   /** Git commit history for a repo (last 20 commits via git log). */
-  getRepoGitHistory: (repoId: string) =>
-    apiFetch<{ commits: import('./types.js').GitCommit[] }>(`/repos/${encodeURIComponent(repoId)}/git-history`),
+  /** `limit`: crew's `?limit=` (1..500; the daemon's default is 20). A daemon from before it ignores it. */
+  getRepoGitHistory: (repoId: string, limit?: number) =>
+    apiFetch<{ commits: import('./types.js').GitCommit[] }>(
+      `/repos/${encodeURIComponent(repoId)}/git-history${limit === undefined ? '' : `?limit=${limit}`}`,
+    ),
 
   /** R3: where a delivering launch on this repo would push (crew's deliver-gate origin
    *  preflight). `null` when the daemon cannot say — an older crew without the route, or any

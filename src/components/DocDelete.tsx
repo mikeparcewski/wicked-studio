@@ -109,7 +109,7 @@ export function DocDeleteConfirm({
           fontFamily: 'var(--font-sans)', maxWidth: 'min(480px, 90vw)', padding: '18px 20px',
         }}
       >
-        <h2 style={{ color: S.ink, fontSize: 'var(--text-md)', fontWeight: 700, margin: 0 }}>
+        <h2 style={{ color: S.ink, fontSize: 'var(--text-md)', fontWeight: 'var(--weight-strong)', margin: 0 }}>
           Delete “{docId}”?
         </h2>
         <p style={{ color: S.body, fontSize: 'var(--text-sm)', lineHeight: 1.5, margin: 0 }}>
@@ -126,8 +126,8 @@ export function DocDeleteConfirm({
               borderRadius: 'var(--radius-md)', padding: '10px 12px',
             }}
           >
-            <p style={{ color: S.danger, fontSize: 'var(--text-xs)', fontWeight: 700,
-                        margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <p style={{ color: S.danger, fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-strong)',
+                        margin: '0 0 6px', textTransform: '' }}>
               Partial delete — needs attention
             </p>
             {/* The wire's own sentence, VERBATIM: it names which half happened and
@@ -179,7 +179,7 @@ export function DocDeleteConfirm({
             style={{
               background: S.danger, border: `1px solid ${S.danger}`,
               borderRadius: 'var(--radius-sm)', color: 'var(--surface-base)',
-              cursor: busy ? 'wait' : 'pointer', fontSize: 'var(--text-xs)', fontWeight: 600,
+              cursor: busy ? 'wait' : 'pointer', fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-strong)',
               opacity: busy ? 0.6 : 1, padding: '6px 12px',
             }}
           >

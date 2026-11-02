@@ -16,7 +16,7 @@ export function TrustReceipt({ session }: {
     return (
       <div
         data-testid={made !== null ? 'trust-receipt-made' : 'trust-receipt-in-force'}
-        className="flex gap-2 text-[11px] pt-1"
+        className="flex gap-2 text-xs pt-1"
       >
         <span className="w-20 shrink-0 font-mono" style={{ color: 'var(--ink-dim)' }}>trust</span>
         <span style={{ color: 'var(--ink-muted)' }}>
@@ -26,7 +26,7 @@ export function TrustReceipt({ session }: {
     );
   }
   return (
-    <div data-testid="trust-receipt" className="flex flex-col gap-1 text-[11px] pt-1">
+    <div data-testid="trust-receipt" className="flex flex-col gap-1 text-xs pt-1">
       <span data-testid="trust-receipt-question" className="font-medium" style={{ color: 'var(--ink-high)' }}>
         {receipt.question}
       </span>

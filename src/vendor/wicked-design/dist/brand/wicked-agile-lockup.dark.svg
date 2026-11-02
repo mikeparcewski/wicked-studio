@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 60" width="360" height="60" role="img" aria-label="wicked agile">
+          <!-- Cable-Stayed / Wave Horizon Geometric Mark -->
+          <g transform="translate(2, 5)">
+            <path d="M 18 2 L 4 38 L 32 38 Z" fill="none" stroke="#def3f6" stroke-width="2"></path>
+            <line x1="18" y1="2" x2="18" y2="38" stroke="#def3f6" stroke-width="1.5"></line>
+            <path d="M 0 38 Q 10 31 18 38 T 36 38" fill="none" stroke="#7fcdff" stroke-width="2.5" stroke-linecap="round"></path>
+            <polygon points="18,0 22,7 14,7" fill="#ffda19"></polygon>
+          </g>
+
+          <!-- "WICKED" in Custom High-Contrast Wicked Serif -->
+          <g transform="translate(48, 7) scale(0.22)" fill="#def3f6">
+            <!-- W -->
+            <path d="M 10 20 L 58 20 L 46 32 L 70 130 L 98 45 L 88 20 L 122 20 L 114 34 L 138 130 L 165 42 C 170 26 160 20 148 20 L 188 20 C 178 32 172 48 164 75 L 138 175 L 120 175 L 96 85 L 70 175 L 52 175 L 22 45 C 18 30 12 24 2 14 Z"></path>
+            <!-- I -->
+            <path d="M 196 20 L 246 20 L 233 34 L 233 161 L 246 175 L 196 175 L 209 161 L 209 34 Z"></path>
+            <!-- C -->
+            <path d="M 345 55 L 338 20 C 322 25 310 20 295 22 C 260 28 248 65 252 105 C 256 148 282 178 320 176 C 342 175 356 162 366 142 L 358 135 C 348 150 335 160 318 158 C 292 155 278 130 278 98 C 278 62 292 38 318 38 C 332 38 340 46 345 55 Z"></path>
+            <!-- K -->
+            <path d="M 372 20 L 420 20 L 408 34 L 408 92 L 455 38 C 462 30 458 24 448 20 L 488 20 L 472 36 L 428 86 L 478 155 C 486 166 496 168 508 160 C 498 178 480 182 464 172 L 418 102 L 408 112 L 408 161 L 420 175 L 372 175 L 384 161 L 384 34 Z"></path>
+            <!-- E -->
+            <path d="M 505 20 L 595 20 L 600 50 L 588 36 L 540 36 L 540 88 L 578 88 L 588 76 L 588 112 L 578 100 L 540 100 L 540 158 L 592 158 L 605 140 L 598 175 L 505 175 L 516 161 L 516 34 Z"></path>
+            <!-- D -->
+            <path d="M 612 20 L 675 20 C 722 20 750 52 750 98 C 750 144 720 175 672 175 L 612 175 L 624 161 L 624 34 L 605 16 Z M 648 38 L 648 157 L 670 157 C 704 157 724 134 724 98 C 724 62 704 38 670 38 Z"></path>
+          </g>
+
+          <!-- "agile" in Flowing Wicked Script -->
+          <g transform="translate(222, 6) scale(0.36)">
+            <path d="M 45 45 C 20 45 12 68 25 82 C 38 94 58 80 65 55 L 60 85 C 60 92 75 90 88 75
+                     C 92 50 125 42 135 60 C 120 42 95 55 98 78 C 102 95 128 85 135 60 L 122 118 C 115 142 85 145 78 128 C 72 115 95 102 145 80
+                     L 168 48 L 160 85 C 158 92 175 90 190 72
+                     L 215 12 C 222 -2 205 5 198 35 L 188 82 C 186 92 205 92 222 75
+                     C 235 78 262 65 258 50 C 254 38 232 45 228 68 C 224 90 255 95 285 75" fill="none" stroke="#7fcdff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"></path>
+            <polygon points="168,22 186,14 176,34" fill="#ffda19"></polygon>
+          </g>
+        </svg>

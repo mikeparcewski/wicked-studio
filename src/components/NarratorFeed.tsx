@@ -45,7 +45,7 @@ function CliAvatar({ cli }: { cli: string }): React.ReactElement {
   return (
     <span
       aria-hidden="true"
-      className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold font-mono select-none"
+      className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono select-none"
       style={{ background: CLI_AVATAR.bg, color: CLI_AVATAR.fg }}
     >
       {cliInitials(cli)}
@@ -279,13 +279,13 @@ export function NarratorFeed({
               </div>
             )}
             <span
-              className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide font-mono"
+              className="rounded-full px-2 py-0.5 text-xs font-semibold font-mono"
               style={{ background: stageBadge.bg, color: stageBadge.color }}
             >
               {unit.stage}
             </span>
             {unit.has_validator_pin && (
-              <span role="img" aria-label="Governance floor armed" style={{ color: 'var(--status-gate)', fontSize: '12px' }}>🔒</span>
+              <span role="img" aria-label="Governance floor armed" style={{ color: 'var(--status-gate)', fontSize: 'var(--text-caption)' }}>🔒</span>
             )}
             <span className="text-xs font-mono truncate max-w-xs" style={{ color: 'var(--ink-dim)' }} title={unit.description}>
               {unit.description}
@@ -330,7 +330,7 @@ export function NarratorFeed({
               // The reason reads in body ink; only the small label carries the fail colour (a red
               // mono paragraph was the loudest, least readable text on the page).
               <div className="text-sm" style={{ color: 'var(--ink-body)' }}>
-                <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--status-fail)' }}>Rejected</span>
+                <span className="text-xs font-semibold " style={{ color: 'var(--status-fail)' }}>Rejected</span>
                 {unit.denial_reason ? `: ${unit.denial_reason}` : ''}
               </div>
             )}
@@ -342,10 +342,10 @@ export function NarratorFeed({
 
   const narrationLine = (key: string, text: string, tone: NarrationTone): React.ReactElement => (
     <div key={key} data-testid="narration-line" data-tone={tone} className="flex items-baseline gap-2 px-1">
-      <span aria-hidden="true" className="shrink-0 text-[10px] font-mono" style={{ color: TONE_COLOR[tone] }}>
+      <span aria-hidden="true" className="shrink-0 text-xs font-mono" style={{ color: TONE_COLOR[tone] }}>
         {TONE_GLYPH[tone]}
       </span>
-      <span className="text-[12.5px] font-mono leading-relaxed min-w-0" style={{ color: tone === 'info' ? 'var(--ink-muted)' : 'var(--ink-body)' }}>
+      <span className="text-xs font-mono leading-relaxed min-w-0" style={{ color: tone === 'info' ? 'var(--ink-muted)' : 'var(--ink-body)' }}>
         {text}
       </span>
     </div>
@@ -367,7 +367,7 @@ export function NarratorFeed({
       {/* Feed header: what this stream is + the raw-wire toggle (§4). */}
       {lens === 'feed' && (
         <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wider font-mono" style={{ color: 'var(--ink-dim)' }}>
+          <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
             run narration
           </span>
           <div className="flex-1" />
@@ -384,7 +384,7 @@ export function NarratorFeed({
                 data-testid={`feed-view-${label}`}
                 aria-pressed={raw === isRaw}
                 onClick={() => setRaw(isRaw)}
-                className="text-[10px] font-mono rounded px-1.5 py-0.5"
+                className="text-xs font-mono rounded px-1.5 py-0.5"
                 style={{
                   background: raw === isRaw ? 'var(--surface-raised)' : 'transparent',
                   color: raw === isRaw ? 'var(--ink-high)' : 'var(--ink-dim)',
@@ -415,7 +415,7 @@ export function NarratorFeed({
             <div
               key={typeof e.seq === 'number' ? `s${e.seq}` : `r${i}`}
               data-testid="raw-event"
-              className="flex items-baseline gap-2 px-1 font-mono text-[11px]"
+              className="flex items-baseline gap-2 px-1 font-mono text-xs"
             >
               <span className="shrink-0" style={{ color: 'var(--ink-dim)' }}>
                 {typeof e.seq === 'number' ? String(e.seq).padStart(5, ' ') : '     '}

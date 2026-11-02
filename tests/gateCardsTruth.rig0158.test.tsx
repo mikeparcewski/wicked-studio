@@ -171,7 +171,7 @@ describe('2 + 3 on the rendered row', () => {
     expect(failing.textContent).toBe(`Failing: ${IDS.slice(0, 5).map(failureName).join(', ')} +3 more`);
     const suggested = screen.getAllByTestId('session-gate-choice').find((b) => b.dataset['recommended'] === 'true')!;
     expect(suggested.dataset['choiceKey']).toBe(FLOOR_OVERRIDE_KEY);
-    expect(screen.getByTestId('session-gate-consequence').textContent).toBe(FLOOR_OVERRIDE_CONSEQUENCE);
+    expect(screen.getByTestId('session-gate-consequence').textContent).toBe(`If you choose this: ${FLOOR_OVERRIDE_CONSEQUENCE}`);
   });
 });
 
@@ -200,7 +200,7 @@ describe('1. a floor the operator overrode is never "passed"', () => {
   it('reads the overridden floor\'s failed checks off its own record, and whether the base failed too', () => {
     const r = deliveryReceiptOf(deliverView(), DELIVER_EVENTS);
     const o = overriddenFloorsOf(r, DELIVER_EVENTS)!;
-    expect(o).toEqual({ checks: ['test'], onBase: true });
+    expect(o).toMatchObject({ checks: ['test'], onBase: true });
     expect(overriddenLine(o)).toBe('Overridden by you: test failed on this change and its base.');
     // a regression the operator overrode is the change's own: no "and its base"
     const reg = [DELIVER_EVENTS[0]!, floorEvent(2, 3, testCheck({ classification: 'regression', regressions: ['x'], base: { run: { exitCode: 0 } } })) as unknown as CoreEvent];
@@ -228,11 +228,12 @@ describe('1. a floor the operator overrode is never "passed"', () => {
   it('the final message says the override, never "The checks passed"', () => {
     const v = deliverView('completed', { delivery: 'delivered', deliverUrl: 'https://github.com/o/r/pull/7' });
     const w = finalWords(v, { done: 3, total: 3 }, { passed: true, tests: null, nothing: false, reviewers: ['Codex'], overridden: 'Overridden by you: test failed on this change and its base.' });
-    expect(w.line).toBe('Overridden by you: test failed on this change and its base. Reviewed and approved by Codex. Pull request #7 is open.');
+    expect(w.lead).toBe('Delivered as pull request #7');
+    expect(w.line).toBe('Overridden by you: test failed on this change and its base. Reviewed and approved by Codex.');
     expect(w.line).not.toContain('The checks passed');
     // an override never hides checks that did not pass
     const failed = finalWords(v, { done: 3, total: 3 }, { passed: false, tests: null, nothing: false, reviewers: [], overridden: 'Overridden by you: test failed on this change and its base.' });
-    expect(failed.line).toBe('Overridden by you: test failed on this change and its base. The checks did not pass. Pull request #7 is open.');
+    expect(failed.line).toBe('Overridden by you: test failed on this change and its base. The checks did not pass.');
   });
 });
 
@@ -285,9 +286,10 @@ describe('studio#923: a hand-over QE refused takes the skip in place', () => {
     Object.assign(view.session as object, { assurance: { mode: 'full', required: ['qe_acceptance'], qe: { status: 'required', basis: 'diff', score: 100, threshold: 20, reason: 'required', reasons: [], ord: 2, tree: 'abc' } } });
     render(<ProposalCard view={view} chain={CHAIN} acceptance={REFUSED} />);
     expect(screen.getByTestId('session-proposal-text').textContent).toBe('QE hasn’t passed, so this can’t be delivered yet');
-    // Starting the job over is still there, under Other options, named for what it does.
-    fireEvent.click(screen.getByTestId('session-proposal-more'));
-    expect(screen.getByTestId('session-proposal-relaunch-skip-qe').textContent).toBe('Start again with QE skipped…');
+    // Guided asks: every way on is a card. Starting the job over is one, named for what it does; Deliver is one,
+    // disabled, saying why.
+    expect(screen.getByTestId('session-proposal-relaunch-skip-qe').querySelector('.wk-ask-opt-label')!.textContent).toBe('Start again with QE skipped…');
+    expect((screen.getByTestId('session-proposal-go') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByTestId('session-proposal-skip-qe'));
     const send = screen.getByTestId('session-proposal-skip-qe-send') as HTMLButtonElement;
     expect(send.disabled).toBe(true);

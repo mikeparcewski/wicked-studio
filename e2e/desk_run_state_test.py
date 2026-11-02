@@ -144,6 +144,7 @@ with sync_playwright() as p:
           got=gate_row.get_attribute("data-reason") if gate_row.is_visible() else "missing")
     # Approve: first choice for a def gate
     page.get_by_test_id("session-gate-choice").first.click()
+    page.get_by_test_id("session-gate-confirm").click()  # guided asks: the primary sends the picked card
     page.wait_for_timeout(11500)  # the 10 s undo window, then the one post
     posts = json.loads(urllib.request.urlopen(f"{origin}/__fixture/gate-posts", timeout=10).read())["posts"]
     mine = [p_ for p_ in posts if p_["runId"] == "r-home-gate"]

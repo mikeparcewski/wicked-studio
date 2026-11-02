@@ -90,6 +90,12 @@ export interface GateFloorCheck {
   /** The failing tests of the check's own re-runs (`RepoCheckRun.reruns[].failureIds`): a failure that reproduces
    *  on the retry is the change's (the engine's WICKED-RETRY rule). */
   rerunFailureIds?: string[];
+  /** The base run's flaky tests (`base.run.flakyIds`: failed there, then passed on its re-run): they fail on the base
+   *  too, under the same conditions. */
+  baseFlakyIds?: string[];
+  /** The base run passed only on its own re-run (its `WICKED-RETRY the re-run passed` line, or `selfRetry`): its first
+   *  pass failed, so a clean base is not shown. */
+  baseCleared?: boolean;
 }
 
 /** The F-039 floor as `repoChecksEvaluated` reported it. */
@@ -249,8 +255,25 @@ function checkOf(raw: unknown): GateFloorCheck | null {
     failureIds: strings(c.failureIds),
     baseFailed: baseFailedOf(c.base),
     baseFailureIds: baseFailureIdsOf(c.base),
-    rerunFailureIds: Array.isArray(c['reruns']) ? (c['reruns'] as unknown[]).flatMap((r) => (isRecord(r) ? strings((r as Record<string, unknown>)['failureIds']) : [])) : [],
+    rerunFailureIds: [
+      ...(Array.isArray(c['reruns']) ? (c['reruns'] as unknown[]).flatMap((r) => (isRecord(r) ? strings((r as Record<string, unknown>)['failureIds']) : [])) : []),
+      ...(isRecord(c['retry']) ? strings((c['retry'] as Record<string, unknown>)['failureIds']) : []),
+    ],
+    baseFlakyIds: baseRunOf(c.base) !== null ? strings(baseRunOf(c.base)!['flakyIds']) : [],
+    baseCleared: baseClearedOf(c.base),
   };
+}
+
+function baseRunOf(base: unknown): Record<string, unknown> | null {
+  const run = isRecord(base) ? (base as Record<string, unknown>)['run'] : null;
+  return isRecord(run) ? run as Record<string, unknown> : null;
+}
+
+/** The base run's own retry cleared its first pass (the engine's WICKED-RETRY marker, or its self-retry flag). */
+function baseClearedOf(base: unknown): boolean {
+  const r = baseRunOf(base);
+  if (r === null) return false;
+  return r['selfRetry'] === true || (typeof r['stdoutTail'] === 'string' && /^WICKED-RETRY the re-run passed\b/mu.test(r['stdoutTail']));
 }
 
 /** The base run's failing tests (`RepoCheckRun.base.run.failureIds`), or `null` when no base run names any. */

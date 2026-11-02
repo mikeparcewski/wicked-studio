@@ -6,7 +6,7 @@ import { builtinDefaults } from '../src/editors/model.js';
 import { steerRowWords, WorkingDocSteerRows } from '../src/components/session/RunThreadPlugin.js';
 import { useWorkingDocs } from '../src/store/workingDocs.js';
 import { RUN_PLUGINS } from '../src/plugins/runPlugins.js';
-import { authorWord, steerWords, trailLines, withDecisionLine, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
+import { addedLines, authorWord, pickedUpStep, reconcileSection, represents, sectionAuthor, steerWords, trailLines, type DocView } from '../src/plugins/wicked-phase-report/workingDoc.js';
 
 /** Power mode spike 3: the working document through the plugin protocol. The HOST decides whose an edit is. */
 
@@ -99,10 +99,14 @@ describe('the host decides whose an edit is', () => {
   it('generated lines are the plugin’s own even under a gesture, and only in its own section', async () => {
     const h = makeHost({ gesture: true });
     h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'decisions', text: 'Plan approved', origin: 'generated' }, 'g1'));
-    h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'next', text: 'Skip QE', origin: 'generated' }, 'g2'));
+    h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'next', text: 'After hand-off round 1 · the review asked for changes', origin: 'generated' }, 'g2'));
+    h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'constraints', text: 'Skip QE', origin: 'generated' }, 'g3'));
+    h.port.postMessage(env('doc.propose_edit', { base: 2, section: 'approach', text: 'Rewrite it', origin: 'generated' }, 'g4'));
     await tick();
-    expect(h.proposals.map((p) => p.by)).toEqual(['plugin']);
-    expect(h.seen.find((m) => m.re === 'g2')).toMatchObject({ ok: false, error: { code: 'refused' } });
+    // Its own lines go under Decisions, Open questions and Next; never Goal, Approach or Constraints.
+    expect(h.proposals.map((p) => `${p.edit.section}:${p.by}`)).toEqual(['decisions:plugin', 'next:plugin']);
+    expect(h.seen.find((m) => m.re === 'g3')).toMatchObject({ ok: false, error: { code: 'refused' } });
+    expect(h.seen.find((m) => m.re === 'g4')).toMatchObject({ ok: false, error: { code: 'refused' } });
   });
 
   it('a suggested steer is only shown, with the host’s own Send: nothing is written or sent', async () => {
@@ -145,9 +149,75 @@ describe('the words', () => {
     expect(steerWords({ id: 'x', kind: 'next', queuedAt: 1, error: null, pickedUp: null })).toBe('waiting for the next step');
   });
 
-  it('the plugin’s Decisions line is written once', () => {
-    expect(withDecisionLine('Approve the plan · answered 20:02', 'Approve the plan · answered 20:02')).toBeNull();
-    expect(withDecisionLine('', 'Deliver · answered 21:17')).toBe('Deliver · answered 21:17');
+  it('the plugin’s lines are written once; a person’s lines are never touched; its stale questions go', () => {
+    expect(reconcileSection('decisions', 'Approve the plan · answered 20:02', ['Approve the plan · answered 20:02'])).toBeNull();
+    expect(reconcileSection('decisions', '', ['Deliver · answered 21:17'])).toBe('Deliver · answered 21:17');
+    // Decisions only gain lines.
+    expect(reconcileSection('decisions', 'Keep JPY at 0 decimals\nApprove the plan · answered 20:02', [])).toBeNull();
+    // An answered question goes; the person's own question stays where it was.
+    expect(reconcileSection('questions', 'Does the PDF need the symbol?\nWaiting on you · Plan approval · since 20:01', [], ['Waiting on you · Plan approval · since 20:01'])).toBe('Does the PDF need the symbol?');
+    expect(reconcileSection('next', 'After hand-off round 1 · the review asked for changes: make them and hand off again', ['After hand-off round 2 · QE acceptance did not pass: fix it and hand off again'], [], ['After hand-off round 1 · the review asked for changes: make them and hand off again']))
+      .toBe('After hand-off round 2 · QE acceptance did not pass: fix it and hand off again');
+  });
+
+  it('a line the person edited is theirs: never taken back, never written again beside it (codex on #937)', () => {
+    const gen = 'After hand-off round 1 · the review asked for changes: make them and hand off again';
+    const edited = `${gen} — keep the retry path; Sam owns the copy`;
+    // still wanted: the edit stands for it, nothing is added
+    expect(reconcileSection('next', edited, [gen])).toBeNull();
+    // no longer wanted (the round passed): the edit stays, the new line is added after it
+    const round2 = 'After hand-off round 2 · QE acceptance did not pass: fix it and hand off again';
+    expect(reconcileSection('next', edited, [round2])).toBe(`${edited}\n${round2}`);
+    // an edit into ANOTHER of the plugin's phrases, in this round, is the person's too (codex r4): kept, not swapped back
+    const skipped = 'After hand-off round 1 · the review was skipped';
+    expect(reconcileSection('next', skipped, [gen], [], [gen])).toBe(`${skipped}\n${gen}`);
+    // a line the plugin wrote, word for word, that no longer holds is taken out
+    expect(reconcileSection('next', `${gen}\nCall Sam`, [], [], [gen])).toBe('Call Sam');
+    // and the person's edit survives the NEXT round too (codex r6): round 1 kept it, round 2 still does
+    const afterRound1 = reconcileSection('next', skipped, [gen], [], [gen])!;
+    expect(reconcileSection('next', afterRound1, [round2], [], [gen])).toBe(`${skipped}\n${round2}`);
+    // the write sequence codex saw (generated, typed, generated) no longer happens
+    expect(reconcileSection('next', 'After hand-off round 1 · the review asked for changes — ask Sam first', [gen]))
+      .toBe(`After hand-off round 1 · the review asked for changes — ask Sam first\n${gen}`);
+    // an edited open question stays once its gate is answered; the plugin's own exact line still goes
+    const own = ['Waiting on you · Plan approval · since 20:01', 'Waiting on you · Deliver · since 21:00',
+      'Waiting on you · checkpoint 2 paused (the tests kept failing): split it, switch to phased steps, continue at high rigor, or stop? · since 20:05'];
+    expect(reconcileSection('questions', 'Waiting on you · Plan approval · since 20:01 (Sam to decide)\nWaiting on you · Deliver · since 21:00', [], own))
+      .toBe('Waiting on you · Plan approval · since 20:01 (Sam to decide)');
+    expect(reconcileSection('questions', own[2]!, [], own)).toBe('');
+    // an edit INSIDE the gate's name, or inside the pause's reason, is the person's too (codex + agy on the fix)
+    expect(reconcileSection('questions', 'Waiting on you · Deliver (ask Sam first) · since 21:00', ['Waiting on you · Deliver · since 21:00'], own))
+      .toBe('Waiting on you · Deliver (ask Sam first) · since 21:00\nWaiting on you · Deliver · since 21:00');
+    const pause = 'Waiting on you · checkpoint 2 paused (flaky, Sam is looking): split it, switch to phased steps, continue at high rigor, or stop? · since 20:05';
+    expect(reconcileSection('questions', pause, [], own)).toBeNull();
+    // a saved line that kept a generated line's words stands for it, for the sync and the "not saved" preview alike
+    expect(represents('After hand-off round 1 · the checks were skipped — fine for docs', 'After hand-off round 1 · the checks were skipped')).toBe(true);
+    expect(represents('After hand-off round 1 · the checks were', 'After hand-off round 1 · the checks were skipped')).toBe(false);
+  });
+
+  it('only the lines a write adds become the plugin\u2019s: a person\u2019s line already there, in its words, is never claimed (codex r7)', () => {
+    const persons = 'After hand-off round 1 · the review was skipped';
+    const qe = 'After hand-off round 1 · QE acceptance did not pass: fix it and hand off again';
+    const current = `${persons}\nCall Sam`;
+    const added = addedLines(current, [persons, qe]);
+    expect(added).toEqual([qe]);
+    // round 2: the plugin takes back only what it added; the person's line stays
+    const afterWrite = reconcileSection('next', current, [persons, qe], [], [])!;
+    expect(reconcileSection('next', afterWrite, [], [], added)).toBe(`${persons}\nCall Sam`);
+  });
+
+  it('an agent’s text is labelled with its seat, a section names every writer, and neither a plugin nor an agent steers', () => {
+    expect(authorWord({ kind: 'agent', id: 'agent:claude' })).toBe('Claude Code (agent)');
+    const v: DocView = { ...view, trail: [...view.trail,
+      { version: 3, author: { kind: 'agent', id: 'agent:claude' }, surface: null, sections: ['approach', 'decisions'], at: 0, steerId: null }] };
+    expect(sectionAuthor(v, 'decisions')).toBe('Claude Code (agent), Phase report (plugin)');
+    expect(sectionAuthor(v, 'constraints')).toBe('You');
+    const lines = trailLines(v);
+    expect(lines[0]).toMatch(/^v3 · Claude Code \(agent\) · Approach, Decisions · \d\d:\d\d · not sent to a step$/u);
+    expect(lines[2]).toMatch(/^v1 · Phase report \(plugin\) · Decisions · \d\d:\d\d · not sent to a step$/u);
+    // crew may say an agent's id under another kind: the id decides.
+    expect(trailLines({ ...view, trail: [{ version: 4, author: { kind: 'system', id: 'agent:codex' }, surface: null, sections: ['approach'], at: 0, steerId: null }] })[0])
+      .toMatch(/^v4 · Codex \(agent\)/u);
   });
 
   it('the thread row says who edited which section and where the note stands', () => {
@@ -162,6 +232,25 @@ describe('the words', () => {
     expect(rows.map((r) => r.dataset['steer'])).toEqual(['s1', 's2']);
     expect(rows[0]?.dataset['picked']).toBe('true');
     act(() => undefined);
+  });
+
+  // Seen live on :7721: crew sent the engine's unit id as `pickedUp.step`, and the row read "picked up at Wf 9397a34b
+  // 08c9 … :unit 2". The step is named from the run (the thread's label at that ord), never from a unit id.
+  it('a steer picked up by an engine unit id names the step, never the id', () => {
+    const unitId = { step: 'wf-9397a34b-08c9-484d-a97d-57675423c817:unit-2', ord: 2 };
+    const byOrd = (ord: number): string | null => (ord === 2 ? 'Fix' : null);
+    expect(steerRowWords('local', ['constraints'], { pickedUp: unitId, error: null }, byOrd))
+      .toBe('You edited the working document · Constraints · picked up at Fix');
+    expect(steerRowWords('local', ['constraints'], { pickedUp: unitId, error: null })).toBe('You edited the working document · Constraints · picked up at step 2');
+    expect(pickedUpStep(unitId)).not.toMatch(/wf|unit|9397/iu);
+    expect(pickedUpStep({ step: 'review', ord: 7 })).toBe('Review');
+    expect(pickedUpStep({ step: 'review', ord: 7 }, () => 'Review 2')).toBe('Review 2');
+    expect(steerWords({ id: 'x', kind: 'standing', queuedAt: 1, error: null, pickedUp: { ...unitId, at: 0 } }, byOrd)).toMatch(/^picked up at Fix \d\d:\d\d$/u);
+    useWorkingDocs.getState().set('run-2', { runId: 'run-2', doc: { projectId: 'default', docId: 'w', head: 1 }, sections: null, labels: {} as never, trail: [], steers: [
+      { id: 's9', version: 1, sections: ['constraints'], kind: 'standing', note: 'n', at: 0, by: 'local', queuedAt: 1, pickedUp: { ...unitId, at: 0 }, error: null },
+    ] });
+    render(<WorkingDocSteerRows runId="run-2" ords={[2]} stepOfOrd={byOrd} />);
+    expect(screen.getByTestId('working-doc-steer').textContent).toBe('You edited the working document · Constraints · picked up at Fix');
   });
 
   it('the built-in plugin asks for the doc requests, each with its reason, and only run-thread ones', () => {

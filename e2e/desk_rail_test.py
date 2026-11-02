@@ -11,8 +11,8 @@ Against the in-process fixture (wave-1 + wave-2b corpus):
      (the sessions by project, at most five, then All jobs) · Build & settings · the Nerve Center tile
      pinned last. Home carries the needs-you badge and its name says it. No Workspace group, no More,
      no "General settings"; no Notifications entry (no bell, no "notifications" nav-dest).
-  1b. MEASURED: the section labels are small caps (uppercase, letter-spaced, <= 11px), the pages 13px
-     at >= 4.5:1, and Nerve Center larger than every other item; HOVER on a page is a visible accent
+  1b. MEASURED: the section labels are caption size (<= 12px, the type scale's caption), the pages 14px
+     (body) at >= 4.5:1, and Nerve Center larger than every other item; HOVER on a page is a visible accent
      tint (dE_OK >= 0.08 from its rest fill, words still >= 4.5:1).
   2. NEW PROJECT: the button opens the New project modal; Escape closes it.
   3. RETIRED /settings: the address REPLACES itself with /system, the Settings page on its General
@@ -130,7 +130,8 @@ with sync_playwright() as p:
     badge = r["badge"]
     check("order",
           r["order"] == want
-          and r["dests"] == ["page:home", "page:projects", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
+          # DES-LEARN §3.0: a fresh fixture has never used Learn, so it leads Work, above Projects.
+          and r["dests"] == ["page:home", "page:learn", "page:projects", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
                              "page:steering", "page:memory", "page:agents", "page:build", "watch"]
           and not r["bell"] and r["homeLinks"] == 1 and r["nerveLast"]
           # The wordmark is the link Home; its description says the badge (the fixture has gates waiting).
@@ -139,7 +140,8 @@ with sync_playwright() as p:
           # Projects is WORK's one primary entry: a stronger weight than its siblings and an accent mark.
           and r["primaries"] == ["nav-projects"] and r["primaryMark"]
           and (r["primaryWeight"] or 0) > (r["jobsWeight"] or 0)
-          and r["secs"] == ["WORK", "INSIGHT", "GOVERN", "RECENT"]
+          # The section labels' case is the theme's (the Wicked synthesis sets them in sentence case).
+          and [x.upper() for x in r["secs"]] == ["WORK", "INSIGHT", "GOVERN", "RECENT"]
           and 1 <= r["sessions"] <= 5 and r["allJobs"] == "/jobs"
           and all(w not in r["text"] for w in ("Everything else", "Product", "Workspace", "General settings", "Configuration", "MCP tools", "Skills"))
           # DES-SYSTEM-CHAT §1: four equal icon buttons (no words), New job · New project · Chat · Search.
@@ -147,8 +149,8 @@ with sync_playwright() as p:
           and (r["nerveWords"] or "").strip() != "" and r["nerveTone"] in ("green", "yellow", "red"),
           **{k: v for k, v in r.items() if k != "text"})
 
-    # ── 1b. the sidebar MEASURED in the browser: small-caps labels, 13px pages at AA, Nerve Center the
-    #        largest item; and hover on a page is a visible ACCENT tint (operator 2026-10-26).
+    # ── 1b. the sidebar MEASURED in the browser: caption labels, 14px pages at AA, Nerve Center the
+    #        largest item (the type scale: pages body 14, labels caption 12, Nerve Center lead 16); and hover on a page is a visible ACCENT tint (operator 2026-10-26).
     MEASURE = """(hovered) => {
       const px = (el) => el ? parseFloat(getComputedStyle(el).fontSize) : null;
       // Any CSS colour (oklch, color-mix…) to sRGB through a 1×1 canvas; alpha < 0.5 counts as transparent.
@@ -182,11 +184,12 @@ with sync_playwright() as p:
     hov = page.evaluate(MEASURE, "nav-report")
     page.screenshot(path=str(SHOTS / "desk-rail-hover.png"))
     page.mouse.move(W // 2, 20)
-    check("sidebar-measured", rest["page"] == 13 and rest["contrast"] >= 4.5
-          and rest["labelTransform"] == "uppercase" and rest["label"] is not None and rest["label"] <= 11 and (rest["labelSpacing"] or 0) > 0
+    check("sidebar-measured", rest["page"] == 14 and rest["contrast"] >= 4.5
+          # Section labels stay small; their case and tracking are the theme's (the Wicked synthesis: sentence case).
+          and rest["label"] is not None and rest["label"] <= 12
           # DES-SYSTEM-VIEW: Nerve Center is larger than every other rail item.
           and rest["nerve"] is not None and rest["nerve"] > max(rest["session"] or 0, rest["page"])
-          # Hover: the page's fill moves off the rail by a visible step, an accent tint (blue leads), AA words.
+          # Hover: the page's fill moves off the rail by a visible step (a monochrome step in the synthesis), AA words.
           and (rest["dE"] or 0) < 0.01 and (hov["dE"] or 0) >= 0.08 and (hov["hoverContrast"] or 0) >= 4.5,
           rest=rest, hover={k: hov[k] for k in ("fill", "rail", "dE", "hoverContrast")})
 

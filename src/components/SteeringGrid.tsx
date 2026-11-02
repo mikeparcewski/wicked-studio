@@ -319,7 +319,7 @@ export function ChipsCell({ testid, label, values, disabled, onCommit }: {
             setDraftValues((cur) => cur.slice(0, -1));
           }
         }}
-        className="min-w-[4rem] flex-1 bg-transparent text-[11px] focus:outline-none"
+        className="min-w-[4rem] flex-1 bg-transparent text-xs focus:outline-none"
         style={{ color: 'var(--ink-high)' }}
       />
     </span>
@@ -654,7 +654,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     spellCheck={false}
                     onChange={(e) => setDraft({ ...draft, id: e.target.value })}
                     onKeyDown={(e) => { if (e.key === 'Escape') setDraft(null); }}
-                    className="w-full rounded px-1.5 py-1 font-mono text-[11px] focus:outline-none"
+                    className="w-full rounded px-1.5 py-1 font-mono text-xs focus:outline-none"
                     style={{
                       background: 'var(--surface-base)',
                       border: `1px solid ${draftIssue === null ? 'var(--surface-raised)' : 'var(--status-fail)'}`,
@@ -694,7 +694,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       if (e.key === 'Escape') setDraft(null);
                       if (e.key === 'Enter') { e.preventDefault(); void saveDraft(); }
                     }}
-                    className="w-full rounded px-1.5 py-1 text-[11px] focus:outline-none"
+                    className="w-full rounded px-1.5 py-1 text-xs focus:outline-none"
                     style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
                   />
                 </td>
@@ -708,7 +708,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     value={draft.weight}
                     onChange={(e) => setDraft({ ...draft, weight: e.target.value })}
                     onKeyDown={(e) => { if (e.key === 'Escape') setDraft(null); }}
-                    className="w-full rounded px-1.5 py-1 font-mono text-[11px] focus:outline-none"
+                    className="w-full rounded px-1.5 py-1 font-mono text-xs focus:outline-none"
                     style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
                   />
                 </td>
@@ -737,7 +737,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       data-testid="steering-draft-save"
                       disabled={!draftReady}
                       onClick={() => void saveDraft()}
-                      className="rounded px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40 focus:outline-none focus-visible:ring-1"
+                      className="rounded px-2 py-0.5 text-xs font-semibold disabled:opacity-40 focus:outline-none focus-visible:ring-1"
                       style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
                     >
                       {draft.saving ? 'Saving…' : 'Save'}
@@ -746,7 +746,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       type="button"
                       data-testid="steering-draft-discard"
                       onClick={() => setDraft(null)}
-                      className="rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-1"
+                      className="rounded px-1.5 py-0.5 text-xs focus:outline-none focus-visible:ring-1"
                       style={{ color: 'var(--ink-dim)', border: '1px solid var(--surface-raised)' }}
                     >
                       Discard
@@ -791,12 +791,12 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
       {body()}
 
       {(draftIssue !== null || draftCollision) && draft !== null && (
-        <p data-testid="steering-draft-issue" className="text-[10px]" style={{ color: draftIssue !== null ? 'var(--status-fail)' : 'var(--status-gate)' }}>
+        <p data-testid="steering-draft-issue" className="text-xs" style={{ color: draftIssue !== null ? 'var(--status-fail)' : 'var(--status-gate)' }}>
           {draftIssue ?? `id ${draft.id.trim()} already exists — saving will UPDATE that rule (the wire is an upsert)`}
         </p>
       )}
       {draft?.error != null && (
-        <p data-testid="steering-draft-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
+        <p data-testid="steering-draft-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
           {draft.error}
         </p>
       )}

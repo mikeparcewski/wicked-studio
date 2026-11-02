@@ -270,6 +270,8 @@ export function importEntryOutcome(entry: SteeringImportEntry): {
   ok: boolean;
   /** e.g. `imported PAT-101, PAT-102` / `rejected soc2.md — <reason>` */
   text: string;
+  /** A refused entry: the service's own reason, verbatim (studio#934). */
+  reason?: string;
 } {
   const ok = entry.status === 'imported' || entry.status === 'created' || entry.status === 'updated';
   const ids = entry.ids ?? (entry.id !== undefined ? [entry.id] : []);
@@ -281,7 +283,7 @@ export function importEntryOutcome(entry: SteeringImportEntry): {
   }
   const reason = entry.error ?? 'unspecified error';
   const what = name ?? (ids.length > 0 ? ids.join(', ') : 'entry');
-  return { ok, text: `${entry.status} ${what} — ${reason}` };
+  return { ok, text: `${entry.status} ${what} — ${reason}`, ...(entry.error !== undefined ? { reason: entry.error } : {}) };
 }
 
 export function importSteeringRules(body: SteeringImportBody): Promise<{ results: SteeringImportEntry[] }> {

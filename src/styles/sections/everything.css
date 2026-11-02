@@ -41,7 +41,7 @@
 .wk-everything-group .wk-statline { margin: var(--space-1) 0 0; }
 
 /* Sentence-case column heads (UI-CONTRACT §1 rule 4: no uppercase micro-labels). */
-.wk-runs-col { text-transform: none; letter-spacing: 0; font-size: var(--text-sm); }
+.wk-runs-col { text-transform: none;  font-size: var(--text-sm); }
 /* A row's meta line that carries links wraps instead of clipping them. */
 .wk-everything-wrapline { white-space: normal; overflow: visible; }
 /* A long project description is clamped to two lines (the whole text is its title and the project page). */

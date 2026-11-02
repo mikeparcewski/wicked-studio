@@ -145,7 +145,7 @@ export function RuleOrigin({ rule, runs, navigate }: {
       {read.kind === 'failed' && (
         <>
           {/* The daemon's message may carry a path or a token: it is a technical detail, never the sentence. */}
-          <p data-testid="rule-origin-error" role="alert" className="text-[11px]" style={{ color: 'var(--status-fail)' }}>
+          <p data-testid="rule-origin-error" role="alert" className="text-xs" style={{ color: 'var(--status-fail)' }}>
             Could not read where this rule came from.
           </p>
           <Tech data-testid="tech-rule-origin-error" parts={[read.message]} block />
@@ -153,14 +153,14 @@ export function RuleOrigin({ rule, runs, navigate }: {
       )}
       {origin !== null && (
         <section data-testid="rule-origin" data-decision-id={origin.decisionId} data-how={origin.how ?? ''} className="flex flex-col gap-1">
-          <h3 className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>Origin — your words</h3>
+          <h3 className="text-xs " style={{ color: 'var(--ink-dim)' }}>Origin — your words</h3>
           {origin.words !== '' && (
-            <blockquote data-testid="rule-origin-words" className="m-0 text-[12px]" style={{ color: 'var(--ink-high)', borderLeft: '2px solid var(--border-strong)', paddingLeft: 8 }}>
+            <blockquote data-testid="rule-origin-words" className="m-0 text-xs" style={{ color: 'var(--ink-high)', borderLeft: '2px solid var(--border-strong)', paddingLeft: 8 }}>
               “{showText(origin.words)}”
             </blockquote>
           )}
-          {origin.choice !== null && <p data-testid="rule-origin-choice" className="m-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>You chose: {origin.choice}</p>}
-          <p data-testid="rule-origin-meta" className="m-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          {origin.choice !== null && <p data-testid="rule-origin-choice" className="m-0 text-xs" style={{ color: 'var(--ink-muted)' }}>You chose: {origin.choice}</p>}
+          <p data-testid="rule-origin-meta" className="m-0 text-xs" style={{ color: 'var(--ink-muted)' }}>
             {origin.actor} · <time dateTime={new Date(origin.at).toISOString()}>{fmtWhen(origin.at)}</time>
             {origin.how !== null && <> · {HOW_WORDS[origin.how]}</>}
             {origin.where !== null && (
@@ -172,17 +172,17 @@ export function RuleOrigin({ rule, runs, navigate }: {
               </>
             )}
           </p>
-          {origin.approvedProposal && <p data-testid="rule-origin-approved" className="m-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>You approved a helper’s proposal; the rule is the proposal’s words, not yours.</p>}
-          {origin.edited !== null && <p data-testid="rule-origin-edited" className="m-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>Edited at Remember to: ‘{origin.edited}’ — your words above are kept.</p>}
-          {origin.redacted && <p data-testid="rule-origin-redacted" className="m-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>A secret in the words was masked when they were recorded.</p>}
-          {origin.authMode === 'off' && origin.how === 'auto' && <p data-testid="rule-origin-authoff" className="m-0 text-[11px]" style={{ color: 'var(--status-gate)' }}>Remembered on the spot under auth=off — the daemon could not prove a human typed it.</p>}
+          {origin.approvedProposal && <p data-testid="rule-origin-approved" className="m-0 text-xs" style={{ color: 'var(--ink-muted)' }}>You approved a helper’s proposal; the rule is the proposal’s words, not yours.</p>}
+          {origin.edited !== null && <p data-testid="rule-origin-edited" className="m-0 text-xs" style={{ color: 'var(--ink-muted)' }}>Edited at Remember to: ‘{origin.edited}’ — your words above are kept.</p>}
+          {origin.redacted && <p data-testid="rule-origin-redacted" className="m-0 text-xs" style={{ color: 'var(--ink-muted)' }}>A secret in the words was masked when they were recorded.</p>}
+          {origin.authMode === 'off' && origin.how === 'auto' && <p data-testid="rule-origin-authoff" className="m-0 text-xs" style={{ color: 'var(--status-gate)' }}>Remembered on the spot under auth=off — the daemon could not prove a human typed it.</p>}
           <Tech data-testid="tech-rule-origin" parts={[`decision ${origin.decisionId}`, ...(origin.where !== null ? whereIds(origin.where) : [])]} block />
         </section>
       )}
       {history.length > 0 && (
         <section data-testid="rule-history" className="flex flex-col gap-1">
-          <h3 className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>History</h3>
-          <ol className="m-0 flex list-none flex-col gap-0.5 p-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <h3 className="text-xs " style={{ color: 'var(--ink-dim)' }}>History</h3>
+          <ol className="m-0 flex list-none flex-col gap-0.5 p-0 text-xs" style={{ color: 'var(--ink-muted)' }}>
             {history.map((h, i) => (
               <li key={`${h.at}:${i}`} data-testid="rule-history-row">
                 {h.at > 0 && <><time dateTime={new Date(h.at).toISOString()}>{fmtWhen(h.at)}</time> · </>}
@@ -196,13 +196,13 @@ export function RuleOrigin({ rule, runs, navigate }: {
       )}
       {!unsupported && (
         <section data-testid="rule-where" data-count={where.length} data-probed={probed} className="flex flex-col gap-1">
-          <h3 className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>Where it was considered</h3>
+          <h3 className="text-xs " style={{ color: 'var(--ink-dim)' }}>Where it was considered</h3>
           {where.length === 0 ? (
-            <p data-testid="rule-where-empty" className="m-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+            <p data-testid="rule-where-empty" className="m-0 text-xs" style={{ color: 'var(--ink-muted)' }}>
               Not seen in anything opened this session{probed > 0 ? ` or in the ${probed} recent ${probed === 1 ? 'step' : 'steps'} looked in` : ''}. Open a conversation or a step to see whether it was considered there.
             </p>
           ) : (
-            <ul className="m-0 flex list-none flex-col gap-0.5 p-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+            <ul className="m-0 flex list-none flex-col gap-0.5 p-0 text-xs" style={{ color: 'var(--ink-muted)' }}>
               {where.map((w) => (
                 <li key={w.key} data-testid="rule-where-row" data-kind={w.kind} data-verdict={w.verdict} {...(w.object !== null ? { 'data-object': w.object } : {})}>
                   <a href={w.href} data-testid="rule-where-open" onClick={go(w.href)} className="wk-since-toggle">{showText(w.label)}</a>
@@ -218,7 +218,7 @@ export function RuleOrigin({ rule, runs, navigate }: {
               ))}
             </ul>
           )}
-          {probed > 0 && where.length > 0 && <p data-testid="rule-where-probe" className="m-0 text-[10px]" style={{ color: 'var(--ink-dim)' }}>Includes a look into the {probed} most recent {probed === 1 ? 'step' : 'steps'} of this rule’s runs.</p>}
+          {probed > 0 && where.length > 0 && <p data-testid="rule-where-probe" className="m-0 text-xs" style={{ color: 'var(--ink-dim)' }}>Includes a look into the {probed} most recent {probed === 1 ? 'step' : 'steps'} of this rule’s runs.</p>}
         </section>
       )}
     </div>
