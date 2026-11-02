@@ -434,9 +434,11 @@ $$('[data-drawer]').forEach((card) => {
   const q = card.querySelector('[data-q]');
   const cells = $$('[data-n]', card);
   const word = q.textContent;
-  let timer = null;
+  let timer = null, frame = 0, run = 0; // run: a play's generation; a stale climb never touches the card
   const reset = () => {
+    run++;
     clearInterval(timer);
+    cancelAnimationFrame(frame);
     q.textContent = '';
     cells.forEach((c) => { c.textContent = '0'; });
     card.classList.remove('is-done', 'is-counted');
@@ -444,6 +446,7 @@ $$('[data-drawer]').forEach((card) => {
   };
   const play = () => {
     reset();
+    const mine = run;
     let i = 0;
     timer = setInterval(() => {
       i++;
@@ -454,16 +457,17 @@ $$('[data-drawer]').forEach((card) => {
       card.classList.add('is-done');
       const t0 = performance.now();
       const climb = (now) => {
+        if (mine !== run) return;
         const p = Math.min(1, (now - t0) / 700);
         cells.forEach((c) => { c.textContent = String(Math.round(p * +c.getAttribute('data-n'))); });
-        if (p < 1) requestAnimationFrame(climb);
+        if (p < 1) frame = requestAnimationFrame(climb);
         else card.classList.add('is-counted'); // the total shows only once the rows add up to it
       };
-      requestAnimationFrame(climb);
+      frame = requestAnimationFrame(climb);
     }, 70);
   };
   reset();
-  inView(card, 0.6, play, () => { clearInterval(timer); reset(); });
+  inView(card, 0.6, play, reset);
 })();
 
 /* ── Get it: the recommended command types itself in once ───────────────────────────────── */

@@ -198,6 +198,37 @@ test('the example search never shows its total while its rows still count up', a
   await expect(page.locator('.reach .hits caption')).toHaveCSS('opacity', '1');
 });
 
+test('leaving the example search mid-count and coming straight back never shows a stale total', async ({ page }) => {
+  await page.goto('/');
+  const r = await page.evaluate(() => new Promise<{ bad: string[]; replayed: boolean; final: string }>((done) => {
+    const card = document.querySelector('[data-search]')!;
+    const reach = document.querySelector('.reach') as HTMLElement;
+    const cap = card.querySelector('.hits caption')!;
+    const cells = Array.from(card.querySelectorAll('[data-n]'));
+    const bad: string[] = [];
+    let phase = 'in', t = 0, replayed = false;
+    const t0 = performance.now();
+    reach.scrollIntoView({ block: 'start' });
+    const tick = (now: number) => {
+      const sum = cells.reduce((a, c) => a + Number(c.textContent), 0);
+      if (parseFloat(getComputedStyle(cap).opacity) > 0.01 && sum !== 8) bad.push(`${phase}:${cells.map((c) => c.textContent).join(',')}`);
+      // 1. wait for the first climb to start, 2. leave ~220ms into it, 3. come back as soon as it resets
+      if (phase === 'in' && card.classList.contains('is-done')) { phase = 'climbing'; t = now; }
+      else if (phase === 'climbing' && now - t > 220) { phase = 'away'; window.scrollTo({ top: 0, behavior: 'instant' }); }
+      else if (phase === 'away' && card.classList.contains('is-pre')) { phase = 'back'; reach.scrollIntoView({ block: 'start' }); }
+      else if (phase === 'back' && card.classList.contains('is-done')) { phase = 'replay'; replayed = true; t = now; }
+      else if (phase === 'replay' && now - t > 1600) { done({ bad, replayed, final: cells.map((c) => c.textContent).join(',') }); return; }
+      if (now - t0 > 12000) { done({ bad: [...bad, `timeout in ${phase}`], replayed, final: '' }); return; }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }));
+  expect(r.replayed).toBe(true);
+  expect(r.bad).toEqual([]);
+  expect(r.final).toBe('4,3,1');
+  await expect(page.locator('.reach .hits caption')).toHaveCSS('opacity', '1');
+});
+
 test('what is new: eight items, arrows move, one stacked panel', async ({ page }) => {
   await page.goto('/');
   const news = page.locator('.news');
