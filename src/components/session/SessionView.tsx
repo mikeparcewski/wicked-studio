@@ -312,9 +312,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     const held = lastEntries.current?.chatId === ref.chatId ? lastEntries.current.entries : [];
     // While a read is pending, or after one failed (the kept history, or the chat's own status), this chat's cards stay
     // as they were, beside the error and Retry: only a read that answered replaces them.
-    const unread = waitingForKept || keptError !== null || chatError !== null;
+    // (A Retry clears the status read while it runs: that pending read holds them too.)
+    const unread = waitingForKept || keptError !== null || chatError !== null || mineChat === null;
     return reconcileProposals(ref.chatId, unread && folded.length === 0 ? held : folded);
-  }, [proposalsOn, ref, keptChat, kept, messages, waitingForKept, keptError, chatError]);
+  }, [proposalsOn, ref, keptChat, kept, messages, waitingForKept, keptError, chatError, mineChat]);
   useEffect(() => { if (ref.kind === 'chat') lastEntries.current = { chatId: ref.chatId, entries: proposalEntries }; }, [ref, proposalEntries]);
   // `/ws` replays nothing: a proposal crew resolved (or another tab answered) while this tab was disconnected is read
   // back on reconnect.

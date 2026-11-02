@@ -418,6 +418,12 @@ describe('the card in the chat thread', () => {
     await waitFor(() => expect(chatReads).toBeGreaterThan(2));
     await new Promise((r) => setTimeout(r, 30));
     expect(screen.getByTestId('artifact-proposal').getAttribute('data-pid')).toBe(`${CLOSED}:t1`);
+    // Retry while the status read still fails: the cards stay through the pending read and the second failure.
+    const reads = chatReads;
+    fireEvent.click(screen.getByTestId('session-chat-error').querySelector('button')!);
+    await waitFor(() => expect(chatReads).toBeGreaterThan(reads));
+    await waitFor(() => expect(screen.queryByTestId('session-chat-error')).not.toBeNull());
+    expect(screen.getByTestId('artifact-proposal').getAttribute('data-pid')).toBe(`${CLOSED}:t1`);
     // The socket drops; meanwhile another tab answered; on reconnect the page reads it back (no frame replayed).
     chatFail = null;
     act(() => useConnectionStore.setState({ status: 'disconnected' }));
