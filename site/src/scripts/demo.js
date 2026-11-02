@@ -2,10 +2,14 @@
    Scripted, not live: it never calls a daemon. Under prefers-reduced-motion there are no timers and
    no typing: every step lands its outcome at once.
 
-   Motion: while the demo is on screen, a background job (Move CI to Node 22) runs to done on its
-   own, and the status dots and the card waiting on you pulse. The Pause button in the title bar
-   (and leaving the screen) stills all of it: the background job stops between steps and the
-   pulses stop (studio.css .ide.is-still). Your own decisions always play out.
+   Motion: while the demo is on screen, your job's prompt types itself in and posts (it stops at the
+   plan), a background job (Move CI to Node 22) runs to done on its own, and the status dots and the
+   card waiting on you pulse. The Pause button in the title bar (and leaving the screen) stills
+   everything that runs by itself: the prompt waits untyped (or its plan waits unposted), the
+   background job stops between steps, and the pulses stop (studio.css .ide.is-still). Your own
+   decisions always play out. There is no hold on hover here, unlike the explanatory scenes: the
+   pulses are the status of jobs you are driving, and a working job must not look frozen while you
+   use it; the Pause button is the WCAG 2.2.2 control.
 
    Keyboard: the thread is re-rendered with innerHTML, so a decision would drop focus to <body>.
    Every render that removes the focused control hands focus to the newest decision card's first
@@ -84,7 +88,8 @@
     { ms: 4000, go: function () { var n = S.node; n.receipt.tests = '212 pass'; push('node', { k: 'event', t: 'Tests pass (212).' }); n.steps = 4; work('node', 'Working on Deliver…'); } },
     { ms: 4000, go: function () { var n = S.node; n.state = 'done'; n.steps = 5; n.receipt = NODE_RECEIPT; push('node', NODE_DONE); } }
   ];
-  var bgAt = 0, bgTimer = null, paused = false, onScreen = false;
+  var bgAt = 0, bgTimer = null, paused = false, onScreen = false, autoWanted = false, pendingPlan = null;
+  function isStill() { return paused || !onScreen; }
   var ORDER = ['rate', 'flaky', 'node'];
   var cur = 'rate';
   var pane = 'changes';
@@ -96,13 +101,28 @@
   function later(ms, fn) { if (reduced) { fn(); return; } timers.push(setTimeout(fn, ms)); }
   // still = paused or off screen: the background job waits between steps, and the pulses stop
   function bgSync() {
-    var still = paused || !onScreen;
+    var still = isStill();
     root.classList.toggle('is-still', still);
-    if (still) { clearTimeout(bgTimer); bgTimer = null; return; }
+    if (still) {
+      clearTimeout(bgTimer); bgTimer = null;
+      // a prompt typing by itself stops and waits, untyped, for the demo to be live again
+      if ((typing || typingPost) && !userTouched) { stopTyping(); input.value = PROMPT; autoWanted = true; }
+      return;
+    }
+    if (autoWanted) { autoWanted = false; autoStart(); }
+    if (pendingPlan) pendingPlan();
     if (bgTimer || bgAt >= BG.length || reduced) return;
     bgTimer = setTimeout(function () { bgTimer = null; BG[bgAt++].go(); bgSync(); }, BG[bgAt].ms);
   }
   var pauseBtn = root.querySelector('[data-demo-pause]');
+  // a visitor who turns on reduced motion while the page is open: everything that runs by itself stops
+  var rmq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+  if (rmq && !reduced && rmq.addEventListener) rmq.addEventListener('change', function (e) {
+    if (!e.matches) return;
+    paused = true;
+    if (pauseBtn) pauseBtn.hidden = true;
+    bgSync();
+  });
   if (pauseBtn) {
     var pauseName = pauseBtn.getAttribute('aria-label') || '';
     if (reduced) pauseBtn.hidden = true;
@@ -114,7 +134,7 @@
       bgSync();
     });
   }
-  function clearTimers() { timers.forEach(clearTimeout); timers = []; stopTyping(); }
+  function clearTimers() { timers.forEach(clearTimeout); timers = []; pendingPlan = null; stopTyping(); }
   function focusQuiet(el) { if (!el) return; try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } }
 
   // ── rendering ───────────────────────────────────────────────────────
@@ -265,20 +285,27 @@
   function push(id, m) { var s = S[id]; s.msgs = s.msgs.filter(function (x) { return x.k !== 'working'; }); if (m) s.msgs.push(m); refresh(id); }
   function work(id, text) { push(id, { k: 'working', t: text }); }
 
-  function start(text) {
+  function start(text, auto) {
     var s = S.rate;
     s.state = 'plan-wait';
     push('rate', { k: 'user', t: text });
     if (text !== PROMPT) push('rate', { k: 'event', t: 'This demo replays one recorded job: rate limits for the public API.' });
     work('rate', 'Claude Code is planning…');
     later(1100, function () {
+      // a job the demo started by itself posts its plan only while the demo is not still
+      if (auto && isStill()) { pendingPlan = postPlan; return; }
+      postPlan();
+    });
+    function postPlan() {
+      pendingPlan = null;
+      if (s !== S.rate || s.state !== 'plan-wait') return;
       s.state = 'plan';
       push('rate', { k: 'plan', who: 'Claude Code', state: 'open', items: [
         'Build: add a rate-limit middleware to the public routes',
         'Review: <b>Codex</b> checks it, not me',
         'Test: run the suite',
         'Deliver: open a pull request'] });
-    });
+    }
   }
   function planDecision(ok) {
     var s = S.rate, plan = s.msgs.filter(function (m) { return m.k === 'plan'; })[0];
@@ -379,7 +406,7 @@
         clearInterval(typing); typing = null; root.classList.remove('is-typing');
         typingPost = setTimeout(function () {
           typingPost = null;
-          if (gen === typingGen && S.rate.state === 'draft' && cur === 'rate' && input.value === PROMPT) { input.value = ''; start(PROMPT); }
+          if (gen === typingGen && S.rate.state === 'draft' && cur === 'rate' && input.value === PROMPT) { input.value = ''; start(PROMPT, !userTouched); }
         }, 260);
       }
     }, 20);
@@ -462,7 +489,11 @@
   renderAll();
   // Start the job on its own once the demo is on screen, unless the visitor got there first.
   // It always stops at the plan: nothing runs without a person approving it.
-  function autoStart() { if (!userTouched && S.rate.state === 'draft') typeThenStart(); }
+  function autoStart() {
+    if (userTouched || S.rate.state !== 'draft') return;
+    if (!reduced && isStill()) { autoWanted = true; return; } // waits for the demo to be live
+    typeThenStart();
+  }
   if (reduced) { autoStart(); return; }
   if ('IntersectionObserver' in window) {
     var io = new IntersectionObserver(function (es) {

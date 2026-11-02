@@ -157,7 +157,8 @@ test('agents: picking one puts it in the sandbox; the search example counts its 
   await page.goto('/');
   const reach = page.locator('.reach');
   await bringIntoView(reach);
-  // stop the alternating search so the first query's counts stay put for the asserts below
+  // let the first query finish counting, then stop the alternation so its counts stay put
+  await expect(reach.locator('.reach-card[data-search]')).toHaveClass(/is-counted/, { timeout: 10_000 });
   await frozen(page, '.reach');
   const group = reach.getByRole('radiogroup', { name: 'Pick an agent to see its sandbox' });
   // Codex is the default pick (Claude Code is the one with a token exception)
@@ -429,37 +430,60 @@ test('the side panel is a named tabpanel for the selected tab', async ({ page })
   await expect(ide.getByRole('tab', { name: 'Receipt' })).toHaveAttribute('aria-controls', 'ide-pane-body');
 });
 
-test('the demo keeps moving on its own, and its Pause stills it (WCAG 2.2.2)', async ({ page }) => {
-  // Motion that starts on its own and runs past five seconds needs a pause control: the title bar's.
+// Fake time, stopped: nothing runs unless a test advances it (the observers stay real).
+async function stoppedClock(page: Page) {
+  const t0 = new Date('2026-11-02T10:00:00Z').getTime();
+  await page.clock.install({ time: t0 });
+  await page.clock.pauseAt(t0 + 1000);
+}
+// advance the fake clock in small steps until `check` holds (a real-time bound, for a loaded runner)
+async function until(page: Page, check: () => Promise<boolean>, what: string, step = 50) {
+  for (const end = Date.now() + 25_000; Date.now() < end;) {
+    if (await check()) return;
+    await page.clock.runFor(step);
+  }
+  throw new Error(`never happened: ${what}`);
+}
+
+test('the demo’s Pause stills its pulses, its own prompt and its background job; Play resumes them (WCAG 2.2.2)', async ({ page }) => {
+  await stoppedClock(page);
   await page.goto('/');
   const ide = page.locator('[data-ide]');
-  await expect(ide.getByRole('button', { name: 'Approve plan' })).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(5200);
+  const node = ide.locator('[data-id="node"]');
+  await expect(node).toHaveAttribute('aria-label', 'Move CI to Node 22, GitHub Copilot working');
+  // the pulses run on their own (CSS animations keep real time)
   const running = () => ide.evaluate((el) => el.getAnimations({ subtree: true }).filter((a) => a.playState === 'running').length);
-  expect(await running(), 'the pulses still run after five seconds').toBeGreaterThan(0);
+  await expect.poll(running).toBeGreaterThan(0);
   const pause = ide.locator('[data-demo-pause]');
   await expect(pause).toHaveAccessibleName("Pause the demo's motion");
   const w0 = await box(pause);
   await pause.click();
-  await expect(ide.getByRole('button', { name: "Play the demo's motion" })).toHaveAttribute('aria-pressed', 'true');
+  await expect(pause).toHaveAccessibleName("Play the demo's motion");
+  await expect(pause).toHaveAttribute('aria-pressed', 'true');
   await expect(ide).toHaveClass(/is-still/);
   await expect.poll(running).toBe(0);
   expect((await box(pause)).w, 'Pause and Play are one width').toBe(w0.w);
-  // the background job waits too: its status does not move while paused
-  const node = ide.locator('[data-id="node"]');
-  const n0 = await node.getAttribute('aria-label');
-  await page.waitForTimeout(4500);
-  expect(await node.getAttribute('aria-label')).toBe(n0);
-  await ide.getByRole('button', { name: "Play the demo's motion" }).click();
+  // twenty seconds later nothing has moved: the job is where it was, the prompt was never typed
+  await page.clock.runFor(20_000);
+  await expect(node).toHaveAttribute('aria-label', 'Move CI to Node 22, GitHub Copilot working');
+  await expect(ide.locator('.msg--user')).toHaveCount(0);
+  await expect(ide.locator('[data-input]')).toHaveValue('Add rate limiting to the public API: 100 requests a minute per API key.');
+  await pause.click();
   await expect(ide).not.toHaveClass(/is-still/);
-  await expect(node).toHaveAttribute('aria-label', 'Move CI to Node 22, Done', { timeout: 12_000 });
+  await until(page, async () => (await node.getAttribute('aria-label')) === 'Move CI to Node 22, Done', 'the background job finishing');
+  await until(page, () => ide.getByRole('button', { name: 'Approve plan' }).isVisible(), 'the plan');
 });
 
-test('the background job finishes by itself while the demo is on screen', async ({ page }) => {
+test('pausing while the demo plans holds its plan until Play', async ({ page }) => {
+  await stoppedClock(page);
   await page.goto('/');
-  const node = page.locator('[data-ide] [data-id="node"]');
-  await expect(node).toHaveAttribute('aria-label', 'Move CI to Node 22, GitHub Copilot working');
-  await expect(node).toHaveAttribute('aria-label', 'Move CI to Node 22, Done', { timeout: 14_000 });
+  const ide = page.locator('[data-ide]');
+  await until(page, async () => (await ide.locator('[data-working]').count()) > 0 && (await ide.locator('.msg--user').count()) > 0, 'the prompt posting');
+  await ide.locator('[data-demo-pause]').click();
+  await page.clock.runFor(5000);
+  await expect(ide.getByRole('button', { name: 'Approve plan' })).toHaveCount(0);
+  await ide.locator('[data-demo-pause]').click();
+  await expect(ide.getByRole('button', { name: 'Approve plan' })).toBeVisible();
 });
 
 test('every Pause button is one width as Pause and as Play', async ({ page }) => {
@@ -477,23 +501,44 @@ test('every Pause button is one width as Pause and as Play', async ({ page }) =>
   }
 });
 
-test('the relay replays on its own while it is on screen, and Pause stops the replays', async ({ page }) => {
+test('the relay replays on its own, stops on its step under Pause, and carries on from it', async ({ page }) => {
+  await stoppedClock(page);
   await page.goto('/');
   const sec = page.locator('.review');
   await sec.evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await page.mouse.move(5, 690);
-  const receipt = sec.locator('.receipt');
-  await expect(receipt.locator('tr.is-filled')).toHaveCount(5, { timeout: 10_000 });
-  // after its pause the run starts again from the empty receipt
-  await expect(receipt.locator('tr.is-filled')).toHaveCount(0, { timeout: 9000 });
-  await expect(receipt.locator('tr.is-filled')).toHaveCount(5, { timeout: 10_000 });
+  const relay = sec.locator('.relay');
+  const filled = sec.locator('.receipt tr.is-filled');
+  await until(page, async () => (await filled.count()) === 5, 'the first run');
+  // after its pause of 5.2 s the run starts again from the empty receipt
+  await page.clock.runFor(5200);
+  await expect(filled).toHaveCount(0);
+  await page.clock.runFor(1300);
+  await expect(relay).toHaveAttribute('data-tok', 'r');
   await sec.getByRole('button', { name: 'Pause the replays' }).click();
   await page.mouse.move(5, 690);
-  await page.waitForTimeout(6500);
-  await expect(receipt.locator('tr.is-filled')).toHaveCount(5);
+  await page.clock.runFor(12_000);
+  await expect(relay).toHaveAttribute('data-tok', 'r');
+  // the step's receipt rows (Required and Built by), not one more
+  await expect(filled).toHaveCount(2);
+  await sec.getByRole('button', { name: 'Play the replays' }).click();
+  await until(page, async () => (await filled.count()) === 5, 'the run carrying on');
+});
+
+test('the relay keeps still while the pointer is on the receipt', async ({ page }) => {
+  await stoppedClock(page);
+  await page.goto('/');
+  const sec = page.locator('.review');
+  await sec.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await sec.locator('.receipt').hover();
+  await page.clock.runFor(8000);
+  await expect(sec.locator('.relay')).toHaveAttribute('data-tok', '');
+  await page.mouse.move(5, 690);
+  await until(page, async () => (await sec.locator('.receipt tr.is-filled').count()) === 5, 'the run after the pointer leaves');
 });
 
 test('the Rules card rotates its suggestions in one cell until you decide', async ({ page }) => {
+  await stoppedClock(page);
   await page.goto('/');
   const steer = page.locator('.steer');
   await steer.evaluate((el) => el.scrollIntoView({ block: 'start' }));
@@ -503,28 +548,58 @@ test('the Rules card rotates its suggestions in one cell until you decide', asyn
   const slot = rule.locator('.dr-slot');
   const h0 = await box(slot);
   await expect(shown).toHaveText('Public routes carry a rate limit');
-  await expect(shown).toHaveText('Limits key on the API key', { timeout: 9000 });
+  await until(page, async () => (await shown.textContent()) === 'Limits key on the API key', 'the second suggestion');
   // one suggestion is exposed at a time; the others keep their space but are hidden
   await expect(rule.locator('.dr-rule:visible')).toHaveCount(1);
   expect(await box(slot)).toEqual(h0);
   await rule.getByRole('button', { name: 'Approve' }).click();
   await expect(rule).toHaveAttribute('data-state', 'ok');
+  // neither the pointer nor focus holds it now: only the decision does
   await page.mouse.move(5, 690);
-  await page.waitForTimeout(6800);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.clock.runFor(13_000);
   await expect(shown).toHaveText('Limits key on the API key');
+  expect(await box(slot)).toEqual(h0);
 });
 
-test('the example search alternates its query while on screen', async ({ page }) => {
+test('the example search alternates its query while live, and Pause stops it mid-word', async ({ page }) => {
+  await stoppedClock(page);
   await page.goto('/');
   const reach = page.locator('.reach');
+  const card = reach.locator('.reach-card[data-search]');
   await reach.evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await page.mouse.move(5, 690);
   const cap = reach.locator('.hits caption');
-  await expect(cap).toHaveText('register across one project: 8 hits', { timeout: 6000 });
-  await expect(reach.locator('.reach-card[data-search]')).toHaveClass(/is-counted/);
-  await expect(cap).toHaveText('rateLimit across one project: 6 hits', { timeout: 9000 });
-  await expect(reach.locator('.reach-card[data-search]')).toHaveClass(/is-counted/, { timeout: 4000 });
+  await until(page, async () => /is-counted/.test((await card.getAttribute('class')) || ''), 'the first count');
+  await expect(cap).toHaveText('register across one project: 8 hits');
+  await page.clock.runFor(4200);
+  await expect(cap).toHaveText('rateLimit across one project: 6 hits');
+  await page.clock.runFor(140);
+  await expect(reach.locator('[data-q]')).toHaveText('ra');
+  await reach.getByRole('button', { name: 'Pause the examples' }).click();
+  await page.mouse.move(5, 690);
+  await page.clock.runFor(8000);
+  await expect(reach.locator('[data-q]')).toHaveText('ra');
+  await expect(reach.locator('.hits-n')).toHaveText(['0', '0', '0']);
+  await reach.getByRole('button', { name: 'Play the examples' }).click();
+  await until(page, async () => /is-counted/.test((await card.getAttribute('class')) || ''), 'the second count');
   await expect(reach.locator('.hits-n')).toHaveText(['2', '3', '1']);
+});
+
+test('reduced motion turned on while the page is open stops every loop on its final frame', async ({ page }) => {
+  await stoppedClock(page);
+  await page.goto('/');
+  await page.locator('.steer').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.mouse.move(5, 690);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('[data-play-toggle]:visible')).toHaveCount(0);
+  await expect(page.locator('[data-scene][data-step="4"]')).toHaveCount(3);
+  await expect(page.locator('.relay')).toHaveAttribute('data-tok', 'y');
+  await expect(page.locator('[data-ide]')).toHaveClass(/is-still/);
+  const shown = page.locator('[data-drawer="rule"] .dr-rule.is-on b');
+  const first = await shown.textContent();
+  await page.clock.runFor(20_000);
+  await expect(shown).toHaveText(first!);
 });
 
 test('opening the Experiments menu with the mouse hides the button tooltip over it', async ({ page }) => {

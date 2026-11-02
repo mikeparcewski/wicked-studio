@@ -104,6 +104,47 @@ for (const vp of [
   });
 }
 
+// Big windows zoom each frame; the relay's track and token are measured in the relay's own pixels, so
+// the token sits on its row at every zoom tier (it was scaled twice: 212px below the relay at 2400x1400).
+for (const vp of [{ width: 1440, height: 700 }, { width: 1440, height: 900 }, { width: 1920, height: 1080 }, { width: 2400, height: 1400 }]) {
+  test.describe(`the relay token sits on its row at ${vp.width}x${vp.height}`, () => {
+    test.use({ viewport: vp, contextOptions: { reducedMotion: 'reduce' } });
+    test('final frame: the token is on the You row and inside the relay', async ({ page }) => {
+      await page.goto('/');
+      await page.evaluate(async () => { await document.fonts.ready; });
+      const m = await page.evaluate(() => {
+        const relay = document.querySelector('.relay')!.getBoundingClientRect();
+        const you = document.querySelector('.fl-y')!.getBoundingClientRect();
+        const tok = document.querySelector('.relay-token')!.getBoundingClientRect();
+        return { tokMid: tok.top + tok.height / 2, youTop: you.top, youBottom: you.bottom, relayBottom: relay.bottom, tokBottom: tok.bottom };
+      });
+      expect(m.tokMid).toBeGreaterThanOrEqual(m.youTop);
+      expect(m.tokMid).toBeLessThanOrEqual(m.youBottom);
+      expect(m.tokBottom).toBeLessThanOrEqual(m.relayBottom + 1);
+    });
+  });
+}
+
+// The sandbox reserves the longest agent name, so a pick never changes its box (it grew 21px at 320px).
+test.describe('picking an agent never resizes the sandbox at 320x640', () => {
+  test.use({ viewport: { width: 320, height: 640 }, contextOptions: { reducedMotion: 'reduce' } });
+  test('every agent, one box', async ({ page }) => {
+    await page.goto('/');
+    const reach = page.locator('.reach');
+    await reach.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    const sbx = reach.locator('.sandbox');
+    const size = () => sbx.evaluate((el) => { const r = el.getBoundingClientRect(); return `${Math.round(r.width)}x${Math.round(r.height)}`; });
+    const docH = () => page.evaluate(() => document.documentElement.scrollHeight);
+    const s0 = await size(), d0 = await docH();
+    for (const name of ['Claude Code', 'GitHub Copilot', 'OpenCode', 'Pi', 'Codex']) {
+      await reach.getByRole('radio', { name, exact: true }).click();
+      await expect(reach.locator('[data-agent-name]')).toHaveText(name);
+      expect(await size(), name).toBe(s0);
+      expect(await docH(), name).toBe(d0);
+    }
+  });
+});
+
 // Outside the media where the hero is one fixed frame, it grows with its content: never into the next frame.
 for (const vp of [{ width: 941, height: 600 }, { width: 941, height: 700 }, { width: 1200, height: 640 }, { width: 1280, height: 600 }]) {
   test(`the hero never runs into the next frame at ${vp.width}x${vp.height}`, async ({ page }) => {

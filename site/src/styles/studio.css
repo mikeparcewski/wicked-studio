@@ -683,7 +683,7 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .sbx { position: relative; min-height: 98px; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 10px 12px; border: 1.5px dashed var(--border-strong); border-radius: 12px; background: color-mix(in oklab, var(--canvas) 55%, transparent); }
 .sbx-k { position: absolute; top: -8px; left: 10px; padding: 0 6px; font-weight: var(--weight-strong); color: var(--muted); background: var(--surface-2); }
 .sbx-agent { font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink); }
-.sandbox.is-swap .sbx-agent { animation: art-in .35s var(--ease); }
+.sandbox.is-swap [data-agent-name] { animation: art-in .35s var(--ease); }
 .sbx-repo { color: var(--muted); }
 .sbx-sees code { font-size: 11.5px; }
 .sbx-wire { position: relative; height: 2px; margin: 0 6px; background: repeating-linear-gradient(to right, var(--hairline-strong) 0 4px, transparent 4px 8px); }
@@ -1100,6 +1100,9 @@ html[data-theme="light"] .amber-floor {
 @keyframes wait-glow { 50% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--you) 18%, transparent); } }
 
 /* reach: Claude Code's line names its token exception (both lines share a cell) */
+.sbx-agent { display: grid; }
+.sbx-agent > span { grid-area: 1 / 1; }
+.sbx-sizer { visibility: hidden; }
 .sbx-sees { display: grid; }
 .sbx-sees > span { grid-area: 1 / 1; }
 .sbx-s2 { visibility: hidden; }
@@ -1119,3 +1122,6 @@ html[data-theme="light"] .amber-floor {
   .al-row { align-items: flex-start; }
   .al-row span { white-space: normal; overflow: visible; text-overflow: clip; }
 }
+/* schematic text in What's new is mock UI at caption size, not panel prose (the panel's p rule reached
+   the power mode message and set it at 20px) */
+.news-art p { font-size: inherit; line-height: inherit; max-width: none; }

@@ -11,7 +11,9 @@
    - Keyboard: every tablist has roving tabindex with arrows, Home and End. */
 import 'wicked-web/scripts/scroll-wheel.js';
 
-const reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const reduceMq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+// `let`: a visitor can turn reduced motion on while the page is open (see the listener after the groups)
+let reduced = !!(reduceMq && reduceMq.matches);
 const $$ = (s, r = document) => Array.prototype.slice.call(r.querySelectorAll(s));
 
 /* ── Wheel: one notch, one frame (wicked-web scroll-wheel.js), only where every frame snaps ──────
@@ -215,6 +217,17 @@ const groupOf = (el) => {
   if (!groups.has(s)) groups.set(s, group(s));
   return groups.get(s);
 };
+// Reduced motion turned on while the page is open: every loop stops for good and settles on its
+// final frame (a player's settle), the Pause buttons go (nothing is left to pause). The CSS side
+// (no animations, no transitions) follows the media query by itself.
+if (reduceMq && !reduced && reduceMq.addEventListener) {
+  reduceMq.addEventListener('change', (e) => {
+    if (!e.matches || reduced) return;
+    reduced = true;
+    $$('[data-play-toggle]').forEach((b) => { b.hidden = true; });
+    groups.forEach((g) => g.players.forEach((pl) => (pl.settle ? pl.settle() : pl.sync())));
+  });
+}
 
 /* ── Scenes (the three benefits): stepped frames, looped while on screen ──────────────────── */
 const SCENE_STEPS = {
@@ -239,15 +252,16 @@ $$('[data-scene]').forEach((el) => {
   const player = {
     sync() {
       clearTimeout(t); t = null;
-      const go = seen && !held && !g.paused;
+      const go = !reduced && seen && !held && !g.paused;
       el.classList.toggle('is-frozen', !go);
       if (go) run();
     },
+    settle() { clearTimeout(t); t = null; show(last); el.classList.add('is-frozen'); },
   };
   g.players.push(player);
   show(0);
   hold(el.closest('.trio-card') || el, (h) => { held = h; player.sync(); });
-  inView(el, 0.6, () => { seen = true; player.sync(); }, () => { seen = false; show(0); player.sync(); });
+  inView(el, 0.6, () => { seen = true; player.sync(); }, () => { seen = false; if (!reduced) show(0); player.sync(); });
 });
 
 /* ── Tours (the sidebar explorer, What's new): auto-advance, hover/focus/click pins ────────── */
@@ -295,8 +309,10 @@ $$('[data-tour]').forEach((el) => {
 });
 
 /* ── The review relay: Builder → Reviewer → back → Reviewer → You, the receipt in step ───────
-   It replays on its own while it is on screen (a pause of HOLD after each run), stops while the
-   pointer or focus is on the relay, the receipt or the switch, and under the frame’s Pause. */
+   It plays from the top each time it comes on screen and replays after a pause of HOLD. An automatic
+   run steps only while it is live (on screen, not held by the pointer or focus on the relay, the
+   receipt or the switch, not under the frame's Pause): otherwise it stops on its current step and
+   carries on from there. A run you start (the switch, Replay) plays through. */
 (() => {
   const sec = document.querySelector('[data-relay]');
   if (!sec) return;
@@ -306,10 +322,11 @@ $$('[data-tour]').forEach((el) => {
   const replay = sec.querySelector('[data-relay-replay]');
   const rows = { b: relay.querySelector('.fl-b'), r: relay.querySelector('.fl-r'), y: relay.querySelector('.fl-y') };
   const trs = $$('tbody tr', receipt);
-  // rows grow with their text (minimum font sizes): the track, the arc and the token follow the measured centres
+  // rows grow with their text (minimum font sizes): the track, the arc and the token follow the measured
+  // centres. offsetTop/offsetHeight are in the relay's own CSS pixels, so a zoomed frame (big windows)
+  // is not scaled twice (getBoundingClientRect is already zoomed).
   const measure = () => {
-    const base = relay.getBoundingClientRect().top;
-    ['b', 'r', 'y'].forEach((k) => { const r = rows[k].getBoundingClientRect(); relay.style.setProperty('--y' + k, Math.round(r.top - base + r.height / 2) + 'px'); });
+    ['b', 'r', 'y'].forEach((k) => { const r = rows[k]; relay.style.setProperty('--y' + k, Math.round(r.offsetTop + r.offsetHeight / 2) + 'px'); });
   };
   measure();
   if ('ResizeObserver' in window) new ResizeObserver(measure).observe(relay.querySelector('.flow'));
@@ -332,13 +349,14 @@ $$('[data-tour]').forEach((el) => {
   const DELAY = [400, 900, 1000, 900, 900];
   const HOLD = 5200;
   const g = groupOf(sec);
-  let mode = 'two', t = null, loop = null, playing = false, seen = false, held = false;
-  const live = () => seen && !held && !g.paused;
-  const again = () => { clearTimeout(loop); loop = null; if (live() && !playing) loop = setTimeout(play, HOLD); };
+  // k: the step on screen; run: true while a run has steps left; driven: you started this run
+  let mode = 'two', k = -1, t = null, loop = null, run = false, driven = false, seen = false, held = false;
+  const seq = () => (mode === 'two' ? TWO : ONE);
+  const live = () => !reduced && seen && !held && !g.paused;
   const apply = (st) => {
-    Object.keys(rows).forEach((k) => {
-      rows[k].classList.toggle('is-lit', st.lit === k);
-      rows[k].setAttribute('data-s', st.s[k] || '');
+    Object.keys(rows).forEach((key) => {
+      rows[key].classList.toggle('is-lit', st.lit === key);
+      rows[key].setAttribute('data-s', st.s[key] || '');
     });
     relay.setAttribute('data-tok', st.tok);
     relay.classList.toggle('has-arc', !!st.arc);
@@ -346,35 +364,47 @@ $$('[data-tour]').forEach((el) => {
     receipt.classList.toggle('is-stopped', !!st.stop);
     trs.forEach((tr) => tr.classList.toggle('is-filled', +tr.getAttribute('data-row') <= st.fill));
   };
-  function play() {
-    clearTimeout(t); clearTimeout(loop); loop = null;
-    const seq = mode === 'two' ? TWO : ONE;
-    relay.setAttribute('data-mode', mode);
-    receipt.setAttribute('data-mode', mode);
-    if (reduced) { apply(seq[seq.length - 1]); return; }
-    let k = 0;
-    playing = true;
-    const next = () => {
-      apply(seq[k]);
-      if (k < seq.length - 1) { t = setTimeout(() => { k++; next(); }, DELAY[k]); }
-      else { playing = false; again(); }
-    };
-    next();
+  // one place decides what happens next: the next step, the next replay, or nothing
+  const tick = () => {
+    clearTimeout(t); t = null; clearTimeout(loop); loop = null;
+    if (run) {
+      if (!driven && !live()) return; // stopped on step k; tick() carries on when it is live again
+      t = setTimeout(() => {
+        k++;
+        apply(seq()[k]);
+        if (k >= seq().length - 1) { run = false; driven = false; }
+        tick();
+      }, DELAY[k]);
+    } else if (live()) {
+      loop = setTimeout(() => start(false), HOLD);
+    }
+  };
+  const setMode = () => { relay.setAttribute('data-mode', mode); receipt.setAttribute('data-mode', mode); };
+  function start(byYou) {
+    setMode();
+    if (reduced) { k = seq().length - 1; apply(seq()[k]); run = false; return; }
+    k = 0; run = true; driven = byYou;
+    apply(seq()[0]);
+    tick();
   }
   sw.addEventListener('click', () => {
     mode = mode === 'two' ? 'one' : 'two';
     sw.setAttribute('aria-checked', mode === 'two' ? 'true' : 'false');
-    play();
+    start(true);
   });
-  replay.addEventListener('click', play);
+  replay.addEventListener('click', () => start(true));
   // The final frame is the no-JS / reduced-motion state; motion starts from the empty one.
-  if (reduced) { play(); return; }
-  g.players.push({ sync: again });
+  if (reduced) { start(false); return; }
+  g.players.push({ sync: tick, settle() { run = false; driven = false; k = seq().length - 1; apply(seq()[k]); tick(); } });
   // held over the relay, the receipt and the switch; not over Pause or Replay, so Play resumes at once
-  holdAll([relay, receipt, sw], (h) => { held = h; again(); });
+  holdAll([relay, receipt, sw], (h) => { held = h; tick(); });
   apply(TWO[0]);
-  // each time it comes on screen it plays from the top; off screen it stops after the current run
-  inView(relay, 0.6, () => { seen = true; play(); }, () => { seen = false; again(); });
+  // On screen: play from the top, or, under Pause, show the whole receipt instead of an empty one.
+  inView(relay, 0.6, () => {
+    seen = true;
+    if (g.paused) { if (k < 0) { k = seq().length - 1; apply(seq()[k]); } tick(); }
+    else start(false);
+  }, () => { seen = false; tick(); });
 })();
 
 /* ── Rules / memory / knowledge drawers: each acts on its own sample, locally ───────────────── */
@@ -478,15 +508,21 @@ $$('[data-drawer]').forEach((card) => {
   chips.forEach((c, k) => c.addEventListener('click', () => pick(k)));
   roving(list, chips, { vertical: true, onMove: pick });
   if (box && !reduced) {
-    g.players.push({ sync() { box.classList.toggle('is-still', g.paused); } });
+    // the hand-off loops while on screen; it stills under the frame's Pause and while the pointer or
+    // focus is on the agents card
+    let held = false;
+    const sync = () => box.classList.toggle('is-still', g.paused || held);
+    g.players.push({ sync });
+    hold(list.closest('.reach-card') || list, (h) => { held = h; sync(); });
     inView(box, 0.5, () => box.classList.add('is-live'), () => box.classList.remove('is-live'));
   }
 })();
 
 /* ── Projects: the example search types its query, then the counts climb ───────────────────
-   While on screen it alternates between the example queries (a pause of HOLD after each count),
-   stops while the pointer or focus is on the card and under the frame's Pause, and starts again
-   from the first query each time it comes back on screen. */
+   While it is live (on screen, not held by the pointer or focus on the card, not under the frame's
+   Pause) it alternates between the example queries, a pause of HOLD after each count. When it stops
+   being live it stops where it is (mid-word, mid-count) and carries on from there; each time it comes
+   back on screen it starts again from the first query, or, under Pause, shows that query's result. */
 (() => {
   const card = document.querySelector('[data-search]');
   if (!card || reduced) return;
@@ -498,21 +534,19 @@ $$('[data-drawer]').forEach((card) => {
   let queries = [];
   try { queries = JSON.parse(card.querySelector('[data-queries]').getAttribute('data-queries')); } catch (e) { queries = []; }
   if (!queries.length) queries = [{ q: q.textContent, n: cells.map((c) => +c.getAttribute('data-n')) }];
-  const HOLD = 4200;
+  const HOLD = 4200, TYPE = 70, CLIMB = 700;
   const g = groupOf(card);
-  let timer = null, frame = 0, run = 0, qi = 0, loop = null, busy = false, seen = false, held = false; // run: a play's generation; a stale climb never touches the card
-  const live = () => seen && !held && !g.paused;
-  const again = () => { clearTimeout(loop); loop = null; if (live() && !busy) loop = setTimeout(() => play((qi + 1) % queries.length), HOLD); };
-  const reset = () => {
-    run++;
-    busy = false;
-    clearInterval(timer);
-    clearTimeout(loop); loop = null;
-    cancelAnimationFrame(frame);
-    q.textContent = '';
-    cells.forEach((c) => { c.textContent = '0'; });
-    card.classList.remove('is-done', 'is-counted');
-    card.classList.add('is-pre');
+  // phase: 'type' (i letters shown) → 'climb' (p of the way) → 'shown' (then HOLD) → the next query
+  let qi = 0, phase = 'shown', i = 0, p = 0, timer = null, frame = 0, run = 0, seen = false, held = false;
+  const live = () => !reduced && seen && !held && !g.paused;
+  const stop = () => { clearTimeout(timer); timer = null; cancelAnimationFrame(frame); frame = 0; run++; };
+  const paint = () => {
+    q.textContent = queries[qi].q.slice(0, i);
+    cells.forEach((c) => { c.textContent = String(Math.round(p * +c.getAttribute('data-n'))); });
+    // the summary waits for the counts, so the example never reads "8 hits" over a row of zeros
+    card.classList.toggle('is-pre', phase === 'type');
+    card.classList.toggle('is-done', phase !== 'type');
+    card.classList.toggle('is-counted', phase === 'shown');
   };
   // load query k into the card: its word, its counts and bars, and its summary (hidden until counted)
   const load = (k) => {
@@ -524,36 +558,42 @@ $$('[data-drawer]').forEach((card) => {
     if (cap) cap.textContent = Q.q;
     if (total) total.textContent = String(Q.n.reduce((a, b) => a + b, 0));
   };
-  const play = (k) => {
-    reset();
-    load(k);
-    busy = true;
-    const word = queries[k].q;
+  const begin = (k) => { load(k); phase = 'type'; i = 0; p = 0; paint(); };
+  const finish = (k) => { load(k); phase = 'shown'; i = queries[k].q.length; p = 1; paint(); };
+  // one place decides what happens next, and only while the search is live
+  const step = () => {
+    stop();
+    if (!live()) return;
     const mine = run;
-    let i = 0;
-    timer = setInterval(() => {
-      i++;
-      q.textContent = word.slice(0, i);
-      if (i < word.length) return;
-      clearInterval(timer);
-      card.classList.remove('is-pre');
-      card.classList.add('is-done');
-      const t0 = performance.now();
+    if (phase === 'type') {
+      timer = setTimeout(() => {
+        if (mine !== run) return;
+        i++;
+        if (i >= queries[qi].q.length) { i = queries[qi].q.length; phase = 'climb'; }
+        paint(); step();
+      }, TYPE);
+    } else if (phase === 'climb') {
+      const t0 = performance.now() - p * CLIMB;
       const climb = (now) => {
         if (mine !== run) return;
-        const p = Math.min(1, (now - t0) / 700);
-        cells.forEach((c) => { c.textContent = String(Math.round(p * +c.getAttribute('data-n'))); });
-        if (p < 1) frame = requestAnimationFrame(climb);
-        else { card.classList.add('is-counted'); busy = false; again(); } // the total shows only once the rows add up to it
+        p = Math.min(1, (now - t0) / CLIMB);
+        if (p >= 1) { phase = 'shown'; paint(); step(); return; }
+        paint();
+        frame = requestAnimationFrame(climb);
       };
       frame = requestAnimationFrame(climb);
-    }, 70);
+    } else {
+      timer = setTimeout(() => { if (mine !== run) return; begin((qi + 1) % queries.length); step(); }, HOLD);
+    }
   };
-  g.players.push({ sync: again });
-  hold(card, (h) => { held = h; again(); });
-  reset();
-  load(0);
-  inView(card, 0.6, () => { seen = true; play(0); }, () => { seen = false; reset(); load(0); });
+  g.players.push({ sync: step, settle() { stop(); finish(qi); } });
+  hold(card, (h) => { held = h; step(); });
+  begin(0);
+  inView(card, 0.6, () => {
+    seen = true;
+    if (g.paused || reduced) finish(0); else begin(0);
+    step();
+  }, () => { seen = false; stop(); if (reduced) finish(qi); else begin(0); });
 })();
 
 /* ── Get it: the recommended command types itself in each time it comes on screen ─────────── */
@@ -564,6 +604,7 @@ $$('[data-drawer]').forEach((card) => {
   let t = null;
   inView(code, 0.9, () => {
     clearInterval(t);
+    if (reduced) { code.textContent = full; code.classList.remove('is-typing'); return; }
     let i = 0;
     code.textContent = '';
     code.classList.add('is-typing');

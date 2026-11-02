@@ -592,7 +592,8 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <div class="sandbox" aria-hidden="true">
             <div class="sbx">
               <span class="sbx-k">sandbox</span>
-              <span class="sbx-agent" data-agent-name>{AGENTS[1]}</span>
+              <!-- the longest name sits in the same cell (hidden), so a pick never changes the box -->
+              <span class="sbx-agent"><span data-agent-name>{AGENTS[1]}</span><span class="sbx-sizer" aria-hidden="true">{AGENTS.reduce((a, b) => (b.length > a.length ? b : a))}</span></span>
               <span class="sbx-repo">your repo</span>
               <!-- both lines in one cell: Claude Code's is the subscription-token exception -->
               <span class="sbx-sees"><span class="sbx-s1">sees <code>placeholder</code></span><span class="sbx-s2">sees placeholders, except a subscription’s sign-in token</span></span>
