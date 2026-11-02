@@ -148,6 +148,22 @@ describe('the state as it stands now', () => {
     // before the session caught up (a read without the flip), this page's answer leads
     expect(mergePower(state(), [], local, at(25))!.on).toBe(false);
   });
+  it('on a caught-up tie the session replaces the answer only where strictly further along; hand-off steps merge by step (codex r4 on 9d)', () => {
+    const flip = [{ at: at(25), on: false, by: 'you', reason: null, stayPhased: [] }];
+    const step = (name: string, status: string, min: number) => ({ step: name, status, at: at(min) }) as never;
+    const local = state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'passed', 26), step('review', 'running', 26)] } });
+    // the same turn count: the answer's orchestrator stands; a session hand-off with the same moment keeps the answer's results
+    const session = state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'running', 26)] } });
+    const merged = mergePower(session, [], local, at(25))!;
+    expect(merged.handoff!.steps.map((st) => [st.step, st.status])).toEqual([['checks', 'passed'], ['review', 'running']]);
+    expect(merged.orchestrator).toEqual(local.orchestrator);
+    // a later session record of a step wins; a new round wins whole
+    const later = mergePower(state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('review', 'passed', 27)] } }), [], local, at(25))!;
+    expect(later.handoff!.steps.map((st) => [st.step, st.status])).toEqual([['checks', 'passed'], ['review', 'passed']]);
+    // a session hand-off that is not well formed is ignored, never a crash
+    const partial = mergePower(state({ on: false, toggles: flip, handoff: { round: 1 } as never }), [], local, at(25))!;
+    expect(partial.handoff!.steps).toHaveLength(2);
+  });
   it('a checkpoint frame that opened a pause pauses the run until the next turn starts; this page\'s answer clears it', () => {
     const pz = { at: at(29), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };
     const cp = { type: 'powerCheckpointReached', session: 'r', ord: 1, checkpoint: 3, turn: 3, trigger: 'turn', head: null, picked: 0, rigor: 'highest', paused: true, pause: pz, ts: at(29) };

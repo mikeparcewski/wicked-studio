@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { isMemoryUnsupported, memoryCoverage } from '../api/memory.js';
 import { proposalKind } from '../api/proposals.js';
-import { useNeedsSources } from '../store/needsSources.js';
+import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import type { MemoryReading } from '../board/deskModel.js';
 
 type Coverage = { state: 'ok'; total: number } | { state: 'down'; reason: string } | { state: 'unknown' };
@@ -25,7 +25,13 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!enabled) return undefined;
-    const again = (): void => { if (document.visibilityState !== 'hidden') setTick((n) => n + 1); };
+    // Coming back also refreshes the queue's own inputs, under its 30 s freshness rule, so the counts below follow
+    // (codex + agy r4 on 9d); moving inside studio fires nothing here (needs_shell's route walk re-reads none).
+    const again = (): void => {
+      if (document.visibilityState === 'hidden') return;
+      setTick((n) => n + 1);
+      void useNeedsSources.getState().load(HOME_FRESH_MS);
+    };
     window.addEventListener('focus', again);
     document.addEventListener('visibilitychange', again);
     return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); };
@@ -50,10 +56,21 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
   const repos = useNeedsSources((s) => (s.readOk.repos === true ? s.repos : null));
   return useMemo((): MemoryReading => {
     if (coverage.state !== 'ok') return coverage;
-    const pending = Array.isArray(proposals) ? proposals.filter((p) => proposalKind(p) === 'memory').length : undefined;
+    const pending = countMemoryProposals(proposals);
     const indexedRepos = Array.isArray(repos)
       ? repos.filter((x) => typeof (x as { code_graph_db?: unknown }).code_graph_db === 'string' && (x as { code_graph_db: string }).code_graph_db !== '').length
       : undefined;
     return { state: 'ok', total: coverage.total, ...(pending !== undefined ? { pending } : {}), ...(indexedRepos !== undefined ? { indexedRepos } : {}) };
   }, [coverage, proposals, repos]);
+}
+
+/** The memory proposals in the queue's list, or undefined when there is no list or an entry cannot be read (codex r4
+ *  on 9d: a partial proposal must leave the count out, never throw while rendering the Desk). */
+function countMemoryProposals(proposals: unknown): number | undefined {
+  if (!Array.isArray(proposals)) return undefined;
+  try {
+    return proposals.filter((p) => proposalKind(p as Parameters<typeof proposalKind>[0]) === 'memory').length;
+  } catch {
+    return undefined;
+  }
 }

@@ -12,7 +12,7 @@ const memoryCoverage = vi.fn();
 const listProposals = vi.fn();
 vi.mock('../src/api/client.js', () => ({ api: { listRepos } }));
 vi.mock('../src/api/memory.js', () => ({ memoryCoverage, isMemoryUnsupported: () => false }));
-vi.mock('../src/api/proposals.js', () => ({ listProposals, proposalKind: (p: { kind?: string }) => p.kind ?? 'memory' }));
+vi.mock('../src/api/proposals.js', () => ({ listProposals, proposalKind: (p: { kind?: string }) => { if (p.kind === undefined) throw new TypeError('no kind_type'); return p.kind; } }));
 
 const { useMemoryReading } = await import('../src/hooks/useMemoryReading.js');
 const { useNeedsSources } = await import('../src/store/needsSources.js');
@@ -82,5 +82,28 @@ describe('useMemoryReading', () => {
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
+  });
+
+  it('a proposal entry that cannot be read leaves the count out, never throws (codex r4 on 9d)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 5 });
+    listProposals.mockResolvedValue([{}]);
+    listRepos.mockResolvedValue({ repos: [] });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await act(async () => { await useNeedsSources.getState().load(); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 5, indexedRepos: 0 }));
+  });
+
+  it('coming back to the window refreshes the queue inputs older than its 30 s window, so the counts follow (codex + agy r4 on 9d)', async () => {
+    memoryCoverage.mockResolvedValue({ total: 1 });
+    listProposals.mockResolvedValue([{ kind: 'memory' }]);
+    listRepos.mockResolvedValue({ repos: [] });
+    const { result } = renderHook(() => useMemoryReading(true));
+    await act(async () => { await useNeedsSources.getState().load(); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 1, pending: 1, indexedRepos: 0 }));
+    // away for a minute: two memory proposals arrived
+    useNeedsSources.setState((s) => ({ readAt: { ...s.readAt, proposals: Date.now() - 60_000, repos: Date.now() - 60_000 } }));
+    listProposals.mockResolvedValue([{ kind: 'memory' }, { kind: 'memory' }]);
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 1, pending: 2, indexedRepos: 0 }));
   });
 });

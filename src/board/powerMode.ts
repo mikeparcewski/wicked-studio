@@ -596,20 +596,35 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
 /**
  * This page's answer, with the run's live progress from a session read that has caught up with it (the same rigor
  * changes and flips): the answer is a snapshot taken when it was sent, so its turns, turn log, check-points, hand-off
- * and outcome froze there (Copilot on #937: after a flip the power panel stopped updating). Each takes whichever side is
- * further along, never going back; what the answer changed (on, rigor, history, toggles, pause) stays the answer's.
+ * and outcome froze there (Copilot on #937: after a flip the power panel stopped updating). The session's value
+ * replaces the answer's only where it is STRICTLY further along; on a tie the answer's stands, as before. Hand-off steps
+ * merge by step (the later record wins, a tie keeps the answer's); a session hand-off that is not well formed is
+ * ignored. What the answer changed (on, rigor, history, toggles, pause) stays the answer's.
  */
 function withLiveProgress(local: PowerState, p: PowerState): PowerState {
-  const handoffAt = (h: PowerState['handoff']): number => (h === null ? -1 : h.round * 1e15 + h.steps.reduce((m, st) => Math.max(m, st.at ?? 0), 0));
-  const turnLog = (p.turnLog?.length ?? 0) >= (local.turnLog?.length ?? 0) ? p.turnLog : local.turnLog;
+  const turnLog = (p.turnLog?.length ?? 0) > (local.turnLog?.length ?? 0) ? p.turnLog : local.turnLog;
   return {
     ...local,
-    orchestrator: p.orchestrator.turns >= local.orchestrator.turns ? p.orchestrator : local.orchestrator,
+    orchestrator: p.orchestrator.turns > local.orchestrator.turns ? p.orchestrator : local.orchestrator,
     ...(turnLog !== undefined ? { turnLog } : {}),
     checkpoints: Math.max(p.checkpoints, local.checkpoints),
-    handoff: handoffAt(p.handoff) >= handoffAt(local.handoff) ? p.handoff : local.handoff,
-    outcome: p.outcome ?? local.outcome,
+    handoff: mergeHandoff(local.handoff, p.handoff),
+    outcome: local.outcome ?? p.outcome,
   };
+}
+
+function mergeHandoff(mine: PowerState['handoff'], theirs: PowerState['handoff']): PowerState['handoff'] {
+  const ok = (h: PowerState['handoff']): h is NonNullable<PowerState['handoff']> =>
+    h !== null && typeof h === 'object' && typeof h.round === 'number' && Array.isArray(h.steps);
+  if (!ok(theirs)) return mine;
+  if (!ok(mine) || theirs.round > mine.round) return theirs;
+  if (theirs.round < mine.round) return mine;
+  const steps = new Map(mine.steps.map((st) => [st.step, st]));
+  for (const st of theirs.steps) {
+    const had = steps.get(st.step);
+    if (had === undefined || (st.at ?? 0) > (had.at ?? 0)) steps.set(st.step, st);
+  }
+  return { ...mine, steps: [...steps.values()] };
 }
 
 function historyTip(p: PowerState): number {
