@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { createContext, runInContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
-import { guardNestedHtml, NESTED_PRELUDE } from '../src/plugins/_shared/nestedGuard.js';
+import { guardNestedHtml, NESTED_PRELUDE, withNestedPrelude } from '../src/plugins/_shared/nestedGuard.js';
 import { sha256Base64 } from '../src/plugins/_shared/sha256.js';
 import { appendInstrumentBridge } from '../src/interactive/instrumented.js';
 
@@ -50,7 +50,7 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
 
   it('no unsafe-inline, child frames load no URL, no workers', () => {
     const policy = policyOf(parse(guardNestedHtml(agent)));
-    expect(policy).toMatch(/^script-src 'sha256-[^;]+; frame-src 'none'; child-src 'none'; worker-src 'none'$/);
+    expect(policy).toMatch(/^script-src 'sha256-[^;]+; frame-src 'none'; child-src 'none'; worker-src 'none'; object-src 'none'$/);
     expect(policy).not.toContain('unsafe');
   });
 
@@ -71,6 +71,16 @@ describe('guardNestedHtml: the prelude first in every script, and a policy that 
   it('the doctype is kept, and a document without one stays without one (its rendering mode does not change)', () => {
     expect(guardNestedHtml('<!DOCTYPE html><p>x</p>').startsWith('<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy"')).toBe(true);
     expect(guardNestedHtml('<p>x</p>').startsWith('<html><head><meta http-equiv="Content-Security-Policy"')).toBe(true);
+  });
+
+  it('a directive prologue and a hashbang stay first (strict mode is kept); after a lone hashbang the prelude starts a new line', () => {
+    expect(withNestedPrelude('"use strict";x()')).toBe(`"use strict";${P}x()`);
+    expect(withNestedPrelude('#!/x\ny()')).toBe(`#!/x\n${P}\ny()`);
+    expect(withNestedPrelude('"use strict"\nb()')).toBe(`${P}"use strict"\nb()`);
+    const doc = parse(guardNestedHtml('<script>"use strict";window.s=1</script>'));
+    const script = Array.from(doc.querySelectorAll('script')).find((s) => s.textContent!.includes('window.s'))!;
+    expect(script.textContent).toBe(`"use strict";${P}window.s=1`);
+    expect(hashesOf(doc)).toContain(node(script.textContent!));
   });
 
   it('inline event handlers stay in the markup but the policy refuses them (no unsafe-hashes)', () => {
@@ -97,10 +107,29 @@ describe('NESTED_PRELUDE: WebRTC gone from the window, for good, before the docu
     expect(() => runInContext(`${P}window.again = 1`, ctx)).not.toThrow();
   });
 
-  it('fails closed: a script that breaks it by a hoisted declaration throws before its own first statement', () => {
+  it('is the same text crew puts in every editor bundle (crew src/editors/webrtc-guard.ts pins the same sha256)', () => {
+    expect(node(P)).toBe('bshWuuB2sbcxfqYhEzM37dLx7kpAWeLCBXSHtjRL1zI=');
+  });
+
+  it('fails closed when `window` is not the window: a module-scope `function window(){}` (here a function scope) throws a string first, and calls no hoisted TypeError', () => {
     const ctx = win();
-    expect(() => runInContext(`${P}window.ran = true; function Object(){}`, ctx)).toThrow();
-    expect(runInContext('window.ran', ctx)).toBeUndefined();
+    let thrown: unknown;
+    try { runInContext(`(function(){ ${P} window.ran = true; function window(){} function TypeError(){ globalThis.called = true } })()`, ctx); } catch (e) { thrown = e; }
+    expect(thrown).toBe('WebRTC is not available in an editor frame');
+    expect(runInContext('typeof globalThis.called + typeof globalThis.ran', ctx)).toBe('undefinedundefined');
+  });
+
+  it('takes Object from a literal: a script that hoists its own `function Object(){}` still gets WebRTC locked', () => {
+    const ctx = win();
+    runInContext(`${P}window.ran = true; function Object(){}`, ctx);
+    expect(runInContext('window.ran', ctx)).toBe(true);
+    expect(runInContext('typeof window.RTCPeerConnection', ctx)).toBe('undefined');
+  });
+
+  it('a script with a lone hashbang still runs the prelude first (it is not swallowed by the hashbang comment)', () => {
+    const ctx = win();
+    runInContext(withNestedPrelude('#!/x\nwindow.seen = typeof RTCPeerConnection;'), ctx);
+    expect(runInContext('window.seen', ctx)).toBe('undefined');
   });
 
   it('holds no "<" (it cannot end or escape the script it sits in)', () => {
