@@ -420,12 +420,15 @@ describe('Change something on a create card (A3)', () => {
       reads.push(u.search);
       // The plain read is the daemon's cached reading (still signed out); only the keyed check reads it fresh.
       return Promise.resolve(ok(u.searchParams.get('refresh') === 'claude'
-        ? { roster: [{ ...stale[0], auth: undefined }, stale[1]], refresh: { key: 'claude', outcome: 'signed_in' } }
+        ? { roster: [{ ...stale[0], auth: undefined }, stale[1]], refresh: { key: 'claude', outcome: 'probed' } }
         : { roster: stale }));
     }));
     const form = await openForm();
     expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(true);
-    fireEvent.click(within(form).getByTestId('proposal-answer-council-refresh'));
+    // Reached by keyboard: the control has focus, and goes once both helpers can work.
+    const refresh = within(form).getByTestId('proposal-answer-council-refresh');
+    refresh.focus();
+    fireEvent.click(refresh);
     await waitFor(() => expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(false));
     expect(reads).toEqual(['?refresh=claude']);
     // The control that asked is gone; focus stays in the helpers, and the line is a live status.
@@ -480,6 +483,77 @@ describe('Change something on a create card (A3)', () => {
     const again = await screen.findByTestId('artifact-proposal-go-again');
     decideAnswer = () => new Promise<Response>(() => {});
     fireEvent.click(again);
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
+  });
+
+  it('a keyed check that timed out is said, not taken as checked (crew keeps the last reading)', async () => {
+    const stale = [
+      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, auth: 'signed_out' },
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true },
+    ];
+    setCachedRoster(stale as never);
+    const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => new URL(url, 'http://x').pathname.endsWith('/roster')
+      ? Promise.resolve(ok({ roster: stale, refresh: { key: 'claude', outcome: 'timed_out' } }))
+      : base(url, init)));
+    const form = await openForm();
+    fireEvent.click(within(form).getByTestId('proposal-answer-council-refresh'));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-council-check-failed')).toBeTruthy());
+    expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(true);
+  });
+
+  it('a check that ends after the person moved on leaves their focus where it is', async () => {
+    const stale = [
+      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, auth: 'signed_out' },
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true },
+    ];
+    setCachedRoster(stale as never);
+    let release: (r: Response) => void = () => {};
+    const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => new URL(url, 'http://x').pathname.endsWith('/roster')
+      ? new Promise<Response>((r) => { release = r; })
+      : base(url, init)));
+    const form = await openForm();
+    fireEvent.click(within(form).getByTestId('proposal-answer-council-refresh'));
+    const title = within(form).getByTestId('proposal-answer-title');
+    title.focus();
+    release(ok({ roster: [{ ...stale[0], auth: undefined }, stale[1]], refresh: { key: 'claude', outcome: 'probed' } }));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(false));
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    expect(document.activeElement).toBe(title);
+  });
+
+  it('a delayed refusal (chat busy) over another tab’s newer Go keeps that Go reading Starting it', async () => {
+    // An old accepting record: the card reads Interrupted, Go again.
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: T0 + 1600, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    let release: (r: Response) => void = () => {};
+    decideAnswer = () => new Promise<Response>((r) => { release = r; });
+    page();
+    fireEvent.click(await screen.findByTestId('artifact-proposal-go-again'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    // Another tab's Go again is recorded now; this tab's is refused, its view carrying no record time.
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: Date.now(), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    release(new Response(JSON.stringify({ code: 'chat_busy', error: 'This chat already has a job running (run 0bad0bad). Wait, or stop that run.', view: { proposal: proposal(), state: 'accepting' } }), { status: 409, headers: { 'content-type': 'application/json' } }));
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
+    expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
+  });
+
+  it('Go again on an expired accepting record reads Starting while its answer is on the way, from the card and the helpers-only form', async () => {
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: T0 + 1600, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    let release: (r: Response) => void = () => {};
+    decideAnswer = () => new Promise<Response>((r) => { release = r; });
+    page();
+    fireEvent.click(await screen.findByTestId('artifact-proposal-go-again'));
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
+    release(new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } }));
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.'));
+    // The helpers-only form's answer on its way reads Starting too.
+    fireEvent.click(screen.getByTestId('artifact-proposal-change-helpers'));
+    const form = screen.getByTestId('proposal-answer-form');
+    fireEvent.click(within(form).getAllByTestId('proposal-answer-seat').find((x) => x.getAttribute('data-seat') === 'claude')!);
+    fireEvent.click(within(form).getAllByTestId('proposal-answer-seat').find((x) => x.getAttribute('data-seat') === 'agy')!);
+    decideAnswer = () => new Promise<Response>(() => {});
+    fireEvent.click(within(form).getByTestId('proposal-answer-go'));
     await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
   });
 

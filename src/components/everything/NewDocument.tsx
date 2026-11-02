@@ -244,16 +244,22 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
     setCheckFailed(false);
     try {
       let latest: RosterSeat[] | null = null;
+      let fresh = true;
       for (const key of keys) {
         const r = await api.getRoster(key);
         if (!Array.isArray(r?.roster)) throw new Error('roster: no list');
         latest = r.roster;
+        // `timed_out`: no fresh answer, the roster is the last reading (crew's contract) — said, not taken as checked.
+        if (r.refresh?.key === key && r.refresh.outcome === 'timed_out') fresh = false;
       }
       if (!alive.current || latest === null) return;
       setCachedRoster(latest);
-      // The control that asked may be gone now (every chosen helper can work): focus stays in the helpers.
+      if (!fresh) setCheckFailed(true);
+      // The control that asked may be gone now (every chosen helper can work): focus stays in the helpers, but only
+      // when it was lost with that control, never taken from where the person moved on to meanwhile.
       requestAnimationFrame(() => {
-        if (alive.current && !seatsRef.current?.contains(document.activeElement)) seatsRef.current?.focus();
+        const at = document.activeElement;
+        if (alive.current && (at === null || at === document.body)) seatsRef.current?.focus();
       });
     } catch {
       if (alive.current) setCheckFailed(true);
@@ -387,7 +393,7 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
             ? <>A helper on this proposal is no longer available: leave it out and choose another, or{' '}
                 <button type="button" data-testid="proposal-answer-council-refresh" className="wk-since-toggle" disabled={checking}
                   onClick={() => void refreshRoster(form.helpers.filter((k) => !eligible(k)))}>{checking ? 'checking…' : 'check the helpers again'}</button>.
-                {checkFailed && <span data-testid="proposal-answer-council-check-failed"> Studio couldn’t check them again; try once more.</span>}</>
+                {checkFailed && <span data-testid="proposal-answer-council-check-failed"> Studio couldn’t get a fresh answer; try once more.</span>}</>
             : form.helpers.length === ANSWER_SEATS
               ? `${seatName(form.helpers[0]!)} and ${seatName(form.helpers[1]!)}: one writes, the other checks`
               : 'Choose two helpers: one writes the document and another checks it.'}
