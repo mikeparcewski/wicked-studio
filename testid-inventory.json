@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 288,
-    "occurrences": 4047,
-    "static": 3450,
+    "occurrences": 4050,
+    "static": 3453,
     "dynamic": 93,
     "computed": 44
   },
@@ -749,6 +749,12 @@
     },
     {
       "testId": "artifact-proposal-brief",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-change-helpers",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
       ]
@@ -12403,7 +12409,19 @@
       ]
     },
     {
+      "testId": "proposal-answer-council-error",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
       "testId": "proposal-answer-council-reading",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council-retry",
       "files": [
         "src/components/everything/NewDocument.tsx"
       ]

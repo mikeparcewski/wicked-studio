@@ -21,8 +21,8 @@ const { useGateStore } = await import('../src/store/gates.js');
 const { useSheets } = await import('../src/store/sheets.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { makeUnit, makeView } = await import('./factories.js');
-const { setCachedRoster } = await import('../src/store/rosterCache.js');
-const { formSources, proposalFormEdits, proposalFormOf, repoKeysOf, resetSettledProposals, PROPOSAL_STARTING_MS } = await import('../src/board/artifactProposal.js');
+const { clearCachedRoster, setCachedRoster } = await import('../src/store/rosterCache.js');
+const { formSources, isArtifactProposal, proposalFormEdits, proposalFormOf, repoKeysOf, resetSettledProposals, PROPOSAL_STARTING_MS } = await import('../src/board/artifactProposal.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 
 const T0 = 1_700_000_000_000;
@@ -133,10 +133,11 @@ describe('the answer form, pure', () => {
       ['run:57443b2b-0000', 'ok', null],
       ['run:1a2b3c4d-0000', 'struck', 'not named in this chat'],
     ]);
-    // Only the project moves: crew re-checks and strikes the rest itself (no sources edit, so no refusal for them).
-    expect(proposalFormEdits(p, moved)).toStrictEqual({ project: 'mikes' });
+    // The project moves with the kept repositories (crew checks them as the person's choice); crew re-checks and strikes
+    // the sources itself (no sources edit, so no refusal for them).
+    expect(proposalFormEdits(p, moved)).toStrictEqual({ project: 'mikes', repos: ['repo-crew'] });
     // Leaving one more out sends the kept ones, never the struck one.
-    expect(proposalFormEdits(p, { ...moved, sources: ['chat', 'run:29bbbfb1-0000'] })).toStrictEqual({ project: 'mikes', sources: ['chat'] });
+    expect(proposalFormEdits(p, { ...moved, sources: ['chat', 'run:29bbbfb1-0000'] })).toStrictEqual({ project: 'mikes', repos: ['repo-crew'], sources: ['chat'] });
   });
 
   it('the starts-nothing notice follows stubOps (create is real since A3)', () => {
@@ -161,11 +162,13 @@ describe('Change something on a create card (A3)', () => {
     expect(within(form).getAllByTestId('proposal-answer-seat').filter((s) => s.getAttribute('aria-pressed') === 'true').map((s) => s.getAttribute('data-seat'))).toStrictEqual(['claude', 'codex']);
     expect(within(form).getByTestId('proposal-answer-project')).not.toBeNull(); // a chat filed in no project may move it
     expect(posts).toStrictEqual([]);
-    // Nothing in the form takes focus away from the composer.
-    expect(form.contains(document.activeElement)).toBe(false);
+    // The control the person used is gone: focus goes to the form itself, never to its Make it (Enter there sends nothing).
+    expect(document.activeElement).toBe(form);
   });
 
   it('Make it answers THIS proposal with the edits, never a create; the card then shows what was started', async () => {
+    const accepted = proposal({ what: { entry: 'document-static', title: 'Coverage note', label: 'Document · Coverage note', outcome: null }, helpers: { seats: ['codex', 'agy'], label: 'Codex and Antigravity: one writes, the other checks' } });
+    decideAnswer = () => ok({ view: { proposal: accepted, state: 'decided', decision: 'go', result: { runId: 'aaaaaaaa-1111-5222-8333-444444444444', artifactRef: '_unfiled/coverage-note-1a', adopted: false, stub: false }, decidedAt: T0 + 3000 } });
     const form = await openForm();
     fireEvent.change(within(form).getByTestId('proposal-answer-title'), { target: { value: 'Coverage note' } });
     fireEvent.click(within(form).getAllByTestId('proposal-answer-source')[1]!); // leave run 29bbbfb1 out
@@ -181,6 +184,10 @@ describe('Change something on a create card (A3)', () => {
     expect(posts.some((p) => p.path.includes('/interactive/'))).toBe(false);
     await waitFor(() => expect(screen.queryByTestId('proposal-answer-form')).toBeNull());
     expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided');
+    // What was accepted, as crew answered it: the edited title and helpers, behind Details.
+    expect(text('artifact-proposal-what')).toBe('Document · Coverage note');
+    fireEvent.click(screen.getByTestId('artifact-proposal-details'));
+    expect(text('artifact-proposal-helpers')).toContain('Codex and Antigravity');
   });
 
   it('a refusal stays in the form, in crew’s words, and the form stays editable', async () => {
@@ -202,7 +209,7 @@ describe('Change something on a create card (A3)', () => {
     expect(within(form).getByTestId('proposal-answer-recheck').textContent).toContain('Mikes');
     fireEvent.click(within(form).getByTestId('proposal-answer-go'));
     await waitFor(() => expect(posts).toHaveLength(1));
-    expect(posts[0]!.body).toStrictEqual({ decision: 'go', edits: { project: 'mikes' } });
+    expect(posts[0]!.body).toStrictEqual({ decision: 'go', edits: { project: 'mikes', repos: ['repo-crew'] } });
   });
 
   it('a project chat’s document stays in its project; Cancel closes the form and posts nothing', async () => {
@@ -343,6 +350,64 @@ describe('Change something on a create card (A3)', () => {
     fireEvent.click(out);
     fireEvent.click(within(form).getAllByTestId('proposal-answer-seat').find((s) => s.getAttribute('data-seat') === 'agy')!);
     expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(false);
+  });
+
+  it('an interrupted Go whose helper can no longer work: Change helpers sends only the helpers; focus follows', async () => {
+    chatBody = { ...chatBody, messages: [
+      ...TURN,
+      { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() },
+      { at: T0 + 1600, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
+    ] };
+    page();
+    fireEvent.click(await screen.findByTestId('artifact-proposal-change-helpers'));
+    const form = screen.getByTestId('proposal-answer-form');
+    expect(document.activeElement).toBe(form);
+    expect((within(form).getByTestId('proposal-answer-title') as HTMLInputElement).disabled).toBe(true);
+    expect(within(form).getAllByTestId('proposal-answer-repo').every((r) => (r as HTMLButtonElement).disabled)).toBe(true);
+    fireEvent.click(within(form).getAllByTestId('proposal-answer-seat').find((s) => s.getAttribute('data-seat') === 'claude')!);
+    fireEvent.click(within(form).getAllByTestId('proposal-answer-seat').find((s) => s.getAttribute('data-seat') === 'agy')!);
+    fireEvent.click(within(form).getByTestId('proposal-answer-go'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.body).toStrictEqual({ decision: 'go', edits: { helpers: ['codex', 'agy'] } });
+  });
+
+  it('Cancel puts focus back on Change something', async () => {
+    const form = await openForm();
+    fireEvent.click(within(form).getByTestId('proposal-answer-cancel'));
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-ask-option')).toBe('change'));
+  });
+
+  it('a roster that cannot be read is said with a Retry; Make it waits for a roster', async () => {
+    clearCachedRoster();
+    let fail = true;
+    const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (new URL(url, 'http://x').pathname.endsWith('/roster')) {
+        return Promise.resolve(fail ? new Response('{}', { status: 503 }) : ok({ roster: [
+          { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
+          { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true },
+        ] }));
+      }
+      return base(url, init);
+    }));
+    const form = await openForm();
+    await within(form).findByTestId('proposal-answer-council-error');
+    expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(true);
+    fail = false;
+    fireEvent.click(within(form).getByTestId('proposal-answer-council-retry'));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(false));
+  });
+
+  it('a record whose fields the form reads are malformed is skipped, never a card that breaks when opened', () => {
+    for (const bad of [
+      { helpers: { label: 'two', seats: 42 } },
+      { repoRefs: [1] },
+      { artifactRef: 7 },
+      { filedIn: { projectId: 3, label: 'x' } },
+    ]) {
+      expect(isArtifactProposal({ ...proposal(), ...bad }), JSON.stringify(bad)).toBe(false);
+    }
+    expect(isArtifactProposal(proposal())).toBe(true);
   });
 
   it('two repositories that share a name are told apart by their id', () => {

@@ -1,5 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createDoc, listDocs, UNFILED_MOUNT } from '../../api/interactive.js';
+import { api } from '../../api/client.js';
+import { setCachedRoster } from '../../store/rosterCache.js';
 import type { ArtifactProposal, ProposalEdits } from '../../api/chatArtifacts-wire.js';
 import { formSources, proposalFormEdits, proposalFormOf, proposalHelperEligible, repoKeysOf, type ProposalForm } from '../../board/artifactProposal.js';
 import { apiStatus } from '../../api/errors.js';
@@ -27,6 +29,8 @@ export interface AnswerProposal {
   projectChangeable: boolean;
   /** A retry fills the same document again: its repositories stay as they were. */
   fixed?: boolean;
+  /** An interrupted Go: it resumes with its accepted choices, and only its helpers may change. */
+  helpersOnly?: boolean;
   /** Answer the proposal with these edits; resolves `null` when crew accepted it, else crew's words. */
   onSubmit: (edits: ProposalEdits) => Promise<string | null>;
   /** The card's last refusal of this form's answer (the card keeps it, so it survives the form closing). */
@@ -210,6 +214,23 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
   const error = answer.error ?? null;
   const sending = useRef(false);
   const roster = useRoster();
+  // A roster that cannot be read is said, with a retry; the shared cache tells every reader once it can.
+  const [rosterError, setRosterError] = useState(false);
+  const [rosterTry, setRosterTry] = useState(0);
+  useEffect(() => {
+    if (roster !== null) return;
+    let cancelled = false;
+    setRosterError(false);
+    Promise.resolve()
+      .then(() => api.getRoster())
+      .then(({ roster: r }) => { if (!cancelled) setCachedRoster(r); })
+      .catch(() => { if (!cancelled) setRosterError(true); });
+    return () => { cancelled = true; };
+  }, [roster, rosterTry]);
+  const only = answer.helpersOnly === true;
+  // Opened from a control that is now gone: focus goes to the form itself (never to Make it).
+  const formRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => { formRef.current?.focus(); }, []);
   const labelOf = (id: string | null): string => (id === null ? 'Unfiled' : projects.find((x) => x.id === id)?.name ?? id);
   const chips = formSources(p, form, labelOf);
   const moved = form.project !== p.filedIn.projectId;
@@ -233,7 +254,7 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
     }
   };
   return (
-    <div data-testid="proposal-answer-form" role="group" aria-label={`Change this proposal: ${p.what.label}`} className="wk-made-new wk-proposal-answer">
+    <div data-testid="proposal-answer-form" role="group" aria-label={`Change this proposal: ${p.what.label}`} className="wk-made-new wk-proposal-answer" ref={formRef} tabIndex={-1}>
       <p className="wk-made-new-field wk-proposal-answer-what"><span>Answer this proposal</span><b>{p.what.label}</b></p>
       <label className="wk-made-new-field">
         <span>Filed in</span>
@@ -249,18 +270,18 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
       </label>
       <label className="wk-made-new-field">
         <span>Title</span>
-        <input data-testid="proposal-answer-title" className="wk-field" value={form.title} disabled={busy} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        <input data-testid="proposal-answer-title" className="wk-field" value={form.title} disabled={busy || only} onChange={(e) => setForm({ ...form, title: e.target.value })} />
       </label>
       <label className="wk-made-new-field">
         <span>What is it about?</span>
-        <textarea data-testid="proposal-answer-brief" className="wk-field" rows={3} value={form.brief} disabled={busy} onChange={(e) => setForm({ ...form, brief: e.target.value })} />
+        <textarea data-testid="proposal-answer-brief" className="wk-field" rows={3} value={form.brief} disabled={busy || only} onChange={(e) => setForm({ ...form, brief: e.target.value })} />
       </label>
       {chips.length > 0 && (
         <div data-testid="proposal-answer-sources" role="group" aria-label="Made from" className="wk-made-new-field">
           <span>From</span>
           <span className="wk-proposal-chips">
             {chips.map((s) => s.status === 'ok' ? (
-              <button key={s.token} type="button" data-testid="proposal-answer-source" data-token={s.token} data-status="ok" aria-pressed={s.kept} disabled={busy}
+              <button key={s.token} type="button" data-testid="proposal-answer-source" data-token={s.token} data-status="ok" aria-pressed={s.kept} disabled={busy || only}
                 onClick={() => setForm({ ...form, sources: toggle(form.sources, s.token) })}
                 title={s.kept ? `${s.label} is used. Click to leave it out.` : `${s.label} is left out. Click to use it.`}
                 className={`wk-chip wk-proposal-chip${s.kept ? '' : ' wk-proposal-chip--off'}`}>
@@ -305,7 +326,13 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
         <span>Helpers</span>
         <span className="wk-prop-btns">
           {/* The roster's seats, plus any the proposal chose that the roster no longer has (said, and removable). */}
-          {roster === null && <span data-testid="proposal-answer-council-reading">Reading which helpers are available…</span>}
+          {roster === null && !rosterError && <span data-testid="proposal-answer-council-reading">Reading which helpers are available…</span>}
+          {roster === null && rosterError && (
+            <span data-testid="proposal-answer-council-error" role="alert">
+              Studio couldn’t read which helpers are available.{' '}
+              <button type="button" data-testid="proposal-answer-council-retry" className="wk-since-toggle" onClick={() => setRosterTry((n) => n + 1)}>Retry</button>
+            </span>
+          )}
           {roster !== null && [
             ...roster.filter((s) => proposalHelperEligible(s as never) || form.helpers.includes(s.key)).map((s) => ({ key: s.key, name: s.display_name || s.key, gone: !proposalHelperEligible(s as never) })),
             ...form.helpers.filter((k) => !roster.some((s) => s.key === k)).map((k) => ({ key: k, name: k, gone: true })),

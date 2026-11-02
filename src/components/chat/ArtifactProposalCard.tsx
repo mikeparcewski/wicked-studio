@@ -55,6 +55,17 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   const [details, setDetails] = useState(false);
   // A3: Change something on a create opens New document under the card, answering this proposal.
   const [answering, setAnswering] = useState(false);
+  // Focus follows the controls a person used: into the form when it opens from them, back to Change something (or the
+  // interrupted card's Change helpers) when it closes.
+  const restoreFocus = useRef(false);
+  const changeHelpersRef = useRef<HTMLButtonElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (answering || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    const target = changeHelpersRef.current ?? sectionRef.current?.querySelector<HTMLElement>('[data-ask-option="change"]') ?? null;
+    target?.focus();
+  }, [answering]);
   const projects = useProjectsStore((s) => s.projects);
   // The daemon's answer to THIS card's request, shown at once while the re-read catches up: a settled one stays (a
   // stale read never reopens it); an open one (a refusal's fresh facts: the document moved) stands until the next read
@@ -126,8 +137,8 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   const starting = proposalStarting(view, Date.now(), busy);
   useEffect(() => {
     if (view.state !== 'accepting' || busy || view.acceptingAt === undefined) return;
-    const left = view.acceptingAt + PROPOSAL_STARTING_MS - Date.now();
-    if (left <= 0) return;
+    // Never skipped: a window that closed between the render and this effect still gets its render (delay 0).
+    const left = Math.max(0, view.acceptingAt + PROPOSAL_STARTING_MS - Date.now());
     const t = setTimeout(() => setTick((n) => n + 1), left + 50);
     return () => clearTimeout(t);
   }, [view.state, view.acceptingAt, busy]);
@@ -141,6 +152,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
       data-state={view.state}
       aria-label={`Proposal from ${seatName}: ${p.what.label}`}
       className={`wk-ask wk-proposal${open ? '' : ' wk-proposal--settled'}`}
+      ref={sectionRef}
     >
       <p className="wk-ask-who">
         <FileText size={16} aria-hidden />
@@ -168,7 +180,11 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
       ) : view.state === 'accepting' ? (
         <div className="wk-proposal-again">
           <AskRecord line={line ?? ''} testId="artifact-proposal-record" />
-          {!starting && <button type="button" data-testid="artifact-proposal-go-again" className="wk-btn wk-btn--primary wk-btn--sm" disabled={busy} onClick={() => decide('go')}>Go again</button>}
+          {!starting && !answering && <button type="button" data-testid="artifact-proposal-go-again" className="wk-btn wk-btn--primary wk-btn--sm" disabled={busy} onClick={() => decide('go')}>Go again</button>}
+          {/* An interrupted Go resumes with its accepted choices; only its helpers may change (one may have signed out). */}
+          {!starting && !answering && p.kind === 'create' && (
+            <button type="button" data-testid="artifact-proposal-change-helpers" ref={changeHelpersRef} className="wk-btn wk-btn--quiet wk-btn--sm" disabled={busy} onClick={() => { setError(null); setAnswering(true); }}>Change helpers</button>
+          )}
         </div>
       ) : (
         <>
@@ -190,19 +206,21 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
           </div>
         </>
       )}
-      {open && answering && (
+      {(open || (view.state === 'accepting' && !starting)) && answering && (
         <NewDocument
           projects={projects}
           onClose={() => {
             setAnswering(false);
             setError(null);
+            restoreFocus.current = true;
           }}
           answer={{
             proposal: p,
             error: error?.words ?? null,
             // The project moves only in a chat filed in no project (crew re-checks); a retry keeps its document.
-            projectChangeable: entry.proposal.filedIn.projectId === null && p.artifactRef === undefined,
-            fixed: p.artifactRef !== undefined,
+            projectChangeable: open && entry.proposal.filedIn.projectId === null && p.artifactRef === undefined,
+            fixed: !open || p.artifactRef !== undefined,
+            ...(open ? {} : { helpersOnly: true }),
             onSubmit: async (edits) => {
               const refused = await answerWith('go', edits);
               if (refused === null) setAnswering(false);
@@ -212,7 +230,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
         />
       )}
       {open && note !== null && <p data-testid="artifact-proposal-note" role="status" className="wk-proposal-note">{note}</p>}
-      {error !== null && !(open && answering) && (!terminal(view.state) || (error.settles && view.state !== 'superseded')) && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error.words}</p>}
+      {error !== null && !answering && (!terminal(view.state) || (error.settles && view.state !== 'superseded')) && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error.words}</p>}
     </section>
   );
 }

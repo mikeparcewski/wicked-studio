@@ -351,12 +351,17 @@ export function proposalFormEdits(p: ArtifactProposal, f: ProposalForm, projectL
   const edits: ProposalEdits = {};
   if (f.title.trim() !== was.title.trim()) edits.title = f.title.trim();
   if (f.brief !== was.brief) edits.brief = f.brief;
-  if (f.project !== was.project) edits.project = f.project;
+  if (f.project !== was.project) {
+    edits.project = f.project;
+    // The kept repositories ride with a project change (even unchanged): crew then checks them as the person's choice
+    // and refuses one outside the target, instead of silently cutting it.
+    edits.repos = [...f.repos];
+  }
   const usable = formSources(p, f, projectLabel).filter((s) => s.status === 'ok').map((s) => s.token);
   const kept = usable.filter((t) => f.sources.includes(t));
   if (kept.length !== usable.length) edits.sources = kept;
   const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
-  if (!sameSet(f.repos, was.repos)) edits.repos = [...f.repos];
+  if (edits.repos === undefined && !sameSet(f.repos, was.repos)) edits.repos = [...f.repos];
   if (!sameSet(f.helpers, was.helpers)) edits.helpers = [...f.helpers];
   return edits;
 }
