@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
 import { editorSaves, type EditorView } from '../../api/editors.js';
 import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, type WriteVerb } from '../../board/artifactMorph.js';
-import { EditorHost, type HostLogEntry, type HostUi } from '../../editors/host.js';
+import { adapterWritesSettled, EditorHost, type HostLogEntry, type HostUi } from '../../editors/host.js';
 import {
-  LIVE_FRAME_CAP, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, replayGroupSelection, touchLive, useGroupShown, useHostChrome, useHostPanel, useLiveCards,
+  LIVE_FRAME_CAP, PANEL_RIBBON_BELOW_PX, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, replayGroupSelection, touchLive, useGroupShown, useHostChrome, useHostPanel, useLiveCards,
   type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
@@ -198,12 +198,16 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       surface: () => {
         if (useHostChrome.getState().full === key) return 'full';
         const panel = useHostPanel.getState();
-        return panel.group?.key === group && !panel.folded && panel.tab.owner !== 'run' ? 'pane' : 'inline';
+        // The panel's own visibility rule: below its ribbon width it shows only as the overlay, else unless folded.
+        const narrow = typeof matchMedia === 'function' && matchMedia(`(max-width: ${PANEL_RIBBON_BELOW_PX - 1}px)`).matches;
+        const visible = narrow ? panel.overlay : !panel.folded;
+        return panel.group?.key === group && visible && panel.tab.owner !== 'run' ? 'pane' : 'inline';
       },
       lens: () => lensRef.current,
       groupShown: () => useGroupShown.getState().shown[group] ?? null,
       adapter: adapter as SurfaceAdapter & { made?: ReadonlySet<number> },
-      host: () => hostRef.current,
+      // Every host of this artifact (its card's and its Options') shares the adapter, and so the write barrier.
+      host: () => ({ writesSettled: () => adapterWritesSettled(adapter) }),
     }));
   }, [adapter, inViewRef, binding.artifactKey, binding.composerKey, group]);
   const enterFull = useHostChrome((s) => s.enterFull);

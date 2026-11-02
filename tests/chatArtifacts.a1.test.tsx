@@ -19,6 +19,7 @@ const getChat = vi.fn();
 const listRepos = vi.fn();
 const listProjects = vi.fn();
 const listRunsForDoc = vi.fn();
+const getHealth = vi.fn();
 const apiFetch = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
@@ -30,6 +31,7 @@ vi.mock('../src/api/client.js', () => ({
     listRepos: (...a: unknown[]) => listRepos(...a),
     listProjects: (...a: unknown[]) => listProjects(...a),
     listRunsForDoc: (...a: unknown[]) => listRunsForDoc(...a),
+    getHealth: (...a: unknown[]) => getHealth(...a),
     getRun: () => Promise.reject(new Error('no run snapshot in this rig')),
   },
   apiFetch: (...a: unknown[]) => apiFetch(...a),
@@ -91,10 +93,10 @@ async function ask(text: string): Promise<void> {
 }
 
 /** A placement on screen whose editor is mid-write: its shown version moves to `after` once the write settles. */
-function placeDeck(opts: { surface: 'full' | 'pane' | 'inline'; composerKey?: string; before: number; after: number; ref?: string }): { flushed: () => boolean } {
+function placeDeck(opts: { surface: 'full' | 'pane' | 'inline'; composerKey?: string; before: number; after: number; ref?: string }): { flushed: () => boolean; remove: () => void } {
   let shown = opts.before;
   let flushed = false;
-  registerInView({
+  const remove = registerInView({
     key: `card:${opts.ref ?? 'mikes/deck'}:${opts.surface}`,
     ref: opts.ref ?? 'mikes/deck',
     title: 'Domain coverage',
@@ -103,7 +105,7 @@ function placeDeck(opts: { surface: 'full' | 'pane' | 'inline'; composerKey?: st
     shown: () => shown,
     flush: async () => { await new Promise((r) => setTimeout(r, 20)); shown = opts.after; flushed = true; return opts.after; },
   });
-  return { flushed: () => flushed };
+  return { flushed: () => flushed, remove };
 }
 
 describe('an older daemon (no chatArtifacts.context) is sent exactly what it was sent before', () => {
@@ -176,6 +178,29 @@ describe('a daemon with chatArtifacts.context', () => {
     expect(sendChatMessage.mock.calls[1]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', anchors: ['slide-3-heading-1'] } });
   });
 
+  it('a retry after the card has closed still names the version the handed-over message was about', async () => {
+    const card = placeDeck({ surface: 'inline', composerKey: 's-1', before: 5, after: 5 });
+    sendChatMessage.mockRejectedValueOnce(new ApiError(502, 'bad gateway'));
+    render(
+      <AskDock runs={[]} pathname="/s/s-1" onClose={() => undefined} sendText="what does slide 4 say?" sendFresh
+        sendArtifact={{ ref: 'mikes/deck', anchors: [], composerKey: 's-1' }} />,
+    );
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    card.remove();
+    await waitFor(() => expect(screen.getByTestId('assist-send')).not.toBeDisabled());
+    await userEvent.setup().click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(sendChatMessage.mock.calls[1]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', version: 5 } });
+  });
+
+  it('an Ask whose press saw no version falls back to the version the docs list holds', async () => {
+    useDocsCache.setState({ byProject: { mikes: [{ name: 'deck', head: 8 } as never] } } as never);
+    setAskAboutSeed({ ref: 'mikes/deck', label: 'Deck', projectId: 'mikes', docId: 'deck', version: null, seed: false });
+    render(<AskDock runs={[]} pathname="/p/mikes" onClose={() => undefined} startProjectId="mikes" startFresh />);
+    await ask('what is this?');
+    expect(sendChatMessage.mock.calls[0]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', version: 8 } });
+  });
+
   it('a document chip turned off sends no artifact and no seed, even with the document beside the chat', async () => {
     placeDeck({ surface: 'full', ref: '_unfiled/release-note', before: 2, after: 2 });
     setAskAboutSeed({ ref: '_unfiled/release-note', label: 'Release note', projectId: null, docId: 'release-note', version: 2, seed: true });
@@ -204,6 +229,26 @@ describe('a daemon with chatArtifacts.context', () => {
     await ask('and now?');
     expect(sendChatMessage.mock.calls[0]![0]).toBe('c-old');
     expect(sendChatMessage.mock.calls[0]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', version: 6 } });
+  });
+});
+
+describe('a send that beats the health read', () => {
+  it('still names the artifact once the daemon says it takes context', async () => {
+    useCapabilities.setState({ loaded: false, chatContext: false });
+    getHealth.mockResolvedValue({ status: 'ok', capabilities: { chatArtifacts: { context: true } } });
+    placeDeck({ surface: 'full', before: 3, after: 3 });
+    render(<AskDock runs={[]} pathname="/projects/mikes/made" onClose={() => undefined} startFresh />);
+    await ask('what does slide 4 say?');
+    expect(sendChatMessage.mock.calls[0]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', version: 3 } });
+  });
+
+  it('reopening a chat this browser has no record of claims none of its chips, only the document', async () => {
+    useCapabilities.setState({ chatContext: true });
+    writeAskSession({ chatId: 'c-x', title: 'x', seeded: true, chipsUnknown: true } as never);
+    setAskAboutSeed({ ref: 'mikes/deck', label: 'Deck', projectId: 'mikes', docId: 'deck', version: 2, seed: false });
+    render(<AskDock runs={[]} pathname="/p/mikes" onClose={() => undefined} />);
+    const pressed = screen.getAllByTestId('chat-scope-chip').filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.getAttribute('data-key'));
+    expect(pressed).toEqual(['doc:mikes/deck']);
   });
 });
 

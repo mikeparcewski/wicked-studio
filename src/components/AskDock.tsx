@@ -49,7 +49,7 @@ import { pageChatEpoch } from '../store/pageChat.js';
 import { focusPack } from './askContext.js';
 import { CHAT_ATTACHMENT_LIMITS, type ChatAttachmentError, type ChatStartedOn } from '../api/chatHistory-wire.js';
 import { artifactRefOf, CONTEXT_PAGE_MAX, parseArtifactRef, type ChatMessageContext } from '../api/chatArtifacts-wire.js';
-import { artifactContext, FLUSH_WAIT_MS, inViewAnywhere, inViewFor, peekAskAboutSeed, takeAskAboutSeed, type AskAboutSeed } from '../store/artifactInView.js';
+import { artifactContext, FLUSH_WAIT_MS, inViewAnywhere, peekAskAboutSeed, shownForRef, takeAskAboutSeed, type AskAboutSeed } from '../store/artifactInView.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -305,7 +305,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const [handoff] = useState(() => sendText);
   // DES-CHAT-ARTIFACTS-001: the artifact the handed-over message is about rides that ONE send; an "Ask about this" seed
   // (read once, like the typed seed) is the artifact this chat is about for as long as its chip stays on.
-  const handoffArtifact = useRef(sendText !== undefined ? sendArtifact ?? null : null);
+  const handoffArtifact = useRef<{ ref: string; anchors: string[]; composerKey: string; lastVersion?: number } | null>(sendText !== undefined ? sendArtifact ?? null : null);
   const [aboutSeed] = useState(() => (page === undefined && sendText === undefined ? peekAskAboutSeed() : null));
   useEffect(() => { if (aboutSeed !== null) takeAskAboutSeed(); }, [aboutSeed]);
   const tookRef = useRef(onHandoffTaken);
@@ -435,7 +435,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     }
     // The chat the document was made in, brought back by Ask about this: its own chips, plus the document.
     if (aboutSeed !== null && resumed !== null) {
-      const own = resumed.chips !== undefined && resumed.chips.length > 0 ? resumed.chips : defaultScopeChips(ctx);
+      // Its own chips as this browser knows them; with no record, nothing is claimed as chosen (all off).
+      const own = resumed.chips !== undefined && resumed.chips.length > 0 ? resumed.chips
+        : resumed.chipsUnknown === true ? defaultScopeChips(ctx).map((c) => ({ ...c, on: false }))
+          : defaultScopeChips(ctx);
       const doc = askAboutDocChip(aboutSeed);
       return [...own.filter((c) => c.key !== doc.key), doc];
     }
@@ -473,7 +476,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // DES-SYSTEM-CHAT §5 — the ONE answering CLI: the user's pick, else the default rule. Fixed once
   // the chat is open (a resumed chat keeps the CLI it was opened with).
   const roster = useRoster();
-  const scoped = chipsScoped(chips);
+  // An Unfiled document's chat whose repositories crew will seed is admitted as the scoped chat it will be.
+  const seedPlanned = aboutSeed !== null && aboutSeed.projectId === null && aboutSeed.seed && chips.some((c) => c.key === askAboutDocChip(aboutSeed).key && c.on);
+  const scoped = chipsScoped(chips) || seedPlanned;
   const clis = useMemo(() => cliOptions(roster, scoped), [roster, scoped]);
   const [cliPick, setCliPick] = useState<string | null>(() => sendPrimary ?? resumed?.cli ?? null);
   const cli = openedScope !== undefined
@@ -576,17 +581,14 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
    * read now as the fallback for a card that closes before the send.
    */
   const pickArtifact = useCallback((): { ref: string; anchors: string[]; fallback: number | null; composerKey?: string } | null => {
-    if (!useCapabilities.getState().chatContext) return null;
+    // Chosen whatever the daemon is yet known to take: whether it rides is decided when the message is serialized.
     if (handoffOwed.current) {
       const h = handoffArtifact.current;
-      return h === null ? null : { ref: h.ref, anchors: h.anchors, fallback: inViewFor(h.composerKey)?.ref === h.ref ? inViewFor(h.composerKey)!.shown() : null, composerKey: h.composerKey };
+      return h === null ? null : { ref: h.ref, anchors: h.anchors, fallback: shownForRef(h.ref, h.composerKey) ?? h.lastVersion ?? headOf(h.ref), composerKey: h.composerKey };
     }
     const chosen = docChipArtifact(chipsRef.current);
     if (chosen !== null) {
-      const placed = inViewAnywhere();
-      const fallback = placed?.ref === chosen.ref ? placed.shown()
-        : aboutSeed?.ref === chosen.ref ? aboutSeed.version
-          : headOf(chosen.ref);
+      const fallback = shownForRef(chosen.ref) ?? (aboutSeed?.ref === chosen.ref ? aboutSeed.version : null) ?? headOf(chosen.ref);
       return { ref: chosen.ref, anchors: [], fallback };
     }
     const beside = inViewAnywhere();
@@ -598,6 +600,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const contextFor = useCallback(async (page: string | null, picked: ReturnType<typeof pickArtifact>): Promise<ChatMessageContext | undefined> => {
     if (!useCapabilities.getState().chatContext) return undefined;
     const artifact = picked === null ? null : await artifactContext(picked.ref, picked.anchors, picked.fallback, FLUSH_WAIT_MS, picked.composerKey);
+    // A handed-over message that fails keeps the version it was about, for a retry after its card has closed.
+    if (artifact !== null && handoffOwed.current && handoffArtifact.current !== null && handoffArtifact.current.ref === artifact.ref) handoffArtifact.current.lastVersion = artifact.version;
     const pageText = pageField(page);
     if (artifact === null && pageText === undefined) return undefined;
     return { ...(artifact !== null ? { artifact } : {}), ...(pageText !== undefined ? { page: pageText } : {}) };
@@ -626,8 +630,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       send: async (text, _documents, files = []) => {
         // Uploads (DES-SYSTEM-CHAT §8) are checked against crew's caps before anything is opened.
         if (files.length > 0) checkUpload(files);
-        // What this message is about is chosen now, before anything below awaits.
+        // What this message is about is chosen now, before anything below awaits; then the daemon's capabilities are
+        // known before the message is serialized (a send at startup may beat the health read).
         const picked = pickArtifact();
+        if (!useCapabilities.getState().loaded) await useCapabilities.getState().load().catch(() => undefined);
         let id = chatIdRef.current;
         if (id !== null && resumed !== null && id === resumed.chatId) {
           try {
@@ -676,7 +682,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
               roster = fetched;
             }
             const chosen = chipsRef.current;
-            const scoped = chipsScoped(chosen);
+            const scoped = chipsScoped(chosen) || (aboutSeed !== null && aboutSeed.projectId === null && aboutSeed.seed && chosen.some((c) => c.key === askAboutDocChip(aboutSeed).key && c.on));
             // DES-SYSTEM-CHAT §5: ONE CLI answers — the picker's. A CLI that cannot answer is never
             // sent; when none can, the refusal says why (the daemon's own words per CLI).
             const options = cliOptions(roster, scoped);

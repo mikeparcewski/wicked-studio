@@ -103,6 +103,18 @@ function best(list: Array<InViewEntry & { at: number }>): InViewEntry | null {
   return top;
 }
 
+/** A placement by its key. */
+export function inViewByKey(key: string): InViewEntry | null {
+  return entries.get(key) ?? null;
+}
+
+/** The version `ref` shows on screen: the sending composer's placement of it first, else its most prominent one. */
+export function shownForRef(ref: string, composerKey?: string): number | null {
+  const placed = [...entries.values()].filter((e) => e.ref === ref);
+  const own = composerKey === undefined ? null : best(placed.filter((e) => e.composerKey === composerKey));
+  return (own ?? best(placed))?.shown() ?? null;
+}
+
 /** The artifact a composer's message is about when no chip says: its full-screen card, else its pane, else its newest card. */
 export function inViewFor(composerKey: string): InViewEntry | null {
   return best([...entries.values()].filter((e) => e.composerKey === composerKey));

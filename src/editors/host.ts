@@ -279,6 +279,29 @@ export function threadLine(firstParty: boolean, name: string, items: readonly Wi
 /** Write refusals the host or adapter makes before anything is sent: nothing was written. */
 const UNSENT: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['not_granted', 'bad_request', 'too_large', 'unsupported', 'rate_limited', 'refused', 'head_moved']);
 
+
+/**
+ * DES-CHAT-ARTIFACTS-001 §5.1: write requests accepted from a plugin and not yet answered, per adapter — the card's
+ * host and its Options host share the artifact's adapter, so a chat send waits for an edit made in either, from the
+ * moment it is accepted (before its inventory read reaches the adapter).
+ */
+const acceptedWrites = new WeakMap<object, Set<Promise<unknown>>>();
+function trackAcceptedWrite(adapter: object, work: Promise<unknown>): void {
+  let set = acceptedWrites.get(adapter);
+  if (set === undefined) acceptedWrites.set(adapter, (set = new Set()));
+  set.add(work);
+  const done = (): void => { set.delete(work); };
+  work.then(done, done);
+}
+/** Wait (a few rounds at most) for every write accepted by any host of this adapter to be answered. */
+export async function adapterWritesSettled(adapter: object): Promise<void> {
+  for (let round = 0; round < 4; round += 1) {
+    const set = acceptedWrites.get(adapter);
+    if (set === undefined || set.size === 0) return;
+    await Promise.allSettled([...set]);
+  }
+}
+
 export class EditorHost {
   readonly frame: HTMLIFrameElement;
   private port: MessagePort | null = null;
@@ -286,12 +309,9 @@ export class EditorHost {
   private torn = false;
   /** The write request whose timeout line the host is showing, while no later line replaced it (codex r5). */
   private timeoutLine: string | null = null;
-  /** Write requests accepted from the plugin and not yet answered. */
-  private readonly writesInFlight = new Set<Promise<unknown>>();
-
-  /** Wait for every write request accepted so far to be answered (and its written line said). A few rounds at most. */
+  /** Wait for every write request accepted so far, by any host of this artifact, to be answered. */
   async writesSettled(): Promise<void> {
-    for (let round = 0; round < 4 && this.writesInFlight.size > 0; round += 1) await Promise.allSettled([...this.writesInFlight]);
+    await adapterWritesSettled(this.o.adapter);
   }
   private loads = 0;
   private readyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -513,11 +533,7 @@ export class EditorHost {
     const work = this.handleRequest(msg.type, msg.payload);
     // DES-CHAT-ARTIFACTS-001 §5.1: a write is in flight from the moment it is accepted (before its inventory read), so
     // a chat message sent right after a hand edit waits for it (`writesSettled`).
-    if (isWrite || msg.type === 'version.fork') {
-      this.writesInFlight.add(work);
-      const done = (): void => { this.writesInFlight.delete(work); };
-      work.then(done, done);
-    }
+    if (isWrite || msg.type === 'version.fork') trackAcceptedWrite(this.o.adapter, work);
     work
       .then((r) => {
         // Settled by the timer: the plugin heard "timeout" and no second reply follows — but what the

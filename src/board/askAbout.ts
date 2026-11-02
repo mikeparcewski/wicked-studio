@@ -4,7 +4,7 @@ import { artifactChip } from './aboutChips.js';
 import { composerOnScreen, focusComposer } from '../components/editorHost/composerBridge.js';
 import type { ArtifactBinding } from '../editors/hostApi.js';
 import { useGroupShown } from '../editors/hostApi.js';
-import { inViewFor, setAskAboutSeed } from '../store/artifactInView.js';
+import { inViewByKey, setAskAboutSeed } from '../store/artifactInView.js';
 import { openAskDock, reopenSystemChat } from '../store/askDock.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { addAboutChip } from '../store/composerChips.js';
@@ -77,10 +77,11 @@ async function madeInChatOf(docId: string, projectId: string): Promise<string | 
   return null;
 }
 
-/** The version this placement shows, for a chat opened after its card has gone. */
+/** The version this placement shows, for a chat opened after its card has gone: its own registration, else the
+ *  version its group last read. */
 function shownVersion(b: ArtifactBinding): number | null {
-  const placed = inViewFor(b.composerKey);
-  if (placed !== null && placed.key === b.artifactKey) return placed.shown();
+  const placed = inViewByKey(b.artifactKey);
+  if (placed !== null) return placed.shown();
   const groups = useGroupShown.getState().shown;
   const own = Object.entries(groups).find(([k]) => k.endsWith(`::${b.artifactKey}`));
   return own?.[1] ?? null;
