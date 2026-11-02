@@ -86,11 +86,11 @@ describe('a run section on the sheet carries the retry lineage (port 1f)', () =>
 });
 
 describe('the rail brand logo (port 1g)', () => {
-  it('no logo: the dot', () => {
+  it('no logo: the Wicked Studio lockup (the Shoreline mark in the dot’s old place)', () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const brand = screen.getByTestId('desk-rail-brand');
     expect(screen.queryByTestId('desk-rail-logo')).toBeNull();
-    expect(brand.querySelector('.wk-desk-dot')).not.toBeNull();
+    expect(brand).toContainElement(screen.getByTestId('desk-rail-lockup'));
   });
 
   it('a logo: a 32 px contain-fit image in the dot’s place', () => {
@@ -101,6 +101,9 @@ describe('the rail brand logo (port 1g)', () => {
     expect(logo.style.height).toBe('32px');
     expect(logo.style.backgroundSize).toBe('contain');
     expect(logo.style.backgroundImage).toContain('data:image/png;base64,AAAA');
-    expect(screen.getByTestId('desk-rail-brand').querySelector('.wk-desk-dot')).toBeNull();
+    // beside a custom logo: the lettering alone, no Shoreline mark
+    expect(screen.getByTestId('desk-rail-brand')).toContainElement(screen.getByTestId('desk-rail-lettering'));
+    expect(screen.queryByTestId('desk-rail-lockup')).toBeNull();
+    expect(screen.queryByTestId('desk-rail-mark')).toBeNull();
   });
 });

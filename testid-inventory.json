@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 288,
-    "occurrences": 4053,
-    "static": 3456,
+    "files": 289,
+    "occurrences": 4061,
+    "static": 3463,
     "dynamic": 93,
     "computed": 44
   },
@@ -1418,6 +1418,24 @@
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "brand-lettering",
+      "files": [
+        "src/components/ui/BrandMarks.tsx"
+      ]
+    },
+    {
+      "testId": "brand-lockup",
+      "files": [
+        "src/components/ui/BrandMarks.tsx"
+      ]
+    },
+    {
+      "testId": "brand-mark",
+      "files": [
+        "src/components/ui/BrandMarks.tsx"
       ]
     },
     {
@@ -3911,7 +3929,25 @@
       ]
     },
     {
+      "testId": "desk-rail-lettering",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-lockup",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "desk-rail-logo",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-mark",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -19605,6 +19641,12 @@
       ]
     },
     {
+      "testId": "topbar-lockup",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
       "testId": "topbar-new-job",
       "files": [
         "src/components/ui/TopBar.tsx"
@@ -21554,6 +21596,7 @@
         "src/components/session/RunConversation.tsx",
         "src/components/steer/EvaluateSurface.tsx",
         "src/components/steer/SeStat.tsx",
+        "src/components/ui/BrandMarks.tsx",
         "src/components/ui/Combobox.tsx",
         "src/components/ui/DayBars.tsx",
         "src/components/ui/FilePick.tsx",

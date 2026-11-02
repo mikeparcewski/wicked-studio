@@ -138,7 +138,7 @@ describe('the top of the rail (operator IA 2026-10-13)', () => {
     expect(home).toHaveAccessibleName('Home');
     expect(home).toHaveAccessibleDescription('1 needs you');
     expect(within(home).getByTestId('desk-rail-badge')).toHaveTextContent('1');
-    expect(within(home).getByTestId('desk-rail-brand')).toHaveTextContent('wicked studio');
+    expect(within(within(home).getByTestId('desk-rail-brand')).getByRole('img', { name: 'Wicked Studio' })).toBeInTheDocument();
     expect(screen.getByTestId('session-rail').querySelectorAll('a[href="/"]')).toHaveLength(1);
     // Home is no longer a WORK item.
     expect(screen.queryByTestId('desk-rail-home')).toBeNull();
