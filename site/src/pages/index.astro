@@ -33,7 +33,8 @@
  *    framework; there is no per-repo target (core crates/wicked-governance/src/conformance.rs).
  *  - Studio grades nothing: the checks are crew's, the store is estate's. Studio is a pure client
  *    of crew's /api/v1 + /ws; the wire contract wicked-crew-api-types is the only shared code.
- * Never hardcode a version in prose: the install stamp is injected at build time (DT-7).
+ * Never hardcode the installed version in prose: the install stamp is injected at build time (DT-7).
+ * The one exception is the "What's new in 0.14" strip, which names the release it describes.
  */
 import Base from 'wicked-web/layouts/Base.astro';
 import Topbar from 'wicked-web/components/Topbar.astro';

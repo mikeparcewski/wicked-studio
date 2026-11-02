@@ -50,8 +50,8 @@ html { scroll-snap-type: y proximity; scroll-padding-top: var(--topbar-h); }
 
 /* ── Under the hero: the small print, three benefits, what's new, what is coming ── */
 .hero-fine { margin: 8px auto 0; max-width: 96ch; font-size: 0.78rem; line-height: 1.45; color: var(--muted); }
-.why { border-top: 1px solid var(--hairline); padding: clamp(44px, 7svh, 80px) 0; }
-.why-new-h { font-size: 1.05rem; margin: clamp(22px, 3.5svh, 36px) 0 12px; }
+.why { border-top: 1px solid var(--hairline); padding: clamp(24px, 3.5svh, 48px) 0; }
+.why-new-h { font-size: 1.05rem; margin: clamp(14px, 2.5svh, 28px) 0 10px; }
 .tab-grid.tab-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .soon { margin: 14px 0 0; font-size: 0.88rem; line-height: 1.5; color: var(--muted); }
 .soon b { color: var(--ink); }

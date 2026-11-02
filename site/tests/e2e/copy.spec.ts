@@ -73,7 +73,7 @@ test.describe('the reviewed messaging', () => {
     const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
     // There is no per-repo rule target: rules apply everywhere or to one project, and can
     // target a language, layer or framework (core crates/wicked-governance/src/conformance.rs).
-    expect(body).not.toMatch(/one repo\b/i);
+    expect(body).not.toMatch(/\b(one|single|per[- ])repo(sitory)?\b/i);
     await expect(page.locator('.steer')).toContainText('a language, a layer or a framework');
   });
 
@@ -95,5 +95,41 @@ test.describe('the reviewed messaging', () => {
     await expect(page.locator('.review .facts')).toContainText(
       'a feature, bug fix, migration, MCP server or editor plugin need QE acceptance',
     );
+  });
+});
+
+test.describe('the reviewed messaging, details', () => {
+  test('the demo strip lists the 0.14 sidebar pages in order', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.ide-tabs span')).toHaveText([
+      'Learn', 'Projects', 'Jobs', 'Repositories', 'Report', 'Understand', 'Evaluate', 'Steering', 'Memory', 'Agents',
+    ]);
+    // the Desk and Steering trio name pages, never the old tabs
+    await expect(page.locator('.trio-where').first()).toHaveText('Steering page');
+    await expect(page.locator('body')).not.toContainText(/\b(Steer|Memory) tab\b/);
+  });
+
+  test('the Claude subscription token exception is stated where keys are', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.reach')).toContainText('a Claude subscription seat gets its sign-in token');
+  });
+
+  test('the benefits band fits a 1440x700 laptop', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 700 });
+    await page.goto('/');
+    await page.evaluate(async () => { await document.fonts.ready; });
+    const { content, usable } = await page.evaluate(() => {
+      const el = document.querySelector('.why') as HTMLElement;
+      const cs = getComputedStyle(el);
+      let c = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      for (const ch of Array.from(el.querySelector('.wrap')!.children)) {
+        const k = getComputedStyle(ch);
+        if (k.position === 'absolute') continue;
+        c += ch.getBoundingClientRect().height + parseFloat(k.marginTop) + parseFloat(k.marginBottom);
+      }
+      const bar = document.querySelector('.topbar, header[class*="topbar"]');
+      return { content: Math.round(c), usable: 700 - (bar ? Math.round(bar.getBoundingClientRect().height) : 0) };
+    });
+    expect(content, `.why content ${content}px in ${usable}px`).toBeLessThanOrEqual(usable);
   });
 });
