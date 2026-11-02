@@ -6,6 +6,7 @@ import { deckOf, topSlideElements, type DeckSlide } from '../../board/deck.js';
 import { overlayBox, type OverlayBox, type ScrollState } from '../../interactive/anchoring.js';
 import { REQUEST_INVENTORY, parseInbound as parseBridge, type WidBlock, type WidRect } from '../../interactive/instrument-protocol.js';
 import { appendInstrumentBridge, hasInstrumentBridge } from '../../interactive/instrumented.js';
+import { guardNestedHtml } from '../_shared/nestedGuard.js';
 
 /**
  * `wicked-deck` — the built-in slide editor as a `wicked.editor/2` plugin, also compatible with v1
@@ -446,8 +447,9 @@ export function start(): void {
     // of them loaded — or after 2 s, should this one never load.
     const prune = (): void => { for (const f of Array.from(slideBox.querySelectorAll('iframe'))) if (f !== frame) f.remove(); };
     next.addEventListener('load', () => { askInventory(next); if (frame === next) prune(); });
-    // Check the original HTML: our extent listener also mentions request-inventory.
-    next.srcdoc = hasInstrumentBridge(html) ? doc : appendInstrumentBridge(doc);
+    // Check the original HTML: our extent listener also mentions request-inventory. The slide's scripts run only after
+    // the WebRTC prelude, and nothing else runs (`nestedGuard.ts`).
+    next.srcdoc = guardNestedHtml(hasInstrumentBridge(html) ? doc : appendInstrumentBridge(doc));
     slideBox.prepend(next);
     placeFrame();
     setTimeout(() => { if (frame === next) prune(); }, 2000);

@@ -8,6 +8,7 @@ import { appendInstrumentBridge, hasInstrumentBridge } from '../../interactive/i
 import { DEFAULT_COLOUR, themeSwatches, type Swatch } from '../../editors/swatches.js';
 import { V2Port, announceReady, helloOf, sizeOfSurface, type Mode, type Surface } from './v2.js';
 import { mountStyle, tokensFromHtml, type ThemeTokens } from './style.js';
+import { guardNestedHtml } from './nestedGuard.js';
 
 /**
  * Shared page/document element editor as a `wicked.editor/1` plugin (DES-EDITOR-PLUGINS-001
@@ -288,7 +289,8 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
     const old = frame;
     frame = next;
     for (const t of timers) clearTimeout(t);
-    next.srcdoc = srcdoc;
+    // The document's scripts run only after the WebRTC prelude, and nothing else runs (`nestedGuard.ts`).
+    next.srcdoc = guardNestedHtml(srcdoc);
     stage.appendChild(next);
     old?.remove();
     applyWidth();
