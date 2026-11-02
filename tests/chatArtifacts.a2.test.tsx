@@ -63,6 +63,8 @@ let decideAnswer: () => Response | Promise<Response> = () => new Response('{}', 
 let keptBody: Record<string, unknown> | number = 404;
 /** How many times the page read the chat (`GET /chats/:id` and `/messages`). */
 let chatReads = 0;
+/** `GET /chats/:id` fails with this status (the chat's own status read). */
+let chatFail: number | null = null;
 
 function ok(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -72,6 +74,7 @@ beforeEach(() => {
   posts.length = 0;
   keptBody = 404;
   chatReads = 0;
+  chatFail = null;
   resetSettledProposals();
   chatBody = { chatId: 'chat-ask', seats: ['claude'], scope: { kind: 'none' }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal() }], path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: null, helpers: [], stepId: 'answer-1' } };
   useCapabilities.setState({ loaded: true, runChatId: true, askPath: true, chatProposals: true, chatArtifactsStub: false, chatList: true });
@@ -94,6 +97,7 @@ beforeEach(() => {
       if (keptBody === -1) return new Promise<Response>(() => undefined); // a read still in flight
       return Promise.resolve(typeof keptBody === 'number' ? new Response(JSON.stringify({ error: 'read failed' }), { status: keptBody }) : ok(keptBody));
     }
+    if (path.startsWith('/chats/') && chatFail !== null) return Promise.resolve(new Response(JSON.stringify({ error: 'unavailable' }), { status: chatFail }));
     if (path.startsWith('/chats/')) return Promise.resolve(ok(chatBody));
     if (path.endsWith('/team')) return Promise.resolve(new Response('{}', { status: 404 }));
     if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
@@ -398,6 +402,28 @@ describe('the card in the chat thread', () => {
     await act(async () => { release(); await new Promise((r) => setTimeout(r, 20)); });
     expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided');
     expect(screen.queryByTestId('artifact-proposal-error')).toBeNull();
+  });
+
+  it('a failed status read of an ended chat keeps its cards; a reconnect reads back what the socket missed', async () => {
+    const { useConnectionStore } = await import('../src/store/connection.js');
+    useConnectionStore.setState({ status: 'connected' });
+    const CLOSED = 'chat-ended';
+    chatBody = { chatId: CLOSED, seats: [], scope: null, messages: [] };
+    keptBody = { chat: { id: CLOSED }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal({ pid: `${CLOSED}:t1`, chatId: CLOSED }) }], attachments: [] };
+    page(() => {}, [], CLOSED);
+    await screen.findByTestId('artifact-proposal');
+    // The chat's own status read fails on the next refresh: the cards stay.
+    chatFail = 503;
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: CLOSED, turn_id: 't1', record: {} } as never));
+    await waitFor(() => expect(chatReads).toBeGreaterThan(2));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByTestId('artifact-proposal').getAttribute('data-pid')).toBe(`${CLOSED}:t1`);
+    // The socket drops; meanwhile another tab answered; on reconnect the page reads it back (no frame replayed).
+    chatFail = null;
+    act(() => useConnectionStore.setState({ status: 'disconnected' }));
+    keptBody = { chat: { id: CLOSED }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: proposal({ pid: `${CLOSED}:t1`, chatId: CLOSED }) }, { at: T0 + 2000, turnId: 't1', kind: 'proposal_decided', pid: `${CLOSED}:t1`, actor: 'local', decision: 'not_now', result: null }], attachments: [] };
+    act(() => useConnectionStore.setState({ status: 'connected' }));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));
   });
 
   it('a daemon without the capability draws no card', async () => {

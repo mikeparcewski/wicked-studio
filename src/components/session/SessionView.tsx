@@ -12,6 +12,7 @@ import type { NeedRow } from '../../board/needsYou.js';
 import { CLOSED_LINE, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
+import { useConnectionStore } from '../../store/connection.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import { isChatScopeProblem, plainRunTitle } from '../../board/deskWords.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
@@ -309,10 +310,21 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     const folded = foldChatProposals(source);
     // Only THIS chat's earlier cards stand in while its kept history loads (never another chat's).
     const held = lastEntries.current?.chatId === ref.chatId ? lastEntries.current.entries : [];
-    // While the read is pending, or after it failed, this chat's cards stay as they were (beside the error and Retry).
-    return reconcileProposals(ref.chatId, (waitingForKept || keptError !== null) && folded.length === 0 ? held : folded);
-  }, [proposalsOn, ref, keptChat, kept, messages, waitingForKept, keptError]);
+    // While a read is pending, or after one failed (the kept history, or the chat's own status), this chat's cards stay
+    // as they were, beside the error and Retry: only a read that answered replaces them.
+    const unread = waitingForKept || keptError !== null || chatError !== null;
+    return reconcileProposals(ref.chatId, unread && folded.length === 0 ? held : folded);
+  }, [proposalsOn, ref, keptChat, kept, messages, waitingForKept, keptError, chatError]);
   useEffect(() => { if (ref.kind === 'chat') lastEntries.current = { chatId: ref.chatId, entries: proposalEntries }; }, [ref, proposalEntries]);
+  // `/ws` replays nothing: a proposal crew resolved (or another tab answered) while this tab was disconnected is read
+  // back on reconnect.
+  const wsStatus = useConnectionStore((st) => st.status);
+  const wasConnected = useRef(wsStatus === 'connected');
+  useEffect(() => {
+    const now = wsStatus === 'connected';
+    if (now && !wasConnected.current && proposalsOn && ref.kind === 'chat') setChatTry((n) => n + 1);
+    wasConnected.current = now;
+  }, [wsStatus, proposalsOn, ref]);
   // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
   // live run here is NOT what Send reaches (it starts a separate Ask), and the composer says so.
   const scopeNote = composerScopeNote(mine, ref.kind === 'chat' && conversation === 'live');
