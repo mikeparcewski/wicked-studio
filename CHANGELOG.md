@@ -18,7 +18,7 @@ npm publish dates. Every version listed here exists on
   wordmark and the phone top bar show the Wicked Studio lockup, the Shoreline mark beside the Wave W lettering, in
   place of the yellow dot and the serif name. A custom site name sits beside the Shoreline mark, and a custom logo
   beside the lettering. The favicon is the Shoreline mark. The design package is re-vendored from wicked-web
-  77fd34c; its tokens are unchanged.
+  1706c6d; its tokens are unchanged.
 - **Memory, Steer and Jobs lists (operator 2026-11-01).**
   - **Memory:** the header's Review proposals and Add a memory buttons are gone. Pills over the list, like Steer's,
     switch between Active, Proposed (N) and Not accepted. Add a memory is the first item in the header's ⋯ menu.

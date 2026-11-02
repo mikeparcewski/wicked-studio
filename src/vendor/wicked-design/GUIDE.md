@@ -16,9 +16,9 @@ The operator's original design source is kept unchanged in `source/` (in the wic
 
 | File | What it still decides |
 |---|---|
-| `source/wicked-agile-lockup.svg`, `source/wicked-agile-icons.svg` | The brand mark and icons, which keep their own colours. |
+| `source/wicked-agile-lockup.svg`, `source/wicked-agile-icons.svg` | The v2 brand mark (historical: the chrome draws the monochrome fonts-v3 lockup, `brand/wicked-*-wordmark*.svg`, since 2026-11-02) and the icons, which keep their own colours. |
 | `source/appearance.md` | Personal and chat-generated themes, and the limits on custom CSS. Users who want colour make it there; the default stays restrained. |
-| `source/ui-mockups/README.md`, `index.html` | The blue palette. No longer the UI palette, it survives in the brand mark and as a theme a user can choose. |
+| `source/ui-mockups/README.md`, `index.html` | The blue palette. No longer the UI palette, it survives in the v2 brand mark and as a theme a user can choose. |
 
 Where the synthesis is silent (spacing, motion, control sizes), the tokens keep studio's considered
 values (`from: "studio"`).
@@ -95,8 +95,9 @@ Neutral grounds, near-black and near-white ink, hairlines, and colour only where
 In the UI only status is chromatic, and each status keeps one hue in both themes: **waiting on you** violet
 (`#6d3e9d` / `#c8a5f0`), **failed** red (`#b3261e` / `#ffaaa1`), **running / ok** green (`#176548` /
 `#83c8a4`; progress bars use it), **warning** amber (`#875300` / `#ebc06b`). Each has a `-dim` tint for
-its pill. The brand mark keeps its own colours (the wave in cyan or sky, the yellow spark) wherever it
-appears; it does not colour the UI. One more exception, outside studio's UI: the family sites' four
+its pill. The brand marks are monochrome (fonts-v3: the Shoreline + Wave W lockup in `currentColor`, the
+ink of the text around it); the v2 lockup kept its own colours (the wave in cyan or sky, the yellow spark).
+Neither colours the UI. One more exception, outside studio's UI: the family sites' four
 **plane** hues (`--plane-experience` … `--plane-foundation`) label the platform map there.
 
 ### Roles (tokens)
