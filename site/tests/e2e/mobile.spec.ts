@@ -39,7 +39,7 @@ test.describe('mobile (390×844)', () => {
 
   test('the proof sections and the four-plane map render on a phone', async ({ page }) => {
     await page.goto('/');
-    for (const sel of ['.tab-grid', '.receipt', '.trio', '.hits', '.install--primary']) {
+    for (const sel of ['.why .trio', '.why .tab-grid', '.desk .tab-grid', '.receipt', '.steer .trio', '.hits', '.install--primary']) {
       const loc = page.locator(sel);
       await bringIntoView(loc);
       await expect(loc).toBeVisible();

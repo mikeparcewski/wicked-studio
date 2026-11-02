@@ -29,7 +29,7 @@ body { padding-top: var(--topbar-h); }
    straight past — that is exactly what happened to .work and .ctx, which read as "the snap skips
    sections". Anything added below must join this selector. */
 html { scroll-snap-type: y proximity; scroll-padding-top: var(--topbar-h); }
-.hero, .desk, .review, .steer, .reach, .get {
+.hero, .why, .desk, .review, .steer, .reach, .get {
   min-height: calc(100svh - var(--topbar-h));
   scroll-snap-align: start;
   display: flex;
@@ -45,8 +45,19 @@ html { scroll-snap-type: y proximity; scroll-padding-top: var(--topbar-h); }
 }
 @media (max-width: 768px) {
   html { scroll-snap-type: none; }
-  .hero, .desk, .review, .steer, .reach, .get { min-height: 0; }
+  .hero, .why, .desk, .review, .steer, .reach, .get { min-height: 0; }
 }
+
+/* ── Under the hero: the small print, three benefits, what's new, what is coming ── */
+.hero-fine { margin: 8px auto 0; max-width: 96ch; font-size: 0.78rem; line-height: 1.45; color: var(--muted); }
+.why { border-top: 1px solid var(--hairline); padding: clamp(44px, 7svh, 80px) 0; }
+.why-new-h { font-size: 1.05rem; margin: clamp(22px, 3.5svh, 36px) 0 12px; }
+.tab-grid.tab-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.soon { margin: 14px 0 0; font-size: 0.88rem; line-height: 1.5; color: var(--muted); }
+.soon b { color: var(--ink); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (max-width: 1100px) { .tab-grid.tab-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .tab-grid.tab-grid--4 { grid-template-columns: 1fr; } }
 
 /* ── Studio background — ITS OWN motif: the CODER'S FRONT DOOR ─────────────
    Same engine + spirit as the siblings (crew's harness schematic, garden's
@@ -167,7 +178,8 @@ code {
 
 /* ── The IDE demo ──────────────────────────────────────────────────────── */
 .ide {
-  --ide-h: clamp(340px, calc(100svh - 372px), 540px);
+  /* 44px less than before the hero's small print (two lines at 1440): the hero keeps its slack. */
+  --ide-h: clamp(296px, calc(100svh - 416px), 540px);
   margin-top: clamp(14px, 2.2svh, 28px);
   border: 1px solid var(--hairline-strong); border-radius: 14px; overflow: hidden;
   background: color-mix(in oklab, var(--surface-2) 88%, #000 6%);
