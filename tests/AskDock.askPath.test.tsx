@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ApiError } from '../src/api/errors.js';
+import { TURN_WAIT } from '../src/board/turnInFlight.js';
 import type { ChatOpenBody, RosterSeat } from '../src/api/types.js';
 
 /**
@@ -19,6 +20,7 @@ const getChat = vi.fn();
 const listRepos = vi.fn();
 const listProjects = vi.fn();
 const apiFetch = vi.fn();
+const getRun = vi.fn<(...a: unknown[]) => Promise<unknown>>(() => Promise.reject(new Error('no run snapshot in this rig')));
 
 vi.mock('../src/api/client.js', () => ({
   api: {
@@ -28,7 +30,7 @@ vi.mock('../src/api/client.js', () => ({
     getChat: (...a: unknown[]) => getChat(...a),
     listRepos: (...a: unknown[]) => listRepos(...a),
     listProjects: (...a: unknown[]) => listProjects(...a),
-    getRun: () => Promise.reject(new Error('no run snapshot in this rig')),
+    getRun: (...a: unknown[]) => getRun(...a),
   },
   apiFetch: (...a: unknown[]) => apiFetch(...a),
 }));
@@ -136,20 +138,42 @@ describe('one thread (Amendment 6 decision 5)', () => {
 });
 
 describe('the PA is still answering (§8 F6)', () => {
-  it('a 409 turn_in_flight is said in plain words naming the PA; the draft is kept; nothing is orphaned', async () => {
-    render(<AskDock runs={[]} pathname="/" onClose={() => undefined} />);
-    await ask('first');
-    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
-    const chatId = lastBody().chatId!;
-    useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: chatId, cliKey: 'claude', text: 'Let me…', turn_id: 't-1' } as never);
-    sendChatMessage.mockRejectedValueOnce(new ApiError(409, 'turn_in_flight: the previous turn has no reply yet'));
-    // The dock keeps its chat across sends: the second question goes to the same chat.
-    getChat.mockResolvedValue({ chatId, seats: ['claude', 'codex'], scope: null, messages: [] });
-    await ask('second');
-    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
-    await screen.findByText(/claude is still answering — wait for the reply; your message was not sent\./);
-    expect(openChat).toHaveBeenCalledTimes(1); // no second chat was opened for the refused message
-    expect(useAskThreadStore.getState().turns[chatId]!.filter((t) => t.who === 'you')).toHaveLength(1);
+  it('a 409 turn_in_flight keeps the draft and holds Send until the turn has closed; nothing is sent for the person (artifact-runs-fix)', async () => {
+    TURN_WAIT.pollMs = 20;
+    let status = 'executing';
+    getRun.mockImplementation(async () => ({ run: { session: { id: 'r-ask', status }, units: [] } }));
+    try {
+      render(<AskDock runs={[]} pathname="/" onClose={() => undefined} />);
+      await ask('first');
+      await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+      const chatId = lastBody().chatId!;
+      useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: chatId, cliKey: 'claude', text: 'Let me…', turn_id: 't-1' } as never);
+      // The answer rendered, but its turn has not closed: crew refuses and names the path's run.
+      sendChatMessage.mockRejectedValueOnce(new ApiError(409, 'turn_in_flight', { code: 'turn_in_flight', error: 'claude is still answering', runId: 'r-ask' }));
+      getChat.mockResolvedValue({ chatId, seats: ['claude', 'codex'], scope: null, messages: [] });
+      await ask('second');
+      const line = await screen.findByTestId('assist-turn-wait');
+      expect(line).toHaveTextContent('claude is still finishing its answer — you can send this when it’s done.');
+      expect((screen.getByTestId('assist-input') as HTMLTextAreaElement).value).toBe('second');
+      expect(screen.getByTestId('assist-send')).toBeDisabled();
+      // While the run works, Send stays held and nothing is re-posted.
+      await waitFor(() => expect(getRun).toHaveBeenCalledWith('r-ask'));
+      expect(sendChatMessage).toHaveBeenCalledTimes(2);
+      status = 'awaiting_human';
+      await waitFor(() => expect(screen.queryByTestId('assist-turn-wait')).toBeNull());
+      expect(sendChatMessage).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('assist-send')).not.toBeDisabled();
+      // The person sends it, once.
+      sendChatMessage.mockResolvedValueOnce({ seats: ['claude'], turnId: 't-2', runId: 'r-ask', stepId: 'answer-2' });
+      await userEvent.setup().click(screen.getByTestId('assist-send'));
+      await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(3));
+      expect(openChat).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(useAskThreadStore.getState().turns[chatId]!.filter((t) => t.who === 'you').map((t) => t.text)).toEqual(['first', 'second']));
+    } finally {
+      TURN_WAIT.pollMs = 3_000;
+      getRun.mockReset();
+      getRun.mockImplementation(() => Promise.reject(new Error('no run snapshot in this rig')));
+    }
   });
 
   it('a 409 chat_scope_changed says to start a new chat in crew’s own plain words and keeps the draft (crew#1020)', async () => {

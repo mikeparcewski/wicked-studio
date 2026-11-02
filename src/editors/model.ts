@@ -71,6 +71,27 @@ export function elementLabel(text: string | undefined, id: string): string {
 
 // ── §6 grants ───────────────────────────────────────────────────────────────────────────────
 
+/** What each permission lets an editor do, in a person's words (the Plugins card and the editor's own notes). */
+export const PERMISSION_WORDS: Record<PermissionId, string> = {
+  'artifact.read': 'read what it opens',
+  'artifact.write': 'change it (you can undo)',
+  'selection.chip': 'point at parts in your message',
+  'composer.draft': 'suggest what to ask',
+  'checks.read': 'see the checks',
+  'checks.contribute': 'add its own notes',
+  'sources.read': 'see the sources',
+  'media.read': 'play recordings',
+  'artifact.export': 'download it',
+  'ui.fullscreen': 'go full screen',
+  'network.media': 'load images and fonts from the internet',
+  'mcp.session': 'start and talk to the MCP servers you connect it to',
+  'artifact.theme': 'change its theme, colours and fonts (you can undo)',
+  'doc.read': 'read the job’s working document',
+  'doc.propose_edit': 'suggest edits to the job’s working document',
+  'steer.propose': 'suggest a note to the job',
+};
+
+
 /** The first-party default set (§6.1 column 4): every permission except `network.media`, which only
  *  `wicked-page` and `wicked-doc` hold by default, and the ledger-only ones (`mcp.session`), which no default grants. */
 export function builtinDefaults(editorId: string): PermissionId[] {
@@ -116,7 +137,9 @@ export async function fetchGrants(editorId: string, version: string, sha: string
   try {
     const r = await apiFetch<{ grants?: unknown }>(`/editors/${encodeURIComponent(editorId)}/grants?${q.toString()}`);
     const { grants, asking } = grantedOf(r.grants);
-    return { grants, note: asking.length === 0 ? null : `This editor asks for ${asking.join(', ')} — allow it under Settings → Editors.` };
+    // artifact-runs-fix: said in a person's words ("asks to load images and fonts from the internet"), never the
+    // permission's id ("asks for network.media").
+    return { grants, note: asking.length === 0 ? null : `This editor asks to ${asking.map((p) => PERMISSION_WORDS[p] ?? p).join(' and ')} — allow it under Settings → Editors.` };
   } catch (e) {
     if (isRouteUnsupported(e)) {
       return editorId.startsWith('wicked-')

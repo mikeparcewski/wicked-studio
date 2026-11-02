@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
-import type { EditorView } from '../../api/editors.js';
+import { editorSaves, type EditorView } from '../../api/editors.js';
 import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, type WriteVerb } from '../../board/artifactMorph.js';
 import { EditorHost, type HostLogEntry, type HostUi } from '../../editors/host.js';
 import {
@@ -14,7 +14,7 @@ import { readThemeTokens } from '../../editors/theme.js';
 import { artifactSizeOf, registerArtifact, setArtifactSize, useArtifactSizes } from '../../store/artifactSizes.js';
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { VersionLens } from '../session/ArtifactVersions.js';
-import { useEditorFor } from '../../store/editors.js';
+import { useEditorChoices, useEditorFor, useEditorPicks } from '../../store/editors.js';
 import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import '../../editors/adapters/index.js';
 import './hostTabs.js';
@@ -58,7 +58,36 @@ export function PluginCard(props: PluginCardProps): React.ReactElement {
       </section>
     );
   }
-  return <CappedCard {...props} editor={editor} />;
+  return <CappedCard key={editor.id} {...props} editor={editor} />;
+}
+
+/** One editor's name in the "Open with" choice: its title, and "only views" when it cannot save (no `artifact.write`). */
+export function openWithLabel(e: EditorView): string {
+  return `${e.title}${e.first_party ? '' : ' (installed)'}${editorSaves(e) ? '' : ' · only views, can’t save changes'}`;
+}
+
+/**
+ * "Open with" (artifact-runs-fix), drawn by the artifact host (`ArtifactMorph`, its one caller): when more than one
+ * editor declares this kind — an installed pack beside the
+ * first-party editor — the person picks which opens it; the pick is remembered for the kind. Nothing shows when one
+ * editor fits. An editor that cannot save says so here, before it is picked.
+ */
+export function OpenWith({ kind, current }: { kind: string; current: EditorView }): React.ReactElement | null {
+  const choices = useEditorChoices(kind);
+  const pick = useEditorPicks((s) => s.pick);
+  if (choices.length < 2) return null;
+  return (
+    <label data-testid="plugin-card-open-with" className="wk-host-note wk-pcard-openwith">
+      Open with{' '}
+      <select
+        data-testid="plugin-card-open-with-select"
+        value={current.id}
+        onChange={(e) => pick(kind, e.target.value === choices[0]?.id ? null : e.target.value)}
+      >
+        {choices.map((e) => <option key={e.id} value={e.id}>{openWithLabel(e)}</option>)}
+      </select>
+    </label>
+  );
 }
 
 /** The cards whose Options group an address opened: Back closes it (codex h2-r8/r9 P2). Kept outside the live card,

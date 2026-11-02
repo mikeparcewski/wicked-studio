@@ -6,6 +6,7 @@ import { PAGE_NAMES } from '../../board/pageNames.js';
 import { OpenDocumentList } from './OpenDocumentList.js';
 import { mcpInspectPath } from '../../api/mcpInspect.js';
 import { MCP_SERVER_KIND } from '../../api/editors.js';
+import { PERMISSION_WORDS } from '../../editors/model.js';
 
 /**
  * The Plugins page (operator 2026-10-12; was Settings → Developer → Editor plugins, ruling X3, 2026-10-10;
@@ -24,20 +25,6 @@ import { MCP_SERVER_KIND } from '../../api/editors.js';
 /** The editor-plugin workflow's id (the launch wizard opens on it). */
 export const CREATE_EDITOR_WORKFLOW_ID = 'editor-plugin';
 
-const PERMISSION_WORDS: Record<string, string> = {
-  'artifact.read': 'read what it opens',
-  'artifact.write': 'change it (you can undo)',
-  'selection.chip': 'point at parts in your message',
-  'composer.draft': 'suggest what to ask',
-  'checks.read': 'see the checks',
-  'checks.contribute': 'add its own notes',
-  'sources.read': 'see the sources',
-  'media.read': 'play recordings',
-  'artifact.export': 'download it',
-  'ui.fullscreen': 'go full screen',
-  'network.media': 'load images and fonts from the internet',
-  'mcp.session': 'start and talk to the MCP servers you connect it to',
-};
 
 const KIND_WORDS: Record<string, string> = {
   page: 'pages',
@@ -58,7 +45,7 @@ export function kindsInWords(kinds: readonly string[]): string {
 
 /** Every permission in plain words, never an id: what it can do, and its internet access on its own line. */
 export function permissionsInWords(permissions: readonly { id: string }[]): { can: string; internet: string | null } {
-  const can = permissions.filter((p) => p.id !== 'network.media').map((p) => PERMISSION_WORDS[p.id] ?? p.id);
+  const can = permissions.filter((p) => p.id !== 'network.media').map((p) => PERMISSION_WORDS[p.id as keyof typeof PERMISSION_WORDS] ?? p.id);
   return {
     can: can.length === 0 ? 'Asks for nothing.' : `Can: ${can.join(' · ')}`,
     internet: permissions.some((p) => p.id === 'network.media') ? 'Also loads images and fonts from the internet.' : null,

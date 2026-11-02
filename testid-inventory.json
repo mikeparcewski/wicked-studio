@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 287,
-    "occurrences": 3995,
-    "static": 3403,
+    "occurrences": 3998,
+    "static": 3406,
     "dynamic": 93,
     "computed": 44
   },
@@ -1134,6 +1134,12 @@
     },
     {
       "testId": "assist-thread",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-turn-wait",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -10908,6 +10914,18 @@
     },
     {
       "testId": "plugin-card-offer-accept",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-open-with",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-open-with-select",
       "files": [
         "src/components/editorHost/PluginCard.tsx"
       ]

@@ -20,6 +20,7 @@ import {
   type DiagnosticsState,
 } from './askContext.js';
 import { AssistDock, type AssistVerbs } from './AssistDock.js';
+import { TurnInFlightError } from '../board/turnInFlight.js';
 import { CaptureDrop } from './CaptureDrop.js';
 import { describeResolvedScope } from './ChatScopeSelect.js';
 import { defaultSelection, describeChatOpenRefusal } from '../board/chatOpen.js';
@@ -104,7 +105,11 @@ function plainSendRefusal(chatId: string): (e: unknown) => never {
       }
       if (/turn_in_flight|in flight|still answering/i.test(wire)) {
         const pa = useAskThreadStore.getState().paByChat[chatId] ?? 'The helper';
-        throw new Error(`${pa} is still answering — wait for the reply; your message was not sent.`);
+        // Typed: the composer keeps the draft and holds Send until the turn closes (artifact-runs-fix).
+        const runId = typeof (body as { runId?: unknown } | null)?.runId === 'string'
+          ? (body as { runId: string }).runId
+          : useAskThreadStore.getState().runByChat[chatId] ?? null;
+        throw new TurnInFlightError(pa, runId);
       }
     }
     throw e;

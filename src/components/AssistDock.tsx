@@ -18,6 +18,7 @@ import { NarratorFeed, phaseName } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
 import { LiveActivity } from './session/LiveActivity.js';
 import { workingOrdOf } from '../board/liveTurn.js';
+import { TURN_WAIT, TurnInFlightError, turnStillOpen } from '../board/turnInFlight.js';
 import {
   deriveArtifacts,
   lastNarration,
@@ -668,6 +669,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   const [files, setFiles] = useState<Array<{ id: number; file: File }>>([]);
   const fileSeq = useRef(0);
   const [sending, setSending] = useState(false);
+  /** The daemon refused a message because the previous turn has not closed (409 `turn_in_flight`): the draft stays in
+   *  the box and Send waits until the path's run stops working (read, never re-posted). */
+  const [turnWait, setTurnWait] = useState<{ who: string; runId: string | null; since: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -783,7 +787,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   const inFlight = useRef(false);
   const send = async (override?: string): Promise<void> => {
     const body = (override ?? text).trim();
-    if (body === '' || sending || inFlight.current) return;
+    if (body === '' || sending || inFlight.current || turnWait !== null) return;
     inFlight.current = true;
     setSending(true);
     onStatus?.('thinking');
@@ -820,6 +824,14 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       setAttachments([]);
       setFiles((cur) => cur.filter((f) => !sentEntries.includes(f)));
     } catch (e) {
+      if (e instanceof TurnInFlightError) {
+        // The answer rendered but its turn has not closed: keep the draft (a handed-over or pressed send whose words
+        // were never in the box goes into it), and hold Send until the turn has closed.
+        setText((cur) => (cur.trim() === '' ? body : cur));
+        setTurnWait({ who: e.who, runId: e.runId, since: Date.now() });
+        onStatus?.('ready');
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       push({ kind: 'user', text: body, files: fileNames });
       note('fail', msg);
@@ -830,6 +842,26 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       setSending(false);
     }
   };
+
+  // A wait belongs to the conversation it was refused in: another surface or chat starts without it (review r2).
+  useEffect(() => { setTurnWait(null); }, [context.surface, context.contextLabel]);
+
+  // While Send waits for the turn to close, the path's run is READ on a short clock (never a POST): once it stops
+  // working — or nothing names it, or the bound passes — Send comes back and the person sends the draft themselves.
+  useEffect(() => {
+    if (turnWait === null) return;
+    let live = true;
+    const check = (): void => {
+      if (!live) return;
+      if (turnWait.runId === null || Date.now() - turnWait.since >= TURN_WAIT.giveUpMs) { setTurnWait(null); return; }
+      api.getRun(turnWait.runId).then(
+        (r) => { if (live && !turnStillOpen(r.run.session.status)) setTurnWait(null); },
+        () => { if (live) setTurnWait(null); },
+      );
+    };
+    const t = setInterval(check, TURN_WAIT.pollMs);
+    return () => { live = false; clearInterval(t); };
+  }, [turnWait]);
 
   // The Desk composer's handoff (S4): the operator pressed Send there — send it here, once.
   const sentOnOpen = useRef(false);
@@ -1204,7 +1236,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             type="button"
             data-testid="assist-send"
             aria-label="Send"
-            disabled={text.trim() === '' || sending}
+            disabled={text.trim() === '' || sending || turnWait !== null}
             onClick={() => void send()}
             className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-opacity disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
@@ -1213,6 +1245,11 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           </button>
         </div>
       </div>
+      {turnWait !== null && (
+        <p data-testid="assist-turn-wait" role="status" className="wk-assist-notice">
+          {turnWait.who} is still finishing its answer — you can send this when it’s done.
+        </p>
+      )}
       {notice !== undefined && notice !== null && (
         <p data-testid="assist-notice" className="wk-assist-notice">{notice}</p>
       )}

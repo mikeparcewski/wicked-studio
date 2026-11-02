@@ -5,7 +5,7 @@ import { useWindowSpend } from '../../hooks/useWindowSpend.js';
 import { useGateStore } from '../../store/gates.js';
 import { useVoiceStore } from '../../store/voice.js';
 import { saveDashboard, useDashStore } from '../../voice/dashboardStore.js';
-import { formatMetric, readMetric, removeWidget, type DashboardWidget } from '../../voice/widgets.js';
+import { formatMetric, isRunningJob, readMetric, removeWidget, stepWords, type DashboardWidget } from '../../voice/widgets.js';
 
 /**
  * The live system around the transcript (mockup state g): built-in widgets (machine load, health, helpers, running
@@ -102,13 +102,13 @@ function HelpersWidget({ w, snap }: { w: DashboardWidget; snap: SystemSnapshot |
 }
 
 function JobsWidget({ w, snap }: { w: DashboardWidget; snap: SystemSnapshot | null }): React.ReactElement {
-  const runs = (snap?.runs ?? []).filter((r) => r.liveness !== 'held');
+  const runs = (snap?.runs ?? []).filter(isRunningJob);
   const tone = (l: string): 'run' | 'warn' | 'fail' => (l === 'stalled' ? 'fail' : l === 'waiting_on_you' ? 'warn' : 'run');
   return (
     <WidgetTile w={w}>
       {runs.length === 0 ? <span className="wk-voice-small">{snap === null ? 'Not read yet' : 'Nothing running'}</span> : (
         <ul className="wk-voice-list">
-          {runs.slice(0, 4).map((r) => <li key={r.runId}><Dot tone={tone(r.liveness)} /><span className="wk-voice-ellip">{r.title}</span>{r.phase !== null ? <span className="wk-voice-small"> · {r.phase}</span> : null}</li>)}
+          {runs.slice(0, 4).map((r) => <li key={r.runId}><Dot tone={tone(r.liveness)} /><span className="wk-voice-ellip">{r.title}</span>{stepWords(r.phase) !== null ? <span className="wk-voice-small"> · {stepWords(r.phase)}</span> : null}</li>)}
           {runs.length > 4 && <li className="wk-voice-small">and {runs.length - 4} more</li>}
         </ul>
       )}

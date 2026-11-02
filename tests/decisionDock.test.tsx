@@ -207,6 +207,39 @@ describe('the reply box: the draft\'s intent picks where Send goes; the switch s
     await waitFor(() => expect(result.current.route).toEqual({ to: 'ask', why: 'question' }));
   });
 
+  it('a card that opens its own note box stands the reply box down: one note input per choice (rig run 2e6059da)', async () => {
+    const confirm = vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' } as never);
+    const onAsk = vi.fn();
+    render(<SessionPage sessionId="run:r1" runs={[live()]} runsLoaded needRows={[]} navigate={() => {}} onAsk={onAsk} />);
+    await screen.findByTestId('decision-dock');
+    const input = screen.getByTestId('session-composer-input');
+    fireEvent.change(input, { target: { value: 'try again with the fixture' } });
+    expect((await screen.findByTestId('session-reply-dest')).textContent).toBe('Replies to this decision (Send back)');
+    // The person takes a note-bearing card: its own box opens, and the reply box no longer answers the decision.
+    const card = screen.getAllByTestId('session-gate-choice').find((c) => c.getAttribute('data-choice-key') === 'send-back')!;
+    fireEvent.click(card);
+    await screen.findByTestId('session-gate-note');
+    await waitFor(() => expect(screen.getByTestId('session-reply-switch').textContent).toBe('Send asks a separate question'));
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(useUndoQueue.getState().pending).toHaveLength(0);
+    expect(onAsk).toHaveBeenCalledWith('try again with the fixture', expect.anything());
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('Stop selected with its reason box closed (Escape) still stands the reply box down (review r2/r3)', async () => {
+    render(<SessionPage sessionId="run:r1" runs={[live()]} runsLoaded needRows={[]} navigate={() => {}} onAsk={vi.fn()} />);
+    await screen.findByTestId('decision-dock');
+    const input = screen.getByTestId('session-composer-input');
+    fireEvent.change(input, { target: { value: 'why is this failing?' } });
+    expect((await screen.findByTestId('session-reply-dest')).textContent).toBe('Replies to this decision (Send back)');
+    const stop = screen.getAllByTestId('session-gate-choice').find((c) => c.getAttribute('data-choice-key') === 'stop')!;
+    fireEvent.click(stop);
+    const note = await screen.findByTestId('session-gate-note');
+    fireEvent.keyDown(note, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('session-gate-note')).toBeNull());
+    expect(screen.getByTestId('session-reply-switch').textContent).toBe('Send asks a separate question');
+  });
+
   it('an unclear reading goes to the decision, said so', () => {
     expect(routeFor('unclear')).toEqual({ to: 'reply', why: 'unclear' });
     expect(switchWords(routeFor('unclear'), 'Send back').why).toBe('couldn’t tell if it was a question, so it replies');

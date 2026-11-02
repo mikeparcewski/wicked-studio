@@ -6,7 +6,7 @@ import { useArtifactAddress } from './ArtifactAddress.js';
 import { ArtifactVersions, lensVersion, useVersionList, VersionLens } from './ArtifactVersions.js';
 import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
 import { useEditorFor, useEditors } from '../../store/editors.js';
-import { PluginCard } from '../editorHost/PluginCard.js';
+import { OpenWith, PluginCard } from '../editorHost/PluginCard.js';
 import { hasAdapter, type AdapterSource } from '../../editors/hostApi.js';
 // The adapters register on import; the routing above asks which exist.
 import '../../editors/adapters/index.js';
@@ -72,13 +72,25 @@ export function ArtifactMorph(props: ArtifactMorphProps): React.ReactElement {
     // The run is the key's own prefix (`artifactKey(projectId, docId, runId)` = `<runId>:<projectId>/<docId>`).
     const runId = props.artifactKey.includes(':') ? props.artifactKey.slice(0, props.artifactKey.indexOf(':')) : undefined;
     return (
-      <PluginCard
-        binding={{ artifactKey: props.artifactKey, title: props.title, kind, source, projectId: props.projectId, docId: props.docId, ...(runId !== undefined ? { runId } : {}), composerKey: props.composerKey, repoId: props.repoId ?? null, producedBy: props.producedBy ?? null }}
-        editor={editor}
-      />
+      <>
+        {/* artifact-runs-fix: more than one editor declares this kind — the person picks which opens it. A slot
+            (walkthrough, demo video) draws its own recording body, so it offers no choice (review r3). */}
+        {props.slot === undefined && <OpenWith kind={kind} current={editor} />}
+        <PluginCard
+          key={editor.id}
+          binding={{ artifactKey: props.artifactKey, title: props.title, kind, source, projectId: props.projectId, docId: props.docId, ...(runId !== undefined ? { runId } : {}), composerKey: props.composerKey, repoId: props.repoId ?? null, producedBy: props.producedBy ?? null }}
+          editor={editor}
+        />
+      </>
     );
   }
-  return <MorphingArtifact {...props} />;
+  return (
+    <>
+      {/* A slot (walkthrough, demo video) draws its own recording body whatever editor is picked: no choice there. */}
+      {props.slot === undefined && editor !== null && editor !== undefined && <OpenWith kind={kind} current={editor} />}
+      <MorphingArtifact {...props} />
+    </>
+  );
 }
 
 function MorphingArtifact({ artifactKey, title, projectId, docId, composerKey, kind = 'page', slot }: {

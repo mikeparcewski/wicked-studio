@@ -68,6 +68,9 @@ export interface AskCardProps {
   leadAct?: React.ReactNode;
   /** The selected option changed (a host that shows more about it). */
   onSelect?: (id: string | null) => void;
+  /** The option whose own reason box is open changed (`null`: none is). A host with a second text box for the same
+   *  answer (a gate's dock reply) stands it down while the card asks for the words itself: one box per answer. */
+  onReasonOpen?: (id: string | null) => void;
   /** Escape inside the reason box. */
   onCancelReason?: () => void;
   /** Test ids: a gate keeps the ones its journeys read. */
@@ -108,7 +111,7 @@ export function AskCard(props: AskCardProps): React.ReactElement {
 }
 
 /** Choose one (and confirm, confirm_reason): radio cards, the consequence line, the reason box, the primary. */
-function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabel, optionProps, optionExtra, confirmProps, confirmExtra, footnote, aside, leadAct, onSelect, onCancelReason, testIds, reasonId }: AskCardProps): React.ReactElement {
+function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabel, optionProps, optionExtra, confirmProps, confirmExtra, footnote, aside, leadAct, onSelect, onReasonOpen, onCancelReason, testIds, reasonId }: AskCardProps): React.ReactElement {
   const options = useMemo(() => ask.options ?? [], [ask.options]);
   const enabled = options.filter((o) => o.disabled === undefined);
   const [sel, setSel] = useState<string | null>(() => (start !== undefined ? start : initialOption(ask)));
@@ -117,7 +120,10 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
   const [missing, setMissing] = useState(false);
   // An option that asks for words opens its box once the person takes it (picks it, or presses the primary on it):
   // a preselected one never opens a box, or a prefilled one would be sent unread, and never takes the caret.
-  const [engaged, setEngaged] = useState<string | null>(null);
+  const [engaged, setEngagedState] = useState<string | null>(null);
+  // The host hears a reason box open or close in the SAME event that opens or closes it (not a commit later), so a
+  // second text box for the same answer stands down before anything can be typed into it (review r1).
+  const setEngaged = (id: string | null): void => { setEngagedState(id); onReasonOpen?.(id); };
   const groupRef = useRef<HTMLDivElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const autoId = useId();
@@ -141,6 +147,8 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
 
   // Opening a reason box puts the caret at its end (a prefilled send-back note is the person's to finish).
   const reasonFor_ = open ? current?.id ?? null : null;
+  useEffect(() => { onReasonOpen?.(reasonFor_); }, [reasonFor_]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { onReasonOpen?.(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (reasonFor_ === null) return;
     const el = reasonRef.current;
