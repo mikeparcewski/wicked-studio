@@ -239,34 +239,40 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
     return () => { alive.current = false; };
   }, []);
   const seatsRef = useRef<HTMLDivElement | null>(null);
+  /** Focus lost with a control a check removed goes to the helpers; never taken from where the person moved on to. */
+  const keepFocus = (): void => {
+    requestAnimationFrame(() => {
+      const at = document.activeElement;
+      if (alive.current && (at === null || at === document.body)) seatsRef.current?.focus();
+    });
+  };
   const refreshRoster = async (keys: readonly string[]): Promise<void> => {
     if (checking || keys.length === 0) return;
     setChecking(true);
-    setCheckFailed(null);
+    // Per helper: a key leaves the unanswered set only when its own check answers fresh; the others stay said.
+    const fresh: string[] = [];
+    const unanswered: string[] = [];
+    let latest: RosterSeat[] | null = null;
     try {
-      let latest: RosterSeat[] | null = null;
-      const stale: string[] = [];
       for (const key of keys) {
         const r = await api.getRoster(key);
         if (!Array.isArray(r?.roster)) throw new Error('roster: no list');
         latest = r.roster;
         // `timed_out`: no fresh answer, the roster is the last reading (crew's contract) — said, not taken as checked.
-        if (r.refresh?.key === key && r.refresh.outcome === 'timed_out') stale.push(key);
+        if (r.refresh?.key === key && r.refresh.outcome === 'timed_out') unanswered.push(key);
+        else fresh.push(key);
       }
-      if (!alive.current || latest === null) return;
-      setCachedRoster(latest);
-      if (stale.length > 0) setCheckFailed(stale);
-      // The control that asked may be gone now (every chosen helper can work): focus stays in the helpers, but only
-      // when it was lost with that control, never taken from where the person moved on to meanwhile.
-      requestAnimationFrame(() => {
-        const at = document.activeElement;
-        if (alive.current && (at === null || at === document.body)) seatsRef.current?.focus();
-      });
     } catch {
-      if (alive.current) setCheckFailed([...keys]);
-    } finally {
-      if (alive.current) setChecking(false);
+      unanswered.push(...keys.filter((k) => !fresh.includes(k) && !unanswered.includes(k)));
     }
+    if (!alive.current) return;
+    if (latest !== null) setCachedRoster(latest);
+    setCheckFailed((was) => {
+      const next = [...new Set([...(was ?? []).filter((k) => !fresh.includes(k)), ...unanswered])];
+      return next.length > 0 ? next : null;
+    });
+    setChecking(false);
+    keepFocus();
   };
   // Opened from a control that is now gone: focus goes to the form itself (never to Make it).
   const formRef = useRef<HTMLDivElement | null>(null);
@@ -392,17 +398,18 @@ function AnswerProposalForm({ answer, projects, onClose }: { answer: AnswerPropo
         <span data-testid="proposal-answer-council" role={form.helpers.length !== ANSWER_SEATS ? 'alert' : 'status'}>
           {roster !== null && !form.helpers.every(eligible)
             ? <>A helper on this proposal is no longer available: leave it out and choose another, or{' '}
-                <button type="button" data-testid="proposal-answer-council-refresh" className="wk-since-toggle" disabled={checking}
+                <button type="button" data-testid="proposal-answer-council-refresh" className="wk-since-toggle" aria-disabled={checking}
                   onClick={() => void refreshRoster(form.helpers.filter((k) => !eligible(k)))}>{checking ? 'checking…' : 'check the helpers again'}</button>.</>
             : form.helpers.length === ANSWER_SEATS
               ? `${seatName(form.helpers[0]!)} and ${seatName(form.helpers[1]!)}: one writes, the other checks`
               : 'Choose two helpers: one writes the document and another checks it.'}
         </span>
-        {/* Said whatever the roster now says: a reading that is not fresh is never shown as checked. */}
+        {/* Said whatever the roster now says: a reading that is not fresh is never shown as checked. The controls stay
+            mounted and focusable while a check runs (aria-disabled; a second click is ignored). */}
         {checkFailed !== null && (
           <span data-testid="proposal-answer-council-check-failed" role="status">
             Studio couldn’t get a fresh answer for {checkFailed.map(seatName).join(' and ')}; what it shows is the last reading.{' '}
-            <button type="button" data-testid="proposal-answer-council-check-again" className="wk-since-toggle" disabled={checking}
+            <button type="button" data-testid="proposal-answer-council-check-again" className="wk-since-toggle" aria-disabled={checking}
               onClick={() => void refreshRoster(checkFailed)}>{checking ? 'checking…' : 'Check again'}</button>
           </span>
         )}

@@ -454,10 +454,10 @@ describe('Change something on a create card (A3)', () => {
     fireEvent.click(button);
     fireEvent.click(button);
     expect(reads).toBe(1);
-    expect(button.hasAttribute('disabled')).toBe(true);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
     release(new Response('{}', { status: 503 }));
     await waitFor(() => expect(within(form).getByTestId('proposal-answer-council-check-failed')).toBeTruthy());
-    expect(within(form).getByTestId('proposal-answer-council-refresh').hasAttribute('disabled')).toBe(false);
+    expect(within(form).getByTestId('proposal-answer-council-refresh').getAttribute('aria-disabled')).toBe('false');
   });
 
   it('a refusal before accepting never marks another tab’s fresh Go as interrupted', async () => {
@@ -598,6 +598,48 @@ describe('Change something on a create card (A3)', () => {
     // B's Go as it is on screen (its helpers), no answer controls back; this tab's refusal is said under it.
     expect(screen.getByTestId('artifact-proposal').textContent).toBe(`${shown}This chat already has a job running.`);
     expect(screen.queryByTestId('artifact-proposal-confirm')).toBeNull();
+  });
+
+  it('a helper whose check timed out stays said while another helper is checked; Check again keeps focus and says it is checking', async () => {
+    const seats = (claude: boolean, codex: boolean) => [
+      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, ...(claude ? {} : { auth: 'signed_out' }) },
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true, ...(codex ? {} : { auth: 'signed_out' }) },
+    ];
+    setCachedRoster(seats(false, false) as never);
+    const pending: Array<(r: Response) => void> = [];
+    const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const u = new URL(url, 'http://x');
+      if (!u.pathname.endsWith('/roster')) return base(url, init);
+      return new Promise<Response>((r) => { pending.push(r); });
+    }));
+    const form = await openForm();
+    const refresh = within(form).getByTestId('proposal-answer-council-refresh');
+    refresh.focus();
+    fireEvent.click(refresh);
+    // Claude times out (its last reading: signed in); Codex is checked fresh and is still signed out.
+    await waitFor(() => expect(pending).toHaveLength(1));
+    pending[0]!(ok({ roster: seats(true, false), refresh: { key: 'claude', outcome: 'timed_out' } }));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    pending[1]!(ok({ roster: seats(true, false), refresh: { key: 'codex', outcome: 'probed' } }));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-council-check-failed').textContent).toContain('Claude Code'));
+    expect(within(form).getByTestId('proposal-answer-council-check-failed').textContent).not.toContain('Codex');
+    // Checking Codex again (it signed in since) answers only for Codex: Claude's timeout is still said.
+    fireEvent.click(within(form).getByTestId('proposal-answer-council-refresh'));
+    await waitFor(() => expect(pending).toHaveLength(3));
+    pending[2]!(ok({ roster: seats(true, true), refresh: { key: 'codex', outcome: 'probed' } }));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-go').hasAttribute('disabled')).toBe(false));
+    const again = within(form).getByTestId('proposal-answer-council-check-again');
+    expect(within(form).getByTestId('proposal-answer-council-check-failed').textContent).toContain('Claude Code');
+    // Check again: still mounted and focused while it runs, saying so.
+    again.focus();
+    fireEvent.click(again);
+    expect(within(form).getByTestId('proposal-answer-council-check-again').textContent).toBe('checking…');
+    expect(document.activeElement).toBe(again);
+    await waitFor(() => expect(pending).toHaveLength(4));
+    pending[3]!(new Response('{}', { status: 503 }));
+    await waitFor(() => expect(within(form).getByTestId('proposal-answer-council-check-again').textContent).toBe('Check again'));
+    expect(document.activeElement).toBe(again);
   });
 
   it('Cancel puts focus back on Change something', async () => {
