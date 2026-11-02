@@ -61,6 +61,13 @@
 .wk-jr-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; min-height: 40px; }
 .wk-jr-label { margin: 0; font-size: var(--text-body); font-weight: var(--weight-strong);   color: var(--ink-muted); }
 .wk-jr-tools { display: flex; align-items: center; gap: 10px; }
+/* Jobs' project picker: no wider than 360 px or the list head (a container, so the limit never depends on the
+   picker's own width); a long name ends in an ellipsis, and when the picker and the filters don't fit on one
+   line the filters wrap under it, at any width (review r3). */
+.wk-jr-sec-head:has(.wk-calm-typepick) { container-type: inline-size; flex-wrap: wrap; row-gap: 8px; }
+.wk-jr-sec-head .wk-calm-typepick { max-width: 100cqw; }
+.wk-jr-sec-head select.wk-calm-pick { max-width: min(360px, 100cqw); text-overflow: ellipsis; }
+.wk-jr-tools { flex-shrink: 0; }
 
 /* The one filter: two words in a quiet track; the chosen one filled. */
 .wk-jr-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: color-mix(in oklab, var(--ink-high) 6%, transparent); }
@@ -197,4 +204,6 @@
   .wk-jr-list--jobs .wk-jr-word { order: 3; flex-basis: 100%; padding: 0 0 0 22px; text-align: left; }
   .wk-jr-details { padding: 0 12px 18px 36px; }
   .wk-jr-refine { padding: 16px; }
+  /* The project picker and the Active / Finished filter: two lines when one is too narrow. */
+  .wk-jr-sec-head { flex-wrap: wrap; row-gap: 8px; }
 }

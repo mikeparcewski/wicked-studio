@@ -906,7 +906,8 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   predating the proposal queue). A list: the pending governed-knowledge proposals
          #   the route serves (`{proposals: [...]}`, the crew wire), filtered by `?state=`.
          #   POST /proposals/<id>/approve (crew's route) flips a pending one to `approved` and answers
-         #   crew's outcome (memory → promoted, policy → handed_off); receipts at
+         #   crew's outcome (memory → promoted, policy → handed_off); POST /proposals/<id>/reject flips
+         #   it to `rejected` and keeps it (Not accepted lists it); approve receipts at
          #   GET /__fixture/approve-posts, cleared by `reset_repairs`.
          "proposals": None,
          # memories — None: GET /memory* answers the standing unknown-route 404 (a daemon predating
@@ -9836,6 +9837,21 @@ class W2Handler(SimpleHTTPRequestHandler):
                 return self._json(200, {"outcome": "promoted", "active_id": f"mem-active-{pid}"})
             return self._json(200, {"outcome": "handed_off", "payload": row.get("payload"),
                                     "landing": {"outcome": "landed", "ruleId": f"proposal:{pid}"}})
+        # crew's POST /proposals/<id>/reject over the `proposals` switch: the store KEEPS the row, marked
+        # `rejected` (estate's reject_proposal), so GET /proposals?state=rejected lists it (Not accepted).
+        m = re.match(r"^/api/v1/proposals/([^/]+)/reject$", path)
+        if m:
+            pid = urllib.parse.unquote(m.group(1))
+            with state_lock:
+                rows = state["proposals"]
+                row = next((r for r in (rows or []) if r.get("id") == pid and r.get("state") == "pending"), None)
+                if row is not None:
+                    state["proposals"] = [dict(r, state="rejected") if r is row else r for r in rows]
+            if rows is None:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            if row is None:
+                return self._json(502, {"error": f"proposal {pid} is not pending"})
+            return self._json(200, {"ok": True})
         # Wave 2 (studio#251): the re-onboard remedy's wire, POST /repos/<id>/onboard → {runId}.
         m = re.match(r"^/api/v1/repos/([^/]+)/onboard$", path)
         if m:

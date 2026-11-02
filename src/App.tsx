@@ -253,7 +253,9 @@ export function App(): React.ReactElement {
       );
     }
     // `address`: moves inside the surface stay on the Steer tab's own address (no redirect, no remount).
-    return <SteerSurface pathname={u.pathname} search={hs} navigate={navigate} runs={runs} address={(p) => deskTabPath('steer', p)} />;
+    // A project's Steer tab keeps its moves (a pill, a rule) in the project, as Memory does.
+    const steerBase = project === null ? '/' : projectDetailPath(project);
+    return <SteerSurface pathname={u.pathname} search={hs} navigate={navigate} runs={runs} address={(p) => deskTabPath('steer', p, steerBase)} />;
   };
 
   useEventStream(handleEvent);

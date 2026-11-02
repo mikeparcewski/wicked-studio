@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 284,
-    "occurrences": 3941,
-    "static": 3347,
+    "files": 285,
+    "occurrences": 3955,
+    "static": 3364,
     "dynamic": 90,
     "computed": 44
   },
@@ -3907,6 +3907,12 @@
     },
     {
       "testId": "desk-runs-open",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-project",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
@@ -8809,7 +8815,19 @@
       ]
     },
     {
+      "testId": "memory-view",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-view-memories",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-view-not-accepted",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -9898,6 +9916,84 @@
       "testId": "new-project-repo",
       "files": [
         "src/components/NewProjectModal.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-count",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-empty",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-error",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-line",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-list",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-loading",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-open",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-row",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-run",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-stale",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-text",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-unsupported",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
       ]
     },
     {
@@ -17306,6 +17402,12 @@
     },
     {
       "testId": "steer-view-live",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-view-not-accepted",
       "files": [
         "src/components/steer/SteerSurface.tsx"
       ]

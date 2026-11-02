@@ -12,6 +12,27 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+- **Memory, Steer and Jobs lists (operator 2026-11-01).**
+  - **Memory:** the header's Review proposals and Add a memory buttons are gone. Pills over the list, like Steer's,
+    switch between Active, Proposed (N) and Not accepted. Add a memory is the first item in the header's ⋯ menu.
+  - **Steer:** the header's Add a rule button is gone; Add a rule is the first item in the ⋯ menu (disabled until the
+    rules have loaded). The pills gain Not accepted. The pills (here and on Memory) are one tab stop; the arrow keys
+    move between them.
+  - **Not accepted** lists every rejected proposal the store kept. Estate marks a rejected proposal `rejected` and
+    never deletes it, and crew's `GET /proposals` returns it. Nothing is hidden, because the wire doesn't record who
+    rejected a proposal or why (wicked-crew#1261 asks crew to record it). Two kinds of row say what the record shows:
+    - an original that an accepted memory edit names: "named as the original of an accepted edit" (crew rejects the
+      original when you accept an edit);
+    - an edited copy: crew also rejects a copy itself when approving it failed.
+
+    The list is read-only, because crew can't reopen a rejected proposal. `?view=not-accepted` opens it on either
+    page, and Steer's Proposed pill opens `/steering/proposals`; on a project's Steer tab the pills stay in the
+    project. No crew change is needed.
+  - **Jobs:** each row's line starts with the job's project, or "No project" for an unfiled job. A project picker in
+    the list head (All projects / each project / No project, with counts for the list as shown) replaces the
+    Project select that was hidden under Search and filter.
+
 ### Fixed
 - **Importing a steering rule the way the dialog says now works, and a refusal shows the service's reason (studio#934, J7).** The Import rules dialog said "one rule per item under ## Rules". A doc written that way was refused, because the service reads a frontmattered doc, and studio showed only "Studio’s service refused it". The dialog now says "a markdown rule doc in the format below", and **The format** opens a copyable starting doc: a `---` block with `id` and `title`, then `## Rules` items written as `` - `ID` (severity): statement ``. That example imports as written. A skipped entry now always ends with what the service said ("Studio’s service said: not a frontmattered rule doc — …"). The plain words come first when studio knows the cause. The table view's assistant uses the same import path.
 

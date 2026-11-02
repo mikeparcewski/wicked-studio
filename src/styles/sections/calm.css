@@ -252,3 +252,11 @@ select.wk-calm-pick { field-sizing: content; }
    the rig's dark-teal accent alone is ~1.5:1 on the classic dark ground. */
 .wk-calm .wk-link { color: var(--calm-link); }
 .wk-calm .wk-link:hover { color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
+
+/* A header whose only action is the ⋯ menu (Memory, Steer): on a phone the menu stays beside the title
+   instead of taking a full-width row of its own. */
+@media (max-width: 767px) {
+  .wk-calm-head:has(.wk-calm-action--menu) { flex-direction: row; align-items: flex-start; }
+  .wk-calm-head:has(.wk-calm-action--menu) .wk-calm-actions,
+  .wk-calm-action--menu { width: auto; }
+}

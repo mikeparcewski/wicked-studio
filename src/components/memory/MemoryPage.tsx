@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { askPage, PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
-import { Plus } from 'lucide-react';
 import {
   addMemory, AddMemoryApproveError, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
   listMemories, memoryCoverage, memoryPath, readMemoryView, retireMemory, retireMemoryItem,
@@ -15,9 +14,10 @@ import { useProjectsStore } from '../../store/projects.js';
 import { FacetAutocomplete } from '../FacetAutocomplete.js';
 import { useModalEscape } from '../Modal.js';
 import { shortContent } from '../ProposalChips.js';
+import { NotAcceptedList } from '../NotAcceptedList.js';
 import { ProposalsSection } from '../ProposalsSection.js';
 import { StateBanner, TechDetails } from '../ui/index.js';
-import { CalmAction, CalmButton, CalmEmpty, CalmFacts, CalmHead, CalmLoading, CalmNote, CalmRow, CalmRows, CalmSearch, CalmSection } from '../calm/Calm.js';
+import { CalmButton, CalmEmpty, CalmFacts, CalmHead, CalmLoading, CalmMenu, CalmNote, CalmRow, CalmRows, CalmSearch, CalmSection, CalmSeg } from '../calm/Calm.js';
 import { memoryOrigin, memorySentence, shortDate } from '../../board/calmMemory.js';
 import { useDialogFocus } from '../steer/useDialogFocus.js';
 import { MemoryCaptureAdd, MemoryRetired, MemoryTable } from './MemoryAdd.js';
@@ -25,13 +25,13 @@ import { MemoryCaptureAdd, MemoryRetired, MemoryTable } from './MemoryAdd.js';
 /**
  * THE MEMORY PAGE (operator 2026-10-17: "memories and steering are separate"). Memory is what
  * helpers REMEMBER — witnessed or told context they recall; Steer is the rules they are HELD to.
- * A Desk tab beside Steer (`/memory`, `/memory?view=proposals`), in Steer's visual language:
+ * A Desk tab beside Steer (`/memory`, `/memory?view=proposals`, `/memory?view=not-accepted`), in Steer's
+ * visual language:
  *
- *  - tiles: the store's real totals (`GET /memory/coverage`), the memory proposals waiting on you,
- *    and Add a memory;
- *  - the kinds (tiers) as cards with the store's counts — the kind filter;
- *  - the list: Memories (search, tag filter, Edit, Retire one, Retire a scope) and Proposals
- *    (approve as filed or with an edit, reject).
+ *  - the header: the title, one sentence, and the ⋯ menu (Add a memory first; operator 2026-11-01);
+ *  - Steer's pills over the list: Active (search, kind and tag filters, Edit, Retire one, Retire a
+ *    scope), Proposed (approve as filed or with an edit, reject) and Not accepted (what was turned
+ *    down, kept by the store, read only).
  *
  * Every write goes through crew's API: add = file a proposal then approve it (crew has no direct
  * memory write); edit = crew's `/memory/edit` (a new memory replaces the old one); retire =
@@ -163,6 +163,9 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   const applyQuery = (): void => { setFacet(null); setQuery(queryInput.trim()); };
   const clearFilters = (): void => { setQueryInput(''); setFacet(null); setTier(null); setQuery(''); };
 
+  /** Bumped by Refresh, so an open Not accepted list reads the queue again. */
+  const [rejectedRev, setRejectedRev] = useState(0);
+
   // ── Moves ────────────────────────────────────────────────────────────────────────────────────
   const [note, setNote] = useState<{ tone: 'ok' | 'fail'; text: string } | null>(null);
   const opened = useRef(0);
@@ -178,7 +181,6 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   const byTier = coverage.kind === 'ok' ? coverage.value.by_tier ?? {} : {};
   const present = [...TIERS, ...Object.keys(byTier).filter((t) => !(TIERS as readonly string[]).includes(t))].filter((t) => (byTier[t] ?? 0) > 0);
   const tierList = tier !== null && !present.includes(tier) ? [...present, tier] : present;
-  const waiting = typeof pending === 'number' ? pending : 0;
 
   const sentence = memorySentence({ total, pending, coverage: coverage.kind });
   const addIt = (): void => setAdding(++opened.current);
@@ -194,19 +196,12 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
     { id: 'table', label: 'Edit as a table', testId: 'memory-add-table', onSelect: () => setPanel('table') },
     { id: 'retired', label: 'Show retired', testId: 'memory-add-retired', onSelect: () => setPanel('retired') },
   ];
-  const refresh = (): void => { reread(); setReviewTick((t) => t + 1); };
-  // One action: review what is waiting when something is; otherwise add a memory. The rest sit in its menu.
-  const action = waiting > 0 && view !== 'proposals'
-    ? <CalmAction label={`Review ${waiting} ${waiting === 1 ? 'proposal' : 'proposals'}`} testId="memory-view-proposals" onClick={() => go('proposals')}
-        menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
-        menu={[{ id: 'add', label: 'Add a memory…', testId: 'memory-add', onSelect: addIt }, ...ways, { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh }]} />
-    : <CalmAction label="Add a memory" testId="memory-add" icon={<Plus size={16} aria-hidden />} onClick={addIt}
-        menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
-        menu={[
-          ...ways,
-          ...(view === 'proposals' ? [] : [{ id: 'proposals', label: pending === 'unsupported' ? 'Proposals (not available here)' : 'Show proposals', testId: 'memory-view-proposals', onSelect: () => go('proposals'), disabled: pending === 'unsupported' ? 'This crew has no proposal review' : null }]),
-          { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh },
-        ]} />;
+  const refresh = (): void => { reread(); setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); setProposalsRev((r) => r + 1); };
+  // Operator 2026-11-01: no header button; Add a memory is the ⋯ menu's first item, the pills switch the list.
+  const action = (
+    <CalmMenu menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
+      menu={[{ id: 'add', label: 'Add a memory…', testId: 'memory-add', onSelect: addIt }, ...ways, { id: 'refresh', label: 'Refresh', testId: 'memories-refresh', onSelect: refresh }]} />
+  );
 
   const memoryRow = (m: MemoryItem): React.ReactElement => {
     const where = whereWords(m, projectName);
@@ -248,7 +243,18 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
       {tierList.map((t) => <option key={t} value={t}>{`${tierWord(t)} (${byTier[t] ?? 0})`}</option>)}
     </select>
   ) : null;
-  const searchTools = view === 'memories' ? (
+  const pills = (
+    <CalmSeg label="Which memories" value={view} onChange={go} data-testid="memory-view"
+      options={[
+        { value: 'memories', label: 'Active', testId: 'memory-view-memories' },
+        { value: 'proposals', label: typeof pending === 'number' ? `Proposed (${pending})` : 'Proposed', testId: 'memory-view-proposals' },
+        { value: 'not-accepted', label: 'Not accepted', testId: 'memory-view-not-accepted' },
+      ]} />
+  );
+  // The pills keep one place in the tree on every view, so the focused pill keeps focus when the address changes.
+  const searchTools = (
+    <>
+    {view === 'memories' && (
     <CalmSearch value={queryInput} onChange={setQueryInput} onSubmit={applyQuery} placeholder="Search what was learned" label="Search memories"
       testId="memories-search" buttonTestId={/* testid */ 'memories-search-open'} startOpen={filtered}
       extra={<>
@@ -256,12 +262,13 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         {kindPick}
         {facetPairs.length > 0 && <FacetAutocomplete testId="memories-facet-filter" options={facetPairs} value={facet} onChange={setFacet} label="Filter memories by tags" placeholder="Filter by tag" />}
       </>} />
-  ) : (
-    <button type="button" className="wk-calm-btn wk-calm-btn--link" data-testid="memory-view-memories" onClick={() => go('memories')}>Back to everything learned</button>
+    )}
+    {pills}
+    </>
   );
 
   const list = (
-    <CalmSection label={view === 'proposals' ? 'Waiting for you' : 'Recently learned'} tools={searchTools} data-testid="memory-list-card" ariaLabel="Memories">
+    <CalmSection label={view === 'proposals' ? 'Waiting for you' : view === 'not-accepted' ? 'Not accepted' : 'Recently learned'} tools={searchTools} data-testid="memory-list-card" ariaLabel="Memories">
       {note !== null && (
         <CalmNote tone={note.tone} data-testid="memories-note" role="status">
           {note.text} <button type="button" className="wk-link wk-se-x" onClick={() => setNote(null)} aria-label="Dismiss">Dismiss</button>
@@ -271,13 +278,15 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
       {view === 'proposals' ? (
         <div className="wk-se-proposals wk-calm-proposals" data-testid="memory-proposals">
           <ProposalsSection kind="memory" heading="Memory proposals" editable revision={proposalsRev} runId={runFilter}
-            onShowAll={() => go('proposals')} onDecision={() => { setReviewTick((t) => t + 1); reread(); }} />
+            onShowAll={() => go('proposals')} onDecision={() => { setReviewTick((t) => t + 1); reread(); }} onSettled={() => setRejectedRev((r) => r + 1)} />
         </div>
+      ) : view === 'not-accepted' ? (
+        <NotAcceptedList kind="memory" revision={rejectedRev} projectName={projectName} />
       ) : loading && memories.length === 0 ? (
         // A re-read after a write keeps the rows on screen (no flash to the loading shape); the first read shows it.
         <CalmLoading data-testid="memories-loading" rows={4} label="Reading what your agents learned" />
       ) : unsupported ? (
-        <CalmEmpty data-testid="memories-unsupported" title="This crew can’t browse its memories yet." body={<p>Memory proposals still show under Review.</p>} />
+        <CalmEmpty data-testid="memories-unsupported" title="This crew can’t browse its memories yet." body={<p>Memory proposals still show under Proposed.</p>} />
       ) : error !== null ? (
         <StateBanner data-testid="memories-error" kind={error.kind} what="the memories" error={error.message} onRetry={() => void load(query)} />
       ) : visible.length === 0 ? (

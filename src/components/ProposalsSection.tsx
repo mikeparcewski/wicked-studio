@@ -15,7 +15,7 @@ import { readErrorKind } from '../api/errors.js';
 import { shortContent } from './ProposalChips.js';
 import { EmptyState, StateBanner } from './ui/index.js';
 
-export function ProposalsSection({ kind, heading, onDecision, editable = false, revision = 0, runId = null, onShowAll }: {
+export function ProposalsSection({ kind, heading, onDecision, onSettled, editable = false, revision = 0, runId = null, onShowAll }: {
   /** Which proposals this section reviews: Steer reviews policies, Memory reviews memories. */
   kind: 'memory' | 'policy';
   /** The section title, e.g. "Rule proposals" / "Memory proposals". */
@@ -27,6 +27,9 @@ export function ProposalsSection({ kind, heading, onDecision, editable = false, 
   /** Fired after a successful approve/reject — lets a host (the dashboard) refresh its own
    *  headline count, which this self-contained section otherwise cannot know changed. */
   onDecision?: (() => void) | undefined;
+  /** Fired when any approve/reject settles, failed ones too: a failed accept-with-edit still leaves a rejected
+   *  copy behind (crew withdraws it), so a host showing rejected proposals reads them again. */
+  onSettled?: (() => void) | undefined;
   /** Only the proposals one run filed (its learnings: `provenance.run_id`), from the run's end card. */
   runId?: string | null;
   /** Leave the one-run filter. */
@@ -98,13 +101,14 @@ export function ProposalsSection({ kind, heading, onDecision, editable = false, 
         setDecisionError({ kind: readErrorKind(e), message: e instanceof Error ? e.message : String(e), id, verb, ...(content !== undefined ? { content } : {}) });
       })
       .finally(() => {
+        onSettled?.();
         setDecidingIds((cur) => {
           const next = new Set(cur);
           next.delete(id);
           return next;
         });
       });
-  }, [loadProposals, onDecision, proposals]);
+  }, [loadProposals, onDecision, onSettled, proposals]);
 
   const onApprove = useCallback((id: string, content?: string) => decide(id, 'approve', content), [decide]);
   const onReject = useCallback((id: string) => decide(id, 'reject'), [decide]);

@@ -14,7 +14,7 @@ import { useEvalReportStore } from '../src/store/evalReport.js';
 import { useSteerDraft } from '../src/store/steerDraft.js';
 import { importRuleFile } from '../src/board/steerImport.js';
 
-/** The calm page keeps every way to add or manage behind Add a rule's menu: open it, then pick the move. */
+/** The calm page keeps every way to add or manage behind the header's ⋯ menu (Add a rule first): open it, then pick the move. */
 async function more(user: ReturnType<typeof userEvent.setup>, testId: string): Promise<void> {
   await user.click(await screen.findByTestId('steer-more-button'));
   await user.click(await screen.findByTestId(testId));
@@ -219,7 +219,14 @@ describe('codex r1 fixes', () => {
     wire();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findByTestId('rules-error');
-    expect(screen.getByTestId('steer-add-rule')).toBeDisabled();
+    // Add a rule is the ⋯ menu's first item: disabled (with its reason) until the rules have loaded.
+    await userEvent.setup().click(screen.getByTestId('steer-more-button'));
+    const add = screen.getByTestId('steer-add-rule');
+    expect(screen.getAllByRole('menuitem')[0]).toBe(add);
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add).toHaveTextContent('Once the rules have loaded');
+    await userEvent.setup().click(add);
+    expect(screen.queryByTestId('steering-form-id')).toBeNull();
   });
 
   it('#2 a run from another rule store puts no eval badge on this daemon’s rules; the daemon’s own run does', async () => {
@@ -349,7 +356,7 @@ describe('codex r2 fixes', () => {
     expect(await screen.findByTestId('steer-refresh-failed')).toBeInTheDocument();
     expect(screen.getAllByTestId('rules-row')).toHaveLength(1);
     // The create form still knows PAT-100 is taken.
-    await user.click(screen.getByTestId('steer-add-rule'));
+    await more(user, 'steer-add-rule');
     const id = await screen.findByTestId('steering-form-id');
     await user.clear(id);
     await user.type(id, 'PAT-100');
@@ -363,11 +370,11 @@ describe('codex r2 fixes', () => {
     const user = userEvent.setup();
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await screen.findAllByTestId('rules-row');
-    await user.click(screen.getByTestId('steer-add-rule'));
+    await more(user, 'steer-add-rule');
     await user.type(await screen.findByTestId('steering-form-statement'), 'First rule statement');
     await user.click(screen.getByTestId('steering-form-save'));
     await user.click(screen.getByTestId('steering-form-cancel'));
-    await user.click(screen.getByTestId('steer-add-rule'));
+    await more(user, 'steer-add-rule');
     await user.type(await screen.findByTestId('steering-form-statement'), 'Second draft');
     resolveSave({ rule: rule('PAT-001') });
     await waitFor(() => expect(listConformanceRules.mock.calls.length).toBeGreaterThan(1));
@@ -610,5 +617,140 @@ describe('agy r1 fixes', () => {
     render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('steer-stat-eval')).toHaveTextContent('Couldn’t read the last eval'));
     expect(screen.getByTestId('steer-stat-eval')).not.toHaveTextContent('None yet');
+  });
+});
+
+describe('Steer header and pills (operator 2026-11-01)', () => {
+  it('has no Add a rule button in the head: Add a rule is the ⋯ menu\'s first item and opens the form', async () => {
+    wire();
+    const user = userEvent.setup();
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
+    await screen.findAllByTestId('rules-row');
+    expect(screen.queryByRole('button', { name: 'Add a rule' })).toBeNull();
+    await user.click(screen.getByTestId('steer-more-button'));
+    const items = screen.getAllByRole('menuitem');
+    expect(items[0]).toHaveTextContent('Add a rule…');
+    expect(items[0]).toHaveAttribute('data-testid', 'steer-add-rule');
+    await user.click(items[0]!);
+    expect(await screen.findByTestId('steering-form-id')).toBeInTheDocument();
+  });
+
+  it('Not accepted lists the rejected RULE proposals the store kept (never memory ones), read only', async () => {
+    const rejected = { id: 'rp1', kind_type: 'policy:security', payload: { rule: 'never push to main', severity: 'error' }, facets: {}, provenance: { run_agent: 'claude' }, state: 'rejected', created_at: 1_700_000_000 };
+    const memory = { ...rejected, id: 'rm1', kind_type: 'memory', payload: { content: 'a memory' } };
+    const pending = { ...rejected, id: 'pp1', state: 'pending' };
+    wire();
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: unknown, init?: unknown) => {
+      const p = String(path);
+      if (p === '/proposals') return Promise.resolve({ proposals: [rejected, memory, pending] });
+      if (p === '/proposals?state=pending') return Promise.resolve({ proposals: [pending] });
+      return base(path, init);
+    });
+    const user = userEvent.setup();
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
+    await screen.findAllByTestId('rules-row');
+    const pills = screen.getByTestId('steer-view');
+    await waitFor(() => expect(within(pills).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Active', 'Proposed (1)', 'Not accepted']));
+    await user.click(screen.getByTestId('steer-view-not-accepted'));
+    const rows = await screen.findAllByTestId('not-accepted-row');
+    expect(rows.map((r) => r.getAttribute('data-proposal-id'))).toEqual(['rp1']);
+    expect(within(rows[0]!).getByTestId('not-accepted-text')).toHaveTextContent('never push to main');
+    expect(within(rows[0]!).getByTestId('not-accepted-line')).toHaveTextContent('Security rule, error · proposed by claude');
+    expect(screen.queryByTestId('steer-search-open')).toBeNull();
+    expect(screen.queryByTestId('steer-show-all')).toBeNull();
+  });
+
+  it('Not accepted round-trips through the address; the MCP filter note stays with the rules it filters', async () => {
+    wire();
+    const navigate = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={navigate} />);
+    await screen.findByTestId('steer-mcp-note');
+    await user.click(screen.getByTestId('steer-view-not-accepted'));
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?mcp=1&view=not-accepted');
+    rerender(<SteerSurface pathname="/steering/policies" search="?mcp=1&view=not-accepted" runs={[]} navigate={navigate} />);
+    expect(screen.getByTestId('steer-view-not-accepted')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByTestId('steer-mcp-note')).toBeNull();
+    // Back (the address loses the view): the rules in force again.
+    rerender(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={navigate} />);
+    expect(screen.getByTestId('steer-view-live')).toHaveAttribute('aria-checked', 'true');
+    // Choosing Active from Not accepted takes the view back out of the address.
+    rerender(<SteerSurface pathname="/steering/policies" search="?mcp=1&view=not-accepted" runs={[]} navigate={navigate} />);
+    await user.click(screen.getByTestId('steer-view-live'));
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?mcp=1');
+    cleanup();
+    // A direct visit (or a reload) opens on Not accepted.
+    render(<SteerSurface pathname="/rules" search="?view=not-accepted" runs={[]} navigate={vi.fn()} />);
+    expect(screen.getByTestId('steer-view-not-accepted')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('every pill has an address: from /steering/proposals, Not accepted then Active lands on the rules (review r2)', async () => {
+    wire();
+    const user = userEvent.setup();
+    // A host that follows navigate, as the router does.
+    let at = '/steering/proposals';
+    const draw = (): React.ReactElement => {
+      const [path, qs = ''] = at.split('?');
+      return <SteerSurface pathname={path!} search={qs === '' ? '' : `?${qs}`} runs={[]} navigate={go} />;
+    };
+    const go = vi.fn((to: string) => { at = to; view.rerender(draw()); });
+    const view = render(draw());
+    const checked = (): string | null => within(screen.getByTestId('steer-view')).getAllByRole('radio').find((r) => r.getAttribute('aria-checked') === 'true')?.textContent ?? null;
+    expect(checked()).toMatch(/^Proposed/);
+    await user.click(screen.getByTestId('steer-view-not-accepted'));
+    expect(at).toBe('/steering/policies?view=not-accepted');
+    expect(checked()).toBe('Not accepted');
+    await user.click(screen.getByTestId('steer-view-live'));
+    expect(at).toBe('/steering/policies');
+    expect(checked()).toBe('Active');
+    await user.click(screen.getByTestId('steer-view-proposals'));
+    expect(at).toBe('/steering/proposals');
+    expect(checked()).toMatch(/^Proposed/);
+    // Back from Proposed (the address the router restores) is Active again.
+    at = '/rules'; view.rerender(draw());
+    expect(checked()).toBe('Active');
+  });
+
+  it('the page\'s filters ride every pill: Security → Proposed keeps Add a rule on Security, and Active comes back filtered (review r4)', async () => {
+    wire();
+    const user = userEvent.setup();
+    let at = '/steering/policies?type=security';
+    const draw = (): React.ReactElement => {
+      const [path, qs = ''] = at.split('?');
+      return <SteerSurface pathname={path!} search={qs === '' ? '' : `?${qs}`} runs={[]} navigate={go} />;
+    };
+    const go = vi.fn((to: string) => { at = to; view.rerender(draw()); });
+    const view = render(draw());
+    await screen.findAllByTestId('rules-row');
+    await user.click(screen.getByTestId('steer-view-proposals'));
+    expect(at).toBe('/steering/proposals?type=security');
+    await more(user, 'steer-add-rule');
+    expect(await screen.findByTestId('steering-rule-form')).toHaveTextContent(/Security/);
+    await user.click(screen.getByTestId('steering-form-cancel'));
+    await user.click(screen.getByTestId('steer-view-live'));
+    expect(at).toBe('/steering/policies?type=security');
+    expect(screen.getByTestId('steer-view-live')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('a kept search shown again never takes focus from the pills (review r3)', async () => {
+    wire();
+    const user = userEvent.setup();
+    let at = '/rules';
+    const draw = (): React.ReactElement => {
+      const [path, qs = ''] = at.split('?');
+      return <SteerSurface pathname={path!} search={qs === '' ? '' : `?${qs}`} runs={[]} navigate={go} />;
+    };
+    const go = vi.fn((to: string) => { at = to; view.rerender(draw()); });
+    const view = render(draw());
+    await screen.findAllByTestId('rules-row');
+    await user.click(screen.getByTestId('steer-search-open'));
+    await user.type(screen.getByTestId('steer-search'), 'auth');
+    screen.getByTestId('steer-view-live').focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(screen.getByTestId('steer-view-not-accepted')).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByTestId('steer-view-live')).toHaveFocus();
+    expect(screen.getByTestId('steer-search')).toHaveValue('auth');
   });
 });
