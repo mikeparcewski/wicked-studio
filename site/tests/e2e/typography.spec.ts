@@ -7,6 +7,8 @@ import { test, expect } from '@playwright/test';
  */
 test('the reach limit is body size under a lead-size card paragraph', async ({ page }) => {
   await page.goto('/');
+  // a stronger 16px paragraph rule than any on the page: only the limit's own !important can beat it
+  await page.addStyleTag({ content: 'html body .reach-card p { font-size: 16px; }' });
   const limit = page.locator('.reach-limit');
   await expect(limit).toHaveCount(1);
   await expect(limit).toHaveCSS('font-size', '14px');
