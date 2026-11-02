@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api/client.js';
 import { isMemoryUnsupported, memoryCoverage } from '../api/memory.js';
-import { listProposals, proposalKind } from '../api/proposals.js';
+import { proposalKind } from '../api/proposals.js';
+import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import type { MemoryReading } from '../board/deskModel.js';
 
 /**
@@ -27,19 +27,19 @@ export function useMemoryReading(enabled: boolean, refreshKey: unknown = null): 
     let live = true;
     // With the coverage: the memory proposals waiting (the Memory page's own count) and the repositories estate has a
     // code graph for, so the Desk says what is actually missing. A side read that fails is left out (never "none").
-    // Each side read settles to a count or undefined, whatever it answers: a shape it cannot count is left out too, and
-    // nothing rejects unobserved when the coverage read fails first and never awaits them (CI r9b: an answer with no
-    // `repos` threw inside the success callback, past its own rejection handler).
-    const pending = listProposals({ state: 'pending' })
+    // Both are the Home queue's own inputs: read through its store (one in-flight read per wire, fresh for 30 s), so a
+    // cold Home reads each once (needs_shell). Each settles to a count or undefined, whatever it answers, and never
+    // rejects unobserved when the coverage read fails first (CI r9b).
+    const sources = useNeedsSources.getState();
+    const pending = sources.loadProposals(HOME_FRESH_MS)
       .then((ps) => (Array.isArray(ps) ? ps.filter((p) => proposalKind(p) === 'memory').length : undefined))
       .catch(() => undefined);
-    const indexed = api.listRepos()
-      .then((r) => {
-        const repos = (r as { repos?: unknown } | null | undefined)?.repos;
-        return Array.isArray(repos)
-          ? repos.filter((x) => typeof (x as { code_graph_db?: unknown }).code_graph_db === 'string' && (x as { code_graph_db: string }).code_graph_db !== '').length
-          : undefined;
-      })
+    // The register as the store holds it (null or malformed until a read answers): a missing count is left out, never 0.
+    const indexed = sources.loadRepos(HOME_FRESH_MS)
+      .then(() => useNeedsSources.getState().repos)
+      .then((repos) => (Array.isArray(repos)
+        ? repos.filter((x) => typeof (x as { code_graph_db?: unknown }).code_graph_db === 'string' && (x as { code_graph_db: string }).code_graph_db !== '').length
+        : undefined))
       .catch(() => undefined);
     memoryCoverage().then(
       // A coverage answer without a total says nothing about emptiness.

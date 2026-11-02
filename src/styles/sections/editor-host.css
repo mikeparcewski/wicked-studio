@@ -104,5 +104,10 @@
 
 /* The address's version lens, over the card's live frame in full screen. */
 .wk-pcard-lens { position: absolute; inset: 0; z-index: 2; display: flex; background: var(--surface-base); }
+/* The host panel's Versions tab: the version list flows under the lens line instead of the full-size artifact's
+   absolute right-hand column, which here sat over the lens line and took its "Back" click (desk_plugins_document). */
+.wk-htab-versions { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wk-htab-versions .wk-artifact-versions { position: static; width: auto; padding: 0; border-left: 0; z-index: auto; background: transparent; }
+.wk-htab-versions > .wk-artifact-body { min-height: 240px; }
 .wk-pcard-lens > .wk-artifact-body { flex: 1 1 auto; display: flex; }
 .wk-pcard-lens .wk-artifact-frame { flex: 1 1 auto; width: 100%; border: 0; }

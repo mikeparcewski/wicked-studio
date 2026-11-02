@@ -171,7 +171,7 @@ with sync_playwright() as p:
     page.route(f"**/api/v1/runs/{RID}/deliver", route_deliver)
 
     for theme in ("light", "dark"):
-        attr = None if theme == "dark" else theme  # the default (dark) theme is the bare stylesheet
+        attr = f"wicked-{theme}"  # a stored dark/light renders as Wicked Dark/Light (appearance.ts LEGACY_THEMES)
         set_fixture(origin, wave1=True, repo=True, appearance={**DEFAULT_APPEARANCE, "theme": theme})
         state.update(qe="required", deliver_posts=0, launch_posts=0)
 

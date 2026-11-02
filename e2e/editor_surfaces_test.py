@@ -86,7 +86,7 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     errors: list[str] = []
     for theme in ("light", "dark"):
-        attr = None if theme == "dark" else theme
+        attr = f"wicked-{theme}"  # a stored dark/light renders as Wicked Dark/Light (appearance.ts LEGACY_THEMES)
         set_fixture(origin, appearance={**DEFAULT_APPEARANCE, "theme": theme})
         page = browser.new_page(viewport={"width": W, "height": H})
         page.on("pageerror", lambda e: errors.append(str(e)))

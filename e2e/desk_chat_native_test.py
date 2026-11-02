@@ -137,7 +137,9 @@ with sync_playwright() as p:
               and d["finalInView"] and not d["oldCard"] and d["details"] and not d["detailsOpen"]
               and d["panel"] is not None and d["panel"]["r"] == W and not d["handle"], page=d)
         check(f"{theme}-chat-measure", d["measure"] is not None and 700 <= d["measure"] <= 768 and not d["hscroll"], measure=d["measure"])
-        check(f"{theme}-agent-bubbles", d["stepBubble"] not in (None, d["pageBg"], "rgba(0, 0, 0, 0)"), bubble=d["stepBubble"], page_bg=d["pageBg"])
+        # The Wicked synthesis (the only themes since round 4) unboxes messages: spacing groups them, no fill, border or
+        # shadow (src/styles/themes/wicked-synthesis.css "Messages"). A stored dark/light renders as Wicked Dark/Light.
+        check(f"{theme}-agent-turns-unboxed", d["stepBubble"] in ("rgba(0, 0, 0, 0)", d["pageBg"]), bubble=d["stepBubble"], page_bg=d["pageBg"])
 
         # ── 2. the final message in plain words ─────────────────────────────────────────────────
         d = open_session(page, "/s/run%3Ar-cn-bug", theme, '[data-testid="chat-final"]')
@@ -194,7 +196,8 @@ with sync_playwright() as p:
         check(f"{theme}-working-step-menu", d["workingMenu"] == 1, menus=d["workingMenu"])
         d = open_session(page, "/s/chat-cn-qa", theme, '[data-testid="session-turn"][data-who="helper"]')
         page.screenshot(path=str(SHOTS / f"desk-chat-native-qa-{theme}.png"))
-        check(f"{theme}-qa-bubbles", len(d["you"]) == 2 and d["helperBubble"] not in (None, d["pageBg"], "rgba(0, 0, 0, 0)")
+        # The helper's answer is unboxed in the Wicked synthesis (no fill), like every message.
+        check(f"{theme}-qa-bubbles", len(d["you"]) == 2 and d["helperBubble"] in ("rgba(0, 0, 0, 0)", d["pageBg"])
               and d["codeCopy"] == 1, you=d["you"], helper_bg=d["helperBubble"])
         ctx.close()
 

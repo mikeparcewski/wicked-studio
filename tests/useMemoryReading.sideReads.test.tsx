@@ -50,4 +50,17 @@ describe('useMemoryReading side reads', () => {
       process.off('unhandledRejection', onUnhandled);
     }
   });
+
+  it('reads /proposals and /repos once with Home\u2019s queue, not again on its own (needs_shell)', async () => {
+    const { useNeedsSources } = await import('../src/store/needsSources.js');
+    memoryCoverage.mockResolvedValue({ total: 4 });
+    listProposals.mockResolvedValue([{}]);
+    listRepos.mockResolvedValue({ repos: [{ code_graph_db: '/x/estate.db' }] });
+    const home = useNeedsSources.getState().load();
+    const { result } = renderHook(() => useMemoryReading(true));
+    await home;
+    await waitFor(() => expect(result.current).toEqual({ state: 'ok', total: 4, pending: 1, indexedRepos: 1 }));
+    expect(listProposals).toHaveBeenCalledTimes(1);
+    expect(listRepos).toHaveBeenCalledTimes(1);
+  });
 });

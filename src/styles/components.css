@@ -1629,7 +1629,9 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-walk-grid { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .wk-walk-stage { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .wk-walk-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
-.wk-walk-video { display: block; width: 100%; max-height: 30vh; object-fit: contain; background: var(--surface-card); border-radius: var(--radius-sm); }
+/* 27vh, not 30vh: since the type scale's 12 px caption the checks run a little taller, and at 700 px tall the pane's
+   failing checks and its verbs must stay above the fold (desk_walkthrough). */
+.wk-walk-video { display: block; width: 100%; max-height: 27vh; object-fit: contain; background: var(--surface-card); border-radius: var(--radius-sm); }
 /* studio#772: a demo video opened beside the thread fills the pane's width at 16:9 (never a letterboxed strip).
    A check walkthrough keeps its short player: its failing checks stay above the fold. */
 .wk-artifact--pane[data-kind="demo-video"] .wk-walk-video { aspect-ratio: 16 / 9; height: auto; max-height: none; }

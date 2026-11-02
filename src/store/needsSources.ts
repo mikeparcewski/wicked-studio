@@ -52,6 +52,8 @@ export interface NeedsSourcesState {
   load: (maxAgeMs?: number) => Promise<void>;
   /** The repo register, read through the same freshness rule (the board model's join). */
   loadRepos: (maxAgeMs?: number) => Promise<RepoEntry[]>;
+  /** The pending proposals, read through the same freshness rule (the Desk's memory reading). */
+  loadProposals: (maxAgeMs?: number) => Promise<Proposal[] | null>;
   /** Store writes of a wire another surface already read — zero requests. */
   depositChats: (chats: LiveChatSnapshot[]) => void;
   depositProposals: (pending: Proposal[]) => void;
@@ -101,6 +103,7 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     readAt: {},
     load: (maxAgeMs = Infinity) => Promise.all(SOURCES.map((s) => read(s, maxAgeMs))).then(() => undefined),
     loadRepos: (maxAgeMs = Infinity) => read('repos', maxAgeMs).then(() => get().repos ?? []),
+    loadProposals: (maxAgeMs = Infinity) => read('proposals', maxAgeMs).then(() => get().proposals),
     depositChats: (chats) => set((s) => ({ chats, readAt: { ...s.readAt, chats: Date.now() } })),
     depositProposals: (pending) =>
       set((s) => ({ proposals: pending, readAt: { ...s.readAt, proposals: Date.now() } })),
