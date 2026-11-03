@@ -114,7 +114,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   let closed = false;
   /** The words open in place on the canvas, if any (see `startInline`): a redraw keeps them open only while the newest
    *  spec still has the words they started from; `drop` closes them with nothing sent. */
-  let inline: { id: string; prop: string; before: string; drop: () => void; hold: () => void; place: () => void } | null = null;
+  let inline: { id: string; prop: string; before: string; drop: () => void; hold: () => void; place: () => void; composing: () => boolean; defer: () => void } | null = null;
   /** The last tap on a component's words, for a double tap (see `tap`). */
   let lastTap: { id: string; prop: string; at: number } | null = null;
 
@@ -926,6 +926,9 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     if (open !== null) {
       const c = editing() ? components().find((x) => x.id === open.id) : undefined;
       carry = c !== undefined && wordsOf(c, open.prop) === open.before;
+      // Mid-composition (an IME), moving the field would end it natively without a compositionend: the draw waits
+      // for the composition to end (codex r11).
+      if (carry && open.composing()) { open.defer(); return; }
       if (carry) open.hold(); else open.drop();
     }
     drawNow(opts);
@@ -1075,11 +1078,14 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     let composing = false;
     /** The field is being moved into a redrawn canvas: its removal is not the person leaving it. */
     let moving = false;
-    let caret: [number | null, number | null] = [null, null];
+    let deferred = false;
+    let caret: [number | null, number | null, 'forward' | 'backward' | 'none'] = [null, null, 'none'];
     const me = {
       id, prop, before,
       drop: (): void => { done = true; moving = false; if (inline === me) inline = null; },
-      hold: (): void => { moving = true; caret = [ed.selectionStart, ed.selectionEnd]; },
+      hold: (): void => { moving = true; caret = [ed.selectionStart, ed.selectionEnd, ed.selectionDirection ?? 'none']; },
+      composing: (): boolean => composing,
+      defer: (): void => { deferred = true; },
       place: (): void => {
         // The redrawn words, found by comparing attributes (a component id never goes into a selector).
         const cell = [...root.querySelectorAll('[data-component]')].find((x) => x.getAttribute('data-component') === id);
@@ -1087,7 +1093,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
         if (words === undefined) { me.drop(); return; }
         words.replaceWith(ed);
         ed.focus();
-        if (caret[0] !== null && caret[1] !== null) ed.setSelectionRange(caret[0], caret[1]);
+        if (caret[0] !== null && caret[1] !== null) ed.setSelectionRange(caret[0], caret[1], caret[2]);
         moving = false;
       },
     };
@@ -1099,7 +1105,10 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       else draw();
     };
     ed.addEventListener('compositionstart', () => { composing = true; });
-    ed.addEventListener('compositionend', () => { composing = false; });
+    ed.addEventListener('compositionend', () => {
+      composing = false;
+      if (deferred) { deferred = false; if (!done) draw(); }
+    });
     ed.addEventListener('keydown', (e: Event) => {
       const k = e as KeyboardEvent;
       if (composing || k.isComposing || k.keyCode === 229) return;

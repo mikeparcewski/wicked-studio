@@ -201,6 +201,16 @@ describe('crew’s records are data (codex r10)', () => {
     expect(await loadAppsDirectory(true)).toMatchObject({ source: 'crew', skipped: 3, apps: [{ slug: 'desk' }] });
   });
 
+  it('pi r11: two sources that share their first 60 characters are both listed', async () => {
+    const d = crewDetail('desk', 'Desk');
+    const long = 'x'.repeat(60);
+    d.app.spec.queries = [{ ...d.app.spec.queries[0]!, source: `${long}-one` }, { ...d.app.spec.queries[0]!, id: 'q2', source: `${long}-two` }];
+    d.app.spec.actions = [];
+    mockDaemon({ '/apps': { apps: [{ slug: 'desk', name: 'Desk' }] }, '/apps/desk': d });
+    const dir = await loadAppsDirectory(true);
+    expect(dir.source === 'crew' && dir.apps[0]!.sources).toStrictEqual([long, long]);
+  });
+
   it('a source that is not a string is not shown, and the card stays whole', async () => {
     const d = crewDetail('desk', 'Desk');
     (d.app.spec.queries[0] as unknown as { source: unknown }).source = { toString: 5 };
@@ -312,7 +322,19 @@ describe('Share: a published link only when crew reports one', () => {
       '<iframe srcdoc="&lt;script&gt;" src="https://desk.example.test/"></iframe>', '<iframe src="https://desk.example.test.evil.test/"></iframe>',
       '<iframe src="https://desk.example.test@evil.test/"></iframe>', '<iframe src="javascript:alert(1)"></iframe>', '<iframe title="no src"></iframe>',
       '<iframe src="https://desk.example.test/" src="https://evil.test/"></iframe>', ok.replace(' title', '\r\n title'), "<iframe src='https://desk.example.test/'></iframe>",
-      '<iframe src="https://desk.example.test/?a=1&b=2"></iframe>', '<IFRAME src="https://desk.example.test/"></IFRAME>', `${ok} `, 7, null,
+      '<iframe src="https://desk.example.test/?a=1&amp;b=2"></iframe>', '<iframe src="https://desk.example.test/" title="a & b"></iframe>', '<IFRAME src="https://desk.example.test/"></IFRAME>', `${ok} `, 7, null,
+    ]) expect(snippetOf(bad, site)).toBeNull();
+  });
+
+  it('codex r11: K6’s own snippet (crew apps/publish/service.ts) is shown, an escaped name included; style only as border:0', () => {
+    // K6's producer, verbatim: the name escaped to numeric entities, style="border:0", referrerpolicy.
+    const k6 = (origin: string, name: string) => `<iframe src="${origin}/" title="${name.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}" width="100%" height="600" style="border:0" loading="lazy" referrerpolicy="no-referrer"></iframe>`;
+    const site = 'https://desk.example.test/';
+    for (const name of ['Escalations', 'R&D "Ops" <x>', "Mike's desk"]) expect(snippetOf(k6('https://desk.example.test', name), site)).toBe(k6('https://desk.example.test', name));
+    expect(snippetOf('<iframe src="https://desk.example.test/" title="Sales &amp; Ops"></iframe>', site)).not.toBeNull();
+    for (const bad of [
+      k6('https://desk.example.test', 'x').replace('border:0', 'position:fixed;inset:0'), '<iframe src="https://desk.example.test/&#47;@evil.test/"></iframe>',
+      '<iframe src="https://desk.example.test/" title="&lt;"></iframe>', '<iframe src="https://desk.example.test/" title="&#x26;"></iframe>',
     ]) expect(snippetOf(bad, site)).toBeNull();
   });
 
@@ -536,6 +558,32 @@ describe('Edit: a component’s own words, in place on the canvas', () => {
     field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await vi.waitFor(() => expect(edits(b.seen)).toBe(2));
     expect(b.seen.filter((m) => m.type === 'spec.edit')[1]!.payload).toMatchObject({ base: 3, ops: [{ id: 'note', prop: 'text', value: 'Hello there' }] });
+  });
+
+  it('codex r11: a redraw waits while an IME composition is open, then draws and carries the field; a backward selection keeps its direction', async () => {
+    const b = await boot(SPEC());
+    dbl(document.querySelector('[data-component="k"] .wk-cell-title')!);
+    const field = document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement;
+    field.value = 'Openに';
+    field.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+    const theirs = SPEC();
+    (theirs.pages[0]!.components[2] as { action: { label: string } }).action.label = 'Go elsewhere';
+    b.set(2, theirs);
+    b.send('artifact.changed', { version: 2, head: 2, by: 'other', kind: 'deterministic' });
+    await vi.waitFor(() => expect(b.seen.filter((m) => m.type === 'artifact.read')).toHaveLength(2));
+    await new Promise((res) => setTimeout(res, 30));
+    // Nothing moved while composing: the same field, still in place, and the other component not yet redrawn.
+    expect(field.isConnected).toBe(true);
+    expect(document.querySelector('[data-component="go"] button')!.textContent).toBe('Go');
+    field.dispatchEvent(new CompositionEvent('compositionend', { data: 'に' }));
+    expect(document.querySelector('[data-component="go"] button')!.textContent).toBe('Go elsewhere');
+    expect([...document.querySelectorAll('[data-testid="apps-inline"]')]).toStrictEqual([field]);
+    expect(field.value).toBe('Openに');
+    field.setSelectionRange(1, 4, 'backward');
+    b.send('host.theme', { theme: {} });
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="apps-inline"]')).toBe(field));
+    await new Promise((res) => setTimeout(res, 20));
+    expect([field.selectionStart, field.selectionEnd, field.selectionDirection]).toStrictEqual([1, 4, 'backward']);
   });
 
   it('codex r9: two taps on a Button’s label open it, with no dblclick (Firefox and WebKit fire none for two touch taps)', async () => {

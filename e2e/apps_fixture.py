@@ -117,7 +117,8 @@ reset()
 # ledger): only fixture-app is published, so a journey sees both Share states.
 # K6's proposed `AppDetail.published` (ledger 2026-11-03T18:26Z), the fields the Share sheet reads plus a few it ignores.
 PUBLISHED = {"fixture-app": {"shareUrl": "https://fixture-desk.apps.example.test/", "audience": "signed-in members of support-ops",
-                             "snippet": '<iframe src="https://fixture-desk.apps.example.test/" title="Fixture desk" width="100%" height="640"></iframe>',
+                             # K6's producer's shape (crew apps/publish/service.ts): the name entity-escaped, style border:0.
+                             "snippet": '<iframe src="https://fixture-desk.apps.example.test/" title="Fixture desk &#38; co" width="100%" height="600" style="border:0" loading="lazy" referrerpolicy="no-referrer"></iframe>',
                              "version": 1, "at": 1762160400000, "targets": ["site", "embed"], "tree": "t", "runId": "r"}}
 
 

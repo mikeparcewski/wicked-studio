@@ -47,19 +47,21 @@ const httpUrl = (v: unknown): string | null => {
 const line = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, max) : null);
 const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && !Number.isNaN(new Date(v).getTime());
 
-/** The attributes an embed snippet may carry, each at most once (anything else, `srcdoc` or `on*` included, refuses it). */
-const SNIPPET_ATTRS = new Set(['src', 'title', 'width', 'height', 'loading', 'allow', 'referrerpolicy', 'sandbox', 'allowfullscreen']);
+/** The attributes an embed snippet may carry, each at most once (anything else, `srcdoc` or `on*` included, refuses it).
+ *  `style` only as K6 writes it (`border:0`). */
+const SNIPPET_ATTRS = new Set(['src', 'title', 'width', 'height', 'style', 'loading', 'allow', 'referrerpolicy', 'sandbox', 'allowfullscreen']);
 
 /**
- * crew's embed snippet, only when it is exactly ONE `<iframe …></iframe>` of the published site: double-quoted
- * attributes from {@link SNIPPET_ATTRS}, no `&`, `<`, `>` or quote inside a value, a `src` on the share link's own
- * origin, nothing before or after it, and no CR (a text area would show a different string than Copy copies). The
- * person pastes it into their own pages, so anything else (another element, a handler, `srcdoc`, a lookalike host) is
- * not shown at all (codex/pi r10).
+ * crew's embed snippet, only when it is exactly ONE `<iframe …></iframe>` of the published site, in the shape K6's
+ * publish writes (crew `apps/publish/service.ts`): double-quoted attributes from {@link SNIPPET_ATTRS}; no `<`, `>` or
+ * quote inside a value, and `&` only as `&#N;` or `&amp;` (K6 escapes a name that way), never in `src`; a `src` on the
+ * share link's own origin; nothing before or after it; and no CR (a text area would show a different string than Copy
+ * copies). The person pastes it into their own pages, so anything else (another element, a handler, `srcdoc`, a
+ * lookalike host, a style other than `border:0`) is not shown at all (codex/pi r10, r11).
  */
 export function snippetOf(v: unknown, shareUrl: string): string | null {
   if (typeof v !== 'string' || v.length > 2_000 || v.includes('\r')) return null;
-  const m = /^<iframe((?:[ \t\n]+[a-z]+(?:="[^"<>&]*")?)*)[ \t\n]*><\/iframe>$/u.exec(v);
+  const m = /^<iframe((?:[ \t\n]+[a-z]+(?:="(?:[^"<>&]|&#[0-9]{1,7};|&amp;)*")?)*)[ \t\n]*><\/iframe>$/u.exec(v);
   if (m === null) return null;
   const seen = new Set<string>();
   let src: string | null = null;
@@ -67,7 +69,8 @@ export function snippetOf(v: unknown, shareUrl: string): string | null {
     const name = a[1]!;
     if (!SNIPPET_ATTRS.has(name) || seen.has(name)) return null;
     seen.add(name);
-    if (name === 'src') src = a[2] ?? null;
+    if (name === 'src') { if ((a[2] ?? '').includes('&')) return null; src = a[2] ?? null; }
+    if (name === 'style' && a[2] !== 'border:0') return null;
   }
   const at = httpUrl(src);
   return at !== null && new URL(at).origin === new URL(shareUrl).origin ? v : null;
@@ -124,7 +127,7 @@ export function receiptWords(app: AppDetail): string {
 
 function sourcesOf(spec: AppSpec): string[] {
   const named = [...spec.queries, ...spec.actions].map((x) => (x as { source?: unknown }).source).filter((v): v is string => typeof v === 'string' && v !== '');
-  return [...new Set(named.map((v) => v.slice(0, 60)))].slice(0, 6);
+  return [...new Set(named)].slice(0, 6).map((v) => v.slice(0, 60));
 }
 
 /** The first page's KPI components (up to three): their titles, and their values when the rows are at hand. */
