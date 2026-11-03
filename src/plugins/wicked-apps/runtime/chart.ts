@@ -209,24 +209,28 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
       return;
     }
     // A stacked series' stroke follows its band's outer edge (the top of its positive band, the bottom of its negative
-    // band), split where its sign changes. At its own crossing (exactly zero) the outgoing run ends on its own stack and
-    // the incoming one starts on the other (codex r5).
+    // band). Through a zero point (an exact zero row, a plateau of them, or an inserted crossing) a run carries on along
+    // its own edge; when the sign then changes, a new run starts at the last zero point on the other edge (codex r5, r6).
     const runs: string[][] = [];
-    let sign = 0;
+    let cur: string[] | null = null;
+    let curSign = 0;
+    let lastZero: number | null = null;
+    const edge = (sg: number, j: number): string => (sg < 0 ? pt(j, negBands[k]![j]![0]) : pt(j, posBands[k]![j]![1]));
     xs.forEach((_x, j) => {
       const v = valueAt(k, j);
-      const posEdge = pt(j, posBands[k]![j]![1]);
-      const negEdge = pt(j, negBands[k]![j]![0]);
-      if (crossing.get(j)?.has(k) === true) {
-        if (runs.length > 0) runs[runs.length - 1]!.push(sign < 0 ? negEdge : posEdge);
-        runs.push([sign < 0 ? posEdge : negEdge]);
-        sign = -sign;
+      if (crossing.get(j)?.has(k) === true || v === 0) {
+        if (cur !== null) cur.push(edge(curSign, j));
+        lastZero = j;
         return;
       }
-      const sgn = v > 0 ? 1 : v < 0 ? -1 : sign;
-      if (runs.length === 0) runs.push([]);
-      runs[runs.length - 1]!.push(sgn < 0 ? negEdge : posEdge);
-      sign = sgn;
+      const sg = v > 0 ? 1 : -1;
+      if (cur === null || sg !== curSign) {
+        cur = lastZero !== null ? [edge(sg, lastZero)] : [];
+        runs.push(cur);
+        curSign = sg;
+      }
+      cur.push(edge(sg, j));
+      lastZero = null;
     });
     for (const run of runs) if (run.length > 1) svg.append(svgEl('polyline', { points: run.join(' '), fill: 'none' }, `wk-stroke wk-series-${k}`));
   });
