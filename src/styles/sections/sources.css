@@ -29,7 +29,7 @@
 .wk-src-title { margin: 0; min-width: 0; flex: 0 1 auto; overflow-wrap: anywhere; font-size: var(--text-section); font-weight: var(--weight-strong); color: var(--ink-high); }
 /* A long table or source name wraps; the Close button never leaves the header. */
 .wk-src-sheet-head > .wk-btn { flex: none; margin-left: auto; }
-.wk-src-head-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wk-src-head-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .wk-src-sheet-main { flex: 1; min-height: 0; display: flex; }
 .wk-src-kinds { width: 196px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: var(--space-2); border-right: 1px solid var(--border-subtle); background: var(--surface-card); overflow-y: auto; }
 .wk-src-kind { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink-body); font: inherit; font-size: var(--text-body); text-align: left; cursor: pointer; }

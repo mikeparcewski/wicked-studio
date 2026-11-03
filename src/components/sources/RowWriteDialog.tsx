@@ -72,8 +72,16 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
     return () => { live.current.mounted = false; gen.current++; };
   }, []);
   // Turning Allow writes off, or the source saved again, stops a check in flight.
-  useEffect(() => { gen.current++; inFlight.current = false; setBusy(false); }, [source.allowWrites, source.descriptorHash]);
+  // The evidence shown (a refusal, the checks passed, "granted") was for the switch and descriptor of
+  // then: once either changes it is cleared, and the next Grant checks again.
+  useEffect(() => { gen.current++; inFlight.current = false; setBusy(false); setGate(null); setOutcome(null); setError(null); }, [source.allowWrites, source.descriptorHash]);
   const draft = declareRowWrite(relation, op, picked);
+  /**
+   * A declaration made before the table changed (a column added, the key changed) no longer says what
+   * the table is: it is shown as declared, and must be declared again before it is checked or granted.
+   */
+  const fresh = write === null ? null : declareRowWrite(relation, write.op, write.set);
+  const stale = write !== null && fresh !== null && (typeof fresh === 'string' || rowWriteLine(fresh) !== rowWriteLine(write) || fresh.key.join() !== write.key.join());
 
   const declare = (): void => {
     if (typeof draft === 'string') return;
@@ -84,7 +92,7 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
   };
 
   const grant = async (): Promise<void> => {
-    if (write === null || inFlight.current) return;
+    if (write === null || inFlight.current || stale) return;
     const mine = ++gen.current;
     const startedFor = source.descriptorHash ?? null;
     // Every stage re-checks: this dialog is open, nothing was edited, Allow writes is still on, same source.
@@ -163,9 +171,16 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
               ))}
             </fieldset>
           )}
-          {typeof draft === 'string'
-            ? <p className="wk-src-note" data-testid="row-write-line">{draft}</p>
-            : <code className="wk-src-code" data-testid="row-write-line">{rowWriteLine(draft)}</code>}
+          {write !== null
+            ? <code className="wk-src-code" data-testid="row-write-line">{rowWriteLine(write)}</code>
+            : typeof draft === 'string'
+              ? <p className="wk-src-note" data-testid="row-write-line">{draft}</p>
+              : <code className="wk-src-code" data-testid="row-write-line">{rowWriteLine(draft)}</code>}
+          {stale && (
+            <p className="wk-src-note wk-src-tone-warn" data-testid="row-write-stale">
+              {relationName(relation)} changed since this was declared{fresh === null || typeof fresh === 'string' ? '' : ` (it would now be ${rowWriteLine(fresh)}, keyed on ${fresh.key.join(', ')})`}. Declare it again to grant it.
+            </p>
+          )}
           {write === null ? (
             <div className="wk-src-row-btns">
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="row-write-declare" disabled={typeof draft === 'string'} onClick={declare}>Declare</button>
@@ -173,7 +188,8 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
             </div>
           ) : (
             <div className="wk-src-row-btns">
-              <button type="button" className="wk-btn wk-btn--primary" data-testid="row-write-grant" disabled={busy} onClick={() => void grant()}>{busy ? 'Checking…' : gate === null ? 'Grant' : 'Check again and grant'}</button>
+              {stale && <button type="button" className="wk-btn wk-btn--secondary" data-testid="row-write-redeclare" disabled={busy} onClick={() => { gen.current++; setWrite(null); setGate(null); setOutcome(null); }}>Declare again</button>}
+              <button type="button" className="wk-btn wk-btn--primary" data-testid="row-write-grant" disabled={busy || stale} onClick={() => void grant()}>{busy ? 'Checking…' : gate === null ? 'Grant' : 'Check again and grant'}</button>
               <span className="wk-src-cap">Declared. Granting checks Allow writes, the table and this login first.</span>
             </div>
           )}

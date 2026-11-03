@@ -201,3 +201,29 @@ describe('review r2 folds (codex): a check in flight stops when the dialog close
     expect(document.activeElement).toBe(screen.getByTestId('row-write-op-insert'));
   });
 });
+
+describe('review r3 folds (codex)', () => {
+  it('a declaration made before the table changed is shown as declared, marked stale, and not granted', () => {
+    const grant = vi.fn(async () => null);
+    const declared = { schema: 'support', table: 'tickets', op: 'insert' as const, set: ['id', 'status', 'owner'], key: ['id'] };
+    const grown = { ...TICKETS, columns: [...TICKETS.columns, { name: 'priority', type: 'text', nullable: true }] };
+    render(<RowWriteDialog source={pgServer({ name: 'support-pg-writer', allowWrites: true })} relation={grown} privileges={WRITER} declared={declared} port={{ grant }} onDeclared={() => {}} onAllowWrites={() => {}} onClose={() => {}} />);
+    expect(screen.getByTestId('row-write-line').textContent).toBe('INSERT INTO support.tickets (id, status, owner)');
+    expect(screen.getByTestId('row-write-stale').textContent).toContain('it would now be INSERT INTO support.tickets (id, status, owner, priority)');
+    expect(screen.getByTestId('row-write-grant')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('row-write-redeclare'));
+    expect(screen.getByTestId('row-write-declare')).toBeTruthy();
+    expect(calls).toEqual([]);
+  });
+
+  it('a "granted" shown for one descriptor is cleared when the source is saved again', async () => {
+    safety = TICKETS_SAFE;
+    const props = { relation: TICKETS, privileges: WRITER, declared: null, port: { grant: async () => null }, onDeclared: () => {}, onAllowWrites: () => {}, onClose: () => {} };
+    const { rerender } = render(<RowWriteDialog source={pgServer({ name: 'support-pg-writer', allowWrites: true })} {...props} />);
+    declareOwner();
+    fireEvent.click(screen.getByTestId('row-write-grant'));
+    await screen.findByTestId('row-write-outcome');
+    rerender(<RowWriteDialog source={pgServer({ name: 'support-pg-writer', allowWrites: true, descriptorHash: 'e'.repeat(64) })} {...props} />);
+    expect(screen.queryByTestId('row-write-outcome')).toBeNull();
+  });
+});

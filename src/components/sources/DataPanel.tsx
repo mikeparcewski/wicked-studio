@@ -55,10 +55,12 @@ export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onDe
   const [open, setOpen] = useState<Record<string, boolean>>({});
   /** Catalogs by source AND version (its descriptor, else its last save): a re-saved source reads afresh. */
   const [catalogs, setCatalogs] = useState<Record<string, SourceCatalogResponse | string>>({});
-  const versionOf = (s: McpServer): string => `${s.name}@${s.descriptorHash ?? ''}@${s.updatedAt}@${epochs?.[s.name] ?? 0}`;
+  const versionOf = (s: McpServer): string => `${s.name}@${s.descriptorHash ?? ''}@${s.updatedAt}@${epochs !== undefined && Object.hasOwn(epochs, s.name) ? epochs[s.name] : 0}`;
   /** The latest request per version: an older answer (or error) never lands over a newer one. */
   const reqGen = useRef<Record<string, number>>({});
 
+  /** Source names are data: read the records by own property only (`constructor` is a valid name). */
+  const isOpen = (name: string): boolean => Object.hasOwn(open, name) && open[name] === true;
   /** Versions with a read out: one request per version at a time. */
   const pending = useRef(new Set<string>());
   const load = async (s: McpServer): Promise<void> => {
@@ -81,17 +83,18 @@ export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onDe
   /** Read when there is nothing for this version yet, or only an error (reopening retries it). */
   const needsRead = (s: McpServer): boolean => {
     const v = versionOf(s);
-    return !pending.current.has(v) && (catalogs[v] === undefined || typeof catalogs[v] === 'string');
+    const have = Object.hasOwn(catalogs, v) ? catalogs[v] : undefined;
+    return !pending.current.has(v) && (have === undefined || typeof have === 'string');
   };
   const toggle = (s: McpServer): void => {
-    const next = !(open[s.name] ?? false);
+    const next = !isOpen(s.name);
     setOpen((o) => ({ ...o, [s.name]: next }));
     if (next && needsRead(s)) void load(s);
   };
   // A source saved (or described) again while its tables are open is read again: its old tables are not its tables.
   const versions = sources.map(versionOf).join('|');
   useEffect(() => {
-    for (const s of sources) if ((open[s.name] ?? false) && catalogs[versionOf(s)] === undefined && !pending.current.has(versionOf(s))) void load(s);
+    for (const s of sources) if (isOpen(s.name) && !Object.hasOwn(catalogs, versionOf(s)) && !pending.current.has(versionOf(s))) void load(s);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the versions; load reads the latest state
   }, [versions]);
 
@@ -112,15 +115,15 @@ export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onDe
         {error !== null && <p role="alert" className="wk-src-note wk-src-tone-fail">{error}</p>}
         <ul className="wk-src-list">
           {sources.map((s) => {
-            const isOpen = open[s.name] ?? false;
-            const c = catalogs[versionOf(s)];
+            const shown = isOpen(s.name);
+            const c = Object.hasOwn(catalogs, versionOf(s)) ? catalogs[versionOf(s)] : undefined;
             const tables = typeof c === 'object' && isSqlCatalog(c.catalog as never) ? (c.catalog as { relations: SourceCatalogRelation[] }).relations : null;
             return (
               <li key={s.name} data-testid="data-panel-source" data-source={s.name}>
                 <div className="wk-src-row">
                   {s.kind === 'sql' ? (
-                    <button type="button" className="wk-src-disclose" aria-expanded={isOpen} aria-label={`${isOpen ? 'Hide' : 'Show'} ${s.name}’s tables`} onClick={() => toggle(s)}>
-                      {isOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+                    <button type="button" className="wk-src-disclose" aria-expanded={shown} aria-label={`${shown ? 'Hide' : 'Show'} ${s.name}’s tables`} onClick={() => toggle(s)}>
+                      {shown ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
                     </button>
                   ) : <span className="wk-src-disclose" aria-hidden />}
                   <button type="button" className="wk-src-row-main" data-testid="data-panel-open" onClick={() => onOpen(s.name)}>
@@ -129,7 +132,7 @@ export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onDe
                   </button>
                   <span className={`wk-src-chip${s.allowWrites === true ? ' wk-src-chip--writes' : ''}`} data-testid="data-panel-chip">{sourceChip(s)}</span>
                 </div>
-                {isOpen && (
+                {shown && (
                   <ul className="wk-src-tables" data-testid="data-panel-tables">
                     {c === undefined && <li className="wk-src-cap">Reading the catalog…</li>}
                     {typeof c === 'string' && <li role="alert" className="wk-src-note wk-src-tone-fail">{c}</li>}

@@ -4,6 +4,9 @@ import { PAGE_NAMES } from '../../board/pageNames.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { CalmAction, CalmHead, CalmPage } from '../calm/Calm.js';
 import { DataPanel, type PanelRowWrite } from './DataPanel.js';
+import { NO_APP_GRANTS, RowWriteDialog, type RowWriteGrantPort } from './RowWriteDialog.js';
+import { SourceSheet, type SheetTarget } from './SourceSheet.js';
+import { relationName, rowWriteKey } from './sourceModel.js';
 
 /** A declared row write as the page keeps it: granted FOR one connection descriptor of its source. */
 interface PageRowWrite extends Omit<PanelRowWrite, 'granted'> {
@@ -11,9 +14,6 @@ interface PageRowWrite extends Omit<PanelRowWrite, 'granted'> {
    *  grants were for its old descriptor, so they do not show as granted on the new one. */
   grantedFor: string | null;
 }
-import { NO_APP_GRANTS, RowWriteDialog, type RowWriteGrantPort } from './RowWriteDialog.js';
-import { SourceSheet, type SheetTarget } from './SourceSheet.js';
-import { relationName, rowWriteKey } from './sourceModel.js';
 
 /** The registered servers an app may read from: data sources, REST APIs and MCP servers. */
 const appReadable = (s: McpServer): boolean => s.kind === 'sql' || s.kind === 'graphql' || s.kind === 'rest' || s.kind === 'mcp-http';
@@ -33,8 +33,13 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
   const [dialog, setDialog] = useState<{ source: string; relation: SourceCatalogRelation; privileges: SourcePrivilegeReport | null; declared: PageRowWrite | null } | null>(null);
   /** Per source, bumped when the sheet described it again: the panel reads its tables afresh. */
   const [epochs, setEpochs] = useState<Record<string, number>>({});
-  /** The Grant button's catalog read: only the latest one opens the dialog, and Close cancels it. */
+  /** The Grant button's catalog read: only the latest one opens the dialog; Close, another Grant, a new
+   *  declaration or a source sheet opening cancels it. */
   const openGen = useRef(0);
+  /** Per source, bumped when its grants are withdrawn (Allow writes off) or it is saved again: a grant
+   *  answer that arrives after either is not recorded. */
+  const revoked = useRef(new Map<string, number>());
+  const bumpRevoked = (name: string): void => { revoked.current.set(name, (revoked.current.get(name) ?? 0) + 1); };
 
   /** Each list read's generation: an older answer never replaces a newer one (a save re-reads the list). */
   const listGen = useRef(0);
@@ -65,16 +70,20 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
     if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`No source named ${deep}.`); }
   }, [deep, sources, loading]);
 
-  const open = (name: string): void => navigate(sourcesPath(name));
+  const open = (name: string): void => { openGen.current++; navigate(sourcesPath(name)); };
   const close = (): void => { setSheet(null); if (deep !== null) navigate(sourcesPath()); };
   const setWrites = (name: string, allowed: boolean): void => {
     setSources((list) => list.map((s) => (s.name === name ? { ...s, allowWrites: allowed } : s)));
     // Turning it off withdraws every row-write grant on the source (crew does; the list says so too).
-    if (!allowed) setActions((list) => list.map((a) => (a.source === name ? { ...a, grantedFor: null } : a)));
+    if (!allowed) {
+      bumpRevoked(name);
+      setActions((list) => list.map((a) => (a.source === name ? { ...a, grantedFor: null } : a)));
+    }
     // A list read that was out before the switch changed is older than it: read again after it.
     void refresh();
   };
   const declare = (source: McpServer, relation: SourceCatalogRelation, c: SourceCatalogResponse): void => {
+    openGen.current++;
     setDialog({ source: source.name, relation, privileges: c.privileges ?? null, declared: null });
   };
   const onDeclared = (source: string, write: SourceRowWrite): void => {
@@ -102,20 +111,25 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
   const dialogSource = dialog === null ? null : sources.find((s) => s.name === dialog.source) ?? null;
   const shownGrants: RowWriteGrantPort = {
     grant: async (source, write, fingerprint) => {
-      // The descriptor the grant is asked under, read before the host answers.
+      // The descriptor and withdrawal count the grant is asked under, read before the host answers.
       const descriptor = sources.find((s) => s.name === source)?.descriptorHash ?? null;
+      const before = revoked.current.get(source) ?? 0;
       const why = await grants.grant(source, write, fingerprint);
-      // Only the exact declaration the host granted is marked granted, and only for that descriptor.
+      // Only the exact declaration the host granted is marked granted, only for that descriptor, and
+      // never after its grants were withdrawn meanwhile (the host's late "yes" is older than that).
       const id = rowWriteKey(source, write);
-      if (why === null && descriptor !== null) setActions((list) => list.map((a) => (a.id === id ? { ...a, grantedFor: descriptor } : a)));
+      if (why === null && descriptor !== null && (revoked.current.get(source) ?? 0) === before) {
+        setActions((list) => list.map((a) => (a.id === id ? { ...a, grantedFor: descriptor } : a)));
+      }
       return why;
     },
   };
 
-  const shownActions: PanelRowWrite[] = actions.map(({ grantedFor, ...a }) => ({
-    ...a,
-    granted: grantedFor !== null && grantedFor === (sources.find((s) => s.name === a.source)?.descriptorHash ?? null),
-  }));
+  const shownActions: PanelRowWrite[] = actions.map(({ grantedFor, ...a }) => {
+    const src = sources.find((s) => s.name === a.source);
+    // Granted = for this descriptor, and Allow writes on (off withdrew it, and on again needs a new grant).
+    return { ...a, granted: grantedFor !== null && src !== undefined && src.allowWrites === true && grantedFor === (src.descriptorHash ?? null) };
+  });
   const count = sources.length;
   return (
     <CalmPage data-testid="sources-page" className="wk-src-page">
@@ -139,12 +153,21 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
       </div>
       {sheet !== null && (
         <SourceSheet
-          key={sheet.mode === 'saved' ? `saved:${sheet.server.name}` : sheet.mode}
+          // A saved source's sheet is its connection's: saved again elsewhere (a new descriptor), it opens afresh.
+          key={sheet.mode === 'saved' ? `saved:${sheet.server.name}:${sheet.server.descriptorHash ?? ''}` : sheet.mode}
           target={sheet}
           existing={sources.map((s) => s.name)}
-          onSaved={() => void refresh()}
+          onSaved={(saved) => {
+            // The saved record now, before the list re-read lands; a new descriptor withdraws old grants.
+            setSources((list) => {
+              const prior = list.find((s) => s.name === saved.name);
+              if (prior !== undefined && prior.descriptorHash !== saved.descriptorHash) bumpRevoked(saved.name);
+              return prior === undefined ? (appReadable(saved) ? [...list, saved] : list) : list.map((s) => (s.name === saved.name ? saved : s));
+            });
+            void refresh();
+          }}
           onAllowWrites={setWrites}
-          onDescribed={(name) => setEpochs((m) => ({ ...m, [name]: (m[name] ?? 0) + 1 }))}
+          onDescribed={(name) => setEpochs((m) => ({ ...m, [name]: (Object.hasOwn(m, name) ? (m[name] ?? 0) : 0) + 1 }))}
           onClose={close}
         />
       )}

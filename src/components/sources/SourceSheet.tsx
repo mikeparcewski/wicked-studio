@@ -85,6 +85,11 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
     target.mode === 'crew' ? { ...EMPTY_FORM, kind: 'crew' } : target.mode === 'saved' ? { ...EMPTY_FORM, kind: sheetKindOf(target.server), name: target.server.name } : EMPTY_FORM,
   );
   const [saved, setSaved] = useState<McpServer | null>(target.mode === 'saved' ? target.server : null);
+  // A newer record of the same source (its Allow writes switch, its health) replaces the shown one.
+  const targetServer = target.mode === 'saved' ? target.server : null;
+  useEffect(() => {
+    if (targetServer !== null) setSaved((s) => (s !== null && s.name === targetServer.name ? targetServer : s));
+  }, [targetServer]);
   const secret = useRef<SecretHandle | null>(null);
   /** THAT the secret changed, and whether one is typed: never its value. */
   const [secretEdits, setSecretEdits] = useState(0);
@@ -220,8 +225,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
     try {
       const c = await sourcesApi.describe(saved.name);
       // A later read (or another describe) supersedes this one; an earlier read can't overwrite it.
-      if (gen === catalogGen.current) setCatalog(c);
-      onDescribed?.(saved.name);
+      if (gen === catalogGen.current) { setCatalog(c); onDescribed?.(saved.name); }
     } catch (e) {
       if (gen === catalogGen.current) setError(words(e));
     } finally {

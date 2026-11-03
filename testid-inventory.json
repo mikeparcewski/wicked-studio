@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 296,
-    "occurrences": 4185,
-    "static": 3544,
+    "occurrences": 4188,
+    "static": 3546,
     "dynamic": 118,
     "computed": 48
   },
@@ -14090,6 +14090,12 @@
       ]
     },
     {
+      "testId": "row-write-redeclare",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
       "testId": "row-write-refused",
       "files": [
         "src/components/sources/RowWriteDialog.tsx"
@@ -14097,6 +14103,12 @@
     },
     {
       "testId": "row-write-scrim",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-stale",
       "files": [
         "src/components/sources/RowWriteDialog.tsx"
       ]

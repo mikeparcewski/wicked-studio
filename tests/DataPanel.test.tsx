@@ -61,6 +61,13 @@ describe('the data panel', () => {
     await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(3));
   });
 
+  it('a source named constructor is closed until opened (source names are data, codex r3)', () => {
+    apiFetch.mockImplementation(() => Promise.resolve({ name: 'constructor', kind: 'sql', catalog: CATALOG, descriptorHash: 'd'.repeat(64) }));
+    render(panel([pgServer({ name: 'constructor' })]));
+    expect(screen.getByRole('button', { name: /Show constructor/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
   it('a table menu offers a row write on Postgres tables only', () => {
     expect(rowWriteMenuBlocker(pgServer(), TICKETS)).toBeNull();
     expect(rowWriteMenuBlocker(pgServer({ sql: { ...pgServer().sql!, driver: 'mysql' } }), TICKETS)).toMatch(/MySQL/);

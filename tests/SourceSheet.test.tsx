@@ -323,3 +323,14 @@ describe('review r1 folds: stale state', () => {
     expect(screen.getAllByTestId('source-described-row')).toHaveLength(1);
   });
 });
+
+describe('review r3 folds (codex): a saved sheet follows its source', () => {
+  it('a newer record of the same source (Allow writes turned on elsewhere) replaces the shown one', async () => {
+    apiFetch.mockImplementation(() => Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: CATALOG, privileges: WRITER, descriptorHash: 'd'.repeat(64) }));
+    const props = { existing: ['support-pg'], onSaved: vi.fn(), onAllowWrites: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<SourceSheet target={{ mode: 'saved', server: pgServer() }} {...props} />);
+    expect(screen.getByTestId('source-allow-writes-switch').getAttribute('aria-checked')).toBe('false');
+    rerender(<SourceSheet target={{ mode: 'saved', server: pgServer({ allowWrites: true, updatedAt: '2026-11-03T16:00:00.000Z' }) }} {...props} />);
+    await waitFor(() => expect(screen.getByTestId('source-allow-writes-switch').getAttribute('aria-checked')).toBe('true'));
+  });
+});

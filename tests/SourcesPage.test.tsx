@@ -135,3 +135,49 @@ describe('review r2 folds (codex): grants per descriptor, the latest Grant opens
     expect(screen.getByTestId('row-write-line').textContent).toBe('UPDATE support.tickets SET status WHERE id');
   });
 });
+
+describe('review r3 folds (codex)', () => {
+  it('a grant answer arriving after Allow writes went off is not recorded', async () => {
+    let answer: (v: string | null) => void = () => {};
+    const grant = vi.fn(() => new Promise<string | null>((r) => { answer = r; }));
+    const { rerender } = render(<SourcesPage navigate={vi.fn()} search="" grants={{ grant }} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Show support-pg-writer/ }));
+    await screen.findByTestId('data-panel-table-menu-support.tickets-button');
+    await declareOn('support.tickets', 'owner');
+    fireEvent.click(screen.getByTestId('row-write-grant'));
+    await waitFor(() => expect(grant).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId('row-write-close'));
+    // Allow writes off from the source's sheet, while the host's answer is still out.
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path.endsWith('/allow-writes')) { servers = [{ ...servers[0]!, allowWrites: false }]; return Promise.resolve({ name: 'support-pg-writer', allowWrites: false, withdrawnGrants: 1 }); }
+      return base(path, init);
+    });
+    rerender(<SourcesPage navigate={vi.fn()} search="?source=support-pg-writer" grants={{ grant }} />);
+    fireEvent.click(await screen.findByTestId('source-allow-writes-switch'));
+    fireEvent.click(screen.getByTestId('source-allow-writes-confirm-off'));
+    await waitFor(() => expect(screen.getByTestId('source-allow-writes-state').textContent).toBe('off'));
+    answer(null); // the host's late "granted"
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByTestId('data-panel-action').getAttribute('data-granted')).toBe('no');
+  });
+
+  it('a Grant read that comes back after a new declaration opened does not replace it', async () => {
+    render(<SourcesPage navigate={vi.fn()} search="" grants={{ grant: async () => null }} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Show support-pg-writer/ }));
+    await screen.findByTestId('data-panel-table-menu-support.tickets-button');
+    await declareOn('support.tickets', 'owner');
+    fireEvent.click(screen.getByTestId('row-write-close'));
+    let answer: (v: unknown) => void = () => {};
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => (path.endsWith('/catalog') ? new Promise((r) => { answer = r; }) : base(path, init)));
+    fireEvent.click(screen.getByTestId('data-panel-grant'));
+    // Meanwhile: a new declaration from the assignments table's menu.
+    fireEvent.click(screen.getByTestId('data-panel-table-menu-support.assignments-button'));
+    fireEvent.click(screen.getByTestId('data-panel-declare'));
+    await screen.findByTestId('row-write-dialog');
+    answer({ name: 'support-pg-writer', kind: 'sql', catalog: CATALOG, privileges: WRITER, descriptorHash: servers[0]!.descriptorHash });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByRole('dialog', { name: /Row write on support.assignments/ })).toBeTruthy();
+  });
+});

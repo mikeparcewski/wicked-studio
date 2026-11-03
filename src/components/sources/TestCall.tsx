@@ -85,7 +85,8 @@ export function TestCall({ source, kind, reads, 'data-testid': testId = 'source-
     setError(null);
     try {
       const r = await sourcesApi.testCall(source, sending.target, args, sending.hash);
-      // What was sent is shown even if the fields changed meanwhile: it names its own request.
+      // The fields are frozen while a send is out, so this is the send they show (the guard only keeps
+      // a send from an older generation, should one ever outlive an edit, off the current fields).
       if (r.sent && mine === gen.current) setResult(r);
     } catch (e) {
       if (mine !== gen.current) return;
