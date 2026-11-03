@@ -132,3 +132,29 @@ describe('granting a row write', () => {
     expect(grant).not.toHaveBeenCalled();
   });
 });
+
+describe('review r1 folds (codex C13, pi P3)', () => {
+  it('while a grant is being checked the declaration is locked, so the answer can only be for what is shown', async () => {
+    let answer: (v: unknown) => void = () => {};
+    apiFetch.mockImplementation(() => new Promise((r) => { answer = r; }));
+    const grant = vi.fn(async () => null);
+    render(<Host relation={TICKETS} writes port={{ grant }} />);
+    declareOwner();
+    fireEvent.click(screen.getByTestId('row-write-grant'));
+    expect(screen.getByTestId('row-write-op-delete')).toBeDisabled();
+    expect(screen.getByTestId('row-write-col-owner')).toBeDisabled();
+    answer(TRIGGER_UNSAFE);
+    await screen.findByTestId('row-write-refused');
+    expect(screen.getByTestId('row-write-op-delete')).not.toBeDisabled();
+  });
+
+  it('a host that did not grant is not shown as a success', async () => {
+    safety = TICKETS_SAFE;
+    render(<Host relation={TICKETS} writes port={{ grant: async () => 'Nothing was granted: a grant belongs to an app.' }} />);
+    declareOwner();
+    fireEvent.click(screen.getByTestId('row-write-grant'));
+    const out = await screen.findByTestId('row-write-outcome');
+    expect(out.getAttribute('data-granted')).toBe('no');
+    expect(out.className).not.toContain('okbox');
+  });
+});

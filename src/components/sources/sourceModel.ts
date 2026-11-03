@@ -84,12 +84,39 @@ export function confirmedAddress(f: SourceForm): McpAddressPolicy | null {
   return { allow: [...f.confirm.ranges], ...(f.confirm.plaintext ? { plaintext: true } : {}) };
 }
 
-/** The form with one asked range ticked or unticked (the other ticks for the same connection kept). */
-export function withRange(f: SourceForm, range: string, on: boolean, plaintext: boolean): SourceForm {
+/**
+ * The form with one asked range ticked or unticked; the other ticks for the SAME connection are kept.
+ * A confirmation given for another connection is dropped whole, its "without TLS" consent included, so
+ * no consent ever carries to a host, port or URL the person did not give it for.
+ */
+export function withRange(f: SourceForm, range: string, on: boolean): SourceForm {
   const forTarget = targetKey(f);
-  const held = f.confirm !== null && f.confirm.forTarget === forTarget ? f.confirm.ranges : [];
+  const same = f.confirm !== null && f.confirm.forTarget === forTarget ? f.confirm : null;
+  const held = same?.ranges ?? [];
   const ranges = on ? (held.includes(range) ? held : [...held, range]) : held.filter((r) => r !== range);
-  return { ...f, confirm: ranges.length === 0 ? null : { ranges, plaintext, forTarget } };
+  return { ...f, confirm: ranges.length === 0 ? null : { ranges, plaintext: same?.plaintext ?? false, forTarget } };
+}
+
+/** The "without TLS" consent, only on a confirmation for this very connection. */
+export function withPlaintext(f: SourceForm, on: boolean): SourceForm {
+  if (f.confirm === null || f.confirm.forTarget !== targetKey(f)) return f;
+  return { ...f, confirm: { ...f.confirm, plaintext: on } };
+}
+
+/** An edit that moves the connection elsewhere drops the confirmation given for the old one. */
+export function withEdit(f: SourceForm, patch: Partial<SourceForm>): SourceForm {
+  const next = { ...f, ...patch };
+  return next.confirm !== null && next.confirm.forTarget !== targetKey(next) ? { ...next, confirm: null } : next;
+}
+
+/**
+ * Whether the sheet may offer "without TLS" for a confirmed private range: a SQL source with TLS off,
+ * or an API source whose URL (or OpenAPI document URL) is plain `http:`.
+ */
+export function plaintextOffered(f: SourceForm): boolean {
+  if (isSqlKind(f.kind)) return f.tls === 'disable';
+  if (isApiKind(f.kind)) return /^http:/i.test(f.url.trim()) || (f.kind === 'rest' && /^http:/i.test(f.openapiUrl.trim()));
+  return false;
 }
 
 /** The keychain entry a typed secret goes into: this source's own (crew's rule for a staged secret). */
@@ -269,7 +296,9 @@ export const ALLOW_WRITES_ALLOWS =
 export function allowWritesCanChange(p: SourcePrivilegeReport | null | undefined): string | null {
   if (p === null || p === undefined) return null;
   const t = writableTables(p);
-  return t.length === 0 ? 'This login can’t change any table now.' : `This login can currently change: ${t.join(', ')}.`;
+  if (t.length > 0) return `This login can currently change: ${t.join(', ')}.`;
+  // `readOnly` is crew's whole answer (TRUNCATE, sequences, views and foreign tables included).
+  return p.readOnly ? 'This login can’t change any table now.' : 'This login holds no row-level update, insert or delete, but it can still change data another way (TRUNCATE, a sequence, a view or a foreign table).';
 }
 
 /** The kind chip a source row carries in the data panel. */
@@ -314,6 +343,11 @@ export function declareRowWrite(r: SourceCatalogRelation, op: RowWriteOp, picked
   const set = r.columns.map((c) => c.name).filter((c) => picked.includes(c) && !key.includes(c));
   if (set.length === 0) return 'Pick at least one column to set (the key columns are not changed)';
   return { schema: r.schema, table: r.name, op, set, key };
+}
+
+/** One declaration's identity: its source and the whole declaration (two differ in any part, never collide). */
+export function rowWriteKey(source: string, w: SourceRowWrite): string {
+  return JSON.stringify([source, w.schema, w.table, w.op, [...w.set], [...w.key]]);
 }
 
 /** "UPDATE s.w SET owner WHERE id" — the declaration in one line. */

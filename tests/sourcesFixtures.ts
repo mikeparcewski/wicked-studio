@@ -78,3 +78,13 @@ export const TRIGGER_UNSAFE: SourceSafetyResponse = {
 };
 
 export const TICKETS_SAFE: SourceSafetyResponse = { table: { schema: 'support', name: 'tickets' }, safe: true, reasons: [], fingerprint: 'a1b2c3d4e5f6'.padEnd(64, '0') };
+
+/** A REST preview: one read, one write; `egress` when the base URL is not one of the document's servers. */
+export function restPreview(hash: string, egress: McpPreviewResponse['egress'] = { origin: 'https://api.support.test', basePath: '/v1', servers: ['https://api.support.test/v1'], matches: true, privateAddress: false, resolved: true, confirmRequired: false }): McpPreviewResponse {
+  const tool = (name: string, cls: 'read' | 'write') => ({ name, rest: null, subject: `mcp:tickets-api/${name}`, description: null, annotations: null, inputSchema: null, class: cls, classOverride: null, schemaHash: `h-${name}`, enabledOnSave: cls === 'read' });
+  return {
+    previewHash: hash, expiresAt: '2026-11-03T14:10:00.000Z',
+    server: { name: 'tickets-api', kind: 'rest', command: null, args: [], url: 'https://api.support.test/v1', auth: null, openapiUrl: 'https://api.support.test/openapi.json' },
+    serverInfo: null, tools: [tool('list_tickets', 'read'), tool('assign_ticket', 'write')], diff: null, egress,
+  };
+}

@@ -38,9 +38,13 @@ import {
   type SheetKind,
   type SourceForm,
   type UnconfirmedAddress,
+  plaintextOffered,
+  withEdit,
+  withPlaintext,
   withRange,
 } from './sourceModel.js';
 import { TestCall } from './TestCall.js';
+import { useDialogFocus } from './useDialogFocus.js';
 
 const KIND_ICON: Record<SheetKind, LucideIcon> = {
   postgres: Database, mysql: Database, rest: Braces, graphql: Network, mcp: Plug, upload: FileUp, crew: Workflow,
@@ -72,7 +76,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
   const titleId = useId();
   const box = useRef<HTMLDivElement | null>(null);
   useModalEscape(onClose);
-  useEffect(() => { box.current?.focus(); }, []);
+  useDialogFocus(box);
 
   const [form, setForm] = useState<SourceForm>(() =>
     target.mode === 'crew' ? { ...EMPTY_FORM, kind: 'crew' } : target.mode === 'saved' ? { ...EMPTY_FORM, kind: sheetKindOf(target.server), name: target.server.name } : EMPTY_FORM,
@@ -87,7 +91,14 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
   const [asks, setAsks] = useState<Array<UnconfirmedAddress & { forTarget: string }>>([]);
   const [busy, setBusy] = useState<null | 'test' | 'save' | 'describe' | 'upload'>(null);
   const [error, setError] = useState<string | null>(null);
-  const [acceptReads, setAcceptReads] = useState(false);
+  /** The preview whose reads the person accepted (an acceptance is for the operations it showed, only). */
+  const [acceptedFor, setAcceptedFor] = useState<string | null>(null);
+  /** The preview whose REST origin the person confirmed (G2: `allowOrigin` rides that save only). */
+  const [originFor, setOriginFor] = useState<string | null>(null);
+  /** A save or upload in flight (a second click in the same tick must not send twice). */
+  const inFlight = useRef(false);
+  /** Catalog reads and re-describes: only the latest one's answer is shown. */
+  const catalogGen = useRef(0);
   const [catalog, setCatalog] = useState<SourceCatalogResponse | null>(null);
   const [crewCatalog, setCrewCatalog] = useState<CrewSourceCatalog | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -105,19 +116,23 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
   const askNow = unticked[0] ?? null;
 
   // A saved source's catalog and privileges (structure only), and the built-in crew source's routes.
+  const savedName = saved?.name ?? null;
+  const savedKind = saved?.kind ?? null;
   useEffect(() => {
+    const name = target.mode === 'crew' || form.kind === 'crew' ? CREW_SOURCE : savedName !== null && (savedKind === 'sql' || savedKind === 'graphql') ? savedName : null;
+    if (name === null || upload !== null || (name === CREW_SOURCE && crewCatalog !== null)) return;
+    const gen = ++catalogGen.current;
     let live = true;
-    const name = target.mode === 'crew' ? CREW_SOURCE : saved !== null && (saved.kind === 'sql' || saved.kind === 'graphql') ? saved.name : null;
-    if (name === null || upload !== null) return () => { live = false; };
     sourcesApi.catalog(name).then(
-      (c) => { if (!live) return; if (c.kind === 'crew') setCrewCatalog(c.catalog as CrewSourceCatalog); else setCatalog(c); },
-      (e: unknown) => { if (live && codeOf(e) !== 'not_described') setError(words(e)); },
+      (c) => { if (!live || gen !== catalogGen.current) return; if (c.kind === 'crew') setCrewCatalog(c.catalog as CrewSourceCatalog); else setCatalog(c); },
+      (e: unknown) => { if (live && gen === catalogGen.current && codeOf(e) !== 'not_described') setError(words(e)); },
     );
     return () => { live = false; };
-  }, [target.mode, saved, upload]);
+  }, [target.mode, form.kind, savedName, savedKind, upload, crewCatalog]);
 
+  /** An edit; one that moves the connection elsewhere drops the confirmation given for the old one. */
   const edit = (patch: Partial<SourceForm>): void => {
-    setForm((f) => ({ ...f, ...patch }));
+    setForm((f) => withEdit(f, patch));
     setError(null);
   };
 
@@ -146,7 +161,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
         return;
       }
       setError(code === 'plaintext_refused'
-        ? `${wire} Use TLS, or (on a private range you confirm) tick “without TLS”.`
+        ? `${wire} Use TLS${isSqlKind(f.kind) ? '' : ' (an https URL)'}, or, on a private range you confirm, tick “without TLS”.`
         : words(e));
     } finally {
       if (mine === seq.current) setBusy(null);
@@ -155,54 +170,64 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
 
   /** One asked range ticked or unticked. A tick is the person's confirmation: test again under it at once. */
   const confirmRange = (range: string, on: boolean): void => {
-    const next = withRange(form, range, on, form.confirm?.plaintext ?? false);
+    const next = withRange(form, range, on);
     setForm(next);
     setError(null);
     if (on) void test(next);
   };
   const confirmPlaintext = (on: boolean): void => {
-    if (form.confirm === null) return;
-    const next: SourceForm = { ...form, confirm: { ...form.confirm, plaintext: on } };
+    const next = withPlaintext(form, on);
     setForm(next);
     setError(null);
     if (on) void test(next);
   };
 
   const save = async (): Promise<void> => {
-    if (preview === null) return;
+    if (preview === null || inFlight.current) return;
+    inFlight.current = true;
     setBusy('save');
     setError(null);
     try {
-      const s = await sourcesApi.save(preview.previewHash);
+      const origin = preview.egress?.confirmRequired === true && originFor === preview.previewHash ? preview.egress.origin : undefined;
+      const s = await sourcesApi.save(preview.previewHash, origin).catch((e: unknown) => {
+        // An expired or unknown preview can't be saved again: the person tests again first.
+        if (codeOf(e) === 'preview_stale' || codeOf(e) === 'preview_required') setHeld(null);
+        throw e;
+      });
       // crew wrote the secret to the keychain with the save: the field lets go of it now.
       secret.current?.clear();
       setHasSecret(false);
+      // The saved view is the saved server's own kind (the form was frozen while it saved).
+      setForm((f) => ({ ...f, kind: sheetKindOf(s) }));
       setSaved(s);
       onSaved(s);
     } catch (e) {
       setError(words(e));
     } finally {
+      inFlight.current = false;
       setBusy(null);
     }
   };
 
   const describeAgain = async (): Promise<void> => {
     if (saved === null) return;
+    const gen = ++catalogGen.current;
     setBusy('describe');
     setError(null);
-    const t0 = performance.now();
     try {
-      setCatalog(await sourcesApi.describe(saved.name));
-      setHeld((h) => (h === null ? h : { ...h, ms: Math.round(performance.now() - t0) }));
+      const c = await sourcesApi.describe(saved.name);
+      // A later read (or another describe) supersedes this one; an earlier read can't overwrite it.
+      if (gen === catalogGen.current) setCatalog(c);
     } catch (e) {
-      setError(words(e));
+      if (gen === catalogGen.current) setError(words(e));
     } finally {
       setBusy(null);
     }
   };
 
   const doUpload = async (): Promise<void> => {
-    if (file === null) return;
+    if (file === null || inFlight.current) return;
+    inFlight.current = true;
     setBusy('upload');
     setError(null);
     try {
@@ -213,6 +238,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
     } catch (e) {
       setError(words(e));
     } finally {
+      inFlight.current = false;
       setBusy(null);
     }
   };
@@ -225,10 +251,17 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
   const shownPrivileges: SourcePrivilegeReport | null = catalog?.privileges ?? preview?.source?.privileges ?? null;
   const blocker = isNew ? formBlocker(form) : null;
   const ops = preview !== null && (kind === 'rest' || kind === 'mcp') ? operationsByClass(preview) : null;
+  const acceptReads = preview !== null && acceptedFor === preview.previewHash;
+  const egress = preview?.egress?.confirmRequired === true ? preview.egress : null;
+  const originOk = egress === null || originFor === preview?.previewHash;
+  /** While a save or upload runs, the form is what is being registered: nothing in it changes. */
+  const frozen = busy === 'save' || busy === 'upload';
   const replaces = isNew && existing.includes(form.name.trim());
-  const saveBlocker = !isNew ? null
-    : kind === 'upload' ? (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(form.name.trim()) ? 'Name it first' : file === null ? 'Pick a file' : null)
-    : blocker ?? (preview === null ? (askNow !== null ? 'Confirm the address, then test' : 'Test it first: Save registers exactly what the test saw') : ops !== null && ops.reads.length > 0 && !acceptReads ? 'Accept the reads first' : null);
+  const saveBlocker = !isNew || kind === 'crew' ? null
+    : kind === 'upload' ? (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(form.name.trim()) ? 'Name it first' : form.name.trim() === CREW_SOURCE ? '"crew" is the built-in source; choose another name' : file === null ? 'Pick a file' : null)
+    : blocker ?? (preview === null ? (askNow !== null ? 'Confirm the address, then test' : 'Test it first: Save registers exactly what the test saw')
+      : ops !== null && ops.reads.length > 0 && !acceptReads ? 'Accept the reads first'
+      : !originOk ? 'Confirm where the calls go first' : null);
   const title = isNew ? 'Add a data source' : target.mode === 'crew' ? 'crew (built in)' : saved?.name ?? 'Data source';
 
   return (
@@ -248,8 +281,15 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
                 const I = KIND_ICON[k.kind];
                 return (
                   <button key={k.kind} type="button" role="radio" aria-checked={kind === k.kind} data-testid={`source-kind-${k.kind}`}
-                    className={`wk-src-kind${kind === k.kind ? ' wk-src-kind--on' : ''}`}
-                    onClick={() => { setForm({ ...EMPTY_FORM, kind: k.kind, name: form.name }); setHeld(null); setAsks([]); setError(null); setAcceptReads(false); }}>
+                    className={`wk-src-kind${kind === k.kind ? ' wk-src-kind--on' : ''}`} disabled={busy !== null}
+                    onClick={() => {
+                      setForm({ ...EMPTY_FORM, kind: k.kind, name: form.name });
+                      // The password field may unmount: what the sheet knows of the secret starts over too.
+                      secret.current?.clear();
+                      setHasSecret(false);
+                      setSecretEdits((n) => n + 1);
+                      setHeld(null); setAsks([]); setError(null); setAcceptedFor(null); setOriginFor(null);
+                    }}>
                     <I size={16} aria-hidden className="wk-src-ico" /><span>{k.label}</span>{k.meta !== undefined && <span className="wk-src-meta">{k.meta}</span>}
                   </button>
                 );
@@ -266,7 +306,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
               ) : (
                 <label className="wk-src-field">
                   <span className="wk-src-label">Name</span>
-                  <input data-testid="source-name" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew} value={form.name} placeholder="support-pg"
+                  <input data-testid="source-name" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew || frozen} value={form.name} placeholder="support-pg"
                     onChange={(e) => edit({ name: e.target.value })} />
                   {replaces && <span className="wk-src-note wk-src-tone-warn" data-testid="source-replaces">A source named {form.name.trim()} exists: saving replaces it.</span>}
                 </label>
@@ -276,32 +316,32 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
                 <>
                   <div className="wk-src-pair wk-src-pair--port">
                     <label className="wk-src-field"><span className="wk-src-label">Host</span>
-                      <input data-testid="source-host" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew} value={isNew ? form.host : (sql?.host ?? '')} placeholder="db.support.internal" onChange={(e) => edit({ host: e.target.value })} /></label>
+                      <input data-testid="source-host" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew || frozen} value={isNew ? form.host : (sql?.host ?? '')} placeholder="db.support.internal" onChange={(e) => edit({ host: e.target.value })} /></label>
                     <label className="wk-src-field"><span className="wk-src-label">Port</span>
-                      <input data-testid="source-port" className="wk-field wk-src-input wk-src-num" inputMode="numeric" disabled={!isNew} value={isNew ? form.port : String(sql?.port ?? '')} placeholder={String(defaultPort(kind))} onChange={(e) => edit({ port: e.target.value })} /></label>
+                      <input data-testid="source-port" className="wk-field wk-src-input wk-src-num" inputMode="numeric" disabled={!isNew || frozen} value={isNew ? form.port : String(sql?.port ?? '')} placeholder={String(defaultPort(kind))} onChange={(e) => edit({ port: e.target.value })} /></label>
                   </div>
                   <div className="wk-src-pair">
                     <label className="wk-src-field"><span className="wk-src-label">Database</span>
-                      <input data-testid="source-database" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew} value={isNew ? form.database : (sql?.database ?? '')} placeholder="support" onChange={(e) => edit({ database: e.target.value })} /></label>
+                      <input data-testid="source-database" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew || frozen} value={isNew ? form.database : (sql?.database ?? '')} placeholder="support" onChange={(e) => edit({ database: e.target.value })} /></label>
                     <label className="wk-src-field"><span className="wk-src-label">Login</span>
-                      <input data-testid="source-user" className="wk-field wk-src-input" spellCheck={false} autoComplete="off" disabled={!isNew} value={isNew ? form.user : (sql?.user ?? '')} placeholder="reader" onChange={(e) => edit({ user: e.target.value })} /></label>
+                      <input data-testid="source-user" className="wk-field wk-src-input" spellCheck={false} autoComplete="off" disabled={!isNew || frozen} value={isNew ? form.user : (sql?.user ?? '')} placeholder="reader" onChange={(e) => edit({ user: e.target.value })} /></label>
                   </div>
                 </>
               )}
               {isApiKind(kind) && (
                 <>
                   <label className="wk-src-field"><span className="wk-src-label">{kind === 'rest' ? 'Base URL (every call is pinned to it)' : kind === 'graphql' ? 'Endpoint' : 'Server URL'}</span>
-                    <input data-testid="source-url" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew} value={isNew ? form.url : (saved?.url ?? '')} placeholder={kind === 'rest' ? 'https://api.example.com/v1' : kind === 'graphql' ? 'https://api.example.com/graphql' : 'https://mcp.example.com/mcp'} onChange={(e) => edit({ url: e.target.value })} /></label>
+                    <input data-testid="source-url" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew || frozen} value={isNew ? form.url : (saved?.url ?? '')} placeholder={kind === 'rest' ? 'https://api.example.com/v1' : kind === 'graphql' ? 'https://api.example.com/graphql' : 'https://mcp.example.com/mcp'} onChange={(e) => edit({ url: e.target.value })} /></label>
                   {kind === 'rest' && (
                     <label className="wk-src-field"><span className="wk-src-label">OpenAPI document URL</span>
-                      <input data-testid="source-openapi" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew} value={isNew ? form.openapiUrl : (saved?.openapiUrl ?? '')} placeholder="https://api.example.com/openapi.json" onChange={(e) => edit({ openapiUrl: e.target.value })} /></label>
+                      <input data-testid="source-openapi" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew || frozen} value={isNew ? form.openapiUrl : (saved?.openapiUrl ?? '')} placeholder="https://api.example.com/openapi.json" onChange={(e) => edit({ openapiUrl: e.target.value })} /></label>
                   )}
                   {isNew && (
                     <div className="wk-src-pair">
                       <label className="wk-src-field"><span className="wk-src-label">Secret header</span>
-                        <input data-testid="source-auth-header" className="wk-field wk-src-input" spellCheck={false} value={form.authHeader} placeholder="Authorization" onChange={(e) => edit({ authHeader: e.target.value })} /></label>
+                        <input data-testid="source-auth-header" className="wk-field wk-src-input" spellCheck={false} disabled={frozen} value={form.authHeader} placeholder="Authorization" onChange={(e) => edit({ authHeader: e.target.value })} /></label>
                       <label className="wk-src-field"><span className="wk-src-label">Scheme</span>
-                        <input data-testid="source-auth-scheme" className="wk-field wk-src-input" spellCheck={false} value={form.authScheme} placeholder="Bearer" onChange={(e) => edit({ authScheme: e.target.value })} /></label>
+                        <input data-testid="source-auth-scheme" className="wk-field wk-src-input" spellCheck={false} disabled={frozen} value={form.authScheme} placeholder="Bearer" onChange={(e) => edit({ authScheme: e.target.value })} /></label>
                     </div>
                   )}
                 </>
@@ -318,7 +358,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
               )}
               {isSqlKind(kind) && isNew && (
                 <label className="wk-src-field"><span className="wk-src-label">TLS</span>
-                  <select data-testid="source-tls" className="wk-field wk-src-input" value={form.tls} onChange={(e) => edit({ tls: e.target.value as SourceForm['tls'] })}>
+                  <select data-testid="source-tls" className="wk-field wk-src-input" disabled={frozen} value={form.tls} onChange={(e) => edit({ tls: e.target.value as SourceForm['tls'] })}>
                     <option value="verify-full">Verify the certificate and host (verify-full)</option>
                     <option value="disable">Off (loopback, or a private range you confirm)</option>
                   </select></label>
@@ -337,10 +377,10 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
                       <span className="wk-src-note">{a.cls === 'loopback' ? 'Loopback' : 'Private'} address <code className="wk-src-mono">{a.address}</code>: allow this host at <code className="wk-src-mono">{a.range}</code> only.</span>
                     </label>
                   ))}
-                  {isNew && form.tls === 'disable' && asksNow.some((a) => a.cls === 'private') && (
+                  {isNew && plaintextOffered(form) && asksNow.some((a) => a.cls === 'private') && (
                     <label className="wk-src-check-row" data-testid="source-address-plaintext">
                       <input type="checkbox" checked={confirmed?.plaintext === true} disabled={confirmed === null || busy !== null} onChange={(e) => confirmPlaintext(e.target.checked)} />
-                      <span className="wk-src-note">Without TLS on these private ranges: the password and every row cross the network unencrypted.</span>
+                      <span className="wk-src-note">Without TLS on these private ranges: {isSqlKind(kind) ? 'the password and every row' : 'the secret and every answer'} cross the network unencrypted.</span>
                     </label>
                   )}
                   {isNew && asksNow.length === 0 && <p className="wk-src-note">A public address needs nothing more. A loopback or private one is asked here, for this source only.</p>}
@@ -365,9 +405,9 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
               {kind === 'upload' && (
                 <>
                   <label className="wk-src-field"><span className="wk-src-label">File (CSV, XLSX first sheet, or .sqlite)</span>
-                    <input data-testid="source-file" type="file" accept=".csv,.xlsx,.sqlite,.db,text/csv" className="wk-src-file" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(null); }} /></label>
+                    <input data-testid="source-file" type="file" accept=".csv,.xlsx,.sqlite,.db,text/csv" className="wk-src-file" disabled={frozen} onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(null); }} /></label>
                   <label className="wk-src-field"><span className="wk-src-label">First row</span>
-                    <select data-testid="source-header" className="wk-field wk-src-input" value={headerChoice} onChange={(e) => setHeaderChoice(e.target.value as 'detect' | 'yes' | 'no')}>
+                    <select data-testid="source-header" className="wk-field wk-src-input" disabled={frozen} value={headerChoice} onChange={(e) => setHeaderChoice(e.target.value as 'detect' | 'yes' | 'no')}>
                       <option value="detect">Detect the header</option>
                       <option value="yes">The first row is the header</option>
                       <option value="no">The first row is data (columns col_1…)</option>
@@ -401,13 +441,21 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
                       {shownPrivileges !== null && <PrivilegeLine report={shownPrivileges} />}
                     </div>
                   )}
+                  {egress !== null && preview !== null && (
+                    <label className="wk-src-check-row" data-testid="source-egress-confirm">
+                      <input type="checkbox" checked={originFor === preview.previewHash} data-testid="source-egress-tick" onChange={(e) => setOriginFor(e.target.checked ? preview.previewHash : null)} />
+                      <span className="wk-src-note">
+                        The calls go to <code className="wk-src-mono">{egress.origin}{egress.basePath}</code>, which the document’s servers{egress.servers.length > 0 ? <> (<code className="wk-src-mono">{egress.servers.join(', ')}</code>)</> : null} don’t list. Confirm this origin for this source.
+                      </span>
+                    </label>
+                  )}
                   {ops !== null && (
                     <div className="wk-src-ops" data-testid="source-operations">
                       <p className="wk-src-note">{ops.reads.length} read{ops.reads.length === 1 ? '' : 's'}: {ops.reads.join(', ') || 'none'}</p>
                       <p className="wk-src-note">{ops.writes.length} write{ops.writes.length === 1 ? '' : 's'} (each becomes an action an app may ask for, after a grant): {ops.writes.join(', ') || 'none'}</p>
                       {ops.reads.length > 0 && (
                         <label className="wk-src-check-row" data-testid="source-accept-reads">
-                          <input type="checkbox" checked={acceptReads} onChange={(e) => setAcceptReads(e.target.checked)} />
+                          <input type="checkbox" checked={acceptReads} data-testid="source-accept-reads-tick" onChange={(e) => setAcceptedFor(e.target.checked && preview !== null ? preview.previewHash : null)} />
                           <span className="wk-src-note">Accept these as reads. crew can’t stop an API that changes data on a GET or a read-only tool: accept only what you trust to read.</span>
                         </label>
                       )}
@@ -417,7 +465,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
               )}
               {kind === 'upload' && upload !== null && (
                 <div className="wk-src-box" data-testid="source-upload-result">
-                  <div className="wk-src-box-head"><span className="wk-src-strong">Uploaded</span><span className="wk-src-cap">{upload.snapshot.kind} · {(upload.snapshot.bytes / 1024).toFixed(1)} KB</span></div>
+                  <div className="wk-src-box-head"><span className="wk-src-strong">Uploaded</span><span className="wk-src-cap">{upload.snapshot.kind} → a snapshot of {(upload.snapshot.bytes / 1024).toFixed(1)} KB</span></div>
                   {upload.header !== null && (
                     <p className="wk-src-note" data-testid="source-upload-header">{upload.header.detected ? 'The first row is the header' : 'No header: the columns are'}: {upload.header.columns.join(', ')}</p>
                   )}
@@ -445,7 +493,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
                     <table className="wk-src-table"><tbody>
                       {shownCatalog.relations.map((r) => (
                         <tr key={relationName(r)} data-testid="source-described-row">
-                          <td><span className="wk-src-cell-name"><Table2 size={12} aria-hidden className="wk-src-ico" />{relationName(r)}{r.kind !== 'table' ? <span className="wk-src-cap">· {r.kind}</span> : null}</span></td>
+                          <td title={relationName(r)}><span className="wk-src-cell-name"><Table2 size={12} aria-hidden className="wk-src-ico" /><span className="wk-src-cell-text">{relationName(r)}{r.kind !== 'table' ? ` · ${r.kind}` : ''}</span></span></td>
                           <td className="wk-src-cap">{r.columns.length} column{r.columns.length === 1 ? '' : 's'}</td>
                           <td className="wk-src-n">{rowsLine(r, shownCatalog.dialect === 'sqlite')}</td>
                         </tr>
@@ -478,7 +526,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
         </div>
         <footer className="wk-src-sheet-foot">
           {error !== null ? <p role="alert" className="wk-src-note wk-src-tone-fail wk-src-foot-msg" data-testid="source-sheet-error">{error}</p>
-            : <span className="wk-src-cap wk-src-foot-msg" data-testid="source-sheet-foot">{isNew ? (saveBlocker ?? 'Saved sources appear in every app in this project.') : 'Saved. It appears in every app in this project.'}</span>}
+            : <span className="wk-src-cap wk-src-foot-msg" data-testid="source-sheet-foot">{kind === 'crew' ? 'crew’s own API is always on: there is nothing to save.' : isNew ? (saveBlocker ?? 'Saved sources appear in every app in this project.') : 'Saved. It appears in every app in this project.'}</span>}
           {isNew ? (
             <>
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="source-cancel" onClick={onClose}>Cancel</button>

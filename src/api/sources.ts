@@ -21,7 +21,6 @@ import type {
   McpServersResponse,
   SourceAllowWritesResponse,
   SourceCatalogResponse,
-  SourceCheckResponse,
   SourcePrivilegeReport,
   SourceRowWrite,
   SourceSafetyBody,
@@ -70,11 +69,6 @@ export const CREW_SOURCE = 'crew';
 const post = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body) });
 const at = (name: string, rest: string): string => `/sources/${encodeURIComponent(name)}/${rest}`;
 
-/** A registered server that is an Apps data source (`sql` or `graphql`). */
-export function isDataSource(s: Pick<McpServer, 'kind'>): boolean {
-  return s.kind === 'sql' || s.kind === 'graphql';
-}
-
 export const sourcesApi = {
   /** Every registered server; the data panel keeps the data sources (and the API kinds an app may read). */
   list: () => apiFetch<McpServersResponse>('/mcp/servers'),
@@ -84,12 +78,15 @@ export const sourcesApi = {
    */
   preview: (body: McpServerConfigBody, secret: string | null) =>
     apiFetch<McpPreviewResponse>('/mcp/servers/preview', post(secret === null || secret === '' ? body : { ...body, secret })),
-  /** Register exactly the preview `previewHash` named (and write its secret to the keychain). */
-  save: (previewHash: string) => apiFetch<McpServer>('/mcp/servers', post({ previewHash })),
+  /**
+   * Register exactly the preview `previewHash` named (and write its secret to the keychain). `allowOrigin`
+   * is the origin a REST preview's calls go to, sent only when the person confirmed it (G2).
+   */
+  save: (previewHash: string, allowOrigin?: string) =>
+    apiFetch<McpServer>('/mcp/servers', post(allowOrigin === undefined ? { previewHash } : { previewHash, allowOrigin })),
   catalog: (name: string) => apiFetch<SourceCatalogResponse>(at(name, 'catalog')),
   describe: (name: string) => apiFetch<SourceCatalogResponse>(at(name, 'describe'), { method: 'POST' }),
   privileges: (name: string, writes: SourceRowWrite[]) => apiFetch<SourcePrivilegeReport>(at(name, 'privileges'), post({ writes })),
-  check: (name: string, text: string) => apiFetch<SourceCheckResponse>(at(name, 'check'), post({ text })),
   safety: (name: string, body: SourceSafetyBody) => apiFetch<SourceSafetyResponse>(at(name, 'safety'), post(body)),
   /** The Allow writes switch. Human operator only (crew answers 403 to anything else). */
   setAllowWrites: (name: string, allowed: boolean) =>

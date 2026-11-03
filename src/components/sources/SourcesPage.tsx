@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -6,7 +6,7 @@ import { CalmAction, CalmHead, CalmPage } from '../calm/Calm.js';
 import { DataPanel, type PanelRowWrite } from './DataPanel.js';
 import { NO_APP_GRANTS, RowWriteDialog, type RowWriteGrantPort } from './RowWriteDialog.js';
 import { SourceSheet, type SheetTarget } from './SourceSheet.js';
-import { relationName } from './sourceModel.js';
+import { relationName, rowWriteKey } from './sourceModel.js';
 
 /** The registered servers an app may read from: data sources, REST APIs and MCP servers. */
 const appReadable = (s: McpServer): boolean => s.kind === 'sql' || s.kind === 'graphql' || s.kind === 'rest' || s.kind === 'mcp-http';
@@ -25,31 +25,34 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
   const [actions, setActions] = useState<PanelRowWrite[]>([]);
   const [dialog, setDialog] = useState<{ source: string; relation: SourceCatalogRelation; privileges: SourcePrivilegeReport | null; declared: PanelRowWrite | null } | null>(null);
 
-  const refresh = useCallback(async (): Promise<McpServer[]> => {
+  /** Each list read's generation: an older answer never replaces a newer one (a save re-reads the list). */
+  const listGen = useRef(0);
+  const refresh = useCallback(async (): Promise<void> => {
+    const gen = ++listGen.current;
     try {
       const r = await sourcesApi.list();
-      const list = r.servers.filter(appReadable);
-      setSources(list);
+      if (gen !== listGen.current) return;
+      setSources(r.servers.filter(appReadable));
       setError(null);
-      return list;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      return [];
+      if (gen === listGen.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (gen === listGen.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  // `?source=<name>` opens that source's sheet (the address a link or Back returns to).
+  // `?source=<name>` opens that source's sheet: the address owns it, so Back (or a link to a source that
+  // isn't there) closes it. A new source's sheet is the page's own, not the address's.
   const deep = readSourceDeepLink(search);
   useEffect(() => {
-    if (deep === null) return;
+    if (deep === null) { setSheet((s) => (s !== null && s.mode !== 'new' ? null : s)); return; }
     if (deep === CREW_SOURCE) { setSheet({ mode: 'crew' }); return; }
     const s = sources.find((x) => x.name === deep);
-    if (s !== undefined) setSheet({ mode: 'saved', server: s });
-  }, [deep, sources]);
+    if (s !== undefined) { setSheet({ mode: 'saved', server: s }); return; }
+    if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`No source named ${deep}.`); }
+  }, [deep, sources, loading]);
 
   const open = (name: string): void => navigate(sourcesPath(name));
   const close = (): void => { setSheet(null); if (deep !== null) navigate(sourcesPath()); };
@@ -62,9 +65,11 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
     setDialog({ source: source.name, relation, privileges: c.privileges ?? null, declared: null });
   };
   const onDeclared = (source: string, write: SourceRowWrite): void => {
-    const id = `${write.op}_${write.table}${write.op === 'update' ? `_${write.set.join('_')}` : ''}`.slice(0, 63);
-    setActions((list) => [...list.filter((a) => a.id !== id), { id, source, write, granted: false }]);
-    setDialog((d) => (d === null ? d : { ...d, declared: { id, source, write, granted: false } }));
+    // The id is the whole declaration with its source: two declarations never share one.
+    const id = rowWriteKey(source, write);
+    const label = `${write.op} ${write.schema}.${write.table}${write.op === 'update' ? ` (${write.set.join(', ')})` : ''}`;
+    setActions((list) => (list.some((a) => a.id === id) ? list : [...list, { id, label, source, write, granted: false }]));
+    setDialog((d) => (d === null ? d : { ...d, declared: { id, label, source, write, granted: false } }));
   };
   const grantAction = async (id: string): Promise<void> => {
     const a = actions.find((x) => x.id === id);
@@ -82,7 +87,9 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
   const shownGrants: RowWriteGrantPort = {
     grant: async (source, write, fingerprint) => {
       const why = await grants.grant(source, write, fingerprint);
-      if (why === null) setActions((list) => list.map((a) => (a.source === source && a.write.table === write.table && a.write.op === write.op ? { ...a, granted: true } : a)));
+      // Only the exact declaration the host granted is marked granted.
+      const id = rowWriteKey(source, write);
+      if (why === null) setActions((list) => list.map((a) => (a.id === id ? { ...a, granted: true } : a)));
       return why;
     },
   };

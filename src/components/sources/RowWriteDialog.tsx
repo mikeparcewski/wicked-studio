@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { sourcesApi, type McpServer, type SourceCatalogRelation, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
 import { useModalEscape } from '../Modal.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { CodeWords } from './CodeWords.js';
 import { declareRowWrite, grantGate, relationName, rowWriteLine, type GrantGate, type RowWriteOp } from './sourceModel.js';
+import { useDialogFocus } from './useDialogFocus.js';
 
 /**
  * Where a checked row write is granted. A grant is an app's (DES §9.4: keyed by app and action, bound to
@@ -49,7 +50,7 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
   const titleId = useId();
   const box = useRef<HTMLDivElement | null>(null);
   useModalEscape(onClose);
-  useEffect(() => { box.current?.focus(); }, []);
+  useDialogFocus(box);
   const keyCols = relation.primaryKey;
   const [op, setOp] = useState<RowWriteOp>(declared?.op ?? 'update');
   const [picked, setPicked] = useState<string[]>(declared?.op === 'update' ? declared.set : []);
@@ -57,7 +58,9 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
   const [gate, setGate] = useState<GrantGate | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<{ granted: boolean; words: string } | null>(null);
+  /** The grant pipeline's generation: an edit to the declaration (or a new Grant) stops the old one. */
+  const gen = useRef(0);
   const draft = declareRowWrite(relation, op, picked);
 
   const declare = (): void => {
@@ -69,7 +72,9 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
   };
 
   const grant = async (): Promise<void> => {
-    if (write === null) return;
+    if (write === null || busy) return;
+    const mine = ++gen.current;
+    const still = (): boolean => mine === gen.current;
     setError(null);
     setOutcome(null);
     // (1) Allow writes first: nothing is asked of the source while it is off.
@@ -79,20 +84,23 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
     try {
       // (2) The table safety check, with the declaration.
       const safety = await sourcesApi.safety(source.name, { schema: write.schema, table: write.table, write: { op: write.op, set: write.set, key: write.key } });
+      if (!still()) return;
       const unsafe = grantGate(source.name, true, safety, null);
       if (unsafe !== null) { setGate(unsafe); return; }
       // (3) The privileges this login still needs for it.
       const report = await sourcesApi.privileges(source.name, [write]);
+      if (!still()) return;
       const g = grantGate(source.name, true, safety, report.writes[0]?.missing ?? []);
       setGate(g);
       if (g?.step !== 'ready') return;
       // (4) The host's grant.
       const why = await port.grant(source.name, write, g.fingerprint);
-      setOutcome(why ?? `Granted: ${rowWriteLine(write)}. Every run still shows its card first.`);
+      if (!still()) return;
+      setOutcome(why === null ? { granted: true, words: `Granted: ${rowWriteLine(write)}. Every run still shows its card first.` } : { granted: false, words: why });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (still()) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      if (still()) setBusy(false);
     }
   };
 
@@ -101,16 +109,15 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
       <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className="wk-src-dialog" data-testid="row-write-dialog">
         <header className="wk-src-sheet-head">
           <h2 id={titleId} className="wk-src-title">Row write on {relationName(relation)}</h2>
-          <span className="wk-src-sp" />
-          <span className="wk-src-cap">{source.name}</span>
+          <span className="wk-src-cap wk-src-head-src">{source.name}</span>
           <button type="button" aria-label="Close" className="wk-btn wk-btn--quiet wk-btn--icon" onClick={onClose} data-testid="row-write-close"><X size={16} aria-hidden /></button>
         </header>
         <div className="wk-src-dialog-body">
           <div className="wk-src-seg" role="radiogroup" aria-label="Operation">
             {OPS.map((o) => (
               <button key={o.op} type="button" role="radio" aria-checked={op === o.op} data-testid={`row-write-op-${o.op}`}
-                className={`wk-src-seg-btn${op === o.op ? ' wk-src-seg-btn--on' : ''}`}
-                onClick={() => { setOp(o.op); setWrite(null); setGate(null); setOutcome(null); }}>{o.label}</button>
+                className={`wk-src-seg-btn${op === o.op ? ' wk-src-seg-btn--on' : ''}`} disabled={busy}
+                onClick={() => { gen.current++; setOp(o.op); setWrite(null); setGate(null); setOutcome(null); }}>{o.label}</button>
             ))}
           </div>
           <p className="wk-src-note">{OPS.find((o) => o.op === op)?.note}</p>
@@ -120,8 +127,8 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
               <legend className="wk-src-label">Columns it sets</legend>
               {relation.columns.filter((c) => !keyCols.includes(c.name)).map((c) => (
                 <label key={c.name} className="wk-src-check-row">
-                  <input type="checkbox" checked={picked.includes(c.name)} data-testid={`row-write-col-${c.name}`}
-                    onChange={(e) => { setPicked((p) => (e.target.checked ? [...p, c.name] : p.filter((x) => x !== c.name))); setWrite(null); setGate(null); setOutcome(null); }} />
+                  <input type="checkbox" checked={picked.includes(c.name)} data-testid={`row-write-col-${c.name}`} disabled={busy}
+                    onChange={(e) => { gen.current++; setPicked((p) => (e.target.checked ? [...p, c.name] : p.filter((x) => x !== c.name))); setWrite(null); setGate(null); setOutcome(null); }} />
                   <span>{c.name}</span><span className="wk-src-cap">{c.type}</span>
                 </label>
               ))}
@@ -172,8 +179,8 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
             </div>
           )}
           {gate?.step === 'ready' && outcome !== null && (
-            <div className="wk-src-okbox" data-testid="row-write-outcome">
-              <p>{outcome}</p>
+            <div className={outcome.granted ? 'wk-src-okbox' : 'wk-src-box'} data-testid="row-write-outcome" data-granted={outcome.granted ? 'yes' : 'no'}>
+              <p>{outcome.words}</p>
               <p className="wk-src-cap">Safety fingerprint <code className="wk-src-mono">{gate.fingerprint.slice(0, 12)}</code> · checked just now</p>
             </div>
           )}

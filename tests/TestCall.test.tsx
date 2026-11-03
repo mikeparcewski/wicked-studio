@@ -70,3 +70,30 @@ describe('the test call names its request before sending', () => {
     expect(screen.queryByTestId('source-test-call-result')).toBeNull();
   });
 });
+
+describe('review r1 folds (codex C5, C12)', () => {
+  it('a naming answer that arrives after an edit is dropped', async () => {
+    let answer: (v: unknown) => void = () => {};
+    apiFetch.mockImplementation(() => new Promise((r) => { answer = r; }));
+    render(<TestCall source="g" kind="graphql" reads={[]} />);
+    fireEvent.change(screen.getByTestId('source-test-call-query'), { target: { value: 'query A { tickets { id } }' } });
+    fireEvent.click(screen.getByTestId('source-test-call-name'));
+    fireEvent.change(screen.getByTestId('source-test-call-query'), { target: { value: 'query B { tickets { id owner } }' } });
+    answer({ sent: false, request: { ...REQUEST, kind: 'graphql', summary: 'POST A' }, requestHash: HASH });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByTestId('source-test-call-named')).toBeNull();
+    expect(screen.queryByTestId('source-test-call-send')).toBeNull();
+  });
+
+  it('a send that fails is spent: the same confirmation is never offered again', async () => {
+    sendImpl = () => Promise.reject(new Error('socket hang up'));
+    render(<TestCall source="tickets-api" kind="rest" reads={['list_tickets']} />);
+    fireEvent.click(screen.getByTestId('source-test-call-name'));
+    await screen.findByTestId('source-test-call-named');
+    fireEvent.click(screen.getByTestId('source-test-call-send'));
+    expect(screen.queryByTestId('source-test-call-send')).toBeNull(); // spent as the send starts
+    await waitFor(() => expect(screen.getByTestId('source-test-call-error').textContent).toMatch(/may or may not have sent it; name the request again/));
+    expect(screen.queryByTestId('source-test-call-send')).toBeNull();
+    expect(calls.filter((c) => c.body['confirm'] !== undefined)).toHaveLength(1);
+  });
+});

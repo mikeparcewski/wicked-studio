@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 296,
-    "occurrences": 4181,
-    "static": 3541,
+    "occurrences": 4184,
+    "static": 3544,
     "dynamic": 118,
     "computed": 48
   },
@@ -17690,6 +17690,12 @@
       ]
     },
     {
+      "testId": "source-accept-reads-tick",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "source-address",
       "files": [
         "src/components/sources/SourceSheet.tsx"
@@ -17781,6 +17787,18 @@
     },
     {
       "testId": "source-done",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-egress-confirm",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-egress-tick",
       "files": [
         "src/components/sources/SourceSheet.tsx"
       ]

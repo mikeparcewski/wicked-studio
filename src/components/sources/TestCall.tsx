@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ApiError } from '../../api/errors.js';
 import { sourcesApi, type SourceTestCallRequest, type SourceTestCallResponse } from '../../api/sources.js';
 
@@ -37,6 +37,10 @@ export function TestCall({ source, kind, reads, 'data-testid': testId = 'source-
   const [result, setResult] = useState<Extract<SourceTestCallResponse, { sent: true }> | null>(null);
   const [busy, setBusy] = useState<null | 'name' | 'send'>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Every edit is a new generation: an answer for an older one is dropped. */
+  const gen = useRef(0);
+  /** A name or send in flight (a second click in the same tick sends nothing). */
+  const inFlight = useRef(false);
 
   const parsedArgs = ((): Record<string, unknown> | string => {
     try {
@@ -47,41 +51,48 @@ export function TestCall({ source, kind, reads, 'data-testid': testId = 'source-
     }
   })();
   const blocker = target.trim() === '' ? (kind === 'graphql' ? 'Type one query' : 'Pick a read') : typeof parsedArgs === 'string' ? parsedArgs : null;
-  const edited = (): void => { setNamed(null); setResult(null); setError(null); };
+  const edited = (): void => { gen.current++; setNamed(null); setResult(null); setError(null); };
 
   const name = async (): Promise<void> => {
-    if (typeof parsedArgs === 'string') return;
+    if (typeof parsedArgs === 'string' || inFlight.current) return;
+    inFlight.current = true;
+    const mine = gen.current;
     setBusy('name');
     setError(null);
     setResult(null);
     try {
       const r = await sourcesApi.testCall(source, target, parsedArgs);
-      if (!r.sent) setNamed({ request: r.request, hash: r.requestHash, target, args: argsText });
+      // An edit since the ask: this request is not what the fields say now.
+      if (mine === gen.current && !r.sent) setNamed({ request: r.request, hash: r.requestHash, target, args: argsText });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (mine === gen.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
+      inFlight.current = false;
       setBusy(null);
     }
   };
 
   const send = async (): Promise<void> => {
-    if (named === null || typeof parsedArgs === 'string') return;
-    // Exactly what was named: the target and arguments it was named with, and its hash.
-    const args = JSON.parse(named.args.trim() === '' ? '{}' : named.args) as Record<string, unknown>;
+    if (named === null || typeof parsedArgs === 'string' || inFlight.current) return;
+    inFlight.current = true;
+    // Exactly what was named: the target and arguments it was named with, and its hash. The named
+    // request is spent as the send starts, whatever comes back: another send is named again first.
+    const sending = named;
+    const args = JSON.parse(sending.args.trim() === '' ? '{}' : sending.args) as Record<string, unknown>;
+    setNamed(null);
     setBusy('send');
     setError(null);
     try {
-      const r = await sourcesApi.testCall(source, named.target, args, named.hash);
-      // One named request, one send: another send is named again first.
-      if (r.sent) { setResult(r); setNamed(null); }
+      const r = await sourcesApi.testCall(source, sending.target, args, sending.hash);
+      if (r.sent) setResult(r);
     } catch (e) {
       if (e instanceof ApiError && (e.body as { code?: unknown } | undefined)?.code === 'request_changed') {
-        setNamed(null);
-        setError('The request changed since it was named (the source was saved again). Name it again to see what would be sent.');
+        setError('The request changed since it was named (the source was saved again). Nothing was sent. Name it again to see what would be sent.');
       } else {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(`${e instanceof Error ? e.message : String(e)}. crew may or may not have sent it; name the request again before sending another.`);
       }
     } finally {
+      inFlight.current = false;
       setBusy(null);
     }
   };

@@ -25,8 +25,11 @@
 /* ── the sheet (a centred dialog over a scrim, 900 × 620 at most) ── */
 .wk-src-scrim { position: fixed; inset: 0; z-index: 60; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
 .wk-src-sheet { width: min(980px, 100%); height: min(640px, 100%); display: flex; flex-direction: column; background: var(--surface-overlay); border-radius: var(--radius-lg); box-shadow: var(--shadow-overlay); overflow: hidden; outline: none; }
-.wk-src-sheet-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle); }
-.wk-src-title { margin: 0; font-size: var(--text-section); font-weight: var(--weight-strong); color: var(--ink-high); }
+.wk-src-sheet-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle); min-width: 0; }
+.wk-src-title { margin: 0; min-width: 0; flex: 0 1 auto; overflow-wrap: anywhere; font-size: var(--text-section); font-weight: var(--weight-strong); color: var(--ink-high); }
+/* A long table or source name wraps; the Close button never leaves the header. */
+.wk-src-sheet-head > .wk-btn { flex: none; margin-left: auto; }
+.wk-src-head-src { flex: 1 1 0; min-width: 0; text-align: right; overflow-wrap: anywhere; }
 .wk-src-sheet-main { flex: 1; min-height: 0; display: flex; }
 .wk-src-kinds { width: 196px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: var(--space-2); border-right: 1px solid var(--border-subtle); background: var(--surface-card); overflow-y: auto; }
 .wk-src-kind { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink-body); font: inherit; font-size: var(--text-body); text-align: left; cursor: pointer; }
@@ -77,7 +80,9 @@
 .wk-src-table caption { text-align: left; padding-bottom: var(--space-1); }
 .wk-src-table th { text-align: left; font-size: var(--text-caption); font-weight: var(--weight-strong); color: var(--ink-muted); padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
 .wk-src-table td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border-subtle); color: var(--ink-body); white-space: nowrap; }
-.wk-src-cell-name { display: inline-flex; align-items: center; gap: var(--space-2); }
+.wk-src-table td:first-child { width: 100%; max-width: 0; }
+.wk-src-cell-name { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.wk-src-cell-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-src-request { display: flex; flex-direction: column; gap: var(--space-1); }
 .wk-src-named, .wk-src-result, .wk-src-ops { display: flex; flex-direction: column; gap: var(--space-2); }
 .wk-src-result p { margin: 0; }

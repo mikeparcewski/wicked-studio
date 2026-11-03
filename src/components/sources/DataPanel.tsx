@@ -6,7 +6,10 @@ import { isSqlCatalog, relationName, rowWriteLine, rowsLine, sourceChip } from '
 
 /** A declared row write as the panel lists it. */
 export interface PanelRowWrite {
+  /** Unique per source and declaration (`rowWriteKey`). */
   id: string;
+  /** What the list shows. */
+  label: string;
   source: string;
   write: SourceRowWrite;
   granted: boolean;
@@ -48,17 +51,22 @@ export function DataPanel({ sources, loading, error, onAdd, onOpen, onDeclare, q
   'data-testid'?: string;
 }): React.ReactElement {
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  /** Catalogs by source AND version (its descriptor, else its last save): a re-saved source reads afresh. */
   const [catalogs, setCatalogs] = useState<Record<string, SourceCatalogResponse | string>>({});
+  const versionOf = (s: McpServer): string => `${s.name}@${s.descriptorHash ?? s.updatedAt}`;
 
-  const toggle = async (name: string): Promise<void> => {
-    const next = !(open[name] ?? false);
-    setOpen((o) => ({ ...o, [name]: next }));
-    if (!next || typeof catalogs[name] === 'object') return;
+  const toggle = async (s: McpServer): Promise<void> => {
+    const next = !(open[s.name] ?? false);
+    setOpen((o) => ({ ...o, [s.name]: next }));
+    const v = versionOf(s);
+    if (!next || typeof catalogs[v] === 'object') return;
     try {
-      const c = await sourcesApi.catalog(name);
-      setCatalogs((m) => ({ ...m, [name]: c }));
+      const c = await sourcesApi.catalog(s.name);
+      // An answer for an older version of the source is not this one's.
+      if (c.descriptorHash !== null && s.descriptorHash !== undefined && c.descriptorHash !== s.descriptorHash) return;
+      setCatalogs((m) => ({ ...m, [v]: c }));
     } catch (e) {
-      setCatalogs((m) => ({ ...m, [name]: e instanceof Error ? e.message : String(e) }));
+      setCatalogs((m) => ({ ...m, [v]: e instanceof Error ? e.message : String(e) }));
     }
   };
 
@@ -80,13 +88,13 @@ export function DataPanel({ sources, loading, error, onAdd, onOpen, onDeclare, q
         <ul className="wk-src-list">
           {sources.map((s) => {
             const isOpen = open[s.name] ?? false;
-            const c = catalogs[s.name];
+            const c = catalogs[versionOf(s)];
             const tables = typeof c === 'object' && isSqlCatalog(c.catalog as never) ? (c.catalog as { relations: SourceCatalogRelation[] }).relations : null;
             return (
               <li key={s.name} data-testid="data-panel-source" data-source={s.name}>
                 <div className="wk-src-row">
                   {s.kind === 'sql' ? (
-                    <button type="button" className="wk-src-disclose" aria-expanded={isOpen} aria-label={`${isOpen ? 'Hide' : 'Show'} ${s.name}’s tables`} onClick={() => void toggle(s.name)}>
+                    <button type="button" className="wk-src-disclose" aria-expanded={isOpen} aria-label={`${isOpen ? 'Hide' : 'Show'} ${s.name}’s tables`} onClick={() => void toggle(s)}>
                       {isOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
                     </button>
                   ) : <span className="wk-src-disclose" aria-hidden />}
@@ -139,7 +147,7 @@ export function DataPanel({ sources, loading, error, onAdd, onOpen, onDeclare, q
           {actions.map((a) => (
             <li key={a.id} className="wk-src-row" data-testid="data-panel-action" data-granted={a.granted ? 'yes' : 'no'}>
               <Lock size={13} aria-hidden className="wk-src-ico" />
-              <span className="wk-src-row-name" title={rowWriteLine(a.write)}>{a.id}</span>
+              <span className="wk-src-row-name" title={`${a.source}: ${rowWriteLine(a.write)}`}>{a.label}</span>
               <span className={`wk-src-chip${a.granted ? ' wk-src-chip--ok' : ''}`}>{a.granted ? 'row write · granted' : 'row write · not granted'}</span>
               {!a.granted && <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="data-panel-grant" onClick={() => onGrantAction(a.id)}>Grant</button>}
             </li>
