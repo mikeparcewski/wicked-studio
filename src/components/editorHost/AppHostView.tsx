@@ -341,7 +341,10 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
       )}
       {(status !== null || pending > 0) && <p className="wk-apps-line" data-testid="apps-status" aria-live="polite">{pending > 0 ? `Saving ${pending} change${pending === 1 ? '' : 's'}…` : status}</p>}
       {error !== null && <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-error">{error}</p>}
-      <div className="wk-apps-body">
+      {shown === 'edit' && chips.length > 0 && (
+        <p className="wk-apps-line wk-apps-chips" data-testid="apps-chips">{chips.map((c, i) => <span key={i} className="wk-source-chip" data-testid="apps-chip">about: {c.label}</span>)}</p>
+      )}
+      <div className="wk-apps-body" data-mode={shown}>
         <div className="wk-apps-frame" ref={frameWrap}>
           {torn !== null && (
             <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-torn">{torn} · <button type="button" className="wk-btn wk-btn--link" onClick={() => setMountKey((k) => k + 1)}>Reload it</button></p>
@@ -369,9 +372,6 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
                 : shown === 'edit' ? 'Actions run in Preview. Studio asks you here before each one.'
                   : 'When the app asks to change something, studio shows exactly what here and waits for you.'}
             </p>
-          )}
-          {shown === 'edit' && chips.length > 0 && (
-            <p className="wk-apps-chips">{chips.map((c, i) => <span key={i} className="wk-source-chip" data-testid="apps-chip">about: {c.label}</span>)}</p>
           )}
         </aside>
       </div>

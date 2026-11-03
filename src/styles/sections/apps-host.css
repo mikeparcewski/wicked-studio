@@ -13,6 +13,9 @@
 .wk-apps-line--note { color: var(--ink-muted); }
 .wk-apps-line--fail { color: var(--status-fail); }
 .wk-apps-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+/* Edit: the builder takes the whole width (actions run only in Preview, so the dock waits there). */
+.wk-apps-body[data-mode='edit'] { grid-template-columns: minmax(0, 1fr); }
+.wk-apps-body[data-mode='edit'] .wk-apps-dock { display: none; }
 .wk-apps-frame { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .wk-apps-frame-box { flex: 1 1 auto; min-height: 0; display: flex; }
 .wk-apps-frame-box .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 420px; border: 0; background: var(--surface-base); }
@@ -21,7 +24,7 @@
 .wk-apps-dock-count { color: var(--ink-muted); font-size: var(--text-caption); font-weight: var(--weight-regular); }
 .wk-apps-dock-hint, .wk-apps-outcome { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); }
 .wk-apps-outcome { color: var(--ink-body); }
-.wk-apps-chips { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.wk-apps-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 /* The card: drawn by the host from the resolved operation (§7.3). Every value is text. */
 .wk-apps-card { border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-card); overflow: hidden; }
 .wk-apps-card-head { padding: var(--space-3) var(--space-4); background: var(--accent-wash); color: var(--ink-high); font-size: var(--text-lead); font-weight: var(--weight-strong); }
