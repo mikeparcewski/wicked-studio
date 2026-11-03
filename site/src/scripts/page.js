@@ -155,13 +155,35 @@ function roving(list, tabs, { vertical, onMove }) {
     tabs[k].focus({ preventScroll: true });
   });
 }
-// Scroll a horizontal strip so a child is in view, without ever moving the page.
-function revealInStrip(strip, child) {
+// Scroll a horizontal strip so a child is in view, without ever moving the page. `clear` keeps the
+// child that far from the strip's edges (an edge fade's width); 0 = only when it is cut off.
+function revealInStrip(strip, child, clear = 0) {
   if (!strip || strip.scrollWidth <= strip.clientWidth + 1) return;
-  const l = child.offsetLeft - strip.offsetLeft, r = l + child.offsetWidth;
-  if (l < strip.scrollLeft) strip.scrollTo({ left: l - 8, behavior: reduced ? 'auto' : 'smooth' });
-  else if (r > strip.scrollLeft + strip.clientWidth) strip.scrollTo({ left: r - strip.clientWidth + 8, behavior: reduced ? 'auto' : 'smooth' });
+  const l = child.offsetLeft - strip.offsetLeft, r = l + child.offsetWidth, pad = Math.max(8, clear);
+  if (l < strip.scrollLeft + clear) strip.scrollTo({ left: l - pad, behavior: reduced ? 'auto' : 'smooth' });
+  else if (r > strip.scrollLeft + strip.clientWidth - clear) strip.scrollTo({ left: r - strip.clientWidth + pad, behavior: reduced ? 'auto' : 'smooth' });
 }
+
+/* ── What's new: the tab row is one line at every width. Where it is wider than its column it scrolls
+   sideways, and a fade marks each side that has more (studio.css .news-tabs). ──────────────────── */
+$$('[data-news-row]').forEach((row) => {
+  const mark = () => {
+    const max = row.scrollWidth - row.clientWidth;
+    row.toggleAttribute('data-more-l', max > 1 && row.scrollLeft > 1);
+    row.toggleAttribute('data-more-r', max > 1 && row.scrollLeft < max - 1);
+  };
+  // the row's width changed (a resize, the fonts arriving): the shown tab stays clear of the fades,
+  // even while the tour is paused (only the row scrolls)
+  const keep = () => {
+    mark();
+    const shown = row.querySelector('[aria-selected="true"]');
+    if (shown) revealInStrip(row, shown, 48);
+  };
+  row.addEventListener('scroll', mark, { passive: true });
+  window.addEventListener('resize', keep);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(keep);
+  mark();
+});
 
 /* ── Copy buttons (hero chip + the install cards): "Copied" for 1.4 s ─────────────────────── */
 const copyStatus = document.querySelector('[data-copy-status]');
@@ -275,7 +297,8 @@ $$('[data-tour]').forEach((el) => {
       tb.tabIndex = on ? 0 : -1;
       panels[j].classList.toggle('is-on', on);
     });
-    revealInStrip(list, tabs[k]);
+    // the What's new row keeps the shown tab clear of its edge fades (44px)
+    revealInStrip(list, tabs[k], list.hasAttribute('data-news-row') ? 48 : 0);
   };
   const barReset = (animate) => {
     if (!bar) return;

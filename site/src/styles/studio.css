@@ -78,31 +78,31 @@ html .footer { scroll-snap-align: end; }
    lays out at 1200px or wider (width / zoom >= 1200), the narrowest desktop layout it is built for. */
 @media (min-width: 1320px) and (min-height: 800px) {
   .frame > .wrap { zoom: 1.1; }
-  html .topbar__inner { max-width: calc(1240px * 1.1); padding-inline: calc(28px * 1.1); }
+  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.1); padding-inline: calc(28px * 1.1); }
 }
 @media (min-width: 1440px) and (min-height: 880px) {
   .frame > .wrap { zoom: 1.2; }
-  html .topbar__inner { max-width: calc(1240px * 1.2); padding-inline: calc(28px * 1.2); }
+  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.2); padding-inline: calc(28px * 1.2); }
 }
 @media (min-width: 1560px) and (min-height: 960px) {
   .frame > .wrap { zoom: 1.3; }
-  html .topbar__inner { max-width: calc(1240px * 1.3); padding-inline: calc(28px * 1.3); }
+  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.3); padding-inline: calc(28px * 1.3); }
 }
 @media (min-width: 1680px) and (min-height: 1040px) {
   .frame > .wrap { zoom: 1.4; }
-  html .topbar__inner { max-width: calc(1240px * 1.4); padding-inline: calc(28px * 1.4); }
+  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.4); padding-inline: calc(28px * 1.4); }
 }
 @media (min-width: 1920px) and (min-height: 1200px) {
   .frame > .wrap { zoom: 1.6; }
-  html .topbar__inner { max-width: calc(1240px * 1.6); padding-inline: calc(28px * 1.6); }
+  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.6); padding-inline: calc(28px * 1.6); }
 }
 @media (min-width: 2160px) and (min-height: 1360px) {
   .frame > .wrap { zoom: 1.8; }
-  html .topbar__inner { max-width: calc(1240px * 1.8); padding-inline: calc(28px * 1.8); }
+  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.8); padding-inline: calc(28px * 1.8); }
 }
 @media (min-width: 2400px) and (min-height: 1400px) {
   .frame > .wrap { zoom: 2; }
-  html .topbar__inner { max-width: calc(1240px * 2); padding-inline: calc(28px * 2); }
+  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 2); padding-inline: calc(28px * 2); }
 }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -725,7 +725,21 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .reach-limit { font-size: var(--text-body) !important; color: var(--muted) !important; }
 
 /* ── 7. What's new in 0.14 ──────────────────────────────────────────────────────────────────── */
-.news-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
+.news-tabs {
+  /* ONE line at every width: short tab names (the panel's heading carries the full one); where the row
+     is wider than its column it scrolls sideways (only the row, never the page), and a fade marks the
+     side with more (page.js sets data-more-l / data-more-r). The padding keeps focus rings inside the
+     scroller; the negative margin gives that room back, so the layout is unchanged. */
+  display: flex; flex-wrap: nowrap; gap: 7px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+  scrollbar-width: none; padding: 6px 3px; margin: -6px -3px;
+  --fade-l: 0px; --fade-r: 0px;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+          mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+}
+.news-tabs::-webkit-scrollbar { display: none; }
+.news-tabs[data-more-l] { --fade-l: 44px; }
+.news-tabs[data-more-r] { --fade-r: 44px; }
+.news-tab { flex: none; }
 .news-tab { font: inherit; font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--muted); padding: 6px 13px; border-radius: 999px; border: 1px solid var(--hairline-strong); background: transparent; cursor: pointer; white-space: nowrap; transition: color .2s var(--ease), background .2s var(--ease), border-color .2s var(--ease); }
 .news-tab:hover { color: var(--ink); border-color: var(--border-strong); }
 .news-tab.is-on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
@@ -824,9 +838,7 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
   .swipe-dots { display: flex; justify-content: center; gap: 7px; margin-top: 12px; }
   .swipe-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--hairline-strong); transition: background .2s var(--ease), transform .2s var(--ease); }
   .swipe-dots i.is-on { background: var(--ink); transform: scale(1.15); }
-  .news-tabs { flex-wrap: nowrap; overflow-x: auto; margin-inline: -18px; padding: 2px 18px 4px; scrollbar-width: none; }
-  .news-tabs::-webkit-scrollbar { display: none; }
-  .news-tab { flex-shrink: 0; }
+  .news-tabs { margin-inline: -18px; padding-inline: 18px; }
   .news-stage { padding: 20px 18px 28px; min-height: 0; }
   .news-stage .ex-progress { left: 18px; bottom: 14px; }
   .news-panel p { font-size: var(--text-lead); }
@@ -1258,3 +1270,43 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { transit
   .hero .ide-pane-tabs { padding: 7px 8px; }
   .hero .ide-pane-body { padding: 8px; }
 }
+
+/* ── The thread and the beat track (studio's plane: experience), ported from wicked-crew (site/src/styles/crew.css) ─────────
+   The same sizes, place, labels, dots, hover, focus and fades as crew's; only the hue (--beat-c, this
+   site's plane) and the beat list differ. src/scripts/beats.js fills the thread and marks the track.
+
+   The thread (1024px and up): decoration (aria-hidden), segment k fills as beat k comes into view, so
+   the story visibly travels down the page. It sits under the bar's stacking (z 199), so the tooltips
+   always paint over it; 3px tall, over each frame's top padding. */
+.beat-thread { display: none; }
+@media (min-width: 1024px) and (min-height: 640px) {
+  .beat-thread {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px;
+    position: fixed; z-index: 199; top: var(--topbar-h); left: 0; right: 0; height: 3px;
+    max-width: 1240px; margin-inline: auto; padding-inline: 28px; pointer-events: none;
+    opacity: 0; transition: opacity .3s var(--ease);
+  }
+  .beat-thread.is-on { opacity: 1; }
+}
+.beat-thread i { display: block; height: 100%; border-radius: 0 0 2px 2px; background: color-mix(in oklab, var(--beat-c) 16%, transparent); overflow: hidden; }
+.beat-thread b { display: block; height: 100%; background: var(--beat-c); box-shadow: 0 0 10px color-mix(in oklab, var(--beat-c) 60%, transparent); transform-origin: 0 50%; transform: scaleX(var(--f, 0)); }
+
+/* The beat track (right gutter, 1400px and up only; beats.js also keeps it hidden where the gutter
+   beside the content cannot hold it). */
+.beats { display: none; }
+@media (min-width: 1400px) and (min-height: 640px) {
+  .beats { display: block; position: fixed; z-index: 40; right: 14px; top: 50%; transform: translateY(-50%); opacity: 0; visibility: hidden; transition: opacity .3s var(--ease), visibility 0s linear .3s; }
+  .beats.is-on { opacity: 1; visibility: visible; transition: opacity .3s var(--ease); }
+}
+.beats ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.beats a { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 28px; text-decoration: none; color: var(--faint); }
+.beats-l { font: 600 11px/1 var(--font-mono); opacity: 0; transition: opacity .2s var(--ease); white-space: nowrap; }
+.beats-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--hairline-strong); background: var(--canvas); transition: background .2s var(--ease), border-color .2s var(--ease); }
+.beats li + li a::before { content: ''; position: absolute; right: 4px; top: -18px; width: 2px; height: 22px; background: var(--hairline); z-index: -1; }
+.beats a[aria-current] { color: var(--beat-c); }
+.beats a[aria-current] .beats-l,
+.beats a:hover .beats-l, .beats a:focus-visible .beats-l { opacity: 1; }
+.beats a[aria-current] .beats-dot { background: var(--beat-c); border-color: var(--beat-c); }
+.beats a:hover .beats-dot, .beats a:focus-visible .beats-dot, .beats a:active .beats-dot { border-color: var(--beat-c); }
+.beats a:focus-visible { outline: 2px solid var(--focus, var(--ink)); outline-offset: 2px; border-radius: 4px; }
+:root { --beat-c: var(--plane-experience); }
