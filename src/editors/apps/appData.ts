@@ -141,7 +141,10 @@ export function crewAppData(slug: string): AppDataPort {
         const state = r.state === 'succeeded' || r.state === 'failed' ? r.state : 'unknown';
         return { state, reason: line(r.reason, 400), sample: false };
       } catch (e) {
-        // A run whose answer was lost may have written: never "failed", always "not known" (§7.3 `unknown`).
+        // crew refusing the run (a 4xx: an expired, replayed or revoked record, a source that changed) happens before
+        // the record moves to `running`, so nothing ran. Anything else — the answer lost, a 5xx — may have written:
+        // never "failed", always "not known" (§7.3 `unknown`).
+        if (e instanceof ApiError && e.status >= 400 && e.status < 500) return { state: 'failed', reason: e.message, sample: false };
         return { state: 'unknown', reason: e instanceof Error ? e.message : String(e), sample: false };
       }
     },

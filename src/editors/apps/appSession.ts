@@ -25,6 +25,8 @@ export type EditResult =
   | { ok: false; code: 'head_moved' | 'refused' | 'bad_request'; message: string; head?: number };
 
 export const BURST_MS = 1_000;
+/** The most ops one burst holds before it lands without waiting. */
+export const BURST_MAX_OPS = 200;
 
 function words(r: StoreRefusal, what: 'saved' | 'undone' | 'redone' = 'saved'): string {
   const not = `Not ${what}`;
@@ -85,7 +87,10 @@ export class AppSession {
     let app: AppDetail;
     try { app = await this.store.detail(); } catch { return; }
     if (this.landing !== null || this.app === null) return;
-    const moved = app.head.version !== this.app.head.version;
+    // Versions only grow: an answer older than the head this session already holds (a GET that left before a landing
+    // and came back after it) is dropped, never adopted.
+    if (app.head.version < this.app.head.version) return;
+    const moved = app.head.version > this.app.head.version;
     const turnChanged = (app.turn?.runId ?? null) !== (this.app.turn?.runId ?? null);
     if (!moved && !turnChanged) return;
     if (moved) {
@@ -110,7 +115,9 @@ export class AppSession {
     this.working = r.spec;
     this.burst.push(...(ops as SpecOp[]));
     this.clearTimer();
-    this.timer = setTimeout(() => { void this.flush(); }, this.burstMs);
+    // A burst is a person's gesture or two; a runtime that keeps sending lands what it sent so far, bounded.
+    if (this.burst.length >= BURST_MAX_OPS) void this.flush();
+    else this.timer = setTimeout(() => { void this.flush(); }, this.burstMs);
     this.emit({ kind: 'pending', count: this.burst.length });
     return { ok: true, spec: r.spec, added: r.added, pending: this.burst.length };
   }

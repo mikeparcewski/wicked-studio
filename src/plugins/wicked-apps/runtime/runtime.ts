@@ -748,7 +748,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     const mod = e.metaKey || e.ctrlKey;
     if (mod && !e.altKey && e.key.toLowerCase() === 'z' && !inField && editing()) {
       e.preventDefault();
-      void request('app.history', { move: e.shiftKey ? 'redo' : 'undo', base: version }).then((r) => { if (!r.ok) { notice = r.message; draw(); } });
+      void request('app.history', { move: e.shiftKey ? 'redo' : 'undo', base: version }).then((r) => {
+        if (r.ok) return;
+        notice = r.message;
+        if (r.code === 'head_moved') void read(); else draw();
+      });
       return;
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && editing() && selected !== null) {

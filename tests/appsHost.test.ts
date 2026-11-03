@@ -115,6 +115,23 @@ describe('the session: one version per edit burst, crew’s CAS, one pointer for
     expect(b.pending).toBe(0);
   });
 
+  it('a refresh answered after a landing never takes the session back to the older head', async () => {
+    const store = new SampleAppStore('esc', SPEC(), new MemStorage());
+    const s = new AppSession(store, { burstMs: 5 });
+    await s.load();
+    const old = await store.detail();
+    let release: (v: Awaited<ReturnType<typeof store.detail>>) => void = () => {};
+    const slow = vi.spyOn(store, 'detail').mockImplementationOnce(() => new Promise((res) => { release = res; }));
+    const pending = s.refresh();
+    s.edit(1, [{ op: 'component-move', id: 'weekly', x: 0, y: 9 }]);
+    await s.flush();
+    expect(s.head).toBe(2);
+    release(old);
+    await pending;
+    expect(s.head).toBe(2);
+    slow.mockRestore();
+  });
+
   it('two tabs: an undo from a stale base is refused, both end on the same version and pointer', async () => {
     const mem = new MemStorage();
     const a = new AppSession(new SampleAppStore('esc', SPEC(), mem), { burstMs: 5 });
@@ -304,5 +321,20 @@ describe('the protocol and the live card', () => {
     const inv = inventoryOf(SPEC());
     expect(inv.components.get('by_region')).toMatchObject({ page: 'overview', type: 'chart' });
     expect(inv.queries.has('escalation_list')).toBe(true);
+  });
+});
+
+describe('the live data path (K2b)', () => {
+  it('crew refusing a run (4xx) is "failed": nothing ran; a lost answer or a 5xx is "not known"', async () => {
+    const { crewAppData } = await import('../src/editors/apps/appData.js');
+    const port = crewAppData('fixture-app');
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ code: 'bad_request', error: 'that record expired' }), { status: 409 }));
+    expect(await port.run('assign_to_me', 'rec-1')).toMatchObject({ state: 'failed' });
+    fetchMock.mockResolvedValueOnce(new Response('boom', { status: 502 }));
+    expect(await port.run('assign_to_me', 'rec-2')).toMatchObject({ state: 'unknown' });
+    fetchMock.mockRejectedValueOnce(new TypeError('network'));
+    expect(await port.run('assign_to_me', 'rec-3')).toMatchObject({ state: 'unknown' });
+    fetchMock.mockRestore();
   });
 });
