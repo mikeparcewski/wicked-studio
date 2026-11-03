@@ -71,6 +71,8 @@ SPEC_B = {
 }
 ROWS_B = {"b_secret": [[123456]]}
 
+# How long a prepared record lives (crew: 2 minutes); POST /__fixture/apps-caps {recordMs} shortens it for a journey.
+RECORD_MS = 120_000
 APPS: dict = {}
 CALLS: list = []
 RECORDS: dict = {}
@@ -103,6 +105,8 @@ def reset() -> None:
         CALLS.clear()
         RECORDS.clear()
         CAPS.update({"query": True, "actions": True})
+        global RECORD_MS
+        RECORD_MS = 120_000
 
 
 reset()
@@ -152,8 +156,51 @@ def _text(v) -> str:
     return "null" if v is None else v if isinstance(v, str) else json.dumps(v)
 
 
+def _unbound(schema) -> list:
+    """Required parameters nothing fills (crew's `unbound_param` rule, packages/crew/src/apps/spec.ts)."""
+    props = (schema or {}).get("properties", {})
+    return [r for r in (schema or {}).get("required", []) if r in props and "from" not in props[r] and "default" not in props[r]]
+
+
+def _check(spec: dict) -> list:
+    """The part of crew's spec check a studio edit can break: every binding names a query or action of this spec,
+    and every required parameter nobody else fills is bound where it is used."""
+    findings = []
+    queries = {q["id"]: q for q in spec.get("queries", [])}
+    actions = {a["id"]: a for a in spec.get("actions", [])}
+    for pi, page in enumerate(spec.get("pages", [])):
+        for ci, c in enumerate(page.get("components", [])):
+            at = f"$.pages[{pi}].components[{ci}]"
+            sites = []
+            if "data" in c:
+                sites.append((queries.get(c["data"]["query"]), c["data"].get("params") or {}, f"{at}.data", c["data"]["query"]))
+            for b, where in ([(c["action"], "action")] if c["type"] == "button" else []) + ([(c["submit"], "submit")] if c["type"] == "form" else []) \
+                    + [(r, f"rowActions[{i}]") for i, r in enumerate(c.get("rowActions") or [])]:
+                sites.append((actions.get(b["action"]), b.get("params") or {}, f"{at}.{where}", b["action"]))
+            for target, bound, path, name in sites:
+                if target is None:
+                    findings.append({"stage": "spec", "code": "unknown_ref", "path": path, "message": f"{name} is not declared"})
+                    continue
+                for r in _unbound(target.get("params")):
+                    if r not in bound:
+                        findings.append({"stage": "spec", "code": "unbound_param", "path": f"{path}.params", "message": f"required parameter {json.dumps(r)} has no binding, default or viewer claim"})
+    return findings
+
+
 def handle(method: str, path: str, body):
-    """Answer an /api/v1/apps or /__fixture/apps* request: (status, json) or None when it is not one of these."""
+    """Answer an /api/v1/apps or /__fixture/apps* request: (status, json) or None when it is not one of these. Every
+    /api/v1/apps call is recorded with the status it got."""
+    if not path.startswith("/api/v1/apps/"):
+        return _answer(method, path, body)
+    with lock:
+        call = {"method": method, "path": path, "body": copy.deepcopy(body), "at": _now()}
+        r = _answer(method, path, body, locked=True)
+        call["status"] = r[0] if r else None
+        CALLS.append(call)
+    return r
+
+
+def _answer(method: str, path: str, body, locked: bool = False):
     if path == "/__fixture/apps-calls" and method == "GET":
         with lock:
             return 200, {"calls": copy.deepcopy(CALLS)}
@@ -161,18 +208,20 @@ def handle(method: str, path: str, body):
         reset()
         return 200, {"ok": True}
     if path == "/__fixture/apps-caps" and method == "POST":
+        global RECORD_MS
         with lock:
             for k in ("query", "actions"):
                 if isinstance((body or {}).get(k), bool):
                     CAPS[k] = body[k]
+            if isinstance((body or {}).get("recordMs"), int):
+                RECORD_MS = body["recordMs"]
         return 200, {"caps": capabilities()}
     if not path.startswith("/api/v1/apps/"):
         return None
     parts = path[len("/api/v1/apps/"):].split("/")
     slug = parts[0]
     rest = parts[1:]
-    with lock:
-        CALLS.append({"method": method, "path": path, "body": copy.deepcopy(body), "at": _now()})
+    if locked:  # handle() holds the lock for every /api/v1/apps call
         a = APPS.get(slug)
         if a is None:
             return _refuse(404, "unknown_app", f"no app {slug}")
@@ -189,6 +238,9 @@ def handle(method: str, path: str, body):
             spec = next((o["spec"] for o in ops if o.get("op") == "spec"), None)
             if spec is None:
                 return _refuse(400, "bad_request", "an edit holds a spec op")
+            findings = _check(spec)
+            if findings:
+                return _refuse(422, "check_failed", "; ".join(f["message"] for f in findings[:5]), findings=findings)
             landed = _land(a, spec, body.get("summary") or "An edit", {"kind": "you"}, {"kind": "human", "id": "local"})
             h = a["history"]
             h["states"] = h["states"][: h["pointer"] + 1] + [landed["version"]]
@@ -204,8 +256,11 @@ def handle(method: str, path: str, body):
             if to < 0 or to >= len(h["states"]):
                 return _refuse(409, "nothing_to_undo" if direction == "undo" else "nothing_to_redo", "nothing to move to")
             target = h["states"][to]
+            held = a["versions"][target - 1]["receipt"]
+            # The restored version's own provenance, followed through any chain of restores (crew's restoredReceipt).
+            origin = held.get("restoredFrom") or {"originKind": held["kind"], "originVersion": target}
             landed = _land(a, a["specs"][target], f"{direction.title()} to v{target}",
-                           {"kind": "restored", "restoredFrom": {"version": target, "originKind": "you", "originVersion": target}},
+                           {"kind": "restored", "restoredFrom": {"version": target, "originKind": origin["originKind"], "originVersion": origin["originVersion"]}},
                            {"kind": "human", "id": "local"})
             h["pointer"] = to
             return 200, {"app": _detail(a), "landed": landed}
@@ -223,14 +278,18 @@ def handle(method: str, path: str, body):
                 rows = [r for r in rows if any(isinstance(c, str) and needle.lower() in c.lower() for c in r)]
             return 200, {"columns": q["output"], "rows": copy.deepcopy(rows), "truncated": False, "hasMore": False, "ms": 3, "cachedAt": None}
         if len(rest) == 3 and rest[0] == "actions" and rest[2] in ("prepare", "run"):
-            spec = a["specs"][a["versions"][-1]["version"]]
+            head = a["versions"][-1]["version"]
+            spec = a["specs"][head]
             act = next((x for x in spec["actions"] if x["id"] == rest[1]), None)
             if act is None:
                 return _refuse(404, "bad_request", f"no action {rest[1]}")
             if rest[2] == "prepare":
+                # §7.3: a record is bound to app, version and action, for the version the viewer is looking at.
+                if body.get("version") != head:
+                    return _refuse(409, "not_accepted", f"prepare named v{body.get('version')}; {slug} is at v{head}")
                 params = body.get("params") or {}
                 record = f"rec-{len(RECORDS) + 1}"
-                RECORDS[record] = {"action": act["id"], "params": params, "state": "prepared", "expiresAt": _now() + 120_000}
+                RECORDS[record] = {"app": slug, "version": head, "action": act["id"], "params": params, "state": "prepared", "expiresAt": _now() + RECORD_MS}
                 if act["kind"] == "row-write":
                     card = {"kind": "row-write", "source": "support-pg-writer (postgres)", "operation": "UPDATE support.tickets",
                             "rows": [{"label": "owner", "value": VIEWER, "from": "your sign-in"}],
@@ -244,8 +303,11 @@ def handle(method: str, path: str, body):
                             "request": 'POST https://ops.example.com/ping\n{"note": "from the app"}', "says": "Pings the on-call channel."}
                 return 200, {"record": record, "card": card, "expiresAt": RECORDS[record]["expiresAt"]}
             rec = RECORDS.get(body.get("record"))
-            if rec is None or rec["action"] != act["id"] or rec["state"] != "prepared":
+            if rec is None or rec["app"] != slug or rec["action"] != act["id"] or rec["state"] != "prepared":
                 return _refuse(409, "bad_request", "that record is not prepared for this action")
+            if _now() >= rec["expiresAt"]:
+                rec["state"] = "expired"
+                return _refuse(409, "bad_request", "that record expired; nothing ran")
             rec["state"] = "succeeded"
             if act["kind"] == "row-write":
                 for r in a["rows"].get("tickets", []):

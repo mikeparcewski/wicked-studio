@@ -93,11 +93,18 @@ export function sampleDetail(slug: string, spec: AppSpec, now = Date.now()): Sam
   };
 }
 
+/** The Web Locks the sample's cross-tab transaction takes (every supported browser has `navigator.locks`). */
+export interface SampleLocks { request<T>(name: string, cb: () => Promise<T>): Promise<T> }
+const browserLocks = (): SampleLocks | null => {
+  const l = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: SampleLocks }).locks : undefined;
+  return l !== undefined && typeof l.request === 'function' ? l : null;
+};
+
 export class SampleAppStore implements AppStorePort {
   readonly kind = 'sample' as const;
   private mem: SampleState;
   private readonly key: string;
-  constructor(readonly slug: string, spec: AppSpec, private readonly storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null, private readonly now: () => number = Date.now) {
+  constructor(readonly slug: string, spec: AppSpec, private readonly storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null, private readonly now: () => number = Date.now, private readonly locks: SampleLocks | null = browserLocks()) {
     this.key = `wicked-apps-sample:${slug}`;
     this.mem = this.load() ?? sampleDetail(slug, spec, now());
     this.save();
@@ -113,6 +120,11 @@ export class SampleAppStore implements AppStorePort {
   private save(): void { try { this.storage?.setItem(this.key, JSON.stringify(this.mem)); } catch { /* a full or absent storage keeps the tab's own copy */ } }
   /** Another tab's write, if any, before every call: the same race crew's CAS settles. */
   private sync(): void { this.mem = this.load() ?? this.mem; }
+  /** Read, check the base and write as ONE transaction across this browser's tabs (a Web Lock named for the app):
+   *  two tabs can never both land on the same head. Without Web Locks (a test host) the tab's own call is atomic. */
+  private tx<T>(fn: () => T): Promise<T> {
+    return this.locks === null ? Promise.resolve().then(fn) : this.locks.request(this.key, async () => fn());
+  }
   /** Put the sample back as it started (the test page's "Start the sample again"). */
   reset(spec: AppSpec): void { this.mem = sampleDetail(this.slug, spec, this.now()); this.save(); }
 
@@ -143,6 +155,10 @@ export class SampleAppStore implements AppStorePort {
   }
 
   async edit(base: number, spec: AppSpec, summary: string): Promise<StoreResult> {
+    return this.tx(() => this.editNow(base, spec, summary));
+  }
+
+  private editNow(base: number, spec: AppSpec, summary: string): StoreResult {
     this.sync();
     const stale = this.stale(base, 'this edit');
     if (stale !== null) return stale;
@@ -154,6 +170,10 @@ export class SampleAppStore implements AppStorePort {
   }
 
   async move(direction: 'undo' | 'redo', base: number): Promise<StoreResult> {
+    return this.tx(() => this.moveNow(direction, base));
+  }
+
+  private moveNow(direction: 'undo' | 'redo', base: number): StoreResult {
     this.sync();
     const stale = this.stale(base, direction === 'undo' ? 'this undo' : 'this redo');
     if (stale !== null) return stale;

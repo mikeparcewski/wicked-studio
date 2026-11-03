@@ -50,6 +50,24 @@ function outcomeWords(o: ActionOutcome, card: ActionCard): string {
   return `Not known whether ${what} ran${why}`;
 }
 
+/** The page's own `url.<name>=value` parameters, the app's `url.<name>` bindings (at most 30, names like crew's). */
+export function urlParamsOf(search: string): Record<string, string> {
+  const out = Object.create(null) as Record<string, string>;
+  let n = 0;
+  for (const [k, v] of new URLSearchParams(search)) {
+    const name = k.startsWith('url.') ? k.slice(4) : null;
+    if (name === null || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/u.test(name) || v.length > 1_000 || Object.hasOwn(out, name) || n >= 30) continue;
+    out[name] = v;
+    n += 1;
+  }
+  return out;
+}
+
+/** Edit needs room: the runtime's frame (not the window) at least this wide, or the builder is Preview only. */
+export function editable(windowWide: boolean, frameWidth: number | null): boolean {
+  return windowWide && (frameWidth === null || frameWidth >= PHONE_PX);
+}
+
 function useNarrow(): boolean {
   const q = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(`(max-width: ${PHONE_PX - 1}px)`) : null;
   const [narrow, setNarrow] = useState(q?.matches ?? false);
@@ -62,7 +80,7 @@ function useNarrow(): boolean {
   return narrow;
 }
 
-function ActionCardView({ asking, onAnswer }: { asking: Asking; onAnswer: (yes: boolean) => void }): React.ReactElement {
+export function ActionCardView({ asking, onAnswer }: { asking: Asking; onAnswer: (yes: boolean) => void }): React.ReactElement {
   const { card, expiresAt } = asking.prepared;
   const [armed, setArmed] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -103,7 +121,19 @@ function ActionCardView({ asking, onAnswer }: { asking: Asking; onAnswer: (yes: 
 }
 
 export function AppHostView({ editor, version, sha, app: slug, sample }: AppHostProps): React.ReactElement {
-  const narrow = useNarrow();
+  const narrowWindow = useNarrow();
+  // The runtime lays itself out by ITS frame's width (its media queries), so Edit is offered only when the frame
+  // itself is wide enough, whatever the window is (codex r1: a 1000 px window leaves the frame under 640 px).
+  const frameWrap = useRef<HTMLDivElement | null>(null);
+  const [frameWidth, setFrameWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const el = frameWrap.current;
+    if (el === null || typeof ResizeObserver !== 'function') return undefined;
+    const seen = new ResizeObserver(() => setFrameWidth(Math.round(el.getBoundingClientRect().width)));
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, []);
+  const narrow = !editable(!narrowWindow, frameWidth);
   const [mode, setMode] = useState<AppMode>('preview');
   const modeRef = useRef<AppMode>('preview');
   const shown = narrow ? 'preview' : mode;
@@ -119,7 +149,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
   const [link, setLink] = useState<LinkAsk | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
-  const [kind, setKind] = useState<{ store: 'crew' | 'sample'; data: 'crew' | 'sample' } | null>(null);
+  const [kind, setKind] = useState<{ store: 'crew' | 'sample'; queries: 'crew' | 'sample'; actions: 'crew' | 'sample' } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewer, setViewer] = useState<string | null>(null);
   const [mountKey, setMountKey] = useState(0);
@@ -129,6 +159,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
   const askingRef = useRef<Asking | null>(null);
   askingRef.current = asking;
 
+  const linkRef = useRef<LinkAsk | null>(null);
+  linkRef.current = link;
+
   const answer = useCallback((yes: boolean) => {
     const a = askingRef.current;
     if (a === null) return;
@@ -136,13 +169,25 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
     setAsking(null);
     a.resolve(yes);
   }, []);
+  /** Settle an open link question (closing, reloading, or leaving Preview): it never opens on its own. */
+  const settleLink = useCallback(() => {
+    const l = linkRef.current;
+    linkRef.current = null;
+    setLink(null);
+    l?.resolve(false);
+  }, []);
 
   useEffect(() => {
     if (frameBox.current === null) return;
     let cancelled = false;
     let off: (() => void) | undefined;
     const start = async (): Promise<void> => {
+      // A replacement session starts clean: nothing of the last one's lines, count or outcome shows for this one.
       setError(null);
+      setTorn(null);
+      setPending(0);
+      setOutcome(null);
+      setStatus(null);
       const health = await api.getHealth().catch(() => null);
       const caps = health?.capabilities?.apps;
       const picked = sampleApp(sample);
@@ -154,7 +199,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
       const decided = await fetchGrants(editor, version, sha, null);
       if (cancelled || frameBox.current === null) { session.dispose(); return; }
       sessionRef.current = session;
-      setKind({ store: store.kind, data: data.kind });
+      setKind({ store: store.kind, ...data.kind });
       setDetail(loaded);
       off = session.on((e) => {
         if (e.kind === 'head') { setDetail(e.app); if (e.by === 'this-session') setStatus(`Saved as v${e.app.head.version}`); }
@@ -168,6 +213,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
         framed: () => framed,
         mode: () => modeRef.current,
         viewer: () => who,
+        url: () => urlParamsOf(window.location.search),
         confirm: (prepared) => new Promise<boolean>((resolve) => {
           setOutcome(null);
           setLink(null);
@@ -207,12 +253,22 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
       cancelled = true;
       off?.();
       answer(false);
+      settleLink();
       hostRef.current?.teardown('The app was closed');
       hostRef.current = null;
       sessionRef.current?.dispose();
       sessionRef.current = null;
     };
-  }, [editor, version, sha, slug, sample, framed, answer, mountKey]);
+  }, [editor, version, sha, slug, sample, framed, answer, settleLink, mountKey]);
+
+  // Changes the runtime was told are pending still land when the view closes (AppSession.dispose); a tab closed within
+  // that second asks first, as a browser does for any unsaved change.
+  useEffect(() => {
+    if (pending === 0) return undefined;
+    const warn = (e: BeforeUnloadEvent): void => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [pending]);
 
   // Every tab agrees because the pointer is crew's: read the head again on focus, on showing, and every 5 s.
   useEffect(() => {
@@ -223,7 +279,20 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
     return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); clearInterval(t); };
   }, []);
 
-  useEffect(() => { hostRef.current?.setAppMode(shown); if (shown === 'preview') setChips([]); }, [shown]);
+  useEffect(() => {
+    hostRef.current?.setAppMode(shown);
+    if (shown === 'preview') setChips([]);
+    // A card or a link question belongs to the Preview it was asked in: leaving it cancels them (nothing runs).
+    else { answer(false); settleLink(); }
+  }, [shown, answer, settleLink]);
+
+  // The person switches theme (or the accent) while the app is open: the runtime takes the new tokens (as PluginCard).
+  useEffect(() => {
+    if (typeof MutationObserver !== 'function') return undefined;
+    const seen = new MutationObserver(() => hostRef.current?.setTheme(readThemeTokens()));
+    seen.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] });
+    return () => seen.disconnect();
+  }, []);
 
   const move = async (direction: 'undo' | 'redo'): Promise<void> => {
     const s = sessionRef.current;
@@ -255,17 +324,18 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
         </span>
       </header>
       {narrow && <p className="wk-apps-line" data-testid="apps-phone-note">Edit on a larger screen. This is the app as a viewer sees it.</p>}
-      {kind !== null && (kind.store === 'sample' || kind.data === 'sample') && (
+      {kind !== null && (kind.store === 'sample' || kind.queries === 'sample' || kind.actions === 'sample') && (
         <p className="wk-apps-line wk-apps-line--note" data-testid="apps-sample-note">
           {kind.store === 'sample'
             ? `${slug !== null ? `This daemon has no app store, so the app “${slug}” could not be opened: this is a sample app instead. ` : 'A sample app: '}its rows are made up and nothing reaches a source.`
-            : 'This daemon does not run app queries and actions yet: the rows are samples and actions write nothing.'}
+            : kind.queries === 'sample' ? 'This daemon does not run app queries and actions yet: the rows are samples and actions write nothing.'
+              : 'The rows are live. This daemon does not run app actions yet: an action shows a sample card and writes nothing.'}
         </p>
       )}
       {(status !== null || pending > 0) && <p className="wk-apps-line" data-testid="apps-status" aria-live="polite">{pending > 0 ? `Saving ${pending} change${pending === 1 ? '' : 's'}…` : status}</p>}
       {error !== null && <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-error">{error}</p>}
       <div className="wk-apps-body">
-        <div className="wk-apps-frame">
+        <div className="wk-apps-frame" ref={frameWrap}>
           {torn !== null && (
             <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-torn">{torn} · <button type="button" className="wk-btn wk-btn--link" onClick={() => setMountKey((k) => k + 1)}>Reload it</button></p>
           )}

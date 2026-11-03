@@ -81,7 +81,7 @@ export class Sheet {
   }
 
   /** The host's theme tokens and the app's own colours, on `:root`. */
-  theme(tokens: Record<string, unknown>, app: { accent?: unknown; palette?: unknown }): void {
+  theme(tokens: Record<string, unknown>, app: { accent?: unknown; palette?: unknown; density?: unknown }): void {
     const root = this.rule(':root');
     for (const [k, v] of Object.entries(tokens)) {
       const val = tokenValue(v);
@@ -89,6 +89,8 @@ export class Sheet {
     }
     const accent = colourOf(app.accent);
     if (accent !== null) this.set(root, '--app-accent', accent);
+    // `compact` density: the smaller row and gap (the runtime's drag geometry reads the same pair).
+    if (app.density === 'compact') { this.set(root, '--row', '36px'); this.set(root, '--gap', '8px'); }
     const palette = Array.isArray(app.palette) ? app.palette : [];
     for (let i = 0; i < 12; i += 1) {
       const c = colourOf(palette[i]);

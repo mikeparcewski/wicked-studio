@@ -1,6 +1,6 @@
 import type {
-  AppActionBinding, AppBindingRef, AppCell, AppComponent, AppComponentType, AppFilterComponent, AppFormComponent, AppOutputColumn, AppPage, AppSpec,
-  AppTableColumn, AppTableComponent,
+  AppActionBinding, AppBindingRef, AppCell, AppComponent, AppComponentType, AppFilterComponent, AppFormComponent, AppOutputColumn, AppPage, AppParamSchema,
+  AppParamsSchema, AppSpec, AppTableColumn, AppTableComponent,
 } from '../../../api/types.js';
 import { ENVELOPE, PROTOCOL, announceReady } from '../../_shared/v2.js';
 import { drawChart } from './chart.js';
@@ -22,12 +22,35 @@ import { Sheet, type Box } from './sheet.js';
 
 type Mode = 'edit' | 'preview';
 type Reply = { ok: true; payload: Record<string, unknown> } | { ok: false; code: string; message: string; payload: Record<string, unknown> };
-interface Rows { columns: AppOutputColumn[]; rows: AppCell[][]; sample: boolean; hasMore: boolean }
+interface Rows { columns: AppOutputColumn[]; rows: AppCell[][]; sample: boolean; hasMore: boolean; truncated: boolean }
 type Result = { state: 'loading' } | { state: 'rows'; rows: Rows } | { state: 'error'; message: string };
 type DateRange = { from: string; to: string };
 
-const ROW_PX = 44;
-const GAP_PX = 12;
+/** The grid's row height and gap (the template's `--row` / `--gap`; `compact` density is the smaller pair). */
+const ROW = { comfortable: 44, compact: 36 } as const;
+const GAP = { comfortable: 12, compact: 8 } as const;
+/** Rows a chart draws; a longer answer says so under the chart. */
+export const CHART_ROWS = 500;
+const PARAM_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/u;
+/** A null-prototype dictionary: a spec id `constructor` or `toString` is just a key (codex r1). */
+const dict = <T,>(): Record<string, T> => Object.create(null) as Record<string, T>;
+
+/**
+ * A bound value as its parameter's declared type (§7.2 step 3 is crew's check; this sends what a person typed in the
+ * type it is declared): numbers and integers from text, booleans from a checkbox or `true`/`false`, text from a number.
+ * A value that does not convert is sent as it is, so crew refuses it with its reason.
+ */
+export function coerceParam(schema: AppParamSchema | undefined, v: unknown): unknown {
+  if (schema === undefined || v === null || v === undefined) return v;
+  if ((schema.type === 'number' || schema.type === 'integer') && typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    if (Number.isFinite(n) && (schema.type === 'number' || Number.isInteger(n))) return n;
+    return v;
+  }
+  if (schema.type === 'boolean' && typeof v === 'string' && (v === 'true' || v === 'false')) return v === 'true';
+  if (schema.type === 'string' && (typeof v === 'number' || typeof v === 'boolean')) return String(v);
+  return v;
+}
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const IMAGE = /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/u;
 const DEFAULT_SIZE: Record<AppComponentType, { w: number; h: number }> = {
@@ -67,17 +90,23 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   let readonly = false;
   let pageId: string | null = null;
   let selected: string | null = null;
-  const filters: Record<string, string | DateRange> = {};
-  const forms: Record<string, Record<string, string | boolean>> = {};
-  const url: Record<string, string> = {};
+  const filters = dict<string | DateRange>();
+  const forms = dict<Record<string, string | boolean>>();
+  const url = dict<string>();
   const results = new Map<string, Result>();
+  /** The binding (query + parameters) each component's result was read with: a result for another binding is stale. */
+  const resultKey = new Map<string, string>();
+  /** The generation of each component's newest read. */
+  const compGen = new Map<string, number>();
   const lines = new Map<string, string>();
   const tablePage = new Map<string, number>();
   let gen = 0;
   let seq = 0;
   const pending = new Map<string, (r: Reply) => void>();
   let notice: string | null = null;
-  let timers: Array<ReturnType<typeof setInterval>> = [];
+  /** `every N s` refresh, one timer per query (§7.2), re-reading only the components bound to it. */
+  const timers = new Map<string, ReturnType<typeof setInterval>>();
+  let closed = false;
 
   // ── the port ────────────────────────────────────────────────────────────────────────────
   const post = (m: Record<string, unknown>): void => { port?.postMessage({ p: PROTOCOL, v: ENVELOPE, ...m }); };
@@ -101,15 +130,24 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       r(d['ok'] === true ? { ok: true, payload: p } : { ok: false, code: String(e['code'] ?? 'unavailable'), message: lineOf(e['message'], 300), payload: p });
       return;
     }
+    if (closed) return;
     switch (d['type']) {
       case 'host.ping': if (typeof d['id'] === 'string') post({ re: d['id'], ok: true, payload: {} }); return;
-      case 'host.theme': sheet.reset(); applyTheme(p['theme']); draw(); return;
+      case 'host.theme': if (isObj(p['theme'])) hostTheme = p['theme']; draw(); return;
       case 'artifact.changed': void read(); return;
       case 'app.mode': if (p['mode'] === 'edit' || p['mode'] === 'preview') { mode = p['mode']; if (mode === 'preview') selected = null; draw(); } return;
       case 'data.invalidate': queryAll(); return;
       case 'host.surface': if (p['surface'] === 'card' || p['surface'] === 'full') { surface = p['surface']; draw(); } return;
       case 'selection.cleared': selected = null; draw(); return;
-      case 'host.teardown': port?.close(); port = null; root.replaceChildren(el('p', 'wk-empty', 'Closed')); return;
+      case 'host.teardown':
+        closed = true;
+        for (const t of timers.values()) clearInterval(t);
+        timers.clear();
+        document.removeEventListener('keydown', onKey);
+        port?.close();
+        port = null;
+        root.replaceChildren(el('p', 'wk-empty', 'Closed'));
+        return;
       default: return;
     }
   };
@@ -117,8 +155,9 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   let hostTheme: Record<string, unknown> = {};
   const applyTheme = (t: unknown): void => {
     if (isObj(t)) hostTheme = t;
-    sheet.theme(hostTheme, { accent: spec?.theme?.accent, palette: spec?.theme?.palette });
+    sheet.theme(hostTheme, { accent: spec?.theme?.accent, palette: spec?.theme?.palette, density: spec?.theme?.density });
   };
+  const density = (): 'comfortable' | 'compact' => (spec?.theme?.density === 'compact' ? 'compact' : 'comfortable');
 
   window.addEventListener('message', (e: MessageEvent) => {
     const d = e.data as Record<string, unknown> | null;
@@ -132,6 +171,10 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     framed = app['framed'] !== false;
     mode = app['mode'] === 'edit' ? 'edit' : 'preview';
     surface = p['surface'] === 'card' || p['size'] === 'inline' ? 'card' : 'full';
+    // The page's URL parameters, as the HOST read them for this app (`url.<name>` bindings).
+    if (isObj(app['url'])) {
+      for (const [k, v] of Object.entries(app['url']).slice(0, 30)) if (PARAM_NAME.test(k) && typeof v === 'string' && v.length <= 1_000) url[k] = v;
+    }
     const prefs = isObj(p['prefs']) ? p['prefs'] : {};
     locale = typeof prefs['locale'] === 'string' && /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u.test(prefs['locale']) ? prefs['locale'] : 'en';
     applyTheme(p['theme']);
@@ -151,11 +194,23 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     if (pageId === null || !spec.pages.some((pg) => pg.id === pageId)) pageId = spec.pages[0]?.id ?? null;
     if (selected !== null && !components().some((x) => x.id === selected)) selected = null;
     notice = null;
-    sheet.reset();
-    applyTheme(undefined);
+    // Filters take their declared defaults BEFORE anything is drawn or read, so a control shows what is sent.
+    initFilters();
+    // A result read for another binding (a refused edit put an older spec back at the same version) is dropped.
+    const stale = invalidate();
     draw();
-    if (before !== version || results.size === 0) queryAll();
+    if (before !== version || stale || results.size === 0) queryAll();
   };
+
+  /** Drop every result whose component now reads another query or other parameters. True when one was dropped. */
+  const invalidate = (): boolean => {
+    const now = new Map<string, string>();
+    for (const pg of spec?.pages ?? []) for (const c of pg.components) { const d = dataOf(c); if (d !== null) now.set(c.id, bindingKey(d)); }
+    let dropped = false;
+    for (const id of [...results.keys()]) if (resultKey.get(id) !== now.get(id)) { results.delete(id); resultKey.delete(id); dropped = true; }
+    return dropped;
+  };
+  const bindingKey = (d: { query: string; params: Record<string, unknown> }): string => `${d.query}\u0000${JSON.stringify(d.params)}`;
 
   const page = (): AppPage | null => spec?.pages.find((pg) => pg.id === pageId) ?? null;
   const components = (): AppComponent[] => page()?.components ?? [];
@@ -167,16 +222,17 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     if (typeof v === 'string') return part === undefined ? v : undefined;
     return part === 'from' ? v.from : part === 'to' ? v.to : undefined;
   };
-  const resolve = (map: Record<string, AppBindingRef> | undefined, ctx: { row?: Record<string, AppCell>; form?: string }): Record<string, unknown> => {
+  const resolve = (map: Record<string, AppBindingRef> | undefined, ctx: { row?: Record<string, AppCell>; form?: string }, schema?: AppParamsSchema): Record<string, unknown> => {
     const out: Record<string, unknown> = {};
+    const props = schema?.properties ?? {};
     for (const [param, ref] of Object.entries(map ?? {})) {
       const [kind, name, part] = ref.split('.');
       let v: unknown;
       if (kind === 'filter' && name !== undefined) v = filterValue(name, part);
-      else if (kind === 'row' && name !== undefined && ctx.row !== undefined) v = ctx.row[name];
-      else if (kind === 'form' && name !== undefined && ctx.form !== undefined) v = forms[ctx.form]?.[name];
+      else if (kind === 'row' && name !== undefined && ctx.row !== undefined && Object.hasOwn(ctx.row, name)) v = ctx.row[name];
+      else if (kind === 'form' && name !== undefined && ctx.form !== undefined) { const f = forms[ctx.form]; v = f !== undefined && Object.hasOwn(f, name) ? f[name] : undefined; }
       else if (kind === 'url' && name !== undefined) v = url[name];
-      if (v !== undefined && v !== '') out[param] = v;
+      if (v !== undefined && v !== '') out[param] = coerceParam(Object.hasOwn(props, param) ? props[param] : undefined, v);
     }
     return out;
   };
@@ -192,44 +248,58 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
 
   // ── data ────────────────────────────────────────────────────────────────────────────────
+  const querySchema = (id: string): AppParamsSchema | undefined => spec?.queries.find((q) => q.id === id)?.params;
   const dataOf = (c: AppComponent): { query: string; params: Record<string, unknown> } | null => {
-    if (c.type === 'table' || c.type === 'chart' || c.type === 'kpi') return { query: c.data.query, params: resolve(c.data.params, {}) };
-    if (c.type === 'filter' && c.filter === 'select' && c.options?.kind === 'query') return { query: c.options.query.query, params: resolve(c.options.query.params, {}) };
+    if (c.type === 'table' || c.type === 'chart' || c.type === 'kpi') return { query: c.data.query, params: resolve(c.data.params, {}, querySchema(c.data.query)) };
+    if (c.type === 'filter' && c.filter === 'select' && c.options?.kind === 'query') return { query: c.options.query.query, params: resolve(c.options.query.params, {}, querySchema(c.options.query.query)) };
     return null;
   };
-  const queryAll = (): void => {
-    if (!grants.has('data.read') || spec === null) return;
+  /** Read every data component on the page (or only those bound to `only`, a refresh timer's query). */
+  const queryAll = (only?: string): void => {
+    if (closed || !grants.has('data.read') || spec === null) return;
     initFilters();
     gen += 1;
     const mine = gen;
     const asked = new Map<string, Promise<Result>>();
     for (const c of components()) {
       const d = dataOf(c);
-      if (d === null) continue;
-      const key = `${d.query}\u0000${JSON.stringify(d.params)}`;
+      if (d === null || (only !== undefined && d.query !== only)) continue;
+      const key = bindingKey(d);
       let job = asked.get(key);
       if (job === undefined) {
         job = request('data.query', { query: d.query, params: d.params }).then((r): Result => {
           if (!r.ok) return { state: 'error', message: r.message };
           const cols = Array.isArray(r.payload['columns']) ? r.payload['columns'] as AppOutputColumn[] : [];
           const rows = Array.isArray(r.payload['rows']) ? (r.payload['rows'] as unknown[]).filter(Array.isArray) as AppCell[][] : [];
-          return { state: 'rows', rows: { columns: cols, rows, sample: r.payload['sample'] === true, hasMore: r.payload['hasMore'] === true } };
+          return { state: 'rows', rows: { columns: cols, rows, sample: r.payload['sample'] === true, hasMore: r.payload['hasMore'] === true, truncated: r.payload['truncated'] === true } };
         });
         asked.set(key, job);
       }
       if (!results.has(c.id)) results.set(c.id, { state: 'loading' });
-      void job.then((res) => { if (mine === gen) { results.set(c.id, res); redraw(c.id); } });
+      // Each component lands only the answer to its newest read: a later read of it (a filter change, a new binding)
+      // makes this one obsolete; a refresh of another query does not.
+      compGen.set(c.id, mine);
+      void job.then((res) => { if (!closed && compGen.get(c.id) === mine) { results.set(c.id, res); resultKey.set(c.id, key); redraw(c.id); } });
     }
-    for (const t of timers) clearInterval(t);
-    timers = [];
-    // `every N s` refresh, only while the frame is visible (§7.2).
-    const every = new Set<number>();
+    if (only === undefined) schedule();
+  };
+  /** One timer per `every N s` query on this page, only while the frame is visible. `events` (the built-in crew source
+   *  only) reads on load and when the host invalidates; the crew source arrives with K1's sources. */
+  const schedule = (): void => {
+    const want = new Map<string, number>();
     for (const c of components()) {
       const d = dataOf(c);
-      const q = d === null ? undefined : spec.queries.find((x) => x.id === d.query);
-      if (q?.refresh?.mode === 'every') every.add(Math.max(15, q.refresh.seconds));
+      const q = d === null ? undefined : spec?.queries.find((x) => x.id === d.query);
+      if (q?.refresh?.mode === 'every') want.set(q.id, Math.max(15, q.refresh.seconds));
     }
-    for (const s of every) timers.push(setInterval(() => { if (document.visibilityState === 'visible') queryAll(); }, s * 1000));
+    for (const [id, t] of [...timers]) {
+      const [q, secs] = id.split('\u0000');
+      if (want.get(q!) !== Number(secs)) { clearInterval(t); timers.delete(id); }
+    }
+    for (const [q, secs] of want) {
+      const id = `${q}\u0000${secs}`;
+      if (!timers.has(id)) timers.set(id, setInterval(() => { if (document.visibilityState === 'visible') queryAll(q); }, secs * 1000));
+    }
   };
 
   // ── actions ─────────────────────────────────────────────────────────────────────────────
@@ -239,7 +309,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     const roomy = components().find((x) => x.id === owner)?.type !== 'button';
     const say = (text: string): void => { if (roomy) { lines.set(owner, text); redraw(owner); } else flash(`${lineOf(b.label, 60)}: ${text}`); };
     say('Waiting for you in studio…');
-    const r = await request('data.action', { action: b.action, params: resolve(b.params, ctx) });
+    const r = await request('data.action', { action: b.action, params: resolve(b.params, ctx, spec?.actions.find((x) => x.id === b.action)?.params) });
     const state = r.ok ? String(r.payload['state']) : 'refused';
     const reason = r.ok ? lineOf(r.payload['reason'], 200) : r.message;
     say(state === 'succeeded' ? `Done${reason !== '' ? `: ${reason}` : ''}` : state === 'cancelled' ? 'Not run' : state === 'unknown' ? `Not known whether it ran: ${reason}` : `Not run: ${reason}`);
@@ -287,7 +357,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
         body.append(sub);
         return;
       }
-      case 'chart': drawChart(body, c, rows!, locale); return;
+      case 'chart':
+        drawChart(body, c, rows!, locale);
+        // A partial answer never looks complete (§7.5): the source's cut, or the chart's own.
+        if (rows!.truncated || rows!.rows.length > CHART_ROWS) body.append(el('p', 'wk-muted', rows!.truncated ? `Only part of the source’s rows: the answer was cut at the app’s limit` : `The first ${CHART_ROWS} of ${rows!.rows.length} rows`));
+        return;
       case 'table': { drawTable(c, body, rows!); return; }
       case 'text': body.append(el(c.style === 'heading' ? 'h2' : 'p', `wk-text wk-text--${c.style ?? 'body'}`, c.text.slice(0, 4_000))); return;
       case 'filter': { drawFilter(c, body); return; }
@@ -342,7 +416,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     const tbody = el('tbody');
     for (const r of rows.rows.slice(pg * size, pg * size + size)) {
       const tr = el('tr');
-      const record: Record<string, AppCell> = {};
+      const record = dict<AppCell>();
       rows.columns.forEach((col, i) => { record[col.name] = r[i] ?? null; });
       for (const col of shown) {
         const v = r[at(col.column)];
@@ -368,7 +442,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       next.addEventListener('click', () => { tablePage.set(c.id, pg + 1); redraw(c.id); });
       foot.append(prev, el('span', 'wk-muted', `${pg + 1} of ${pages}`), next);
     }
-    if (rows.hasMore) foot.append(el('span', 'wk-muted', 'First page of the source’s rows'));
+    if (rows.truncated) foot.append(el('span', 'wk-muted', `Only the first ${rows.rows.length} rows: the answer was cut at the app’s limit`));
+    else if (rows.hasMore) foot.append(el('span', 'wk-muted', 'First page of the source’s rows'));
     const ln = lines.get(c.id);
     if (ln !== undefined) foot.append(el('span', 'wk-status', ln));
     if (foot.childNodes.length > 0) body.append(foot);
@@ -420,7 +495,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
 
   const drawForm = (c: AppFormComponent, body: HTMLElement): void => {
-    const values = (forms[c.id] ??= {});
+    const values = (forms[c.id] ??= dict<string | boolean>());
     const box = el('div', 'wk-form');
     for (const f of c.fields.slice(0, 30)) {
       const label = el('label', 'wk-field');
@@ -472,7 +547,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
 
   const cellSize = (): { col: number; row: number; left: number; top: number } => {
     const r = grid!.getBoundingClientRect();
-    return { col: (r.width + GAP_PX) / 12, row: ROW_PX + GAP_PX, left: r.left, top: r.top };
+    const d = density();
+    return { col: (r.width + GAP[d]) / 12, row: ROW[d] + GAP[d], left: r.left, top: r.top };
   };
   const cellAt = (clientX: number, clientY: number): { x: number; y: number } => {
     const s = cellSize();
@@ -488,8 +564,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     }
     if (isObj(r.payload['spec'])) spec = r.payload['spec'] as unknown as AppSpec;
     notice = null;
-    sheet.reset();
-    applyTheme(undefined);
+    initFilters();
+    invalidate();
     const added = Array.isArray(r.payload['added']) ? (r.payload['added'] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
     if (added[0] !== undefined) select(added[0]);
     draw();
@@ -507,6 +583,9 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     if (!editing() || e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    // preventDefault keeps the page from selecting text, and in Firefox and WebKit it also keeps focus out of this
+    // frame. The host takes a change only from a gesture IN this frame (focus here), so focus moves here explicitly.
+    ((cell.closest('.wk-cell') as HTMLElement | null) ?? cell).focus({ preventScroll: true });
     const n = index.get(c.id)!;
     const s = cellSize();
     const start = { x: e.clientX, y: e.clientY };
@@ -544,6 +623,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   const startAdd = (e: PointerEvent, type: AppComponentType, tile: HTMLElement): void => {
     if (!editing() || e.button !== 0 || grid === null || pageId === null) return;
     e.preventDefault();
+    tile.focus({ preventScroll: true }); // as startDrag: the gesture is in this frame
     const size = DEFAULT_SIZE[type];
     const drop = el('div', 'wk-drop wk-c9999');
     drop.setAttribute('data-testid', 'apps-drop-target');
@@ -633,10 +713,19 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     const queries = (spec?.queries ?? []).map((q) => q.id);
     const cols = (q: string): string[] => spec?.queries.find((x) => x.id === q)?.output.map((o) => o.name) ?? [];
     if (c.type === 'table' || c.type === 'chart' || c.type === 'kpi') box.append(selectProp(c, 'Data', 'query', c.data.query, queries, 'bind'));
+    if (c.type === 'table') {
+      const i = el('input', 'wk-input wk-input--num');
+      i.type = 'number';
+      i.min = '5'; i.max = '500';
+      i.value = String(c.pageSize ?? 10);
+      i.setAttribute('data-prop', 'pageSize');
+      i.addEventListener('change', () => { const v = Math.round(Number(i.value)); if (Number.isFinite(v)) void edit([{ op: 'component-set', id: c.id, prop: 'pageSize', value: Math.min(500, Math.max(5, v)) }]); });
+      box.append(prop('Rows per page', i));
+    }
     if (c.type === 'chart') {
       box.append(selectProp(c, 'Chart', 'chart', c.chart, ['bar', 'line', 'area', 'pie']));
       box.append(selectProp(c, 'Category', 'x', c.x, cols(c.data.query)));
-      if (c.chart !== 'pie') box.append(checkProp(c, 'Stacked', 'stacked', c.stacked === true));
+      if (c.chart === 'bar' || c.chart === 'area') box.append(checkProp(c, 'Stacked', 'stacked', c.stacked === true));
     }
     if (c.type === 'kpi') {
       box.append(selectProp(c, 'Figure', 'value', c.value, cols(c.data.query)));
@@ -673,6 +762,12 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       b.type = 'button';
       b.setAttribute('data-palette', t.type);
       b.addEventListener('pointerdown', (e) => startAdd(e, t.type, b));
+      // Enter or Space on a focused tile (a click with no pointer behind it) adds it below everything.
+      b.addEventListener('click', (e) => {
+        if (e.detail !== 0 || !editing() || pageId === null) return;
+        const size = DEFAULT_SIZE[t.type];
+        void edit([{ op: 'component-add', page: pageId, type: t.type, box: { x: 0, y: nextRow(), w: size.w, h: size.h } }]);
+      });
       tiles.append(b);
     }
     box.append(tiles);
@@ -684,6 +779,10 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     root.replaceChildren();
     bodies.clear();
     index.clear();
+    // Every draw rebuilds the runtime's rules from scratch: nothing of the last page or version (a series colour, a
+    // hidden-on-phones rule) carries over to the next.
+    sheet.reset();
+    applyTheme(undefined);
     root.setAttribute('data-mode', editing() ? 'edit' : 'preview');
     root.setAttribute('data-surface', surface);
     if (spec === null) { root.append(el('p', 'wk-empty', notice ?? 'Loading the app…')); return; }
@@ -722,6 +821,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       cell.append(body);
       if (editing()) {
         cell.classList.add('is-editable');
+        cell.tabIndex = 0;
+        cell.setAttribute('aria-label', `${c.type === 'chart' ? `${c.chart} chart` : c.type} ${lineOf(c.title ?? c.id, 80)}: Enter to select`);
         cell.append(el('span', 'wk-tag', `${c.type === 'chart' ? `${c.chart} chart` : c.type}${'data' in c && c.data !== undefined ? ` · ${(c.data as { query: string }).query}` : ''}`));
         const handle = el('span', 'wk-handle');
         handle.setAttribute('aria-hidden', 'true');
@@ -742,8 +843,16 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
 
   // ── keys: delete, undo, redo, Escape ────────────────────────────────────────────────────
-  document.addEventListener('keydown', (e) => {
+  function onKey(e: KeyboardEvent): void {
     if (port === null || spec === null) return;
+    // Enter or Space on a focused component selects it (its Properties open) without a pointer.
+    const cell = (e.target as HTMLElement | null)?.closest?.('.wk-cell.is-editable') as HTMLElement | null;
+    if (cell !== null && (e.key === 'Enter' || e.key === ' ') && e.target === cell) {
+      e.preventDefault();
+      const id = cell.getAttribute('data-component');
+      if (id !== null) { select(id); draw(); (root.querySelector(`.wk-props input, .wk-props select`) as HTMLElement | null)?.focus(); }
+      return;
+    }
     const inField = (e.target as HTMLElement | null)?.closest('input, textarea, select') != null;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && !e.altKey && e.key.toLowerCase() === 'z' && !inField && editing()) {
@@ -763,7 +872,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       return;
     }
     if (e.key === 'Escape' && selected !== null && !inField) { selected = null; draw(); }
-  });
+  }
+  document.addEventListener('keydown', onKey);
 
   root.append(el('p', 'wk-empty', 'Loading the app…'));
   announceReady(cfg.editor, cfg.surfaces);

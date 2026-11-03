@@ -294,6 +294,7 @@ describe('the app host: data.read / data.write are its own, for wicked-apps only
     expect(linkOf('https://user:pw@status.example.com/', spec)).toMatch(/^!a link with a sign-in/);
     expect(linkOf('https://status.example.com:8443/', spec)).toMatch(/^!a link with a sign-in or a port/);
     expect(linkOf('https://STATUS.example.com/support', spec)).toBe('https://status.example.com/support');
+    expect(linkOf('https://docs.example.com/x', { ...spec, linkHosts: ['Docs.Example.com'] })).toBe('https://docs.example.com/x');
     const r = await rig();
     expect(await r.ask('link.open', { href: 'javascript:alert(1)' })).toMatchObject({ ok: false, error: { code: 'refused' } });
     expect(await r.ask('link.open', { href: 'https://status.example.com/support' })).toMatchObject({ ok: true, payload: { opened: true } });
@@ -311,9 +312,16 @@ describe('the protocol and the live card', () => {
     expect(parseInbound(env('spec.edit', { base: 1, ops: [{ op: 'component-add', page: 'p', type: 'script', box: { x: 0, y: 0, w: 1, h: 1 } }] }, 'a'), 2)).toMatchObject({ ok: false });
   });
 
-  it('crew’s card is read field by field; without its source, operation or request it is refused', () => {
-    expect(parseCard({ source: 's', operation: 'UPDATE t', request: 'UPDATE …', rows: [{ label: 'owner', value: { html: '<b>' } }, { label: 'id', value: '4821', from: 'from the app' }] }, 'a'))
-      .toMatchObject({ rows: [{ label: 'id', value: '4821', from: 'from the app' }], sample: false });
+  it('crew’s card is read whole or not at all: a malformed row, an unknown kind, a missing key, an oversized request', () => {
+    const good = { kind: 'row-write', source: 's', operation: 'UPDATE t', key: 'id = 4821', request: 'UPDATE …', rows: [{ label: 'id', value: '4821', from: 'from the app' }] };
+    expect(parseCard(good, 'a')).toMatchObject({ kind: 'row-write', rows: [{ label: 'id', value: '4821', from: 'from the app' }], sample: false });
+    expect(parseCard({ ...good, rows: [{ label: 'owner', value: { html: '<b>' } }, good.rows[0]] }, 'a')).toBeNull();
+    expect(parseCard({ ...good, kind: 'shell' }, 'a')).toBeNull();
+    expect(parseCard({ ...good, key: null }, 'a')).toBeNull();
+    expect(parseCard({ ...good, rows: undefined }, 'a')).toBeNull();
+    expect(parseCard({ ...good, request: 'x'.repeat(64_001) }, 'a')).toBeNull();
+    // A request at the published mutation size is shown whole, never cropped.
+    expect(parseCard({ ...good, kind: 'api', request: 'm'.repeat(16_384) }, 'a')!.request).toHaveLength(16_384);
     expect(parseCard({ source: 's', operation: 'UPDATE t' }, 'a')).toBeNull();
   });
 

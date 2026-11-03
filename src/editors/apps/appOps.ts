@@ -1,5 +1,6 @@
 import type {
-  AppAction, AppActionBinding, AppBindingRef, AppComponent, AppComponentType, AppOutputColumn, AppQuery, AppQueryBinding, AppSpec,
+  AppAction, AppActionBinding, AppBindingRef, AppComponent, AppComponentType, AppFormField, AppOutputColumn, AppParamsSchema, AppQuery,
+  AppQueryBinding, AppSpec,
 } from '../../api/types.js';
 import { COMPONENT_ID, isSpecOp } from '../protocol.js';
 
@@ -77,9 +78,39 @@ function chartColumns(q: AppQuery): { x: string; series: string } | null {
   return x !== undefined && series !== undefined ? { x, series } : null;
 }
 
-/** The data a component of `type` would read: the first query that has the columns it needs. */
+/** Required parameters nothing fills by itself (no `from`, no `default`): a new component would have to bind them,
+ *  and a new component binds nothing, so crew would refuse it (`unbound_param`). */
+export function unboundRequired(schema: AppParamsSchema | undefined): string[] {
+  if (schema === undefined) return [];
+  return [...new Set(schema.required ?? [])].filter((r) => {
+    const p = Object.hasOwn(schema.properties, r) ? schema.properties[r] : undefined;
+    return p !== undefined && p.from === undefined && p.default === undefined;
+  });
+}
+
+const FIELD_NAME = /^[a-z][a-z0-9_]{0,63}$/u;
+
+/** A form for `action`: one field per parameter the page must give (never a viewer-bound one), each bound
+ *  `form.<name>`; null when a parameter cannot be a field (a list, or a name a field cannot have). */
+function formFor(a: AppAction): { fields: AppFormField[]; params: Record<string, AppBindingRef> } | null {
+  const props = a.params?.properties ?? {};
+  const required = new Set(a.params?.required ?? []);
+  const fields: AppFormField[] = [];
+  const params: Record<string, AppBindingRef> = {};
+  for (const [name, p] of Object.entries(props)) {
+    if (p.from !== undefined) continue;
+    if (p.type === 'array' || !FIELD_NAME.test(name)) { if (required.has(name) && p.default === undefined) return null; continue; }
+    const input: AppFormField['input'] = p.type === 'boolean' ? 'checkbox' : p.type === 'number' || p.type === 'integer' ? 'number' : p.format === 'date' ? 'date' : 'text';
+    fields.push({ name, label: name.replace(/_/g, ' '), input, ...(required.has(name) ? { required: true } : {}) });
+    params[name] = `form.${name}`;
+  }
+  return fields.length >= 1 && fields.length <= 30 ? { fields, params } : null;
+}
+
+/** The data a component of `type` would read: the first query it can read with no bindings, with the columns it needs. */
 function defaultData(spec: AppSpec, type: 'table' | 'chart' | 'kpi'): { query: AppQuery; chart?: { x: string; series: string }; value?: string } | null {
   for (const q of spec.queries) {
+    if (unboundRequired(q.params).length > 0) continue;
     if (type === 'table' && q.output.length > 0) return { query: q };
     if (type === 'chart') { const c = chartColumns(q); if (c !== null) return { query: q, chart: c }; }
     if (type === 'kpi') { const v = firstOf(q.output, (c) => NUMERIC.has(c.type)); if (v !== undefined) return { query: q, value: v }; }
@@ -91,7 +122,7 @@ function newComponent(spec: AppSpec, id: string, type: AppComponentType, box: Ap
   switch (type) {
     case 'table': {
       const d = defaultData(spec, 'table');
-      return d === null ? 'a table reads a query: add one first' : { id, type, box, title: d.query.id.replace(/_/g, ' '), data: { query: d.query.id } };
+      return d === null ? 'a table reads a query that needs no values from the page: add one first' : { id, type, box, title: d.query.id.replace(/_/g, ' '), data: { query: d.query.id } };
     }
     case 'chart': {
       const d = defaultData(spec, 'chart');
@@ -106,13 +137,16 @@ function newComponent(spec: AppSpec, id: string, type: AppComponentType, box: Ap
     case 'text': return { id, type, box, text: 'Text', style: 'body' };
     case 'filter': return { id, type, box, filter: 'search', label: 'Search' };
     case 'button': {
-      const a = spec.actions[0];
-      return a === undefined ? 'a button runs an action: add one first' : { id, type, box, action: { label: 'Run', action: a.id } };
+      // A button gives its action nothing from the page: only an action that needs nothing from it.
+      const a = spec.actions.find((x) => unboundRequired(x.params).length === 0);
+      return a === undefined ? 'a button runs an action that needs no values from the page: add one, or use a form or a table row' : { id, type, box, action: { label: 'Run', action: a.id } };
     }
     case 'form': {
-      const a = spec.actions[0];
-      return a === undefined ? 'a form submits an action: add one first'
-        : { id, type, box, fields: [{ name: 'note', label: 'Note', input: 'text' }], submit: { label: 'Submit', action: a.id } };
+      for (const a of spec.actions) {
+        const f = formFor(a);
+        if (f !== null) return { id, type, box, fields: f.fields, submit: { label: 'Submit', action: a.id, params: f.params } };
+      }
+      return 'a form submits an action that takes values from the page: add one first';
     }
     case 'image': return { id, type, box, src: PLACEHOLDER_IMAGE, alt: 'Image' };
     case 'link': return { id, type, box, label: 'Link', to: { kind: 'page', page: spec.pages[0]!.id } };
@@ -188,7 +222,8 @@ const BY_TYPE: Partial<Record<AppComponentType, Record<string, Setter>>> = {
   },
 };
 
-/** The properties `component-set` may change on a component of `type` (Properties draws exactly these). */
+/** The properties `component-set` may change on a component of `type` (the host's rule; Properties draws a control for
+ *  each, and anything else is refused here). */
 export function settableProps(type: AppComponentType): string[] {
   return [...Object.keys(COMMON), ...Object.keys(BY_TYPE[type] ?? {})];
 }
@@ -300,6 +335,8 @@ export function applyOps(spec: AppSpec, ops: readonly unknown[]): OpsResult {
         if (q === undefined) return { ok: false, code: 'refused', message: `this version has no query ${op.query}` };
         const declared = new Set(Object.keys(q.params?.properties ?? {}));
         const kept = Object.fromEntries(Object.entries(c.data.params ?? {}).filter(([k]) => declared.has(k)));
+        const missing = unboundRequired(q.params).filter((r) => !Object.hasOwn(kept, r));
+        if (missing.length > 0) return { ok: false, code: 'refused', message: `${q.id} needs ${missing.join(', ')} from the page, which this component does not give it` };
         c.data = Object.keys(kept).length > 0 ? { query: q.id, params: kept } : { query: q.id };
         if (c.type === 'table') delete c.columns;
         if (c.type === 'chart') {

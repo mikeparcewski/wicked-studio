@@ -51,58 +51,65 @@ export interface ActionOutcome { state: 'succeeded' | 'failed' | 'unknown'; reas
 export interface Viewer { email: string | null; sample: boolean }
 
 export interface AppDataPort {
-  readonly kind: 'crew' | 'sample';
+  /** Where rows come from and where actions go: each half is `crew` (live) or `sample` (the stub), said on screen. */
+  readonly kind: { queries: 'crew' | 'sample'; actions: 'crew' | 'sample' };
   query(version: number, query: string, params: Record<string, unknown>): Promise<AppRows | DataError>;
   prepare(version: number, action: string, params: Record<string, unknown>): Promise<PreparedAction | DataError>;
   run(action: string, record: string): Promise<ActionOutcome>;
   viewer(): Viewer;
 }
 
-/** The seam's one choice. `caps` is `GET /health` `capabilities.apps` (absent on a daemon without the app store). */
+/**
+ * The seam's one choice. `caps` is `GET /health` `capabilities.apps` (absent on a daemon without the app store).
+ * Live actions need live rows too: an action is never offered against a made-up row (a sample id would become a real
+ * write target). So `query` on alone gives live rows and sample actions; `actions` on alone gives samples for both.
+ */
 export function appDataFor(caps: AppsCapabilities | undefined, slug: string | null, sample: () => AppDataPort): AppDataPort {
   const liveQuery = slug !== null && caps?.query === true;
-  const liveActions = slug !== null && caps?.actions === true;
-  if (!liveQuery && !liveActions) return sample();
+  const liveActions = liveQuery && caps?.actions === true;
+  if (!liveQuery) return sample();
   const crew = crewAppData(slug!);
-  if (liveQuery && liveActions) return crew;
-  // One flag on and the other not: each half answers from where it really runs, and the port says which.
+  if (liveActions) return crew;
   const stub = sample();
-  return {
-    kind: 'crew',
-    query: liveQuery ? crew.query : stub.query,
-    prepare: liveActions ? crew.prepare : stub.prepare,
-    run: liveActions ? crew.run : stub.run,
-    viewer: liveActions ? crew.viewer : stub.viewer,
-  };
+  return { kind: { queries: 'crew', actions: 'sample' }, query: crew.query, prepare: stub.prepare, run: stub.run, viewer: stub.viewer };
 }
 
 // ── crew (the live path) ────────────────────────────────────────────────────────────────────
 
 const line = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]+/gu, ' ').slice(0, max) : null);
-const block = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/gu, ' ').slice(0, max) : null);
 
-/** crew's card, read field by field: anything not a bounded string is dropped, and a card without its operation,
- *  source or request is refused (the person is never asked about something the card cannot name). */
+/** The most a card may hold: above the published limits (a GraphQL mutation is 16 KB, 50 arguments, 200 columns),
+ *  so a valid card always fits, and an oversized one is refused rather than cropped. */
+export const CARD_LIMITS = { request: 64_000, value: 16_000, label: 200, rows: 260, line: 1_000 } as const;
+
+/**
+ * crew's card, read WHOLE or not at all (DES §7.3): the person must see everything that will run. A missing or
+ * mistyped field, a row that is not a `{label, value, from?}` of strings, an unknown kind, or anything over
+ * {@link CARD_LIMITS} refuses the card, and the action is not offered. Control characters are shown as spaces; the
+ * text is otherwise exactly crew's.
+ */
 export function parseCard(raw: unknown, action: string): ActionCard | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const c = raw as Record<string, unknown>;
-  const source = line(c['source'], 200);
-  const operation = line(c['operation'], 400);
-  const request = block(c['request'], 8_000);
-  if (source === null || operation === null || request === null) return null;
+  const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
+  const optional = (v: unknown, max: number): v is string | null | undefined => v === undefined || v === null || str(v, max);
+  if (c['kind'] !== 'row-write' && c['kind'] !== 'api') return null;
+  if (!str(c['source'], CARD_LIMITS.line) || c['source'] === '' || !str(c['operation'], CARD_LIMITS.line) || c['operation'] === '') return null;
+  if (!str(c['request'], CARD_LIMITS.request) || c['request'] === '') return null;
+  if (!Array.isArray(c['rows']) || c['rows'].length > CARD_LIMITS.rows) return null;
+  if (!optional(c['key'], CARD_LIMITS.line) || !optional(c['checks'], CARD_LIMITS.line) || !optional(c['says'], CARD_LIMITS.line)) return null;
+  if (c['kind'] === 'row-write' && (typeof c['key'] !== 'string' || c['key'] === '')) return null;
   const rows: CardRow[] = [];
-  if (Array.isArray(c['rows'])) {
-    for (const r of c['rows'].slice(0, 200)) {
-      if (typeof r !== 'object' || r === null) continue;
-      const label = line((r as Record<string, unknown>)['label'], 120);
-      const value = block((r as Record<string, unknown>)['value'], 2_000);
-      if (label === null || value === null) continue;
-      rows.push({ label, value, from: line((r as Record<string, unknown>)['from'], 80) });
-    }
+  for (const r of c['rows']) {
+    if (typeof r !== 'object' || r === null) return null;
+    const o = r as Record<string, unknown>;
+    if (!str(o['label'], CARD_LIMITS.label) || o['label'] === '' || !str(o['value'], CARD_LIMITS.value) || !optional(o['from'], CARD_LIMITS.label)) return null;
+    rows.push({ label: line(o['label'], CARD_LIMITS.label)!, value: (o['value'] as string).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, ' '), from: typeof o['from'] === 'string' ? line(o['from'], CARD_LIMITS.label) : null });
   }
+  const text = (v: unknown): string | null => (typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, ' ') : null);
   return {
-    action, kind: c['kind'] === 'row-write' ? 'row-write' : 'api', source, operation, rows,
-    key: line(c['key'], 400), checks: block(c['checks'], 600), request, says: block(c['says'], 500), sample: false,
+    action, kind: c['kind'], source: line(c['source'], CARD_LIMITS.line)!, operation: line(c['operation'], CARD_LIMITS.line)!, rows,
+    key: typeof c['key'] === 'string' ? line(c['key'], CARD_LIMITS.line) : null, checks: text(c['checks']), request: text(c['request'])!, says: text(c['says']), sample: false,
   };
 }
 
@@ -120,7 +127,7 @@ function dataError(e: unknown): DataError {
 export function crewAppData(slug: string): AppDataPort {
   const base = `/apps/${encodeURIComponent(slug)}`;
   return {
-    kind: 'crew',
+    kind: { queries: 'crew', actions: 'crew' },
     async query(version, query, params) {
       try {
         const r = await apiFetch<AppQueryResponse>(`${base}/query`, { method: 'POST', body: JSON.stringify({ version, query, params }) });
@@ -175,7 +182,8 @@ function sampleCell(col: AppOutputColumn, i: number): AppCell {
  * the action's own declaration. Nothing leaves the tab.
  */
 export function sampleAppData(spec: () => AppSpec, data: SampleData | null): AppDataPort {
-  const rows: Record<string, AppCell[][]> = structuredClone(data?.rows ?? {});
+  // A null-prototype map: a query named `constructor` or `toString` is just a query.
+  const rows: Record<string, AppCell[][]> = Object.assign(Object.create(null) as Record<string, AppCell[][]>, structuredClone(data?.rows ?? {}));
   const viewer = data?.viewer ?? null;
   const signedIn = viewer ?? 'you';
   const prepared = new Map<string, { action: AppAction; params: Record<string, unknown>; expiresAt: number }>();
@@ -187,11 +195,13 @@ export function sampleAppData(spec: () => AppSpec, data: SampleData | null): App
     return { value: v.value === 'now' ? new Date().toISOString() : 'a new uuid', from: `filled by studio: ${v.value}` };
   };
   return {
-    kind: 'sample',
+    kind: { queries: 'sample', actions: 'sample' },
     async query(_version, query, params) {
       const q = spec().queries.find((x) => x.id === query);
       if (q === undefined) return { error: 'refused', message: `this version has no query ${query}` };
-      let out = rows[query] ?? [0, 1, 2].map((i) => q.output.map((c) => sampleCell(c, i)));
+      // Made-up rows are kept once made, so a sample action's change shows when the app reads them again.
+      if (!Object.hasOwn(rows, query)) rows[query] = [0, 1, 2].map((i) => q.output.map((c) => sampleCell(c, i)));
+      let out = rows[query]!;
       const needles = Object.values(params).filter((v): v is string => typeof v === 'string' && v.trim() !== '' && v !== 'all');
       if (needles.length > 0) out = out.filter((r) => needles.every((n) => r.some((cell) => typeof cell === 'string' && cell.toLowerCase().includes(n.toLowerCase()))));
       return { columns: q.output, rows: structuredClone(out), truncated: false, hasMore: false, ms: 1, cachedAt: null, sample: true };
@@ -241,7 +251,7 @@ export function sampleAppData(spec: () => AppSpec, data: SampleData | null): App
         for (const q of spec().queries) {
           const cols = q.output.map((c) => c.name);
           const keyCols = Object.entries(a.key);
-          const table = rows[q.id];
+          const table = Object.hasOwn(rows, q.id) ? rows[q.id] : undefined;
           if (table === undefined || !keyCols.every(([k]) => cols.includes(k))) continue;
           for (const r of table) {
             if (!keyCols.every(([k, v]) => valueText(r[cols.indexOf(k)]) === valueText(p.params[v.name]))) continue;
@@ -249,7 +259,8 @@ export function sampleAppData(spec: () => AppSpec, data: SampleData | null): App
           }
         }
       }
-      return { state: 'succeeded', reason: 'Sample data: the sample rows in this tab changed; no source was touched', sample: true };
+      const changed = p.action.kind === 'row-write' && p.action.op === 'update';
+      return { state: 'succeeded', reason: changed ? 'Sample data: the sample rows in this tab changed; no source was touched' : 'Sample data: nothing was written and no rows changed', sample: true };
     },
     viewer: () => ({ email: viewer, sample: true }),
   };
