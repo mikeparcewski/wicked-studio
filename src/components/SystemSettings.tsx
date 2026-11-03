@@ -29,8 +29,8 @@ function isAbsolutePathLike(p: string): boolean {
 type LocalSettings = Settings & {
   /** "Power mode for new jobs" (api-types 0.149.0, spelled here until studio's pin carries it): the default of a launch's
    *  `power`. ABSENT = on (the shipped default). */
-  powerModeDefault?: boolean;
-  requirementsGraph?: { minCoveragePct?: number };
+  powerModeDefault?: boolean | undefined;
+  requirementsGraph?: { minCoveragePct?: number } | undefined;
 };
 
 /** The requirements graph's minimum coverage when the daemon has none set (crew and core default). */

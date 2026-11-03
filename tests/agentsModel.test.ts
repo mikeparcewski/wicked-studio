@@ -22,7 +22,7 @@ const seat = (key: string, display_name: string, extra: Partial<RosterSeat> & Re
   key, display_name, binary: key, enabled_for_council: true, health: { status: 'active', since: ago(600) }, issues: [], ...extra,
 });
 
-const BENCH = { kind: 'quota_exhausted', runs: 3, last_at: ago(12), lifts_at: new Date(NOW + 18 * 60_000).toISOString(), source: 'worker', reason: 'quota_exhausted (no success in the run)' };
+const BENCH = { kind: 'quota_exhausted', runs: 3, last_at: ago(12), lifts_at: new Date(NOW + 18 * 60_000).toISOString(), source: 'worker', reason: 'quota_exhausted (no success in the run)', until_source: 'window' as const, strikes: 1 };
 const ROSTER: RosterSeat[] = [
   seat('claude', 'Claude Code', {
     auth: 'signed_out', login_check: 'status', probed_at: ago(4), council_eligible: false, governance_mode: all(mode('admitted', 'acp_input_governance')),
@@ -39,7 +39,7 @@ const ROSTER: RosterSeat[] = [
   }),
   seat('opencode', 'opencode', {
     optIn: true, auth: 'not_required', free_tier: 'free models', council_eligible: true, governance_mode: all(mode('none', 'none')), account: { kind: 'free' },
-    version: { installed: 'opencode v2.0.25', proven: 'opencode v1.17.18', status: 'unproven', checked_at: ago(3), install_source: 'brew' },
+    version: { installed: 'opencode v2.0.25', proven: 'opencode v1.17.18', status: 'unproven', why: 'no_answer', checked_at: ago(3), install_source: 'brew' },
     version_pin: { cli: 'opencode', binary: 'opencode', pinned: 'opencode v1.17.18', observed: 'opencode v2.0.25', matched: false, governanceClaimed: true, disclosure: 'pin mismatch: governance fails closed' },
     issues: [issue('version_unproven', 'warning', { installed: 'opencode v2.0.25', proven: 'opencode v1.17.18' }), issue('opt_in', 'note')],
   }),

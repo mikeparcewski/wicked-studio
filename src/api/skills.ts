@@ -225,6 +225,7 @@ export const SKILLS_ENGINE_STATE_COPY: Record<DiagnosticsSkillsState, string> = 
   blocked: 'blocked — the first publish is blocked; launches refuse the skills snapshot until the catalog is fixed',
   'config-error': 'config error — the skills root is corrupt or unusable; launches refuse the skills snapshot',
   disabled: 'disabled — this daemon booted without the skills seam',
+  publishing: 'publishing — the daemon is serving while it verifies the skills snapshot; launches wait for it',
 };
 
 // ── The catalog (`GET /skills` — manifest + revision + root + current) ────────────────────────
