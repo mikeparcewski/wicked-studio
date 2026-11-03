@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiBase } from '../../api/client.js';
 import type { AppDetail } from '../../api/types.js';
-import { EditorHost } from '../../editors/host.js';
+import { EditorHost, SPEC_EDIT_AFTER_FOCUS_MS } from '../../editors/host.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { AppAdapter, type AppHostPort, type AppMode } from '../../editors/apps/appAdapter.js';
@@ -129,7 +129,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
   useEffect(() => {
     const el = frameWrap.current;
     if (el === null || typeof ResizeObserver !== 'function') return undefined;
-    const seen = new ResizeObserver(() => setFrameWidth(Math.round(el.getBoundingClientRect().width)));
+    const measure = (): void => setFrameWidth(Math.round(el.getBoundingClientRect().width));
+    measure(); // before the first observation, so Edit is never offered for a moment on a frame too narrow for it
+    const seen = new ResizeObserver(measure);
     seen.observe(el);
     return () => seen.disconnect();
   }, []);
@@ -137,6 +139,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
   const [mode, setMode] = useState<AppMode>('preview');
   const modeRef = useRef<AppMode>('preview');
   const shown = narrow ? 'preview' : mode;
+  // When Edit was left: a field typed in Edit commits as the person clicks Preview, and that op is still Edit's.
+  const editLeftRef = useRef(Number.NEGATIVE_INFINITY);
+  if (modeRef.current === 'edit' && shown !== 'edit') editLeftRef.current = Date.now();
   modeRef.current = shown;
   // The host page decides framing, once, and never relaxes it (§7.1): studio refuses to be framed (S8), so a framed
   // studio is a page someone else put it in.
@@ -212,6 +217,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
         session, data,
         framed: () => framed,
         mode: () => modeRef.current,
+        editing: () => modeRef.current === 'edit' || Date.now() - editLeftRef.current < SPEC_EDIT_AFTER_FOCUS_MS,
         viewer: () => who,
         url: () => urlParamsOf(window.location.search),
         confirm: (prepared) => new Promise<boolean>((resolve) => {

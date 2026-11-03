@@ -20,6 +20,9 @@ export interface AppHostPort {
   framed(): boolean;
   /** Edit or Preview, as the host's own toggle says. Nothing writes to a source in Edit. */
   mode(): AppMode;
+  /** Whether a spec op is still Edit's: in Edit, or just left it (a field committed as the person clicks Preview).
+   *  Absent = `mode() === 'edit'`. Actions never use this: they need Preview, strictly. */
+  editing?(): boolean;
   /** "Viewing as": who the app is shown to (the host's words). */
   viewer(): string;
   /** The page's URL parameters for this app's `url.<name>` bindings (said once, in `host.hello`). */
