@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 296,
-    "occurrences": 4192,
-    "static": 3548,
-    "dynamic": 118,
-    "computed": 48
+    "files": 298,
+    "occurrences": 4218,
+    "static": 3552,
+    "dynamic": 132,
+    "computed": 49
   },
   "static": [
     {
@@ -14336,6 +14336,12 @@
       ]
     },
     {
+      "testId": "run-data-use",
+      "files": [
+        "src/components/session/RunDataUse.tsx"
+      ]
+    },
+    {
       "testId": "run-degraded",
       "files": [
         "src/components/RunDegradedNote.tsx",
@@ -14398,6 +14404,12 @@
     },
     {
       "testId": "run-delivery-codebase-zip",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-delivery-data-use",
       "files": [
         "src/components/RunDelivery.tsx"
       ]
@@ -15466,6 +15478,12 @@
     },
     {
       "testId": "session-gate-creator-seat-nocap",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-data-use",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -17741,6 +17759,12 @@
       "testId": "source-address-tick",
       "files": [
         "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-agents",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -21447,6 +21471,12 @@
       ]
     },
     {
+      "pattern": "*-catalog-only",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
       "pattern": "*-change",
       "files": [
         "src/components/report/ReportPage.tsx"
@@ -21468,6 +21498,7 @@
     {
       "pattern": "*-confirm",
       "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx"
       ]
     },
@@ -21480,7 +21511,14 @@
     {
       "pattern": "*-confirm-on",
       "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
+      "pattern": "*-consequence",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -21506,8 +21544,15 @@
     {
       "pattern": "*-error",
       "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx",
         "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-every",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -21549,6 +21594,12 @@
         "src/components/ui/Combobox.tsx",
         "src/components/ui/FilePick.tsx",
         "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "pattern": "*-label",
+      "files": [
+        "src/components/session/RunDataUse.tsx"
       ]
     },
     {
@@ -21626,6 +21677,24 @@
       ]
     },
     {
+      "pattern": "*-project-*",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-projects",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-projects-state",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
       "pattern": "*-qe",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
@@ -21634,7 +21703,38 @@
     {
       "pattern": "*-query",
       "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-query-state",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-recent",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-recent-none",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-recent-row",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-recent-unknown",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -21671,6 +21771,18 @@
       "pattern": "*-search",
       "files": [
         "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
+      "pattern": "*-see",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-see-state",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -22256,6 +22368,8 @@
         "src/components/session/CodebaseDownload.tsx",
         "src/components/session/PowerMode.tsx",
         "src/components/session/RunConversation.tsx",
+        "src/components/session/RunDataUse.tsx",
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx",
         "src/components/sources/DataPanel.tsx",
         "src/components/sources/SecretField.tsx",
@@ -22340,6 +22454,12 @@
       "expression": "testId = 'skeleton'",
       "files": [
         "src/components/ui/StateBanner.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'source-agents'",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {

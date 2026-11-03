@@ -29,6 +29,7 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
+import { RunDataUse } from './RunDataUse.js';
 import { missingSeatsLine, OPERATOR_JUDGMENT_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
 import { baseCountOf, failureName, groupByFile, testPlace, testWords } from '../../board/failingChecks.js';
 import { useOfferReply } from './DecisionDock.js';
@@ -316,6 +317,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" tech="host" />
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
       {qe !== null && receipt?.qe === undefined && <p className="wk-assurance"><QeAcceptanceLabel qe={qe} testId="session-gate-qe" /></p>}
+      <RunDataUse runId={runId} refresh={events?.length ?? 0} testId="session-gate-data-use" />
     </>
   );
   return (

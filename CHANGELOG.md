@@ -13,6 +13,14 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **Data sources for agents (DES-APPS-001 rev 12; crew api-types 0.180.0).** A saved SQL or GraphQL source's sheet has
+  an Agents box under "What agents see": **Agents can see this structure** (on), **Agents can query this source**
+  (off, SQL only; it says that rows go to the agent's model provider, and turning it on takes a second click on a
+  confirmation), and the projects whose agents may use it (none until you tick one, or "Every project on this
+  daemon"). Each change is a person's click; crew refuses anyone but a human operator. Below them, the source's recent
+  agent queries (time, job link, seat, rows or the refusal; never the SQL). A job's gate cards and its delivery say
+  which sources its agents read ("Agents read data: support-pg · 3 queries · 12 rows"), or that crew's record could
+  not be read. The 0.180.0 shapes are mirrored in `src/api/sourceAgents.ts` until studio pins that api-types.
 - **Understand reads like a chat (operator, round 10).** The page fills the Desk's height: the thread and its
   composer share one centred 760 px column, the composer pinned at the bottom (mic and Ask, as before), and the
   thread scrolls, not the document. A right sidebar holds Recent answers (crew's chat history merged with this

@@ -13,6 +13,7 @@ import {
   type SourceUploadResponse,
 } from '../../api/sources.js';
 import { useModalEscape } from '../Modal.js';
+import { AgentAccess } from './AgentAccess.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
 import {
@@ -541,6 +542,14 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
                   <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog)}</p>
                 </div>
               ) : null}
+              {!isNew && saved !== null && (saved.kind === 'sql' || saved.kind === 'graphql') && (
+                <AgentAccess
+                  source={saved.name}
+                  kind={saved.kind}
+                  agents={(saved as { agents?: unknown }).agents}
+                  onChanged={(agents) => setSaved({ ...saved, agents } as McpServer)}
+                />
+              )}
             </div>
           </div>
         </div>
