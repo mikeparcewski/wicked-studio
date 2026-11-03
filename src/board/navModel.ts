@@ -113,9 +113,9 @@ export function navGroups(placement: 'start' | 'insight', opts: NavOptions = {})
 export const BUILD_LINKS: readonly { id: string; label: string; path: string; testId: string; hint: string }[] = [
   { id: 'skills', label: PAGE_NAMES.skills, path: skillsPath(), testId: 'build-link-skills', hint: 'What your agents know how to do, and what they are given when they start' },
   { id: 'mcp', label: PAGE_NAMES.mcp, path: mcpPath(), testId: 'build-link-mcp', hint: 'The tools agents can call, and when they need your approval' },
-  { id: 'sources', label: PAGE_NAMES.sources, path: SOURCES_PATH, testId: 'build-link-sources', hint: 'The databases, APIs and files apps read from, and whether a source allows writes' },
   { id: 'plugins', label: PAGE_NAMES.plugins, path: '/plugins', testId: 'build-link-plugins', hint: 'Editor plugins, and making one' },
   { id: 'workflows', label: PAGE_NAMES.workflows, path: '/workflows', testId: 'build-link-workflows', hint: 'The steps a job goes through' },
+  { id: 'sources', label: PAGE_NAMES.sources, path: SOURCES_PATH, testId: 'build-link-sources', hint: 'The databases, APIs and files apps read from, and whether a source allows writes' },
   { id: 'settings', label: PAGE_NAMES.system, path: '/system', testId: 'build-link-settings', hint: 'Agents, notifications and the theme for this computer' },
 ];
 

@@ -196,9 +196,9 @@ describe('chores for whoever runs studio', () => {
 });
 
 describe('the rail destinations', () => {
-  it('Build & settings lists the old Workspace group: Skills · MCP · Data sources · Plugins · Workflows · Settings; no sidebar page', () => {
+  it('Build & settings lists the old Workspace group: Skills · MCP · Plugins · Workflows · Data sources · Settings; no sidebar page', () => {
     expect(BUILD_LINKS.map((l) => [l.label, l.path])).toEqual([
-      ['Skills', '/skills'], ['MCP', '/mcp'], ['Data sources', '/sources'], ['Plugins', '/plugins'], ['Workflows', '/workflows'], ['Settings', '/system'],
+      ['Skills', '/skills'], ['MCP', '/mcp'], ['Plugins', '/plugins'], ['Workflows', '/workflows'], ['Data sources', '/sources'], ['Settings', '/system'],
     ]);
     // Repositories, Steering, Evaluate and Agents are sidebar pages; the retired overview is not linked.
     for (const d of BUILD_LINKS) {
