@@ -66,10 +66,14 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
   const inFlight = useRef(false);
   /** The source's switch and descriptor as rendered now: a check started under others stops. */
   const live = useRef({ allowWrites: source.allowWrites === true, descriptor: source.descriptorHash ?? null, mounted: true });
-  live.current = { ...live.current, allowWrites: source.allowWrites === true, descriptor: source.descriptorHash ?? null };
+  // Updated in place (one object for the dialog's life), so the unmount below marks the same one.
+  live.current.allowWrites = source.allowWrites === true;
+  live.current.descriptor = source.descriptorHash ?? null;
   useEffect(() => {
-    live.current.mounted = true;
-    return () => { live.current.mounted = false; gen.current++; };
+    const state = live.current;
+    const generation = gen;
+    state.mounted = true;
+    return () => { state.mounted = false; generation.current++; };
   }, []);
   // Turning Allow writes off, or the source saved again, stops a check in flight.
   // The evidence shown (a refusal, the checks passed, "granted") was for the switch and descriptor of
