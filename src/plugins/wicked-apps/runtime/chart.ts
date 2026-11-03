@@ -214,24 +214,32 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
     const runs: string[][] = [];
     let cur: string[] | null = null;
     let curSign = 0;
-    let lastZero: number | null = null;
+    /** The zero points since the last non-zero value (all of them before the first: codex r7). */
+    let zeros: number[] = [];
     const edge = (sg: number, j: number): string => (sg < 0 ? pt(j, negBands[k]![j]![0]) : pt(j, posBands[k]![j]![1]));
     xs.forEach((_x, j) => {
       const v = valueAt(k, j);
       if (crossing.get(j)?.has(k) === true || v === 0) {
         if (cur !== null) cur.push(edge(curSign, j));
-        lastZero = j;
+        zeros.push(j);
         return;
       }
       const sg = v > 0 ? 1 : -1;
-      if (cur === null || sg !== curSign) {
-        cur = lastZero !== null ? [edge(sg, lastZero)] : [];
+      if (cur === null) {
+        cur = zeros.map((z) => edge(sg, z)); // a leading run of zeros joins the first run, on its edge
+        runs.push(cur);
+        curSign = sg;
+      } else if (sg !== curSign) {
+        const last = zeros[zeros.length - 1];
+        cur = last !== undefined ? [edge(sg, last)] : [];
         runs.push(cur);
         curSign = sg;
       }
       cur.push(edge(sg, j));
-      lastZero = null;
+      zeros = [];
     });
+    // A series that is zero everywhere still draws its line (along the positive stack, as a zero value is drawn).
+    if (cur === null && zeros.length > 1) runs.push(zeros.map((z) => edge(1, z)));
     for (const run of runs) if (run.length > 1) svg.append(svgEl('polyline', { points: run.join(' '), fill: 'none' }, `wk-stroke wk-series-${k}`));
   });
   root.append(svg);
