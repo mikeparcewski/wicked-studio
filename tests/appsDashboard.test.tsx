@@ -586,6 +586,24 @@ describe('Edit: a component’s own words, in place on the canvas', () => {
     expect([field.selectionStart, field.selectionEnd, field.selectionDirection]).toStrictEqual([1, 4, 'backward']);
   });
 
+  it('pi r12: mid-composition, another tab changing the open words closes the field at once, with nothing sent', async () => {
+    const b = await boot(SPEC());
+    dbl(document.querySelector('[data-component="k"] .wk-cell-title')!);
+    const field = document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement;
+    field.value = 'Mineに';
+    field.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+    const theirs = SPEC();
+    (theirs.pages[0]!.components[0] as { title?: string }).title = 'Theirs';
+    b.set(2, theirs);
+    b.send('artifact.changed', { version: 2, head: 2, by: 'other', kind: 'deterministic' });
+    await vi.waitFor(() => expect(document.querySelector('[data-component="k"] .wk-cell-title')?.textContent).toBe('Theirs'));
+    expect(document.querySelector('[data-testid="apps-inline"]')).toBeNull();
+    field.dispatchEvent(new CompositionEvent('compositionend', { data: 'に' }));
+    field.dispatchEvent(new Event('blur'));
+    await new Promise((res) => setTimeout(res, 40));
+    expect(edits(b.seen)).toBe(0);
+  });
+
   it('codex r9: two taps on a Button’s label open it, with no dblclick (Firefox and WebKit fire none for two touch taps)', async () => {
     await boot(SPEC());
     for (let i = 0; i < 2; i += 1) {
