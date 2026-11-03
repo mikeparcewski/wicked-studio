@@ -255,7 +255,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     return null;
   };
   /** Read every data component on the page (or only those bound to `only`, a refresh timer's query). */
-  const queryAll = (only?: string): void => {
+  const queryAll = (only?: string, missingOnly = false): void => {
     if (closed || !grants.has('data.read') || spec === null) return;
     initFilters();
     gen += 1;
@@ -263,7 +263,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     const asked = new Map<string, Promise<Result>>();
     for (const c of components()) {
       const d = dataOf(c);
-      if (d === null || (only !== undefined && d.query !== only)) continue;
+      if (d === null || (only !== undefined && d.query !== only) || (missingOnly && results.has(c.id))) continue;
       const key = bindingKey(d);
       let job = asked.get(key);
       if (job === undefined) {
@@ -329,6 +329,9 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
 
   // ── drawing ─────────────────────────────────────────────────────────────────────────────
   const index = new Map<string, number>();
+  /** The Properties panel drawn last, and the component it is for. */
+  let propsNode: HTMLElement | null = null;
+  let propsFor: string | null = null;
   const bodies = new Map<string, HTMLElement>();
 
   const drawBody = (c: AppComponent, body: HTMLElement): void => {
@@ -565,7 +568,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     return { x: Math.min(11, Math.max(0, Math.floor((clientX - s.left) / s.col))), y: Math.min(999, Math.max(0, Math.floor((clientY - s.top) / s.row))) };
   };
 
-  const edit = async (ops: Array<Record<string, unknown>>): Promise<string[] | null> => {
+  const edit = async (ops: Array<Record<string, unknown>>, opts: { typed?: boolean } = {}): Promise<string[] | null> => {
     const r = await request('spec.edit', { base: version, ops });
     if (!r.ok) {
       notice = r.code === 'head_moved' ? 'The app changed meanwhile: showing the newest version' : `Not changed: ${r.message}`;
@@ -578,8 +581,9 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     invalidate();
     const added = Array.isArray(r.payload['added']) ? (r.payload['added'] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
     if (added[0] !== undefined) select(added[0]);
-    draw();
-    queryAll();
+    draw({ keepProps: opts.typed === true && added.length === 0 });
+    // Read only what this edit changed (a new component, a new binding): a title, a label or a box reads nothing.
+    queryAll(undefined, true);
     return added;
   };
 
@@ -668,14 +672,18 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
    * a commit made on the blur caused by a click in studio's own chrome arrives after focus has left (Firefox fires no
    * event the host could time that by), so nothing waits for the blur.
    */
-  const typed = (input: HTMLInputElement | HTMLTextAreaElement, commit: () => void, multiline = false): void => {
+  const typed = (input: HTMLInputElement | HTMLTextAreaElement, commit: () => void, multiline = false, current?: () => string): void => {
     let sent = input.value;
     const go = (): void => {
       if (input.value === sent) return;
       sent = input.value;
       commit();
     };
-    input.addEventListener('input', go);
+    // An IME composition commits once, when it ends: its intermediate text is not the person's word yet.
+    input.addEventListener('input', (e: Event) => { if ((e as InputEvent).isComposing !== true) go(); });
+    input.addEventListener('compositionend', go);
+    // Leaving the field shows what was saved (a value the host clamped, or kept as it was after a refusal).
+    if (current !== undefined) input.addEventListener('blur', () => { const v = current(); if (input.value !== v) { input.value = v; sent = v; } });
     input.addEventListener('change', go);
     input.addEventListener('keydown', (e: Event) => {
       const k = e as KeyboardEvent;
@@ -693,7 +701,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     input.value = value ?? '';
     input.maxLength = max;
     input.setAttribute('data-prop', name);
-    typed(input, () => { void edit([{ op: 'component-set', id: c.id, prop: name, value: input.value }]); }, area);
+    typed(input, () => { void edit([{ op: 'component-set', id: c.id, prop: name, value: input.value }], { typed: true }); }, area, () => {
+      const now = components().find((x) => x.id === c.id) as unknown as Record<string, unknown> | undefined;
+      const v = name === 'label' && now?.['type'] === 'button' ? (now['action'] as { label?: unknown } | undefined)?.label : now?.[name];
+      return typeof v === 'string' ? v : '';
+    });
     return prop(label, input);
   };
   const selectProp = (c: AppComponent, label: string, name: string, value: string, options: readonly string[], op: 'set' | 'bind' = 'set'): HTMLElement => {
@@ -718,19 +730,24 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     i.min = String(min); i.max = String(max);
     i.value = String(name === 'x' ? c.box.x + 1 : name === 'y' ? c.box.y + 1 : c.box[name]);
     i.setAttribute('data-prop', `box-${name}`);
+    // The box as the spec has it NOW (the panel outlives the edits it makes).
+    const box = (): Box => components().find((x) => x.id === c.id)?.box ?? c.box;
+    const shown = (b: Box): string => String(name === 'x' ? b.x + 1 : name === 'y' ? b.y + 1 : b[name]);
     typed(i, () => {
+      if (i.value.trim() === '') return; // a field cleared mid-typing is not 0 (pi r3)
       const v = Math.round(Number(i.value));
       if (!Number.isFinite(v)) return;
+      const b = box();
       if (name === 'x' || name === 'y') {
-        const x = name === 'x' ? Math.min(12 - c.box.w, Math.max(0, v - 1)) : c.box.x;
-        const y = name === 'y' ? Math.max(0, v - 1) : c.box.y;
-        void edit([{ op: 'component-move', id: c.id, x, y }]);
+        const x = name === 'x' ? Math.min(12 - b.w, Math.max(0, v - 1)) : b.x;
+        const y = name === 'y' ? Math.max(0, v - 1) : b.y;
+        void edit([{ op: 'component-move', id: c.id, x, y }], { typed: true });
       } else {
-        const w = name === 'w' ? Math.min(12 - c.box.x, Math.max(1, v)) : c.box.w;
-        const h = name === 'h' ? Math.min(50, Math.max(1, v)) : c.box.h;
-        void edit([{ op: 'component-resize', id: c.id, w, h }]);
+        const w = name === 'w' ? Math.min(12 - b.x, Math.max(1, v)) : b.w;
+        const h = name === 'h' ? Math.min(50, Math.max(1, v)) : b.h;
+        void edit([{ op: 'component-resize', id: c.id, w, h }], { typed: true });
       }
-    });
+    }, false, () => shown(box()));
     return prop(label, i);
   };
 
@@ -750,7 +767,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       i.min = '5'; i.max = '500';
       i.value = String(c.pageSize ?? 10);
       i.setAttribute('data-prop', 'pageSize');
-      typed(i, () => { const v = Math.round(Number(i.value)); if (Number.isFinite(v)) void edit([{ op: 'component-set', id: c.id, prop: 'pageSize', value: Math.min(500, Math.max(5, v)) }]); });
+      typed(i, () => { if (i.value.trim() === '') return; const v = Math.round(Number(i.value)); if (Number.isFinite(v)) void edit([{ op: 'component-set', id: c.id, prop: 'pageSize', value: Math.min(500, Math.max(5, v)) }], { typed: true }); }, false,
+        () => String((components().find((x) => x.id === c.id) as AppTableComponent | undefined)?.pageSize ?? 10));
       box.append(prop('Rows per page', i));
     }
     if (c.type === 'chart') {
@@ -806,20 +824,15 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
 
   // ── the whole surface ───────────────────────────────────────────────────────────────────
-  const draw = (): void => {
-    // A Properties field being typed in keeps its focus, its caret and what is typed in it across the redraw.
-    const was = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement ? document.activeElement : null;
-    const keep = was !== null && root.contains(was) ? { prop: was.getAttribute('data-prop'), value: was.value, at: (() => { try { return [was.selectionStart, was.selectionEnd] as const; } catch { return null; } })() } : null;
-    drawNow();
-    if (keep === null || keep.prop === null) return;
-    const now = [...root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-prop]')].find((e) => e.getAttribute('data-prop') === keep.prop);
-    if (now === undefined) return;
-    now.value = keep.value;
-    now.focus({ preventScroll: true });
-    try { if (keep.at !== null && keep.at[0] !== null) now.setSelectionRange(keep.at[0], keep.at[1]); } catch { /* a number input has no caret to set */ }
-  };
-  const drawNow = (): void => {
-    root.replaceChildren();
+  /**
+   * Draw the surface. `keepProps`: an edit typed in the Properties panel was acknowledged — the canvas is redrawn but
+   * the panel's own nodes stay in place, so the field keeps its focus, its IME composition and its native undo (codex
+   * r3). Anything else (a version read, a selection, a mode) rebuilds the panel from the spec, so a field never holds
+   * a value the spec does not (no stale draft is carried onto a newer version). A rebuilt panel gives focus back to
+   * the control that had it.
+   */
+  const draw = (opts: { keepProps?: boolean } = {}): void => {
+    const had = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.getAttribute('data-prop') : null;
     bodies.clear();
     index.clear();
     // Every draw rebuilds the runtime's rules from scratch: nothing of the last page or version (a series colour, a
@@ -828,8 +841,9 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     applyTheme(undefined);
     root.setAttribute('data-mode', editing() ? 'edit' : 'preview');
     root.setAttribute('data-surface', surface);
-    if (spec === null) { root.append(el('p', 'wk-empty', notice ?? 'Loading the app…')); return; }
-    if (editing()) root.append(drawPalette());
+    if (spec === null) { root.replaceChildren(el('p', 'wk-empty', notice ?? 'Loading the app…')); propsNode = null; return; }
+    const parts: HTMLElement[] = [];
+    if (editing()) parts.push(drawPalette());
     const main = el('main', 'wk-main');
     const nav = el('nav', 'wk-pages');
     nav.setAttribute('aria-label', 'Pages');
@@ -880,9 +894,18 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     });
     if (list.length === 0) grid.append(el('p', 'wk-empty', editing() ? 'Drag a component here from the palette' : 'This page is empty'));
     main.append(grid);
-    root.append(main);
+    parts.push(main);
     const sel = editing() && selected !== null ? list.find((c) => c.id === selected) : undefined;
-    if (sel !== undefined) root.append(drawProps(sel));
+    const keep = opts.keepProps === true && sel !== undefined && propsNode !== null && propsFor === sel.id && propsNode.parentNode === root;
+    if (keep) {
+      for (const ch of [...root.childNodes]) if (ch !== propsNode) ch.remove();
+      for (const part of parts) root.insertBefore(part, propsNode);
+      return;
+    }
+    propsNode = sel !== undefined ? drawProps(sel) : null;
+    propsFor = sel?.id ?? null;
+    root.replaceChildren(...parts, ...(propsNode !== null ? [propsNode] : []));
+    if (had !== null) [...root.querySelectorAll<HTMLElement>('[data-prop]')].find((e) => e.getAttribute('data-prop') === had)?.focus({ preventScroll: true });
   };
 
   // ── keys: delete, undo, redo, Escape ────────────────────────────────────────────────────

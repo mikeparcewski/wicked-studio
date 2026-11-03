@@ -127,26 +127,30 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   const H = 220;
   const L = 36;
   const B = 24;
-  // Each series' band per row: [lower, upper]. A stacked area puts each series on the ones before it, positive values
-  // upward from the positive stack and negative ones downward from the negative stack; otherwise a band runs from zero
-  // to the value. A line draws its value (a line never stacks).
+  // Each series' bands per row, [lower, upper]. Unstacked: an area fills between its line and zero (the polygon crosses
+  // zero exactly where the line does). Stacked (diverging, as charting libraries do): each series' positive part sits on
+  // the positive stack and its negative part under the negative stack, so bands never overlap (codex r3).
   const stackArea = c.chart === 'area' && c.stacked === true && series.length > 1;
-  const bands: Array<Array<[number, number]>> = series.map(() => []);
+  const posBands: Array<Array<[number, number]>> = series.map(() => []);
+  const negBands: Array<Array<[number, number]>> = series.map(() => []);
   rows.forEach((r, i) => {
     let pos = 0;
     let neg = 0;
     series.forEach((s, k) => {
       const v = num(r[s.i]);
-      if (!stackArea) { bands[k]![i] = [Math.min(0, v), Math.max(0, v)]; return; }
-      if (v >= 0) { bands[k]![i] = [pos, pos + v]; pos += v; } else { bands[k]![i] = [neg + v, neg]; neg += v; }
+      const up = stackArea ? Math.max(0, v) : v;
+      const down = stackArea ? Math.min(0, v) : 0;
+      posBands[k]![i] = stackArea ? [pos, pos + up] : [0, up];
+      negBands[k]![i] = stackArea ? [neg + down, neg] : [0, 0];
+      if (stackArea) { pos += up; neg += down; }
     });
   });
   const level = (k: number, i: number): number => {
+    if (!stackArea) return posBands[k]![i]![1];
     const v = num(rows[i]![series[k]!.i]);
-    const [lo, hi] = bands[k]![i]!;
-    return stackArea ? (v >= 0 ? hi : lo) : v;
+    return v >= 0 ? posBands[k]![i]![1] : negBands[k]![i]![0];
   };
-  const values = bands.flatMap((b) => b.flat());
+  const values = [...posBands.flatMap((x) => x.flat()), ...negBands.flatMap((x) => x.flat())];
   const max = Math.max(1, ...values);
   const min = Math.min(0, ...values);
   const sx = (i: number): number => L + (rows.length === 1 ? 0 : (i / (rows.length - 1)) * (W - L - 8));
@@ -162,10 +166,15 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   series.forEach((_, k) => {
     const pts = rows.map((_r, i) => `${r1(sx(i))},${r1(sy(level(k, i)))}`);
     if (c.chart === 'area') {
-      // The band: along its upper edge left to right, back along its lower edge right to left.
-      const upper = rows.map((_r, i) => `${r1(sx(i))},${r1(sy(bands[k]![i]![1]))}`);
-      const lower = rows.map((_r, i) => `${r1(sx(i))},${r1(sy(bands[k]![i]![0]))}`).reverse();
-      svg.append(svgEl('path', { d: `M ${upper.join(' L ')} L ${lower.join(' L ')} Z` }, `wk-area wk-series-${k}`));
+      // A band: along its upper edge left to right, back along its lower edge right to left. Stacked series draw their
+      // positive and negative bands separately (a band of zero height draws nothing).
+      const band = (bs: Array<[number, number]>): string => {
+        const upper = rows.map((_r, i) => `${r1(sx(i))},${r1(sy(bs[i]![1]))}`);
+        const lower = rows.map((_r, i) => `${r1(sx(i))},${r1(sy(bs[i]![0]))}`).reverse();
+        return `M ${upper.join(' L ')} L ${lower.join(' L ')} Z`;
+      };
+      svg.append(svgEl('path', { d: band(posBands[k]!) }, `wk-area wk-series-${k}`));
+      if (stackArea && negBands[k]!.some(([lo, hi]) => lo !== hi)) svg.append(svgEl('path', { d: band(negBands[k]!) }, `wk-area wk-area--neg wk-series-${k}`));
     }
     svg.append(svgEl('polyline', { points: pts.join(' '), fill: 'none' }, `wk-stroke wk-series-${k}`));
   });
