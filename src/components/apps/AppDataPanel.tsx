@@ -41,8 +41,11 @@ const bindable = (spec: AppSpec): Array<{ id: string; words: string }> =>
   spec.pages.flatMap((p) => p.components).filter((c) => c.type === 'table' || c.type === 'chart' || c.type === 'kpi')
     .map((c) => ({ id: c.id, words: `${c.type} “${(c.title ?? c.id).slice(0, 60)}”` }));
 
-/** A source of crew's registry an app query of `kind` may read (the registry's kinds for SQL and GraphQL reads). */
-const sourceKindOf = (kind: AppQuery['kind']): string | null => (kind === 'sql' ? 'sql' : kind === 'graphql' ? 'graphql' : null);
+/** The registry kinds a query of `kind` may read (crew's `queryKindFits`, apps/exec/sources.ts); `crew` is built in. */
+const registryKindsOf = (kind: AppQuery['kind']): readonly string[] =>
+  kind === 'sql' ? ['sql'] : kind === 'graphql' ? ['graphql'] : kind === 'rest' ? ['rest'] : kind === 'mcp' ? ['mcp-http', 'mcp-stdio'] : [];
+/** Whether crew's `/sources/:name/check` can check a query of `kind` before it is saved (SQL and GraphQL only). */
+const preCheckable = (kind: AppQuery['kind']): boolean => kind === 'sql' || kind === 'graphql';
 const driverOf = (s: McpServer | undefined): string | null => s?.sql?.driver ?? null;
 const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 /** The query as the panel began editing it: a save lands only if the head still has exactly this. */
@@ -97,7 +100,7 @@ function outputFromCheck(r: SourceCheckResponse): { ok: true; columns: Array<{ n
   if (!r.ok) return { ok: false, state: { kind: 'refused', code: r.code, detail: r.detail } };
   const bad = badOutputNames(r.columns);
   if (bad.length > 0) {
-    return { ok: false, state: { kind: 'refused', code: 'output_name', detail: `alias ${bad.map((b) => JSON.stringify(b)).join(', ')} (AS a_name): an app's column names are letters, digits, _ and -, a letter first` } };
+    return { ok: false, state: { kind: 'refused', code: 'output_name', detail: `alias ${bad.map((b) => JSON.stringify(b)).join(', ')} (AS a_name): an app's column names are letters, digits, _ and -, starting with a letter or _` } };
   }
   return { ok: true, columns: r.columns };
 }
@@ -111,17 +114,18 @@ function QueryEditor({ session, detail, sample, sources, row, onDone }: {
   const [check, setCheck] = useState<CheckState>({ kind: 'idle' });
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
   const [gone, setGone] = useState<ColumnUse[]>([]);
-  const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  const alive = useRef(false);
+  // Set on setup and cleared on cleanup: Strict Mode replays effects (setup, cleanup, setup) (codex r14).
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const busy = check.kind === 'checking' || save.kind === 'saving';
-  const registryKind = sourceKindOf(row.kind);
+  const kinds = registryKindsOf(row.kind);
   const current = sources?.find((s) => s.name === row.source);
-  // The source can change to another of the same kind and SQL dialect; a source gone from crew's registry can be
-  // replaced by any of the same kind (the text is checked against the one chosen).
-  const compatible = registryKind === null ? [] : (sources ?? []).filter((s) => s.kind === registryKind && (current === undefined || driverOf(s) === driverOf(current)));
-  const choices = current === undefined && registryKind !== null ? [{ name: row.source, missing: true }, ...compatible.map((s) => ({ name: s.name, missing: false }))] : compatible.map((s) => ({ name: s.name, missing: false }));
+  // The source can change to another the query's kind may read (and, for SQL, of the same dialect); a source gone from
+  // crew's registry can be replaced by any of those. crew's staged check judges the text against the one chosen.
+  const compatible = (sources ?? []).filter((s) => kinds.includes(s.kind) && (current === undefined || row.kind !== 'sql' || driverOf(s) === driverOf(current)));
+  const choices = current === undefined && kinds.length > 0 ? [{ name: row.source, missing: true }, ...compatible.map((s) => ({ name: s.name, missing: false }))] : compatible.map((s) => ({ name: s.name, missing: false }));
   const changed = text !== (row.text ?? '') || source !== row.source;
-  const checkable = !sample && registryKind !== null;
+  const checkable = !sample && preCheckable(row.kind);
 
   const runCheck = async (): Promise<SourceCheckResponse | null> => {
     setCheck({ kind: 'checking' });
@@ -156,6 +160,8 @@ function QueryEditor({ session, detail, sample, sources, row, onDone }: {
     }
     setSave({ kind: 'saving' });
     const r = await session.landDirect((head) => {
+      // landDirect lands the canvas burst first: an editor closed meanwhile sends nothing (codex r14).
+      if (!alive.current) return 'Not saved: the query was closed before it was saved';
       if (snapshotOf(head.spec, head.queryText ?? {}, row.id) !== began) return 'Not saved: this query changed meanwhile (an undo, or another tab). Look at it again, then save.';
       const q = head.spec.queries.find((x) => x.id === row.id);
       if (q === undefined) return `Not saved: the query ${row.id} is no longer in the app`;
@@ -175,7 +181,7 @@ function QueryEditor({ session, detail, sample, sources, row, onDone }: {
       <div className="wk-apps-data-row">
         <label className="wk-apps-data-k" htmlFor={`wk-qs-${row.id}`}>Source</label>
         {sample || choices.length <= 1
-          ? <span data-testid="apps-data-source">{row.source}{current === undefined && !sample && registryKind !== null ? ' (not in crew’s registry)' : ''}</span>
+          ? <span data-testid="apps-data-source">{row.source}{current === undefined && !sample && kinds.length > 0 ? ' (not in crew’s registry)' : ''}</span>
           : (
             <select id={`wk-qs-${row.id}`} className="wk-apps-data-select" data-testid="apps-data-source-select" value={source} disabled={busy} onChange={(e) => { setSource(e.currentTarget.value); setCheck({ kind: 'idle' }); }}>
               {choices.map((c) => <option key={c.name} value={c.name}>{c.missing ? `${c.name} (not in crew’s registry)` : c.name}</option>)}
@@ -220,8 +226,9 @@ function AddData({ session, detail, sources, selectedId, page, navigate, onDone 
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
   /** Bumped when the source changes: an answer (catalog, draft, check) for another source is never shown or used. */
   const gen = useRef(0);
-  const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  const alive = useRef(false);
+  // Set on setup and cleared on cleanup: Strict Mode replays effects (setup, cleanup, setup) (codex r14).
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const busy = check.kind === 'checking' || save.kind === 'saving' || asked === 'asking';
 
   useEffect(() => {
@@ -270,6 +277,7 @@ function AddData({ session, detail, sources, selectedId, page, navigate, onDone 
     const output = outputOf(out.columns);
     setSave({ kind: 'saving' });
     const landed = await session.landDirect((head) => {
+      if (!alive.current || gen.current !== mine) return 'Not added: the panel or its source changed before it was saved';
       const id = freshQueryId(head.spec, fromTable?.name ?? 'query');
       const q: AppQuery = { id, source: sentSource, kind: 'sql', output };
       const withQ = withQuery(head.spec, q);

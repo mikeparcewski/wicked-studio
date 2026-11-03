@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppDetail, AppSpec } from '../src/api/types.js';
@@ -385,5 +386,56 @@ describe('the Data panel', () => {
     await waitFor(() => expect(screen.getByTestId('apps-data-saved').textContent).toBe('Saved as v2 (sample: not checked against a source)'));
     expect(calls).toStrictEqual([]);
     expect((made[0] as Exclude<Made, string>).texts).toStrictEqual({ tickets: 'SELECT 2' });
+  });
+});
+describe('Data panel review round 14 (codex)', () => {
+  const TEXT = { tickets: 'SELECT t.id, t.subject, t.owner FROM support.tickets AS t', open_count: 'SELECT count(*) AS open FROM support.tickets AS t' };
+  const OK = () => ({ ok: true, columns: [{ name: 'id', type: 'integer' }, { name: 'subject', type: 'text' }, { name: 'owner', type: 'text' }], params: [], relations: [] });
+
+  it('an editor closed while the canvas burst lands sends nothing: only the burst lands', async () => {
+    mockCrew({ '/mcp/servers': () => SERVERS, '/sources/support-pg/check': OK });
+    const st = new SampleAppStore('desk', SPEC(), new MemStorage(), Date.now, null);
+    await st.edit(1, SPEC(), 'texts', TEXT);
+    const session = new AppSession(st, { burstMs: 60_000 });
+    await session.load();
+    session.edit(2, [{ op: 'component-move', id: 'open', x: 3, y: 0 }]);
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    const real = st.edit.bind(st);
+    const edit = vi.spyOn(st, 'edit').mockImplementation(async (...a) => { await held; return real(...a); });
+    const { unmount } = render(<AppDataPanel session={session} detail={session.detail!} sample={false} selectedId={null} page="main" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('tickets'));
+    fireEvent.change(screen.getByTestId('apps-data-text'), { target: { value: 'SELECT t.id, t.subject, t.owner FROM support.tickets AS t LIMIT 3' } });
+    fireEvent.click(screen.getByTestId('apps-data-save'));
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1)); // the burst is landing
+    unmount();
+    release();
+    await new Promise((res) => setTimeout(res, 30));
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(session.detail!.queryText.tickets).toBe(TEXT.tickets);
+  });
+
+  it('works under React Strict Mode (effects replay): Check & save lands', async () => {
+    mockCrew({ '/mcp/servers': () => SERVERS, '/sources/support-pg/check': OK });
+    const d = detailOf(SPEC(), TEXT);
+    const { session } = fakeSession(d);
+    render(<StrictMode><AppDataPanel session={session} detail={d} sample={false} selectedId={null} page="main" onClose={vi.fn()} /></StrictMode>);
+    fireEvent.click(screen.getByText('tickets'));
+    fireEvent.change(screen.getByTestId('apps-data-text'), { target: { value: 'SELECT t.id, t.subject, t.owner FROM support.tickets AS t LIMIT 9' } });
+    fireEvent.click(screen.getByTestId('apps-data-save'));
+    await waitFor(() => expect(session.landDirect).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('apps-data-saved')).toBeTruthy());
+  });
+
+  it('a REST query is offered the other REST sources (crew checks the text on save)', async () => {
+    const spec = SPEC();
+    spec.queries.push({ id: 'items', source: 'ops-api', kind: 'rest', rowPath: '$.items[*]', output: [{ name: 'id', type: 'string' }] } as never);
+    mockCrew({ '/mcp/servers': () => ({ servers: [...SERVERS.servers, { name: 'ops-api', kind: 'rest', enabled: true }, { name: 'ops-api-2', kind: 'rest', enabled: true }, { name: 'tools', kind: 'mcp-http', enabled: true }], discovered: [] }) });
+    const d = detailOf(spec, { ...TEXT, items: '{"tool":"GET /items"}' });
+    render(<AppDataPanel session={fakeSession(d).session} detail={d} sample={false} selectedId={null} page="main" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('items'));
+    await waitFor(() => expect(screen.getByTestId('apps-data-source-select')).toBeTruthy());
+    expect([...(screen.getByTestId('apps-data-source-select') as HTMLSelectElement).options].map((o) => o.value)).toStrictEqual(['ops-api', 'ops-api-2']);
+    expect(screen.queryByTestId('apps-data-check')).toBeNull();
   });
 });
