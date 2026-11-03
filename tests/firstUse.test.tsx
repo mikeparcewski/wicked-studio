@@ -62,7 +62,7 @@ describe('the rule (§5.1)', () => {
   });
 
   it('an active bench or an unchecked agent never completes setup', () => {
-    const benched = { ...ready('claude', 'Claude Code'), recent_bench: { kind: 'quota_exhausted', runs: 1, last_at: new Date().toISOString(), lifts_at: new Date(Date.now() + 6e5).toISOString(), source: 'worker', reason: 'r' } };
+    const benched = { ...ready('claude', 'Claude Code'), recent_bench: { kind: 'quota_exhausted', runs: 1, last_at: new Date().toISOString(), lifts_at: new Date(Date.now() + 6e5).toISOString(), source: 'worker', reason: 'r', until_source: 'window' as const, strikes: 1 } };
     expect(setupAgents(rows([benched]))).toHaveLength(0);
     const unchecked = { ...ready('claude', 'Claude Code'), governance_mode: all(mode('none', 'none')) };
     expect(setupAgents(rows([unchecked]))).toHaveLength(0);
