@@ -7,11 +7,11 @@ import { test, expect, type Page } from '@playwright/test';
  * row is one line at every width.
  */
 const BEATS: [string, string][] = [
-  ['top', 'The job'],
-  ['why', 'Benefits'],
+  ['top', 'The ADE'],
+  ['why', 'For you'],
   ['desk', 'Desk'],
   ['review', 'Review'],
-  ['steer', 'Steering'],
+  ['steer', 'Rules'],
   ['reach', 'Agents'],
 ];
 const HUE = '--plane-experience';
@@ -85,17 +85,36 @@ test.describe('the thread and the beat track', () => {
     expect(th[3]).toBe(3);
   });
 
-  test('1920x1080: the thread still lines up with the topbar row (studio widens both with its frames)', async ({ page }) => {
+  test('1920x1080: the thread widens to 1400px like crew\'s, and the track shows', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto('/');
     await goTo(page, 'desk');
-    const [row, th] = await page.evaluate(() => [
-      (() => { const r = document.querySelector('.topbar__inner')!.getBoundingClientRect(); return [r.left, r.right]; })(),
-      (() => { const r = document.querySelector('[data-beat-thread]')!.getBoundingClientRect(); return [r.left, r.right]; })(),
-    ] as const);
-    expect(Math.abs(th[0] - row[0])).toBeLessThan(1.5);
-    expect(Math.abs(th[1] - row[1])).toBeLessThan(1.5);
+    // centred like the topbar (both are fixed to the same box; a classic scrollbar takes its width off the window)
+    const [l, r, bl, br] = await page.evaluate(() => {
+      const t = document.querySelector('[data-beat-thread]')!.getBoundingClientRect(), b = document.querySelector('.topbar')!.getBoundingClientRect();
+      return [t.left, t.right, b.left, b.right];
+    });
+    expect(r - l).toBe(1400);
+    expect(Math.abs((l + r) / 2 - (bl + br) / 2)).toBeLessThan(1);
     await expect(page.locator('[data-beats]')).toBeVisible();
+  });
+
+  test('each beat is named from its own frame: the name is in that frame\'s kicker or heading', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    const names = await page.locator('[data-beats] .beats-l').evaluateAll((ls) => ls.map((l) => l.textContent || ''));
+    const firsts = BEATS.filter(([id, n], i) => BEATS.findIndex(([, m]) => m === n) === i);
+    expect(names).toEqual(firsts.map(([, n]) => n));
+    for (const [id, name] of firsts) {
+      const head = await page.evaluate((id) => {
+        const s = document.getElementById(id)!;
+        const sh = s.querySelector('.scene-head');
+        if (sh) return sh.textContent || '';
+        const k = s.querySelector('.kicker, [class*="kicker"]'), h = s.querySelector('h1, h2');
+        return [k, h].filter(Boolean).map((e) => (e as HTMLElement).textContent).join(' ');
+      }, id);
+      expect(head.toLowerCase(), `#${id}'s own kicker or heading names "${name}"`).toContain(name.replace(/^the /i, '').toLowerCase());
+    }
   });
 
   test('a beat on the track is a link to its frame; hover and keyboard focus show its name', async ({ page }) => {
@@ -121,13 +140,23 @@ test.describe('the thread and the beat track', () => {
     expect(Math.abs(top - 64)).toBeLessThan(2);
   });
 
-  test('where the gutter cannot hold the track it stays hidden; below 1024px neither shows', async ({ page }) => {
-    // 1440x900: the frames are zoomed to the window's width, so there is no gutter
+  test('1440x900 shows the track (the frames stay in the family grid, as on crew); below 1400 / 1024 it and the thread hide', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await goTo(page, 'desk');
     await expect(page.locator('[data-beat-thread]')).toHaveClass(/is-on/);
+    await expect(page.locator('[data-beats]')).toBeVisible();
+    // the frame's content keeps crew's box: the lockup and the content's left edge at x=128
+    const [lock, wrapL] = await page.evaluate(() => [
+      Math.round(document.querySelector('.topbar__inner')!.getBoundingClientRect().left + 28),
+      Math.round((() => { const w = document.querySelector('#desk > .wrap')!; const r = w.getBoundingClientRect(); return r.left + parseFloat(getComputedStyle(w).paddingLeft) * (r.width / (w as HTMLElement).offsetWidth); })()),
+    ]);
+    expect([lock, wrapL]).toEqual([128, 128]);
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await goTo(page, 'desk');
+    await expect(page.locator('[data-beat-thread]')).toBeVisible();
     await expect(page.locator('[data-beats]')).toBeHidden();
+    await page.setViewportSize({ width: 1440, height: 900 });
     // past the last beat the thread fades out
     await goTo(page, 'new');
     await expect(page.locator('[data-beat-thread]')).toHaveCSS('opacity', '0');
