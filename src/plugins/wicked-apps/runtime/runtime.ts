@@ -1072,6 +1072,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     ed.setAttribute('data-testid', 'apps-inline');
     ed.setAttribute('aria-label', `Edit the ${prop === 'text' ? 'text' : prop}`);
     target.replaceWith(ed);
+    // The cell's type tag sits over its top right, where a title's field reaches: it steps aside while the field is open.
+    ed.closest('[data-component]')?.classList.add('is-inline');
     ed.focus();
     ed.select();
     let done = false;
@@ -1092,6 +1094,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
         const words = cell === undefined ? undefined : [...cell.querySelectorAll('[data-inline]')].find((x) => x.getAttribute('data-inline') === prop);
         if (words === undefined) { me.drop(); return; }
         words.replaceWith(ed);
+        cell!.classList.add('is-inline');
         ed.focus();
         if (caret[0] !== null && caret[1] !== null) ed.setSelectionRange(caret[0], caret[1], caret[2]);
         moving = false;

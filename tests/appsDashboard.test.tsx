@@ -438,6 +438,8 @@ describe('Edit: a component’s own words, in place on the canvas', () => {
     dbl(title);
     const field = document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement;
     expect(field.tagName).toBe('INPUT');
+    // The cell's type tag steps aside while its words are open (it sits over the title's field).
+    expect(field.closest('[data-component="k"]')!.classList.contains('is-inline')).toBe(true);
     expect(document.querySelectorAll('[contenteditable]')).toHaveLength(0);
     field.value = '<img src=x onerror=window.__pwned=7> Queue';
     field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
@@ -545,6 +547,8 @@ describe('Edit: a component’s own words, in place on the canvas', () => {
     b.release();
     await vi.waitFor(() => expect(document.querySelector('[data-component="k"] .wk-cell-title')?.textContent).toBe('Open now'));
     expect([...document.querySelectorAll('[data-testid="apps-inline"]')]).toStrictEqual([field]);
+    expect(field.closest('[data-component="note"]')!.classList.contains('is-inline')).toBe(true);
+    expect(document.querySelector('[data-component="k"]')!.classList.contains('is-inline')).toBe(false);
     expect(field.value).toBe('Hello there');
     expect(field.selectionStart).toBe(5);
     // Another tab renames ANOTHER component: it is drawn now, and the field stays as it is.
