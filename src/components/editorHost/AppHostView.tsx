@@ -257,7 +257,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
       {narrow && <p className="wk-apps-line" data-testid="apps-phone-note">Edit on a larger screen. This is the app as a viewer sees it.</p>}
       {kind !== null && (kind.store === 'sample' || kind.data === 'sample') && (
         <p className="wk-apps-line wk-apps-line--note" data-testid="apps-sample-note">
-          {kind.store === 'sample' ? 'A sample app: its rows are made up and nothing reaches a source.' : 'This daemon does not run app queries and actions yet: the rows are samples and actions write nothing.'}
+          {kind.store === 'sample'
+            ? `${slug !== null ? `This daemon has no app store, so the app “${slug}” could not be opened: this is a sample app instead. ` : 'A sample app: '}its rows are made up and nothing reaches a source.`
+            : 'This daemon does not run app queries and actions yet: the rows are samples and actions write nothing.'}
         </p>
       )}
       {(status !== null || pending > 0) && <p className="wk-apps-line" data-testid="apps-status" aria-live="polite">{pending > 0 ? `Saving ${pending} change${pending === 1 ? '' : 's'}…` : status}</p>}
