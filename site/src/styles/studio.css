@@ -1195,11 +1195,14 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { transit
   .trio-where a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; vertical-align: middle; }
   /* mid-sentence, the link's box grows by a transparent pad (12px above and below, 11px at the sides)
      that its negative margin gives back, so the lines keep their spacing; the focus ring is drawn in
-     by 8px, so it still hugs the word (3-4px out) and never crosses the lines above or below */
-  .facts a { display: inline-block; padding: 12px 11px; margin: -12px -11px; }
+     by 8px, so it still hugs the word (3-4px out) and never crosses the lines above or below. It is
+     lifted over the sentence's next line, so a tap anywhere in its 44px box reaches it (the pad
+     paints nothing; the words beneath it stay in view) */
+  .facts a { display: inline-block; padding: 12px 11px; margin: -12px -11px; position: relative; z-index: 1; }
   .facts a:focus-visible { outline-offset: -8px; }
   .agent-chip { min-width: 44px; }
   .topbar .icon-btn { width: 44px; height: 44px; }
+  .topbar .dropdown-item { min-height: 44px; } /* the Experiments menu, open from 641 to 768px */
   .topbar .wordmark { min-height: 44px; }
   .footer-wordmark { display: inline-flex; align-items: center; min-height: 44px; }
   .same-garden .sg-visit, .same-garden .sg-repo { min-height: 44px; min-width: 44px; justify-content: center; }
