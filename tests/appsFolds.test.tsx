@@ -905,3 +905,27 @@ describe('codex r5: long stacked areas, stroke ends at a crossing, a cleared num
     await vi.waitFor(() => expect(h.value).toBe('50'));
   });
 });
+
+describe('codex r6: a sign change through an exact zero row, or a plateau of them', () => {
+  beforeEach(() => { document.body.innerHTML = ''; });
+  const q = { id: 'r', source: 's', kind: 'sql' as const, output: [{ name: 'c', type: 'string' as const }, { name: 'a', type: 'integer' as const }, { name: 'b', type: 'integer' as const }] };
+  const spec = base([{ id: 'sa', type: 'chart', chart: 'area', stacked: true, data: { query: 'r' }, x: 'c', series: [{ column: 'a' }, { column: 'b' }], box: { x: 0, y: 0, w: 6, h: 4 } }], { queries: [q] });
+  const runsOf = (k: number): Array<Array<[number, number]>> => [...document.querySelectorAll(`[data-component="sa"] polyline.wk-series-${k}`)]
+    .map((l) => l.getAttribute('points')!.split(' ').map((p) => p.split(',').map(Number) as [number, number]));
+
+  for (const [name, b] of [['-8, 0, 20', [-8, 0, 20]], ['20, 0, -8', [20, 0, -8]], ['-8, 0, 0, 20', [-8, 0, 0, 20]]] as const) {
+    it(`b = ${name}: two runs, the old one ending at zero on its own stack, the new one starting at the last zero on the other`, async () => {
+      await boot(spec, () => rowsFor(q, b.map((v, i) => [`r${i}`, 10, v])));
+      await vi.waitFor(() => expect(runsOf(1)).toHaveLength(2));
+      const aTop = runsOf(0)[0]![0]![1]; // a is 10 throughout: the positive stack base under b
+      const [first, second] = runsOf(1) as [Array<[number, number]>, Array<[number, number]>];
+      const zeroRow = b.lastIndexOf(0);
+      const startsNeg = b[0]! < 0;
+      // The new run starts at the last zero row, on the other stack's edge.
+      expect(second[0]![0]).toBeCloseTo(first.at(-1)![0], 0);
+      if (startsNeg) { expect(second[0]![1]).toBeCloseTo(aTop, 0); expect(first.at(-1)![1]).toBeGreaterThan(aTop); }
+      else { expect(first.at(-1)![1]).toBeCloseTo(aTop, 0); expect(second[0]![1]).toBeGreaterThan(aTop); }
+      expect(first).toHaveLength(zeroRow + 1);
+    });
+  }
+});
