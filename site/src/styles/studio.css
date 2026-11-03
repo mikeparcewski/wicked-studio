@@ -1,4 +1,4 @@
-/* wicked-studio content styles (ws.wickedagile.com): the IDE for running a team of coding agents.
+/* wicked-studio content styles (ws.wickedagile.com): the ADE for running a team of coding agents.
    The page is a hook, a working miniature of the Desk (.ide), four short proofs and Get it.
    Shared chrome (wicked-web Base/Topbar/Footer + tokens.css) owns theming via [data-theme]; only
    studio rules live here. Amber (--plane-experience) is the plane voice; brand yellow (--accent)
@@ -174,7 +174,13 @@ code {
 }
 .hero-head { text-align: center; }
 .hero-head h1 { font-size: clamp(2rem, 3.6vw, 3rem); margin: 0 auto; max-width: 22ch; }
-.lede { margin: 12px auto 0; font-size: clamp(1rem, 1.3vw, 1.14rem); line-height: 1.5; color: color-mix(in oklab, var(--ink) 80%, transparent); max-width: 60ch; }
+/* the kicker spells ADE out on first use, so the headline's abbreviation needs no dotted underline */
+.hero-kick { margin: 0 0 6px; }
+/* the kicker costs a line, so the small print runs the container's width (two lines at 1440, not
+   three) and the lede sits closer: the hero keeps its slack */
+.hero-head .hero-fine { max-width: none; }
+.hero h1 abbr { text-decoration: none; }
+.lede { margin: 8px auto 0; font-size: clamp(1rem, 1.3vw, 1.14rem); line-height: 1.5; color: color-mix(in oklab, var(--ink) 80%, transparent); max-width: 60ch; }
 
 /* ── The IDE demo ──────────────────────────────────────────────────────── */
 .ide {

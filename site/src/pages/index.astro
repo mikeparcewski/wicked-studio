@@ -2,7 +2,8 @@
 /**
  * index.astro — the wicked-studio landing page (ws.wickedagile.com).
  *
- * POSITIONING: studio is the IDE for running a team of coding agents. The page leads with that and
+ * POSITIONING: studio is the ADE (agentic development environment) for running a team of coding
+ * agents. The page leads with that and
  * shows it: the hero IS a working miniature of the Desk (sessions on the left, a run as a chat in
  * the middle, what changed on the right). Separate-agent review is a supporting proof further down,
  * not the hook.
@@ -42,18 +43,24 @@ import Footer from 'wicked-web/components/Footer.astro';
 import SameGarden from 'wicked-web/components/SameGarden.astro';
 import '../styles/studio.css';
 
-// The hook. Kept as two strings so the operator can swap a variant in one place.
-const HEADLINE = 'The IDE for running a team of coding agents.';
+// The hook (messaging N2). Kept as strings so the operator can swap a variant in one place. ADE is
+// spelled out on first use: the kicker above the headline reads it in full, and the headline's
+// <abbr> carries the expansion for assistive tech.
+const ABBR = 'ADE';
+const ABBR_FULL = 'agentic development environment';
+const KICKER = 'Agentic development environment (ADE)';
+const HEADLINE = 'The ADE for running a team of coding agents.';
+const [HEAD_PRE, HEAD_POST] = HEADLINE.split(ABBR);
 const SUBLINE = 'Chat with them, or talk to them. Watch the work happen, make the calls only you can make, and ship what they changed.';
 // The default-review qualifier (messaging N1), as small print under the sub-line.
 const FINE =
   'By default a different agent reviews the work. When none can, the job stops unless you launch it as “reduced assurance”, which is labelled on the job, every gate and the delivery. A saved workflow may require fewer checks; its requirements are listed in the receipts.';
 
-const title = 'wicked-studio — the IDE for running a team of coding agents';
+const title = 'wicked-studio — the ADE for running a team of coding agents';
 // What search results and social cards show. Same attribution boundary as the page: the crew
 // daemon runs the agents; studio is the screen you run them from.
 const description =
-  'The IDE for running a team of coding agents. Chat with Claude Code, Codex, Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. By default a different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
+  'The agentic development environment (ADE) for running a team of coding agents. Chat with Claude Code, Codex, Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. By default a different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
 // Nine of the sidebar's real pages (NAV_GROUPS + LEARN_ITEM in src/board/navModel.ts; Report left out to keep
@@ -102,7 +109,8 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
   <section class="hero" aria-labelledby="hero-h">
     <div class="amber-floor" aria-hidden="true"></div>
     <div class="wrap hero-head">
-      <h1 id="hero-h">{HEADLINE}</h1>
+      <p class="kicker hero-kick">{KICKER}</p>
+      <h1 id="hero-h">{HEAD_PRE}<abbr title={ABBR_FULL}>{ABBR}</abbr>{HEAD_POST}</h1>
       <p class="lede">{SUBLINE}</p>
       <p class="hero-fine">{FINE}</p>
     </div>

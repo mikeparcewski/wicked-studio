@@ -68,6 +68,38 @@ test.describe('honest boundaries', () => {
 });
 
 test.describe('the reviewed messaging', () => {
+  test('the headline names studio an ADE and spells it out on first use (messaging N2)', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.hero h1')).toHaveText('The ADE for running a team of coding agents.');
+    await expect(page.locator('.hero h1 abbr')).toHaveAttribute('title', 'agentic development environment');
+    // the spelled-out form reads before the abbreviation, on the first screen
+    const kick = page.locator('.hero .hero-kick');
+    await expect(kick).toBeVisible();
+    await expect(kick).toHaveText('Agentic development environment (ADE)');
+    const order = await page.evaluate(() => {
+      const k = document.querySelector('.hero .hero-kick')!;
+      const h = document.querySelector('.hero h1')!;
+      return k.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING;
+    });
+    expect(order, 'the kicker comes before the headline').toBeTruthy();
+    await expect(page).toHaveTitle('wicked-studio — the ADE for running a team of coding agents');
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /^The agentic development environment \(ADE\) for running a team of coding agents\./);
+    // the old word is gone from the page, the title and the description. The platform band is
+    // wicked-web's shared family copy (family.js), which moves to ADE in its own change.
+    const text = [
+      await page.evaluate(() => {
+        const b = document.body.cloneNode(true) as HTMLElement;
+        b.querySelectorAll('.same-garden').forEach((n) => n.remove());
+        return b.textContent || '';
+      }),
+      await page.title(),
+      (await page.locator('meta[name="description"]').getAttribute('content')) ?? '',
+    ].join(' ');
+    expect(text).not.toMatch(/\bIDE\b/);
+    // the pattern itself catches the old headline, or this asserts nothing
+    expect('The IDE for running a team of coding agents.').toMatch(/\bIDE\b/);
+  });
+
   test('rules reach every repository or one project, never one repo', async ({ page }) => {
     await page.goto('/');
     const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
