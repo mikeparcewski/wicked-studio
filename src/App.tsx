@@ -30,6 +30,7 @@ import { McpInspectPage } from './components/editors/McpInspectPage.js';
 import { AGENTS_PATH, AgentsPage } from './components/agents/AgentsPage.js';
 import { useFirstUseLanding } from './components/agents/useFirstUseLanding.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
+import { SourcesPage } from './components/sources/SourcesPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoryPage } from './components/memory/MemoryPage.js';
 import { TestingPage } from './components/TestingPage.js';
@@ -714,6 +715,14 @@ export function App(): React.ReactElement {
       return (
         <div className="flex-1 overflow-y-auto">
           <PluginsPage navigate={navigate} />
+        </div>
+      );
+    }
+    // `/sources` — the Apps data sources (DES-APPS-001 §5): the data panel and the "Add a data source" sheet.
+    if (panel === 'sources') {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <SourcesPage navigate={navigate} search={search} />
         </div>
       );
     }

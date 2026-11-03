@@ -21,6 +21,8 @@ export const PAGE_NAMES = {
   skills: 'Skills',
   mcp: 'MCP',
   mcpInspect: 'MCP inspector',
+  /** `/sources` — the Apps data sources (DES-APPS-001 §5): the source sheet and the data panel. */
+  sources: 'Data sources',
   plugins: 'Plugins',
   steering: 'Steering',
   memory: 'Memory',
@@ -49,6 +51,7 @@ const BY_PATH: ReadonlyArray<[string, string]> = [
   ['/skills', PAGE_NAMES.skills],
   ['/mcp/inspect', PAGE_NAMES.mcpInspect],
   ['/mcp', PAGE_NAMES.mcp],
+  ['/sources', PAGE_NAMES.sources],
   ['/plugins', PAGE_NAMES.plugins],
   ['/agents', PAGE_NAMES.agents],
   ['/rules', PAGE_NAMES.steering],

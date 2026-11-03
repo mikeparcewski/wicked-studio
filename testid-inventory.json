@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 289,
-    "occurrences": 4061,
-    "static": 3463,
-    "dynamic": 93,
-    "computed": 44
+    "files": 296,
+    "occurrences": 4181,
+    "static": 3541,
+    "dynamic": 118,
+    "computed": 48
   },
   "static": [
     {
@@ -1475,6 +1475,12 @@
       ]
     },
     {
+      "testId": "build-link-sources",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
       "testId": "build-link-workflows",
       "files": [
         "src/board/navModel.ts"
@@ -2571,6 +2577,72 @@
       "testId": "copy-command",
       "files": [
         "src/components/CopyButton.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-action",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-add",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-chip",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-declare",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-grant",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-no-actions",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-open",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-source",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-table",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-tables",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
       ]
     },
     {
@@ -13946,6 +14018,90 @@
       ]
     },
     {
+      "testId": "row-write-allow-writes",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-close",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-columns",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-declare",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-dialog",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-error",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-grant",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-key",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-line",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-missing",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-outcome",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-reason",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-refused",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "testId": "row-write-scrim",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
       "testId": "rule-history",
       "files": [
         "src/components/decisions/RuleOrigin.tsx"
@@ -17528,6 +17684,318 @@
       ]
     },
     {
+      "testId": "source-accept-reads",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-address",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-address-confirm",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-address-plaintext",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-address-saved",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-address-tick",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-agents-see",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-allow-writes",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
+      "testId": "source-auth-header",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-auth-scheme",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-cancel",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-crew-routes",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-database",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-describe",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-described",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-described-row",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-done",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-file",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-form",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-header",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-host",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-kinds",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-name",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-openapi",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-operations",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-port",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-privileges",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-replaces",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-results",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-save",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-secret",
+      "files": [
+        "src/components/sources/SecretField.tsx"
+      ]
+    },
+    {
+      "testId": "source-sheet",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-sheet-close",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-sheet-error",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-sheet-foot",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-sheet-scrim",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-sheet-title",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-test",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-test-call",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "testId": "source-test-ok",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-test-run",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-test-unconfirmed",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-tls",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-upload",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-upload-again",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-upload-header",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-upload-result",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-upload-sample",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-url",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-user",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sources-add",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "sources-page",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
       "testId": "standing-order-cancel",
       "files": [
         "src/components/StandingOrdersPanel.tsx"
@@ -20907,6 +21375,18 @@
       ]
     },
     {
+      "pattern": "*-args",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-body",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
       "pattern": "*-breakdown",
       "files": [
         "src/components/RequirementsCoverageSummary.tsx"
@@ -20916,6 +21396,12 @@
       "pattern": "*-button",
       "files": [
         "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
+      "pattern": "*-can-change",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx"
       ]
     },
     {
@@ -20938,6 +21424,24 @@
       ]
     },
     {
+      "pattern": "*-confirm",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
+      "pattern": "*-confirm-off",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
+      "pattern": "*-confirm-on",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
       "pattern": "*-detail",
       "files": [
         "src/components/QeRefusalWarning.tsx",
@@ -20955,6 +21459,13 @@
       "pattern": "*-editor",
       "files": [
         "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "pattern": "*-error",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx",
+        "src/components/sources/TestCall.tsx"
       ]
     },
     {
@@ -21030,6 +21541,24 @@
       ]
     },
     {
+      "pattern": "*-name",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-named",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-no-reads",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
       "pattern": "*-note",
       "files": [
         "src/components/QeOffNote.tsx"
@@ -21061,9 +21590,27 @@
       ]
     },
     {
+      "pattern": "*-query",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
       "pattern": "*-reonboard",
       "files": [
         "src/components/RepoFindings.tsx"
+      ]
+    },
+    {
+      "pattern": "*-request",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-result",
+      "files": [
+        "src/components/sources/TestCall.tsx"
       ]
     },
     {
@@ -21082,6 +21629,18 @@
       "pattern": "*-search",
       "files": [
         "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
+      "pattern": "*-send",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-sent",
+      "files": [
+        "src/components/sources/TestCall.tsx"
       ]
     },
     {
@@ -21115,15 +21674,46 @@
       ]
     },
     {
+      "pattern": "*-state",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx",
+        "src/components/sources/SecretField.tsx"
+      ]
+    },
+    {
+      "pattern": "*-summary",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-switch",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
       "pattern": "*-table-toggle",
       "files": [
         "src/components/report/ReportPage.tsx"
       ]
     },
     {
+      "pattern": "*-target",
+      "files": [
+        "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
       "pattern": "*-toggle",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "pattern": "*-unsaved",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx"
       ]
     },
     {
@@ -21139,6 +21729,12 @@
       ]
     },
     {
+      "pattern": "*-withdrawn",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
       "pattern": "chat-narration-raw-*",
       "files": [
         "src/components/ChatThread.tsx"
@@ -21148,6 +21744,12 @@
       "pattern": "chat-narration-toggle-*",
       "files": [
         "src/components/ChatThread.tsx"
+      ]
+    },
+    {
+      "pattern": "data-panel-table-menu-*",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
       ]
     },
     {
@@ -21397,6 +21999,18 @@
       ]
     },
     {
+      "pattern": "row-write-col-*",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
+      "pattern": "row-write-op-*",
+      "files": [
+        "src/components/sources/RowWriteDialog.tsx"
+      ]
+    },
+    {
       "pattern": "run-raw-*",
       "files": [
         "src/components/RunRawView.tsx"
@@ -21424,6 +22038,12 @@
       "pattern": "skills-tab-*",
       "files": [
         "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "pattern": "source-kind-*",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
       ]
     },
     {
@@ -21594,6 +22214,10 @@
         "src/components/session/CodebaseDownload.tsx",
         "src/components/session/PowerMode.tsx",
         "src/components/session/RunConversation.tsx",
+        "src/components/sources/AllowWritesSwitch.tsx",
+        "src/components/sources/DataPanel.tsx",
+        "src/components/sources/SecretField.tsx",
+        "src/components/sources/TestCall.tsx",
         "src/components/steer/EvaluateSurface.tsx",
         "src/components/steer/SeStat.tsx",
         "src/components/ui/BrandMarks.tsx",
@@ -21620,6 +22244,12 @@
       "expression": "testId = 'combobox'",
       "files": [
         "src/components/ui/Combobox.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'data-panel'",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
       ]
     },
     {
@@ -21668,6 +22298,24 @@
       "expression": "testId = 'skeleton'",
       "files": [
         "src/components/ui/StateBanner.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'source-allow-writes'",
+      "files": [
+        "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'source-secret'",
+      "files": [
+        "src/components/sources/SecretField.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'source-test-call'",
+      "files": [
+        "src/components/sources/TestCall.tsx"
       ]
     },
     {
