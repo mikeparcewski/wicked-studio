@@ -275,7 +275,9 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
         });
         asked.set(key, job);
       }
-      if (!results.has(c.id)) results.set(c.id, { state: 'loading' });
+      // A read in flight belongs to its binding from the moment it is asked, so an edit that leaves the binding as it
+      // is never asks again (codex r4: a slow read was repeated on every keystroke).
+      if (!results.has(c.id)) { results.set(c.id, { state: 'loading' }); resultKey.set(c.id, key); }
       // Each component lands only the answer to its newest read: a later read of it (a filter change, a new binding)
       // makes this one obsolete; a refresh of another query does not.
       compGen.set(c.id, mine);
@@ -672,21 +674,38 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
    * a commit made on the blur caused by a click in studio's own chrome arrives after focus has left (Firefox fires no
    * event the host could time that by), so nothing waits for the blur.
    */
-  const typed = (input: HTMLInputElement | HTMLTextAreaElement, commit: () => void, multiline = false, current?: () => string): void => {
+  const typed = (input: HTMLInputElement | HTMLTextAreaElement, commit: () => Promise<unknown> | void, multiline = false, current?: () => string): void => {
     let sent = input.value;
+    /** This field's newest edit still waiting for its answer: leaving the field normalises only after it (pi r4). */
+    let waiting: Promise<unknown> | null = null;
     const go = (): void => {
       if (input.value === sent) return;
       sent = input.value;
-      commit();
+      const p = Promise.resolve(commit());
+      waiting = p;
+      void p.finally(() => { if (waiting === p) waiting = null; });
     };
-    // An IME composition commits once, when it ends: its intermediate text is not the person's word yet.
-    input.addEventListener('input', (e: Event) => { if ((e as InputEvent).isComposing !== true) go(); });
-    input.addEventListener('compositionend', go);
+    // An IME composition commits once, when it ends: its intermediate text is not the person's word yet, and its keys
+    // (Enter accepting a candidate) are the IME's, untouched (codex r4).
+    let composing = false;
+    input.addEventListener('compositionstart', () => { composing = true; });
+    input.addEventListener('compositionend', () => { composing = false; go(); });
+    input.addEventListener('input', (e: Event) => { if (!composing && (e as InputEvent).isComposing !== true) go(); });
     // Leaving the field shows what was saved (a value the host clamped, or kept as it was after a refusal).
-    if (current !== undefined) input.addEventListener('blur', () => { const v = current(); if (input.value !== v) { input.value = v; sent = v; } });
-    input.addEventListener('change', go);
+    if (current !== undefined) {
+      input.addEventListener('blur', () => {
+        const settle = (): void => {
+          if (document.activeElement === input) return; // the person came back to it meanwhile
+          const v = current();
+          if (input.value !== v) { input.value = v; sent = v; }
+        };
+        if (waiting !== null) void waiting.then(settle, settle); else settle();
+      });
+    }
+    input.addEventListener('change', () => { if (!composing) go(); });
     input.addEventListener('keydown', (e: Event) => {
       const k = e as KeyboardEvent;
+      if (composing || k.isComposing || k.keyCode === 229) return;
       if (k.key === 'Enter' && (!multiline || k.metaKey || k.ctrlKey)) { k.preventDefault(); go(); }
     });
   };
@@ -701,7 +720,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     input.value = value ?? '';
     input.maxLength = max;
     input.setAttribute('data-prop', name);
-    typed(input, () => { void edit([{ op: 'component-set', id: c.id, prop: name, value: input.value }], { typed: true }); }, area, () => {
+    typed(input, () => edit([{ op: 'component-set', id: c.id, prop: name, value: input.value }], { typed: true }), area, () => {
       const now = components().find((x) => x.id === c.id) as unknown as Record<string, unknown> | undefined;
       const v = name === 'label' && now?.['type'] === 'button' ? (now['action'] as { label?: unknown } | undefined)?.label : now?.[name];
       return typeof v === 'string' ? v : '';
@@ -734,19 +753,18 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     const box = (): Box => components().find((x) => x.id === c.id)?.box ?? c.box;
     const shown = (b: Box): string => String(name === 'x' ? b.x + 1 : name === 'y' ? b.y + 1 : b[name]);
     typed(i, () => {
-      if (i.value.trim() === '') return; // a field cleared mid-typing is not 0 (pi r3)
+      if (i.value.trim() === '') return undefined; // a field cleared mid-typing is not 0 (pi r3)
       const v = Math.round(Number(i.value));
-      if (!Number.isFinite(v)) return;
+      if (!Number.isFinite(v)) return undefined;
       const b = box();
       if (name === 'x' || name === 'y') {
         const x = name === 'x' ? Math.min(12 - b.w, Math.max(0, v - 1)) : b.x;
         const y = name === 'y' ? Math.max(0, v - 1) : b.y;
-        void edit([{ op: 'component-move', id: c.id, x, y }], { typed: true });
-      } else {
-        const w = name === 'w' ? Math.min(12 - b.x, Math.max(1, v)) : b.w;
-        const h = name === 'h' ? Math.min(50, Math.max(1, v)) : b.h;
-        void edit([{ op: 'component-resize', id: c.id, w, h }], { typed: true });
+        return edit([{ op: 'component-move', id: c.id, x, y }], { typed: true });
       }
+      const w = name === 'w' ? Math.min(12 - b.x, Math.max(1, v)) : b.w;
+      const h = name === 'h' ? Math.min(50, Math.max(1, v)) : b.h;
+      return edit([{ op: 'component-resize', id: c.id, w, h }], { typed: true });
     }, false, () => shown(box()));
     return prop(label, i);
   };
@@ -767,7 +785,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       i.min = '5'; i.max = '500';
       i.value = String(c.pageSize ?? 10);
       i.setAttribute('data-prop', 'pageSize');
-      typed(i, () => { if (i.value.trim() === '') return; const v = Math.round(Number(i.value)); if (Number.isFinite(v)) void edit([{ op: 'component-set', id: c.id, prop: 'pageSize', value: Math.min(500, Math.max(5, v)) }], { typed: true }); }, false,
+      typed(i, () => { if (i.value.trim() === '') return undefined; const v = Math.round(Number(i.value)); return Number.isFinite(v) ? edit([{ op: 'component-set', id: c.id, prop: 'pageSize', value: Math.min(500, Math.max(5, v)) }], { typed: true }) : undefined; }, false,
         () => String((components().find((x) => x.id === c.id) as AppTableComponent | undefined)?.pageSize ?? 10));
       box.append(prop('Rows per page', i));
     }
