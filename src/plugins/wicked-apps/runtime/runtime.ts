@@ -681,7 +681,10 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     const go = (): void => {
       if (input.value === sent) return;
       sent = input.value;
-      const p = Promise.resolve(commit());
+      const r = commit();
+      // Only a real edit is waited for: a keystroke that sent nothing (a cleared number) keeps the one in flight (codex r5).
+      if (r === undefined) return;
+      const p = Promise.resolve(r);
       waiting = p;
       void p.finally(() => { if (waiting === p) waiting = null; });
     };

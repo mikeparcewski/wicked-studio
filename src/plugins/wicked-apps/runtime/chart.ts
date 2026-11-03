@@ -132,18 +132,22 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   // positive and a negative band at once (codex r4).
   const stackArea = c.chart === 'area' && c.stacked === true && series.length > 1;
   const xs: number[] = [];
+  /** At an inserted position, the series that cross zero there: exactly zero for them, whatever rounding says (codex r5). */
+  const crossing = new Map<number, Set<number>>();
   rows.forEach((_r, i) => {
     xs.push(i);
     if (!stackArea || i + 1 >= rows.length) return;
-    const ts = new Set<number>();
-    for (const s of series) {
+    const ts = new Map<number, number[]>();
+    series.forEach((s, k) => {
       const a = num(rows[i]![s.i]);
       const b = num(rows[i + 1]![s.i]);
-      if ((a > 0 && b < 0) || (a < 0 && b > 0)) ts.add(a / (a - b));
-    }
-    for (const t of [...ts].sort((p, q) => p - q)) xs.push(i + t);
+      if ((a > 0 && b < 0) || (a < 0 && b > 0)) { const t = a / (a - b); ts.set(t, [...(ts.get(t) ?? []), k]); }
+    });
+    for (const t of [...ts.keys()].sort((p, q) => p - q)) { crossing.set(xs.length, new Set(ts.get(t))); xs.push(i + t); }
   });
-  const valueAt = (k: number, x: number): number => {
+  const valueAt = (k: number, j: number): number => {
+    if (crossing.get(j)?.has(k) === true) return 0;
+    const x = xs[j]!;
     const i = Math.floor(x);
     const t = x - i;
     const a = num(rows[i]![series[k]!.i]);
@@ -155,23 +159,28 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   // negative part under the negative stack, so bands never overlap.
   const posBands: Array<Array<[number, number]>> = series.map(() => []);
   const negBands: Array<Array<[number, number]>> = series.map(() => []);
-  xs.forEach((x, j) => {
+  // The domain, kept as the bands are made (never spread into Math.max: a long chart has hundreds of thousands).
+  let lo = 0;
+  let hi = 1;
+  const seen = (v: number): void => { if (v < lo) lo = v; if (v > hi) hi = v; };
+  xs.forEach((_x, j) => {
     let pos = 0;
     let neg = 0;
     series.forEach((_s, k) => {
-      const v = valueAt(k, x);
-      if (!stackArea) { posBands[k]![j] = [0, v]; negBands[k]![j] = [0, 0]; return; }
+      const v = valueAt(k, j);
+      if (!stackArea) { posBands[k]![j] = [0, v]; negBands[k]![j] = [0, 0]; seen(v); return; }
       const up = Math.max(0, v);
       const down = Math.min(0, v);
       posBands[k]![j] = [pos, pos + up];
       negBands[k]![j] = [neg + down, neg];
       pos += up;
       neg += down;
+      seen(pos);
+      seen(neg);
     });
   });
-  const values = [...posBands.flatMap((x) => x.flat()), ...negBands.flatMap((x) => x.flat())];
-  const max = Math.max(1, ...values);
-  const min = Math.min(0, ...values);
+  const max = hi;
+  const min = lo;
   const sx = (x: number): number => L + (rows.length === 1 ? 0 : (x / (rows.length - 1)) * (W - L - 8));
   const sy = (v: number): number => H - B - ((v - min) / (max - min || 1)) * (H - B - 10);
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': lineOf(c.title ?? `${c.chart} chart`, 120) }, `wk-chart wk-chart--${c.chart}`);
@@ -196,27 +205,28 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
       if (stackArea && negBands[k]!.some(([lo, hi]) => lo !== hi)) svg.append(svgEl('path', { d: band(negBands[k]!) }, `wk-area wk-area--neg wk-series-${k}`));
     }
     if (!stackArea) {
-      svg.append(svgEl('polyline', { points: xs.map((x, j) => pt(j, valueAt(k, x))).join(' '), fill: 'none' }, `wk-stroke wk-series-${k}`));
+      svg.append(svgEl('polyline', { points: xs.map((_x, j) => pt(j, valueAt(k, j))).join(' '), fill: 'none' }, `wk-stroke wk-series-${k}`));
       return;
     }
-    // A stacked series' stroke follows its band's outer edge, split where its sign changes (a crossing point belongs to
-    // both runs): the top of its positive band, the bottom of its negative band.
+    // A stacked series' stroke follows its band's outer edge (the top of its positive band, the bottom of its negative
+    // band), split where its sign changes. At its own crossing (exactly zero) the outgoing run ends on its own stack and
+    // the incoming one starts on the other (codex r5).
     const runs: string[][] = [];
     let sign = 0;
-    xs.forEach((x, j) => {
-      const v = valueAt(k, x);
-      const sgn = v > 0 ? 1 : v < 0 ? -1 : 0;
-      const p = sgn < 0 ? pt(j, negBands[k]![j]![0]) : pt(j, posBands[k]![j]![1]);
-      if (runs.length === 0 || (sgn !== 0 && sign !== 0 && sgn !== sign)) runs.push([]);
-      if (sgn === 0 && runs.length > 0 && sign !== 0) {
-        // the crossing: it ends this run on its own edge and starts the next on the other
-        runs[runs.length - 1]!.push(sign < 0 ? pt(j, negBands[k]![j]![0]) : pt(j, posBands[k]![j]![1]));
-        runs.push([p]);
-        sign = 0;
+    xs.forEach((_x, j) => {
+      const v = valueAt(k, j);
+      const posEdge = pt(j, posBands[k]![j]![1]);
+      const negEdge = pt(j, negBands[k]![j]![0]);
+      if (crossing.get(j)?.has(k) === true) {
+        if (runs.length > 0) runs[runs.length - 1]!.push(sign < 0 ? negEdge : posEdge);
+        runs.push([sign < 0 ? posEdge : negEdge]);
+        sign = -sign;
         return;
       }
-      runs[runs.length - 1]!.push(p);
-      if (sgn !== 0) sign = sgn;
+      const sgn = v > 0 ? 1 : v < 0 ? -1 : sign;
+      if (runs.length === 0) runs.push([]);
+      runs[runs.length - 1]!.push(sgn < 0 ? negEdge : posEdge);
+      sign = sgn;
     });
     for (const run of runs) if (run.length > 1) svg.append(svgEl('polyline', { points: run.join(' '), fill: 'none' }, `wk-stroke wk-series-${k}`));
   });
