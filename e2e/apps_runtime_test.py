@@ -25,6 +25,9 @@ with its CAS and one undo pointer, and the query / prepare / run routes), at 144
  11. /apps: a dashboard of crew's apps (3-4 across at 1440, 2 at 1024, 1 at 390), names as text, no style attribute,
      no query sent for a tile; a card opens its app; Share says "not published" (Publish disabled, a studio link) or
      shows crew's published link; a title edited in place lands one version, Escape lands none.
+ 12. DATA PANEL (Edit): the app's queries and their text; a text crew's read policy refuses shows the code and lands
+     nothing; a valid edit lands ONE version with the columns the check re-read (the table gains the column); Add data
+     turns a table into a starter read and a table for it; Ask in words shows the drafted SQL and the seat's words as text.
 
 Exit 0 and a JSON report on success. Captures: e2e/shots/apps-runtime-<browser>-*.png. Env: FEEDBACK_PORT.
 """
@@ -454,6 +457,72 @@ def main() -> None:
         tf.press('[data-testid="apps-inline"]', "Escape")
         check("inline_touch", opened and tapped_value == "Docs", value=tapped_value)
         touch.close()
+
+        # 9d. the Data panel in Edit: a refused text lands nothing and says why; a valid edit lands ONE version with the
+        #     columns crew's check re-read; Add data makes a starter read and a table for it; hostile words stay text.
+        dp = ctx.new_page()
+        dp.goto(f"{origin}/apps/fixture-app?mode=edit")
+        df = app_frame(dp)
+        df.wait_for_selector(".wk-palette", timeout=20_000)
+        dp.click('[data-testid="apps-data-open"]')
+        dp.wait_for_selector('[data-testid="apps-data"]')
+        listed = dp.eval_on_selector_all('[data-testid="apps-data-query"]', "els => els.map(e => e.dataset.query)")
+        dp.click('[data-testid="apps-data-query"][data-query="tickets"]')
+        shown_text = dp.input_value('[data-testid="apps-data-text"]')
+        e0 = count(origin, "POST", "/edits")
+        hostile_sql = "SELECT '<script>window.__pwned=7</script>' AS id; DROP TABLE support.tickets"
+        dp.fill('[data-testid="apps-data-text"]', hostile_sql)
+        dp.click('[data-testid="apps-data-save"]')
+        dp.wait_for_selector('[data-testid="apps-data-refused"]', timeout=8_000)
+        refused = dp.text_content('[data-testid="apps-data-refused"]')
+        dp.wait_for_timeout(1_200)
+        e1 = count(origin, "POST", "/edits")
+        scripts = dp.evaluate("() => document.querySelectorAll('[data-testid=apps-data] script, [data-testid=apps-data] img').length")
+        check("data_refused", listed == ["open_count", "by_region", "tickets"] and shown_text.startswith("SELECT t.id, t.subject, t.owner")
+              and refused.startswith("statements") and e1 == e0 and scripts == 0
+              and dp.input_value('[data-testid="apps-data-text"]') == hostile_sql and dp.evaluate("() => window.__pwned === undefined"),
+              listed=listed, refused=refused, edits=e1 - e0)
+        good = "SELECT t.id, t.subject, t.owner, t.status\nFROM support.tickets AS t\nWHERE t.subject ILIKE '%' || $1 || '%'\nLIMIT 100"
+        dp.fill('[data-testid="apps-data-text"]', good)
+        dp.click('[data-testid="apps-data-save"]')
+        # The editor opens afresh on the new head; the panel's own line says what landed.
+        dp.wait_for_selector('[data-testid="apps-data-last"]', timeout=8_000)
+        saved = dp.text_content('[data-testid="apps-data-last"]')
+        e2 = count(origin, "POST", "/edits")
+        landed = [c for c in calls(origin) if c["method"] == "POST" and c["path"].endswith("/edits")][-1]
+        ops = landed["body"]["ops"]
+        out = next(q["output"] for q in ops[0]["spec"]["queries"] if q["id"] == "tickets")
+        df.wait_for_function("() => [...document.querySelectorAll('[data-component=\"tickets\"] th')].some(th => th.textContent.trim().toLowerCase() === 'status')", timeout=10_000)
+        shot(dp, "7-data-edit")
+        check("data_edit_lands", e2 - e1 == 1 and landed["status"] == 200 and saved.startswith("Saved as v") and "4 columns" in saved
+              and [o for o in ops if o["op"] == "query-text"] == [{"op": "query-text", "query": "tickets", "text": good}]
+              and [o["name"] for o in out] == ["id", "subject", "owner", "status"], saved=saved, edits=e2 - e1, output=out)
+        # Add data: support.regions -> a starter read -> a new table that reads it, in ONE version.
+        dp.wait_for_selector('[data-testid="apps-data-table"][data-table="support.regions"]', timeout=8_000)
+        dp.click('[data-testid="apps-data-table"][data-table="support.regions"]')
+        starter = dp.input_value('[data-testid="apps-data-add-text"]')
+        target = dp.input_value('[data-testid="apps-data-target"]')
+        dp.click('[data-testid="apps-data-add-save"]')
+        dp.wait_for_selector('[data-testid="apps-data-add"] [data-testid="apps-data-saved"]', timeout=8_000)
+        e3 = count(origin, "POST", "/edits")
+        landed = [c for c in calls(origin) if c["method"] == "POST" and c["path"].endswith("/edits")][-1]
+        spec3 = landed["body"]["ops"][0]["spec"]
+        reads = [c for c in spec3["pages"][0]["components"] if c.get("data", {}).get("query") == "regions"]
+        df.wait_for_function("() => [...document.querySelectorAll('.wk-cell-title')].some(t => t.textContent.trim().toLowerCase() === 'regions')", timeout=10_000)
+        check("data_add", starter == "SELECT id, name, sla_hours\nFROM support.regions\nLIMIT 100" and target == "new-table" and e3 - e2 == 1 and landed["status"] == 200
+              and any(q["id"] == "regions" for q in spec3["queries"]) and len(reads) == 1 and reads[0]["type"] == "table"
+              and {"op": "query-text", "query": "regions", "text": starter} in landed["body"]["ops"], starter=starter, edits=e3 - e2, reads=len(reads))
+        # Ask in words: the drafted SQL and the seat's words are shown first, as text; nothing lands until Check & add.
+        dp.fill('[data-testid="apps-data-ask"]', "Open tickets per region?")
+        dp.click('[data-testid="apps-data-ask-go"]')
+        dp.wait_for_selector('[data-testid="apps-data-draft-sql"]', timeout=8_000)
+        draft = dp.text_content('[data-testid="apps-data-draft"]')
+        e4 = count(origin, "POST", "/edits")
+        imgs = dp.evaluate("() => document.querySelectorAll('[data-testid=apps-data] img, [data-testid=apps-data] script').length")
+        shot(dp, "8-data-ask")
+        check("data_ask_text", "<img src=x onerror=window.__pwned=8> Open tickets per region." in draft and e4 == e3 and imgs == 0
+              and no_style(df) == 0 and dp.evaluate("() => window.__pwned === undefined"), draft=draft[:200], imgs=imgs)
+        dp.close()
 
         # 9. framed
         framer = ctx.new_page()

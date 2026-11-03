@@ -20,7 +20,8 @@ export interface AppStorePort {
   /** `crew` = crew's store; `sample` = the in-memory sample (shown as such by the host). */
   readonly kind: 'crew' | 'sample';
   detail(): Promise<AppDetail>;
-  edit(base: number, spec: AppSpec, summary: string): Promise<StoreResult>;
+  /** One version from `spec`, plus the text of each query in `texts` (crew's `query-text` op), on `base`. */
+  edit(base: number, spec: AppSpec, summary: string, texts?: Readonly<Record<string, string>>): Promise<StoreResult>;
   move(direction: 'undo' | 'redo', base: number): Promise<StoreResult>;
 }
 
@@ -44,9 +45,10 @@ export class CrewAppStore implements AppStorePort {
   async detail(): Promise<AppDetail> {
     return (await apiFetch<AppDetailResponse>(this.path())).app;
   }
-  async edit(base: number, spec: AppSpec, summary: string): Promise<StoreResult> {
+  async edit(base: number, spec: AppSpec, summary: string, texts: Readonly<Record<string, string>> = {}): Promise<StoreResult> {
+    const ops = [{ op: 'spec', spec }, ...Object.entries(texts).map(([query, text]) => ({ op: 'query-text', query, text }))];
     try {
-      const r = await apiFetch<AppLandedResponse>(this.path('/edits'), { method: 'POST', body: JSON.stringify({ base, ops: [{ op: 'spec', spec }], summary }) });
+      const r = await apiFetch<AppLandedResponse>(this.path('/edits'), { method: 'POST', body: JSON.stringify({ base, ops, summary }) });
       return { ok: true, app: r.app, landed: r.landed };
     } catch (e) { return refusalOf(e); }
   }
@@ -73,7 +75,19 @@ export function sampleTree(spec: AppSpec): string {
   return `${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
 }
 
-interface SampleState { detail: AppDetail; specs: Record<number, AppSpec> }
+interface SampleState { detail: AppDetail; specs: Record<number, AppSpec>; texts?: Record<number, Record<string, string>> }
+
+/** A sample query's stand-in text (the samples hold no SQL): it says what it is, and no source ever sees it. */
+export function sampleTexts(spec: AppSpec): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const q of spec.queries) out[q.id] = `-- A sample query: this app's rows are made up, and nothing reaches ${q.source}.\nSELECT ${q.output.map((o) => o.name).join(', ')}\nFROM sample.${q.id}`;
+  return out;
+}
+/** The texts of the queries `spec` declares: a text whose query is gone goes with it (crew does the same). */
+function declaredTexts(spec: AppSpec, texts: Readonly<Record<string, string>>): Record<string, string> {
+  const ids = new Set(spec.queries.map((q) => q.id));
+  return Object.fromEntries(Object.entries(texts).filter(([id]) => ids.has(id)));
+}
 
 const ACCEPTED: ReadonlySet<string> = new Set(['you', 'reviewed', 'restored']);
 const SAMPLE_ACTOR = { id: 'you', kind: 'human', trust: 'operator' } as unknown as AppReceipt['actor'];
@@ -83,11 +97,13 @@ export function sampleDetail(slug: string, spec: AppSpec, now = Date.now()): Sam
   const tree = sampleTree(spec);
   const receipt: AppReceipt = { kind: 'reviewed', tree, version: 1, at: now, actor: SAMPLE_ACTOR, review: { runId: 'sample', builder: 'sample', reviewer: 'sample' } };
   const v1: AppVersion = { version: 1, commit: tree, tree, base: null, at: now, author: { kind: 'seat', id: 'sample' }, receipt, summary: 'The sample app', check: { level: 'full', checked: [] } };
+  const texts = sampleTexts(spec);
   return {
     specs: { 1: spec },
+    texts: { 1: texts },
     detail: {
       slug, name: spec.name, projectId: 'sample', repoId: slug, createdAt: now, head: { version: 1, tree, receipt: 'reviewed' }, turn: null,
-      spec, lock: { schema: 'wicked.apps.lock/v1', sources: {}, queries: {}, actions: {}, uploads: {} }, queryText: {},
+      spec, lock: { schema: 'wicked.apps.lock/v1', sources: {}, queries: {}, actions: {}, uploads: {} }, queryText: texts,
       versions: [v1], history: { states: [1], pointer: 0, canUndo: false, canRedo: false },
     },
   };
@@ -133,7 +149,7 @@ export class SampleAppStore implements AppStorePort {
 
   async detail(): Promise<AppDetail> { await this.ready; this.sync(); return structuredClone(this.mem.detail); }
 
-  private land(spec: AppSpec, summary: string, receipt: (v: number, tree: string, at: number) => AppReceipt, history: (v: number) => void): StoreResult {
+  private land(spec: AppSpec, texts: Record<string, string>, summary: string, receipt: (v: number, tree: string, at: number) => AppReceipt, history: (v: number) => void): StoreResult {
     const d = this.mem.detail;
     const version = d.head.version + 1;
     const tree = sampleTree(spec);
@@ -142,6 +158,8 @@ export class SampleAppStore implements AppStorePort {
     const v: AppVersion = { version, commit: tree, tree, base: d.head.version, at, author: { kind: 'human', id: 'you' }, receipt: r, summary: summary.slice(0, 200), check: { level: 'spec', checked: [] } };
     d.versions.push(v);
     this.mem.specs[version] = structuredClone(spec);
+    this.mem.texts = { ...(this.mem.texts ?? {}), [version]: structuredClone(texts) };
+    d.queryText = structuredClone(texts);
     d.spec = structuredClone(spec);
     d.name = spec.name;
     d.head = { version, tree, receipt: r.kind };
@@ -157,16 +175,17 @@ export class SampleAppStore implements AppStorePort {
     return base === h ? null : { ok: false, code: 'stale_base', message: `${what} was made on v${base}, but ${this.slug} is at v${h}; reload and try again`, head: h };
   }
 
-  async edit(base: number, spec: AppSpec, summary: string): Promise<StoreResult> {
+  async edit(base: number, spec: AppSpec, summary: string, texts: Readonly<Record<string, string>> = {}): Promise<StoreResult> {
     await this.ready;
-    return this.tx(() => this.editNow(base, spec, summary));
+    return this.tx(() => this.editNow(base, spec, summary, texts));
   }
 
-  private editNow(base: number, spec: AppSpec, summary: string): StoreResult {
+  private editNow(base: number, spec: AppSpec, summary: string, texts: Readonly<Record<string, string>>): StoreResult {
     this.sync();
     const stale = this.stale(base, 'this edit');
     if (stale !== null) return stale;
-    return this.land(spec, summary, (version, tree, at) => ({ kind: 'you', tree, version, at, actor: SAMPLE_ACTOR }), (version) => {
+    const next = declaredTexts(spec, { ...(this.mem.detail.queryText ?? {}), ...texts });
+    return this.land(spec, next, summary, (version, tree, at) => ({ kind: 'you', tree, version, at, actor: SAMPLE_ACTOR }), (version) => {
       const h = this.mem.detail.history;
       h.states = [...h.states.slice(0, h.pointer + 1), version];
       h.pointer = h.states.length - 1;
@@ -190,8 +209,9 @@ export class SampleAppStore implements AppStorePort {
     const target = this.mem.detail.versions[states[to]! - 1]!;
     if (target.receipt === null || !ACCEPTED.has(target.receipt.kind)) return { ok: false, code: 'not_accepted', message: `v${target.version} holds no accepted receipt` };
     const spec = this.mem.specs[target.version]!;
+    const texts = this.mem.texts?.[target.version] ?? declaredTexts(spec, this.mem.detail.queryText ?? {});
     const origin = target.receipt.restoredFrom ?? { version: target.version, originKind: target.receipt.kind === 'reviewed' ? 'reviewed' as const : 'you' as const, originVersion: target.version };
-    return this.land(spec, `${direction === 'undo' ? 'Undo' : 'Redo'} to v${target.version}`, (version, tree, at) => ({
+    return this.land(spec, texts, `${direction === 'undo' ? 'Undo' : 'Redo'} to v${target.version}`, (version, tree, at) => ({
       kind: 'restored', tree, version, at, actor: SAMPLE_ACTOR, restoredFrom: { version: target.version, originKind: origin.originKind, originVersion: origin.originVersion },
     }), () => { this.mem.detail.history.pointer = to; });
   }

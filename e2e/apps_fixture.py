@@ -72,12 +72,38 @@ SPEC_B = {
 }
 ROWS_B = {"b_secret": [[123456]]}
 
+# The query texts at v1 (crew keeps them as queries/<id>.sql beside apps.json).
+TEXTS_A = {
+    "open_count": "SELECT count(*) AS open\nFROM support.tickets AS t\nWHERE t.status = 'open'",
+    "by_region": "SELECT r.name AS region, count(*) AS n\nFROM support.tickets AS t\nJOIN support.regions AS r ON r.id = t.region_id\nGROUP BY r.name",
+    "tickets": "SELECT t.id, t.subject, t.owner\nFROM support.tickets AS t\nWHERE t.subject ILIKE '%' || $1 || '%'\nLIMIT 100",
+}
+TEXTS_B = {"b_secret": "SELECT p.salary\nFROM hr.pay AS p"}
+
+# support-pg as crew's registry and catalog describe it (structure only), and the column types its describe answers.
+SOURCE_TYPES = {"id": "integer", "subject": "text", "owner": "text", "status": "text", "region_id": "integer", "opened_at": "timestamp with time zone",
+                "name": "text", "sla_hours": "integer", "region": "text"}
+CATALOG = {"name": "support-pg", "kind": "sql", "descriptorHash": "d-fixture", "catalog": {"dialect": "postgres", "database": "support", "describedAt": "2026-11-04T00:00:00Z", "relations": [
+    {"schema": "support", "name": "tickets", "kind": "table", "rowEstimate": 4, "primaryKey": ["id"], "foreignKeys": [],
+     "columns": [{"name": n, "type": SOURCE_TYPES[n], "nullable": n != "id"} for n in ("id", "subject", "status", "owner", "region_id", "opened_at")]},
+    {"schema": "support", "name": "regions", "kind": "table", "rowEstimate": 5, "primaryKey": ["id"], "foreignKeys": [],
+     "columns": [{"name": n, "type": SOURCE_TYPES[n], "nullable": n != "id"} for n in ("id", "name", "sla_hours")]},
+]}}
+SERVER = {"name": "support-pg", "kind": "sql", "sql": {"driver": "postgres"}, "enabled": True, "allowWrites": False, "descriptorHash": "d-fixture",
+          "registeredAt": "2026-11-04T00:00:00.000Z", "updatedAt": "2026-11-04T00:00:00.000Z", "tools": [],
+          "counts": {"total": 0, "enabled": 0, "registered": 0, "read": 0, "write": 0, "destructive": 0}}
+# What a seat drafts for "Ask in words" (crew#1305): the explanation is the seat's words, so it is hostile on purpose.
+ASK = {"sql": "SELECT r.name AS region, count(*) AS open\nFROM support.tickets AS t\nJOIN support.regions AS r ON r.id = t.region_id\nWHERE t.status = 'open'\nGROUP BY r.name",
+       "explanation": "<img src=x onerror=window.__pwned=8> Open tickets per region.", "seat": "claude"}
+
 # How long a prepared record lives (crew: 2 minutes); POST /__fixture/apps-caps {recordMs} shortens it for a journey.
 RECORD_MS = 120_000
 APPS: dict = {}
 CALLS: list = []
 RECORDS: dict = {}
 CAPS = {"query": True, "actions": True, "turns": False, "publish": False, "uploads": False, "sourceCheck": True}
+# Whether crew's registry holds support-pg (POST /__fixture/apps-caps {sources: false} empties it).
+SOURCES_ON = [True]
 
 
 def _tree(spec) -> str:
@@ -88,11 +114,11 @@ def _now() -> int:
     return int(time.time() * 1000)
 
 
-def _make(slug: str, spec: dict, rows: dict) -> dict:
+def _make(slug: str, spec: dict, rows: dict, texts: dict) -> dict:
     tree = _tree(spec)
     receipt = {"kind": "reviewed", "tree": tree, "version": 1, "at": _now(), "actor": {"id": "local", "kind": "human", "trust": "operator"},
                "review": {"runId": "r-fixture", "builder": "claude", "reviewer": "codex"}}
-    return {"slug": slug, "specs": {1: copy.deepcopy(spec)}, "rows": copy.deepcopy(rows), "versions": [
+    return {"slug": slug, "specs": {1: copy.deepcopy(spec)}, "texts": {1: dict(texts)}, "rows": copy.deepcopy(rows), "versions": [
         {"version": 1, "commit": tree, "tree": tree, "base": None, "at": _now(), "author": {"kind": "seat", "id": "claude"},
          "receipt": receipt, "summary": "The first turn", "check": {"level": "full", "checked": []}}],
         "history": {"states": [1], "pointer": 0}}
@@ -101,11 +127,12 @@ def _make(slug: str, spec: dict, rows: dict) -> dict:
 def reset() -> None:
     with lock:
         APPS.clear()
-        APPS["fixture-app"] = _make("fixture-app", SPEC_A, ROWS_A)
-        APPS["other-app"] = _make("other-app", SPEC_B, ROWS_B)
+        APPS["fixture-app"] = _make("fixture-app", SPEC_A, ROWS_A, TEXTS_A)
+        APPS["other-app"] = _make("other-app", SPEC_B, ROWS_B, TEXTS_B)
         CALLS.clear()
         RECORDS.clear()
         CAPS.update({"query": True, "actions": True})
+        SOURCES_ON[0] = True
         global RECORD_MS
         RECORD_MS = 120_000
 
@@ -122,6 +149,15 @@ PUBLISHED = {"fixture-app": {"shareUrl": "https://fixture-desk.apps.example.test
                              "version": 1, "at": 1762160400000, "targets": ["site", "embed"], "tree": "t", "runId": "r"}}
 
 
+def _sample_cell(name: str, i: int):
+    """A row value for a query a journey added (the fixture has no database): ids count, text says what it is."""
+    if name in ("id", "n", "open", "sla_hours", "region_id"):
+        return 4900 + i if name == "id" else i + 1
+    if name == "subject":
+        return ["<img src=x onerror=window.__pwned=6> Printer", "Login loop", "Refund"][i]
+    return f"{name} {i + 1}"
+
+
 def capabilities() -> dict:
     with lock:
         return dict(CAPS)
@@ -136,11 +172,11 @@ def _detail(a: dict) -> dict:
             "head": {"version": head["version"], "tree": head["tree"], "receipt": head["receipt"]["kind"] if head["receipt"] else None},
             "turn": None, "spec": copy.deepcopy(spec),
             "lock": {"schema": "wicked.apps.lock/v1", "sources": {}, "queries": {}, "actions": {}, "uploads": {}},
-            "queryText": {}, "versions": copy.deepcopy(a["versions"]),
+            "queryText": dict(a["texts"].get(head["version"], {})), "versions": copy.deepcopy(a["versions"]),
             "history": {"states": list(states), "pointer": pointer, "canUndo": pointer > 0, "canRedo": 0 <= pointer < len(states) - 1}}
 
 
-def _land(a: dict, spec: dict, summary: str, receipt: dict, author: dict) -> dict:
+def _land(a: dict, spec: dict, summary: str, receipt: dict, author: dict, texts: dict | None = None) -> dict:
     head = a["versions"][-1]["version"]
     v = head + 1
     tree = _tree(spec)
@@ -149,6 +185,7 @@ def _land(a: dict, spec: dict, summary: str, receipt: dict, author: dict) -> dic
               "summary": summary[:200], "check": {"level": "spec", "checked": []}}
     a["versions"].append(landed)
     a["specs"][v] = copy.deepcopy(spec)
+    a["texts"][v] = dict(texts if texts is not None else a["texts"].get(head, {}))
     return landed
 
 
@@ -191,6 +228,15 @@ def _check(spec: dict) -> list:
             for b, where in ([(c["action"], "action")] if c["type"] == "button" else []) + ([(c["submit"], "submit")] if c["type"] == "form" else []) \
                     + [(r, f"rowActions[{i}]") for i, r in enumerate(c.get("rowActions") or [])]:
                 sites.append((actions.get(b["action"]), b.get("params") or {}, f"{at}.{where}", b["action"]))
+            q = queries.get(c["data"]["query"]) if "data" in c else None
+            if q is not None:
+                have = {o["name"] for o in q.get("output", [])}
+                named = [tc["column"] for tc in c.get("columns") or []] if c["type"] == "table" else \
+                    ([c["x"]] + [x["column"] for x in c.get("series", [])]) if c["type"] == "chart" else \
+                    ([c["value"]] + ([c["delta"]] if "delta" in c else [])) if c["type"] == "kpi" else []
+                for col in named:
+                    if col not in have:
+                        findings.append({"stage": "spec", "code": "unknown_column", "path": f"{at}", "message": f"query {q['id']} declares no output column {json.dumps(col)}"})
             for target, bound, path, name in sites:
                 if target is None:
                     findings.append({"stage": "spec", "code": "unknown_ref", "path": path, "message": f"{name} is not declared"})
@@ -201,9 +247,93 @@ def _check(spec: dict) -> list:
     return findings
 
 
+def _policy(text: str):
+    """crew's read policy, in the few rules a journey needs (packages/crew/src/sources/policy/pg.ts): one SELECT, no
+    function outside the allowlist, schema-qualified tables. Answers (code, detail) or None."""
+    t = text.strip()
+    if not t.lower().startswith("select"):
+        return "not_select", "only a SELECT reads data"
+    if ";" in t.rstrip(";"):
+        return "statements", "one statement only"
+    if "pg_sleep" in t.lower():
+        return "function", "pg_sleep() is not an allowed function"
+    return None
+
+
+def _describe(text: str) -> list:
+    """The described result columns of a SELECT (a stand-in for Postgres's Describe): each select-list item's alias, or
+    its column name; count(*) is a bigint."""
+    head = text.strip()[6:]
+    low = head.lower()
+    cut = low.find("\nfrom") if "\nfrom" in low else low.find(" from ")
+    items, depth, cur = [], 0, ""
+    for ch in head[:cut if cut >= 0 else len(head)]:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            items.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        items.append(cur)
+    out = []
+    for it in items:
+        it = it.strip()
+        parts = it.split()
+        name = parts[-1] if len(parts) >= 3 and parts[-2].lower() == "as" else it.split(".")[-1]
+        name = name.strip('"')
+        typ = "bigint" if "count(" in it.lower() else SOURCE_TYPES.get(it.split(".")[-1].split()[0].strip('"'), "text")
+        out.append({"name": name, "type": typ})
+    return out
+
+
+def _source_check(q: dict, text: str):
+    """The source stage for one query (crew's apps/exec/source-stage.ts): the policy, then the described columns
+    against the declared output (names and count). Answers a finding or None."""
+    bad = _policy(text)
+    if bad is not None:
+        return {"stage": "source", "code": bad[0], "path": "$.queries", "message": f"query {q['id']}: {bad[1]}"}
+    cols = [c["name"] for c in _describe(text)]
+    declared = [o["name"] for o in q.get("output", [])]
+    if sorted(cols) != sorted(declared):
+        return {"stage": "source", "code": "output_columns", "path": "$.queries", "message": f"query {q['id']}: the query returns {len(cols)} columns ({', '.join(cols)}); {len(declared)} are declared"}
+    return None
+
+
+def _sources(method: str, path: str, body):
+    """crew's registry read and support-pg's source routes (catalog, check, ask), as K1 and crew#1305 answer them."""
+    if path == "/api/v1/mcp/servers" and method == "GET":
+        return 200, {"servers": [copy.deepcopy(SERVER)] if SOURCES_ON[0] else [], "discovered": []}
+    if not path.startswith("/api/v1/sources/"):
+        return None
+    name, _, verb = path[len("/api/v1/sources/"):].partition("/")
+    if name != "support-pg" or not SOURCES_ON[0]:
+        return _refuse(404, "unknown_source", f"no source {name}")
+    if verb == "catalog" and method == "GET":
+        return 200, copy.deepcopy(CATALOG)
+    if verb == "check" and method == "POST":
+        text = (body or {}).get("text") or ""
+        bad = _policy(text)
+        if bad is not None:
+            return 200, {"ok": False, "code": bad[0], "detail": bad[1]}
+        return 200, {"ok": True, "columns": _describe(text), "params": ["text"] if "$1" in text else [], "relations": ["support.tickets"]}
+    if verb == "ask" and method == "POST":
+        return 200, {**ASK, "check": {"ok": True, "columns": _describe(ASK["sql"]), "params": [], "relations": ["support.tickets", "support.regions"]}, "confirm": None}
+    return _refuse(404, "bad_request", "no such route")
+
+
+
 def handle(method: str, path: str, body):
     """Answer an /api/v1/apps or /__fixture/apps* request: (status, json) or None when it is not one of these. Every
     /api/v1/apps call is recorded with the status it got."""
+    if path == "/api/v1/mcp/servers" or path.startswith("/api/v1/sources/"):
+        with lock:
+            r = _sources(method, path, body)
+            CALLS.append({"method": method, "path": path, "body": copy.deepcopy(body), "at": _now(), "status": r[0] if r else None})
+            return r
     if path == "/api/v1/apps" and method == "GET":
         with lock:
             CALLS.append({"method": method, "path": path, "body": None, "at": _now(), "status": 200})
@@ -235,6 +365,8 @@ def _answer(method: str, path: str, body, locked: bool = False):
             for k in ("query", "actions"):
                 if isinstance((body or {}).get(k), bool):
                     CAPS[k] = body[k]
+            if isinstance((body or {}).get("sources"), bool):
+                SOURCES_ON[0] = body["sources"]
             if isinstance((body or {}).get("recordMs"), int):
                 RECORD_MS = body["recordMs"]
         return 200, {"caps": capabilities()}
@@ -260,10 +392,34 @@ def _answer(method: str, path: str, body, locked: bool = False):
             spec = next((o["spec"] for o in ops if o.get("op") == "spec"), None)
             if spec is None:
                 return _refuse(400, "bad_request", "an edit holds a spec op")
+            head_v = a["versions"][-1]["version"]
+            texts = dict(a["texts"].get(head_v, {}))
+            for o in ops:
+                if o.get("op") == "query-text":
+                    texts[o["query"]] = o["text"]
+            declared = {q["id"] for q in spec.get("queries", [])}
+            texts = {k: v for k, v in texts.items() if k in declared}
             findings = _check(spec)
+            # The source stage, for the queries whose text or declaration changed (crew's level 'auto').
+            before = {q["id"]: q for q in a["specs"][head_v].get("queries", [])}
+            old_texts = a["texts"].get(head_v, {})
+            for q in spec.get("queries", []):
+                if before.get(q["id"]) != q or old_texts.get(q["id"]) != texts.get(q["id"]):
+                    f = _source_check(q, texts.get(q["id"], ""))
+                    if f is not None:
+                        findings.append(f)
             if findings:
                 return _refuse(422, "check_failed", "; ".join(f["message"] for f in findings[:5]), findings=findings)
-            landed = _land(a, spec, body.get("summary") or "An edit", {"kind": "you"}, {"kind": "human", "id": "local"})
+            landed = _land(a, spec, body.get("summary") or "An edit", {"kind": "you"}, {"kind": "human", "id": "local"}, texts)
+            # A new query answers made-up rows, and a query whose output changed keeps its rows by column name (the
+            # fixture has no database), so the canvas has something to draw.
+            for q in spec.get("queries", []):
+                new = [o["name"] for o in q["output"]]
+                if q["id"] not in a["rows"]:
+                    a["rows"][q["id"]] = [[_sample_cell(n, i) for n in new] for i in range(3)]
+                elif q["id"] in before and [o["name"] for o in before[q["id"]]["output"]] != new:
+                    old = [o["name"] for o in before[q["id"]]["output"]]
+                    a["rows"][q["id"]] = [[r[old.index(n)] if n in old else _sample_cell(n, i) for n in new] for i, r in enumerate(a["rows"][q["id"]])]
             h = a["history"]
             h["states"] = h["states"][: h["pointer"] + 1] + [landed["version"]]
             h["pointer"] = len(h["states"]) - 1
@@ -283,7 +439,7 @@ def _answer(method: str, path: str, body, locked: bool = False):
             origin = held.get("restoredFrom") or {"originKind": held["kind"], "originVersion": target}
             landed = _land(a, a["specs"][target], f"{direction.title()} to v{target}",
                            {"kind": "restored", "restoredFrom": {"version": target, "originKind": origin["originKind"], "originVersion": origin["originVersion"]}},
-                           {"kind": "human", "id": "local"})
+                           {"kind": "human", "id": "local"}, a["texts"].get(target, {}))
             h["pointer"] = to
             return 200, {"app": _detail(a), "landed": landed}
         if rest == ["query"]:

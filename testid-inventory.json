@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 300,
-    "occurrences": 4272,
-    "static": 3619,
+    "files": 301,
+    "occurrences": 4312,
+    "static": 3657,
     "dynamic": 120,
     "computed": 48
   },
@@ -704,6 +704,234 @@
       "testId": "apps-crumb",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-add",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-add-save",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-add-source",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-add-text",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-ask",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-ask-failed",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-ask-go",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-check",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-checking",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-close",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-columns",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-draft",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-draft-sql",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-editor",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-findings",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-gone",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-last",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-nosource",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-open",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-output",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-params",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-query",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-refused",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-refused-code",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-sample",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-save",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-save-refused",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-saved",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-saving",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-source",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-source-select",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-sources-link",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-table",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-target",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-text",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-use-draft",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-usedby",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
       ]
     },
     {

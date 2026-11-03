@@ -8814,7 +8814,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"posts": posts})
         if (path == "/api/v1/editors" or path.startswith("/api/v1/editors/")) and self._editor_routes(path):
             return None
-        if path == "/api/v1/apps" or path.startswith("/api/v1/apps/") or path.startswith("/__fixture/apps"):
+        if path == "/api/v1/apps" or path.startswith("/api/v1/apps/") or path.startswith("/__fixture/apps") \
+                or path == "/api/v1/mcp/servers" or path.startswith("/api/v1/sources/"):
             with state_lock:
                 apps_on = state["apps"]
             if apps_on:
@@ -9095,7 +9096,7 @@ class W2Handler(SimpleHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if path.startswith("/api/v1/mcp-inspect/") and self._mcp_inspect("POST", path, body):
             return None
-        if path.startswith("/api/v1/apps/") or path.startswith("/__fixture/apps"):
+        if path.startswith("/api/v1/apps/") or path.startswith("/__fixture/apps") or path.startswith("/api/v1/sources/"):
             with state_lock:
                 apps_on = state["apps"]
             if apps_on:

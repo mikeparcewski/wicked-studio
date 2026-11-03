@@ -16,6 +16,34 @@
 /* Edit: the builder takes the whole width (actions run only in Preview, so the dock waits there). */
 .wk-apps-body[data-mode='edit'] { grid-template-columns: minmax(0, 1fr); }
 .wk-apps-body[data-mode='edit'] .wk-apps-dock { display: none; }
+/* Edit's Data panel (the app's queries; Add data): a drawer over the frame's right edge, where the runtime's
+   Properties sit, so the canvas keeps its width while the person works on the data. */
+.wk-apps-body { position: relative; }
+.wk-apps-data { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; width: min(420px, 100%); box-sizing: border-box; min-width: 0; overflow: auto; padding: var(--space-4); border-left: 1px solid var(--border-strong); background: var(--surface-base); box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-apps-data-head { display: flex; align-items: center; justify-content: space-between; }
+.wk-apps-data-title { margin: 0; font-size: var(--text-lead); font-weight: var(--weight-strong); color: var(--ink-high); }
+.wk-apps-data-sec { margin: 0 0 var(--space-2); font-size: var(--text-caption); font-weight: var(--weight-strong); color: var(--ink-muted); display: flex; gap: var(--space-2); }
+.wk-apps-data-list, .wk-apps-data-tables { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.wk-apps-data-q, .wk-apps-data-table { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); color: var(--ink-body); font: inherit; cursor: pointer; }
+.wk-apps-data-table { flex-direction: row; align-items: baseline; justify-content: space-between; }
+.wk-apps-data-q[aria-expanded='true'], .wk-apps-data-table[aria-pressed='true'] { border-color: var(--accent); }
+.wk-apps-data-q:focus-visible, .wk-apps-data-table:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wk-apps-data-name { font-family: var(--font-mono); font-size: var(--text-code); color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-apps-data-meta { color: var(--ink-muted); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.wk-apps-data-editor, .wk-apps-data-add, .wk-apps-data-draft { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) 0 var(--space-2); }
+.wk-apps-data-k { font-size: var(--text-caption); color: var(--ink-muted); }
+.wk-apps-data-text { width: 100%; box-sizing: border-box; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-code); resize: vertical; }
+.wk-apps-data-sql { margin: 0; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-code); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-apps-data-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.wk-apps-data-select, .wk-apps-data-input { flex: 1 1 140px; min-width: 0; padding: 4px 6px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); color: var(--ink-high); font: inherit; font-size: var(--text-caption); }
+.wk-apps-data-more { font-size: var(--text-caption); }
+.wk-apps-data-actions { display: flex; gap: var(--space-2); }
+.wk-apps-data-note { margin: 0; color: var(--ink-body); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.wk-apps-data-note--fail { color: var(--status-fail); }
+.wk-apps-data-note--ok { color: var(--status-ok); }
+.wk-apps-data-note ul, .wk-apps-data-findings { margin: var(--space-1) 0 0; padding-left: var(--space-4); }
+.wk-apps-data-note code, .wk-apps-data-findings code { font-family: var(--font-mono); }
+.wk-btn--on { border-color: var(--accent); color: var(--ink-high); }
 .wk-apps-frame { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .wk-apps-frame-box { flex: 1 1 auto; min-height: 0; display: flex; }
 .wk-apps-frame-box .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 420px; border: 0; background: var(--surface-base); }

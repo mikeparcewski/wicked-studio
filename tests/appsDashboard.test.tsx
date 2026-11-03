@@ -370,7 +370,7 @@ interface Booted {
   hold: () => void;
   release: () => void;
 }
-async function boot(spec: AppSpec): Promise<Booted> {
+async function boot(spec: AppSpec, opts: { rows?: Record<string, { columns: Array<{ name: string; type: string }>; rows: unknown[][] }> } = {}): Promise<Booted> {
   vi.resetModules();
   const style = document.createElement('style');
   style.id = 'wk-apps-sheet';
@@ -389,6 +389,7 @@ async function boot(spec: AppSpec): Promise<Booted> {
     if (d.id === undefined) return;
     const reply = (payload: unknown): void => ch.port1.postMessage({ p: 'wicked.editor', v: 1, re: d.id, ok: true, payload });
     if (d.type === 'artifact.read') { reply({ version: ver, content: { type: 'app', spec: current } }); return; }
+    if (d.type === 'data.query' && opts.rows !== undefined) { reply(opts.rows[d.payload['query'] as string] ?? { columns: [], rows: [] }); return; }
     if (d.type === 'spec.edit') {
       const next = structuredClone(current);
       const op = (d.payload['ops'] as Array<Record<string, unknown>>)[0]!;
@@ -402,7 +403,7 @@ async function boot(spec: AppSpec): Promise<Booted> {
     reply({});
   };
   window.dispatchEvent(Object.assign(new Event('message'), {
-    data: { p: 'wicked.editor', v: 1, type: 'host.hello', payload: { protocol: 2, surface: 'full', grants: ['artifact.read', 'artifact.write', 'selection.chip'], app: { framed: false, mode: 'edit' }, theme: {}, prefs: { locale: 'en' } } },
+    data: { p: 'wicked.editor', v: 1, type: 'host.hello', payload: { protocol: 2, surface: 'full', grants: ['artifact.read', 'artifact.write', 'selection.chip', ...(opts.rows !== undefined ? ['data.read'] : [])], app: { framed: false, mode: 'edit' }, theme: {}, prefs: { locale: 'en' } } },
     source: window, ports: [ch.port2],
   }));
   await vi.waitFor(() => expect(document.querySelector('.wk-palette')).not.toBeNull());
@@ -682,5 +683,23 @@ describe('a tile’s host refuses everything a compromised frame could ask', () 
     expect(prepare.mock.calls.length === 0 || (await prepare.mock.results[0]!.value as { error?: string }).error === 'refused').toBe(true);
     expect(session.head).toBe(3);
     host.teardown('done');
+  });
+});
+
+// ── a component whose column is gone (K4 Data panel, operator 2026-11-04) ───────────────────
+
+describe('a column the rows no longer carry', () => {
+  it('is said plainly on the component (never a blank or a dash), and the words are text', async () => {
+    const spec = SPEC();
+    (spec.pages[0]!.components[0] as { value: string }).value = '<img src=x onerror=window.__pwned=9>n';
+    await boot(spec, { rows: { x: { columns: [{ name: 'other', type: 'integer' }], rows: [[4]] } } });
+    await vi.waitFor(() => expect(document.querySelector('[data-component="k"] .wk-gone')?.textContent).toBe('Column gone: <img src=x onerror=window.__pwned=9>n. The query no longer returns it.'));
+    expect(document.querySelectorAll('[data-testid="apps-runtime"] img')).toHaveLength(0);
+  });
+
+  it('a component whose columns are all there draws as before', async () => {
+    await boot(SPEC(), { rows: { x: { columns: [{ name: 'n', type: 'integer' }], rows: [[4]] } } });
+    await vi.waitFor(() => expect(document.querySelector('[data-component="k"] .wk-kpi-value')?.textContent).toBe('4'));
+    expect(document.querySelector('[data-component="k"] .wk-gone')).toBeNull();
   });
 });

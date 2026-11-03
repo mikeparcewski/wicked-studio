@@ -383,6 +383,18 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       if (res.state === 'error') { body.append(el('p', 'wk-error', `${'data' in c ? c.data.query : ''}: ${res.message}`)); return; }
     }
     const rows = res?.state === 'rows' ? res.rows : null;
+    // A column this component names that its rows no longer carry (the query changed, or the source did): said
+    // plainly, never a blank or a silent dash.
+    if (rows !== null && (c.type === 'kpi' || c.type === 'chart' || c.type === 'table')) {
+      const named = c.type === 'kpi' ? [c.value, ...(c.delta !== undefined ? [c.delta] : [])]
+        : c.type === 'chart' ? [c.x, ...c.series.map((x) => x.column)] : (c.columns ?? []).map((x) => x.column);
+      const have = new Set(rows.columns.map((col) => col.name));
+      const gone = [...new Set(named.filter((n) => !have.has(n)))];
+      if (gone.length > 0) {
+        body.append(el('p', 'wk-error wk-gone', `Column gone: ${gone.map((g) => lineOf(g, 60)).join(', ')}. The query no longer returns ${gone.length === 1 ? 'it' : 'them'}.`));
+        return;
+      }
+    }
     switch (c.type) {
       case 'kpi': {
         const at = (n: string | undefined): number => (n === undefined ? -1 : rows!.columns.findIndex((col) => col.name === n));

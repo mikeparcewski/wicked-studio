@@ -1,4 +1,4 @@
-import type { AppDetail, AppSpec } from '../../api/types.js';
+import type { AppCheckFinding, AppDetail, AppSpec } from '../../api/types.js';
 import { applyOps, inventoryOf, opsSummary, type AppInventory, type SpecOp } from './appOps.js';
 import type { AppStorePort, StoreRefusal } from './appStore.js';
 
@@ -222,6 +222,41 @@ export class AppSession {
       }
       await this.recover(r, what);
       return { ok: false, code: r.code, message: words(r, what), ...(this.app !== null ? { head: this.app.head.version } : {}) };
+    } finally {
+      this.moving = false;
+    }
+  }
+
+  /**
+   * A change the person made in studio's own Data panel (a query's text, source or output, a new query and its binding):
+   * their click in the host, never the runtime's. The runtime's burst lands first; then `build` makes the next spec and
+   * query texts from the head as it then is, and they land as ONE version through crew's staged check (spec stage, then
+   * the source stage for the queries that changed). Refused: crew's code, words and findings, and nothing here changed.
+   * Edits and moves wait while it lands, as they do for an undo.
+   */
+  async landDirect(build: (head: AppDetail) => { spec: AppSpec; texts: Record<string, string>; summary: string } | string): Promise<
+    { ok: true; version: number; app: AppDetail } | { ok: false; code: string; message: string; findings: AppCheckFinding[] }
+  > {
+    const no = (code: string, message: string): { ok: false; code: string; message: string; findings: AppCheckFinding[] } => ({ ok: false, code, message, findings: [] });
+    if (this.app === null) return no('refused', 'the app is not loaded yet');
+    if (this.readonly) return no('refused', 'a chat turn is changing the app; it is read-only until the turn ends');
+    if (this.moving) return no('refused', 'another change is landing; try again in a moment');
+    this.moving = true;
+    try {
+      if (!(await this.flush())) return no('refused', 'Not saved: your last change on the canvas did not land');
+      while (this.landing !== null) if (!(await this.landing)) return no('refused', 'Not saved: your last change on the canvas did not land');
+      const head = this.app;
+      const made = build(head);
+      if (typeof made === 'string') return no('refused', made);
+      const r = await this.store.edit(head.head.version, made.spec, made.summary, made.texts);
+      if (r.ok) {
+        this.adopt(r.app);
+        this.emit({ kind: 'head', app: r.app, by: 'this-session' });
+        return { ok: true, version: r.landed.version, app: r.app };
+      }
+      // A refused check changed nothing here; anything else (another tab moved the head, a lost answer) re-reads.
+      if (r.code !== 'check_failed') await this.recover(r);
+      return { ok: false, code: r.code, message: words(r), findings: r.findings ?? [] };
     } finally {
       this.moving = false;
     }

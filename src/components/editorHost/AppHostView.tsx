@@ -11,6 +11,7 @@ import { CrewAppStore, SampleAppStore, type AppStorePort } from '../../editors/a
 import { sampleApp } from '../../editors/apps/samples.js';
 import { isAppSlug, publishedOf } from '../../editors/apps/appsDirectory.js';
 import { ShareSheet } from '../apps/ShareSheet.js';
+import { AppDataPanel } from '../apps/AppDataPanel.js';
 
 /**
  * THE APP HOST (DES-APPS-001 §6.1, §7.1, §7.3; slice K4): one app in the `wicked-apps` runtime's sandboxed frame, and
@@ -150,6 +151,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const [mode, setMode] = useState<AppMode>(initialMode ?? 'preview');
   const modeRef = useRef<AppMode>(initialMode ?? 'preview');
   const [sharing, setSharing] = useState(false);
+  /** Edit's Data panel (the app's queries; Add data): drawn by the host beside the frame. */
+  const [dataOpen, setDataOpen] = useState(false);
   const shown = narrow ? 'preview' : mode;
   // When Edit was left: a field typed in Edit commits as the person clicks Preview, and that op is still Edit's.
   const editLeftRef = useRef(Number.NEGATIVE_INFINITY);
@@ -348,6 +351,10 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         {shown === 'edit' && <span className="wk-apps-hint" data-testid="apps-edit-hint">Changes save as you make them · Undo to go back</span>}
         <span className="wk-apps-spacer" />
         {shown === 'preview' && viewer !== null && <span className="wk-apps-pill" data-testid="apps-viewer">Viewing as {viewer}</span>}
+        {shown === 'edit' && (
+          <button type="button" className={`wk-btn wk-btn--secondary wk-btn--sm${dataOpen ? ' wk-btn--on' : ''}`} data-testid="apps-data-open" aria-pressed={dataOpen}
+            disabled={detail === null || kind === null} onClick={() => setDataOpen((o) => !o)}>Data</button>
+        )}
         <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-share-open" disabled={detail === null} onClick={() => setSharing(true)}>Share</button>
         <span className="wk-seg" role="group" aria-label="Mode">
           <button type="button" className={`wk-seg-btn${shown === 'edit' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-edit" aria-pressed={shown === 'edit'} disabled={narrow || framed} title={framed ? 'Open studio on its own to change the app' : narrow ? 'Edit on a larger screen' : undefined} onClick={() => setMode('edit')}>Edit</button>
@@ -378,13 +385,19 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             : <span className="wk-apps-line--note">Select a component to make it the subject of your next message.</span>}
         </p>
       )}
-      <div className="wk-apps-body" data-mode={shown}>
+      <div className="wk-apps-body" data-mode={shown} data-panel={shown === 'edit' && dataOpen ? 'data' : 'none'}>
         <div className="wk-apps-frame" ref={frameWrap}>
           {torn !== null && (
             <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-torn">{torn} · <button type="button" className="wk-btn wk-btn--link" onClick={() => setMountKey((k) => k + 1)}>Reload it</button></p>
           )}
           <div ref={frameBox} key={mountKey} className="wk-apps-frame-box" data-testid="apps-frame-box" />
         </div>
+        {shown === 'edit' && dataOpen && detail !== null && kind !== null && sessionRef.current !== null && (() => {
+          const anchor = chips[0]?.anchor;
+          const selectedId = anchor !== undefined && 'id' in anchor ? anchor.id : null;
+          const page = detail.spec.pages.find((pg) => pg.components.some((c) => c.id === selectedId))?.id ?? detail.spec.pages[0]?.id ?? '';
+          return <AppDataPanel session={sessionRef.current} detail={detail} sample={kind.store === 'sample'} selectedId={selectedId} page={page} navigate={navigate} onClose={() => setDataOpen(false)} />;
+        })()}
         <aside className={`wk-apps-dock${narrow && asking === null && link === null ? ' wk-apps-dock--quiet' : ''}`} aria-label="Needs you" data-testid="apps-dock">
           <h2 className="wk-apps-dock-title">Needs you <span className="wk-apps-dock-count">{asking !== null || link !== null ? '1 waiting' : 'nothing waiting'}</span></h2>
           {asking !== null && <ActionCardView asking={asking} onAnswer={answer} />}
