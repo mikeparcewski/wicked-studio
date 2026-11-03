@@ -7,7 +7,7 @@ Against the in-process fixture (wave-1 + wave-2b corpus):
 
   1. ORDER: top to bottom — the wordmark (a label, not a link) · the four icon buttons (New job · New
      project · Chat · Search) · the pages in three groups under small-caps labels — WORK (Home, Jobs,
-     Repositories), INSIGHT (Report, Understand, Evaluate), GOVERN (Steering, Memory, Agents) · RECENT
+     Apps, Repositories), INSIGHT (Report, Understand, Evaluate), GOVERN (Steering, Memory, Agents) · RECENT
      (the sessions by project, at most five, then All jobs) · Build & settings · the Nerve Center tile
      pinned last. Home carries the needs-you badge and its name says it. No Workspace group, no More,
      no "General settings"; no Notifications entry (no bell, no "notifications" nav-dest).
@@ -55,12 +55,12 @@ def check(step: str, ok: bool, **detail) -> None:
 
 
 
-PAGES = ["nav-projects", "nav-jobs", "nav-repos", "nav-report", "nav-understand", "nav-evaluate",
+PAGES = ["nav-projects", "nav-jobs", "nav-apps", "nav-repos", "nav-report", "nav-understand", "nav-evaluate",
          "nav-steering", "nav-memory", "nav-agents"]
 
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
-  const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', 'nav-projects', 'nav-jobs', 'nav-repos',
+  const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', 'nav-projects', 'nav-jobs', 'nav-apps', 'nav-repos',
                'nav-report', 'nav-understand', 'nav-evaluate', 'nav-steering', 'nav-memory', 'nav-agents', 'rail-recent-toggle',
                'rail-group', 'rail-all-jobs', 'desk-rail-build', 'desk-rail-nerve',
                'desk-rail-skills', 'desk-rail-general', 'rail-foot-label', 'desk-tabs-more', 'desk-rail-more'];
@@ -131,7 +131,7 @@ with sync_playwright() as p:
     check("order",
           r["order"] == want
           # DES-LEARN §3.0: a fresh fixture has never used Learn, so it leads Work, above Projects.
-          and r["dests"] == ["page:home", "page:learn", "page:projects", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
+          and r["dests"] == ["page:home", "page:learn", "page:projects", "page:jobs", "page:apps", "page:repos", "page:report", "page:understand", "page:evaluate",
                              "page:steering", "page:memory", "page:agents", "page:build", "watch"]
           and not r["bell"] and r["homeLinks"] == 1 and r["nerveLast"]
           # The wordmark is the link Home; its description says the badge (the fixture has gates waiting).
@@ -231,7 +231,8 @@ with sync_playwright() as p:
     # ── 3. the pages navigate and mark the current one; Build & settings lists the rest ──
     went = {}
     page.goto(f"{origin}/", wait_until="networkidle")
-    for tid, path in (("nav-projects", "/projects"), ("nav-jobs", "/jobs"), ("nav-repos", "/repos"), ("nav-report", "/report"), ("nav-understand", "/understand"),
+    for tid, path in (("nav-projects", "/projects"), ("nav-jobs", "/jobs"), ("nav-apps", "/apps"), ("nav-repos", "/repos"), ("nav-report", "/report"),
+                      ("nav-understand", "/understand"),
                       ("nav-evaluate", "/testing/evals"), ("nav-steering", "/rules"), ("nav-memory", "/memory"),
                       ("nav-agents", "/agents"), ("desk-rail-wordmark", "/"), ("desk-rail-build", "/build")):
         page.get_by_test_id(tid).click()

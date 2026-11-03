@@ -8814,7 +8814,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"posts": posts})
         if (path == "/api/v1/editors" or path.startswith("/api/v1/editors/")) and self._editor_routes(path):
             return None
-        if path.startswith("/api/v1/apps/") or path.startswith("/__fixture/apps"):
+        if path == "/api/v1/apps" or path.startswith("/api/v1/apps/") or path.startswith("/__fixture/apps"):
             with state_lock:
                 apps_on = state["apps"]
             if apps_on:

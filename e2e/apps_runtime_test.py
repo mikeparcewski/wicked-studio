@@ -22,6 +22,9 @@ with its CAS and one undo pointer, and the query / prepare / run routes), at 144
   9. FRAMED: studio inside a same-origin page (which `frame-ancestors 'self'` allows) offers no action ("Open to make
      changes"), and a `data.action` sent straight to its host is refused with no prepare.
  10. PHONE (390x844): Preview only, "Edit on a larger screen", the grid in one column; still no `style` attribute.
+ 11. /apps: a dashboard of crew's apps (3-4 across at 1440, 2 at 1024, 1 at 390), names as text, no style attribute,
+     no query sent for a tile; a card opens its app; Share says "not published" (Publish disabled, a studio link) or
+     shows crew's published link; a title edited in place lands one version, Escape lands none.
 
 Exit 0 and a JSON report on success. Captures: e2e/shots/apps-runtime-<browser>-*.png. Env: FEEDBACK_PORT.
 """
@@ -333,6 +336,90 @@ def main() -> None:
         owner_kept = frame.evaluate("() => [...document.querySelectorAll('.wk-table tbody tr')].find(r => r.textContent.includes('javascript:'))?.textContent.includes('unassigned')")
         check("changed_action_runs_nothing", refused_run["status"] == 409 and count(origin, "POST", "/run") == runs_before + 1 and "failed" in stale_outcome and owner_kept,
               outcome=stale_outcome, status=refused_run["status"])
+
+        # 9a. /apps: a dashboard of crew's apps (the fixture serves the store): the grid, the names as text, no style
+        # attribute, and no query sent to draw a tile
+        # The earlier tab is closed first: its own refresh (it adopts step 8b's version and re-reads its queries) is not
+        # the dashboard's, and only the dashboard's requests are counted.
+        page.close()
+        dash_wait = ctx.new_page()
+        dash_wait.wait_for_timeout(500)
+        dash_wait.close()
+        q0 = count(origin, "POST", "/query")
+        dash = ctx.new_page()
+        dash.on("pageerror", lambda e: errors.append(str(e)))
+        dash.goto(f"{origin}/apps")
+        dash.wait_for_selector('[data-testid="apps-card"] >> nth=1', timeout=20_000)
+        dash.wait_for_timeout(2_000)  # the tiles' frames load and draw
+        names = dash.eval_on_selector_all('[data-testid="apps-card-name"]', "els => els.map(e => e.textContent)")
+        nav_current = dash.get_attribute('[data-testid="nav-apps"]', "aria-current")
+        cols = lambda pg: pg.evaluate("() => getComputedStyle(document.querySelector('[data-testid=apps-grid]')).gridTemplateColumns.split(' ').length")
+        styled = dash.evaluate("() => document.querySelectorAll('[data-testid=apps-page] [style]').length")
+        tile_frames = [f for f in dash.frames if "/api/v1/editors/wicked-apps/" in f.url]
+        tile_styled = sum(f.evaluate("() => document.querySelectorAll('[style]').length") for f in tile_frames)
+        pwned = dash.evaluate("() => window.__pwned === undefined ? null : window.__pwned")
+        shot(dash, "5-dashboard")
+        check("dashboard", sorted(names) == sorted(["Fixture desk", "<script>window.__pwned=5</script> Other app"]) and nav_current == "page"
+              and 3 <= cols(dash) <= 4 and styled == 0 and len(tile_frames) == 2 and tile_styled == 0 and pwned is None
+              and count(origin, "POST", "/query") == q0, names=names, nav=nav_current, columns=cols(dash), styled=styled, tiles=len(tile_frames), queries=count(origin, "POST", "/query") - q0)
+        for w, want in ((1024, 2), (390, 1)):
+            narrow = browser.new_context(viewport={"width": w, "height": 800})
+            np_ = narrow.new_page()
+            np_.goto(f"{origin}/apps")
+            np_.wait_for_selector('[data-testid="apps-card"] >> nth=1', timeout=20_000)
+            got = cols(np_)
+            narrow.close()
+            check(f"dashboard_{w}", got == want, columns=got)
+        # Share, not published (other-app), from its card: plain words, Publish disabled, a studio link labelled as one
+        dash.locator('[data-testid="apps-card"][data-slug="other-app"] [data-testid="apps-card-share"]').click()
+        dash.wait_for_selector('[data-testid="apps-share"][data-published="false"]')
+        unpub = {"publish_disabled": dash.is_disabled('[data-testid="apps-share-publish"]'), "studio": dash.input_value('[data-testid="apps-share-studio-field"]'),
+                 "title": dash.text_content("#wk-share-title"), "link": dash.locator('[data-testid="apps-share-link-field"]').count()}
+        dash.click('[data-testid="apps-share-close"]')
+        check("share_unpublished", unpub["publish_disabled"] and unpub["studio"] == f"{origin}/apps/other-app" and unpub["link"] == 0
+              and unpub["title"] == "Share “<script>window.__pwned=5</script> Other app”", **unpub)
+        # A card opens its app (Preview), and its Share shows the published copy crew reports
+        dash.locator('[data-testid="apps-card"][data-slug="fixture-app"] [data-testid="apps-card-open"]').click()
+        dash.wait_for_url(f"{origin}/apps/fixture-app")
+        af = app_frame(dash)
+        af.wait_for_selector(".wk-table tbody tr", timeout=20_000)
+        dash.click('[data-testid="apps-share-open"]')
+        dash.wait_for_selector('[data-testid="apps-share"][data-published="true"]')
+        pub = {"link": dash.input_value('[data-testid="apps-share-link-field"]'), "embed": dash.input_value('[data-testid="apps-share-embed-field"]'),
+               "audience": dash.text_content('[data-testid="apps-share-audience"]')}
+        dash.click('[data-testid="apps-share-close"]')
+        check("card_opens_and_share_published", pub["link"] == "https://apps.example.test/fixture-desk/" and 'src="https://apps.example.test/fixture-desk/embed"' in pub["embed"]
+              and pub["audience"] == "signed-in members of support-ops", **pub)
+
+        # 9b. editing in place: a double-click on a title, Enter lands ONE version; Escape lands none; text stays text
+        dash.goto(f"{origin}/apps/fixture-app?mode=edit")
+        ef = app_frame(dash)
+        ef.wait_for_selector(".wk-palette", timeout=20_000)
+        hint = dash.text_content('[data-testid="apps-edit-hint"]')
+        e0 = count(origin, "POST", "/edits")
+        hostile_title = "<img src=x onerror=window.__pwned=9> Queue"
+        ef.dblclick('[data-component="tickets"] .wk-cell-title')
+        field = ef.wait_for_selector('[data-testid="apps-inline"]')
+        field.fill(hostile_title)
+        field.press("Enter")
+        dash.wait_for_timeout(2_200)
+        e1 = count(origin, "POST", "/edits")
+        shown_title = ef.text_content('[data-component="tickets"] .wk-cell-title')
+        landed = [c for c in calls(origin) if c["method"] == "POST" and c["path"].endswith("/edits")][-1]
+        landed_title = next((c.get("title") for c in landed["body"]["ops"][0]["spec"]["pages"][0]["components"] if c["id"] == "tickets"), None)
+        ef.dblclick('[data-component="tickets"] .wk-cell-title')
+        field = ef.wait_for_selector('[data-testid="apps-inline"]')
+        field.fill("not this")
+        field.press("Escape")
+        dash.wait_for_timeout(1_600)
+        e2 = count(origin, "POST", "/edits")
+        after_escape = ef.text_content('[data-component="tickets"] .wk-cell-title')
+        imgs = ef.evaluate("() => document.querySelectorAll('[data-testid=apps-runtime] img').length")
+        shot(dash, "6-inline")
+        check("inline_edit", hint == "Changes save as you make them · Undo to go back" and e1 - e0 == 1 and landed["status"] == 200 and landed_title == hostile_title
+              and shown_title == hostile_title and e2 == e1 and after_escape == hostile_title and imgs == 0 and no_style(ef) == 0
+              and ef.evaluate("() => window.__pwned === undefined"), hint=hint, landed=e1 - e0, after_escape_edits=e2 - e1, title=shown_title, imgs=imgs)
+        dash.close()
 
         # 9. framed
         framer = ctx.new_page()

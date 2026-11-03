@@ -284,6 +284,8 @@ export function threadLine(firstParty: boolean, name: string, items: readonly Wi
 
 /** How long after focus leaves an app's frame a spec op from it is still the person's (see `justInFrame`). */
 export const SPEC_EDIT_AFTER_FOCUS_MS = 1_500;
+/** How often an app host reads whether focus is in its frame. */
+export const FOCUS_POLL_MS = 250;
 
 /** Write refusals the host or adapter makes before anything is sent: nothing was written. */
 const UNSENT: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['not_granted', 'bad_request', 'too_large', 'unsupported', 'rate_limited', 'refused', 'head_moved']);
@@ -357,6 +359,8 @@ export class EditorHost {
   private readonly onFrameBlur = (): void => { this.frameLeftAt = this.now(); this.frameFocused = false; };
   private frameFocused = false;
   private frameLeftAt = Number.NEGATIVE_INFINITY;
+  private lastInFrameAt = Number.NEGATIVE_INFINITY;
+  private focusPoll: ReturnType<typeof setInterval> | null = null;
   private writing = false;
   private grants: Set<PermissionId>;
   private ownVersions = new Set<number>();
@@ -395,6 +399,11 @@ export class EditorHost {
     this.frame.addEventListener('focus', this.onFrameFocus);
     this.frame.addEventListener('blur', this.onFrameBlur);
     this.frame.addEventListener('load', this.onLoad);
+    // An app: when focus was last in this frame, read every quarter second — the one signal every engine gives
+    // (Firefox fires no event the host can time a focus leaving a frame by).
+    if (this.o.app !== undefined && this.o.app.tile === undefined) {
+      this.focusPoll = setInterval(() => { if (this.inFrame()) { this.frameFocused = true; this.lastInFrameAt = this.now(); } else if (this.frameFocused) { this.frameFocused = false; this.frameLeftAt = this.now(); } }, FOCUS_POLL_MS);
+    }
     // The 3 s for plugin.ready start when the frame's document has loaded (frameLoaded): a slow daemon serving the
     // bundle is not a plugin that failed to start (orchestrator 2026-10-14: :7701 took 20-59 s to serve the deck's
     // entry, and the card tore down at 3 s). A document that never loads is torn down at loadMs. Armed before the
@@ -467,7 +476,7 @@ export class EditorHost {
     const v3 = observes ? { observe: { runId: this.o.events!.runId, topics: [...this.o.events!.topics], ...(sc !== undefined ? { scope: { phase: sc.phase, label: sc.label, ords: [...sc.ords] } } : {}), ...(this.o.events?.panel !== undefined ? { panel: { slot: this.o.events.panel.slot, id: this.o.events.panel.id } } : {}) } } : {};
     this.frame.contentWindow?.postMessage(event('host.hello', {
       protocol: this.protocol, ...v2, ...v3,
-      ...(this.o.app !== undefined ? { app: { framed: this.o.app.framed(), mode: this.o.app.mode(), viewer: this.o.app.viewer(), url: { ...(this.o.app.url?.() ?? {}) } } } : {}),
+      ...(this.o.app !== undefined ? { app: { framed: this.o.app.framed(), mode: this.o.app.mode(), viewer: this.o.app.viewer(), url: { ...(this.o.app.url?.() ?? {}) }, ...(this.o.app.tile !== undefined ? { tile: true, rows: this.o.app.tile.rows } : {}) } } : {}),
       artifact: a, size: this.o.size, grants: [...this.grants],
       theme: this.o.theme, artifactTheme: null, prefs: this.o.prefs,
       limits: { messageBytes: LIMITS.messageBytes, writeOps: LIMITS.writeOps, writeBytes: LIMITS.writeBytes },
@@ -753,7 +762,8 @@ export class EditorHost {
   /** A spec op (only) may also come from a gesture that just left this frame: a field typed in and then left with a
    *  click on studio's own chrome commits on that blur, which reaches the host after focus has gone (1.5 s). */
   private justInFrame(): boolean {
-    return (this.o.activation ?? NO_ACTIVATION)() && (this.inFrame() || this.now() - this.frameLeftAt < SPEC_EDIT_AFTER_FOCUS_MS);
+    const left = Math.max(this.frameLeftAt, this.lastInFrameAt);
+    return (this.o.activation ?? NO_ACTIVATION)() && (this.inFrame() || this.now() - left < SPEC_EDIT_AFTER_FOCUS_MS);
   }
 
   private async appRequest(type: 'spec.edit' | 'app.history' | 'data.query' | 'data.action' | 'link.open', p: Record<string, unknown>): Promise<unknown> {
@@ -1222,6 +1232,8 @@ export class EditorHost {
     this.frame.removeEventListener('focus', this.onFrameFocus);
     this.frame.removeEventListener('blur', this.onFrameBlur);
     this.frame.removeEventListener('load', this.onLoad);
+    if (this.focusPoll !== null) clearInterval(this.focusPoll);
+    this.focusPoll = null;
     if (this.readyTimer !== null) clearTimeout(this.readyTimer);
     if (this.pingTimer !== null) clearInterval(this.pingTimer);
     if (this.pingWait !== null) clearTimeout(this.pingWait);

@@ -39,7 +39,7 @@ export const BUILD_PATH = '/build';
 /** The projects page (for now the projects list; a designed Projects home follows its mockup). */
 export const PROJECTS_PATH = '/projects';
 
-export type NavId = 'home' | 'projects' | 'jobs' | 'repos' | 'sources' | 'report' | 'understand' | 'evaluate' | 'steering' | 'memory' | 'agents' | 'build' | 'learn';
+export type NavId = 'home' | 'projects' | 'jobs' | 'apps' | 'repos' | 'sources' | 'report' | 'understand' | 'evaluate' | 'steering' | 'memory' | 'agents' | 'build' | 'learn';
 
 export interface NavItem {
   id: NavId;
@@ -60,6 +60,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   { id: 'work', label: 'Work', items: [
     { id: 'projects', label: PAGE_NAMES.projects, path: PROJECTS_PATH, testId: 'nav-projects', under: [PROJECTS_PATH], primary: true },
     { id: 'jobs', label: PAGE_NAMES.jobs, path: DESK_VIEW_PATH.runs, testId: 'nav-jobs', under: ['/jobs'] },
+    { id: 'apps', label: PAGE_NAMES.apps, path: '/apps', testId: 'nav-apps', under: ['/apps'] },
     { id: 'repos', label: PAGE_NAMES.repos, path: DESK_VIEW_PATH.repositories, testId: 'nav-repos', under: ['/repos', '/repo-detail'] },
   ] },
   { id: 'insight', label: 'Insight', items: [

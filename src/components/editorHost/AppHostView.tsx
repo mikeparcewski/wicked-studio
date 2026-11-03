@@ -9,6 +9,8 @@ import { appDataFor, sampleAppData, type ActionCard, type ActionOutcome, type Ap
 import { AppSession } from '../../editors/apps/appSession.js';
 import { CrewAppStore, SampleAppStore, type AppStorePort } from '../../editors/apps/appStore.js';
 import { sampleApp } from '../../editors/apps/samples.js';
+import { publishedOf } from '../../editors/apps/appsDirectory.js';
+import { ShareSheet } from '../apps/ShareSheet.js';
 
 /**
  * THE APP HOST (DES-APPS-001 §6.1, §7.1, §7.3; slice K4): one app in the `wicked-apps` runtime's sandboxed frame, and
@@ -29,7 +31,13 @@ import { sampleApp } from '../../editors/apps/samples.js';
 const ARM_MS = 600;
 const PHONE_PX = 640;
 
-export interface AppHostProps { editor: string; version: string; sha: string; app: string | null; sample: string | null }
+export interface AppHostProps {
+  editor: string; version: string; sha: string; app: string | null; sample: string | null;
+  /** Where it opens (the `/apps/<slug>?mode=` route); Preview by default. */
+  initialMode?: AppMode;
+  /** The Apps route's navigation: the "Apps /" crumb goes back to the dashboard. */
+  navigate?: (path: string) => void;
+}
 
 interface Asking { prepared: PreparedAction; resolve: (yes: boolean) => void; at: number }
 interface LinkAsk { url: string; resolve: (yes: boolean) => void }
@@ -120,7 +128,7 @@ export function ActionCardView({ asking, onAnswer }: { asking: Asking; onAnswer:
   );
 }
 
-export function AppHostView({ editor, version, sha, app: slug, sample }: AppHostProps): React.ReactElement {
+export function AppHostView({ editor, version, sha, app: slug, sample, initialMode, navigate }: AppHostProps): React.ReactElement {
   const narrowWindow = useNarrow();
   // The runtime lays itself out by ITS frame's width (its media queries), so Edit is offered only when the frame
   // itself is wide enough, whatever the window is (codex r1: a 1000 px window leaves the frame under 640 px).
@@ -136,8 +144,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
     return () => seen.disconnect();
   }, []);
   const narrow = !editable(!narrowWindow, frameWidth);
-  const [mode, setMode] = useState<AppMode>('preview');
-  const modeRef = useRef<AppMode>('preview');
+  const [mode, setMode] = useState<AppMode>(initialMode ?? 'preview');
+  const modeRef = useRef<AppMode>(initialMode ?? 'preview');
+  const [sharing, setSharing] = useState(false);
   const shown = narrow ? 'preview' : mode;
   // When Edit was left: a field typed in Edit commits as the person clicks Preview, and that op is still Edit's.
   const editLeftRef = useRef(Number.NEGATIVE_INFINITY);
@@ -314,7 +323,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
   return (
     <div className="wk-apps-host" data-testid="apps-host" data-mode={shown} data-framed={framed}>
       <header className="wk-apps-head">
-        <span className="wk-apps-crumb">Apps /</span>
+        {navigate !== undefined
+          ? <a href="/apps" className="wk-apps-crumb wk-link" data-testid="apps-crumb" onClick={(ev) => { ev.preventDefault(); navigate('/apps'); }}>Apps /</a>
+          : <span className="wk-apps-crumb">Apps /</span>}
         <span className="wk-apps-title" data-testid="apps-title">{detail?.name ?? 'App'}</span>
         {detail !== null && (
           <span className="wk-apps-pill" data-testid="apps-version"><span className="wk-apps-dot" aria-hidden="true" />v{detail.head.version} · {receiptWords(detail)}</span>
@@ -323,8 +334,10 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-undo" disabled={history?.canUndo !== true || busy || framed} onClick={() => void move('undo')} aria-label="Undo">Undo</button>
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-redo" disabled={history?.canRedo !== true || busy || framed} onClick={() => void move('redo')} aria-label="Redo">Redo</button>
         </span>
+        {shown === 'edit' && <span className="wk-apps-hint" data-testid="apps-edit-hint">Changes save as you make them · Undo to go back</span>}
         <span className="wk-apps-spacer" />
         {shown === 'preview' && viewer !== null && <span className="wk-apps-pill" data-testid="apps-viewer">Viewing as {viewer}</span>}
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-share-open" disabled={detail === null} onClick={() => setSharing(true)}>Share</button>
         <span className="wk-seg" role="group" aria-label="Mode">
           <button type="button" className={`wk-seg-btn${shown === 'edit' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-edit" aria-pressed={shown === 'edit'} disabled={narrow || framed} title={framed ? 'Open studio on its own to change the app' : narrow ? 'Edit on a larger screen' : undefined} onClick={() => setMode('edit')}>Edit</button>
           <button type="button" className={`wk-seg-btn${shown === 'preview' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-preview" aria-pressed={shown === 'preview'} onClick={() => setMode('preview')}>Preview</button>
@@ -341,8 +354,14 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
       )}
       {(status !== null || pending > 0) && <p className="wk-apps-line" data-testid="apps-status" aria-live="polite">{pending > 0 ? `Saving ${pending} change${pending === 1 ? '' : 's'}…` : status}</p>}
       {error !== null && <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-error">{error}</p>}
-      {shown === 'edit' && chips.length > 0 && (
-        <p className="wk-apps-line wk-apps-chips" data-testid="apps-chips">{chips.map((c, i) => <span key={i} className="wk-source-chip" data-testid="apps-chip">about: {c.label}</span>)}</p>
+      {/* Always there in Edit (selecting must never move the app under the pointer: a double-click's second press
+          would land on another component). */}
+      {shown === 'edit' && (
+        <p className="wk-apps-line wk-apps-chips" data-testid="apps-chips">
+          {chips.length > 0
+            ? chips.map((c, i) => <span key={i} className="wk-source-chip" data-testid="apps-chip">about: {c.label}</span>)
+            : <span className="wk-apps-line--note">Select a component to make it the subject of your next message.</span>}
+        </p>
       )}
       <div className="wk-apps-body" data-mode={shown}>
         <div className="wk-apps-frame" ref={frameWrap}>
@@ -375,6 +394,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
           )}
         </aside>
       </div>
+      {sharing && detail !== null && (
+        <ShareSheet name={detail.name} slug={detail.slug} published={publishedOf(detail)} onClose={() => setSharing(false)} />
+      )}
     </div>
   );
 }

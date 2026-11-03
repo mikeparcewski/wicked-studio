@@ -25,6 +25,7 @@ VIEWER = "priya@example.com"
 
 SPEC_A = {
     "schema": "wicked.apps/v1", "name": "Fixture desk", "linkHosts": ["docs.example.com"],
+    "description": "<img src=x onerror=window.__pwned=4> a desk for the journey",
     "pages": [{"id": "main", "title": "Main", "components": [
         {"id": "search", "type": "filter", "filter": "search", "label": "Search", "box": {"x": 0, "y": 0, "w": 4, "h": 1}},
         {"id": "open_kpi", "type": "kpi", "title": "Open", "box": {"x": 0, "y": 1, "w": 3, "h": 2}, "data": {"query": "open_count"}, "value": "open"},
@@ -63,7 +64,7 @@ ROWS_A = {
 
 # App B: a query app A's frame must never reach (S7).
 SPEC_B = {
-    "schema": "wicked.apps/v1", "name": "Other app", "linkHosts": [],
+    "schema": "wicked.apps/v1", "name": "<script>window.__pwned=5</script> Other app", "linkHosts": [],
     "pages": [{"id": "p", "title": "P", "components": [
         {"id": "t", "type": "table", "box": {"x": 0, "y": 0, "w": 12, "h": 4}, "data": {"query": "b_secret"}}]}],
     "queries": [{"id": "b_secret", "source": "hr-db", "kind": "sql", "output": [{"name": "salary", "type": "integer"}]}],
@@ -112,6 +113,12 @@ def reset() -> None:
 reset()
 
 
+# The published record K6 will write (studio reads it from GET /apps/:app `published`; the proposed shape is in the
+# ledger): only fixture-app is published, so a journey sees both Share states.
+PUBLISHED = {"fixture-app": {"url": "https://apps.example.test/fixture-desk/", "audience": "signed-in members of support-ops",
+                             "embedUrl": "https://apps.example.test/fixture-desk/embed", "version": 1, "at": 1762160400000}}
+
+
 def capabilities() -> dict:
     with lock:
         return dict(CAPS)
@@ -121,7 +128,8 @@ def _detail(a: dict) -> dict:
     head = a["versions"][-1]
     states, pointer = a["history"]["states"], a["history"]["pointer"]
     spec = a["specs"][head["version"]]
-    return {"slug": a["slug"], "name": spec["name"], "projectId": "notes", "repoId": a["slug"], "createdAt": a["versions"][0]["at"],
+    extra = {"published": PUBLISHED[a["slug"]]} if a["slug"] in PUBLISHED else {}
+    return {**extra, "slug": a["slug"], "name": spec["name"], "projectId": "notes", "repoId": a["slug"], "createdAt": a["versions"][0]["at"],
             "head": {"version": head["version"], "tree": head["tree"], "receipt": head["receipt"]["kind"] if head["receipt"] else None},
             "turn": None, "spec": copy.deepcopy(spec),
             "lock": {"schema": "wicked.apps.lock/v1", "sources": {}, "queries": {}, "actions": {}, "uploads": {}},
@@ -193,6 +201,14 @@ def _check(spec: dict) -> list:
 def handle(method: str, path: str, body):
     """Answer an /api/v1/apps or /__fixture/apps* request: (status, json) or None when it is not one of these. Every
     /api/v1/apps call is recorded with the status it got."""
+    if path == "/api/v1/apps" and method == "GET":
+        with lock:
+            CALLS.append({"method": method, "path": path, "body": None, "at": _now(), "status": 200})
+            out = []
+            for a in APPS.values():
+                d = _detail(a)
+                out.append({k: d[k] for k in ("slug", "name", "projectId", "repoId", "createdAt", "head", "turn")})
+            return 200, {"apps": out}
     if not path.startswith("/api/v1/apps/"):
         return _answer(method, path, body)
     with lock:

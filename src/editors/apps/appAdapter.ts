@@ -27,6 +27,8 @@ export interface AppHostPort {
   viewer(): string;
   /** The page's URL parameters for this app's `url.<name>` bindings (said once, in `host.hello`). */
   url?(): Record<string, string>;
+  /** A dashboard tile (the Apps page): read-only; `rows` false = the runtime sends no query at all. */
+  tile?: { rows: boolean };
   /** The host draws the card OUTSIDE the frame; resolves true only on the person's own Run there. */
   confirm(prepared: PreparedAction): Promise<boolean>;
   /** The host shows the full URL and opens it only on the person's own click. */

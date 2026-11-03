@@ -69,6 +69,8 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'learn', example: '/learn', is: (r) => r.panel === 'learn' },
   { id: 'insights', example: '/insights', is: (r) => r.panel === 'insights' },
   { id: 'sources', example: '/sources', is: (r) => r.panel === 'sources' },
+  { id: 'apps', example: '/apps', is: (r) => r.panel === 'apps' && r.artifactId == null },
+  { id: 'app', example: '/apps/escalations', is: (r) => r.panel === 'apps' && r.artifactId === 'escalations' },
   { id: 'system', example: '/system', is: (r) => r.panel === 'system' },
   { id: 'theme', example: '/theme', is: (r) => r.panel === 'theme' },
   { id: 'editors-dev', example: '/editors/dev', is: (r) => r.panel === 'editors' && r.artifactId === 'dev' },
@@ -110,6 +112,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'learn', label: 'Learn', href: '/learn' },
   { shape: 'insights', label: 'Run insights', href: '/insights' },
   { shape: 'sources', label: `${PAGE_NAMES.sources} — what apps read from`, href: '/sources' },
+  { shape: 'apps', label: PAGE_NAMES.apps, href: '/apps' },
   { shape: 'system', label: `${PAGE_NAMES.system} — agents, notifications and the theme`, href: '/system' },
   // studio-settings-tabs: Theme is a tab of the Settings page (`/theme` only redirects there).
   { shape: 'system', label: `${PAGE_NAMES.theme} — light or dark, logo, site name`, href: SETTINGS_THEME_PATH },
@@ -185,4 +188,4 @@ export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['repo-detail'];
  *  `/testing/campaigns` opens the launch wizard on the test-writing workflow; and `/health`, which lands
  *  on Nerve Center (`/watch`, DES-SYSTEM-VIEW) — its ⌘K entry says "health"; and `/theme`, which lands
  *  on the Settings page's Theme tab (its ⌘K row opens that tab). */
-export const NOT_IN_PALETTE: readonly string[] = ['editors-conformance', 'product', 'testing-campaigns', 'health', 'theme'];
+export const NOT_IN_PALETTE: readonly string[] = ['editors-conformance', 'product', 'testing-campaigns', 'health', 'theme', 'app'];

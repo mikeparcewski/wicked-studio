@@ -29,6 +29,8 @@ type DateRange = { from: string; to: string };
 /** The grid's row height and gap (the template's `--row` / `--gap`; `compact` density is the smaller pair). */
 const ROW = { comfortable: 44, compact: 36 } as const;
 const GAP = { comfortable: 12, compact: 8 } as const;
+/** Two taps on the same words within this long edit them in place. */
+const DOUBLE_TAP_MS = 450;
 /** Rows a chart draws; a longer answer says so under the chart. */
 export const CHART_ROWS = 500;
 const PARAM_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/u;
@@ -82,6 +84,9 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   let port: MessagePort | null = null;
   let grants = new Set<string>();
   let framed = true; // until the host says otherwise: no action is ever offered before the handshake
+  /** A dashboard tile (the Apps page): read-only, nothing reacts, and with `rows` false no query is ever sent. */
+  let tile = false;
+  let tileRows = false;
   let mode: Mode = 'preview';
   let surface: 'card' | 'full' = 'full';
   let locale = 'en';
@@ -169,6 +174,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     grants = new Set(Array.isArray(p['grants']) ? (p['grants'] as unknown[]).filter((g): g is string => typeof g === 'string') : []);
     const app = isObj(p['app']) ? p['app'] : {};
     framed = app['framed'] !== false;
+    tile = app['tile'] === true;
+    tileRows = tile && app['rows'] === true;
     mode = app['mode'] === 'edit' ? 'edit' : 'preview';
     surface = p['surface'] === 'card' || p['size'] === 'inline' ? 'card' : 'full';
     // The page's URL parameters, as the HOST read them for this app (`url.<name>` bindings).
@@ -256,7 +263,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
   /** Read every data component on the page (or only those bound to `only`, a refresh timer's query). */
   const queryAll = (only?: string, missingOnly = false): void => {
-    if (closed || !grants.has('data.read') || spec === null) return;
+    if (closed || !grants.has('data.read') || spec === null || (tile && !tileRows)) return;
     initFilters();
     gen += 1;
     const mine = gen;
@@ -322,9 +329,10 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     const btn = el('button', cls, lineOf(b.label, 60));
     btn.type = 'button';
     btn.setAttribute('data-action', b.action);
-    if (mode !== 'preview' || !grants.has('data.write')) {
-      btn.disabled = true;
-      btn.title = mode === 'edit' ? 'Actions run in Preview' : 'This app may not ask to run actions here';
+    if (tile || mode !== 'preview' || !grants.has('data.write')) {
+      // Inert, but not `disabled`: a disabled button gets no double-click, and Edit renames a button by its label.
+      btn.setAttribute('aria-disabled', 'true');
+      btn.title = tile ? '' : mode === 'edit' ? 'Actions run in Preview' : 'This app may not ask to run actions here';
     } else btn.addEventListener('click', (e) => { e.stopPropagation(); void runAction(owner, b, ctx); });
     return btn;
   };
@@ -337,10 +345,34 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   const bodies = new Map<string, HTMLElement>();
 
   const drawBody = (c: AppComponent, body: HTMLElement): void => {
+    drawBodyNow(c, body);
+    markInline(c, body);
+  };
+  /**
+   * Edit: a component's own words (its title, a Text's text, a Button's, Link's or Filter's label) are edited in place
+   * with a double-click; they carry `data-inline` (the property) and the editable look (an outline and a pencil on
+   * hover, from the one stylesheet).
+   */
+  const markInline = (c: AppComponent, root: HTMLElement): void => {
+    if (!editing()) return;
+    const mark = (e: Element | null, prop: string): void => {
+      if (e === null) return;
+      e.setAttribute('data-inline', prop);
+      e.classList.add('wk-editable');
+      e.setAttribute('title', 'Double-click to edit');
+    };
+    if (c.type === 'text') mark(root.querySelector('.wk-text'), 'text');
+    if (c.type === 'button') mark(root.querySelector('button[data-action]'), 'label');
+    if (c.type === 'link') mark(root.querySelector('.wk-link'), 'label');
+    if (c.type === 'filter') mark(root.querySelector('.wk-filter-label'), 'label');
+  };
+  const drawBodyNow = (c: AppComponent, body: HTMLElement): void => {
     body.replaceChildren();
     const res = results.get(c.id);
     const needsData = c.type === 'table' || c.type === 'chart' || c.type === 'kpi';
     if (needsData) {
+      // A tile without rows: the component's shape, no numbers (the Apps page never reads a source to draw a tile).
+      if (tile && !tileRows) { body.append(el('div', `wk-skeleton wk-skeleton--${c.type}`)); return; }
       if (!grants.has('data.read')) { body.append(el('p', 'wk-muted', 'Live rows are not shown here')); return; }
       if (res === undefined || res.state === 'loading') { body.append(el('p', 'wk-muted', 'Loading…')); return; }
       if (res.state === 'error') { body.append(el('p', 'wk-error', `${'data' in c ? c.data.query : ''}: ${res.message}`)); return; }
@@ -607,6 +639,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     const start = { x: e.clientX, y: e.clientY };
     let box: Box = { ...c.box };
     let moved = false;
+    /** The words this press landed on, if they edit in place (a double tap on them opens the field). */
+    const tapOn = kind === 'move' ? ((e.target as HTMLElement | null)?.closest?.('[data-inline]') as HTMLElement | null) : null;
     cell.setPointerCapture(e.pointerId);
     cell.classList.add('is-dragging');
     const onMove = (ev: PointerEvent): void => {
@@ -625,7 +659,22 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       cell.removeEventListener('pointercancel', onUp);
       cell.classList.remove('is-dragging');
       const changed = kind === 'move' ? box.x !== c.box.x || box.y !== c.box.y : box.w !== c.box.w || box.h !== c.box.h;
-      if (!moved || !changed) { sheet.place(n, c.box); if (!moved) { select(c.id); draw(); } return; }
+      if (!moved || !changed) {
+        sheet.place(n, c.box);
+        if (!moved) {
+          select(c.id);
+          refreshSelection();
+          // A double tap on the same words edits them in place. Detected here, not from `dblclick`: Firefox fires no
+          // double-click after a prevented pointerdown (which a drag needs).
+          const prop = tapOn?.getAttribute('data-inline') ?? null;
+          const now = Date.now();
+          if (prop !== null && tapOn !== null && lastTap !== null && lastTap.id === c.id && lastTap.prop === prop && now - lastTap.at < DOUBLE_TAP_MS) {
+            lastTap = null;
+            if (tapOn.isConnected) startInline(c.id, tapOn);
+          } else lastTap = prop !== null ? { id: c.id, prop, at: now } : null;
+        }
+        return;
+      }
       void edit([kind === 'move' ? { op: 'component-move', id: c.id, x: box.x, y: box.y } : { op: 'component-resize', id: c.id, w: box.w, h: box.h }]);
     };
     cell.addEventListener('pointermove', onMove);
@@ -821,6 +870,17 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     return box;
   };
 
+  /** Edit with nothing selected: the Properties column stays (so selecting never moves the canvas under the pointer)
+   *  and says what to do. */
+  const drawPropsEmpty = (): HTMLElement => {
+    const box = el('aside', 'wk-props wk-props--empty');
+    box.setAttribute('aria-label', 'Properties');
+    box.setAttribute('data-testid', 'apps-properties-empty');
+    box.append(el('h3', 'wk-props-title', 'Properties'));
+    box.append(el('p', 'wk-muted', 'Select a component to change it here. Double-click its words to edit them in place.'));
+    return box;
+  };
+
   const drawPalette = (): HTMLElement => {
     const box = el('aside', 'wk-palette');
     box.setAttribute('aria-label', 'Components');
@@ -861,6 +921,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     sheet.reset();
     applyTheme(undefined);
     root.setAttribute('data-mode', editing() ? 'edit' : 'preview');
+    root.setAttribute('data-tile', tile ? 'true' : 'false');
     root.setAttribute('data-surface', surface);
     if (spec === null) { root.replaceChildren(el('p', 'wk-empty', notice ?? 'Loading the app…')); propsNode = null; return; }
     const parts: HTMLElement[] = [];
@@ -892,7 +953,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       if (c.type === 'chart') c.series.slice(0, 12).forEach((s, k) => sheet.seriesColour(i, k, s.color));
       const cell = el('section', `wk-cell wk-cell--${c.type} wk-c${i}${c.id === selected && editing() ? ' is-selected' : ''}`);
       cell.setAttribute('data-component', c.id);
-      if (c.title !== undefined && c.type !== 'text') cell.append(el('h3', 'wk-cell-title', lineOf(c.title, 120)));
+      if (c.title !== undefined && c.type !== 'text') {
+        const h = el('h3', 'wk-cell-title', lineOf(c.title, 120));
+        if (editing()) { h.setAttribute('data-inline', 'title'); h.classList.add('wk-editable'); h.setAttribute('title', 'Double-click to edit'); }
+        cell.append(h);
+      }
       const body = el('div', 'wk-cell-body');
       bodies.set(c.id, body);
       drawBody(c, body);
@@ -923,11 +988,86 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       for (const part of parts) root.insertBefore(part, propsNode);
       return;
     }
-    propsNode = sel !== undefined ? drawProps(sel) : null;
+    propsNode = sel !== undefined ? drawProps(sel) : editing() ? drawPropsEmpty() : null;
     propsFor = sel?.id ?? null;
     root.replaceChildren(...parts, ...(propsNode !== null ? [propsNode] : []));
     if (had !== null) [...root.querySelectorAll<HTMLElement>('[data-prop]')].find((e) => e.getAttribute('data-prop') === had)?.focus({ preventScroll: true });
   };
+
+  /** A selection made by a click: the canvas stays as it is (a double-click's second click lands on the same nodes),
+   *  only the outline and the Properties panel change. */
+  const refreshSelection = (): void => {
+    for (const cell of root.querySelectorAll('[data-component]')) cell.classList.toggle('is-selected', editing() && cell.getAttribute('data-component') === selected);
+    const sel = editing() && selected !== null ? components().find((c) => c.id === selected) : undefined;
+    const next = sel !== undefined ? drawProps(sel) : editing() ? drawPropsEmpty() : null;
+    if (propsNode !== null && next !== null && propsNode.parentNode === root) propsNode.replaceWith(next);
+    else { propsNode?.remove(); if (next !== null) root.append(next); }
+    propsNode = next;
+    propsFor = sel?.id ?? null;
+  };
+
+  let lastTap: { id: string; prop: string; at: number } | null = null;
+
+  /** The words a component's `data-inline` property names, as the spec has them now. */
+  const wordsOf = (c: AppComponent, prop: string): string => {
+    if (prop === 'title') return c.title ?? '';
+    if (prop === 'text' && c.type === 'text') return c.text;
+    if (prop === 'label') {
+      if (c.type === 'button') return c.action.label;
+      if (c.type === 'link') return c.label;
+      if (c.type === 'filter') return c.label ?? '';
+    }
+    return '';
+  };
+
+  /**
+   * Edit in place: the words become a text field where they are (never `contenteditable`, so nothing pasted is markup);
+   * Enter or leaving the field commits ONE spec op, Escape puts the words back with nothing sent.
+   */
+  const startInline = (id: string, target: HTMLElement): void => {
+    const c = components().find((x) => x.id === id);
+    const prop = target.getAttribute('data-inline');
+    if (c === undefined || prop === null || !editing()) return;
+    const before = wordsOf(c, prop);
+    const multi = prop === 'text';
+    const ed = multi ? el('textarea', 'wk-inline-input wk-inline-input--multi') : el('input', 'wk-inline-input');
+    ed.value = before;
+    ed.maxLength = multi ? 4_000 : c.type === 'button' ? 60 : 120;
+    ed.setAttribute('data-testid', 'apps-inline');
+    ed.setAttribute('aria-label', `Edit the ${prop === 'text' ? 'text' : prop}`);
+    target.replaceWith(ed);
+    ed.focus();
+    ed.select();
+    let done = false;
+    let composing = false;
+    const finish = (commit: boolean): void => {
+      if (done) return;
+      done = true;
+      if (commit && ed.value !== before) void edit([{ op: 'component-set', id, prop, value: ed.value }]);
+      else draw();
+    };
+    ed.addEventListener('compositionstart', () => { composing = true; });
+    ed.addEventListener('compositionend', () => { composing = false; });
+    ed.addEventListener('keydown', (e: Event) => {
+      const k = e as KeyboardEvent;
+      if (composing || k.isComposing || k.keyCode === 229) return;
+      if (k.key === 'Escape') { k.preventDefault(); k.stopPropagation(); finish(false); return; }
+      if (k.key === 'Enter' && !(multi && k.shiftKey)) { k.preventDefault(); k.stopPropagation(); finish(true); }
+    });
+    ed.addEventListener('blur', () => finish(true));
+  };
+
+  root.addEventListener('dblclick', (e) => {
+    // A Button's or a Link's label (no drag starts on them); a double tap elsewhere has already opened the field.
+    if (!editing() || root.querySelector('[data-testid="apps-inline"]') !== null) return;
+    // The element under the pointer (a drag's pointer capture retargets the event to the component's cell).
+    const at = (typeof document.elementFromPoint === 'function' ? document.elementFromPoint(e.clientX, e.clientY) : null) ?? (e.target as Element | null);
+    const target = at?.closest('[data-inline]') as HTMLElement | null;
+    const cell = target?.closest('[data-component]');
+    if (target === null || target === undefined || cell === null || cell === undefined) return;
+    e.preventDefault();
+    startInline(cell.getAttribute('data-component')!, target);
+  });
 
   // ── keys: delete, undo, redo, Escape ────────────────────────────────────────────────────
   function onKey(e: KeyboardEvent): void {
@@ -937,7 +1077,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     if (cell !== null && (e.key === 'Enter' || e.key === ' ') && e.target === cell) {
       e.preventDefault();
       const id = cell.getAttribute('data-component');
-      if (id !== null) { select(id); draw(); (root.querySelector(`.wk-props input, .wk-props select`) as HTMLElement | null)?.focus(); }
+      if (id !== null) { select(id); refreshSelection(); (root.querySelector(`.wk-props input, .wk-props select`) as HTMLElement | null)?.focus(); }
       return;
     }
     const inField = (e.target as HTMLElement | null)?.closest('input, textarea, select') != null;

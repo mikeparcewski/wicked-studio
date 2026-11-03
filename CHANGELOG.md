@@ -68,6 +68,21 @@ npm publish dates. Every version listed here exists on
   the person's Run there; a framed studio refuses every action. A link opens only an https host the app lists, after
   studio shows the whole address. It opens from Settings → Developer → Editor plugins → "Try it on a sample app".
   Its data permissions are the app host's own: crew's registry does not list them yet.
+- **Apps under Work, a dashboard of apps, inline edits and Share (DES-APPS-001 slice K4, operator 2026-11-03).**
+  - **Apps** sits under Work between Jobs and Repositories. `/apps` is a dashboard of the apps: one card each, with a
+    small read-only preview of its first page drawn by the runtime, its headline numbers, its version and receipt, when
+    it last changed and the sources it reads. Studio lists crew's apps when crew reports the apps capability, and the
+    two sample apps (marked as samples, with sample numbers) until then. Drawing a card never starts a source read: with
+    crew's apps a card shows no numbers until the app is opened. A card opens `/apps/<slug>` in Preview; its Edit link
+    opens `?mode=edit`.
+  - **Inline edits:** in Edit, double-click (or double-tap) a chart or table title, a KPI label, a Text's words, or a
+    Button's, Link's or Filter's label to change it in place. Enter or leaving the field keeps the change, and Escape
+    drops it. Each change is one spec op and lands one version, as every other edit does. Properties stays for the
+    rest. The header says "Changes save as you make them · Undo to go back".
+  - **Share** in the app header and on each card. If crew reports a published copy, the sheet gives its link, who can
+    open it, an embed snippet and the version it was published at, each with Copy. Until then it says plainly that
+    others need a published copy, which Publish will build. The Publish button is disabled ("Coming with Publish"),
+    and the only link offered is this studio's own address, labelled as such.
 
 ### Changed
 - **The type and the marks (fonts-v3, the operator's pick 2026-11-02).** The text face is Wicked Sans A, an OFL cut
