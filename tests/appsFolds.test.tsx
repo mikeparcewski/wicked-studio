@@ -98,12 +98,13 @@ describe('codex #3: what allowed the card must still hold when the answer comes'
   it('Run after switching to Edit, or after the card expired, runs nothing', async () => {
     let answer: (yes: boolean) => void = () => {};
     const r = await hostRig({ confirm: () => new Promise<boolean>((res) => { answer = res; }) });
-    r.port.postMessage(env('data.action', { action: 'assign_to_me', params: { id: 4821 } }, 'a1'));
+    const asked = r.ask('data.action', { action: 'assign_to_me', params: { id: 4821 } });
     await vi.waitFor(() => expect(r.app.confirm).toHaveBeenCalledTimes(1));
     r.state.mode = 'edit';
     answer(true);
-    await vi.waitFor(() => expect(r.run).not.toHaveBeenCalled());
-    r.state.mode = 'preview';
+    // The request's own answer, awaited: cancelled, and run never called (codex r2: no early pass).
+    expect(await asked).toMatchObject({ ok: true, payload: { state: 'cancelled' } });
+    expect(r.run).not.toHaveBeenCalled();
     r.host.teardown('done');
     const e = await hostRig({ prepare: async () => ({ record: 'old', expiresAt: Date.now() - 1, card: { action: 'assign_to_me', kind: 'row-write', source: 's', operation: 'UPDATE t', rows: [], key: 'id = 1', checks: null, request: 'UPDATE', says: null, sample: true } }) });
     const out = await e.ask('data.action', { action: 'assign_to_me', params: { id: 4821 } });
@@ -242,7 +243,7 @@ describe('codex #10: the sample store’s transaction holds a lock named for the
     const st = new SampleAppStore('esc', SPEC(), new MemStorage(), Date.now, locks);
     await st.edit(1, SPEC(), 'x');
     await st.move('undo', 2);
-    expect(names).toStrictEqual(['wicked-apps-sample:esc', 'wicked-apps-sample:esc']);
+    expect(names).toStrictEqual(['wicked-apps-sample:esc', 'wicked-apps-sample:esc', 'wicked-apps-sample:esc']); // first use, edit, move
   });
 });
 
@@ -285,7 +286,7 @@ async function boot(spec: AppSpec, answer: Answer, app: Record<string, unknown> 
     if (d.id === undefined) return;
     const reply = (payload: unknown): void => ch.port1.postMessage({ p: 'wicked.editor', v: 1, re: d.id, ok: true, payload });
     if (d.type === 'artifact.read') reply({ version: 1, content: { type: 'app', spec: current } });
-    else reply(answer(d.type, d.payload));
+    else void Promise.resolve(answer(d.type, d.payload)).then(reply);
   };
   window.dispatchEvent(Object.assign(new Event('message'), {
     data: { p: 'wicked.editor', v: 1, type: 'host.hello', payload: { protocol: 2, surface: 'full', grants: ['artifact.read', 'artifact.write', 'selection.chip', 'data.read', 'data.write'], app, theme: {}, prefs: { locale: 'en' } } },
@@ -480,5 +481,150 @@ describe('a spec op made in Edit and committed as the person clicks Preview', ()
     (r.app as { editing?: () => boolean }).editing = () => true;
     expect(await r.ask('data.action', { action: 'assign_to_me', params: { id: 4821 } })).toMatchObject({ ok: false, error: { code: 'refused' } });
     r.host.teardown('done');
+  });
+});
+
+// ── review round 2 (codex gpt-6.1-sol high) ─────────────────────────────────────────────────
+
+describe('codex r2 #2, #3, #4: the session and the sample store', () => {
+  it('#2 an undo that arrives while a landing is in flight aborts when that landing is refused', async () => {
+    const st = store();
+    const s = new AppSession(st, { burstMs: 5 });
+    await s.load();
+    const gate = deferred<StoreResult>();
+    vi.spyOn(st, 'edit').mockImplementationOnce(() => gate.promise);
+    const move = vi.spyOn(st, 'move');
+    s.edit(1, [{ op: 'component-move', id: 'weekly', x: 0, y: 9 }]);
+    await new Promise((res) => setTimeout(res, 20)); // the burst timer started the landing
+    const undo = s.move('undo', 1);
+    gate.resolve({ ok: false, code: 'stale_base', message: 'moved', head: 1 });
+    expect(await undo).toMatchObject({ ok: false, message: expect.stringMatching(/did not land/) });
+    expect(move).not.toHaveBeenCalled();
+  });
+
+  it('#3 a store opened late never writes its own older copy over another tab’s; first use writes under the lock', async () => {
+    const mem = new MemStorage();
+    const a = new SampleAppStore('esc', SPEC(), mem, Date.now, null);
+    await a.edit(1, SPEC(), 'x'); // v2 in storage
+    const writes = vi.spyOn(mem, 'setItem');
+    const names: string[] = [];
+    const late = new SampleAppStore('esc', SPEC(), mem, Date.now, { request: async (n, cb) => { names.push(n); return cb(); } });
+    expect((await late.detail()).head.version).toBe(2);
+    expect(writes).not.toHaveBeenCalled();
+    expect(names[0]).toBe('wicked-apps-sample:esc');
+  });
+
+  it('#4 a batch that would take a burst past its maximum lands the burst so far first', async () => {
+    const st = store();
+    const edit = vi.spyOn(st, 'edit');
+    const s = new AppSession(st, { burstMs: 60_000 });
+    await s.load();
+    for (let i = 0; i < BURST_MAX_OPS - 1; i += 1) s.edit(1, [{ op: 'component-move', id: 'weekly', x: 0, y: i % 7 }]);
+    const batch = Array.from({ length: 50 }, (_, i) => ({ op: 'component-move', id: 'by_region', x: 6, y: i % 7 }));
+    expect(s.edit(1, batch)).toMatchObject({ ok: true, pending: BURST_MAX_OPS - 1 + 50 });
+    expect(edit).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(s.head).toBe(2));
+    expect(s.pending).toBe(50);
+    s.dispose();
+  });
+});
+
+describe('codex r2 #6, #7, r1 #23 (stacking), #12, #13: the runtime', () => {
+  beforeEach(() => { document.body.innerHTML = ''; });
+
+  it('#6 a checkbox sends false until ticked; a declared default shows and sends as such', async () => {
+    const spec = base([{ id: 'f', type: 'form', fields: [{ name: 'urgent', input: 'checkbox' }, { name: 'notify', input: 'checkbox' }], submit: { label: 'Go', action: 'flag', params: { urgent: 'form.urgent', notify: 'form.notify' } }, box: { x: 0, y: 0, w: 4, h: 3 } }],
+      { actions: [{ id: 'flag', kind: 'api', source: 's', call: { kind: 'tool', tool: 'POST /flag' }, args: {}, params: { type: 'object', properties: { urgent: { type: 'boolean' }, notify: { type: 'boolean', default: true } }, required: ['urgent'] } }] });
+    const { seen } = await boot(spec, () => ({ state: 'cancelled' }));
+    const boxes = [...document.querySelectorAll('[data-component="f"] input[type="checkbox"]')] as HTMLInputElement[];
+    expect(boxes.map((b) => b.checked)).toStrictEqual([false, true]);
+    (document.querySelector('[data-component="f"] button') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(seen.find((m) => m.type === 'data.action')?.payload).toStrictEqual({ action: 'flag', params: { urgent: false, notify: true } }));
+  });
+
+  it('#7 / #23 stacked bars add up; a stacked area is a band on the one before it; a negative value stacks below zero', async () => {
+    const q = { id: 'r', source: 's', kind: 'sql' as const, output: [{ name: 'c', type: 'string' as const }, { name: 'a', type: 'integer' as const }, { name: 'b', type: 'integer' as const }] };
+    const spec = base([
+      { id: 'sb', type: 'chart', chart: 'bar', stacked: true, data: { query: 'r' }, x: 'c', series: [{ column: 'a' }, { column: 'b' }], box: { x: 0, y: 0, w: 6, h: 4 } },
+      { id: 'sa', type: 'chart', chart: 'area', stacked: true, data: { query: 'r' }, x: 'c', series: [{ column: 'a' }, { column: 'b' }], box: { x: 6, y: 0, w: 6, h: 4 } },
+    ], { queries: [q] });
+    await boot(spec, () => rowsFor(q, [['x', 10, 20], ['y', 10, -8]]));
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-component="sb"] rect')).toHaveLength(4));
+    const rect = (i: number) => document.querySelectorAll('[data-component="sb"] rect')[i]!;
+    // Row x: a's segment ends where b's begins.
+    expect(Number(rect(0).getAttribute('x')) + Number(rect(0).getAttribute('width'))).toBeCloseTo(Number(rect(1).getAttribute('x')), 0);
+    // Row y: b (-8) runs left of a's start (zero).
+    expect(Number(rect(3).getAttribute('x'))).toBeLessThan(Number(rect(2).getAttribute('x')));
+    const paths = [...document.querySelectorAll('[data-component="sa"] path.wk-area')].map((p) => p.getAttribute('d')!);
+    const ys = (d: string): number[] => [...d.matchAll(/[\d.]+,([\d.]+)/gu)].map((m) => Number(m[1]));
+    // Series b's band at row x starts at a's top (10) and ends at 30: its lower edge equals a's upper edge there.
+    const aUpperX = ys(paths[0]!)[0]!;
+    const bLowerX = ys(paths[1]!).at(-1)!;
+    expect(bLowerX).toBeCloseTo(aUpperX, 0);
+    // At row y, b is -8: its band lies below zero (a larger y in SVG) while a's band lies above it.
+    const aLowerY = ys(paths[0]!).at(-2)!; // a's lower edge at row y = zero
+    const bUpperY = ys(paths[1]!)[1]!; // b's upper edge at row y = the negative stack top = zero
+    const bLowerY = ys(paths[1]!).at(-2)!;
+    expect(bUpperY).toBeCloseTo(aLowerY, 0);
+    expect(bLowerY).toBeGreaterThan(aLowerY);
+  });
+
+  it('#12 spec ids named like Object.prototype members are plain keys (filters, forms, sample rows); nothing inherited changes', async () => {
+    const q = { id: 'constructor', source: 's', kind: 'sql' as const, params: { type: 'object' as const, properties: { s: { type: 'string' as const } } }, output: [{ name: 'v', type: 'string' as const }] };
+    const spec = base([
+      { id: 'toString', type: 'filter', filter: 'search', box: { x: 0, y: 0, w: 3, h: 1 } },
+      { id: 'valueOf', type: 'table', data: { query: 'constructor', params: { s: 'filter.toString' } }, box: { x: 0, y: 1, w: 6, h: 3 } },
+    ], { queries: [q] });
+    const sample = sampleAppData(() => spec, { rows: Object.assign(Object.create(null), { constructor: [['alpha'], ['beta']] }), viewer: null });
+    const { seen } = await boot(spec, (_t, p) => sample.query(1, p['query'] as string, (p['params'] ?? {}) as Record<string, unknown>));
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-component="valueOf"] tbody tr')).toHaveLength(2));
+    expect(seen.find((m) => m.type === 'data.query')!.payload).toStrictEqual({ query: 'constructor', params: {} });
+    const input = document.querySelector('[data-component="toString"] input') as HTMLInputElement;
+    input.value = 'alp';
+    input.dispatchEvent(new Event('input'));
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-component="valueOf"] tbody tr')).toHaveLength(1), { timeout: 2_000 });
+    expect(typeof ({} as Record<string, unknown>)['toString']).toBe('function');
+    expect(Object.getOwnPropertyNames(Object.prototype)).not.toContain('alp');
+  });
+
+  it('#13 a refresh of one query never discards another component’s answer in flight; an older answer for the same component is', async () => {
+    const fast = { id: 'fast', source: 's', kind: 'sql' as const, refresh: { mode: 'every' as const, seconds: 15 }, output: [{ name: 'n', type: 'integer' as const }] };
+    const slow = { id: 'slow', source: 's', kind: 'sql' as const, output: [{ name: 'n', type: 'integer' as const }] };
+    const spec = base([
+      { id: 'a', type: 'kpi', data: { query: 'fast' }, value: 'n', box: { x: 0, y: 0, w: 3, h: 2 } },
+      { id: 'b', type: 'kpi', data: { query: 'slow' }, value: 'n', box: { x: 3, y: 0, w: 3, h: 2 } },
+    ], { queries: [fast, slow] });
+    const intervals: Array<() => void> = [];
+    vi.spyOn(window, 'setInterval').mockImplementation(((fn: () => void) => { intervals.push(fn); return intervals.length as never; }) as never);
+    // The host answers `slow` only when told; `fast` at once.
+    let releaseSlow: () => void = () => {};
+    const replies: Array<{ q: string; send: () => void }> = [];
+    vi.resetModules();
+    const style = document.createElement('style');
+    style.id = 'wk-apps-sheet';
+    style.textContent = /<style id="wk-apps-sheet">([\s\S]*?)<\/style>/u.exec(TEMPLATE)![1]!;
+    document.head.append(style);
+    const { startRuntime } = await import('../src/plugins/wicked-apps/runtime/runtime.js');
+    startRuntime({ editor: 'wicked-apps', surfaces: {} });
+    const ch = new MessageChannel();
+    let fastN = 0;
+    ch.port1.onmessage = (m) => {
+      const d = m.data as { type: string; id?: string; payload: Record<string, unknown> };
+      if (d.id === undefined) return;
+      const reply = (payload: unknown): void => ch.port1.postMessage({ p: 'wicked.editor', v: 1, re: d.id, ok: true, payload });
+      if (d.type === 'artifact.read') { reply({ version: 1, content: { type: 'app', spec } }); return; }
+      if (d.payload['query'] === 'fast') { fastN += 1; reply(rowsFor(fast, [[fastN]])); return; }
+      replies.push({ q: 'slow', send: () => reply(rowsFor(slow, [[42]])) });
+      releaseSlow = () => replies.forEach((r) => r.send());
+    };
+    window.dispatchEvent(Object.assign(new Event('message'), {
+      data: { p: 'wicked.editor', v: 1, type: 'host.hello', payload: { protocol: 2, surface: 'full', grants: ['artifact.read', 'data.read'], app: { framed: false, mode: 'preview' }, theme: {}, prefs: { locale: 'en' } } },
+      source: window, ports: [ch.port2],
+    }));
+    await vi.waitFor(() => expect(document.querySelector('[data-component="a"] .wk-kpi-value')?.textContent).toBe('1'));
+    intervals[0]!(); // refresh `fast` while `slow` is still in flight
+    await vi.waitFor(() => expect(document.querySelector('[data-component="a"] .wk-kpi-value')?.textContent).toBe('2'));
+    releaseSlow();
+    await vi.waitFor(() => expect(document.querySelector('[data-component="b"] .wk-kpi-value')?.textContent).toBe('42'));
   });
 });

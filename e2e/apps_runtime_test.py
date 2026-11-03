@@ -34,6 +34,7 @@ import time
 import urllib.parse
 import urllib.request
 
+import apps_fixture
 from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
 
 ap = argparse.ArgumentParser()
@@ -134,6 +135,12 @@ def main() -> None:
     post_json(f"{origin}/__fixture/apps-reset", {})
     reg = get_json(f"{origin}/api/v1/editors")
     entry = next((e for e in reg["editors"] if e["id"] == "wicked-apps"), None)
+    # The fixture's own binding check covers a query-backed select's parameters (codex r2): a stand-in that let such a
+    # spec land could not show that studio's defaults survive crew's rule.
+    probe = json.loads(json.dumps(apps_fixture.SPEC_A))
+    probe["queries"].append({"id": "teams", "source": "s", "kind": "sql", "params": {"type": "object", "properties": {"org": {"type": "string"}}, "required": ["org"]}, "output": [{"name": "t", "type": "string"}]})
+    probe["pages"][0]["components"].append({"id": "team", "type": "filter", "filter": "select", "options": {"kind": "query", "query": {"query": "teams"}, "value": "t"}, "box": {"x": 0, "y": 20, "w": 3, "h": 1}})
+    check("fixture_checks", [f["code"] for f in apps_fixture._check(probe)] == ["unbound_param"])
     check("registry", entry is not None and entry["kinds"] == ["app"], kinds=entry and entry["kinds"],
           permissions=entry and [p["id"] for p in entry["permissions"]])
     q = urllib.parse.urlencode({"editor": "wicked-apps", "version": entry["version"], "sha": entry["sha256"], "title": "App", "kind": "app", "app": "fixture-app"})
@@ -309,6 +316,24 @@ def main() -> None:
               a=state(page), b=state(page_b), b_told=b_status, undo_posts=undo_posts, pointer=fixture_app["history"])
         page_b.close()
 
+        # 8b. a card whose action changed meanwhile (another writer) runs nothing: crew refuses the record, said "failed"
+        page.click('[data-testid="apps-mode-preview"]')
+        frame.locator(".wk-table tbody tr", has_text="javascript:").locator("button", has_text="Assign to me").click()
+        page.wait_for_selector('[data-testid="apps-card"]')
+        cur = get_json(f"{origin}/api/v1/apps/fixture-app")["app"]
+        changed = json.loads(json.dumps(cur["spec"]))
+        changed["actions"][0]["set"] = {"owner": {"kind": "literal", "value": "someone-else"}}
+        post_json(f"{origin}/api/v1/apps/fixture-app/edits", {"base": cur["head"]["version"], "ops": [{"op": "spec", "spec": changed}], "summary": "elsewhere"})
+        runs_before = count(origin, "POST", "/run")
+        page.wait_for_selector('[data-testid="apps-card-run"][data-armed="true"]')
+        page.click('[data-testid="apps-card-run"]')
+        page.wait_for_selector('[data-testid="apps-outcome"]')
+        stale_outcome = page.text_content('[data-testid="apps-outcome"]')
+        refused_run = [c for c in calls(origin) if c["path"].endswith("/run")][-1]
+        owner_kept = frame.evaluate("() => [...document.querySelectorAll('.wk-table tbody tr')].find(r => r.textContent.includes('javascript:'))?.textContent.includes('unassigned')")
+        check("changed_action_runs_nothing", refused_run["status"] == 409 and count(origin, "POST", "/run") == runs_before + 1 and "failed" in stale_outcome and owner_kept,
+              outcome=stale_outcome, status=refused_run["status"])
+
         # 9. framed
         framer = ctx.new_page()
         framer.goto(f"{origin}/__fixture/apps-framer?{urllib.parse.urlencode({'src': url})}")
@@ -324,8 +349,17 @@ def main() -> None:
         says = inner.text_content(".wk-td-actions")
         p0 = count(origin, "POST", "/prepare")
         r5 = inner.evaluate(HOSTILE_ASK, ["data.action", {"action": "assign_to_me", "params": {"id": 4821}}, "h5"])
+        # Studio's own chrome changes nothing in a frame either: Undo, Redo and Edit are not offered (codex r2 P1).
+        studio = next((f for f in framer.frames if "/editors/dev" in f.url), None)
+        chrome = studio.evaluate("() => ['apps-undo', 'apps-redo', 'apps-mode-edit'].map((t) => document.querySelector(`[data-testid=${t}]`)?.disabled)") if studio else None
+        undo_before = len([c for c in calls(origin) if c["path"].endswith("/undo") or c["path"].endswith("/redo")])
+        if studio is not None:
+            studio.click('[data-testid="apps-undo"]', force=True)
+            framer.wait_for_timeout(500)
+        undo_after = len([c for c in calls(origin) if c["path"].endswith("/undo") or c["path"].endswith("/redo")])
         check("framed_refuses", offered == 0 and "Open to make changes" in says and r5 and r5["error"]["code"] == "refused"
-              and "Open to make changes" in r5["error"]["message"] and count(origin, "POST", "/prepare") == p0, buttons=offered, says=says, sent=r5)
+              and "Open to make changes" in r5["error"]["message"] and count(origin, "POST", "/prepare") == p0
+              and chrome == [True, True, True] and undo_after == undo_before, buttons=offered, says=says, sent=r5, chrome_disabled=chrome)
         framer.close()
 
         # 10. a window too narrow for the builder: the frame decides (under 640 px), so Edit is not offered

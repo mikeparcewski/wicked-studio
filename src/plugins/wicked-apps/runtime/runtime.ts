@@ -496,6 +496,16 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
 
   const drawForm = (c: AppFormComponent, body: HTMLElement): void => {
     const values = (forms[c.id] ??= dict<string | boolean>());
+    // Every field starts at what it will send: the bound parameter's declared default, and a checkbox is `false`
+    // until ticked (never "absent"), so what the form shows is what it sends (codex r2).
+    const target = spec?.actions.find((a) => a.id === c.submit.action)?.params?.properties ?? {};
+    for (const f of c.fields) {
+      if (Object.hasOwn(values, f.name)) continue;
+      const ref = c.submit.params === undefined ? undefined : Object.entries(c.submit.params).find(([, r]) => r === `form.${f.name}`)?.[0];
+      const d = ref !== undefined && Object.hasOwn(target, ref) ? target[ref]!.default : undefined;
+      if (f.input === 'checkbox') values[f.name] = d === true;
+      else if (d !== undefined) values[f.name] = String(d);
+    }
     const box = el('div', 'wk-form');
     for (const f of c.fields.slice(0, 30)) {
       const label = el('label', 'wk-field');

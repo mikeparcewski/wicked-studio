@@ -174,6 +174,9 @@ def _check(spec: dict) -> list:
             sites = []
             if "data" in c:
                 sites.append((queries.get(c["data"]["query"]), c["data"].get("params") or {}, f"{at}.data", c["data"]["query"]))
+            opts = c.get("options") if c["type"] == "filter" else None
+            if isinstance(opts, dict) and opts.get("kind") == "query":
+                sites.append((queries.get(opts["query"]["query"]), opts["query"].get("params") or {}, f"{at}.options.query", opts["query"]["query"]))
             for b, where in ([(c["action"], "action")] if c["type"] == "button" else []) + ([(c["submit"], "submit")] if c["type"] == "form" else []) \
                     + [(r, f"rowActions[{i}]") for i, r in enumerate(c.get("rowActions") or [])]:
                 sites.append((actions.get(b["action"]), b.get("params") or {}, f"{at}.{where}", b["action"]))
@@ -283,6 +286,16 @@ def _answer(method: str, path: str, body, locked: bool = False):
             act = next((x for x in spec["actions"] if x["id"] == rest[1]), None)
             if act is None:
                 return _refuse(404, "bad_request", f"no action {rest[1]}")
+            if rest[2] == "run":
+                # §7.3: run executes the operation the card was drawn from (the record's version), and only while the
+                # head still declares that same action: a changed action withdraws the record (crew rechecks hashes).
+                rec = RECORDS.get(body.get("record"))
+                if rec is not None and rec.get("app") == slug:
+                    drawn = next((x for x in a["specs"][rec["version"]]["actions"] if x["id"] == rec["action"]), None)
+                    if drawn is None or drawn != act:
+                        rec["state"] = "withdrawn"
+                        return _refuse(409, "bad_request", "the action changed since its card was drawn; nothing ran")
+                    act = drawn
             if rest[2] == "prepare":
                 # §7.3: a record is bound to app, version and action, for the version the viewer is looking at.
                 if body.get("version") != head:
