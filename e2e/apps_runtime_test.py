@@ -272,28 +272,40 @@ def main() -> None:
         check("burst_one_version", len(edits) == 1 and kpi.get("box", {}).get("x", 0) > 0 and (kpi.get("box", {}).get("h", 2) > 2 or kpi.get("box", {}).get("w", 3) > 3) and style_mid == 0 and no_style(frame) == 0
               and chip == "about: KPI “Open” (Main, v1)", edits=len(edits), kpi_box=kpi.get("box"), style_during_drag=style_mid, chip=chip)
 
+        # 7b. a title typed and then left with a click on studio's own Preview still lands (it commits as focus leaves)
+        title = frame.locator('[data-prop="title"]')
+        title.click()
+        title.press("ControlOrMeta+a")
+        title.press_sequentially("Open now")
+        page.click('[data-testid="apps-mode-preview"]')
+        page.wait_for_timeout(2_500)
+        last = [c for c in calls(origin) if c["method"] == "POST" and c["path"].endswith("/edits")][-1]
+        landed_title = next((c.get("title") for c in last["body"]["ops"][0]["spec"]["pages"][0]["components"] if c["id"] == "open_kpi"), None)
+        check("typed_then_left", last["status"] == 200 and landed_title == "Open now", title=landed_title, status=last["status"])
+        page.click('[data-testid="apps-mode-edit"]')
+
         # 8. two tabs
+        h = get_json(f"{origin}/api/v1/apps/fixture-app")["app"]["head"]["version"]
         page_b = ctx.new_page()
         page_b.on("pageerror", lambda e: errors.append(str(e)))
         page_b.goto(origin + url)
-        page_b.wait_for_selector('[data-testid="apps-version"]:has-text("v2")')
+        page_b.wait_for_selector(f'[data-testid="apps-version"]:has-text("v{h}")')
         page.click('[data-testid="apps-undo"]')
-        page.wait_for_selector('[data-testid="apps-version"]:has-text("v3")')
+        page.wait_for_selector(f'[data-testid="apps-version"]:has-text("v{h + 1}")')
         page_b.click('[data-testid="apps-undo"]')
-        page_b.wait_for_selector('[data-testid="apps-version"]:has-text("v3")')
+        page_b.wait_for_selector(f'[data-testid="apps-version"]:has-text("v{h + 1}")')
         b_status = page_b.text_content('[data-testid="apps-status"]') or ""
-        stale = [c for c in calls(origin) if c["path"].endswith("/undo")]
         page_b.wait_for_selector('[data-testid="apps-redo"]:not([disabled])')
         page_b.click('[data-testid="apps-redo"]')
-        page_b.wait_for_selector('[data-testid="apps-version"]:has-text("v4")')
+        page_b.wait_for_selector(f'[data-testid="apps-version"]:has-text("v{h + 2}")')
         page.bring_to_front()
         page.evaluate("() => window.dispatchEvent(new Event('focus'))")
-        page.wait_for_selector('[data-testid="apps-version"]:has-text("v4")')
+        page.wait_for_selector(f'[data-testid="apps-version"]:has-text("v{h + 2}")')
         state = lambda pg: (pg.text_content('[data-testid="apps-version"]'), pg.is_disabled('[data-testid="apps-undo"]'), pg.is_disabled('[data-testid="apps-redo"]'))
         fixture_app = get_json(f"{origin}/api/v1/apps/fixture-app")["app"]
         undo_posts = [(c["body"].get("base"), c["status"]) for c in calls(origin) if c["path"].endswith("/undo")]
-        check("two_tabs_agree", state(page) == state(page_b) and fixture_app["head"]["version"] == 4 and fixture_app["history"]["canRedo"] is False
-              and undo_posts == [(2, 200), (2, 409)] and "another tab" in b_status,
+        check("two_tabs_agree", state(page) == state(page_b) and fixture_app["head"]["version"] == h + 2 and fixture_app["history"]["canRedo"] is False
+              and undo_posts == [(h, 200), (h, 409)] and "another tab" in b_status,
               a=state(page), b=state(page_b), b_told=b_status, undo_posts=undo_posts, pointer=fixture_app["history"])
         page_b.close()
 

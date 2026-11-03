@@ -415,3 +415,70 @@ describe('codex #28, #16: the card’s own gate and the frame’s width', () => 
     expect({ ...urlParamsOf('?editor=x&url.region=EMEA&url.bad%20name=1&url.constructor=y') }).toStrictEqual({ region: 'EMEA', constructor: 'y' });
   });
 });
+
+describe('a typed Properties field commits while focus is in the frame', () => {
+  beforeEach(() => { document.body.innerHTML = ''; });
+
+  it('each keystroke commits (focus still in the frame), and the field keeps its focus and text across the redraw', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const spec = base([{ id: 'note', type: 'text', text: 'Hello', box: { x: 0, y: 0, w: 6, h: 1 } }]);
+    const { seen } = await boot(spec, (type, p) => (type === 'spec.edit' ? { spec: { ...spec, pages: [{ ...spec.pages[0]!, components: [{ ...spec.pages[0]!.components[0]!, title: (p['ops'] as Array<{ value: string }>)[0]!.value }] }] }, added: [], pending: 1 } : {}), { framed: false, mode: 'edit' });
+    // jsdom has no PointerEvent or pointer capture: mouse events of the pointer types, and a no-op capture.
+    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { configurable: true, value: () => {} });
+    const note = document.querySelector('[data-component="note"]') as HTMLElement;
+    note.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    note.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }));
+    await vi.waitFor(() => expect(document.querySelector('[data-prop="title"]')).not.toBeNull());
+    const title = document.querySelector('[data-prop="title"]') as HTMLInputElement;
+    title.focus();
+    title.value = 'Greeting';
+    title.dispatchEvent(new Event('input'));
+    await vi.waitFor(() => expect(seen.filter((m) => m.type === 'spec.edit')).toHaveLength(1));
+    expect(seen.find((m) => m.type === 'spec.edit')!.payload).toMatchObject({ ops: [{ op: 'component-set', id: 'note', prop: 'title', value: 'Greeting' }] });
+    await vi.waitFor(() => expect((document.activeElement as HTMLElement | null)?.getAttribute('data-prop')).toBe('title'));
+    expect((document.activeElement as HTMLInputElement).value).toBe('Greeting');
+    // The blur that follows (focus leaving for studio's chrome) sends nothing more: it was already committed.
+    (document.activeElement as HTMLInputElement).dispatchEvent(new Event('change'));
+    expect(seen.filter((m) => m.type === 'spec.edit')).toHaveLength(1);
+  });
+});
+
+describe('a spec op from a gesture that just left the frame (a field committed by clicking studio’s chrome)', () => {
+  it('is taken within 1.5 s of focus leaving the frame, and refused after; actions and history never get the grace', async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const r = await hostRig();
+    r.state.mode = 'edit';
+    // Focus went into the frame (the host window blurs), then came back to studio's chrome (the host window focuses).
+    window.dispatchEvent(new Event('blur'));
+    r.state.click = false;
+    const activation = { on: true };
+    (r.host as unknown as { o: { activation: () => boolean } }).o.activation = () => activation.on;
+    window.dispatchEvent(new Event('focus'));
+    expect(await r.ask('spec.edit', { base: 1, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'By region' }] })).toMatchObject({ ok: true });
+    expect(await r.ask('app.history', { move: 'undo', base: 1 })).toMatchObject({ ok: false, error: { code: 'refused' } });
+    // The frame element's own blur (the event Firefox fires) starts the same window.
+    now += 1_600;
+    expect(await r.ask('spec.edit', { base: r.session.head, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'Gone' }] })).toMatchObject({ ok: false, error: { code: 'refused' } });
+    r.host.frame.dispatchEvent(new Event('blur'));
+    expect(await r.ask('spec.edit', { base: r.session.head, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'Again' }] })).toMatchObject({ ok: true });
+    now += 1_600;
+    expect(await r.ask('spec.edit', { base: r.session.head, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'Later' }] })).toMatchObject({ ok: false, error: { code: 'refused' } });
+    r.host.teardown('done');
+  });
+});
+
+describe('a spec op made in Edit and committed as the person clicks Preview', () => {
+  it('is Edit’s while the host page says editing (just left Edit); an action never takes that grace', async () => {
+    const r = await hostRig();
+    r.state.mode = 'preview';
+    (r.app as { editing?: () => boolean }).editing = () => true;
+    expect(await r.ask('spec.edit', { base: 1, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'By region' }] })).toMatchObject({ ok: true });
+    (r.app as { editing?: () => boolean }).editing = () => false;
+    expect(await r.ask('spec.edit', { base: 1, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'Later' }] })).toMatchObject({ ok: false, error: { code: 'refused' } });
+    r.state.mode = 'edit';
+    (r.app as { editing?: () => boolean }).editing = () => true;
+    expect(await r.ask('data.action', { action: 'assign_to_me', params: { id: 4821 } })).toMatchObject({ ok: false, error: { code: 'refused' } });
+    r.host.teardown('done');
+  });
+});

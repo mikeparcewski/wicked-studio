@@ -652,6 +652,27 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     tile.addEventListener('pointercancel', onUp);
   };
 
+  /**
+   * A typed field commits on every keystroke, while focus is still in this frame (the host's edit burst makes the
+   * keystrokes one version), and on Enter and change. The host takes a change only from a gesture in this frame, and
+   * a commit made on the blur caused by a click in studio's own chrome arrives after focus has left (Firefox fires no
+   * event the host could time that by), so nothing waits for the blur.
+   */
+  const typed = (input: HTMLInputElement | HTMLTextAreaElement, commit: () => void, multiline = false): void => {
+    let sent = input.value;
+    const go = (): void => {
+      if (input.value === sent) return;
+      sent = input.value;
+      commit();
+    };
+    input.addEventListener('input', go);
+    input.addEventListener('change', go);
+    input.addEventListener('keydown', (e: Event) => {
+      const k = e as KeyboardEvent;
+      if (k.key === 'Enter' && (!multiline || k.metaKey || k.ctrlKey)) { k.preventDefault(); go(); }
+    });
+  };
+
   const prop = (label: string, input: HTMLElement): HTMLElement => {
     const row = el('label', 'wk-prop');
     row.append(el('span', 'wk-prop-label', label), input);
@@ -662,7 +683,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     input.value = value ?? '';
     input.maxLength = max;
     input.setAttribute('data-prop', name);
-    input.addEventListener('change', () => { void edit([{ op: 'component-set', id: c.id, prop: name, value: input.value }]); });
+    typed(input, () => { void edit([{ op: 'component-set', id: c.id, prop: name, value: input.value }]); }, area);
     return prop(label, input);
   };
   const selectProp = (c: AppComponent, label: string, name: string, value: string, options: readonly string[], op: 'set' | 'bind' = 'set'): HTMLElement => {
@@ -687,7 +708,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     i.min = String(min); i.max = String(max);
     i.value = String(name === 'x' ? c.box.x + 1 : name === 'y' ? c.box.y + 1 : c.box[name]);
     i.setAttribute('data-prop', `box-${name}`);
-    i.addEventListener('change', () => {
+    typed(i, () => {
       const v = Math.round(Number(i.value));
       if (!Number.isFinite(v)) return;
       if (name === 'x' || name === 'y') {
@@ -719,7 +740,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       i.min = '5'; i.max = '500';
       i.value = String(c.pageSize ?? 10);
       i.setAttribute('data-prop', 'pageSize');
-      i.addEventListener('change', () => { const v = Math.round(Number(i.value)); if (Number.isFinite(v)) void edit([{ op: 'component-set', id: c.id, prop: 'pageSize', value: Math.min(500, Math.max(5, v)) }]); });
+      typed(i, () => { const v = Math.round(Number(i.value)); if (Number.isFinite(v)) void edit([{ op: 'component-set', id: c.id, prop: 'pageSize', value: Math.min(500, Math.max(5, v)) }]); });
       box.append(prop('Rows per page', i));
     }
     if (c.type === 'chart') {
@@ -776,6 +797,18 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
 
   // ── the whole surface ───────────────────────────────────────────────────────────────────
   const draw = (): void => {
+    // A Properties field being typed in keeps its focus, its caret and what is typed in it across the redraw.
+    const was = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement ? document.activeElement : null;
+    const keep = was !== null && root.contains(was) ? { prop: was.getAttribute('data-prop'), value: was.value, at: (() => { try { return [was.selectionStart, was.selectionEnd] as const; } catch { return null; } })() } : null;
+    drawNow();
+    if (keep === null || keep.prop === null) return;
+    const now = [...root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-prop]')].find((e) => e.getAttribute('data-prop') === keep.prop);
+    if (now === undefined) return;
+    now.value = keep.value;
+    now.focus({ preventScroll: true });
+    try { if (keep.at !== null && keep.at[0] !== null) now.setSelectionRange(keep.at[0], keep.at[1]); } catch { /* a number input has no caret to set */ }
+  };
+  const drawNow = (): void => {
     root.replaceChildren();
     bodies.clear();
     index.clear();

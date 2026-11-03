@@ -282,6 +282,9 @@ export function threadLine(firstParty: boolean, name: string, items: readonly Wi
   return `${firstParty ? 'You' : name} ${writeVerb(items)} ${summary} · Version ${version}`;
 }
 
+/** How long after focus leaves an app's frame a spec op from it is still the person's (see `justInFrame`). */
+export const SPEC_EDIT_AFTER_FOCUS_MS = 1_500;
+
 /** Write refusals the host or adapter makes before anything is sent: nothing was written. */
 const UNSENT: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['not_granted', 'bad_request', 'too_large', 'unsupported', 'rate_limited', 'refused', 'head_moved']);
 
@@ -340,7 +343,20 @@ export class EditorHost {
   /** One typed character per gesture (§5.10): spent by an accepted `ui.typed`, re-armed only when
    *  focus enters the frame again — transient activation lasts seconds and is not consumed (Copilot). */
   private typingSpent = false;
-  private readonly onHostBlur = (): void => { if (document.activeElement === this.frame) this.typingRearm(); };
+  private readonly onHostBlur = (): void => {
+    if (!this.inFrame()) return;
+    this.typingRearm();
+    this.frameFocused = true;
+  };
+  /** Focus came back to the host page from this frame (a click on studio's chrome): when, for {@link justInFrame}.
+   *  The frame element's own blur is the one every engine fires (Firefox fires no host-window focus for it). */
+  private readonly onHostFocus = (): void => {
+    if (this.frameFocused && !this.inFrame()) { this.frameLeftAt = this.now(); this.frameFocused = false; }
+  };
+  private readonly onFrameFocus = (): void => { this.frameFocused = true; };
+  private readonly onFrameBlur = (): void => { this.frameLeftAt = this.now(); this.frameFocused = false; };
+  private frameFocused = false;
+  private frameLeftAt = Number.NEGATIVE_INFINITY;
   private writing = false;
   private grants: Set<PermissionId>;
   private ownVersions = new Set<number>();
@@ -374,6 +390,10 @@ export class EditorHost {
   mount(): void {
     window.addEventListener('message', this.onWindow);
     window.addEventListener('blur', this.onHostBlur);
+    window.addEventListener('focus', this.onHostFocus);
+    document.addEventListener('focusin', this.onHostFocus);
+    this.frame.addEventListener('focus', this.onFrameFocus);
+    this.frame.addEventListener('blur', this.onFrameBlur);
     this.frame.addEventListener('load', this.onLoad);
     // The 3 s for plugin.ready start when the frame's document has loaded (frameLoaded): a slow daemon serving the
     // bundle is not a plugin that failed to start (orchestrator 2026-10-14: :7701 took 20-59 s to serve the deck's
@@ -726,8 +746,14 @@ export class EditorHost {
 
   /** Whether this frame holds the person's click right now: real activation with focus in THIS frame (judged at
    *  receipt, before any await, as `mcp.request` is). */
+  private inFrame(): boolean { return (this.o.focusInFrame ?? ((f) => document.activeElement === f))(this.frame); }
   private clickedNow(): boolean {
-    return (this.o.activation ?? NO_ACTIVATION)() && (this.o.focusInFrame ?? ((f) => document.activeElement === f))(this.frame);
+    return (this.o.activation ?? NO_ACTIVATION)() && this.inFrame();
+  }
+  /** A spec op (only) may also come from a gesture that just left this frame: a field typed in and then left with a
+   *  click on studio's own chrome commits on that blur, which reaches the host after focus has gone (1.5 s). */
+  private justInFrame(): boolean {
+    return (this.o.activation ?? NO_ACTIVATION)() && (this.inFrame() || this.now() - this.frameLeftAt < SPEC_EDIT_AFTER_FOCUS_MS);
   }
 
   private async appRequest(type: 'spec.edit' | 'app.history' | 'data.query' | 'data.action' | 'link.open', p: Record<string, unknown>): Promise<unknown> {
@@ -735,8 +761,10 @@ export class EditorHost {
     if (app === undefined) return { error: 'unsupported', message: `${type} is available only on an app` };
     // Everything a refusal depends on is read NOW, before the first await.
     const clicked = this.clickedNow();
+    const editGesture = this.justInFrame();
     const framed = app.framed();
     const mode = app.mode();
+    const inEdit = app.editing?.() ?? mode === 'edit';
     // Every change the runtime asks for — a spec op, an undo or a redo, an action — is the person's: it needs their
     // click or key in THIS frame right now, and a framed host changes nothing at all (§7.1, S8).
     if (framed && type !== 'data.query' && type !== 'link.open') {
@@ -744,8 +772,8 @@ export class EditorHost {
     }
     switch (type) {
       case 'spec.edit': {
-        if (mode !== 'edit') return { error: 'refused', message: 'the app changes in Edit; this is Preview' };
-        if (!clicked) return { error: 'refused', message: 'the app changes only from your own gesture in it' };
+        if (!inEdit) return { error: 'refused', message: 'the app changes in Edit; this is Preview' };
+        if (!editGesture) return { error: 'refused', message: 'the app changes only from your own gesture in it' };
         const r = app.session.edit(p['base'] as number, p['ops'] as unknown[]);
         if (!r.ok) return { error: r.code, message: r.message, ...(r.head !== undefined ? { head: r.head } : {}) };
         return { spec: r.spec, added: r.added, pending: r.pending };
@@ -1189,6 +1217,10 @@ export class EditorHost {
     this.unsubscribeApp = undefined;
     window.removeEventListener('message', this.onWindow);
     window.removeEventListener('blur', this.onHostBlur);
+    window.removeEventListener('focus', this.onHostFocus);
+    document.removeEventListener('focusin', this.onHostFocus);
+    this.frame.removeEventListener('focus', this.onFrameFocus);
+    this.frame.removeEventListener('blur', this.onFrameBlur);
     this.frame.removeEventListener('load', this.onLoad);
     if (this.readyTimer !== null) clearTimeout(this.readyTimer);
     if (this.pingTimer !== null) clearInterval(this.pingTimer);
