@@ -1,0 +1,302 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api, apiBase } from '../../api/client.js';
+import type { AppDetail } from '../../api/types.js';
+import { EditorHost } from '../../editors/host.js';
+import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
+import { readThemeTokens } from '../../editors/theme.js';
+import { AppAdapter, type AppHostPort, type AppMode } from '../../editors/apps/appAdapter.js';
+import { appDataFor, sampleAppData, type ActionCard, type ActionOutcome, type AppDataPort, type PreparedAction } from '../../editors/apps/appData.js';
+import { AppSession } from '../../editors/apps/appSession.js';
+import { CrewAppStore, SampleAppStore, type AppStorePort } from '../../editors/apps/appStore.js';
+import { sampleApp } from '../../editors/apps/samples.js';
+
+/**
+ * THE APP HOST (DES-APPS-001 §6.1, §7.1, §7.3; slice K4): one app in the `wicked-apps` runtime's sandboxed frame, and
+ * everything around it the HOST draws — never the frame:
+ *
+ *  - the header: the app's name, its version and receipt, Undo and Redo (crew's pointer), Edit | Preview, and
+ *    "Viewing as";
+ *  - the "Needs you" dock: the CARD for an action the app asked to run (from the resolved operation; Run is armed
+ *    after a moment and runs only on the person's click here), the full URL of a link before it opens, and what the
+ *    last action did;
+ *  - the edit line: what landed (one version per edit burst), or why it did not.
+ *
+ * On a daemon that serves crew's app store, `?app=<slug>` opens that app ({@link CrewAppStore}); otherwise a sample app
+ * opens in memory ({@link SampleAppStore}). Live rows and actions come through the data seam (`appDataFor`), which is
+ * the stub until crew says it runs them. Below 640 px the builder is Preview only: "Edit on a larger screen".
+ */
+
+const ARM_MS = 600;
+const PHONE_PX = 640;
+
+export interface AppHostProps { editor: string; version: string; sha: string; app: string | null; sample: string | null }
+
+interface Asking { prepared: PreparedAction; resolve: (yes: boolean) => void; at: number }
+interface LinkAsk { url: string; resolve: (yes: boolean) => void }
+
+function receiptWords(app: AppDetail): string {
+  const v = app.versions.find((x) => x.version === app.head.version);
+  const r = v?.receipt;
+  if (r == null) return 'not accepted';
+  if (r.kind === 'restored') return `restored from v${r.restoredFrom?.version ?? '?'}`;
+  return r.kind;
+}
+
+function outcomeWords(o: ActionOutcome, card: ActionCard): string {
+  const what = `“${card.action}”`;
+  const why = o.reason !== null && o.reason !== '' ? `: ${o.reason}` : '';
+  if (o.state === 'succeeded') return `Ran ${what}${why}`;
+  if (o.state === 'failed') return `${what} failed${why}`;
+  return `Not known whether ${what} ran${why}`;
+}
+
+function useNarrow(): boolean {
+  const q = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(`(max-width: ${PHONE_PX - 1}px)`) : null;
+  const [narrow, setNarrow] = useState(q?.matches ?? false);
+  useEffect(() => {
+    if (q === null) return;
+    const on = (): void => setNarrow(q.matches);
+    q.addEventListener('change', on);
+    return () => q.removeEventListener('change', on);
+  }, [q]);
+  return narrow;
+}
+
+function ActionCardView({ asking, onAnswer }: { asking: Asking; onAnswer: (yes: boolean) => void }): React.ReactElement {
+  const { card, expiresAt } = asking.prepared;
+  const [armed, setArmed] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    // Run is armed only after the card has been on screen a moment: a click aimed at the app can't land on it.
+    const arm = setTimeout(() => setArmed(true), ARM_MS);
+    const tick = setInterval(() => setNow(Date.now()), 1_000);
+    return () => { clearTimeout(arm); clearInterval(tick); };
+  }, [asking]);
+  const left = Math.max(0, Math.round((expiresAt - now) / 1_000));
+  useEffect(() => { if (left === 0) onAnswer(false); }, [left, onAnswer]);
+  return (
+    <section className="wk-apps-card" data-testid="apps-card" aria-label={`Run ${card.action}?`} role="dialog">
+      <header className="wk-apps-card-head">Run “{card.action}”?</header>
+      <p className="wk-apps-card-lock">Drawn by studio, outside the app: the app can’t change or click it.</p>
+      {card.sample && <p className="wk-apps-card-sample" data-testid="apps-card-sample">Sample: nothing is written to a source.</p>}
+      <dl className="wk-apps-card-rows">
+        <dt>Source</dt><dd data-testid="apps-card-source">{card.source}</dd>
+        <dt>Operation</dt><dd data-testid="apps-card-operation">{card.operation}</dd>
+        {card.rows.map((r, i) => (
+          <div key={i} className="wk-apps-card-row" data-testid="apps-card-row">
+            <dt>{r.label}</dt><dd>{r.value}{r.from !== null && <span className="wk-apps-card-from"> ({r.from})</span>}</dd>
+          </div>
+        ))}
+        {card.key !== null && (<><dt>Row</dt><dd data-testid="apps-card-key">{card.key}</dd></>)}
+      </dl>
+      {card.checks !== null && <p className="wk-apps-card-checks">{card.checks}</p>}
+      <pre className="wk-apps-card-request" data-testid="apps-card-request">{card.request}</pre>
+      {card.says !== null && <p className="wk-apps-card-says">The app says: “{card.says}”</p>}
+      <p className="wk-apps-card-note">Asked every time. If anything else would change, nothing is written.</p>
+      <footer className="wk-apps-card-foot">
+        <button type="button" className="wk-btn wk-btn--primary" data-testid="apps-card-run" data-armed={armed} disabled={!armed} onClick={() => onAnswer(true)}>Run it</button>
+        <button type="button" className="wk-btn wk-btn--secondary" data-testid="apps-card-cancel" onClick={() => onAnswer(false)}>Cancel</button>
+        <span className="wk-apps-card-expiry">expires in {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}</span>
+      </footer>
+    </section>
+  );
+}
+
+export function AppHostView({ editor, version, sha, app: slug, sample }: AppHostProps): React.ReactElement {
+  const narrow = useNarrow();
+  const [mode, setMode] = useState<AppMode>('preview');
+  const modeRef = useRef<AppMode>('preview');
+  const shown = narrow ? 'preview' : mode;
+  modeRef.current = shown;
+  // The host page decides framing, once, and never relaxes it (§7.1): studio refuses to be framed (S8), so a framed
+  // studio is a page someone else put it in.
+  const framed = useMemo(() => { try { return window.top !== window.self; } catch { return true; } }, []);
+  const [detail, setDetail] = useState<AppDetail | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [torn, setTorn] = useState<string | null>(null);
+  const [chips, setChips] = useState<Chip[]>([]);
+  const [asking, setAsking] = useState<Asking | null>(null);
+  const [link, setLink] = useState<LinkAsk | null>(null);
+  const [outcome, setOutcome] = useState<string | null>(null);
+  const [pending, setPending] = useState(0);
+  const [kind, setKind] = useState<{ store: 'crew' | 'sample'; data: 'crew' | 'sample' } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<string | null>(null);
+  const [mountKey, setMountKey] = useState(0);
+  const frameBox = useRef<HTMLDivElement | null>(null);
+  const hostRef = useRef<EditorHost | null>(null);
+  const sessionRef = useRef<AppSession | null>(null);
+  const askingRef = useRef<Asking | null>(null);
+  askingRef.current = asking;
+
+  const answer = useCallback((yes: boolean) => {
+    const a = askingRef.current;
+    if (a === null) return;
+    askingRef.current = null;
+    setAsking(null);
+    a.resolve(yes);
+  }, []);
+
+  useEffect(() => {
+    if (frameBox.current === null) return;
+    let cancelled = false;
+    let off: (() => void) | undefined;
+    const start = async (): Promise<void> => {
+      setError(null);
+      const health = await api.getHealth().catch(() => null);
+      const caps = health?.capabilities?.apps;
+      const picked = sampleApp(sample);
+      const store: AppStorePort = slug !== null && caps !== undefined ? new CrewAppStore(slug) : new SampleAppStore(picked.slug, picked.spec);
+      const session = new AppSession(store);
+      let loaded: AppDetail;
+      try { loaded = await session.load(); } catch (e) { if (!cancelled) setError(`This app could not be read: ${e instanceof Error ? e.message : String(e)}`); return; }
+      const data: AppDataPort = appDataFor(store.kind === 'crew' ? caps : undefined, store.kind === 'crew' ? store.slug : null, () => sampleAppData(() => session.landedSpec ?? loaded.spec, store.kind === 'sample' ? picked.data : null));
+      const decided = await fetchGrants(editor, version, sha, null);
+      if (cancelled || frameBox.current === null) { session.dispose(); return; }
+      sessionRef.current = session;
+      setKind({ store: store.kind, data: data.kind });
+      setDetail(loaded);
+      off = session.on((e) => {
+        if (e.kind === 'head') { setDetail(e.app); if (e.by === 'this-session') setStatus(`Saved as v${e.app.head.version}`); }
+        if (e.kind === 'pending') setPending(e.count);
+        if (e.kind === 'failed') setStatus(e.message);
+      });
+      const who = data.viewer().email ?? 'you';
+      setViewer(who);
+      const port: AppHostPort = {
+        session, data,
+        framed: () => framed,
+        mode: () => modeRef.current,
+        viewer: () => who,
+        confirm: (prepared) => new Promise<boolean>((resolve) => {
+          setOutcome(null);
+          setLink(null);
+          setAsking({ prepared, resolve, at: Date.now() });
+        }),
+        openLink: (url) => new Promise<boolean>((resolve) => setLink({ url, resolve })),
+        outcome: (o, card) => setOutcome(outcomeWords(o, card)),
+      };
+      const host = new EditorHost({
+        container: frameBox.current,
+        src: bundleUrl(apiBase(), editor, version, sha),
+        editor, version,
+        name: 'App',
+        title: `App: ${loaded.name}, version ${loaded.head.version}`,
+        size: 'full', surface: 'full',
+        grants: decided.grants,
+        theme: readThemeTokens(),
+        prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
+        firstParty: editor.startsWith('wicked-'),
+        adapter: new AppAdapter(session, loaded.name),
+        app: port,
+        ui: {
+          chips: (c) => setChips(c), draft: () => {}, typed: () => {}, key: () => {}, morph: () => {},
+          status: (line) => setStatus(line), notes: () => {}, thread: () => {},
+          writeFailed: (m) => setStatus(m),
+          fullscreen: async () => false,
+          torn: (reason) => { setTorn(reason); answer(false); },
+          log: () => {},
+        },
+      });
+      hostRef.current = host;
+      host.mount();
+      if (decided.note !== null) setStatus(decided.note);
+    };
+    void start();
+    return () => {
+      cancelled = true;
+      off?.();
+      answer(false);
+      hostRef.current?.teardown('The app was closed');
+      hostRef.current = null;
+      sessionRef.current?.dispose();
+      sessionRef.current = null;
+    };
+  }, [editor, version, sha, slug, sample, framed, answer, mountKey]);
+
+  // Every tab agrees because the pointer is crew's: read the head again on focus, on showing, and every 5 s.
+  useEffect(() => {
+    const again = (): void => { if (document.visibilityState === 'visible') void sessionRef.current?.refresh(); };
+    window.addEventListener('focus', again);
+    document.addEventListener('visibilitychange', again);
+    const t = setInterval(again, 5_000);
+    return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); clearInterval(t); };
+  }, []);
+
+  useEffect(() => { hostRef.current?.setAppMode(shown); if (shown === 'preview') setChips([]); }, [shown]);
+
+  const move = async (direction: 'undo' | 'redo'): Promise<void> => {
+    const s = sessionRef.current;
+    if (s === null) return;
+    const r = await s.move(direction, s.head);
+    setStatus(r.ok ? `${direction === 'undo' ? 'Undone' : 'Redone'}: now v${r.version}` : r.message);
+  };
+
+  const history = detail?.history;
+  const busy = detail?.turn != null;
+
+  return (
+    <div className="wk-apps-host" data-testid="apps-host" data-mode={shown} data-framed={framed}>
+      <header className="wk-apps-head">
+        <span className="wk-apps-crumb">Apps /</span>
+        <span className="wk-apps-title" data-testid="apps-title">{detail?.name ?? 'App'}</span>
+        {detail !== null && (
+          <span className="wk-apps-pill" data-testid="apps-version"><span className="wk-apps-dot" aria-hidden="true" />v{detail.head.version} · {receiptWords(detail)}</span>
+        )}
+        <span className="wk-apps-history" role="group" aria-label="History">
+          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-undo" disabled={history?.canUndo !== true || busy} onClick={() => void move('undo')} aria-label="Undo">Undo</button>
+          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-redo" disabled={history?.canRedo !== true || busy} onClick={() => void move('redo')} aria-label="Redo">Redo</button>
+        </span>
+        <span className="wk-apps-spacer" />
+        {shown === 'preview' && viewer !== null && <span className="wk-apps-pill" data-testid="apps-viewer">Viewing as {viewer}</span>}
+        <span className="wk-seg" role="group" aria-label="Mode">
+          <button type="button" className={`wk-seg-btn${shown === 'edit' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-edit" aria-pressed={shown === 'edit'} disabled={narrow} title={narrow ? 'Edit on a larger screen' : undefined} onClick={() => setMode('edit')}>Edit</button>
+          <button type="button" className={`wk-seg-btn${shown === 'preview' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-preview" aria-pressed={shown === 'preview'} onClick={() => setMode('preview')}>Preview</button>
+        </span>
+      </header>
+      {narrow && <p className="wk-apps-line" data-testid="apps-phone-note">Edit on a larger screen. This is the app as a viewer sees it.</p>}
+      {kind !== null && (kind.store === 'sample' || kind.data === 'sample') && (
+        <p className="wk-apps-line wk-apps-line--note" data-testid="apps-sample-note">
+          {kind.store === 'sample' ? 'A sample app: its rows are made up and nothing reaches a source.' : 'This daemon does not run app queries and actions yet: the rows are samples and actions write nothing.'}
+        </p>
+      )}
+      {(status !== null || pending > 0) && <p className="wk-apps-line" data-testid="apps-status" aria-live="polite">{pending > 0 ? `Saving ${pending} change${pending === 1 ? '' : 's'}…` : status}</p>}
+      {error !== null && <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-error">{error}</p>}
+      <div className="wk-apps-body">
+        <div className="wk-apps-frame">
+          {torn !== null && (
+            <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-torn">{torn} · <button type="button" className="wk-btn wk-btn--link" onClick={() => setMountKey((k) => k + 1)}>Reload it</button></p>
+          )}
+          <div ref={frameBox} key={mountKey} className="wk-apps-frame-box" data-testid="apps-frame-box" />
+        </div>
+        <aside className={`wk-apps-dock${narrow && asking === null && link === null ? ' wk-apps-dock--quiet' : ''}`} aria-label="Needs you" data-testid="apps-dock">
+          <h2 className="wk-apps-dock-title">Needs you <span className="wk-apps-dock-count">{asking !== null || link !== null ? '1 waiting' : 'nothing waiting'}</span></h2>
+          {asking !== null && <ActionCardView asking={asking} onAnswer={answer} />}
+          {link !== null && (
+            <section className="wk-apps-card" data-testid="apps-link-confirm" role="dialog" aria-label="Open this link?">
+              <header className="wk-apps-card-head">Open this link?</header>
+              <p className="wk-apps-card-lock">The app asks to open a page in a new tab. Studio shows the whole address first.</p>
+              <pre className="wk-apps-card-request" data-testid="apps-link-url">{link.url}</pre>
+              <footer className="wk-apps-card-foot">
+                <button type="button" className="wk-btn wk-btn--primary" data-testid="apps-link-open" onClick={() => { const l = link; setLink(null); window.open(l.url, '_blank', 'noopener,noreferrer'); l.resolve(true); }}>Open</button>
+                <button type="button" className="wk-btn wk-btn--secondary" data-testid="apps-link-cancel" onClick={() => { const l = link; setLink(null); l.resolve(false); }}>Cancel</button>
+              </footer>
+            </section>
+          )}
+          {asking === null && link === null && outcome !== null && <p className="wk-apps-outcome" data-testid="apps-outcome">{outcome}</p>}
+          {asking === null && link === null && (
+            <p className="wk-apps-dock-hint">
+              {framed ? 'This page is inside another page, so the app cannot run actions here.'
+                : shown === 'edit' ? 'Actions run in Preview. Studio asks you here before each one.'
+                  : 'When the app asks to change something, studio shows exactly what here and waits for you.'}
+            </p>
+          )}
+          {shown === 'edit' && chips.length > 0 && (
+            <p className="wk-apps-chips">{chips.map((c, i) => <span key={i} className="wk-source-chip" data-testid="apps-chip">about: {c.label}</span>)}</p>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+}
+

@@ -8,6 +8,7 @@ import { PERMISSIONS, SIZES, type PermissionId, type Size } from '../../editors/
 import { readThemeTokens } from '../../editors/theme.js';
 import { EditorTestPagePicker } from './EditorPluginsSettings.js';
 import { EditorSurfacesView } from '../editorHost/EditorSurfacesView.js';
+import { AppHostView } from '../editorHost/AppHostView.js';
 
 /**
  * THE EDITOR HOST PAGE (DES-EDITOR-PLUGINS-001 §10 step 2, §12.1; slice EP-P1): one editor plugin in
@@ -30,8 +31,12 @@ interface Page {
   title: string;
   grants: PermissionId[] | null;
   firstParty: boolean;
-  /** The kind the sample is (P-D1: `deck` opens a sample deck, `demo-video` the sample cut; anything else the sample page). */
+  /** The kind the sample is (P-D1: `deck` opens a sample deck, `demo-video` the sample cut, `app` the app host;
+   *  anything else the sample page). */
   kind: string;
+  /** DES-APPS-001 K4, kind `app`: crew's app to open (`?app=<slug>`), else the named sample (`?sample=`). */
+  app: string | null;
+  sample: string | null;
   /** Protocol 2 (conformance only): the surface this instance is, its options tab, its full-screen mode. */
   surface: Surface | null;
   tab: string | null;
@@ -51,7 +56,9 @@ function readPage(search: string, mode: 'dev' | 'conformance'): Page {
     title: q.get('title') ?? (editor === '' ? 'Editor' : editor),
     grants: grants === null ? null : grants.split(',').filter((g): g is PermissionId => PERMISSIONS.includes(g as PermissionId)),
     firstParty: editor.startsWith('wicked-'),
-    kind: q.get('kind') === 'deck' ? 'deck' : q.get('kind') === 'demo-video' ? 'demo-video' : 'page',
+    kind: q.get('kind') === 'deck' ? 'deck' : q.get('kind') === 'demo-video' ? 'demo-video' : q.get('kind') === 'app' ? 'app' : 'page',
+    app: q.get('app'),
+    sample: q.get('sample'),
     surface: mode === 'conformance' && ['card', 'options', 'full'].includes(q.get('surface') ?? '') ? q.get('surface') as Surface : null,
     // A tab only for an options instance; the host checks it against the declared plugin tabs (codex h3-seam r1 P3).
     tab: mode === 'conformance' && q.get('surface') === 'options' ? q.get('tab') : null,
@@ -195,6 +202,16 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
       // A single scrolling column (codex): not the two-column host frame, which reserves the host's side panel.
       <div data-testid="editor-host-page" data-mode={mode} className="flex-1 min-w-0 overflow-y-auto">
         <EditorTestPagePicker navigate={navigate ?? ((p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); })} />
+      </div>
+    );
+  }
+
+  // DES-APPS-001 K4: an app opens in the app host (its own header, the card dock), on the dev page only. The
+  // conformance host keeps its one-frame view (it never holds an app's data permissions).
+  if (page.kind === 'app' && mode === 'dev') {
+    return (
+      <div data-testid="editor-host-page" data-mode={mode} className="wk-editor-page wk-editor-page--app">
+        <AppHostView editor={page.editor} version={page.version} sha={page.sha} app={page.app} sample={page.sample} />
       </div>
     );
   }

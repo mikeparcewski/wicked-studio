@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.13.0",
   "counts": {
-    "files": 289,
-    "occurrences": 4061,
-    "static": 3463,
+    "files": 290,
+    "occurrences": 4092,
+    "static": 3493,
     "dynamic": 93,
     "computed": 44
   },
@@ -564,6 +564,186 @@
       "testId": "appearance-settings",
       "files": [
         "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-cancel",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-key",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-operation",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-request",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-row",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-run",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-sample",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-source",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-chip",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-dock",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-error",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-frame-box",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-host",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-link-cancel",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-link-confirm",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-link-open",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-link-url",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-mode-edit",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-mode-preview",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-outcome",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-phone-note",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-redo",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-sample-note",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-status",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-title",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-torn",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-undo",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-version",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-viewer",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
       ]
     },
     {

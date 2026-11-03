@@ -1,0 +1,49 @@
+/* DES-APPS-001 K4 — the app host: the header, the frame and the "Needs you" dock with the action card. Everything here
+   is the HOST's chrome around the wicked-apps frame (mockup states B, C, E). Tokens only. */
+.wk-editor-page--app { display: flex; padding: 0; gap: 0; }
+.wk-apps-host { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.wk-apps-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--border); min-width: 0; flex-wrap: wrap; }
+.wk-apps-crumb { color: var(--ink-muted); font-size: var(--text-body); }
+.wk-apps-title { color: var(--ink-high); font-size: var(--text-section); font-weight: var(--weight-strong); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-apps-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--ink-body); font-size: var(--text-caption); white-space: nowrap; }
+.wk-apps-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--status-ok); }
+.wk-apps-history { display: inline-flex; gap: var(--space-1); }
+.wk-apps-spacer { flex: 1 1 auto; }
+.wk-apps-line { margin: 0; padding: var(--space-2) var(--space-5); color: var(--ink-body); font-size: var(--text-caption); border-bottom: 1px solid var(--border); }
+.wk-apps-line--note { color: var(--ink-muted); }
+.wk-apps-line--fail { color: var(--status-fail); }
+.wk-apps-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+.wk-apps-frame { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.wk-apps-frame-box { flex: 1 1 auto; min-height: 0; display: flex; }
+.wk-apps-frame-box .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 420px; border: 0; background: var(--surface-base); }
+.wk-apps-dock { min-width: 0; overflow: auto; padding: var(--space-4); border-left: 1px solid var(--border); background: var(--surface-base); display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-apps-dock-title { margin: 0; display: flex; align-items: baseline; justify-content: space-between; color: var(--ink-high); font-size: var(--text-body); font-weight: var(--weight-strong); }
+.wk-apps-dock-count { color: var(--ink-muted); font-size: var(--text-caption); font-weight: var(--weight-regular); }
+.wk-apps-dock-hint, .wk-apps-outcome { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-apps-outcome { color: var(--ink-body); }
+.wk-apps-chips { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+/* The card: drawn by the host from the resolved operation (§7.3). Every value is text. */
+.wk-apps-card { border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-card); overflow: hidden; }
+.wk-apps-card-head { padding: var(--space-3) var(--space-4); background: var(--accent-wash); color: var(--ink-high); font-size: var(--text-lead); font-weight: var(--weight-strong); }
+.wk-apps-card-lock, .wk-apps-card-sample, .wk-apps-card-checks, .wk-apps-card-says, .wk-apps-card-note { margin: var(--space-2) var(--space-4) 0; color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-apps-card-sample { color: var(--status-warn); }
+.wk-apps-card-checks { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--ink-body); }
+.wk-apps-card-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px var(--space-3); margin: var(--space-3) var(--space-4) 0; font-size: var(--text-caption); }
+.wk-apps-card-row { display: contents; }
+.wk-apps-card-rows dt { color: var(--ink-muted); }
+.wk-apps-card-rows dd { margin: 0; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-apps-card-from { color: var(--ink-muted); }
+.wk-apps-card-request { margin: var(--space-3) var(--space-4) 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-code); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-apps-card-foot { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+.wk-apps-card-expiry { margin-left: auto; color: var(--ink-muted); font-size: var(--text-caption); }
+/* Phone (DES §6.1): Preview only; the dock is a sheet over the bottom, shown only while something waits. */
+@media (max-width: 639px) {
+  .wk-apps-head { padding: var(--space-2) var(--space-3); gap: var(--space-2); }
+  .wk-apps-crumb, .wk-apps-history { display: none; }
+  .wk-apps-title { font-size: var(--text-lead); }
+  .wk-apps-line { padding: var(--space-2) var(--space-3); }
+  .wk-apps-body { grid-template-columns: minmax(0, 1fr); }
+  .wk-apps-frame-box .wk-editor-frame { min-height: 0; }
+  .wk-apps-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 44; max-height: 72vh; border-left: 0; border-top: 1px solid var(--border-strong); box-shadow: var(--shadow-card); }
+  .wk-apps-dock--quiet { display: none; }
+}
