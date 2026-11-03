@@ -1,5 +1,6 @@
 import { mcpPath } from '../api/mcp.js';
 import { skillsPath } from '../api/skills.js';
+import { SOURCES_PATH } from '../api/sources.js';
 import { PAGE_NAMES } from './pageNames.js';
 
 /**
@@ -38,7 +39,7 @@ export const BUILD_PATH = '/build';
 /** The projects page (for now the projects list; a designed Projects home follows its mockup). */
 export const PROJECTS_PATH = '/projects';
 
-export type NavId = 'home' | 'projects' | 'jobs' | 'repos' | 'report' | 'understand' | 'evaluate' | 'steering' | 'memory' | 'agents' | 'build' | 'learn';
+export type NavId = 'home' | 'projects' | 'jobs' | 'repos' | 'sources' | 'report' | 'understand' | 'evaluate' | 'steering' | 'memory' | 'agents' | 'build' | 'learn';
 
 export interface NavItem {
   id: NavId;
@@ -73,6 +74,19 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   ] },
 ];
 
+/**
+ * Data sources (DES-APPS-001 §5; operator 2026-11-03: "should go in sidebar"): in Work, below Repositories — the
+ * code and the data the work reads from. Placed by `navGroups` only when the connected crew serves data sources
+ * (`HealthCapabilities.apps.uploads`); `/sources` stays reachable by address and from Build & settings either way.
+ */
+export const SOURCES_ITEM: NavItem = { id: 'sources', label: PAGE_NAMES.sources, path: SOURCES_PATH, testId: 'nav-sources', under: [SOURCES_PATH] };
+
+/** What the connected crew serves, as far as the sidebar is concerned. */
+export interface NavOptions {
+  /** crew serves Apps data sources: the Data sources entry is in Work. */
+  sources?: boolean;
+}
+
 /** Learn's address (program DES-LEARN §3): Style · Rules · Personality · Brand. */
 export const LEARN_PATH = '/learn';
 
@@ -84,11 +98,16 @@ export const LEARN_ITEM: NavItem = { id: 'learn', label: PAGE_NAMES.learn, path:
  * Projects, marked "Start here"; once used, in Insight below Evaluate, unmarked. It never moves back
  * (`studio.firstRun.learnUsedAt` is set once).
  */
-export function navGroups(placement: 'start' | 'insight'): readonly NavGroup[] {
+export function navGroups(placement: 'start' | 'insight', opts: NavOptions = {}): readonly NavGroup[] {
   return NAV_GROUPS.map((g) => {
-    if (placement === 'start' && g.id === 'work') return { ...g, items: [{ ...LEARN_ITEM, mark: 'Start here' }, ...g.items] };
-    if (placement === 'insight' && g.id === 'insight') return { ...g, items: [...g.items, LEARN_ITEM] };
-    return g;
+    let items = g.items;
+    if (g.id === 'work' && opts.sources === true) {
+      const at = items.findIndex((i) => i.id === 'repos') + 1;
+      items = [...items.slice(0, at), SOURCES_ITEM, ...items.slice(at)];
+    }
+    if (placement === 'start' && g.id === 'work') items = [{ ...LEARN_ITEM, mark: 'Start here' }, ...items];
+    if (placement === 'insight' && g.id === 'insight') items = [...items, LEARN_ITEM];
+    return items === g.items ? g : { ...g, items };
   });
 }
 
@@ -96,7 +115,7 @@ export function navGroups(placement: 'start' | 'insight'): readonly NavGroup[] {
 export const BUILD_LINKS: readonly { id: string; label: string; path: string; testId: string; hint: string }[] = [
   { id: 'skills', label: PAGE_NAMES.skills, path: skillsPath(), testId: 'build-link-skills', hint: 'What your agents know how to do, and what they are given when they start' },
   { id: 'mcp', label: PAGE_NAMES.mcp, path: mcpPath(), testId: 'build-link-mcp', hint: 'The tools agents can call, and when they need your approval' },
-  { id: 'sources', label: PAGE_NAMES.sources, path: '/sources', testId: 'build-link-sources', hint: 'The databases, APIs and files apps read from, and whether a source allows writes' },
+  { id: 'sources', label: PAGE_NAMES.sources, path: SOURCES_PATH, testId: 'build-link-sources', hint: 'The databases, APIs and files apps read from, and whether a source allows writes' },
   { id: 'plugins', label: PAGE_NAMES.plugins, path: '/plugins', testId: 'build-link-plugins', hint: 'Editor plugins, and making one' },
   { id: 'workflows', label: PAGE_NAMES.workflows, path: '/workflows', testId: 'build-link-workflows', hint: 'The steps a job goes through' },
   { id: 'settings', label: PAGE_NAMES.system, path: '/system', testId: 'build-link-settings', hint: 'Agents, notifications and the theme for this computer' },
@@ -111,9 +130,10 @@ const within = (pathname: string, prefix: string): boolean => pathname === prefi
 
 /** The sidebar item the address is on (one at most), or null (a session, Nerve Center…). `home` is the
  *  wordmark: Home and Needs you in full. A project's own page is under Projects. */
-export function navCurrent(pathname: string): NavId | null {
+export function navCurrent(pathname: string, opts: NavOptions = {}): NavId | null {
   if (pathname === '/' || within(pathname, '/needs')) return 'home';
-  for (const item of [...NAV_GROUPS.flatMap((g) => g.items), LEARN_ITEM, BUILD_ITEM]) {
+  // Without the sidebar entry, /sources is a Build & settings page (BUILD_LINKS), so that one is current.
+  for (const item of [...NAV_GROUPS.flatMap((g) => g.items), ...(opts.sources === true ? [SOURCES_ITEM] : []), LEARN_ITEM, BUILD_ITEM]) {
     if (item.under.some((p) => within(pathname, p))) return item.id;
   }
   return null;

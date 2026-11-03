@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 296,
-    "occurrences": 4188,
-    "static": 3546,
+    "occurrences": 4192,
+    "static": 3548,
     "dynamic": 118,
     "computed": 48
   },
@@ -9325,6 +9325,12 @@
       ]
     },
     {
+      "testId": "nav-sources",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
       "testId": "nav-steering",
       "files": [
         "src/board/navModel.ts"
@@ -18021,6 +18027,12 @@
     },
     {
       "testId": "sources-page",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "sources-unsupported-why",
       "files": [
         "src/components/sources/SourcesPage.tsx"
       ]

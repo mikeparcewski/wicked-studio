@@ -5,6 +5,7 @@ const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
 import { SourcesPage } from '../src/components/sources/SourcesPage.js';
+import { useCapabilities } from '../src/store/capabilities.js';
 import { CATALOG, pgPreview, pgServer, TICKETS_SAFE, WRITER } from './sourcesFixtures.js';
 
 /**
@@ -16,6 +17,7 @@ let listAnswers: Array<(v: unknown) => void> = [];
 let deferList = false;
 
 beforeEach(() => {
+  useCapabilities.setState({ loaded: true, dataSources: true });
   servers = [pgServer({ name: 'support-pg-writer', allowWrites: true, sql: { ...pgServer().sql!, user: 'writer' } })];
   listAnswers = [];
   deferList = false;

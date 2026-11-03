@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
+import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { CalmAction, CalmHead, CalmPage } from '../calm/Calm.js';
 import { DataPanel, type PanelRowWrite } from './DataPanel.js';
@@ -24,7 +25,33 @@ const appReadable = (s: McpServer): boolean => s.kind === 'sql' || s.kind === 'g
  * app's action (DES §9.4), so here the checks run and `NO_APP_GRANTS` says where the grant is made; the
  * Apps section (K5) mounts the same panel with its app's grant port.
  */
-export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navigate: Navigate; search: string; grants?: RowWriteGrantPort }): React.ReactElement {
+export function SourcesPage(props: { navigate: Navigate; search: string; grants?: RowWriteGrantPort }): React.ReactElement {
+  // A crew from before Apps data sources (K1) serves none of the routes: the page says so, by address only
+  // (the sidebar shows the entry only when crew advertises them, `HealthCapabilities.apps.uploads`).
+  const loaded = useCapabilities((s) => s.loaded);
+  const supported = useCapabilities((s) => s.dataSources);
+  useEffect(() => { if (!loaded) void useCapabilities.getState().load(); }, [loaded]);
+  if (!loaded) {
+    return (
+      <CalmPage data-testid="sources-page" className="wk-src-page">
+        <CalmHead title={PAGE_NAMES.sources} sentence="Checking what this crew supports…" />
+      </CalmPage>
+    );
+  }
+  if (!supported) {
+    return (
+      <CalmPage data-testid="sources-page" className="wk-src-page">
+        <CalmHead title={PAGE_NAMES.sources} sentence="This crew doesn’t support data sources yet." sentenceTestId="sources-unsupported" />
+        <p className="wk-src-note" data-testid="sources-unsupported-why">
+          Data sources (databases, APIs and files that apps read from) come with a newer crew. Update crew, then open this page again. Nothing was read or changed.
+        </p>
+      </CalmPage>
+    );
+  }
+  return <SourcesPageBody {...props} />;
+}
+
+function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigate: Navigate; search: string; grants?: RowWriteGrantPort }): React.ReactElement {
   const [sources, setSources] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
