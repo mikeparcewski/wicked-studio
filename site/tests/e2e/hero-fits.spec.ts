@@ -88,8 +88,11 @@ test.describe('the hero demo at 85%', () => {
         const [c1, c2] = cs.gridTemplateColumns.split(' ').map(parseFloat);
         const zoom = parseFloat(getComputedStyle(grid.closest('.wrap')!).zoom) || 1;
         const colL = g.left + (c1 + parseFloat(cs.columnGap)) * zoom, colW = c2 * zoom;
-        // 85% of the row, at least 440px where the row allows (a short window), at most 612px
-        const want = Math.min(612 * zoom, Math.max(0.85 * g.height, Math.min(g.height, 440 * zoom)));
+        // 85% of the row, at least 440px where the row allows (a short window), at most 612px; when a
+        // frame overflows its window (html.frames-overflow: text zoom, wider fonts) the hero is no
+        // longer one frame and the demo keeps the fallback's fixed 520px
+        const want = document.documentElement.classList.contains('frames-overflow') ? 520 * zoom
+          : Math.min(612 * zoom, Math.max(0.85 * g.height, Math.min(g.height, 440 * zoom)));
         return { w: r.width / colW, hpx: r.height, want, left: r.left - colL, right: colL + colW - r.right, top: r.top - g.top, bottom: g.bottom - r.bottom, tf: getComputedStyle(ide).transform, zoom: getComputedStyle(ide).zoom };
       });
       expect(box.tf).toBe('none');

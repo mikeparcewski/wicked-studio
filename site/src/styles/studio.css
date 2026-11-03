@@ -1243,8 +1243,9 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { transit
   .hero .ide-new { padding: 7px 10px; }
   .hero .ide-sess { padding: 7px 6px; column-gap: 7px; }
   .hero .ide-head { padding: 8px 12px; }
-  .hero .ide-steps { gap: 3px; }
-  .hero .ide-steps li { padding: 1px 5px; }
+  /* the step row fits the 1200px chat column with room for Linux's wider text (CI) */
+  .hero .ide-steps { gap: 2px; }
+  .hero .ide-steps li { padding: 1px 4px; }
   /* tighter chat spacing, so your prompt still shows above the plan card when it arrives */
   .hero .ide-thread { padding: 10px 12px; gap: 6px; }
   .hero .msg { line-height: 1.4; }
