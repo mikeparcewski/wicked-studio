@@ -929,3 +929,34 @@ describe('codex r6: a sign change through an exact zero row, or a plateau of the
     });
   }
 });
+
+describe('codex r7: the stacked stroke over every small case (a property test, not one case at a time)', () => {
+  it('for every 3- and 4-row b in {-8, 0, 10} over a = 10: every row is on a stroke, each run keeps one sign, one run per sign segment', async () => {
+    const { drawChart } = await import('../src/plugins/wicked-apps/runtime/chart.js');
+    const vals = [-8, 0, 10];
+    const combos: number[][] = [];
+    for (const n of [3, 4]) for (let m = 0; m < vals.length ** n; m += 1) combos.push(Array.from({ length: n }, (_, i) => vals[Math.floor(m / vals.length ** i) % vals.length]!));
+    const cols = [{ name: 'c', type: 'string' as const }, { name: 'a', type: 'integer' as const }, { name: 'b', type: 'integer' as const }];
+    const chart = { id: 'sa', type: 'chart' as const, chart: 'area' as const, stacked: true, data: { query: 'r' }, x: 'c', series: [{ column: 'a' }, { column: 'b' }], box: { x: 0, y: 0, w: 6, h: 4 } };
+    for (const b of combos) {
+      const root = document.createElement('div');
+      drawChart(root, chart, { columns: cols, rows: b.map((v, i) => [`r${i}`, 10, v]) }, 'en');
+      const runs = [...root.querySelectorAll('polyline.wk-series-1')].map((l) => l.getAttribute('points')!.split(' ').map((p) => p.split(',').map(Number) as [number, number]));
+      const rowX = [...root.querySelectorAll('polyline.wk-series-0')][0]!.getAttribute('points')!.split(' ').map((p) => Number(p.split(',')[0]));
+      const aTop = Number([...root.querySelectorAll('polyline.wk-series-0')][0]!.getAttribute('points')!.split(' ')[0]!.split(',')[1]);
+      const label = `b = ${b.join(',')}`;
+      // every row's x is on some run of b
+      for (const x of rowX) expect(runs.some((r) => r.some(([px]) => Math.abs(px - x) < 0.2)), `${label}: row at x=${x}`).toBe(true);
+      // one run per maximal run of same-signed values (zeros join their neighbours); an all-zero b is one run
+      const signs = b.filter((v) => v !== 0).map(Math.sign);
+      const segments = signs.length === 0 ? 1 : signs.filter((sg, i) => i === 0 || sg !== signs[i - 1]).length;
+      expect(runs.length, label).toBe(segments);
+      // within a run, every point is on one side of a's top edge (the positive stack base under b): never across a's band
+      for (const r of runs) {
+        const above = r.filter(([, y]) => y < aTop - 0.2).length;
+        const below = r.filter(([, y]) => y > aTop + 0.2).length;
+        expect(above === 0 || below === 0, `${label}: a run crosses a's band`).toBe(true);
+      }
+    }
+  });
+});
