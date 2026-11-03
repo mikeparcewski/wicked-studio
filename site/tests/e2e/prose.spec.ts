@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Guard against words fusing to the bold/code span that follows them.
@@ -35,4 +37,14 @@ test('prose does not fuse words into the following bold or code span', async ({ 
   for (const fused of ['withreduced', 'needacceptance', 'crew’s/api', 'contract,wicked', 'bywicked']) {
     expect(body, `found the fused form "${fused}"`).not.toContain(fused);
   }
+});
+
+// The page's own notes are Astro comments ({/* */}), which never ship; the only HTML comments in the
+// served page are the shared chrome's (wicked-web's components, left as they are).
+test('the shipped page carries no site-authored HTML comment', async ({ request }) => {
+  const html = await (await request.get('/')).text();
+  const walk = (d: string): string[] => readdirSync(d).flatMap((f) => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : p.endsWith('.astro') ? [p] : []; });
+  const chrome = walk('node_modules/wicked-web/src').map((f) => readFileSync(f, 'utf8')).join('\n');
+  const comments = html.match(/<!--[\s\S]*?-->/g) || [];
+  expect(comments.filter((c) => !chrome.includes(c))).toEqual([]);
 });

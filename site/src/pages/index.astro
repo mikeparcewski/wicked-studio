@@ -144,11 +144,11 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
 <Base title={title} description={description}>
   <Topbar pkg="wicked-studio" repo={repo} />
 
-  <!-- ── 1. Hook + the working demo ───────────────────────────────────────── -->
+  {/* ── 1. Hook + the working demo ───────────────────────────────────────── */}
   <section class="hero frame snap-section" id="top" aria-labelledby="hero-h">
     <div class="amber-floor" aria-hidden="true"></div>
     <div class="wrap hero-wrap">
-      <!-- phones: the topbar hides the package name below 768px, so the hero names it -->
+      {/* the narrowest phones (under 360px): the header's path cuts the package name short, so the hero names it */}
       <p class="hero-pkg" aria-hidden="true">wicked-studio</p>
       <div class="hero-head">
         <p class="kicker beat hero-kick">{KICKER}</p>
@@ -173,9 +173,9 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <p class="hero-fine">{FINE}</p>
         </div>
 
-        <!-- A working miniature of the Desk. Left: your jobs. Middle: the selected job as a chat.
+        {/* A working miniature of the Desk. Left: your jobs. Middle: the selected job as a chat.
              Right: what changed, and the job's receipt. Scripted, not live: it never calls a daemon
-             (src/scripts/demo.js). -->
+             (src/scripts/demo.js). */}
         <div class="ide" id="demo" data-ide role="region" aria-label="A working demo of wicked-studio: three jobs, one of them yours to drive">
           <div class="ide-bar">
             <span class="ide-dots" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -221,7 +221,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  <!-- ── 2. What studio does for you: three benefits, each a short scene from the same job ── -->
+  {/* ── 2. What studio does for you: three benefits, each a short scene from the same job ── */}
   <section class="why frame snap-section" id="why" aria-labelledby="why-h" data-autoplay>
     <div class="wrap">
       <div class="sec-head sec-head--row">
@@ -288,7 +288,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  <!-- ── 3. The sidebar, explorable: the whole surface at a glance ─────────── -->
+  {/* ── 3. The sidebar, explorable: the whole surface at a glance ─────────── */}
   <section class="desk frame snap-section" id="desk" aria-labelledby="desk-h" data-autoplay>
     <div class="wrap">
       <div class="sec-head sec-head--row">
@@ -313,7 +313,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           ))}
         </div>
         <div class="ex-stage">
-          <!-- Learn -->
+          {/* Learn */}
           <div class="ex-panel is-on" role="tabpanel" id="ex-panel-learn" aria-labelledby="ex-tab-learn">
             <div class="ex-copy"><h3>Learn</h3><p>{line('Learn')}</p></div>
             <div class="ex-art" aria-hidden="true">
@@ -329,7 +329,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
-          <!-- Projects -->
+          {/* Projects */}
           <div class="ex-panel" role="tabpanel" id="ex-panel-projects" aria-labelledby="ex-tab-projects">
             <div class="ex-copy"><h3>Projects</h3><p>{line('Projects')}</p></div>
             <div class="ex-art" aria-hidden="true">
@@ -343,7 +343,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
-          <!-- Jobs -->
+          {/* Jobs */}
           <div class="ex-panel" role="tabpanel" id="ex-panel-jobs" aria-labelledby="ex-tab-jobs">
             <div class="ex-copy"><h3>Jobs</h3><p>{line('Jobs')}</p></div>
             <div class="ex-art" aria-hidden="true">
@@ -355,7 +355,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
-          <!-- Repositories -->
+          {/* Repositories */}
           <div class="ex-panel" role="tabpanel" id="ex-panel-repositories" aria-labelledby="ex-tab-repositories">
             <div class="ex-copy"><h3>Repositories</h3><p>{line('Repositories')}</p></div>
             <div class="ex-art" aria-hidden="true">
@@ -367,7 +367,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
-          <!-- Understand -->
+          {/* Understand */}
           <div class="ex-panel" role="tabpanel" id="ex-panel-understand" aria-labelledby="ex-tab-understand">
             <div class="ex-copy"><h3>Understand</h3><p>{line('Understand')}</p></div>
             <div class="ex-art" aria-hidden="true">
@@ -377,7 +377,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
-          <!-- Evaluate -->
+          {/* Evaluate */}
           <div class="ex-panel" role="tabpanel" id="ex-panel-evaluate" aria-labelledby="ex-tab-evaluate">
             <div class="ex-copy"><h3>Evaluate</h3><p>{line('Evaluate')}</p></div>
             <div class="ex-art" aria-hidden="true">
@@ -389,7 +389,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
-          <!-- Steering -->
+          {/* Steering */}
           <div class="ex-panel" role="tabpanel" id="ex-panel-steering" aria-labelledby="ex-tab-steering">
             <div class="ex-copy"><h3>Steering</h3><p>{line('Steering')}</p></div>
             <div class="ex-art" aria-hidden="true">
@@ -400,7 +400,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
-          <!-- Memory -->
+          {/* Memory */}
           <div class="ex-panel" role="tabpanel" id="ex-panel-memory" aria-labelledby="ex-tab-memory">
             <div class="ex-copy"><h3>Memory</h3><p>{line('Memory')}</p></div>
             <div class="ex-art" aria-hidden="true">
@@ -411,7 +411,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
-          <!-- Agents -->
+          {/* Agents */}
           <div class="ex-panel" role="tabpanel" id="ex-panel-agents" aria-labelledby="ex-tab-agents">
             <div class="ex-copy"><h3>Agents</h3><p>{line('Agents')}</p></div>
             <div class="ex-art" aria-hidden="true">
@@ -427,10 +427,8 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         </div>
       </div>
       <div class="extras-row">
+        {/* only what the capability matrix backs: voice mode (C34) and the themes (C41) */}
         <ul class="extras" role="list">
-          <li>⌘K command palette</li>
-          <li>Batch triage from the keyboard</li>
-          <li>Desktop alerts when a job needs you</li>
           <li class="extras-voice">Voice mode</li>
           <li>Wicked Light, Wicked Dark and Ambient themes</li>
         </ul>
@@ -439,7 +437,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  <!-- ── 4. A different agent checks the work: the relay, and the receipt it leaves ── -->
+  {/* ── 4. A different agent checks the work: the relay, and the receipt it leaves ── */}
   <section class="review frame snap-section" id="review" aria-labelledby="review-h" data-relay data-autoplay>
     <div class="wrap review-grid">
       <div class="review-left">
@@ -493,7 +491,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  <!-- ── 5. Rules, memory, knowledge: three different things, kept apart ───── -->
+  {/* ── 5. Rules, memory, knowledge: three different things, kept apart ───── */}
   <section class="steer frame snap-section" id="steer" aria-labelledby="steer-h" data-autoplay>
     <div class="wrap">
       <div class="sec-head sec-head--row">
@@ -510,7 +508,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <p>What a gate checks. Each rule applies to every repository or to one project, and can target a language, a layer or a framework.</p>
           <div class="dr-box">
             <span class="dr-k">Waiting for you · example</span>
-            <!-- three suggestions in one cell: page.js rotates them while the card waits for you -->
+            {/* three suggestions in one cell: page.js rotates them while the card waits for you */}
             <div class="dr-slot dr-rot" data-rot>
               <div class="dr-rule is-on">
                 <span class="dr-from">Suggested by Learn, from your team docs</span>
@@ -575,7 +573,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  <!-- ── 6. Your agents, sandboxed; your repos, one project ───────────────── -->
+  {/* ── 6. Your agents, sandboxed; your repos, one project ───────────────── */}
   <section class="reach frame snap-section" id="reach" aria-labelledby="reach-h" data-autoplay>
     <div class="wrap">
       <div class="sec-head sec-head--row">
@@ -596,10 +594,10 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <div class="sandbox" aria-hidden="true">
             <div class="sbx">
               <span class="sbx-k">sandbox</span>
-              <!-- the longest name sits in the same cell (hidden), so a pick never changes the box -->
+              {/* the longest name sits in the same cell (hidden), so a pick never changes the box */}
               <span class="sbx-agent"><span data-agent-name>{AGENTS[1]}</span><span class="sbx-sizer" aria-hidden="true">{AGENTS.reduce((a, b) => (b.length > a.length ? b : a))}</span></span>
               <span class="sbx-repo">your repo</span>
-              <!-- both lines in one cell: Claude Code's is the subscription-token exception -->
+              {/* both lines in one cell: Claude Code's is the subscription-token exception */}
               <span class="sbx-sees"><span class="sbx-s1">sees <code>placeholder</code></span><span class="sbx-s2">sees placeholders, except a subscription’s sign-in token</span></span>
             </div>
             <div class="sbx-wire"><span class="sbx-token"></span></div>
@@ -625,7 +623,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  <!-- ── 7. What's new in 0.14 ─────────────────────────────────────────────── -->
+  {/* ── 7. What's new in 0.14 ─────────────────────────────────────────────── */}
   <section class="new frame snap-section" id="new" aria-labelledby="new-h" data-autoplay>
     <div class="wrap">
       <div class="sec-head sec-head--row">
@@ -726,7 +724,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
 
   <SameGarden current="wicked-studio" />
 
-  <!-- ── 9. Get it ─────────────────────────────────────────────────────────── -->
+  {/* ── 9. Get it ─────────────────────────────────────────────────────────── */}
   <div class="finale">
     <section class="get frame snap-section" id="get" aria-labelledby="get-h">
       <div class="wrap get-grid">

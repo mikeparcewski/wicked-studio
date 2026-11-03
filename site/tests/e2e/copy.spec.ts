@@ -199,6 +199,10 @@ test.describe('the reviewed messaging, details', () => {
     await expect(page.locator('.hero .hero-voice')).toHaveText('Voice needs whisper.cpp. ' + N6);
     // the Voice mode chip
     await expect(page.locator('.desk .extras')).toContainText('Voice mode');
+    // the Desk extras list only what the capability matrix backs (voice mode C34, the themes C41):
+    // no command palette, keyboard batch triage or desktop alerts
+    await expect(page.locator('.desk .extras li')).toHaveText(['Voice mode', 'Wicked Light, Wicked Dark and Ambient themes']);
+    await expect(page.locator('body')).not.toContainText(/command palette|batch triage|desktop alerts/i);
     await expect(page.locator('.desk .voice-note')).toContainText(N6);
     // the Voice release item carries the privacy line in its own words (COPY rev 5), and says what you can say
     const voice = page.getByRole('tabpanel', { name: 'Voice', includeHidden: true });
@@ -206,4 +210,26 @@ test.describe('the reviewed messaging, details', () => {
     await expect(voice).toContainText('the audio is never stored');
     await expect(voice).toContainText('Nothing is sent to a job until you confirm it on screen.');
   });
+});
+
+test.describe('the Copy chips', () => {
+  for (const vp of [{ width: 1440, height: 700 }, { width: 390, height: 844 }]) {
+    test(`each Copy label sits in the middle of its chip @ ${vp.width}x${vp.height}`, async ({ page }) => {
+      await page.setViewportSize(vp);
+      await page.goto('/');
+      await page.evaluate(async () => { await document.fonts.ready; });
+      const off = await page.locator('.cta-copy-l, .install__copy span').evaluateAll((ls) => ls.map((l) => {
+        const chip = l.closest('.cta-copy-l') ? l : l.closest('button')!;
+        const r = chip.getBoundingClientRect();
+        const range = document.createRange(); range.selectNodeContents(l);
+        const t = Array.from(range.getClientRects()).find((x) => x.height > 0)!;
+        return { text: l.textContent!.trim(), dy: Math.abs((t.top + t.bottom) / 2 - (r.top + r.bottom) / 2), dx: Math.abs((t.left + t.right) / 2 - (r.left + r.right) / 2) };
+      }));
+      expect(off.length).toBe(3);
+      for (const o of off) {
+        expect(o.dy, `"${o.text}" is ${o.dy.toFixed(1)}px off its chip's middle`).toBeLessThanOrEqual(1);
+        expect(o.dx).toBeLessThanOrEqual(1);
+      }
+    });
+  }
 });

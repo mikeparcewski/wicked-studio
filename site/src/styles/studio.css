@@ -250,7 +250,8 @@ code {
 .cta-watch:hover { text-decoration-color: currentColor; }
 .hero-fine { margin: 0; font-size: var(--text-caption); line-height: 1.45; color: var(--muted); padding-top: 12px; border-top: 1px solid var(--hairline); }
 
-/* Desktop 1200px and up: the headline on one line over two columns, the demo at full frame height. */
+/* Desktop 1200px and up: the headline on one line over two columns, the demo beside the copy (at 85%
+   of its column, centred: see "The hero demo at 85%" at the end of this file). */
 @media (min-width: 1200px) and (min-height: 640px) {
   .hero { height: var(--frame); min-height: 0; }
   .hero-wrap { flex: 1 1 auto; min-height: 0; }
@@ -749,9 +750,9 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .install { min-width: 0; width: 100%; border: 1px solid var(--hairline-strong); border-radius: 12px; background: var(--surface-2); }
 .install__bar { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--hairline); border-radius: 12px 12px 0 0; background: color-mix(in oklab, var(--canvas) 50%, transparent); }
 .install__label { min-width: 0; font-size: var(--text-caption); color: var(--muted); }
-.install__copy { font: inherit; font-size: var(--text-caption); color: var(--muted); background: transparent; border: 1px solid var(--hairline-strong); border-radius: 6px; padding: 4px 12px; cursor: pointer; transition: border-color .2s var(--ease), color .2s var(--ease); }
+.install__copy { display: inline-flex; align-items: center; justify-content: center; font: inherit; font-size: var(--text-caption); color: var(--muted); background: transparent; border: 1px solid var(--hairline-strong); border-radius: 6px; padding: 4px 12px; cursor: pointer; transition: border-color .2s var(--ease), color .2s var(--ease); }
 .install__copy:hover { border-color: var(--border-strong); color: var(--ink); }
-.install__copy span { display: inline-block; min-width: 6ch; }
+.install__copy span { display: flex; flex-direction: column; align-items: center; min-width: 6ch; }
 .install__code { min-width: 0; margin: 0; padding: 16px; overflow-x: auto; }
 .install__code:focus-visible { outline-offset: -3px; }
 .install__code code { display: block; background: none; border: none; padding: 0; font-family: var(--font-mono); font-size: var(--text-code); line-height: 1.8; min-height: 1.8em; color: var(--ink); white-space: pre; }
@@ -995,11 +996,6 @@ html.frames-overflow .hero { height: auto; min-height: var(--frame); }
 
 /* ── Fix round 1 (critics, 2026-11-02) ───────────────────────────────────────────────────────── */
 
-/* Topbar, site-side (no wicked-web edit): the Experiments tooltip (z 300) drew over its own open
-   menu (z 200) while the pointer stayed on the button; and the menu cut the studio row's line. */
-html .topbar .dropdown-wrap:has(> #projectsBtn[aria-expanded="true"])::after { opacity: 0 !important; }
-html .topbar #projectsMenu { min-width: 300px; }
-
 /* Pause / Play: both labels stacked in one cell, so the button is one width in both states and the
    heading beside it never rewraps (a tap on a phone moved the tablist under the finger). */
 .play-toggle { justify-content: center; }
@@ -1011,7 +1007,9 @@ html .topbar #projectsMenu { min-width: 300px; }
 .play-toggle--sm { flex-shrink: 0; gap: 6px; padding: 3px 10px 3px 8px; font-weight: var(--weight-regular); }
 .relay-btns { display: inline-flex; align-items: center; gap: 8px; }
 
-/* Copy chips: "Copied" is wider than "Copy"; reserve it so the chip keeps one width. */
+/* Copy chips: "Copied" is wider than "Copy"; reserve it so the chip keeps one width. The twin is a
+   zero-height flex item under the label, so it never shifts the label off its button's middle. */
+.cta-copy-l, .install__copy span { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; }
 .cta-copy-l::after, .install__copy span::after { content: 'Copied'; display: block; height: 0; overflow: hidden; visibility: hidden; }
 /* Explorer tabs: the selected tab is bold; reserve the bold width so labels never shift. */
 .ex-tab-n { display: inline-flex; flex-direction: column; }
@@ -1065,11 +1063,15 @@ html[data-theme="light"] .amber-floor {
 .trio-card, .reach-card { background-color: color-mix(in oklab, var(--surface-2) 92%, transparent); }
 @media (min-width: 1440px) { .sec-head h2, .get-intro h2 { font-size: 36px; } }
 
-/* hero: the package name on phones (the topbar hides it below 768px); "Watch a job" points at the demo */
+/* hero: the package name under 360px, where the topbar's path cuts it short; "Watch a job" points at the demo */
 .hero-pkg { display: none; }
-@media (max-width: 768px) {
+@media (max-width: 359px) {
   .hero-pkg { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-mono); font-size: var(--text-code); font-weight: var(--weight-strong); color: var(--ink); }
   .hero-pkg::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--amb); box-shadow: 0 0 0 3px color-mix(in oklab, var(--amb) 24%, transparent); }
+  /* the package name leads and the kicker reads as its description, one block (one dot) */
+  .hero-pkg + .hero-head { margin-top: calc(-1 * clamp(12px, 2.2svh, 24px) + 4px); }
+  .hero-kick { padding-left: 15px; }
+  .hero-kick::before { display: none; }
 }
 .cta-alt { line-height: 1.5; max-width: 46ch; }
 .cta-arr { margin-left: .3em; }
@@ -1187,37 +1189,71 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { transit
 .drawer[data-state="gone"] .dr-gone { transition: opacity var(--xf-in) var(--ease) var(--xf-out); }
 
 /* ── Phones: every tap target is at least 44 x 44 px (criterion 4) ─────────────────────────
-   "Watch a job" takes its own row; the two in-text links grow to the target height in place; the
-   agent chips get a minimum width. The shared chrome (wicked-web's topbar, platform band and
+   "Watch a job" takes its own row; the estate link grows to the target in place (a link inside a
+   sentence keeps its line box, the inline exception); the agent chips get a minimum width. The shared chrome (wicked-web's topbar, platform band and
    footer) is sized here for this site's phones only; wicked-web itself is unchanged. */
 @media (max-width: 768px) {
   .cta-watch { display: block; width: fit-content; min-height: 44px; line-height: 44px; }
   .trio-where a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; vertical-align: middle; }
-  /* mid-sentence, the link's box grows by a transparent pad (12px above and below, 11px at the sides)
-     that its negative margin gives back, so the lines keep their spacing; the focus ring is drawn in
-     by 8px, so it still hugs the word (3-4px out) and never crosses the lines above or below. It is
-     lifted over the sentence's next line, so a tap anywhere in its 44px box reaches it (the pad
-     paints nothing; the words beneath it stay in view) */
-  .facts a { display: inline-block; padding: 12px 11px; margin: -12px -11px; position: relative; z-index: 1; }
-  .facts a:focus-visible { outline-offset: -8px; }
+  /* a link inside a sentence keeps its own line box as its target (WCAG 2.5.8's inline exception):
+     a pad that reached 44px covered the words on the lines above and below it, and a tap on them
+     opened the link. Its box is the line's height, and no wider than the word */
+  .facts a { display: inline-block; line-height: inherit; }
   .agent-chip { min-width: 44px; }
   .topbar .icon-btn { width: 44px; height: 44px; }
-  .topbar .dropdown-item { min-height: 44px; } /* the Experiments menu, open from 641 to 768px */
   .topbar .wordmark { min-height: 44px; }
+  /* the product path's two text links ("labs", "wicked-studio") */
+  .topbar .crumb { line-height: 44px; min-width: 44px; text-align: center; }
   .footer-wordmark { display: inline-flex; align-items: center; min-height: 44px; }
   .same-garden .sg-visit, .same-garden .sg-repo { min-height: 44px; min-width: 44px; justify-content: center; }
   .footer-cta a { display: inline-flex; align-items: center; min-height: 44px; }
   .footer-links { gap: 0; }
   .footer-links a { min-width: 44px; min-height: 44px; align-items: center; }
 }
-/* phones: the package name leads and the kicker reads as its description, one block (one dot) */
-@media (max-width: 768px) {
-  .hero-pkg + .hero-head { margin-top: calc(-1 * clamp(12px, 2.2svh, 24px) + 4px); }
-  .hero-kick { padding-left: 15px; }
-  .hero-kick::before { display: none; }
+@media (max-width: 720px) {
+  /* the path keeps only the lockup's 22px mark up to 720px (the shared chrome clips it at 560; with
+     this site's 44px icons, 561-720 had cut the package name short): the link around it is a 44px
+     target, its pad given back by negative margins (14px into the bar's 16px edge, 8px into the gap
+     before the first slash, never over it), so the path keeps its spacing; the lettering stays
+     clipped, and the focus ring is drawn inside the box so the window's edge never cuts it */
+  html .topbar .crumbs .wordmark { box-sizing: border-box; width: 44px; overflow: hidden; padding: 0 8px 0 14px; margin: 0 -8px 0 -14px; }
+  html .topbar .crumbs .wordmark-lockup { clip-path: inset(0 calc(100% - 22px) 0 0); }
+  html .topbar .crumbs .wordmark:focus-visible { outline-offset: -2px; }
 }
 /* the demo's drop shadow ends at the hero's own edge, so it never greys the top of the next frame
    (light theme: a grey band under the topbar); nothing else in the hero reaches past its padding */
 .hero { overflow-y: clip; }
 /* the note's code chips may wrap onto two lines; the taller lines keep their backgrounds apart */
 .install__note { line-height: 1.75; }
+
+/* ── The hero demo at 85% (operator, 2026-11-02: "we need whitespace") ─────────────────────────
+   Desktop: the demo window takes 85% of its column's width and height, centred in the column, so
+   there is real space around it. It is sized, not scaled (no transform, no zoom): its own columns,
+   padding and type are set smaller here, so its layout, hit areas and focus rings stay true, and no
+   text in it is under 12px (body 13px; captions and code 12px). */
+@media (min-width: 1200px) and (min-height: 640px) {
+  /* 85% of the row, but never under 440px where the row allows it (a short window), so a decision
+     card always fits its thread whole: the reviewer's name, the finding and every choice */
+  .hero .ide { width: 85%; height: max(85%, min(100%, 440px)); max-height: 612px; justify-self: center; align-self: center; --text-body: 13px; --text-code: 12px; }
+  .hero .ide-bar { gap: 10px; padding: 6px 12px; }
+  /* the side pane keeps room for a whole file name and its counts (test/rateLimit.test.ts +28 -0) */
+  .hero .ide-body { grid-template-columns: 136px minmax(0, 1fr) 244px; }
+  .hero .ide-rail { padding: 10px 8px; gap: 8px; }
+  .hero .ide-rail-top { gap: 8px; }
+  .hero .ide-new { padding: 7px 10px; }
+  .hero .ide-sess { padding: 7px 6px; column-gap: 7px; }
+  .hero .ide-head { padding: 8px 12px; }
+  .hero .ide-steps { gap: 3px; }
+  .hero .ide-steps li { padding: 1px 5px; }
+  /* tighter chat spacing, so your prompt still shows above the plan card when it arrives */
+  .hero .ide-thread { padding: 10px 12px; gap: 6px; }
+  .hero .msg { line-height: 1.4; }
+  .hero .msg--user, .hero .msg--agent { padding: 7px 10px; }
+  .hero .plan li { margin: 0; }
+  .hero .acts { margin-top: 6px; }
+  .hero .ide-composer { padding: 8px 10px; }
+  .hero .ide-composer input { padding: 7px 10px; }
+  .hero .ide-send { padding: 0 14px; }
+  .hero .ide-pane-tabs { padding: 7px 8px; }
+  .hero .ide-pane-body { padding: 8px; }
+}

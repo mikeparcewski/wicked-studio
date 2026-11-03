@@ -61,14 +61,18 @@ for (const vp of SIZES) {
   });
 }
 
-test('the demo gets the frame: the plan card and your prompt are both in view at 1440x700', async ({ page }) => {
+// The demo is 85% of its column (operator, 2026-11-02: "we need whitespace"; hero-fits.spec.ts), so
+// at the plan decision the chat has scrolled your prompt up under the plan, as a chat does: the plan
+// card is whole and its end of your prompt still shows above it.
+test('the demo gets the frame: the whole plan card and the end of your prompt are in view at 1440x700', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 700 });
   await page.goto('/');
   const ide = page.locator('[data-ide]');
   await expect(ide.getByRole('button', { name: 'Approve plan' })).toBeInViewport({ ratio: 1, timeout: 10_000 });
-  await expect(ide.locator('.msg--user')).toBeInViewport({ ratio: 1 });
+  await expect(ide.locator('.msg--card.is-live')).toBeInViewport({ ratio: 1 });
+  await expect(ide.locator('.msg--user')).toBeInViewport({ ratio: 0.4 });
   const h = await ide.evaluate((el) => Math.round(el.getBoundingClientRect().height));
-  expect(h, 'the demo is at least 500px tall').toBeGreaterThanOrEqual(500);
+  expect(h, 'the demo is at least 430px tall').toBeGreaterThanOrEqual(430);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
 

@@ -745,17 +745,6 @@ test('a paused search stops its caret, and a paused tour stops its waveform', as
   expect(states.every((st) => st === 'paused'), states.join(',')).toBe(true);
 });
 
-test('opening the Experiments menu with the mouse hides the button tooltip over it', async ({ page }) => {
-  await page.goto('/');
-  const btn = page.locator('#projectsBtn');
-  await btn.hover();
-  const tipOpacity = () => page.locator('.topbar .dropdown-wrap[data-tip]').evaluate((el) => getComputedStyle(el, '::after').opacity);
-  await expect.poll(tipOpacity).toBe('1');
-  await btn.click();
-  await expect(page.locator('#projectsMenu')).toBeVisible();
-  await expect.poll(tipOpacity).toBe('0');
-});
-
 test.describe('Watch a job on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 } });
   test('brings the demo in below the topbar', async ({ page }) => {

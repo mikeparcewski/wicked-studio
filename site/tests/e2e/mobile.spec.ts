@@ -113,10 +113,13 @@ test.describe('mobile (390×844)', () => {
 
   test('the first screen names the product; the benefits stack and read in full', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.hero-pkg')).toBeVisible();
-    await expect(page.locator('.hero-pkg')).toHaveText('wicked-studio');
-    await expect(page.locator('.hero-pkg')).toBeInViewport();
-    // and what it is, spelled out, right under the name
+    // the topbar's path names it on a phone ("labs / wicked-studio" after the mark), so the hero
+    // repeats the name only under 360px, where the path cuts it short
+    const name = page.locator('.topbar').getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'wicked-studio', exact: true });
+    await expect(name).toBeVisible();
+    await expect(name).toBeInViewport({ ratio: 1 });
+    await expect(page.locator('.hero-pkg')).toBeHidden();
+    // and what it is, spelled out, as the hero's first line
     await expect(page.locator('.hero-kick')).toHaveText('Agentic development environment (ADE)');
     await expect(page.locator('.hero-kick')).toBeInViewport();
     // three cards, one under the other, each the full width of the row
@@ -133,6 +136,8 @@ test.describe('mobile (390×844)', () => {
   // Every visible target, measured AND hit-tested: five points spanning its box must reach it
   // (a box that another element covers is not a 44px target). The page is swept with the topbar's
   // menu closed, then the menu is opened and its own targets are swept (open, it covers the page).
+  // A link inside a sentence is held to its line instead (WCAG 2.5.8's inline exception): a 44px box
+  // there covers the words above and below it (see the in-text link test).
   const tapSweep = (page: import('@playwright/test').Page, scope = 'body') => page.evaluate((scope) => {
     const out: string[] = [];
     for (const el of Array.from(document.querySelectorAll<HTMLElement>(scope.split(',').map((s) => `${s} :is(a[href], button, input, [role=tab], [role=radio], [role=switch])`).join(',')))) {
@@ -142,7 +147,9 @@ test.describe('mobile (390×844)', () => {
       for (let a: HTMLElement | null = el; a; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.display === 'none' || cs.visibility === 'hidden') { hidden = true; break; } }
       if (hidden || el.closest('[aria-hidden="true"]')) continue;
       const label = `${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 28)}`;
-      if (r.width < 43.5 || r.height < 43.5) { out.push(`${label} ${Math.round(r.width)}x${Math.round(r.height)}`); continue; }
+      const inSentence = el.tagName === 'A' && getComputedStyle(el).display.startsWith('inline') && !!el.closest('p, li')
+        && Array.from(el.parentElement!.childNodes).some((n) => n !== el && n.nodeType === 3 && /\w/.test(n.textContent || ''));
+      if (!inSentence && (r.width < 43.5 || r.height < 43.5)) { out.push(`${label} ${Math.round(r.width)}x${Math.round(r.height)}`); continue; }
       if (getComputedStyle(el).position !== 'fixed' && !el.closest('.topbar, .mobile-menu')) { el.scrollIntoView({ block: 'center', inline: 'nearest' }); r = el.getBoundingClientRect(); }
       // the centre and the four edge midpoints, 10% in (corners are outside a pill's rounded box)
       let missed = 0;
@@ -157,7 +164,7 @@ test.describe('mobile (390×844)', () => {
     return out;
   }, scope);
 
-  test('every tap target on the page is at least 44 x 44 and nothing covers it, the shared chrome and the in-text links included', async ({ page }) => {
+  test('every tap target on the page is at least 44 x 44 and nothing covers it, the shared chrome included', async ({ page }) => {
     // verifier (round 2): "Watch a job" 82x15, "crew’s" 42x17, "wicked-estate" 83x15, the Pi chip
     // 39 wide; the topbar buttons 36x36, the band's links 18 and the footer's 24-35 tall
     await page.goto('/');
@@ -167,34 +174,96 @@ test.describe('mobile (390×844)', () => {
     await page.getByRole('button', { name: 'Menu' }).click();
     await expect(page.locator('#mobileMenu')).toBeVisible();
     expect(await tapSweep(page, '.topbar, .mobile-menu')).toEqual([]);
-    // the in-text link keeps its sentence's line spacing (its pad is given back by its margin)
-    const lines = await page.locator('.facts li').last().evaluate((li) => {
-      const a = li.querySelector('a')!; const t = a.getBoundingClientRect();
-      const range = document.createRange(); range.selectNodeContents(a);
-      const g = range.getBoundingClientRect();
-      return { pad: Math.round(t.height - g.height), liLine: parseFloat(getComputedStyle(li).lineHeight), liH: li.getBoundingClientRect().height };
-    });
-    expect(lines.pad).toBeGreaterThan(18);
-    expect(lines.liH, 'two lines tall, not stretched by the link').toBeLessThanOrEqual(lines.liLine * 2 + 1);
   });
 
-  test('at 768px (the shared topbar shows its own menu there) every target is 44 x 44 too, the open menu included', async ({ page }) => {
+  // verifier (3b33923): the in-text link's 44px pad lay over "are", the period and the lines above and
+  // below, so a tap on those words opened crew's site. A link inside a sentence keeps its line.
+  for (const size of [{ width: 390, height: 844 }, { width: 360, height: 740 }]) {
+    test(`the in-text link covers no word around it, and keeps its sentence's line spacing @ ${size.width}x${size.height}`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await page.goto('/');
+      await page.evaluate(async () => { await document.fonts.ready; });
+      const m = await page.locator('.facts li').last().evaluate((li) => {
+        const a = li.querySelector('a')!; a.scrollIntoView({ block: 'center' });
+        const r = a.getBoundingClientRect(); const hits: string[] = [];
+        const walker = document.createTreeWalker(li.closest('ul')!, NodeFilter.SHOW_TEXT); let n: Node | null;
+        while ((n = walker.nextNode())) {
+          if (a.contains(n)) continue;
+          let off = 0;
+          for (const w of (n.textContent || '').split(/(\s+)/)) {
+            if (w.trim()) {
+              const rg = document.createRange(); rg.setStart(n, off); rg.setEnd(n, off + w.length);
+              for (const b of Array.from(rg.getClientRects())) {
+                const ix = Math.min(b.right, r.right) - Math.max(b.left, r.left), iy = Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top);
+                if (ix > 1 && iy > 1) hits.push(w);
+              }
+            }
+            off += w.length;
+          }
+        }
+        return { hits, h: r.height, line: parseFloat(getComputedStyle(li).lineHeight), liH: li.getBoundingClientRect().height };
+      });
+      expect(m.hits, 'words under the link box').toEqual([]);
+      expect(m.h).toBeLessThanOrEqual(m.line + 1);
+      expect(m.liH, 'two lines tall, not stretched by the link').toBeLessThanOrEqual(m.line * 2 + 1);
+    });
+  }
+
+  test('at 768px (the shared topbar shows its icons inline there) every target is 44 x 44 too, the path included', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto('/');
     await page.evaluate(async () => { await document.fonts.ready; });
     expect(await tapSweep(page)).toEqual([]);
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.locator('#projectsBtn').click();
-    await expect(page.locator('#projectsMenu')).toBeVisible();
     expect(await tapSweep(page, '.topbar')).toEqual([]);
   });
 
-  test('the hamburger menu lists studio as a site link', async ({ page }) => {
+  test('the header keeps the mark and "labs / wicked-studio"; the menu leads with Wicked Labs', async ({ page }) => {
     await page.goto('/');
+    const path = page.locator('.topbar').getByRole('navigation', { name: 'Breadcrumb' });
+    // the lockup shows only its mark on a phone (its lettering clipped); the text crumbs stay whole
+    expect(await path.locator('.wordmark-lockup').evaluate((svg) => getComputedStyle(svg).clipPath)).toContain('22px');
+    const mark = (await path.locator('.wordmark').boundingBox())!;
+    expect(Math.min(mark.width, mark.height), 'the mark is a 44px target').toBeGreaterThanOrEqual(44);
+    // its focus ring is drawn inside its box, so the window's left edge never cuts it (codex review)
+    for (let k = 0; k < 4 && !(await path.locator('.wordmark').evaluate((el) => el === document.activeElement)); k++) await page.keyboard.press('Tab');
+    const ring = await path.locator('.wordmark').evaluate((el) => {
+      const cs = getComputedStyle(el); const r = el.getBoundingClientRect();
+      return { focused: el.matches(':focus-visible'), left: r.left - parseFloat(cs.outlineOffset) - parseFloat(cs.outlineWidth) };
+    });
+    expect(ring.focused).toBe(true);
+    expect(ring.left, 'the focus ring starts off the window').toBeGreaterThanOrEqual(0);
+    for (const [name, href] of [['labs', 'https://wickedlabs.ai/'], ['wicked-studio', 'https://ws.wickedagile.com']]) {
+      const l = path.getByRole('link', { name, exact: true });
+      await expect(l).toHaveAttribute('href', href);
+      await expect(l).toBeInViewport({ ratio: 1 });
+      expect(await l.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), `${name} is cut`).toBe(true);
+    }
     await page.locator('#menuBtn').click();
     const menu = page.locator('#mobileMenu');
     await expect(menu).toBeVisible();
-    const studioRow = menu.getByRole('link', { name: /studio/ });
-    await expect(studioRow).toHaveAttribute('href', 'https://ws.wickedagile.com');
+    const first = menu.getByRole('link').first();
+    await expect(first).toContainText('Wicked Labs');
+    await expect(first).toHaveAttribute('href', 'https://wickedlabs.ai/');
+  });
+
+  // codex (local review): the path cut the package name short at 641-720 (this site's 44px icons
+  // beside the full lockup) and at 320; the hero no longer named it on a phone
+  for (const width of [360, 390, 641, 700, 721, 768]) {
+    test(`the header's path shows the whole package name @ ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto('/');
+      await page.evaluate(async () => { await document.fonts.ready; });
+      const name = page.locator('.topbar .crumbs').getByRole('link', { name: 'wicked-studio', exact: true });
+      await expect(name).toBeInViewport({ ratio: 1 });
+      expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    });
+  }
+  test('under 360px, where the path cuts the name short, the hero names the package', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto('/');
+    await expect(page.locator('.hero-pkg')).toBeVisible();
+    await expect(page.locator('.hero-pkg')).toHaveText('wicked-studio');
+    await expect(page.locator('.hero-pkg')).toBeInViewport();
   });
 });
