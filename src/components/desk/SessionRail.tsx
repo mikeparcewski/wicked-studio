@@ -129,7 +129,11 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
     return () => { el.removeEventListener('scroll', check); ro?.disconnect(); };
   }, [groups, collapsed]);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
-  const on = navCurrent(pathname);
+  // DES-APPS-001: Data sources is in Work only when the connected crew serves them (an older crew: Build & settings).
+  const dataSources = useCapabilities((s) => s.dataSources);
+  const capsLoaded = useCapabilities((s) => s.loaded);
+  useEffect(() => { if (!capsLoaded) void useCapabilities.getState().load(); }, [capsLoaded]);
+  const on = navCurrent(pathname, { sources: dataSources });
   const recentFolded = collapsed.has(RECENT_KEY);
   const navLink = (item: NavItem): React.ReactElement => (
     <a key={item.id} href={item.path} onClick={go(item.path)} data-testid={item.testId} data-nav-dest={`page:${item.id}`}
@@ -143,7 +147,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   );
   // DES-LEARN §3.0: Learn sits above Projects until it is used, then below Evaluate (studio.firstRun). Until the
   // settings are read (or when they can't be) it sits in Insight, unmarked: "Start here" only once it is known.
-  const groupsNav = navGroups(firstRunRead === 'ok' ? learnPlacement(firstRun) : 'insight');
+  const groupsNav = navGroups(firstRunRead === 'ok' ? learnPlacement(firstRun) : 'insight', { sources: dataSources });
   const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
   // studio#512 (S18b): Theme › Logo takes the dot's place — the classic chrome's §3.1 slot, 32 px, contain-fit.
   const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);

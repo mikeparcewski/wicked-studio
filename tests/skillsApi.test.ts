@@ -781,8 +781,8 @@ describe('findingLocation — the file:line cite', () => {
 });
 
 describe('SKILLS_ENGINE_STATE_COPY — every DiagnosticsSkillsState has operator copy', () => {
-  it('spells the five states', () => {
-    expect(Object.keys(SKILLS_ENGINE_STATE_COPY).sort()).toEqual(['blocked', 'config-error', 'disabled', 'fallback', 'published']);
+  it('spells the six states', () => {
+    expect(Object.keys(SKILLS_ENGINE_STATE_COPY).sort()).toEqual(['blocked', 'config-error', 'disabled', 'fallback', 'published', 'publishing']);
     expect(SKILLS_ENGINE_STATE_COPY.published).toMatch(/^published — /);
     expect(SKILLS_ENGINE_STATE_COPY['config-error']).toMatch(/^config error — /);
   });

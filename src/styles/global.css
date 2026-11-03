@@ -53,6 +53,7 @@
 @import './sections/layout.css';
 @import './sections/jobs-repos.css';
 @import './sections/repo-know.css';
+@import './sections/sources.css';
 
 @tailwind base;
 @tailwind components;
