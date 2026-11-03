@@ -75,8 +75,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 ];
 
 /**
- * Data sources (DES-APPS-001 §5; operator 2026-11-03: "should go in sidebar"): in Work, below Repositories — the
- * code and the data the work reads from. Placed by `navGroups` only when the connected crew serves data sources
+ * Data sources (DES-APPS-001 §5; operator 2026-11-03: "should go in sidebar"): last in Work, after Repositories — the
+ * code and the data the work reads from (agreed Work order: Learn, Projects, Jobs, Apps, Repositories, Data sources). Placed by `navGroups` only when the connected crew serves data sources
  * (`HealthCapabilities.apps.uploads`); `/sources` stays reachable by address and from Build & settings either way.
  */
 export const SOURCES_ITEM: NavItem = { id: 'sources', label: PAGE_NAMES.sources, path: SOURCES_PATH, testId: 'nav-sources', under: [SOURCES_PATH] };
@@ -101,10 +101,8 @@ export const LEARN_ITEM: NavItem = { id: 'learn', label: PAGE_NAMES.learn, path:
 export function navGroups(placement: 'start' | 'insight', opts: NavOptions = {}): readonly NavGroup[] {
   return NAV_GROUPS.map((g) => {
     let items = g.items;
-    if (g.id === 'work' && opts.sources === true) {
-      const at = items.findIndex((i) => i.id === 'repos') + 1;
-      items = [...items.slice(0, at), SOURCES_ITEM, ...items.slice(at)];
-    }
+    // Last in Work (the agreed order: Learn, Projects, Jobs, Apps, Repositories, Data sources).
+    if (g.id === 'work' && opts.sources === true) items = [...items, SOURCES_ITEM];
     if (placement === 'start' && g.id === 'work') items = [{ ...LEARN_ITEM, mark: 'Start here' }, ...items];
     if (placement === 'insight' && g.id === 'insight') items = [...items, LEARN_ITEM];
     return items === g.items ? g : { ...g, items };

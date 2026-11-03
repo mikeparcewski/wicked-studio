@@ -34,7 +34,7 @@ afterEach(() => { cleanup(); useCapabilities.setState({ loaded: false, dataSourc
 const rail = (pathname: string) => render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname={pathname} />);
 
 describe('the sidebar\'s Data sources entry', () => {
-  it('the model: in Work after Repositories with the capability, nowhere without it', () => {
+  it('the model: last in Work with the capability, nowhere without it', () => {
     const work = (sources: boolean) => navGroups('insight', { sources }).find((g) => g.id === 'work')!.items.map((i) => i.label);
     expect(work(true)).toEqual(['Projects', 'Jobs', 'Repositories', 'Data sources']);
     expect(work(false)).toEqual(['Projects', 'Jobs', 'Repositories']);
