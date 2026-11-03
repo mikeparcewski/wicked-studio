@@ -116,6 +116,9 @@ test.describe('mobile (390×844)', () => {
     await expect(page.locator('.hero-pkg')).toBeVisible();
     await expect(page.locator('.hero-pkg')).toHaveText('wicked-studio');
     await expect(page.locator('.hero-pkg')).toBeInViewport();
+    // and what it is, spelled out, right under the name
+    await expect(page.locator('.hero-kick')).toHaveText('Agentic development environment (ADE)');
+    await expect(page.locator('.hero-kick')).toBeInViewport();
     // three cards, one under the other, each the full width of the row
     const cards = await page.locator('.why .ben').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width) }; }));
     expect(cards).toHaveLength(3);
@@ -125,6 +128,35 @@ test.describe('mobile (390×844)', () => {
     // the Learn schematic wraps instead of cutting words off
     const cut = await page.locator('.art-learn .al-row span').evaluateAll((ls) => ls.filter((l) => l.scrollWidth > l.clientWidth + 1).length);
     expect(cut).toBe(0);
+  });
+
+  test('every tap target on the page is at least 44 x 44, the shared chrome and the in-text links included', async ({ page }) => {
+    // verifier (round 2): "Watch a job" 82x15, "crew’s" 42x17, "wicked-estate" 83x15, the Pi chip
+    // 39 wide; the topbar buttons 36x36, the band's links 18 and the footer's 24-35 tall
+    await page.goto('/');
+    await page.evaluate(async () => { await document.fonts.ready; });
+    const small = await page.evaluate(() => {
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>('a[href], button, input, [role=tab], [role=radio], [role=switch]'))) {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) continue;
+        let hidden = false;
+        for (let a: HTMLElement | null = el; a; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.display === 'none' || cs.visibility === 'hidden') { hidden = true; break; } }
+        if (hidden || el.closest('[aria-hidden="true"]')) continue;
+        if (r.width < 43.5 || r.height < 43.5) out.push(`${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 28)} ${Math.round(r.width)}x${Math.round(r.height)}`);
+      }
+      return out;
+    });
+    expect(small).toEqual([]);
+    // the in-text link keeps its sentence's line spacing (its pad is given back by its margin)
+    const lines = await page.locator('.facts li').last().evaluate((li) => {
+      const a = li.querySelector('a')!; const t = a.getBoundingClientRect();
+      const range = document.createRange(); range.selectNodeContents(a);
+      const g = range.getBoundingClientRect();
+      return { pad: Math.round(t.height - g.height), liLine: parseFloat(getComputedStyle(li).lineHeight), liH: li.getBoundingClientRect().height };
+    });
+    expect(lines.pad).toBeGreaterThan(18);
+    expect(lines.liH, 'two lines tall, not stretched by the link').toBeLessThanOrEqual(lines.liLine * 2 + 1);
   });
 
   test('the hamburger menu lists studio as a site link', async ({ page }) => {

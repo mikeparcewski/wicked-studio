@@ -655,6 +655,72 @@ test('a rotating suggestion never shows on top of the one before it', async ({ p
   await expect(rule.locator('.dr-rule.is-on b')).toHaveText('Limits key on the API key');
 });
 
+// Every cell that stacks states (grid siblings in one area, and a receipt cell's "…" under its
+// value), sampled each animation frame: two of them drawn at once (visible, effective opacity over
+// 0.2, with text) is text over text. Verifier round 2 saw "Confirm" under "Sent back. Undo", the
+// plan over "Claude Code is planning…", and the relay's labels cross-fading.
+async function watchStacks(page: Page) {
+  await page.evaluate(() => {
+    const S: { el: Element; pseudo?: string }[][] = [];
+    for (const p of Array.from(document.querySelectorAll('section *'))) {
+      if (!/grid/.test(getComputedStyle(p).display)) continue;
+      const by = new Map<string, Element[]>();
+      for (const c of Array.from(p.children)) {
+        const cs = getComputedStyle(c);
+        if (cs.gridRowStart === 'auto' || cs.gridColumnStart === 'auto') continue;
+        const k = cs.gridRowStart + '/' + cs.gridColumnStart;
+        by.set(k, [...(by.get(k) || []), c]);
+      }
+      for (const arr of by.values()) if (arr.length > 1) S.push(arr.map((el) => ({ el })));
+    }
+    for (const td of Array.from(document.querySelectorAll('.receipt td'))) S.push([{ el: td, pseudo: '::before' }, ...Array.from(td.querySelectorAll(':scope > .rv')).map((el) => ({ el }))]);
+    const eff = (el: Element) => { let o = 1; for (let a: Element | null = el; a && a !== document.body; a = a.parentElement) o *= parseFloat(getComputedStyle(a).opacity); return o; };
+    const w = window as unknown as { __xf: string[] };
+    w.__xf = [];
+    const tick = () => {
+      for (const s of S) {
+        const on: string[] = [];
+        for (const m of s) {
+          const cs = getComputedStyle(m.el, m.pseudo);
+          const txt = m.pseudo ? (cs.content === 'none' || cs.content === 'normal' ? '' : cs.content) : (m.el instanceof HTMLInputElement ? m.el.value : m.el.textContent || '').trim();
+          const o = (m.pseudo ? parseFloat(cs.opacity) : 1) * eff(m.el);
+          if (txt && cs.visibility === 'visible' && o > 0.2 && m.el.getBoundingClientRect().height > 0) on.push(txt.slice(0, 24) + ' ' + o.toFixed(2));
+        }
+        if (on.length > 1 && w.__xf.length < 50) w.__xf.push(on.join(' + '));
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+test('stacked states never draw over each other: the scenes, the relay, the receipt and the drawers', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/');
+  await page.evaluate(async () => { await document.fonts.ready; });
+  await page.mouse.move(5, 690);
+  await watchStacks(page);
+  // the benefits' scenes: the plan arrives (2.7 s), it is approved (4.3 s), Confirm gives way to Undo (4 s)
+  await page.locator('#why').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(5200);
+  // the relay and its receipt, as it plays on arrival and after a switch to one agent
+  await page.locator('#review').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(3800);
+  await page.locator('[data-relay-switch]').click();
+  await page.waitForTimeout(2600);
+  await page.locator('[data-relay-switch]').click();
+  await page.waitForTimeout(3600);
+  // the drawers' state lines
+  await page.locator('#steer').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(400);
+  for (const [card, act] of [['rule', 'approve'], ['rule', 'reset'], ['rule', 'later'], ['memory', 'edit'], ['memory', 'cancel'], ['memory', 'erase'], ['memory', 'undo']]) {
+    await page.locator(`[data-drawer="${card}"] [data-dr="${act}"]:visible`).first().click();
+    await page.waitForTimeout(700);
+  }
+  const seen = await page.evaluate(() => (window as unknown as { __xf: string[] }).__xf);
+  expect(seen, 'two stacked states drawn at once').toEqual([]);
+});
+
 test('a paused search stops its caret, and a paused tour stops its waveform', async ({ page }) => {
   await stoppedClock(page);
   await page.goto('/');

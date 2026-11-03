@@ -609,7 +609,8 @@ $$('[data-drawer]').forEach((card) => {
   }, () => { clearInterval(t); t = null; code.textContent = full; code.classList.remove('is-typing'); });
 })();
 
-/* ── Phones: swipe rows get dots and become keyboard-scrollable ────────────────────────── */
+/* ── Narrow windows (601-768px): the benefits swipe row gets dots and becomes keyboard-scrollable
+   (600px and under the benefits stack, so the row never scrolls and this stays idle) ─────────── */
 $$('[data-swipe]').forEach((row) => {
   const dots = $$('i', row.parentElement.querySelector('[data-swipe-dots]') || document.createElement('div'));
   const kids = Array.prototype.slice.call(row.children);

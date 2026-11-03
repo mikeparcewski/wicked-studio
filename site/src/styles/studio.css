@@ -1,4 +1,4 @@
-/* wicked-studio content styles (ws.wickedagile.com): the IDE for running a team of coding agents.
+/* wicked-studio content styles (ws.wickedagile.com): the ADE for running a team of coding agents.
    Nine frames: the hook with a working miniature of the Desk (.ide), then one frame per proof, each
    with one thing to watch or drive (src/scripts/page.js), the platform map and Get it.
    Shared chrome (wicked-web Base/Topbar/Footer + tokens.css) owns theming via [data-theme]; only
@@ -224,6 +224,11 @@ code {
 .hero { padding: clamp(12px, 2.4svh, 30px) 0; }
 .hero-wrap { display: flex; flex-direction: column; gap: clamp(12px, 2.2svh, 24px); }
 .hero h1 { font-size: var(--text-display); line-height: 1.02; margin: 0; }
+/* the kicker spells ADE out on first use (messaging N2), so the headline's abbreviation needs no
+   dotted underline; studio's own hue (experience amber) marks it */
+.hero-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.hero-kick { --hue: var(--amb); }
+.hero h1 abbr { text-decoration: none; }
 .hero-copy { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .lede { margin: 0; font-size: 17px; line-height: 1.5; color: color-mix(in oklab, var(--ink) 84%, transparent); max-width: 52ch; }
 .mini-k { margin: 0 0 7px; font-size: var(--text-caption); font-weight: var(--weight-strong); color: var(--muted); }
@@ -267,7 +272,7 @@ code {
   .hero .ide { flex: 1 1 0; min-height: 260px; }
 }
 
-/* ── The IDE demo ───────────────────────────────────────────────────────────────────────────── */
+/* ── The Desk demo (.ide) ───────────────────────────────────────────────────────────────────────────── */
 .ide {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   border: 1px solid var(--hairline-strong); border-radius: 14px; overflow: hidden;
@@ -809,7 +814,8 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
   .lede { font-size: var(--text-lead); }
   .hero-fine { padding-top: 10px; }
   .sec-head--row { align-items: flex-start; }
-  /* Benefits and What's new: swipe rows on phones, one card per screen width */
+  /* Benefits: a swipe row from 601 to 768px, one card per screen width (600px and under they stack,
+     see the phones block near the end) */
   .ben-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: -18px; padding: 2px 18px 6px; scroll-padding-inline: 18px; scrollbar-width: none; }
   .ben-row::-webkit-scrollbar { display: none; }
   .ben-row > .ben { flex: 0 0 86%; scroll-snap-align: start; }
@@ -1143,3 +1149,72 @@ html[data-theme="light"] .amber-floor {
   .ide-bar { flex-wrap: wrap; row-gap: 6px; }
   .ide-url { flex: 1 1 0; min-width: 0; max-width: none; overflow-wrap: anywhere; }
 }
+
+/* ── One cross-fade rule for every stacked state (criterion 6) ──────────────────────────────
+   Where two states share one cell (grid-area 1 / 1), the one going out fades in --xf-out and only
+   then does the one coming in start (--xf-in, delayed by --xf-out), so two states' text never draws
+   on top of each other mid-change. The rotating rules and the tour panels already work this way
+   (above); these are the scenes, the relay's status labels, the receipt's cells and the drawers.
+   A part that goes out with its whole card (a scene's reset) waits for the card to fade first. */
+:root { --xf-out: .14s; --xf-in: .26s; --xf-card: .4s; }
+/* scene a: "Claude Code is planning…" gives way to the plan; Approve plan / Not now to "You approved" */
+.scene .sa-work { transition: opacity var(--xf-out) var(--ease); }
+.scene-a[data-step="2"] .sa-work { transition: opacity var(--xf-in) var(--ease) var(--xf-out); }
+.scene-a.st-3 .sa-plan { transition: opacity var(--xf-in) var(--ease) var(--xf-out), transform .35s var(--ease) var(--xf-out), border-color .3s var(--ease), box-shadow .3s var(--ease); }
+.scene .sa-plan .s-acts { transition: opacity var(--xf-in) var(--ease) var(--xf-card); }
+.scene-a.st-4 .sa-plan .s-acts { transition: opacity var(--xf-out) var(--ease); }
+.scene .sa-plan .sa-done { transition: opacity var(--xf-out) var(--ease); }
+.scene-a.st-4 .sa-plan .sa-done { transition: opacity var(--xf-in) var(--ease) var(--xf-out); }
+/* scene b: Confirm gives way to "Sent back. Undo" */
+.scene .sb-confirm { transition: opacity var(--xf-in) var(--ease) var(--xf-card); }
+.scene-b.st-3 .sb-confirm { transition: opacity .3s var(--ease); }
+.scene-b.st-4 .sb-confirm { transition: opacity var(--xf-out) var(--ease); }
+.scene .sb-undo { transition: opacity var(--xf-out) var(--ease); }
+.scene-b.st-4 .sb-undo { transition: opacity var(--xf-in) var(--ease) var(--xf-out); }
+/* the relay's status labels: "writing" → "fixed: per API key", "one finding" → "approved" */
+.fl-s > span { transition: opacity var(--xf-out) var(--ease); }
+li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { transition: opacity var(--xf-in) var(--ease) var(--xf-out); }
+/* the receipt: a cell's "…" goes before its value comes in */
+.receipt tr.is-filled td::before { transition: opacity var(--xf-out) var(--ease); }
+.receipt tr.is-filled td > .rv { transition: opacity var(--xf-in) var(--ease) var(--xf-out), visibility 0s; }
+/* the drawers' state lines: the line going out leaves first. The one coming in is visible at once
+   (opacity 0), so the click handler can move focus into it, and fades in after the other has gone. */
+.dr-stack > * { transition: opacity var(--xf-out) var(--ease), visibility 0s linear var(--xf-out); }
+.drawer[data-state="in"] .dr-s-in, .drawer[data-state="ok"] .dr-s-ok, .drawer[data-state="later"] .dr-s-later,
+.drawer[data-state="edit"] .dr-s-edit, .drawer[data-state="gone"] .dr-s-gone { transition: opacity var(--xf-in) var(--ease) var(--xf-out), visibility 0s; }
+/* the memory: Erase slides the memory out before "Erased." comes in; Undo hides "Erased." at once */
+.drawer[data-state="gone"] .dr-mem { transition: opacity var(--xf-out) var(--ease), transform .2s var(--ease), visibility 0s linear var(--xf-out); }
+.drawer[data-state="gone"] .dr-gone { transition: opacity var(--xf-in) var(--ease) var(--xf-out); }
+
+/* ── Phones: every tap target is at least 44 x 44 px (criterion 4) ─────────────────────────
+   "Watch a job" takes its own row; the two in-text links grow to the target height in place; the
+   agent chips get a minimum width. The shared chrome (wicked-web's topbar, platform band and
+   footer) is sized here for this site's phones only; wicked-web itself is unchanged. */
+@media (max-width: 768px) {
+  .cta-watch { display: block; width: fit-content; min-height: 44px; line-height: 44px; }
+  .trio-where a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; vertical-align: middle; }
+  /* mid-sentence, the link's box grows by a transparent pad (12px above and below, 11px at the sides)
+     that its negative margin gives back, so the lines keep their spacing; the focus ring is drawn in
+     by 8px, so it still hugs the word (3-4px out) and never crosses the lines above or below */
+  .facts a { display: inline-block; padding: 12px 11px; margin: -12px -11px; }
+  .facts a:focus-visible { outline-offset: -8px; }
+  .agent-chip { min-width: 44px; }
+  .topbar .icon-btn { width: 44px; height: 44px; }
+  .topbar .wordmark { min-height: 44px; }
+  .footer-wordmark { display: inline-flex; align-items: center; min-height: 44px; }
+  .same-garden .sg-visit, .same-garden .sg-repo { min-height: 44px; min-width: 44px; justify-content: center; }
+  .footer-cta a { display: inline-flex; align-items: center; min-height: 44px; }
+  .footer-links { gap: 0; }
+  .footer-links a { min-width: 44px; min-height: 44px; align-items: center; }
+}
+/* phones: the package name leads and the kicker reads as its description, one block (one dot) */
+@media (max-width: 768px) {
+  .hero-pkg + .hero-head { margin-top: calc(-1 * clamp(12px, 2.2svh, 24px) + 4px); }
+  .hero-kick { padding-left: 15px; }
+  .hero-kick::before { display: none; }
+}
+/* the demo's drop shadow ends at the hero's own edge, so it never greys the top of the next frame
+   (light theme: a grey band under the topbar); nothing else in the hero reaches past its padding */
+.hero { overflow-y: clip; }
+/* the note's code chips may wrap onto two lines; the taller lines keep their backgrounds apart */
+.install__note { line-height: 1.75; }

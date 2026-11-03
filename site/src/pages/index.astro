@@ -2,7 +2,8 @@
 /**
  * index.astro — the wicked-studio landing page (ws.wickedagile.com).
  *
- * POSITIONING: studio is the IDE for running a team of coding agents. The page leads with that and
+ * POSITIONING: studio is the ADE (agentic development environment) for running a team of coding
+ * agents. The page leads with that and
  * shows it: the hero IS a working miniature of the Desk (your jobs on the left, a job as a chat in
  * the middle, what changed on the right). Separate-agent review is a supporting proof further down,
  * not the hook.
@@ -74,7 +75,7 @@ const title = 'wicked-studio — the ADE for running a team of coding agents';
 // What search results and social cards show. Same attribution boundary as the page: the crew
 // daemon runs the agents; studio is the screen you run them from.
 const description =
-  'The IDE for running a team of coding agents. Chat with Claude Code, Codex, GitHub Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. By default a different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
+  'The agentic development environment (ADE) for running a team of coding agents. Chat with Claude Code, Codex, GitHub Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. By default a different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
 // Nine of the sidebar's real pages (NAV_GROUPS + LEARN_ITEM in src/board/navModel.ts; Report has no
@@ -149,7 +150,10 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     <div class="wrap hero-wrap">
       <!-- phones: the topbar hides the package name below 768px, so the hero names it -->
       <p class="hero-pkg" aria-hidden="true">wicked-studio</p>
-      <h1 id="hero-h">{HEADLINE}</h1>
+      <div class="hero-head">
+        <p class="kicker beat hero-kick">{KICKER}</p>
+        <h1 id="hero-h">{HEAD_PRE}<abbr title={ABBR_FULL}>{ABBR}</abbr>{HEAD_POST}</h1>
+      </div>
       <div class="hero-grid">
         <div class="hero-copy">
           <p class="lede">{SUBLINE}</p>

@@ -171,6 +171,9 @@ for (const vp of [{ width: 941, height: 600 }, { width: 1280, height: 600 }]) {
     await page.goto('/');
     const ide = page.locator('[data-ide]');
     const heroH = () => page.locator('.hero').evaluate((el) => Math.round(el.getBoundingClientRect().height));
+    // a window this short shows only the demo's top fifth on load, under its 25% autoplay threshold:
+    // the demo plays once it is scrolled into view, as a visitor would
+    await ide.evaluate((el) => el.scrollIntoView({ block: 'center' }));
     await ide.getByRole('button', { name: 'Approve plan' }).waitFor({ timeout: 10_000 });
     const h0 = await heroH();
     await ide.getByRole('button', { name: 'Approve plan' }).click();
