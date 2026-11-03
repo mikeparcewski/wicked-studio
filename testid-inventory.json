@@ -12,8 +12,8 @@
   "studioVersion": "0.13.0",
   "counts": {
     "files": 290,
-    "occurrences": 4092,
-    "static": 3493,
+    "occurrences": 4093,
+    "static": 3494,
     "dynamic": 93,
     "computed": 44
   },
@@ -622,6 +622,12 @@
     },
     {
       "testId": "apps-chip",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-chips",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
       ]

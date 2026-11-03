@@ -20,8 +20,8 @@ const ESCALATIONS: AppSpec = {
     {
       id: 'overview', title: 'Overview', components: [
         { id: 'search', type: 'filter', filter: 'search', label: 'Search', box: { x: 0, y: 0, w: 4, h: 1 } },
-        { id: 'region', type: 'filter', filter: 'select', label: 'Region', box: { x: 6, y: 0, w: 3, h: 1 }, options: { kind: 'query', query: { query: 'regions' }, value: 'region' } },
-        { id: 'period', type: 'filter', filter: 'date-range', label: 'Last 90 days', box: { x: 9, y: 0, w: 3, h: 1 }, default: { lastDays: 90 } },
+        { id: 'region', type: 'filter', filter: 'select', label: 'Region', box: { x: 4, y: 0, w: 3, h: 1 }, options: { kind: 'query', query: { query: 'regions' }, value: 'region' } },
+        { id: 'period', type: 'filter', filter: 'date-range', label: 'Last 90 days', box: { x: 7, y: 0, w: 5, h: 1 }, default: { lastDays: 90 } },
         { id: 'kpi_open', type: 'kpi', title: 'Open escalations', box: { x: 0, y: 1, w: 3, h: 2 }, data: { query: 'open_escalations' }, value: 'open', delta: 'delta', caption: 'vs previous 90 days' },
         { id: 'kpi_breaches', type: 'kpi', title: 'SLA breaches', box: { x: 3, y: 1, w: 3, h: 2 }, data: { query: 'sla_breaches' }, value: 'breaches', delta: 'delta', caption: 'vs previous 90 days' },
         { id: 'kpi_median', type: 'kpi', title: 'Median time to owner', box: { x: 6, y: 1, w: 3, h: 2 }, data: { query: 'median_time_to_owner' }, value: 'seconds', format: { kind: 'duration' }, delta: 'delta', caption: 'vs previous 90 days' },
