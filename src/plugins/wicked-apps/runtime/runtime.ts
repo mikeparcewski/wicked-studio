@@ -73,7 +73,12 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 
 function isoDay(d: Date): string { return d.toISOString().slice(0, 10); }
 
-export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
+/**
+ * `connect` (DES-APPS-001 §7.1, the standalone site): the host is in this page and hands its port and its hello
+ * over directly. The runtime then never listens on `window` and never posts to a parent, so no parent, opener or
+ * embedding page can join or hear it. Without `connect` (studio) the one handshake is the parent's `host.hello`.
+ */
+export function startRuntime(cfg: { editor: string; surfaces: unknown; connect?: { port: MessagePort; hello: Record<string, unknown> } }): void {
   const styleEl = document.getElementById('wk-apps-sheet');
   if (!(styleEl instanceof HTMLStyleElement)) return;
   const sheet = new Sheet(styleEl);
@@ -169,13 +174,10 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
   const density = (): 'comfortable' | 'compact' => (spec?.theme?.density === 'compact' ? 'compact' : 'comfortable');
 
-  window.addEventListener('message', (e: MessageEvent) => {
-    const d = e.data as Record<string, unknown> | null;
-    // The one handshake: from the parent only, once, with the port. After it, the window is never read again.
-    if (port !== null || e.source !== parent || !isObj(d) || d['p'] !== PROTOCOL || d['type'] !== 'host.hello' || e.ports[0] === undefined) return;
-    port = e.ports[0];
+  const accept = (given: MessagePort, payload: unknown): void => {
+    port = given;
     port.onmessage = onPort;
-    const p = isObj(d['payload']) ? d['payload'] : {};
+    const p = isObj(payload) ? payload : {};
     grants = new Set(Array.isArray(p['grants']) ? (p['grants'] as unknown[]).filter((g): g is string => typeof g === 'string') : []);
     const app = isObj(p['app']) ? p['app'] : {};
     framed = app['framed'] !== false;
@@ -191,7 +193,15 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     locale = typeof prefs['locale'] === 'string' && /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u.test(prefs['locale']) ? prefs['locale'] : 'en';
     applyTheme(p['theme']);
     void read();
-  });
+  };
+  if (cfg.connect === undefined) {
+    window.addEventListener('message', (e: MessageEvent) => {
+      const d = e.data as Record<string, unknown> | null;
+      // The one handshake: from the parent only, once, with the port. After it, the window is never read again.
+      if (port !== null || e.source !== parent || !isObj(d) || d['p'] !== PROTOCOL || d['type'] !== 'host.hello' || e.ports[0] === undefined) return;
+      accept(e.ports[0], d['payload']);
+    });
+  }
 
   // ── reading the app ─────────────────────────────────────────────────────────────────────
   const read = async (): Promise<void> => {
@@ -1168,5 +1178,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   document.addEventListener('keydown', onKey);
 
   root.append(el('p', 'wk-empty', 'Loading the app…'));
-  announceReady(cfg.editor, cfg.surfaces);
+  // Last, once everything the hello reaches is initialised: the standalone host's port, or the parent's handshake.
+  if (cfg.connect !== undefined) accept(cfg.connect.port, cfg.connect.hello);
+  else announceReady(cfg.editor, cfg.surfaces);
 }

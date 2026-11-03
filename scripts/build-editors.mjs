@@ -167,7 +167,7 @@ export function looksOf(id) {
 }
 
 /** Bundle one plugin's entry to a single IIFE script (Vite's library build, in memory). */
-async function bundleScript(entry) {
+async function bundleScript(entry, name = 'wickedEditor') {
   const { build } = await import('vite');
   const out = await build({
     configFile: false,
@@ -177,7 +177,7 @@ async function bundleScript(entry) {
       write: false,
       minify: true,
       target: 'es2020',
-      lib: { entry, formats: ['iife'], name: 'wickedEditor', fileName: () => 'plugin.js' },
+      lib: { entry, formats: ['iife'], name, fileName: () => 'plugin.js' },
       rollupOptions: { output: { inlineDynamicImports: true } },
     },
   });
@@ -210,8 +210,27 @@ export async function buildEditors(outDir, { version } = {}) {
     if (looks.visuals?.icon !== undefined) copyFileSync(join(dir, looks.visuals.icon), join(target, looks.visuals.icon));
     writeFileSync(join(target, 'editor.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
     written.push({ id: e.id, version: v, bytes: Buffer.byteLength(html, 'utf8'), sha256: createHash('sha256').update(html, 'utf8').digest('hex'), dir: target });
+    if (e.id === 'wicked-apps') written.push(buildAppsStandalone(outDir, dir, v, await bundleScript(join(dir, 'standalone.ts'), 'wickedAppsStandalone')));
   }
   return written;
+}
+
+/**
+ * (DES-APPS-001 §7.1, §8.2) The Apps runtime's STANDALONE entry, for crew's publish: the script (an IIFE declaring
+ * `wickedAppsStandalone`, whose `boot(port, hello)` the site's in-process host calls) and the runtime's one
+ * stylesheet, taken from its template so studio and the site draw from the same rules. Written outside `editors/`:
+ * it is not an editor, and crew's editor registry never reads it.
+ */
+function buildAppsStandalone(outDir, dir, v, script) {
+  const m = /<style id="wk-apps-sheet">([\s\S]*?)<\/style>/u.exec(readFileSync(join(dir, 'template.html'), 'utf8'));
+  if (m === null) throw new Error('build-editors: wicked-apps/template.html has no <style id="wk-apps-sheet">');
+  const target = join(outDir, 'apps-standalone');
+  mkdirSync(target, { recursive: true });
+  const sha = (s) => createHash('sha256').update(s, 'utf8').digest('hex');
+  writeFileSync(join(target, 'runtime.js'), script, 'utf8');
+  writeFileSync(join(target, 'runtime.css'), m[1], 'utf8');
+  writeFileSync(join(target, 'runtime.json'), `${JSON.stringify({ editor: 'wicked-apps', version: v, js: sha(script), css: sha(m[1]) }, null, 2)}\n`, 'utf8');
+  return { id: 'wicked-apps (standalone)', version: v, bytes: Buffer.byteLength(script, 'utf8'), sha256: sha(script), dir: target };
 }
 
 const invokedDirectly = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
