@@ -112,6 +112,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   /** `every N s` refresh, one timer per query (§7.2), re-reading only the components bound to it. */
   const timers = new Map<string, ReturnType<typeof setInterval>>();
   let closed = false;
+  /** The words open in place on the canvas, if any (see `startInline`): a redraw keeps them open only while the newest
+   *  spec still has the words they started from; `drop` closes them with nothing sent. */
+  let inline: { id: string; prop: string; before: string; drop: () => void } | null = null;
+  /** The last tap on a component's words, for a double tap (see `tap`). */
+  let lastTap: { id: string; prop: string; at: number } | null = null;
 
   // ── the port ────────────────────────────────────────────────────────────────────────────
   const post = (m: Record<string, unknown>): void => { port?.postMessage({ p: PROTOCOL, v: ENVELOPE, ...m }); };
@@ -583,6 +588,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
 
   const redraw = (id: string): void => {
+    // A component whose words are open in place keeps them: the newest rows show when the field closes (closing draws).
+    if (inline !== null && inline.id === id) return;
     const c = components().find((x) => x.id === id);
     const body = bodies.get(id);
     if (c !== undefined && body !== undefined) drawBody(c, body);
@@ -666,12 +673,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
           refreshSelection();
           // A double tap on the same words edits them in place. Detected here, not from `dblclick`: Firefox fires no
           // double-click after a prevented pointerdown (which a drag needs).
-          const prop = tapOn?.getAttribute('data-inline') ?? null;
-          const now = Date.now();
-          if (prop !== null && tapOn !== null && lastTap !== null && lastTap.id === c.id && lastTap.prop === prop && now - lastTap.at < DOUBLE_TAP_MS) {
-            lastTap = null;
-            if (tapOn.isConnected) startInline(c.id, tapOn);
-          } else lastTap = prop !== null ? { id: c.id, prop, at: now } : null;
+          tap(c.id, tapOn);
         }
         return;
       }
@@ -913,6 +915,16 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
    * the control that had it.
    */
   const draw = (opts: { keepProps?: boolean } = {}): void => {
+    if (inline !== null) {
+      // Words open in place stay open across a redraw that leaves them as they were (the person's own burst landing, a
+      // theme change); the field's commit draws everything. Anything else (another tab changed those words, the
+      // component is gone, Edit ended) closes the field first, with nothing sent (codex r9: a removed field's blur
+      // committed its draft on the newer version).
+      const open = inline;
+      const c = editing() ? components().find((x) => x.id === open.id) : undefined;
+      if (c !== undefined && wordsOf(c, open.prop) === open.before) return;
+      open.drop();
+    }
     const had = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.getAttribute('data-prop') : null;
     bodies.clear();
     index.clear();
@@ -975,6 +987,12 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
           if ((e.target as HTMLElement).closest('input, select, textarea, button, .wk-handle') !== null) return;
           startDrag(e, c, 'move', cell);
         });
+        // A Button's or a Link's label starts no drag, so its taps are counted as they end (Firefox and WebKit fire no
+        // dblclick for two touch taps on it). A drag captures the pointer to the cell, so its own taps never get here.
+        cell.addEventListener('pointerup', (e) => {
+          const words = (e.target as HTMLElement).closest?.('button[data-inline]') as HTMLElement | null;
+          if (words !== null && e.button === 0) tap(c.id, words);
+        });
       }
       grid!.append(cell);
     });
@@ -1006,7 +1024,15 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     propsFor = sel?.id ?? null;
   };
 
-  let lastTap: { id: string; prop: string; at: number } | null = null;
+  /** Two taps on the same words of one component, within {@link DOUBLE_TAP_MS}, open them in place. */
+  const tap = (id: string, target: HTMLElement | null): void => {
+    const prop = target?.getAttribute('data-inline') ?? null;
+    const now = Date.now();
+    if (prop !== null && target !== null && lastTap !== null && lastTap.id === id && lastTap.prop === prop && now - lastTap.at < DOUBLE_TAP_MS) {
+      lastTap = null;
+      if (target.isConnected) startInline(id, target);
+    } else lastTap = prop !== null ? { id, prop, at: now } : null;
+  };
 
   /** The words a component's `data-inline` property names, as the spec has them now. */
   const wordsOf = (c: AppComponent, prop: string): string => {
@@ -1027,7 +1053,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   const startInline = (id: string, target: HTMLElement): void => {
     const c = components().find((x) => x.id === id);
     const prop = target.getAttribute('data-inline');
-    if (c === undefined || prop === null || !editing()) return;
+    if (c === undefined || prop === null || !editing() || inline !== null) return;
     const before = wordsOf(c, prop);
     const multi = prop === 'text';
     const ed = multi ? el('textarea', 'wk-inline-input wk-inline-input--multi') : el('input', 'wk-inline-input');
@@ -1040,9 +1066,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     ed.select();
     let done = false;
     let composing = false;
+    const me = { id, prop, before, drop: (): void => { done = true; if (inline === me) inline = null; } };
+    inline = me;
     const finish = (commit: boolean): void => {
       if (done) return;
-      done = true;
+      me.drop();
       if (commit && ed.value !== before) void edit([{ op: 'component-set', id, prop, value: ed.value }]);
       else draw();
     };
@@ -1054,7 +1082,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       if (k.key === 'Escape') { k.preventDefault(); k.stopPropagation(); finish(false); return; }
       if (k.key === 'Enter' && !(multi && k.shiftKey)) { k.preventDefault(); k.stopPropagation(); finish(true); }
     });
-    ed.addEventListener('blur', () => finish(true));
+    // Leaving the field keeps the words; a field taken out of the page (Chromium fires blur for that) sends nothing.
+    ed.addEventListener('blur', () => { if (ed.isConnected) finish(true); else me.drop(); });
   };
 
   root.addEventListener('dblclick', (e) => {

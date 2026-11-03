@@ -2,11 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { api, apiBase } from '../../api/client.js';
 import { listEditors } from '../../api/editors.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
-import { AppAdapter, type AppHostPort } from '../../editors/apps/appAdapter.js';
-import { sampleAppData, type AppDataPort } from '../../editors/apps/appData.js';
+import { AppAdapter } from '../../editors/apps/appAdapter.js';
 import { AppSession } from '../../editors/apps/appSession.js';
-import { FixedAppStore, loadAppsDirectory, type AppTileData, type AppsDirectory } from '../../editors/apps/appsDirectory.js';
-import { SAMPLE_APPS } from '../../editors/apps/samples.js';
+import { FixedAppStore, PREVIEW_LIMIT, loadAppsDirectory, tileHostPort, type AppTileData, type AppsDirectory } from '../../editors/apps/appsDirectory.js';
 import { EditorHost } from '../../editors/host.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import { APPS_EDITOR, type PermissionId } from '../../editors/protocol.js';
@@ -43,26 +41,15 @@ function TilePreview({ tile, editor }: { tile: AppTileData; editor: EditorEntry 
   const box = useRef<HTMLDivElement | null>(null);
   const [torn, setTorn] = useState(false);
   useEffect(() => {
-    if (editor === null || box.current === null) return undefined;
+    if (editor === null || box.current === null || tile.detail === null) return undefined;
     const store = new FixedAppStore(tile.slug, tile.detail, tile.sample ? 'sample' : 'crew');
     const session = new AppSession(store);
     let host: EditorHost | null = null;
     let cancelled = false;
     void session.load().then(() => {
       if (cancelled || box.current === null) return;
-      const sample = tile.sampleKey !== null ? SAMPLE_APPS[tile.sampleKey] ?? null : null;
       // Rows only from what is at hand: a sample's own rows in this browser. With crew, no query is ever sent.
-      const data: AppDataPort = sample !== null ? sampleAppData(() => tile.detail.spec, sample.data) : {
-        kind: { queries: 'crew', actions: 'crew' },
-        query: async () => ({ error: 'unavailable', message: 'a tile reads nothing' }),
-        prepare: async () => ({ error: 'refused', message: 'a tile runs nothing' }),
-        run: async () => ({ state: 'failed', reason: 'a tile runs nothing', sample: false }),
-        viewer: () => ({ email: null, sample: false }),
-      };
-      const port: AppHostPort = {
-        session, data, framed: () => false, mode: () => 'preview', viewer: () => 'you',
-        confirm: async () => false, openLink: async () => false, tile: { rows: sample !== null },
-      };
+      const port = tileHostPort(session, tile);
       host = new EditorHost({
         container: box.current, src: bundleUrl(apiBase(), APPS_EDITOR, editor.version, editor.sha), editor: APPS_EDITOR, version: editor.version,
         name: 'App', title: `Preview of ${tile.name}`, size: 'inline', surface: 'card', grants: editor.grants, theme: readThemeTokens(),
@@ -81,7 +68,9 @@ function TilePreview({ tile, editor }: { tile: AppTileData; editor: EditorEntry 
   return (
     <div className="wk-appcard-prev" data-testid="apps-card-preview" aria-hidden="true">
       <div ref={box} className="wk-appcard-frame" />
-      {(editor === null || torn) && <p className="wk-appcard-noprev">{editor === null ? 'The App editor is not installed here' : 'Preview not shown'}</p>}
+      {(editor === null || torn || tile.detail === null) && (
+        <p className="wk-appcard-noprev">{tile.detail === null ? 'Open it to see it' : editor === null ? 'The App editor is not installed here' : 'Preview not shown'}</p>
+      )}
     </div>
   );
 }
@@ -98,6 +87,7 @@ function AppCard({ tile, editor, navigate, onShare }: { tile: AppTileData; edito
           {tile.sample && <span className="wk-pill" data-testid="apps-card-sample">Sample</span>}
         </div>
         {tile.description !== '' && <p className="wk-appcard-desc" data-testid="apps-card-desc">{tile.description}</p>}
+        {tile.note !== null && <p className="wk-appcard-muted" data-testid="apps-card-note">{tile.note}</p>}
         {tile.kpis.length > 0 && tile.kpis.some((k) => k.value !== null) ? (
           <dl className="wk-appcard-kpis" data-testid="apps-card-kpis">
             {tile.kpis.map((k, i) => (
@@ -106,12 +96,13 @@ function AppCard({ tile, editor, navigate, onShare }: { tile: AppTileData; edito
           </dl>
         ) : tile.kpis.length > 0 ? <p className="wk-appcard-muted" data-testid="apps-card-nonumbers">Its numbers show when you open it.</p> : null}
         <p className="wk-appcard-meta">
-          <span data-testid="apps-card-version">{tile.version}</span> · changed {ago(tile.changedAt)}
+          <span data-testid="apps-card-version">{tile.version}</span>{tile.changedAt !== null && <> · changed {ago(tile.changedAt)}</>}
         </p>
         {tile.sources.length > 0 && <p className="wk-appcard-meta" data-testid="apps-card-sources">Reads {tile.sources.join(', ')}</p>}
         <div className="wk-appcard-actions">
           <a href={appPath(tile.slug, 'edit')} className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-card-edit" onClick={(e) => { e.preventDefault(); navigate(appPath(tile.slug, 'edit')); }}>Edit</a>
-          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-card-share" onClick={onShare}>Share</button>
+          {/* Share says whether a published copy exists, which only the app's detail tells. */}
+          {tile.detail !== null && <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-card-share" onClick={onShare}>Share</button>}
         </div>
       </div>
     </article>
@@ -122,11 +113,19 @@ export function AppsPage({ navigate }: { navigate: (path: string) => void }): Re
   const [dir, setDir] = useState<AppsDirectory | null>(null);
   const [editor, setEditor] = useState<EditorEntry | null>(null);
   const [sharing, setSharing] = useState<AppTileData | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    setDir(null);
     void (async () => {
-      const health = await api.getHealth().catch(() => null);
-      const [d, editors] = await Promise.all([loadAppsDirectory(health?.capabilities?.apps !== undefined), listEditors().catch(() => null)]);
+      // A daemon that can't be reached is an error to retry, never "no app store" (codex r9: samples stood in for
+      // crew's apps when health failed).
+      let hasStore: boolean;
+      try { hasStore = (await api.getHealth()).capabilities?.apps !== undefined; } catch (e) {
+        if (!cancelled) setDir({ source: 'error', message: `the daemon did not answer (${e instanceof Error ? e.message : String(e)})` });
+        return;
+      }
+      const [d, editors] = await Promise.all([loadAppsDirectory(hasStore), listEditors().catch(() => null)]);
       if (cancelled) return;
       setDir(d);
       const e = editors?.find((x) => x.id === APPS_EDITOR && x.enabled !== false) ?? null;
@@ -135,13 +134,24 @@ export function AppsPage({ navigate }: { navigate: (path: string) => void }): Re
       if (!cancelled) setEditor({ version: e.version, sha: e.sha256, grants: decided.grants });
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [attempt]);
   const apps = dir !== null && dir.source !== 'error' ? dir.apps : [];
+  const skipped = dir !== null && dir.source !== 'error' ? dir.skipped : 0;
   return (
     <PageFrame data-testid="apps-page" title={PAGE_NAMES.apps}
       intro="Dashboards and tools over your data, built by chat and by hand. Open one to use it, or Edit to change it in place.">
       {dir === null && <div className="wk-apps-grid" data-testid="apps-loading">{[0, 1, 2].map((i) => <div key={i} className="wk-appcard wk-appcard--ghost" />)}</div>}
-      {dir !== null && dir.source === 'error' && <p className="wk-apps-dash-line wk-apps-dash-line--fail" data-testid="apps-error">The apps could not be read: {dir.message}</p>}
+      {dir !== null && dir.source === 'error' && (
+        <p className="wk-apps-dash-line wk-apps-dash-line--fail" data-testid="apps-error">
+          The apps could not be read: {dir.message}. <button type="button" className="wk-btn wk-btn--link" data-testid="apps-retry" onClick={() => setAttempt((n) => n + 1)}>Try again</button>
+        </p>
+      )}
+      {apps.length > PREVIEW_LIMIT && (
+        <p className="wk-apps-dash-line" data-testid="apps-preview-limit">The first {PREVIEW_LIMIT} of {apps.length} apps show a preview; open any app to see it.</p>
+      )}
+      {skipped > 0 && (
+        <p className="wk-apps-dash-line" data-testid="apps-skipped">{skipped === 1 ? 'One app crew lists has' : `${skipped} apps crew lists have`} an address studio can’t open, so {skipped === 1 ? 'it is' : 'they are'} not shown.</p>
+      )}
       {dir !== null && dir.source === 'sample' && (
         <p className="wk-apps-dash-line" data-testid="apps-samples-note">This daemon has no app store yet: these are two sample apps, with made-up rows. Nothing reaches a source.</p>
       )}

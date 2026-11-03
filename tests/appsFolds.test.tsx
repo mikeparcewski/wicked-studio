@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppDetail, AppSpec } from '../src/api/types.js';
-import { EditorHost, type HostUi } from '../src/editors/host.js';
+import { EditorHost, FOCUS_POLL_MS, type HostUi } from '../src/editors/host.js';
 import { AppAdapter, type AppHostPort, type AppMode } from '../src/editors/apps/appAdapter.js';
 import { appDataFor, sampleAppData, type PreparedAction } from '../src/editors/apps/appData.js';
 import { applyOps } from '../src/editors/apps/appOps.js';
@@ -454,26 +454,50 @@ describe('a typed Properties field commits while focus is in the frame', () => {
 });
 
 describe('a spec op from a gesture that just left the frame (a field committed by clicking studio’s chrome)', () => {
-  it('is taken within 1.5 s of focus leaving the frame, and refused after; actions and history never get the grace', async () => {
+  const edit = (value: string, base: number) => ({ base, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value }] });
+  const tick = () => new Promise((res) => setTimeout(res, FOCUS_POLL_MS + 120));
+
+  it('is taken within 1.5 s of the last moment the frame held focus and activation, refused after; actions and history never get the grace', async () => {
     let now = 1_000_000;
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     const r = await hostRig();
     r.state.mode = 'edit';
-    // Focus went into the frame (the host window blurs), then came back to studio's chrome (the host window focuses).
-    window.dispatchEvent(new Event('blur'));
-    r.state.click = false;
-    const activation = { on: true };
-    (r.host as unknown as { o: { activation: () => boolean } }).o.activation = () => activation.on;
-    window.dispatchEvent(new Event('focus'));
-    expect(await r.ask('spec.edit', { base: 1, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'By region' }] })).toMatchObject({ ok: true });
+    const g = { focus: true, activation: true };
+    const o = (r.host as unknown as { o: { activation: () => boolean; focusInFrame: () => boolean } }).o;
+    o.activation = () => g.activation;
+    o.focusInFrame = () => g.focus;
+    await tick(); // the person is typing in the frame: the poll sees focus and activation
+    g.focus = false; // then clicks studio's chrome (fresh activation, focus gone)
+    now += 1_000;
+    expect(await r.ask('spec.edit', edit('By region', 1))).toMatchObject({ ok: true });
     expect(await r.ask('app.history', { move: 'undo', base: 1 })).toMatchObject({ ok: false, error: { code: 'refused' } });
-    // The frame element's own blur (the event Firefox fires) starts the same window.
-    now += 1_600;
-    expect(await r.ask('spec.edit', { base: r.session.head, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'Gone' }] })).toMatchObject({ ok: false, error: { code: 'refused' } });
+    now += 600;
+    expect(await r.ask('spec.edit', edit('Gone', r.session.head))).toMatchObject({ ok: false, error: { code: 'refused' } });
+    // Focus leaving the frame starts nothing by itself, whichever event says so.
     r.host.frame.dispatchEvent(new Event('blur'));
-    expect(await r.ask('spec.edit', { base: r.session.head, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'Again' }] })).toMatchObject({ ok: true });
-    now += 1_600;
-    expect(await r.ask('spec.edit', { base: r.session.head, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'Later' }] })).toMatchObject({ ok: false, error: { code: 'refused' } });
+    window.dispatchEvent(new Event('focus'));
+    expect(await r.ask('spec.edit', edit('Again', r.session.head))).toMatchObject({ ok: false, error: { code: 'refused' } });
+    r.host.teardown('done');
+  });
+
+  it('codex r9 P1: a frame idle until its activation expired, then a click on studio’s chrome, is refused', async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const r = await hostRig();
+    r.state.mode = 'edit';
+    const g = { focus: true, activation: false };
+    const o = (r.host as unknown as { o: { activation: () => boolean; focusInFrame: () => boolean } }).o;
+    o.activation = () => g.activation;
+    o.focusInFrame = () => g.focus;
+    await tick(); // focus sits in the frame with no activation
+    now += 10_000;
+    g.focus = false;
+    g.activation = true; // the click on studio's chrome
+    r.host.frame.dispatchEvent(new Event('blur'));
+    window.dispatchEvent(new Event('focus'));
+    await tick();
+    expect(await r.ask('spec.edit', edit('Hijacked', 1))).toMatchObject({ ok: false, error: { code: 'refused' } });
+    expect(r.session.head).toBe(1);
     r.host.teardown('done');
   });
 });

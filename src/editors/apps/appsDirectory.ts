@@ -1,7 +1,9 @@
 import { apiFetch } from '../../api/client.js';
 import type { AppDetail, AppDetailResponse, AppSpec, AppsListResponse } from '../../api/types.js';
 import { cellText } from '../../plugins/wicked-apps/runtime/format.js';
-import { sampleAppData, type SampleData } from './appData.js';
+import type { AppHostPort } from './appAdapter.js';
+import { sampleAppData, type AppDataPort, type SampleData } from './appData.js';
+import type { AppSession } from './appSession.js';
 import type { AppStorePort, StoreResult } from './appStore.js';
 import { SampleAppStore } from './appStore.js';
 import { SAMPLE_APPS } from './samples.js';
@@ -14,20 +16,25 @@ import { SAMPLE_APPS } from './samples.js';
  */
 
 /**
- * A published copy of an app (lane K6 builds the signed-in app server; its address is the share link). PROPOSED
- * shape, read from `AppDetail.published` until K6 publishes it in api-types (ledger, 2026-11-03): studio shows a
- * share link only when crew reports one, and never makes one up.
+ * A published copy of an app (lane K6 builds the signed-in app server; its address is the share link), as K6 proposed
+ * it for api-types (ledger 2026-11-03T18:26Z: `AppDetail.published: AppPublished | null`). Studio reads only the fields
+ * the Share sheet shows, field by field, and shows a share link only when crew reports one: it never makes one up.
  */
 export interface AppPublished {
-  /** The signed-in site's address: the link people are sent. */
-  url: string;
-  /** Who can open it, in the deployer's words ("signed-in members of support-ops"). */
+  /** The site's address (its origin and `/`): what people are sent, and what Copy copies. */
+  shareUrl: string;
+  /** Who can open it, in one line ("people in group support-ops who sign in at dex.apps.test"). */
   audience: string;
-  /** The address an iframe may load, when the publish allowed embedding; null = no embedding. */
-  embedUrl: string | null;
-  /** The version published, and when. */
+  /** The `<iframe>` snippet, when the publish allows embedding (public apps); shown and copied exactly as crew wrote it. */
+  snippet: string | null;
+  /** The version published, and when (Unix millis). */
   version: number;
   at: number;
+}
+
+/** An app's address segment: crew's slug grammar (api-types `AppSummary.slug`), never `check` or `uploads`. */
+export function isAppSlug(v: unknown): boolean {
+  return typeof v === 'string' && v.length <= 48 && /^[a-z][a-z0-9]*(-[a-z0-9]+){0,3}$/u.test(v) && v !== 'check' && v !== 'uploads';
 }
 
 const httpUrl = (v: unknown): string | null => {
@@ -37,15 +44,21 @@ const httpUrl = (v: unknown): string | null => {
     return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
   } catch { return null; }
 };
+const line = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, max) : null);
+const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && !Number.isNaN(new Date(v).getTime());
 
 /** crew's published record, read field by field; anything missing or malformed means "not published". */
 export function publishedOf(detail: unknown): AppPublished | null {
   const p = typeof detail === 'object' && detail !== null ? (detail as { published?: unknown }).published : undefined;
   if (typeof p !== 'object' || p === null) return null;
   const r = p as Record<string, unknown>;
-  const url = httpUrl(r['url']);
-  if (url === null || typeof r['audience'] !== 'string' || r['audience'] === '' || !Number.isInteger(r['version']) || typeof r['at'] !== 'number') return null;
-  return { url, audience: r['audience'].slice(0, 300), embedUrl: r['embedUrl'] == null ? null : httpUrl(r['embedUrl']), version: r['version'] as number, at: r['at'] };
+  const shareUrl = httpUrl(r['shareUrl']);
+  const audience = line(r['audience'], 300);
+  const version = r['version'];
+  if (shareUrl === null || audience === null || typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1 || !isTime(r['at'])) return null;
+  // A snippet shows only when it is crew's text for this site (it names the share link's origin).
+  const snippet = typeof r['snippet'] === 'string' && r['snippet'].trim() !== '' && r['snippet'].length <= 4_000 && r['snippet'].includes(new URL(shareUrl).origin) ? r['snippet'] : null;
+  return { shareUrl, audience, snippet, version, at: r['at'] };
 }
 
 export interface TileKpi { title: string; value: string | null }
@@ -57,16 +70,25 @@ export interface AppTileData {
   sample: boolean;
   /** The sample's key (`?sample=`), for a sample tile. */
   sampleKey: string | null;
-  detail: AppDetail;
+  /** The app's detail, read for its preview; null when the card is drawn from crew's list alone (see `note`). */
+  detail: AppDetail | null;
+  /** Why the card has no detail ("its details could not be read: …"), or null. */
+  note: string | null;
   /** `v14 · reviewed`. */
   version: string;
-  changedAt: number;
+  /** When it last changed (or was made, from the list alone); null when crew's record has no time. */
+  changedAt: number | null;
   sources: string[];
   kpis: TileKpi[];
   published: AppPublished | null;
 }
 
-export type AppsDirectory = { source: 'crew' | 'sample'; apps: AppTileData[] } | { source: 'error'; message: string };
+export type AppsDirectory =
+  | { source: 'crew' | 'sample'; apps: AppTileData[]; /** Listed apps whose address is not an app slug: not shown. */ skipped: number }
+  | { source: 'error'; message: string };
+
+/** Crew's apps get a preview (one detail read each) up to this many; the rest show from the list alone. */
+export const PREVIEW_LIMIT = 24;
 
 export function receiptWords(app: AppDetail): string {
   const v = app.versions.find((x) => x.version === app.head.version);
@@ -98,24 +120,53 @@ async function kpisOf(spec: AppSpec, data: SampleData | null): Promise<TileKpi[]
   return out;
 }
 
+/** Whether crew's detail has the shape a card reads (crew's records are data: one malformed record is one card's). */
+function detailOk(d: unknown, slug: string): d is AppDetail {
+  if (typeof d !== 'object' || d === null) return false;
+  const a = d as Record<string, unknown>;
+  const spec = a['spec'] as Record<string, unknown> | null | undefined;
+  const head = a['head'] as Record<string, unknown> | null | undefined;
+  return a['slug'] === slug && typeof a['name'] === 'string' && Array.isArray(a['versions']) && typeof head === 'object' && head !== null
+    && Number.isSafeInteger(head['version']) && typeof spec === 'object' && spec !== null && Array.isArray(spec['pages'])
+    && Array.isArray(spec['queries']) && Array.isArray(spec['actions']) && (spec['description'] === undefined || typeof spec['description'] === 'string');
+}
+
 async function tileOf(detail: AppDetail, sample: { key: string; data: SampleData } | null): Promise<AppTileData> {
   const head = detail.versions.find((v) => v.version === detail.head.version);
   return {
     slug: detail.slug,
-    name: detail.name,
+    name: detail.name.slice(0, 120),
     description: (detail.spec.description ?? '').slice(0, 300),
     sample: sample !== null,
     sampleKey: sample?.key ?? null,
     detail,
+    note: null,
     version: `v${detail.head.version} · ${receiptWords(detail)}`,
-    changedAt: head?.at ?? detail.createdAt,
+    changedAt: isTime(head?.at) ? head.at : isTime(detail.createdAt) ? detail.createdAt : null,
     sources: sourcesOf(detail.spec),
     kpis: await kpisOf(detail.spec, sample?.data ?? null),
     published: publishedOf(detail),
   };
 }
 
-/** Load the dashboard. `hasStore`: crew's health advertises `capabilities.apps`. */
+/** A card from crew's list entry alone: its name, version and receipt, no preview, no numbers, no share state. */
+function summaryTile(a: Record<string, unknown>, slug: string, note: string | null): AppTileData {
+  const head = typeof a['head'] === 'object' && a['head'] !== null ? a['head'] as Record<string, unknown> : {};
+  const v = Number.isSafeInteger(head['version']) ? `v${head['version'] as number}` : 'v?';
+  const receipt = typeof head['receipt'] === 'string' ? head['receipt'] : 'not accepted';
+  return {
+    slug, name: line(a['name'], 120) ?? slug, description: '', sample: false, sampleKey: null, detail: null, note,
+    version: `${v} · ${receipt}`, changedAt: isTime(a['createdAt']) ? a['createdAt'] : null, sources: [], kpis: [], published: null,
+  };
+}
+
+const why = (e: unknown): string => (e instanceof Error ? e.message : String(e)).slice(0, 200);
+
+/**
+ * Load the dashboard. `hasStore`: crew's health advertises `capabilities.apps`. Every app crew lists gets a card: the
+ * first {@link PREVIEW_LIMIT} read their detail for a preview, and a detail that fails or is malformed leaves that card
+ * drawn from the list alone, saying so. Only a failed LIST is an error.
+ */
 export async function loadAppsDirectory(hasStore: boolean): Promise<AppsDirectory> {
   if (!hasStore) {
     const apps: AppTileData[] = [];
@@ -123,17 +174,49 @@ export async function loadAppsDirectory(hasStore: boolean): Promise<AppsDirector
       const detail = await new SampleAppStore(s.slug, s.spec).detail();
       apps.push(await tileOf(detail, { key, data: s.data }));
     }
-    return { source: 'sample', apps };
+    return { source: 'sample', apps, skipped: 0 };
   }
+  let list: AppsListResponse;
   try {
-    const list = await apiFetch<AppsListResponse>('/apps');
-    const details = await Promise.all(list.apps.slice(0, 100).map((a) => apiFetch<AppDetailResponse>(`/apps/${encodeURIComponent(a.slug)}`).then((r) => r.app).catch(() => null)));
-    const apps: AppTileData[] = [];
-    for (const d of details) if (d !== null) apps.push(await tileOf(d, null));
-    return { source: 'crew', apps };
+    list = await apiFetch<AppsListResponse>('/apps');
   } catch (e) {
-    return { source: 'error', message: e instanceof Error ? e.message : String(e) };
+    return { source: 'error', message: why(e) };
   }
+  const entries = (Array.isArray(list?.apps) ? list.apps as unknown[] : []).filter((a): a is Record<string, unknown> => typeof a === 'object' && a !== null);
+  const listed = entries.filter((a) => isAppSlug(a['slug']));
+  const apps = await Promise.all(listed.map(async (a, i): Promise<AppTileData> => {
+    const slug = a['slug'] as string;
+    if (i >= PREVIEW_LIMIT) return summaryTile(a, slug, null);
+    try {
+      const d = (await apiFetch<AppDetailResponse>(`/apps/${slug}`))?.app;
+      if (!detailOk(d, slug)) return summaryTile(a, slug, 'Its details could not be read.');
+      return await tileOf(d, null);
+    } catch (e) {
+      return summaryTile(a, slug, `Its details could not be read: ${why(e)}`);
+    }
+  }));
+  return { source: 'crew', apps, skipped: entries.length - listed.length };
+}
+
+/**
+ * A dashboard tile's host port: the app's first page, read-only. It is drawn in Preview and asks nothing: a frame in a
+ * tile (honest or not) gets no edit (Preview, and its store changes nothing), no history, no action (never confirmed),
+ * no link, and rows only from the sample's own data in this browser (crew's tiles: every query refused, no request).
+ */
+export function tileHostPort(session: AppSession, tile: AppTileData): AppHostPort {
+  const sample = tile.sampleKey !== null ? SAMPLE_APPS[tile.sampleKey] ?? null : null;
+  const spec = (): AppSpec => session.landedSpec ?? tile.detail!.spec;
+  const data: AppDataPort = sample !== null ? sampleAppData(spec, sample.data) : {
+    kind: { queries: 'crew', actions: 'crew' },
+    query: async () => ({ error: 'unavailable', message: 'a tile reads nothing' }),
+    prepare: async () => ({ error: 'refused', message: 'a tile runs nothing' }),
+    run: async () => ({ state: 'failed', reason: 'a tile runs nothing', sample: false }),
+    viewer: () => ({ email: null, sample: false }),
+  };
+  return {
+    session, data, framed: () => false, mode: () => 'preview', editing: () => false, viewer: () => 'you',
+    confirm: async () => false, openLink: async () => false, tile: { rows: sample !== null },
+  };
 }
 
 /** The sample key a slug names (`escalations`, `refund-approvals`), or null. */

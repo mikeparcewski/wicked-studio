@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { AppPublished } from '../../editors/apps/appsDirectory.js';
+import { useModalEscape } from '../Modal.js';
+import { useDialogFocus } from '../steer/useDialogFocus.js';
 
 /**
  * SHARE (operator 2026-11-03: "a share link so the user could share with others"). Real sharing is a PUBLISHED copy:
  * Publish (lane K6) builds a signed-in app server the deployer runs, and that server's address is the link. So:
  *
- *  - published (crew reports the record): the link, who can open it, the iframe snippet when embedding is allowed,
- *    and which version went out when — each with Copy;
+ *  - published (crew reports the record): the link and the iframe snippet (when embedding is allowed), each with Copy,
+ *    who can open it, and which version went out when;
  *  - not published: it says so plainly, offers Publish (disabled until it lands), and a studio link labelled as one,
  *    for people who use this studio.
  *
@@ -25,15 +27,10 @@ export function studioLink(slug: string, origin = window.location.origin): strin
   return `${origin}/apps/${encodeURIComponent(slug)}`;
 }
 
-/** The iframe snippet for a published copy that allows embedding; its words are attribute-escaped. */
-export function embedSnippet(embedUrl: string, name: string): string {
-  const esc = (v: string): string => v.replace(/&/gu, '&amp;').replace(/"/gu, '&quot;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;');
-  return `<iframe src="${esc(embedUrl)}" title="${esc(name)}" width="100%" height="640" loading="lazy"></iframe>`;
-}
-
-function CopyRow({ label, value, testId, note }: { label: string; value: string; testId: string; note?: string }): React.ReactElement {
+/** One value with Copy. The field shows exactly the string Copy copies (a snippet in a text area keeps its lines). */
+function CopyRow({ label, value, testId, note, multiline = false }: { label: string; value: string; testId: string; note?: string; multiline?: boolean }): React.ReactElement {
   const [state, setState] = useState<'idle' | 'copied' | 'manual'>('idle');
-  const field = useRef<HTMLInputElement | null>(null);
+  const field = useRef<HTMLInputElement & HTMLTextAreaElement | null>(null);
   const copy = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(value);
@@ -48,7 +45,9 @@ function CopyRow({ label, value, testId, note }: { label: string; value: string;
     <div className="wk-share-row">
       <label className="wk-share-label" htmlFor={`${testId}-field`}>{label}</label>
       <div className="wk-share-copy">
-        <input id={`${testId}-field`} ref={field} readOnly className="wk-share-field" value={value} data-testid={`${testId}-field`} onFocus={(e) => e.currentTarget.select()} />
+        {multiline
+          ? <textarea id={`${testId}-field`} ref={field} readOnly rows={3} className="wk-share-field wk-share-field--multi" value={value} data-testid={`${testId}-field`} onFocus={(e) => e.currentTarget.select()} />
+          : <input id={`${testId}-field`} ref={field} readOnly className="wk-share-field" value={value} data-testid={`${testId}-field`} onFocus={(e) => e.currentTarget.select()} />}
         <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid={`${testId}-copy`} onClick={() => void copy()}>
           {state === 'copied' ? 'Copied' : 'Copy'}
         </button>
@@ -61,13 +60,10 @@ function CopyRow({ label, value, testId, note }: { label: string; value: string;
 
 export function ShareSheet({ name, slug, published, onClose }: ShareSheetProps): React.ReactElement {
   const box = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const was = document.activeElement as HTMLElement | null;
-    box.current?.querySelector<HTMLElement>('button, input')?.focus();
-    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } };
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('keydown', onKey); was?.focus?.(); };
-  }, [onClose]);
+  // The modal family's contract: one Escape closes the top layer only (the palette and later modals first), Tab
+  // stays inside, and focus goes back where it was when the sheet closes.
+  useModalEscape(onClose);
+  useDialogFocus(true, box, { modal: true });
   return (
     <div className="wk-share-scrim" data-testid="apps-share-scrim" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={box} className="wk-share" role="dialog" aria-modal="true" aria-labelledby="wk-share-title" data-testid="apps-share" data-published={published !== null}>
@@ -77,12 +73,12 @@ export function ShareSheet({ name, slug, published, onClose }: ShareSheetProps):
         </header>
         {published !== null ? (
           <>
-            <p className="wk-share-lead" data-testid="apps-share-state">Published: anyone the deployer allows can open it, signed in.</p>
-            <CopyRow label="Share link" value={published.url} testId="apps-share-link" />
+            <p className="wk-share-lead" data-testid="apps-share-state">Published: send this link to the people who can open it.</p>
+            <CopyRow label="Share link" value={published.shareUrl} testId="apps-share-link" />
             <p className="wk-share-meta"><span className="wk-share-k">Who can open it</span> <span data-testid="apps-share-audience">{published.audience}</span></p>
-            {published.embedUrl !== null && <CopyRow label="Embed in a page" value={embedSnippet(published.embedUrl, name)} testId="apps-share-embed" />}
+            {published.snippet !== null && <CopyRow label="Embed in a page" value={published.snippet} testId="apps-share-embed" multiline />}
             <p className="wk-share-meta" data-testid="apps-share-when">
-              <span className="wk-share-k">Published</span> v{published.version} · published · {new Date(published.at).toLocaleString()}
+              <span className="wk-share-k">Published</span> v{published.version} on {new Date(published.at).toLocaleString()}
             </p>
           </>
         ) : (

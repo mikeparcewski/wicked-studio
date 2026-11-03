@@ -388,7 +388,7 @@ def main() -> None:
         pub = {"link": dash.input_value('[data-testid="apps-share-link-field"]'), "embed": dash.input_value('[data-testid="apps-share-embed-field"]'),
                "audience": dash.text_content('[data-testid="apps-share-audience"]')}
         dash.click('[data-testid="apps-share-close"]')
-        check("card_opens_and_share_published", pub["link"] == "https://apps.example.test/fixture-desk/" and 'src="https://apps.example.test/fixture-desk/embed"' in pub["embed"]
+        check("card_opens_and_share_published", pub["link"] == "https://fixture-desk.apps.example.test/" and pub["embed"] == apps_fixture.PUBLISHED["fixture-app"]["snippet"]
               and pub["audience"] == "signed-in members of support-ops", **pub)
 
         # 9b. editing in place: a double-click on a title, Enter lands ONE version; Escape lands none; text stays text
@@ -398,6 +398,12 @@ def main() -> None:
         hint = dash.text_content('[data-testid="apps-edit-hint"]')
         e0 = count(origin, "POST", "/edits")
         hostile_title = "<img src=x onerror=window.__pwned=9> Queue"
+        # Selecting puts a chip on the host's line: the frame must not move between the two clicks (codex r9).
+        frame_top = lambda: dash.eval_on_selector(".wk-apps-frame .wk-editor-frame", "e => e.getBoundingClientRect().top")
+        top0 = frame_top()
+        ef.click('[data-component="tickets"] .wk-cell-title')
+        dash.wait_for_selector('[data-testid="apps-chip"]', timeout=5_000)
+        top1 = frame_top()
         ef.dblclick('[data-component="tickets"] .wk-cell-title')
         field = ef.wait_for_selector('[data-testid="apps-inline"]')
         field.fill(hostile_title)
@@ -416,10 +422,38 @@ def main() -> None:
         after_escape = ef.text_content('[data-component="tickets"] .wk-cell-title')
         imgs = ef.evaluate("() => document.querySelectorAll('[data-testid=apps-runtime] img').length")
         shot(dash, "6-inline")
+        # A Button's label, through the real host and crew's store (pi r9: the label op on a button).
+        # force: the button is aria-disabled in Edit (inert), which Playwright reads as "not enabled"; a person's
+        # double-click reaches it all the same.
+        ef.dblclick('[data-component="ping"] button[data-inline]', force=True)
+        field = ef.wait_for_selector('[data-testid="apps-inline"]')
+        field.fill("Ping now")
+        field.press("Enter")
+        dash.wait_for_timeout(2_200)
+        e3 = count(origin, "POST", "/edits")
+        landed = [c for c in calls(origin) if c["method"] == "POST" and c["path"].endswith("/edits")][-1]
+        landed_label = next((c.get("action", {}).get("label") for c in landed["body"]["ops"][0]["spec"]["pages"][0]["components"] if c["id"] == "ping"), None)
         check("inline_edit", hint == "Changes save as you make them · Undo to go back" and e1 - e0 == 1 and landed["status"] == 200 and landed_title == hostile_title
               and shown_title == hostile_title and e2 == e1 and after_escape == hostile_title and imgs == 0 and no_style(ef) == 0
-              and ef.evaluate("() => window.__pwned === undefined"), hint=hint, landed=e1 - e0, after_escape_edits=e2 - e1, title=shown_title, imgs=imgs)
+              and top0 == top1 and e3 - e2 == 1 and landed_label == "Ping now"
+              and ef.evaluate("() => window.__pwned === undefined"), hint=hint, landed=e1 - e0, after_escape_edits=e2 - e1, title=shown_title, imgs=imgs,
+              frame_top=[top0, top1], label_edits=e3 - e2, label=landed_label)
         dash.close()
+
+        # 9c. two touch taps on a Link's label open it in place in every engine (none fires dblclick for them: codex r9)
+        touch = browser.new_context(viewport={"width": 1440, "height": 900}, has_touch=True)
+        tp = touch.new_page()
+        tp.goto(f"{origin}/apps/fixture-app?mode=edit")
+        tf = app_frame(tp)
+        tf.wait_for_selector(".wk-palette", timeout=20_000)
+        tf.tap('[data-component="docs"] button[data-inline]', force=True)
+        tp.wait_for_timeout(120)
+        tf.tap('[data-component="docs"] button[data-inline]', force=True)
+        opened = tf.wait_for_selector('[data-testid="apps-inline"]', timeout=3_000) is not None
+        tapped_value = tf.input_value('[data-testid="apps-inline"]')
+        tf.press('[data-testid="apps-inline"]', "Escape")
+        check("inline_touch", opened and tapped_value == "Docs", value=tapped_value)
+        touch.close()
 
         # 9. framed
         framer = ctx.new_page()

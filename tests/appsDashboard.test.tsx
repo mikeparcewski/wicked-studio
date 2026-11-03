@@ -6,9 +6,13 @@ import type { AppSpec } from '../src/api/types.js';
 import { navCurrent, navGroups } from '../src/board/navModel.js';
 import { parseRoute } from '../src/hooks/useRoute.js';
 import { AppsPage, appPath } from '../src/components/apps/AppsPage.js';
-import { ShareSheet, embedSnippet, studioLink } from '../src/components/apps/ShareSheet.js';
-import { publishedOf } from '../src/editors/apps/appsDirectory.js';
+import { AppRoutePage } from '../src/components/apps/AppRoutePage.js';
+import { ShareSheet, studioLink } from '../src/components/apps/ShareSheet.js';
+import { AppAdapter } from '../src/editors/apps/appAdapter.js';
+import { AppSession } from '../src/editors/apps/appSession.js';
+import { FixedAppStore, PREVIEW_LIMIT, isAppSlug, loadAppsDirectory, publishedOf, tileHostPort } from '../src/editors/apps/appsDirectory.js';
 import { SAMPLE_APPS } from '../src/editors/apps/samples.js';
+import { EditorHost } from '../src/editors/host.js';
 
 /**
  * DES-APPS-001 K4, the operator's look (2026-11-03): Apps under Work, `/apps` as a dashboard of the apps, `/apps/<slug>`
@@ -43,10 +47,21 @@ function mockDaemon(routes: Routes): { urls: string[] } {
     urls.push(path);
     const hit = Object.entries(routes).find(([p]) => p === path);
     if (hit === undefined) return new Response(JSON.stringify({ error: 'no route' }), { status: 404 });
+    if (hit[1] instanceof Error) throw hit[1];
+    const failing = typeof hit[1] === 'object' && hit[1] !== null && '__status' in hit[1] ? (hit[1] as { __status: number }).__status : null;
+    if (failing !== null) return new Response(JSON.stringify({ error: { code: 'internal', message: 'boom' } }), { status: failing, headers: { 'Content-Type': 'application/json' } });
     return new Response(JSON.stringify(hit[1]), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }) as typeof fetch);
   return { urls };
 }
+const CAPS = { apps: { query: true, actions: true, turns: false, publish: false, uploads: false, sourceCheck: true } };
+const crewDetail = (slug: string, name: string, description = '', extra: Record<string, unknown> = {}) => ({
+  app: { slug, name, projectId: 'p', repoId: slug, createdAt: 1, head: { version: 3, tree: 't', receipt: 'you' }, turn: null,
+    spec: { ...structuredClone(SAMPLE_APPS['escalations']!.spec), name, description },
+    lock: { schema: 'wicked.apps.lock/v1', sources: {}, queries: {}, actions: {}, uploads: {} }, queryText: {},
+    versions: [1, 2, 3].map((v) => ({ version: v, commit: 'c', tree: 't', base: v - 1 || null, at: Date.now() - 60_000, author: { kind: 'human', id: 'you' }, receipt: { kind: 'you', tree: 't', version: v, at: 1, actor: { id: 'you', kind: 'human', trust: 'operator' } }, summary: '', check: { level: 'spec', checked: [] } })),
+    history: { states: [1, 2, 3], pointer: 2, canUndo: true, canRedo: false }, ...extra },
+});
 const EDITORS = { editors: [{ id: 'wicked-apps', version: '0.13.0', sha256: 'a'.repeat(64), kinds: ['app'], enabled: true, first_party: true, title: 'App', protocol: [1, 2], sizes: ['inline', 'pane', 'full'], permissions: [] }] };
 
 describe('/apps: a dashboard of the apps', () => {
@@ -108,6 +123,97 @@ describe('/apps: a dashboard of the apps', () => {
   });
 });
 
+describe('/apps: crew’s records are data (codex r9)', () => {
+  it('a slug outside crew’s grammar is never requested or linked (dot segments, slashes, reserved names)', async () => {
+    for (const bad of ['..', '.', 'a/b', '%2e%2e', 'A', '-a', 'a--b', 'check', 'uploads', 'a'.repeat(49), 'a-b-c-d-e', '', 7]) expect(isAppSlug(bad)).toBe(false);
+    for (const ok of ['desk', 'refund-approvals', 'a1-b2-c3-d4', 'x']) expect(isAppSlug(ok)).toBe(true);
+    const { urls } = mockDaemon({
+      '/health': { status: 'ok', capabilities: CAPS },
+      '/apps': { apps: [{ slug: '..', name: 'Up' }, { slug: 'a/b', name: 'Slash' }, { slug: 'desk', name: 'Desk' }] },
+      '/apps/desk': crewDetail('desk', 'Desk'), '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] },
+    });
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    expect(screen.getByTestId('apps-skipped').textContent).toMatch(/^2 apps crew lists have an address studio can’t open/);
+    expect(urls.filter((u) => u.startsWith('/apps')).sort()).toStrictEqual(['/apps', '/apps/desk']);
+    expect(urls).not.toContain('/');
+  });
+
+  it('a detail that fails or is malformed leaves its card, drawn from the list and saying so; the others are whole', async () => {
+    mockDaemon({
+      '/health': { status: 'ok', capabilities: CAPS },
+      '/apps': { apps: [{ slug: 'desk', name: 'Desk', head: { version: 2, receipt: 'you' }, createdAt: 5 }, { slug: 'ops', name: 'Ops' }, { slug: 'odd', name: { not: 'text' } }, { slug: 'other', name: 'Other' }] },
+      '/apps/desk': { __status: 500 },
+      '/apps/ops': crewDetail('ops', 'Ops', 'fine'),
+      '/apps/odd': { app: { ...crewDetail('odd', 'Odd').app, spec: { ...crewDetail('odd', 'Odd').app.spec, description: 123 } } },
+      '/apps/other': crewDetail('elsewhere', 'Other'),
+      '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] },
+    });
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(4));
+    const card = (slug: string) => screen.getAllByTestId('apps-card').find((c) => c.getAttribute('data-slug') === slug)!;
+    expect(card('desk').querySelector('[data-testid="apps-card-note"]')!.textContent).toMatch(/^Its details could not be read: /);
+    expect(card('desk').querySelector('[data-testid="apps-card-version"]')!.textContent).toBe('v2 · you');
+    expect(card('desk').querySelector('[data-testid="apps-card-share"]')).toBeNull();
+    expect(card('odd').querySelector('[data-testid="apps-card-name"]')!.textContent).toBe('odd');
+    expect(card('odd').querySelector('[data-testid="apps-card-note"]')!.textContent).toBe('Its details could not be read.');
+    // A detail for another slug than the one asked for is not this app's.
+    expect(card('other').querySelector('[data-testid="apps-card-note"]')).not.toBeNull();
+    expect(card('ops').querySelector('[data-testid="apps-card-desc"]')!.textContent).toBe('fine');
+    expect(card('ops').querySelector('[data-testid="apps-card-note"]')).toBeNull();
+    expect(screen.queryByTestId('apps-error')).toBeNull();
+  });
+
+  it('every listed app gets a card: the first ones a preview, the rest from the list, and the page says so', async () => {
+    const list = Array.from({ length: PREVIEW_LIMIT + 6 }, (_, i) => ({ slug: `app-${i}`, name: `App ${i}`, head: { version: 1, receipt: null } }));
+    const routes: Routes = { '/health': { status: 'ok', capabilities: CAPS }, '/apps': { apps: list } };
+    for (const a of list.slice(0, PREVIEW_LIMIT)) routes[`/apps/${a.slug}`] = crewDetail(a.slug, a.name);
+    const { urls } = mockDaemon(routes);
+    const d = await loadAppsDirectory(true);
+    expect(d.source === 'crew' && d.apps.length).toBe(PREVIEW_LIMIT + 6);
+    expect(urls.filter((u) => u.startsWith('/apps/'))).toHaveLength(PREVIEW_LIMIT);
+    expect(d.source === 'crew' && d.apps.slice(PREVIEW_LIMIT).every((t) => t.detail === null && t.version === 'v1 · not accepted')).toBe(true);
+  });
+
+  it('a daemon that does not answer is an error with Try again, never the samples', async () => {
+    mockDaemon({ '/health': { __status: 503 }, '/editors': EDITORS });
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('apps-error')).toBeTruthy());
+    expect(screen.queryByTestId('apps-samples-note')).toBeNull();
+    expect(screen.queryAllByTestId('apps-card')).toHaveLength(0);
+    vi.restoreAllMocks();
+    mockDaemon({ '/health': { status: 'ok', capabilities: {} }, '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] } });
+    fireEvent.click(screen.getByTestId('apps-retry'));
+    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(2));
+  });
+});
+
+describe('/apps/<slug>: one store decision (codex r9)', () => {
+  it('a daemon that does not answer says so with Try again; it never opens a sample for crew’s app', async () => {
+    mockDaemon({ '/health': { __status: 503 }, '/editors': EDITORS });
+    render(<AppRoutePage slug="escalations" search="" navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('apps-route-failed')).toBeTruthy());
+    expect(screen.queryByTestId('apps-route')).toBeNull();
+    expect(screen.getByTestId('apps-route-retry')).toBeTruthy();
+  });
+
+  it('an address outside crew’s grammar sends nothing', async () => {
+    const { urls } = mockDaemon({ '/health': { status: 'ok', capabilities: CAPS }, '/editors': EDITORS });
+    render(<AppRoutePage slug=".." search="" navigate={vi.fn()} />);
+    expect(screen.getByTestId('apps-route-unknown').textContent).toMatch(/is not an app’s address/);
+    await new Promise((res) => setTimeout(res, 30));
+    expect(urls).toStrictEqual([]);
+  });
+
+  it('health is read once and handed to the host: the app opens from crew’s store without a second health read', async () => {
+    const { urls } = mockDaemon({ '/health': { status: 'ok', capabilities: CAPS }, '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] }, '/apps/desk': crewDetail('desk', 'Desk') });
+    render(<AppRoutePage slug="desk" search="" navigate={vi.fn()} />);
+    await waitFor(() => expect(urls).toContain('/apps/desk'));
+    await waitFor(() => expect(screen.getByTestId('apps-route')).toBeTruthy());
+    expect(urls.filter((u) => u === '/health')).toHaveLength(1);
+  });
+});
+
 // ── Share ───────────────────────────────────────────────────────────────────────────────────
 
 describe('Share: a published link only when crew reports one', () => {
@@ -129,35 +235,69 @@ describe('Share: a published link only when crew reports one', () => {
     expect(document.querySelectorAll('[data-testid="apps-share"] b')).toHaveLength(0);
   });
 
-  it('published: the link, who can open it, the escaped snippet and when; Copy copies each', async () => {
-    const published = publishedOf({ published: { url: 'https://apps.example.test/desk/', audience: 'signed-in members of support-ops', embedUrl: 'https://apps.example.test/desk/embed', version: 7, at: 1_762_160_400_000 } })!;
+  it('published (K6’s record): the share link and crew’s snippet, each copied exactly as shown; who can open it; when', async () => {
+    const snippet = '<iframe src="https://desk.example.test/" title="Desk"\n  width="100%" height="640"></iframe>';
+    const published = publishedOf({ published: { shareUrl: 'https://desk.example.test/', audience: 'people in group support-ops who sign in at dex.apps.test', snippet, version: 7, at: 1_762_160_400_000, targets: ['site', 'embed'], tree: 't', runId: 'r' } })!;
     render(<ShareSheet name={'Desk "x" <y>'} slug="desk" published={published} onClose={vi.fn()} />);
     expect(screen.getByTestId('apps-share-state').textContent).toMatch(/^Published/);
-    expect(screen.getByTestId('apps-share-audience').textContent).toBe('signed-in members of support-ops');
-    expect(screen.getByTestId('apps-share-when').textContent).toMatch(/v7 · published/);
+    expect(screen.getByTestId('apps-share-audience').textContent).toBe('people in group support-ops who sign in at dex.apps.test');
+    expect(screen.getByTestId('apps-share-when').textContent).toMatch(/^Published v7 on /);
+    expect(screen.getByTestId('apps-share-when').textContent).not.toMatch(/published ·/);
+    const field = screen.getByTestId('apps-share-embed-field') as HTMLTextAreaElement;
+    expect(field.tagName).toBe('TEXTAREA');
+    expect(field.value).toBe(snippet);
     fireEvent.click(screen.getByTestId('apps-share-link-copy'));
     fireEvent.click(screen.getByTestId('apps-share-embed-copy'));
     await waitFor(() => expect(writes).toHaveLength(2));
-    expect(writes[0]).toBe('https://apps.example.test/desk/');
-    expect(writes[1]).toBe('<iframe src="https://apps.example.test/desk/embed" title="Desk &quot;x&quot; &lt;y&gt;" width="100%" height="640" loading="lazy"></iframe>');
+    expect(writes).toStrictEqual(['https://desk.example.test/', snippet]);
     expect(screen.queryByTestId('apps-share-publish')).toBeNull();
   });
 
   it('a malformed or partial record is "not published": no link is ever made up', () => {
+    const ok = { shareUrl: 'https://a.test/', audience: 'x', version: 1, at: 1_762_160_400_000, snippet: null };
     expect(publishedOf({})).toBeNull();
-    expect(publishedOf({ published: { url: 'javascript:alert(1)', audience: 'x', version: 1, at: 1 } })).toBeNull();
-    expect(publishedOf({ published: { url: 'https://a.test/', audience: '', version: 1, at: 1 } })).toBeNull();
-    expect(publishedOf({ published: { url: 'https://a.test/', audience: 'x', version: 1.5, at: 1 } })).toBeNull();
-    expect(publishedOf({ published: { url: 'https://a.test/', audience: 'x', version: 1, at: 1, embedUrl: 'data:text/html,x' } })!.embedUrl).toBeNull();
+    expect(publishedOf({ published: null })).toBeNull();
+    expect(publishedOf({ published: { ...ok, shareUrl: 'javascript:alert(1)' } })).toBeNull();
+    expect(publishedOf({ published: { ...ok, shareUrl: undefined, url: 'https://a.test/' } })).toBeNull();
+    for (const audience of ['', '   ', 7]) expect(publishedOf({ published: { ...ok, audience } })).toBeNull();
+    for (const version of [1.5, -1, 0, 2 ** 60, '1']) expect(publishedOf({ published: { ...ok, version } })).toBeNull();
+    for (const at of [1e100, -5, Number.NaN, '1']) expect(publishedOf({ published: { ...ok, at } })).toBeNull();
+    expect(publishedOf({ published: ok })).toMatchObject({ shareUrl: 'https://a.test/', snippet: null });
+    // A snippet that does not name the share link's own site is not shown.
+    expect(publishedOf({ published: { ...ok, snippet: '<iframe src="https://evil.test/"></iframe>' } })!.snippet).toBeNull();
     expect(studioLink('a b', 'http://h')).toBe('http://h/apps/a%20b');
-    expect(embedSnippet('https://e.test/"x', 'n')).toContain('src="https://e.test/&quot;x"');
+  });
+
+  it('is a modal: Escape closes the top layer only, and Tab stays inside', async () => {
+    const onClose = vi.fn();
+    const before = document.createElement('button');
+    document.body.append(before);
+    before.focus();
+    const { unmount } = render(<ShareSheet name="Desk" slug="desk" published={null} onClose={onClose} />);
+    const dialog = screen.getByRole('dialog');
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    const first = dialog.querySelector('button')!;
+    first.focus();
+    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(document.activeElement).toBe(before);
   });
 });
 
 // ── editing in place ────────────────────────────────────────────────────────────────────────
 
 const TEMPLATE = readFileSync(join(__dirname, '../src/plugins/wicked-apps/template.html'), 'utf8');
-async function boot(spec: AppSpec): Promise<{ seen: Array<{ type: string; payload: Record<string, unknown> }> }> {
+interface Booted {
+  seen: Array<{ type: string; payload: Record<string, unknown> }>;
+  /** What the next `artifact.read` answers (another tab's version, or the person's own landing). */
+  set: (version: number, spec: AppSpec) => void;
+  /** A host event on the port. */
+  send: (type: string, payload: Record<string, unknown>) => void;
+}
+async function boot(spec: AppSpec): Promise<Booted> {
   vi.resetModules();
   const style = document.createElement('style');
   style.id = 'wk-apps-sheet';
@@ -168,12 +308,13 @@ async function boot(spec: AppSpec): Promise<{ seen: Array<{ type: string; payloa
   const ch = new MessageChannel();
   const seen: Array<{ type: string; payload: Record<string, unknown> }> = [];
   let current = spec;
+  let ver = 1;
   ch.port1.onmessage = (m) => {
     const d = m.data as { type: string; id?: string; payload: Record<string, unknown> };
     seen.push(d);
     if (d.id === undefined) return;
     const reply = (payload: unknown): void => ch.port1.postMessage({ p: 'wicked.editor', v: 1, re: d.id, ok: true, payload });
-    if (d.type === 'artifact.read') { reply({ version: 1, content: { type: 'app', spec: current } }); return; }
+    if (d.type === 'artifact.read') { reply({ version: ver, content: { type: 'app', spec: current } }); return; }
     if (d.type === 'spec.edit') {
       const next = structuredClone(current);
       const op = (d.payload['ops'] as Array<Record<string, unknown>>)[0]!;
@@ -190,7 +331,11 @@ async function boot(spec: AppSpec): Promise<{ seen: Array<{ type: string; payloa
     source: window, ports: [ch.port2],
   }));
   await vi.waitFor(() => expect(document.querySelector('.wk-palette')).not.toBeNull());
-  return { seen };
+  return {
+    seen,
+    set: (v, sp) => { ver = v; current = sp; },
+    send: (type, payload) => ch.port1.postMessage({ p: 'wicked.editor', v: 1, type, payload }),
+  };
 }
 const SPEC = (): AppSpec => ({
   schema: 'wicked.apps/v1', name: 'T', linkHosts: [], queries: [{ id: 'x', source: 's', kind: 'sql', output: [{ name: 'n', type: 'integer' }] }],
@@ -274,6 +419,51 @@ describe('Edit: a component’s own words, in place on the canvas', () => {
     expect((document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement).value).toBe('Open');
   });
 
+  it('codex r9: the person’s own version landing keeps the open field and its words; the commit goes on the newest version', async () => {
+    const b = await boot(SPEC());
+    dbl(document.querySelector('[data-component="k"] .wk-cell-title')!);
+    const field = document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement;
+    field.value = 'Open now';
+    b.set(2, SPEC()); // the earlier burst landed as v2: the same words
+    b.send('artifact.changed', { version: 2, head: 2, by: 'this-editor', kind: 'deterministic' });
+    await vi.waitFor(() => expect(b.seen.filter((m) => m.type === 'artifact.read')).toHaveLength(2));
+    await new Promise((res) => setTimeout(res, 30));
+    expect(document.querySelector('[data-testid="apps-inline"]')).toBe(field);
+    expect(field.value).toBe('Open now');
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(edits(b.seen)).toBe(1));
+    expect(b.seen.find((m) => m.type === 'spec.edit')!.payload).toMatchObject({ base: 2, ops: [{ id: 'k', prop: 'title', value: 'Open now' }] });
+  });
+
+  it('codex r9: another tab changing those words closes the field with nothing sent, and its blur sends nothing either', async () => {
+    const b = await boot(SPEC());
+    dbl(document.querySelector('[data-component="k"] .wk-cell-title')!);
+    const field = document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement;
+    field.value = 'Mine';
+    const theirs = SPEC();
+    (theirs.pages[0]!.components[0] as { title?: string }).title = 'Theirs';
+    b.set(2, theirs);
+    b.send('artifact.changed', { version: 2, head: 2, by: 'other', kind: 'deterministic' });
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="apps-inline"]')).toBeNull());
+    field.dispatchEvent(new Event('blur')); // Chromium fires blur on the removed field
+    await new Promise((res) => setTimeout(res, 40));
+    expect(edits(b.seen)).toBe(0);
+    expect(document.querySelector('[data-component="k"] .wk-cell-title')!.textContent).toBe('Theirs');
+  });
+
+  it('codex r9: two taps on a Button’s label open it, with no dblclick (Firefox and WebKit fire none for two touch taps)', async () => {
+    await boot(SPEC());
+    for (let i = 0; i < 2; i += 1) {
+      const button = document.querySelector('[data-component="go"] button[data-inline]')!;
+      button.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+      button.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }));
+    }
+    expect((document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement | null)?.value).toBe('Go');
+    // A native dblclick after the two taps opens no second field.
+    dbl(document.querySelector('[data-component="go"]')!);
+    expect(document.querySelectorAll('[data-testid="apps-inline"]')).toHaveLength(1);
+  });
+
   it('a click selects without rebuilding the canvas, so the second click of a double-click lands on the same words', async () => {
     Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { configurable: true, value: () => {} });
     await boot(SPEC());
@@ -284,5 +474,53 @@ describe('Edit: a component’s own words, in place on the canvas', () => {
     expect(document.querySelector('[data-testid="apps-properties"]')).not.toBeNull();
     expect(document.querySelector('[data-component="k"] .wk-cell-title')).toBe(title);
     expect(cell.classList.contains('is-selected')).toBe(true);
+  });
+});
+
+// ── a dashboard tile is read-only even if its frame is not honest (codex r9) ────────────────
+
+describe('a tile’s host refuses everything a compromised frame could ask', () => {
+  it('no edit, no history, no query to crew, no action, no link — with the person’s click and focus in the frame', async () => {
+    const urls = mockDaemon({}).urls;
+    const detail = crewDetail('desk', 'Desk').app as never;
+    const tile = { slug: 'desk', name: 'Desk', description: '', sample: false, sampleKey: null, detail, note: null, version: 'v3', changedAt: 1, sources: [], kpis: [], published: null };
+    const session = new AppSession(new FixedAppStore('desk', detail, 'crew'));
+    await session.load();
+    const port = tileHostPort(session, tile);
+    const edit = vi.spyOn(session, 'edit');
+    const move = vi.spyOn(session, 'move');
+    const prepare = vi.spyOn(port.data, 'prepare');
+    const container = document.createElement('div');
+    document.body.append(container);
+    const host = new EditorHost({
+      container, src: 'about:blank', editor: 'wicked-apps', version: '0.13.0', name: 'App', title: 'Preview', size: 'inline', surface: 'card',
+      grants: ['artifact.read', 'artifact.write', 'data.read', 'data.write'], theme: {}, prefs: { reducedMotion: true, techDetails: false, locale: 'en' },
+      firstParty: true, adapter: new AppAdapter(session, 'Desk'), app: port, activation: () => true, focusInFrame: () => true,
+      ui: { chips: vi.fn(), draft: vi.fn(), typed: vi.fn(), key: vi.fn(), morph: vi.fn(), status: vi.fn(), notes: vi.fn(), thread: vi.fn(), fullscreen: vi.fn(async () => false), torn: vi.fn(), log: () => {} },
+    });
+    host.mount();
+    let p: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { p = (tr?.[0] as MessagePort) ?? null; }) as never);
+    const surfaces = JSON.parse(readFileSync(join(__dirname, '../src/plugins/wicked-apps/surfaces.json'), 'utf8'));
+    window.dispatchEvent(new MessageEvent('message', { data: { p: 'wicked.editor', v: 1, type: 'plugin.ready', payload: { editor: 'wicked-apps', version: '0.13.0', protocol: [1, 2], surfaces } }, source: host.frame.contentWindow }));
+    await vi.waitFor(() => expect(p).not.toBeNull());
+    const replies: Array<{ re?: string; ok?: boolean; error?: { code: string } }> = [];
+    p!.onmessage = (m) => replies.push(m.data as never);
+    const ask = async (type: string, payload: unknown, id: string) => {
+      p!.postMessage({ p: 'wicked.editor', v: 1, type, id, payload });
+      await vi.waitFor(() => expect(replies.some((r) => r.re === id)).toBe(true), { timeout: 2_000 });
+      return replies.find((r) => r.re === id)!;
+    };
+    expect(await ask('spec.edit', { base: 3, ops: [{ op: 'component-set', id: 'by_region', prop: 'title', value: 'x' }] }, 'e')).toMatchObject({ ok: false });
+    expect(await ask('app.history', { move: 'undo', base: 3 }, 'h')).toMatchObject({ ok: false });
+    expect(await ask('data.query', { query: 'open_count', params: {} }, 'q')).toMatchObject({ ok: false });
+    expect(await ask('data.action', { action: 'assign_to_me', params: { id: 1 } }, 'a')).toMatchObject({ ok: false });
+    expect(await ask('link.open', { url: 'https://docs.example.com/' }, 'l')).toMatchObject({ ok: false });
+    expect(edit).not.toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
+    expect(urls).toStrictEqual([]);
+    expect(prepare.mock.calls.length === 0 || (await prepare.mock.results[0]!.value as { error?: string }).error === 'refused').toBe(true);
+    expect(session.head).toBe(3);
+    host.teardown('done');
   });
 });

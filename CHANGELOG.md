@@ -73,16 +73,22 @@ npm publish dates. Every version listed here exists on
     small read-only preview of its first page drawn by the runtime, its headline numbers, its version and receipt, when
     it last changed and the sources it reads. Studio lists crew's apps when crew reports the apps capability, and the
     two sample apps (marked as samples, with sample numbers) until then. Drawing a card never starts a source read: with
-    crew's apps a card shows no numbers until the app is opened. A card opens `/apps/<slug>` in Preview; its Edit link
-    opens `?mode=edit`.
+    crew's apps a card shows no numbers until the app is opened. Every app crew lists gets a card. The first 24 get a
+    preview, and a card whose details can't be read says so. A daemon that doesn't answer shows an error with Try
+    again, never the samples. A card opens `/apps/<slug>` in Preview; its Edit link opens `?mode=edit`.
   - **Inline edits:** in Edit, double-click (or double-tap) a chart or table title, a KPI label, a Text's words, or a
     Button's, Link's or Filter's label to change it in place. Enter or leaving the field keeps the change, and Escape
-    drops it. Each change is one spec op and lands one version, as every other edit does. Properties stays for the
-    rest. The header says "Changes save as you make them · Undo to go back".
-  - **Share** in the app header and on each card. If crew reports a published copy, the sheet gives its link, who can
-    open it, an embed snippet and the version it was published at, each with Copy. Until then it says plainly that
-    others need a published copy, which Publish will build. The Publish button is disabled ("Coming with Publish"),
-    and the only link offered is this studio's own address, labelled as such.
+    drops it. Each change is one spec op, and it lands in a version with the rest of its edit burst, as every other
+    edit does. The field stays open while the person's own changes land, and closes with nothing sent if another tab
+    changes those words first. Properties stays for the rest. The header says "Changes save as you make them · Undo
+    to go back".
+  - **Share** in the app header and on each card. If crew reports a published copy (`AppDetail.published`, the record
+    K6 proposed), the sheet gives its link and its embed snippet, each with Copy, plus who can open it and the version
+    published and when. Until then it says plainly that others need a published copy, which Publish will build. The
+    Publish button is disabled ("Coming with Publish"), and the only link offered is this studio's own address,
+    labelled as such.
+  - **Edits from the frame:** the 1.5 s after focus leaves an app's frame counts only from the last moment the frame
+    held both focus and the person's activation, so a click on studio's chrome after an idle frame grants it nothing.
 
 ### Changed
 - **The type and the marks (fonts-v3, the operator's pick 2026-11-02).** The text face is Wicked Sans A, an OFL cut

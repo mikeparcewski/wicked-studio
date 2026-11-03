@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiBase } from '../../api/client.js';
-import type { AppDetail } from '../../api/types.js';
+import type { AppDetail, AppsCapabilities } from '../../api/types.js';
 import { EditorHost, SPEC_EDIT_AFTER_FOCUS_MS } from '../../editors/host.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -9,7 +9,7 @@ import { appDataFor, sampleAppData, type ActionCard, type ActionOutcome, type Ap
 import { AppSession } from '../../editors/apps/appSession.js';
 import { CrewAppStore, SampleAppStore, type AppStorePort } from '../../editors/apps/appStore.js';
 import { sampleApp } from '../../editors/apps/samples.js';
-import { publishedOf } from '../../editors/apps/appsDirectory.js';
+import { isAppSlug, publishedOf } from '../../editors/apps/appsDirectory.js';
 import { ShareSheet } from '../apps/ShareSheet.js';
 
 /**
@@ -37,6 +37,9 @@ export interface AppHostProps {
   initialMode?: AppMode;
   /** The Apps route's navigation: the "Apps /" crumb goes back to the dashboard. */
   navigate?: (path: string) => void;
+  /** crew's apps capabilities, when the caller has already read health (the Apps route): ONE store decision, so a
+   *  second read failing can't turn crew's app into a sample (codex r9). Absent: this view reads health itself. */
+  caps?: { apps: AppsCapabilities | undefined };
 }
 
 interface Asking { prepared: PreparedAction; resolve: (yes: boolean) => void; at: number }
@@ -128,7 +131,7 @@ export function ActionCardView({ asking, onAnswer }: { asking: Asking; onAnswer:
   );
 }
 
-export function AppHostView({ editor, version, sha, app: slug, sample, initialMode, navigate }: AppHostProps): React.ReactElement {
+export function AppHostView({ editor, version, sha, app: slug, sample, initialMode, navigate, caps: given }: AppHostProps): React.ReactElement {
   const narrowWindow = useNarrow();
   // The runtime lays itself out by ITS frame's width (its media queries), so Edit is offered only when the frame
   // itself is wide enough, whatever the window is (codex r1: a 1000 px window leaves the frame under 640 px).
@@ -202,8 +205,16 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       setPending(0);
       setOutcome(null);
       setStatus(null);
-      const health = await api.getHealth().catch(() => null);
-      const caps = health?.capabilities?.apps;
+      if (slug !== null && !isAppSlug(slug)) { if (!cancelled) setError(`“${slug}” is not an app’s address.`); return; }
+      let caps: AppsCapabilities | undefined;
+      if (given !== undefined) caps = given.apps;
+      else {
+        try { caps = (await api.getHealth()).capabilities?.apps; } catch (e) {
+          // A named app needs crew: a daemon that did not answer is an error, never a reason to show a sample instead.
+          if (slug !== null) { if (!cancelled) setError(`The daemon did not answer, so this app could not be opened: ${e instanceof Error ? e.message : String(e)}`); return; }
+          caps = undefined;
+        }
+      }
       const picked = sampleApp(sample);
       const store: AppStorePort = slug !== null && caps !== undefined ? new CrewAppStore(slug) : new SampleAppStore(picked.slug, picked.spec);
       const session = new AppSession(store);
@@ -274,7 +285,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       sessionRef.current?.dispose();
       sessionRef.current = null;
     };
-  }, [editor, version, sha, slug, sample, framed, answer, settleLink, mountKey]);
+  }, [editor, version, sha, slug, sample, framed, answer, settleLink, mountKey, given]);
 
   // Changes the runtime was told are pending still land when the view closes (AppSession.dispose); a tab closed within
   // that second asks first, as a browser does for any unsaved change.

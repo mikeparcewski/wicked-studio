@@ -24,8 +24,9 @@
 .wk-apps-dock-count { color: var(--ink-muted); font-size: var(--text-caption); font-weight: var(--weight-regular); }
 .wk-apps-dock-hint, .wk-apps-outcome { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); }
 .wk-apps-outcome { color: var(--ink-body); }
-.wk-apps-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-height: 37px; }
-.wk-apps-chips .wk-apps-line--note { color: var(--ink-muted); }
+/* The line's placeholder is the same box as a chip (padding, border, size), so selecting a component moves nothing. */
+.wk-apps-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.wk-apps-chips .wk-apps-line--note { padding: 2px 0; border: 1px solid transparent; font-size: var(--text-xs); color: var(--ink-muted); }
 /* The card: drawn by the host from the resolved operation (§7.3). Every value is text. */
 .wk-apps-card { border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-card); overflow: hidden; }
 .wk-apps-card-head { padding: var(--space-3) var(--space-4); background: var(--accent-wash); color: var(--ink-high); font-size: var(--text-lead); font-weight: var(--weight-strong); }
@@ -100,8 +101,9 @@
 .wk-share-k { color: var(--ink-muted); }
 .wk-share-row { display: flex; flex-direction: column; gap: var(--space-1); }
 .wk-share-label { color: var(--ink-muted); font-size: var(--text-caption); }
-.wk-share-copy { display: flex; gap: var(--space-2); }
+.wk-share-copy { display: flex; align-items: flex-start; gap: var(--space-2); }
 .wk-share-field { flex: 1 1 auto; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-code); }
+.wk-share-field--multi { resize: vertical; white-space: pre-wrap; word-break: break-all; }
 .wk-share-note { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); }
 .wk-share-actions { display: flex; align-items: center; gap: var(--space-2); }
 @media (max-width: 639px) { .wk-apps-hint { display: none; } }

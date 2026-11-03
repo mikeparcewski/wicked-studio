@@ -348,18 +348,12 @@ export class EditorHost {
   private readonly onHostBlur = (): void => {
     if (!this.inFrame()) return;
     this.typingRearm();
-    this.frameFocused = true;
   };
-  /** Focus came back to the host page from this frame (a click on studio's chrome): when, for {@link justInFrame}.
-   *  The frame element's own blur is the one every engine fires (Firefox fires no host-window focus for it). */
-  private readonly onHostFocus = (): void => {
-    if (this.frameFocused && !this.inFrame()) { this.frameLeftAt = this.now(); this.frameFocused = false; }
-  };
-  private readonly onFrameFocus = (): void => { this.frameFocused = true; };
-  private readonly onFrameBlur = (): void => { this.frameLeftAt = this.now(); this.frameFocused = false; };
-  private frameFocused = false;
-  private frameLeftAt = Number.NEGATIVE_INFINITY;
-  private lastInFrameAt = Number.NEGATIVE_INFINITY;
+  /** The last moment this frame held the person's gesture (focus in it AND real activation), for {@link justInFrame}.
+   *  Only that moment starts the grace: focus merely leaving the frame does not (codex r9 P1: a frame idle until its
+   *  activation expired, then a click on studio's chrome, was a fresh grant). Read by the focus poll and at each request. */
+  private gestureAt = Number.NEGATIVE_INFINITY;
+  private noteGesture(): void { if (this.clickedNow()) this.gestureAt = this.now(); }
   private focusPoll: ReturnType<typeof setInterval> | null = null;
   private writing = false;
   private grants: Set<PermissionId>;
@@ -394,15 +388,11 @@ export class EditorHost {
   mount(): void {
     window.addEventListener('message', this.onWindow);
     window.addEventListener('blur', this.onHostBlur);
-    window.addEventListener('focus', this.onHostFocus);
-    document.addEventListener('focusin', this.onHostFocus);
-    this.frame.addEventListener('focus', this.onFrameFocus);
-    this.frame.addEventListener('blur', this.onFrameBlur);
     this.frame.addEventListener('load', this.onLoad);
-    // An app: when focus was last in this frame, read every quarter second — the one signal every engine gives
-    // (Firefox fires no event the host can time a focus leaving a frame by).
+    // An app: whether the frame holds the person's gesture, read every quarter second (Firefox fires no host-window
+    // event for a frame's focus, so polling is the one signal every engine gives).
     if (this.o.app !== undefined && this.o.app.tile === undefined) {
-      this.focusPoll = setInterval(() => { if (this.inFrame()) { this.frameFocused = true; this.lastInFrameAt = this.now(); } else if (this.frameFocused) { this.frameFocused = false; this.frameLeftAt = this.now(); } }, FOCUS_POLL_MS);
+      this.focusPoll = setInterval(() => this.noteGesture(), FOCUS_POLL_MS);
     }
     // The 3 s for plugin.ready start when the frame's document has loaded (frameLoaded): a slow daemon serving the
     // bundle is not a plugin that failed to start (orchestrator 2026-10-14: :7701 took 20-59 s to serve the deck's
@@ -760,16 +750,17 @@ export class EditorHost {
     return (this.o.activation ?? NO_ACTIVATION)() && this.inFrame();
   }
   /** A spec op (only) may also come from a gesture that just left this frame: a field typed in and then left with a
-   *  click on studio's own chrome commits on that blur, which reaches the host after focus has gone (1.5 s). */
+   *  click on studio's own chrome commits on that blur, which reaches the host after focus has gone. It is taken
+   *  within 1.5 s of the last moment the frame held focus AND activation, never from focus leaving alone. */
   private justInFrame(): boolean {
-    const left = Math.max(this.frameLeftAt, this.lastInFrameAt);
-    return (this.o.activation ?? NO_ACTIVATION)() && (this.inFrame() || this.now() - left < SPEC_EDIT_AFTER_FOCUS_MS);
+    return (this.o.activation ?? NO_ACTIVATION)() && (this.inFrame() || this.now() - this.gestureAt < SPEC_EDIT_AFTER_FOCUS_MS);
   }
 
   private async appRequest(type: 'spec.edit' | 'app.history' | 'data.query' | 'data.action' | 'link.open', p: Record<string, unknown>): Promise<unknown> {
     const app = this.o.app;
     if (app === undefined) return { error: 'unsupported', message: `${type} is available only on an app` };
     // Everything a refusal depends on is read NOW, before the first await.
+    this.noteGesture();
     const clicked = this.clickedNow();
     const editGesture = this.justInFrame();
     const framed = app.framed();
@@ -1227,10 +1218,6 @@ export class EditorHost {
     this.unsubscribeApp = undefined;
     window.removeEventListener('message', this.onWindow);
     window.removeEventListener('blur', this.onHostBlur);
-    window.removeEventListener('focus', this.onHostFocus);
-    document.removeEventListener('focusin', this.onHostFocus);
-    this.frame.removeEventListener('focus', this.onFrameFocus);
-    this.frame.removeEventListener('blur', this.onFrameBlur);
     this.frame.removeEventListener('load', this.onLoad);
     if (this.focusPoll !== null) clearInterval(this.focusPoll);
     this.focusPoll = null;
