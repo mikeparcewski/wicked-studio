@@ -422,8 +422,12 @@ describe('a typed Properties field commits while focus is in the frame', () => {
 
   it('each keystroke commits (focus still in the frame), and the field keeps its focus and text across the redraw', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const spec = base([{ id: 'note', type: 'text', text: 'Hello', box: { x: 0, y: 0, w: 6, h: 1 } }]);
-    const { seen } = await boot(spec, (type, p) => (type === 'spec.edit' ? { spec: { ...spec, pages: [{ ...spec.pages[0]!, components: [{ ...spec.pages[0]!.components[0]!, title: (p['ops'] as Array<{ value: string }>)[0]!.value }] }] }, added: [], pending: 1 } : {}), { framed: false, mode: 'edit' });
+    const kq = { id: 'k', source: 's', kind: 'sql' as const, output: [{ name: 'n', type: 'integer' as const }] };
+    const spec = base([{ id: 'note', type: 'text', text: 'Hello', box: { x: 0, y: 0, w: 6, h: 1 } }, { id: 'kpi', type: 'kpi', data: { query: 'k' }, value: 'n', box: { x: 6, y: 0, w: 3, h: 2 } }], { queries: [kq] });
+    const { seen } = await boot(spec, (type, p) => (type === 'spec.edit'
+      ? { spec: { ...spec, pages: [{ ...spec.pages[0]!, components: [{ ...spec.pages[0]!.components[0]!, title: (p['ops'] as Array<{ value: string }>)[0]!.value }, spec.pages[0]!.components[1]!] }] }, added: [], pending: 1 }
+      : type === 'data.query' ? rowsFor(kq, [[3]]) : {}), { framed: false, mode: 'edit' });
+    await vi.waitFor(() => expect(seen.filter((m) => m.type === 'data.query')).toHaveLength(1));
     // jsdom has no PointerEvent or pointer capture: mouse events of the pointer types, and a no-op capture.
     Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { configurable: true, value: () => {} });
     const note = document.querySelector('[data-component="note"]') as HTMLElement;
@@ -438,9 +442,14 @@ describe('a typed Properties field commits while focus is in the frame', () => {
     expect(seen.find((m) => m.type === 'spec.edit')!.payload).toMatchObject({ ops: [{ op: 'component-set', id: 'note', prop: 'title', value: 'Greeting' }] });
     await vi.waitFor(() => expect((document.activeElement as HTMLElement | null)?.getAttribute('data-prop')).toBe('title'));
     expect((document.activeElement as HTMLInputElement).value).toBe('Greeting');
-    // The blur that follows (focus leaving for studio's chrome) sends nothing more: it was already committed.
-    (document.activeElement as HTMLInputElement).dispatchEvent(new Event('change'));
+    // The same node (codex r3: its IME composition and native undo survive), and the change that follows on leaving
+    // sends nothing more, after a real port round trip (codex r3: no early pass).
+    expect(document.activeElement).toBe(title);
+    title.dispatchEvent(new Event('change'));
+    await new Promise((res) => setTimeout(res, 60));
     expect(seen.filter((m) => m.type === 'spec.edit')).toHaveLength(1);
+    // A title edit reads no data (codex r3: per-keystroke edits must not re-query the page): still the first read only.
+    expect(seen.filter((m) => m.type === 'data.query')).toHaveLength(1);
   });
 });
 
@@ -555,18 +564,20 @@ describe('codex r2 #6, #7, r1 #23 (stacking), #12, #13: the runtime', () => {
     expect(Number(rect(0).getAttribute('x')) + Number(rect(0).getAttribute('width'))).toBeCloseTo(Number(rect(1).getAttribute('x')), 0);
     // Row y: b (-8) runs left of a's start (zero).
     expect(Number(rect(3).getAttribute('x'))).toBeLessThan(Number(rect(2).getAttribute('x')));
-    const paths = [...document.querySelectorAll('[data-component="sa"] path.wk-area')].map((p) => p.getAttribute('d')!);
+    const paths = [...document.querySelectorAll('[data-component="sa"] path.wk-area')].map((p) => ({ d: p.getAttribute('d')!, neg: p.classList.contains('wk-area--neg') }));
     const ys = (d: string): number[] => [...d.matchAll(/[\d.]+,([\d.]+)/gu)].map((m) => Number(m[1]));
-    // Series b's band at row x starts at a's top (10) and ends at 30: its lower edge equals a's upper edge there.
-    const aUpperX = ys(paths[0]!)[0]!;
-    const bLowerX = ys(paths[1]!).at(-1)!;
-    expect(bLowerX).toBeCloseTo(aUpperX, 0);
-    // At row y, b is -8: its band lies below zero (a larger y in SVG) while a's band lies above it.
-    const aLowerY = ys(paths[0]!).at(-2)!; // a's lower edge at row y = zero
-    const bUpperY = ys(paths[1]!)[1]!; // b's upper edge at row y = the negative stack top = zero
-    const bLowerY = ys(paths[1]!).at(-2)!;
-    expect(bUpperY).toBeCloseTo(aLowerY, 0);
-    expect(bLowerY).toBeGreaterThan(aLowerY);
+    // a's band, b's positive band, b's negative band (diverging stacks: none overlaps another).
+    expect(paths.map((p) => p.neg)).toStrictEqual([false, false, true]);
+    const [a, bPos, bNeg] = paths.map((p) => ys(p.d)) as [number[], number[], number[]];
+    // Path order per band: upper edge (row x, row y), then lower edge reversed (row y, row x).
+    // Row x: b's positive band starts where a's ends (10) and a's band ends at zero.
+    expect(bPos[3]!).toBeCloseTo(a[0]!, 0);
+    // Row y: b (-8) is entirely below zero: its negative band's upper edge is zero, its lower edge below; a's band
+    // (0..10) is above zero and untouched by b.
+    const zeroY = a[2]!; // a's lower edge at row y
+    expect(bNeg[1]!).toBeCloseTo(zeroY, 0);
+    expect(bNeg[2]!).toBeGreaterThan(zeroY);
+    expect(bPos[1]!).toBeCloseTo(bPos[2]!, 0); // b's positive part at row y is empty
   });
 
   it('#12 spec ids named like Object.prototype members are plain keys (filters, forms, sample rows); nothing inherited changes', async () => {
@@ -626,5 +637,89 @@ describe('codex r2 #6, #7, r1 #23 (stacking), #12, #13: the runtime', () => {
     await vi.waitFor(() => expect(document.querySelector('[data-component="a"] .wk-kpi-value')?.textContent).toBe('2'));
     releaseSlow();
     await vi.waitFor(() => expect(document.querySelector('[data-component="b"] .wk-kpi-value')?.textContent).toBe('42'));
+  });
+});
+
+describe('codex r3: Properties drafts, composition, numbers; areas across zero', () => {
+  beforeEach(() => { document.body.innerHTML = ''; });
+  const select = async (id: string): Promise<void> => {
+    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { configurable: true, value: () => {} });
+    const cell = document.querySelector(`[data-component="${id}"]`) as HTMLElement;
+    cell.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    cell.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }));
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="apps-properties"]')).not.toBeNull());
+  };
+  const echo = (spec: AppSpec) => (type: string, p: Record<string, unknown>) => {
+    if (type !== 'spec.edit') return {};
+    const next = structuredClone(spec);
+    const c = next.pages[0]!.components[0]! as unknown as Record<string, unknown>;
+    for (const op of p['ops'] as Array<Record<string, unknown>>) {
+      if (op['op'] === 'component-set') c[op['prop'] as string] = op['value'];
+      if (op['op'] === 'component-resize') c['box'] = { ...(c['box'] as object), w: op['w'], h: op['h'] };
+    }
+    return { spec: next, added: [], pending: 1 };
+  };
+
+  it('#1 another version read while a field is focused shows that version’s value, never the old draft', async () => {
+    const spec = base([{ id: 'note', type: 'text', title: 'Mine', text: 'Hello', box: { x: 0, y: 0, w: 6, h: 1 } }]);
+    const { host, setSpec } = await boot(spec, echo(spec), { framed: false, mode: 'edit' });
+    await select('note');
+    const title = document.querySelector('[data-prop="title"]') as HTMLInputElement;
+    title.focus();
+    const elsewhere = structuredClone(spec);
+    (elsewhere.pages[0]!.components[0] as { title: string }).title = 'Elsewhere';
+    setSpec(elsewhere);
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'artifact.changed', payload: { version: 2 } });
+    await vi.waitFor(() => expect((document.querySelector('[data-prop="title"]') as HTMLInputElement).value).toBe('Elsewhere'));
+  });
+
+  it('#2 a composition commits once, at its end, into the same field node', async () => {
+    const spec = base([{ id: 'note', type: 'text', title: 'T', text: 'Hello', box: { x: 0, y: 0, w: 6, h: 1 } }]);
+    const { seen } = await boot(spec, echo(spec), { framed: false, mode: 'edit' });
+    await select('note');
+    const title = document.querySelector('[data-prop="title"]') as HTMLInputElement;
+    title.focus();
+    title.value = 'に';
+    title.dispatchEvent(new InputEvent('input', { isComposing: true }));
+    title.value = '日本';
+    title.dispatchEvent(new InputEvent('input', { isComposing: true }));
+    await new Promise((res) => setTimeout(res, 60));
+    expect(seen.filter((m) => m.type === 'spec.edit')).toHaveLength(0);
+    title.dispatchEvent(new Event('compositionend'));
+    await vi.waitFor(() => expect(seen.filter((m) => m.type === 'spec.edit')).toHaveLength(1));
+    expect(seen.find((m) => m.type === 'spec.edit')!.payload).toMatchObject({ ops: [{ prop: 'title', value: '日本' }] });
+    await new Promise((res) => setTimeout(res, 60));
+    expect(document.querySelector('[data-prop="title"]')).toBe(title);
+  });
+
+  it('#5 a number the host clamps shows the saved value once the field is left', async () => {
+    const spec = base([{ id: 'note', type: 'text', text: 'Hello', box: { x: 0, y: 0, w: 6, h: 1 } }]);
+    await boot(spec, (type, p) => {
+      if (type !== 'spec.edit') return {};
+      const next = structuredClone(spec);
+      const op = (p['ops'] as Array<Record<string, number>>)[0]!;
+      next.pages[0]!.components[0]!.box = { x: 0, y: 0, w: op['w']!, h: Math.min(50, op['h']!) };
+      return { spec: next, added: [], pending: 1 };
+    }, { framed: false, mode: 'edit' });
+    await select('note');
+    const h = document.querySelector('[data-prop="box-h"]') as HTMLInputElement;
+    h.focus();
+    h.value = '100';
+    h.dispatchEvent(new Event('input'));
+    await new Promise((res) => setTimeout(res, 60));
+    h.dispatchEvent(new Event('blur'));
+    expect(h.value).toBe('50');
+  });
+
+  it('#4 an unstacked area fills between its line and zero, so it crosses zero where the line does', async () => {
+    const q = { id: 'r', source: 's', kind: 'sql' as const, output: [{ name: 'c', type: 'string' as const }, { name: 'a', type: 'integer' as const }] };
+    const spec = base([{ id: 'ar', type: 'chart', chart: 'area', data: { query: 'r' }, x: 'c', series: [{ column: 'a' }], box: { x: 0, y: 0, w: 6, h: 4 } }], { queries: [q] });
+    await boot(spec, () => rowsFor(q, [['x', 10], ['y', -10]]));
+    await vi.waitFor(() => expect(document.querySelector('[data-component="ar"] path.wk-area')).not.toBeNull());
+    const ys = [...document.querySelector('[data-component="ar"] path.wk-area')!.getAttribute('d')!.matchAll(/[\d.]+,([\d.]+)/gu)].map((m) => Number(m[1]));
+    // upper edge = the values (10, -10); lower edge = zero at both rows.
+    expect(ys[2]).toBeCloseTo(ys[3]!, 5);
+    expect(ys[0]).toBeLessThan(ys[2]!);
+    expect(ys[1]).toBeGreaterThan(ys[2]!);
   });
 });
