@@ -103,6 +103,17 @@ const slug = (n: string) => n.toLowerCase();
 
 const AGENTS = ['Claude Code', 'Codex', 'GitHub Copilot', 'OpenCode', 'Pi'];
 
+// The page's spine (the same thread and beat track as wicked-crew's): the hero's job, then the frames
+// that follow it. What's new, the platform map and Get it are not beats.
+const BEATS = [
+  { id: 'top', name: 'The job' },
+  { id: 'why', name: 'Benefits' },
+  { id: 'desk', name: 'Desk' },
+  { id: 'review', name: 'Review' },
+  { id: 'steer', name: 'Steering' },
+  { id: 'reach', name: 'Agents' },
+];
+
 // Three benefits, right under the demo (studio 0.14 / crew 0.16.12).
 const BENEFITS = [
   { h: 'Start with a chat, not a form.', p: 'Describe what you want; the chat proposes a plan, and nothing starts until you confirm it.' },
@@ -110,19 +121,20 @@ const BENEFITS = [
   { h: 'It learns how you work.', p: 'Learn turns your team docs, your best repos and your writing into suggested rules and memories, and sets the tone the lead agent takes with you. You choose which suggestions become active.' },
 ];
 
-// What's new in 0.14, one line each.
+// What's new in 0.14, one line each. `tab` is the item's short name on its tab (the row stays one line at
+// every width); the panel's heading carries the full name and labels the panel.
 const NEW = [
-  { name: 'Voice', line: 'A mic beside Send, Start and Ask. With whisper.cpp installed, speech becomes text on your machine (the model downloads only when you ask), and the audio is never stored.',
+  { name: 'Voice', tab: 'Voice', line: 'A mic beside Send, Start and Ask. With whisper.cpp installed, speech becomes text on your machine (the model downloads only when you ask), and the audio is never stored.',
     more: 'Press the mic and say “show me this job”, then “tell it to keep the old URL working”. Nothing is sent to a job until you confirm it on screen.' },
-  { name: 'Guided asks', line: 'A job’s questions and decisions share one guided card.' },
-  { name: 'Learn', line: 'Style, rules, personality and brand, in one place.' },
-  { name: 'Page chat', line: 'The main pages, including Understand, Report, Evaluate, Steering, Memory, Learn and Nerve Center, each have a chat over their own data.' },
-  { name: 'Requirements with real coverage', line: 'The real-requirements share against your minimum; placeholders never count, and an unconfirmed item shows its reason.' },
+  { name: 'Guided asks', tab: 'Guided asks', line: 'A job’s questions and decisions share one guided card.' },
+  { name: 'Learn', tab: 'Learn', line: 'Style, rules, personality and brand, in one place.' },
+  { name: 'Page chat', tab: 'Page chat', line: 'The main pages, including Understand, Report, Evaluate, Steering, Memory, Learn and Nerve Center, each have a chat over their own data.' },
+  { name: 'Requirements with real coverage', tab: 'Requirements', line: 'The real-requirements share against your minimum; placeholders never count, and an unconfirmed item shows its reason.' },
   // DECISIONS N3: lead with the benefit, then the on-screen name once.
-  { name: 'Power mode on the job page', lead: 'When you launch a preset or a plan on a repository, the code-writing step runs as one agent’s checkpointed turns, and failed checks go back for rework or wait for your judgment (power mode, on by default for those launches).',
+  { name: 'Power mode on the job page', tab: 'Power mode', lead: 'When you launch a preset or a plan on a repository, the code-writing step runs as one agent’s checkpointed turns, and failed checks go back for rework or wait for your judgment (power mode, on by default for those launches).',
     line: 'Rigor, checkpoints, and a pause (at a turn boundary) when the job detects a qualifying jump in complexity or signs that the agent is struggling.' },
-  { name: 'Wicked Dark, Wicked Light and Ambient', line: 'Ambient adds a quiet line and tint that follow the state of your work; text never changes colour.' },
-  { name: 'Plugins as cards', line: 'See where each plugin appears, its preview when it has one, and, in its details, what it was granted.' },
+  { name: 'Wicked Dark, Wicked Light and Ambient', tab: 'Themes', line: 'Ambient adds a quiet line and tint that follow the state of your work; text never changes colour.' },
+  { name: 'Plugins as cards', tab: 'Plugins', line: 'See where each plugin appears, its preview when it has one, and, in its details, what it was granted.' },
 ];
 
 // The example search in the projects card: one project, three repos.
@@ -143,6 +155,19 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
 
 <Base title={title} description={description}>
   <Topbar pkg="wicked-studio" repo={repo} />
+
+  {/* The spine, at 1024px wide and up: the job's beats as one thread under the topbar, filling as each
+      beat arrives (decoration; the beat track says it in words). */}
+  <div class="beat-thread" data-beat-thread aria-hidden="true">{BEATS.map((b) => <i data-beat-thread-seg={b.id}><b></b></i>)}</div>
+
+  {/* The spine: the job's beats, in the right gutter (1400px wide and up, where the gutter holds it). */}
+  <nav class="beats" data-beats aria-label="The job, beat by beat">
+    <ol>
+      {BEATS.map((b, i) => (
+        <li><a href={`#${b.id}`} data-beat-link={b.id}><span class="beats-l">{b.name}</span><span class="beats-dot" aria-hidden="true"></span><span class="sr-only">{`, beat ${i + 1} of ${BEATS.length}`}</span></a></li>
+      ))}
+    </ol>
+  </nav>
 
   {/* ── 1. Hook + the working demo ───────────────────────────────────────── */}
   <section class="hero frame snap-section" id="top" aria-labelledby="hero-h">
@@ -633,17 +658,17 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the tour of what is new"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
       </div>
       <div class="news" data-tour data-tour-ms="4500">
-        <div class="news-tabs" role="tablist" aria-label="What is new in 0.14">
+        <div class="news-tabs" role="tablist" aria-label="What is new in 0.14" data-news-row>
           {NEW.map((n, k) => (
-            <button type="button" role="tab" class={`news-tab${k === 0 ? ' is-on' : ''}`} id={`new-tab-${k}`} aria-controls={`new-panel-${k}`} aria-selected={k === 0 ? 'true' : 'false'} tabindex={k === 0 ? '0' : '-1'}>{n.name}</button>
+            <button type="button" role="tab" class={`news-tab${k === 0 ? ' is-on' : ''}`} id={`new-tab-${k}`} aria-controls={`new-panel-${k}`} aria-selected={k === 0 ? 'true' : 'false'} tabindex={k === 0 ? '0' : '-1'}>{n.tab}</button>
           ))}
         </div>
         <div class="news-stage">
           {NEW.map((n, k) => (
-            <div class={`news-panel ex-panel${k === 0 ? ' is-on' : ''}`} role="tabpanel" id={`new-panel-${k}`} aria-labelledby={`new-tab-${k}`}>
+            <div class={`news-panel ex-panel${k === 0 ? ' is-on' : ''}`} role="tabpanel" id={`new-panel-${k}`} aria-labelledby={`new-h3-${k}`}>
               <div class="news-copy">
                 <span class="news-n" aria-hidden="true">{String(k + 1).padStart(2, '0')} / 08</span>
-                <h3>{n.name}</h3>
+                <h3 id={`new-h3-${k}`}>{n.name}</h3>
                 {n.lead && <p>{n.lead}</p>}
                 <p class={n.lead ? 'news-sub' : undefined}>{n.line}</p>
                 {n.more && <p class="news-sub">{n.more}</p>}
@@ -776,5 +801,6 @@ npx serve dist</code></pre>
   <script>
     import '../scripts/demo.js';
     import '../scripts/page.js';
+    import '../scripts/beats.js';
   </script>
 </Base>
