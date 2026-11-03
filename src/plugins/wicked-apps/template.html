@@ -16,6 +16,8 @@
     --s0: #4c9be8; --s1: #a78bfa; --s2: #f59e0b; --s3: #34d399; --s4: #f87171; --s5: #60a5fa;
     --s6: #f472b6; --s7: #a3e635; --s8: #fb923c; --s9: #22d3ee; --s10: #c084fc; --s11: #94a3b8;
     --row: 44px; --gap: 12px; --radius: 10px;
+    /* The app's own accent (theme.accent, set through the CSSOM) over the host's. */
+    --ui-accent: var(--app-accent, var(--accent));
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -30,7 +32,7 @@
   .wk-pages { display: flex; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--border); }
   .wk-page { font: inherit; font-size: 14px; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--ink-muted); cursor: pointer; }
   .wk-page.is-on { color: var(--ink-high); border-bottom-color: var(--ink-high); font-weight: 600; }
-  .wk-page:focus-visible, .wk-btn:focus-visible, .wk-tile:focus-visible, .wk-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .wk-page:focus-visible, .wk-btn:focus-visible, .wk-tile:focus-visible, .wk-link:focus-visible, .wk-cell:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
   .wk-grid { position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: var(--row); gap: var(--gap); }
   .wk-cell { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
     background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
@@ -38,7 +40,7 @@
   .wk-cell-title { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-body); }
   .wk-cell-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
   .wk-cell.is-editable { cursor: grab; }
-  .wk-cell.is-editable:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+  .wk-cell.is-editable:hover { border-color: color-mix(in srgb, var(--ui-accent) 55%, var(--border)); }
   .wk-cell.is-dragging { cursor: grabbing; opacity: .85; z-index: 3; }
   .wk-cell.is-selected { border: 2px solid var(--s0); padding: 9px 13px; z-index: 2; }
   .wk-tag { position: absolute; right: 6px; top: 4px; display: none; font-size: 11px; padding: 1px 6px; border-radius: 4px;
@@ -79,7 +81,7 @@
   .wk-form { display: flex; flex-direction: column; gap: 8px; }
   .wk-field { display: flex; flex-direction: column; gap: 3px; }
   .wk-form-foot { display: flex; align-items: center; gap: 10px; }
-  .wk-link { font: inherit; padding: 0; border: 0; background: none; color: var(--accent); text-decoration: underline; cursor: pointer; }
+  .wk-link { font: inherit; padding: 0; border: 0; background: none; color: var(--ui-accent); text-decoration: underline; cursor: pointer; }
   .wk-image { max-width: 100%; max-height: 100%; object-fit: contain; }
   .wk-chart { display: block; width: 100%; height: auto; max-height: 100%; overflow: visible; }
   .wk-chart text { font: 11px var(--font-sans); }

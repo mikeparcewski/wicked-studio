@@ -447,7 +447,7 @@ export class EditorHost {
     const v3 = observes ? { observe: { runId: this.o.events!.runId, topics: [...this.o.events!.topics], ...(sc !== undefined ? { scope: { phase: sc.phase, label: sc.label, ords: [...sc.ords] } } : {}), ...(this.o.events?.panel !== undefined ? { panel: { slot: this.o.events.panel.slot, id: this.o.events.panel.id } } : {}) } } : {};
     this.frame.contentWindow?.postMessage(event('host.hello', {
       protocol: this.protocol, ...v2, ...v3,
-      ...(this.o.app !== undefined ? { app: { framed: this.o.app.framed(), mode: this.o.app.mode(), viewer: this.o.app.viewer() } } : {}),
+      ...(this.o.app !== undefined ? { app: { framed: this.o.app.framed(), mode: this.o.app.mode(), viewer: this.o.app.viewer(), url: { ...(this.o.app.url?.() ?? {}) } } } : {}),
       artifact: a, size: this.o.size, grants: [...this.grants],
       theme: this.o.theme, artifactTheme: null, prefs: this.o.prefs,
       limits: { messageBytes: LIMITS.messageBytes, writeOps: LIMITS.writeOps, writeBytes: LIMITS.writeBytes },
@@ -737,14 +737,23 @@ export class EditorHost {
     const clicked = this.clickedNow();
     const framed = app.framed();
     const mode = app.mode();
+    // Every change the runtime asks for — a spec op, an undo or a redo, an action — is the person's: it needs their
+    // click or key in THIS frame right now, and a framed host changes nothing at all (§7.1, S8).
+    if (framed && type !== 'data.query' && type !== 'link.open') {
+      return { error: 'refused', message: type === 'data.action' ? 'Open to make changes: actions never run inside a frame' : 'Open to make changes: an app never changes inside a frame' };
+    }
     switch (type) {
       case 'spec.edit': {
         if (mode !== 'edit') return { error: 'refused', message: 'the app changes in Edit; this is Preview' };
+        if (!clicked) return { error: 'refused', message: 'the app changes only from your own gesture in it' };
         const r = app.session.edit(p['base'] as number, p['ops'] as unknown[]);
         if (!r.ok) return { error: r.code, message: r.message, ...(r.head !== undefined ? { head: r.head } : {}) };
         return { spec: r.spec, added: r.added, pending: r.pending };
       }
       case 'app.history': {
+        // An undo or a redo moves crew's accepted history: Edit only, and only from the person's own key in the frame.
+        if (mode !== 'edit') return { error: 'refused', message: 'undo and redo are in Edit; this is Preview' };
+        if (!clicked) return { error: 'refused', message: 'undo and redo only from your own key in the app' };
         const r = await app.session.move(p['move'] as 'undo' | 'redo', p['base'] as number);
         if (!r.ok) return { error: r.code === 'head_moved' ? 'head_moved' : 'refused', message: r.message, ...(r.head !== undefined ? { head: r.head } : {}) };
         return { version: r.version };
@@ -761,8 +770,7 @@ export class EditorHost {
         return 'error' in r ? { error: r.error, message: r.message } : r;
       }
       case 'data.action': {
-        // §7.1: a framed host refuses here, whatever the runtime believes; then Preview only, then the person's click.
-        if (framed) return { error: 'refused', message: 'Open to make changes: actions never run inside a frame' };
+        // §7.1: a framed host refused above, whatever the runtime believes; then Preview only, then the person's click.
         if (mode !== 'preview') return { error: 'refused', message: 'Switch to Preview to run an action: nothing writes to a source in Edit' };
         if (!clicked) return { error: 'refused', message: 'an action runs only from your click in the app' };
         if (this.asking) return { error: 'rate_limited', message: 'another question is waiting for you' };
@@ -779,7 +787,9 @@ export class EditorHost {
           if (this.torn) return { state: 'cancelled' };
           // §7.3: the card is drawn by the HOST, outside the frame; nothing runs without the person's Run there.
           const yes = await app.confirm(prepared);
-          if (!yes || this.torn) return { state: 'cancelled' };
+          // What allowed the question must still hold when the answer comes: still Preview, still not framed, the card
+          // not expired. Otherwise nothing runs (the person may have switched to Edit with the card open).
+          if (!yes || this.torn || app.mode() !== 'preview' || app.framed() || Date.now() >= prepared.expiresAt) return { state: 'cancelled' };
           const outcome = await app.data.run(a.id, prepared.record);
           app.outcome?.(outcome, prepared.card);
           // Any outcome invalidates what the app shows (§7.2 "Cache and coalescing"): the runtime re-reads.
@@ -1220,6 +1230,6 @@ export function linkOf(href: string, spec: AppSpec | null): string {
   if (u.protocol !== 'https:') return `!only https links open (this is ${u.protocol.replace(/:$/u, '') || 'none'})`;
   if (u.username !== '' || u.password !== '' || u.port !== '') return '!a link with a sign-in or a port does not open';
   const host = u.hostname.toLowerCase();
-  if (spec === null || !spec.linkHosts.includes(host)) return `!${host} is not one of the hosts this app lists`;
+  if (spec === null || !spec.linkHosts.some((h) => typeof h === 'string' && h.toLowerCase() === host)) return `!${host} is not one of the hosts this app lists`;
   return u.href;
 }

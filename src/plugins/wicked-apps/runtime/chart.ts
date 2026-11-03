@@ -46,7 +46,7 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   const at = (name: string): number => data.columns.findIndex((col) => col.name === name);
   const xi = at(c.x);
   const series = c.series.slice(0, c.chart === 'pie' ? 1 : 12).map((s) => ({ label: lineOf(s.label ?? s.column, 60), i: at(s.column) })).filter((s) => s.i >= 0);
-  const rows = data.rows.slice(0, 500);
+  const rows = data.rows.slice(0, 500); // CHART_ROWS: the caller says when an answer was longer
   if (xi < 0 || series.length === 0 || rows.length === 0) {
     const p = document.createElement('p');
     p.className = 'wk-empty';
@@ -56,18 +56,52 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   }
   const cats = rows.map((r) => cellText(r[xi], undefined, locale));
   if (c.chart === 'bar') {
-    const s = series[0]!;
-    const max = Math.max(1, ...rows.map((r) => num(r[s.i])));
-    const rowH = 26;
-    const svg = svgEl('svg', { viewBox: `0 0 400 ${rows.length * rowH + 4}`, role: 'img', 'aria-label': lineOf(c.title ?? 'bar chart', 120) }, 'wk-chart wk-chart--bar');
+    // Horizontal bars, one per series in each category (or one segment each, `stacked`), on a signed axis: a negative
+    // value runs left of zero. Labels and values are text; geometry is SVG attributes.
+    const stacked = c.stacked === true && series.length > 1;
+    const vals = rows.map((r) => series.map((s) => num(r[s.i])));
+    let lo = 0;
+    let hi = 0;
+    for (const v of vals) {
+      if (stacked) {
+        hi = Math.max(hi, v.filter((x) => x > 0).reduce((a, b) => a + b, 0));
+        lo = Math.min(lo, v.filter((x) => x < 0).reduce((a, b) => a + b, 0));
+      } else for (const x of v) { hi = Math.max(hi, x); lo = Math.min(lo, x); }
+    }
+    if (hi === lo) hi = lo + 1;
+    const X0 = 130;
+    const W = series.length > 1 ? 250 : 220;
+    const sx = (v: number): number => X0 + ((v - lo) / (hi - lo)) * W;
+    const zero = sx(0);
+    const groupH = stacked || series.length === 1 ? 26 : Math.max(26, series.length * 10 + 10);
+    const svg = svgEl('svg', { viewBox: `0 0 400 ${rows.length * groupH + 4}`, role: 'img', 'aria-label': lineOf(c.title ?? 'bar chart', 120) }, 'wk-chart wk-chart--bar');
+    if (lo < 0) svg.append(svgEl('line', { x1: r1(zero), x2: r1(zero), y1: 0, y2: rows.length * groupH + 4 }, 'wk-grid-line'));
     rows.forEach((r, i) => {
-      const y = i * rowH + 2;
-      const v = num(r[s.i]);
-      svg.append(svgText(0, y + 16, cats[i]!.slice(0, 22), 'wk-axis'));
-      svg.append(svgEl('rect', { x: 130, y: y + 4, width: r1(Math.max(1, (v / max) * 220)), height: rowH - 10, rx: 2 }, 'wk-series-0'));
-      svg.append(svgText(r1(130 + Math.max(1, (v / max) * 220) + 6), y + 16, cellText(r[s.i], undefined, locale), 'wk-value'));
+      const y = i * groupH + 2;
+      svg.append(svgText(0, r1(y + groupH / 2 + 4), cats[i]!.slice(0, 22), 'wk-axis'));
+      if (stacked) {
+        let pos = 0;
+        let neg = 0;
+        series.forEach((_, k) => {
+          const v = vals[i]![k]!;
+          const from = v >= 0 ? pos : neg + v;
+          const to = v >= 0 ? pos + v : neg;
+          if (v >= 0) pos += v; else neg += v;
+          svg.append(svgEl('rect', { x: r1(sx(from)), y: y + 4, width: r1(Math.max(1, sx(to) - sx(from))), height: groupH - 10 }, `wk-series-${k % 12}`));
+        });
+        return;
+      }
+      const bh = (groupH - 8) / series.length;
+      series.forEach((s, k) => {
+        const v = vals[i]![k]!;
+        const x = Math.min(sx(v), zero);
+        const w = Math.max(1, Math.abs(sx(v) - zero));
+        svg.append(svgEl('rect', { x: r1(x), y: r1(y + 4 + k * bh), width: r1(w), height: r1(Math.max(2, bh - 2)), rx: 2 }, `wk-series-${k % 12}`));
+        if (series.length === 1) svg.append(svgText(r1(v < 0 ? x - 6 : x + w + 6), r1(y + groupH / 2 + 4), cellText(r[s.i], undefined, locale), 'wk-value', v < 0 ? 'end' : 'start'));
+      });
     });
     root.append(svg);
+    if (series.length > 1) legend(root, series.map((s) => s.label));
     return;
   }
   if (c.chart === 'pie') {
@@ -93,7 +127,10 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   const H = 220;
   const L = 36;
   const B = 24;
-  const values = series.flatMap((s) => rows.map((r) => num(r[s.i])));
+  // A stacked area draws each series on top of the ones before it (cumulative); a line never stacks.
+  const stackArea = c.chart === 'area' && c.stacked === true && series.length > 1;
+  const level = (r: AppCell[], k: number): number => (stackArea ? series.slice(0, k + 1).reduce((t, s) => t + num(r[s.i]), 0) : num(r[series[k]!.i]));
+  const values = series.flatMap((_, k) => rows.map((r) => level(r, k)));
   const max = Math.max(1, ...values);
   const min = Math.min(0, ...values);
   const sx = (i: number): number => L + (rows.length === 1 ? 0 : (i / (rows.length - 1)) * (W - L - 8));
@@ -106,8 +143,8 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   }
   const ticks = rows.length <= 4 ? rows.map((_, i) => i) : [0, Math.floor((rows.length - 1) / 3), Math.floor(((rows.length - 1) * 2) / 3), rows.length - 1];
   for (const i of ticks) svg.append(svgText(r1(sx(i)), H - 6, cats[i]!.slice(0, 14), 'wk-axis', i === 0 ? 'start' : i === rows.length - 1 ? 'end' : 'middle'));
-  series.forEach((s, k) => {
-    const pts = rows.map((r, i) => `${r1(sx(i))},${r1(sy(num(r[s.i])))}`);
+  series.forEach((_, k) => {
+    const pts = rows.map((r, i) => `${r1(sx(i))},${r1(sy(level(r, k)))}`);
     if (c.chart === 'area') svg.append(svgEl('path', { d: `M ${r1(sx(0))},${r1(sy(min))} L ${pts.join(' L ')} L ${r1(sx(rows.length - 1))},${r1(sy(min))} Z` }, `wk-area wk-series-${k}`));
     svg.append(svgEl('polyline', { points: pts.join(' '), fill: 'none' }, `wk-stroke wk-series-${k}`));
   });

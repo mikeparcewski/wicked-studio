@@ -15,7 +15,8 @@ with its CAS and one undo pointer, and the query / prepare / run routes), at 144
   6. THE CARD: Assign to me in Preview → the host draws the card outside the frame (operation, key, statement) and the
      fixture saw ONE prepare and NO run; Run is armed after a moment; Run → exactly one run, and the table re-reads.
      Cancel runs nothing.
-  7. ONE VERSION PER DRAG: in Edit, a mouse drag of 25 moves lands exactly one POST /edits (one version).
+  7. ONE VERSION PER BURST: in Edit, a drag (25 pointer moves, one op at its end) and a resize of the same component
+     within the second land exactly one POST /edits (one version); the composer chip is the host's words for it.
   8. TWO TABS: undo in tab A, then undo in tab B from its stale version → B is told and re-reads; redo in B; A reads
      again on focus: both tabs show the same version, receipt and Undo / Redo state as the fixture's pointer.
   9. FRAMED: studio inside a same-origin page (which `frame-ancestors 'self'` allows) offers no action ("Open to make
@@ -205,7 +206,7 @@ def main() -> None:
         prepared, ran = count(origin, "POST", "/prepare"), count(origin, "POST", "/run")
         shot(page, "2-card")
         check("card_before_run", card["operation"] == "UPDATE support.tickets" and "id = 4824" in card["key"] and card["request"].startswith("UPDATE ONLY")
-              and prepared == 1 and ran == 0, card=card, prepared=prepared, ran=ran, armed_at_first=armed_at_first)
+              and prepared == 1 and ran == 0 and armed_at_first == "false", card=card, prepared=prepared, ran=ran, armed_at_first=armed_at_first)
         page.wait_for_selector('[data-testid="apps-card-run"][data-armed="true"]')
         page.click('[data-testid="apps-card-run"]')
         page.wait_for_selector('[data-testid="apps-outcome"]')
@@ -226,16 +227,41 @@ def main() -> None:
         frame.wait_for_selector('[data-testid="apps-notice"]:has-text("Ping: Not run")')
         check("api_card", api_card["operation"] == "POST /ping" and any("from the app" in r and "fixed by the app" in r for r in api_card["rows"])
               and api_card["request"].startswith("POST https://ops.example.com/ping") and count(origin, "POST", "/run") == 1, card=api_card)
+        # A card that expires runs nothing; a card left open when the person switches to Edit runs nothing.
+        post_json(f"{origin}/__fixture/apps-caps", {"recordMs": 1500})
+        frame.locator(".wk-table tbody tr", has_text="javascript:").locator("button", has_text="Assign to me").click()
+        page.wait_for_selector('[data-testid="apps-card"]')
+        page.wait_for_selector('[data-testid="apps-card"]', state="detached", timeout=8_000)
+        post_json(f"{origin}/__fixture/apps-caps", {"recordMs": 120000})
+        frame.locator(".wk-table tbody tr", has_text="javascript:").locator("button", has_text="Assign to me").click()
+        page.wait_for_selector('[data-testid="apps-card"]')
+        page.click('[data-testid="apps-mode-edit"]')
+        page.wait_for_selector('[data-testid="apps-card"]', state="detached", timeout=5_000)
+        page.click('[data-testid="apps-mode-preview"]')
+        check("card_expiry_and_edit_cancel", count(origin, "POST", "/run") == 1 and count(origin, "POST", "/prepare") == 5, runs=count(origin, "POST", "/run"), prepares=count(origin, "POST", "/prepare"))
 
-        # 7. one version per drag
+        # 7. one version per edit burst: a drag (one op at pointerup) and a Properties change within the second land ONE
+        # version; the chip is the host's words for the selected component.
         page.click('[data-testid="apps-mode-edit"]')
         frame.wait_for_selector(".wk-palette")
         edits0 = count(origin, "POST", "/edits")
+        frame.click('[data-component="open_kpi"] .wk-kpi-value')
+        frame.wait_for_selector('[data-testid="apps-properties"]')
+        page.wait_for_selector('[data-testid="apps-chip"]')
+        chip = page.text_content('[data-testid="apps-chip"]')
         box = frame.locator('[data-component="open_kpi"]').bounding_box()
         page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
         page.mouse.down()
         page.mouse.move(box["x"] + box["width"] / 2 + 200, box["y"] + box["height"] / 2 + 60, steps=25)
         style_mid = no_style(frame)
+        page.mouse.up()
+        # The second gesture of the same burst: drag the selected component's corner (well inside the 1 s window).
+        frame.wait_for_function("() => { const c = document.querySelector('[data-component=open_kpi]'); return !!c && c.classList.contains('is-selected'); }")
+        page.wait_for_timeout(150)
+        hb = frame.locator('[data-component="open_kpi"] .wk-handle').bounding_box()
+        page.mouse.move(hb["x"] + hb["width"] / 2, hb["y"] + hb["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(hb["x"] + 70, hb["y"] + 70, steps=8)
         page.mouse.up()
         page.wait_for_timeout(2_200)
         edits = [c for c in calls(origin) if c["method"] == "POST" and c["path"].endswith("/edits")][edits0:]
@@ -243,8 +269,8 @@ def main() -> None:
         shot(page, "3-edit")
         moved = edits[0]["body"]["ops"][0]["spec"]["pages"][0]["components"] if edits else []
         kpi = next((c for c in moved if c["id"] == "open_kpi"), {})
-        check("drag_one_version", len(edits) == 1 and kpi.get("box", {}).get("x", 0) > 0 and style_mid == 0 and no_style(frame) == 0,
-              edits=len(edits), kpi_box=kpi.get("box"), style_during_drag=style_mid)
+        check("burst_one_version", len(edits) == 1 and kpi.get("box", {}).get("x", 0) > 0 and (kpi.get("box", {}).get("h", 2) > 2 or kpi.get("box", {}).get("w", 3) > 3) and style_mid == 0 and no_style(frame) == 0
+              and chip == "about: KPI “Open” (Main, v1)", edits=len(edits), kpi_box=kpi.get("box"), style_during_drag=style_mid, chip=chip)
 
         # 8. two tabs
         page_b = ctx.new_page()
@@ -265,8 +291,10 @@ def main() -> None:
         page.wait_for_selector('[data-testid="apps-version"]:has-text("v4")')
         state = lambda pg: (pg.text_content('[data-testid="apps-version"]'), pg.is_disabled('[data-testid="apps-undo"]'), pg.is_disabled('[data-testid="apps-redo"]'))
         fixture_app = get_json(f"{origin}/api/v1/apps/fixture-app")["app"]
-        check("two_tabs_agree", state(page) == state(page_b) and fixture_app["head"]["version"] == 4 and fixture_app["history"]["canRedo"] is False,
-              a=state(page), b=state(page_b), b_told=b_status, undo_posts=[c["body"] for c in stale], pointer=fixture_app["history"])
+        undo_posts = [(c["body"].get("base"), c["status"]) for c in calls(origin) if c["path"].endswith("/undo")]
+        check("two_tabs_agree", state(page) == state(page_b) and fixture_app["head"]["version"] == 4 and fixture_app["history"]["canRedo"] is False
+              and undo_posts == [(2, 200), (2, 409)] and "another tab" in b_status,
+              a=state(page), b=state(page_b), b_told=b_status, undo_posts=undo_posts, pointer=fixture_app["history"])
         page_b.close()
 
         # 9. framed
@@ -288,7 +316,16 @@ def main() -> None:
               and "Open to make changes" in r5["error"]["message"] and count(origin, "POST", "/prepare") == p0, buttons=offered, says=says, sent=r5)
         framer.close()
 
-        # 10. phone
+        # 10. a window too narrow for the builder: the frame decides (under 640 px), so Edit is not offered
+        mid = browser.new_context(viewport={"width": 1000, "height": 700})
+        mp = mid.new_page()
+        mp.goto(origin + url)
+        app_frame(mp).wait_for_selector(".wk-table tbody tr", timeout=20_000)
+        mp.wait_for_function("() => document.querySelector('[data-testid=apps-mode-edit]')?.disabled === true", timeout=5_000)
+        check("narrow_frame_preview_only", mp.is_disabled('[data-testid="apps-mode-edit"]'))
+        mid.close()
+
+        # 11. phone
         phone = browser.new_context(viewport={"width": 390, "height": 844})
         pp = phone.new_page()
         pp.goto(origin + url)

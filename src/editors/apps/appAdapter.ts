@@ -22,6 +22,8 @@ export interface AppHostPort {
   mode(): AppMode;
   /** "Viewing as": who the app is shown to (the host's words). */
   viewer(): string;
+  /** The page's URL parameters for this app's `url.<name>` bindings (said once, in `host.hello`). */
+  url?(): Record<string, string>;
   /** The host draws the card OUTSIDE the frame; resolves true only on the person's own Run there. */
   confirm(prepared: PreparedAction): Promise<boolean>;
   /** The host shows the full URL and opens it only on the person's own click. */
