@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 284,
-    "occurrences": 3941,
-    "static": 3347,
-    "dynamic": 90,
+    "files": 289,
+    "occurrences": 4061,
+    "static": 3463,
+    "dynamic": 93,
     "computed": 44
   },
   "static": [
@@ -724,6 +724,174 @@
       ]
     },
     {
+      "testId": "artifact-proposal",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-about",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-audience",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-blocked",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-brief",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-change-helpers",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-demo",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-details",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-details-region",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-error",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-filed",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-from",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-go-again",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-helpers",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-lines",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-note",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-reason",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-record",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-show",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-source",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-stops",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-stub",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-target",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-theme",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-time",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-touches",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-what",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposals-read-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "artifact-shrink",
       "files": [
         "src/components/session/ArtifactMorph.tsx"
@@ -1139,6 +1307,12 @@
       ]
     },
     {
+      "testId": "assist-turn-wait",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
       "testId": "assist-user-msg",
       "files": [
         "src/components/AssistDock.tsx"
@@ -1244,6 +1418,24 @@
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "brand-lettering",
+      "files": [
+        "src/components/ui/BrandMarks.tsx"
+      ]
+    },
+    {
+      "testId": "brand-lockup",
+      "files": [
+        "src/components/ui/BrandMarks.tsx"
+      ]
+    },
+    {
+      "testId": "brand-mark",
+      "files": [
+        "src/components/ui/BrandMarks.tsx"
       ]
     },
     {
@@ -3737,7 +3929,25 @@
       ]
     },
     {
+      "testId": "desk-rail-lettering",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-lockup",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "desk-rail-logo",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-mark",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -3907,6 +4117,12 @@
     },
     {
       "testId": "desk-runs-open",
+      "files": [
+        "src/components/desk/DeskRuns.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-project",
       "files": [
         "src/components/desk/DeskRuns.tsx"
       ]
@@ -6485,6 +6701,132 @@
       ]
     },
     {
+      "testId": "launch-catalog",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-cat",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-clear-filters",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-clear-search",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-count",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-empty",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-failed",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-filters",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-filters-toggle",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-fit",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-loading",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-noresults",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-older",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-repo",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-results",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-search",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-section",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-soon-tag",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-soon-toggle",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-top",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-unavailable-tag",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
       "testId": "launch-confirm",
       "files": [
         "src/components/ChatInput.tsx"
@@ -6695,12 +7037,6 @@
       ]
     },
     {
-      "testId": "launch-wizard-cards",
-      "files": [
-        "src/components/launch/LaunchWizard.tsx"
-      ]
-    },
-    {
       "testId": "launch-wizard-change",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -6881,6 +7217,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-project-note",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-qe",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -6906,6 +7248,12 @@
     },
     {
       "testId": "launch-wizard-repo",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-repo-note",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -6959,6 +7307,24 @@
       ]
     },
     {
+      "testId": "launch-wizard-shape",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-shape-inputs",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-shape-needs",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-signin",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -6977,15 +7343,9 @@
       ]
     },
     {
-      "testId": "launch-wizard-soon",
-      "files": [
-        "src/components/launch/LaunchWizard.tsx"
-      ]
-    },
-    {
       "testId": "launch-wizard-start-chat",
       "files": [
-        "src/components/launch/LaunchWizard.tsx"
+        "src/components/launch/WorkflowCatalog.tsx"
       ]
     },
     {
@@ -8809,7 +9169,19 @@
       ]
     },
     {
+      "testId": "memory-view",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-view-memories",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-view-not-accepted",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
@@ -9901,6 +10273,84 @@
       ]
     },
     {
+      "testId": "not-accepted",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-count",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-empty",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-error",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-line",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-list",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-loading",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-open",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-row",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-run",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-stale",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-text",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
+      "testId": "not-accepted-unsupported",
+      "files": [
+        "src/components/NotAcceptedList.tsx"
+      ]
+    },
+    {
       "testId": "not-found",
       "files": [
         "src/components/NotFoundPage.tsx"
@@ -10668,6 +11118,18 @@
     },
     {
       "testId": "plugin-card-offer-accept",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-open-with",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-open-with-select",
       "files": [
         "src/components/editorHost/PluginCard.tsx"
       ]
@@ -11965,6 +12427,138 @@
       ]
     },
     {
+      "testId": "proposal-answer-brief",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-cancel",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council-check-again",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council-check-failed",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council-error",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council-reading",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council-refresh",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-council-retry",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-error",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-form",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-go",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-project",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-project-fixed",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-recheck",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-repo",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-repos",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-seat",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-seats",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-source",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-sources",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-answer-title",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
       "testId": "proposal-approve",
       "files": [
         "src/components/ProposalsList.tsx"
@@ -12598,6 +13192,43 @@
       "testId": "repo-hotspots-empty",
       "files": [
         "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know",
+      "files": [
+        "src/components/RepoDetailPage.tsx",
+        "src/components/RepoKnowledge.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-band",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-flag",
+      "files": [
+        "src/components/RepoKnowledge.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-mark",
+      "files": [
+        "src/components/RepoKnowledge.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-meter",
+      "files": [
+        "src/components/RepoKnowledge.tsx"
+      ]
+    },
+    {
+      "testId": "repo-know-value",
+      "files": [
+        "src/components/RepoKnowledge.tsx"
       ]
     },
     {
@@ -17311,6 +17942,12 @@
       ]
     },
     {
+      "testId": "steer-view-not-accepted",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-view-proposals",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -19004,6 +19641,12 @@
       ]
     },
     {
+      "testId": "topbar-lockup",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
       "testId": "topbar-new-job",
       "files": [
         "src/components/ui/TopBar.tsx"
@@ -19112,6 +19755,12 @@
       ]
     },
     {
+      "testId": "understand-back",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
       "testId": "understand-chat",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
@@ -19119,6 +19768,12 @@
     },
     {
       "testId": "understand-compare",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-compare-toggle",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -19142,7 +19797,19 @@
       ]
     },
     {
+      "testId": "understand-graph-all",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
       "testId": "understand-graph-empty",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-flag",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -19155,6 +19822,18 @@
     },
     {
       "testId": "understand-graph-repo",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-req",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-graph-value",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -19197,6 +19876,24 @@
     },
     {
       "testId": "understand-scope-words",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-side",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-side-close",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-side-toggle",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -20556,6 +21253,24 @@
       ]
     },
     {
+      "pattern": "launch-catalog-fit-*",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "pattern": "launch-catalog-soon-*",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "pattern": "launch-catalog-top-*",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
       "pattern": "launch-entity-*",
       "files": [
         "src/components/ContextPopover.tsx"
@@ -20576,7 +21291,7 @@
     {
       "pattern": "launch-wizard-workflow-*",
       "files": [
-        "src/components/launch/LaunchWizard.tsx"
+        "src/components/launch/WorkflowCatalog.tsx"
       ]
     },
     {
@@ -20850,6 +21565,7 @@
         "src/components/QeRefusalWarning.tsx",
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoFindings.tsx",
+        "src/components/RepoKnowledge.tsx",
         "src/components/RequirementsCoverageSummary.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/SkillChips.tsx",
@@ -20863,11 +21579,11 @@
         "src/components/calm/Calm.tsx",
         "src/components/charts/CategoryBars.tsx",
         "src/components/charts/Chart.tsx",
+        "src/components/chat/ArtifactProposalCard.tsx",
         "src/components/chat/PageChat.tsx",
         "src/components/dashboardKit.tsx",
         "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskParts.tsx",
-        "src/components/desk/UnderstandPage.tsx",
         "src/components/editors/PluginLivePreview.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
         "src/components/insights/InsightsLine.tsx",
@@ -20880,6 +21596,7 @@
         "src/components/session/RunConversation.tsx",
         "src/components/steer/EvaluateSurface.tsx",
         "src/components/steer/SeStat.tsx",
+        "src/components/ui/BrandMarks.tsx",
         "src/components/ui/Combobox.tsx",
         "src/components/ui/DayBars.tsx",
         "src/components/ui/FilePick.tsx",
@@ -21073,7 +21790,6 @@
     {
       "expression": "toggleId",
       "files": [
-        "src/components/desk/UnderstandPage.tsx",
         "src/components/steer/EvaluateSurface.tsx"
       ]
     },

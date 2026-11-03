@@ -1,10 +1,11 @@
 /**
- * What studio shows as coming, never as working (operator 2026-10-12). The app builder ("vibe") is
- * not built: apps are built by pipelines today, and a visual over them needs its own design. Where an
- * app builder would be offered — the Plugins page list and the New job cards — it is listed with
- * these words, disabled, with no link and nothing behind it.
+ * What studio shows as coming, never as working (operator 2026-10-12). The data builder is not built
+ * (operator 2026-11-02: it is "Apps", a live app or dashboard over your APIs and databases; was
+ * "Vibe"). Where it would be offered — the Plugins page list, and New job on a daemon whose catalog
+ * does not list it — it is listed with these words, disabled, with no link and nothing behind it.
+ * On a daemon with the catalog, crew's own `apps` card says it.
  */
 export const VIBE_SOON = {
-  name: 'Vibe — app builder',
-  line: 'Build and preview an app visually. Apps are already built by pipelines today.',
+  name: 'Apps',
+  line: 'A live app or dashboard over your APIs and databases.',
 } as const;

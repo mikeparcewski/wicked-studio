@@ -249,8 +249,9 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
         return { turnGates };
       }
       if (typeof f.chat !== 'string' || f.chat === '') return s;
-      // A verdict or a decision landed after the reply: the transcript holds it — re-read (#6).
-      if (f.type === 'chatCitations' || f.type === 'chatDecisions') {
+      // A verdict or a decision landed after the reply: the transcript holds it — re-read (#6). So does a proposal
+      // record (DES-CHAT-ARTIFACTS-001 A2: crew resolves the card after the reply, and records each answer).
+      if (f.type === 'chatCitations' || f.type === 'chatDecisions' || f.type === 'chatProposal') {
         return { replySeq: { ...s.replySeq, [f.chat]: (s.replySeq[f.chat] ?? 0) + 1 } };
       }
       if (f.type === 'chatClosed') {

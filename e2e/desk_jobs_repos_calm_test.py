@@ -14,6 +14,8 @@ shipped theme (wicked-dark, wicked-light, dark, light), on the in-process fixtur
      button move dE_OK >= 0.08 (OKLab) from rest when hovered, composited over the page by the browser.
   5. VISIBLE FOCUS: a row reached by keyboard wears the focus ring (a box-shadow).
   6. A PHONE (390x844): neither page scrolls sideways.
+  6b. BY PROJECT (operator 2026-11-01): Jobs' list head has a project picker (All projects, each project, No
+     project last); each row's line leads with its project ("No project" when unfiled); No project keeps those.
   7. 0 page errors.
 
 Captures: e2e/shots/jobs-repos-{jobs,repos}-<theme>.png (1440x700) and -phone (390x844, wicked-dark).
@@ -264,11 +266,53 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"jobs-repos-repos-{theme}.png"))
         ctx.close()
 
+    # ── By project (operator 2026-11-01): the project_dto corpus files most jobs in projects and leaves r-unfiled
+    #    in none. Each row's line leads with its project's name ("No project" when unfiled); each choice in the list
+    #    head's picker keeps exactly the rows of that project, and its count says how many. ──
+    ctx = browser.new_context(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page = ctx.new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    set_fixture(origin, wave1=False, repo=False, repo_refs=False, project_dto=True, appearance={**DEFAULT_APPEARANCE, **HARBOR, "theme": "wicked-dark"})
+    page.goto(f"{origin}/?tab=runs", wait_until="networkidle")
+    page.get_by_test_id("desk-runs-row").first.wait_for(state="visible", timeout=15000)
+    pick = page.get_by_test_id("desk-runs-project")
+    ROWS = "rs => rs.map(r => [r.dataset.runId, r.dataset.project, r.querySelector('[data-testid=desk-runs-line]').textContent])"
+    by_group = {}
+    for group in ("active", "finished"):
+        page.get_by_test_id(f"desk-runs-group-{group}").click()
+        page.wait_for_timeout(200)
+        options = pick.locator("option").evaluate_all("os => os.map(o => [o.value, o.textContent])")
+        label = {v: re.sub(r" \(\d+\)$", "", t) for v, t in options}
+        count = {v: int(m.group(1)) for v, t in options if (m := re.search(r"\((\d+)\)$", t))}
+        rows = page.locator('[data-testid="desk-runs-row"]').evaluate_all(ROWS)
+        picked = {}
+        for value, _ in options[1:]:
+            pick.select_option(value)
+            page.wait_for_timeout(150)
+            picked[value] = sorted(r[0] for r in page.locator('[data-testid="desk-runs-row"]').evaluate_all(ROWS))
+        pick.select_option("")
+        page.wait_for_timeout(150)
+        by_group[group] = {"options": options, "rows": rows, "picked": picked,
+                           "led": all(line.startswith(label[proj] + " · ") for _, proj, line in rows),
+                           "exact": all(picked[v] == sorted(r[0] for r in rows if r[1] == v) and count[v] == len(picked[v]) for v in picked),
+                           "all": count.get("", -1) == len(rows) and len(rows) < 40,
+                           "back": page.get_by_test_id("desk-runs-row").count() == len(rows)}
+    every = [r for g in by_group.values() for r in g["rows"]]
+    check("jobs-by-project", all(g["led"] and g["exact"] and g["all"] and g["back"] for g in by_group.values())
+          and any(r[1] == "default" for r in every) and any(r[1] != "default" for r in every)
+          and all(g["options"][0][0] == "" and g["options"][-1][0] == "default" and g["options"][-1][1].startswith("No project (")
+                  for g in by_group.values()),
+          **{g: {k: v for k, v in d.items() if k != "rows"} | {"rows": d["rows"][:6]} for g, d in by_group.items()})
+    page.get_by_test_id("desk-runs-group-active").click()
+    page.wait_for_timeout(400)
+    page.screenshot(path=str(SHOTS / "jobs-repos-jobs-by-project.png"))
+    ctx.close()
+
     # ── A phone ──
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1, is_mobile=True, has_touch=True)
     page = ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
-    set_fixture(origin, wave1=True, repo=True, repo_refs=True, appearance={**DEFAULT_APPEARANCE, **HARBOR, "theme": "wicked-dark"})
+    set_fixture(origin, wave1=True, repo=True, repo_refs=True, project_dto=False, appearance={**DEFAULT_APPEARANCE, **HARBOR, "theme": "wicked-dark"})
     page.goto(f"{origin}/?tab=runs", wait_until="networkidle")
     page.get_by_test_id("desk-runs").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(500)

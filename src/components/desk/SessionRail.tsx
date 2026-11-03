@@ -23,6 +23,7 @@ import { useChatWindow } from '../../store/chatWindow.js';
 import { openSearch } from '../../store/searchModal.js';
 import { pageComposerKey } from '../../store/composerSeed.js';
 import { useProjectsStore } from '../../store/projects.js';
+import { ShorelineMark, StudioLettering, StudioLockup } from '../ui/BrandMarks.js';
 
 /** The modifier the shortcuts are said with (⌘ on a Mac, Ctrl elsewhere). */
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/u.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+';
@@ -165,9 +166,12 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
                   backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
                 }}
               />
-            : <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />}
-          {/* The default wordmark is set in the brand face (--font-display); a custom name is the user's words: Inter. */}
-          <span className={`wk-rail-brand-name${siteName === null ? ' wk-wordmark' : ''}`}>{siteName !== null ? <b>{siteName}</b> : <>wicked <b>studio</b></>}</span>
+            : siteName !== null ? <ShorelineMark testId="desk-rail-mark" /> : null}
+          {/* The default is the drawn lockup (the Shoreline mark beside the Wave W lettering, fonts-v3); beside a
+              custom logo, the lettering alone; a custom name is the user's words, in the text face, beside the mark. */}
+          {siteName !== null
+            ? <span className="wk-rail-brand-name"><b>{siteName}</b></span>
+            : logoUrl !== null ? <StudioLettering testId="desk-rail-lettering" /> : <StudioLockup testId="desk-rail-lockup" />}
         </span>
         {count > 0 && <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge wk-rail-badge--home">{badgeText}</span>}
         {count > 0 && <span id={needsId} className="wk-visually-hidden">{needWords}</span>}

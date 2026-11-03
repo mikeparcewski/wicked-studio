@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const getElicitation = vi.fn();
 vi.mock('../src/api/client.js', () => ({ api: { getElicitation: (id: string) => getElicitation(id) } }));
 
-import { hydrateElicitations } from '../src/hooks/useRuns.js';
+import { hydrateElicitations, resetElicitationProbes } from '../src/hooks/useRuns.js';
 import { useElicitationStore } from '../src/store/elicitations.js';
 import type { SessionView } from '../src/api/types.js';
 
@@ -14,9 +14,19 @@ const info = (runId: string, elicitationId: string) => ({ runId, elicitationId, 
 beforeEach(() => {
   useElicitationStore.setState({ elicitations: {}, generations: {} });
   getElicitation.mockReset();
+  resetElicitationProbes();
 });
 
 describe('studio#769 — late-join elicitation hydration', () => {
+  it('a run that answered none is not read again until its status changes (artifact-runs-fix: 404 noise)', async () => {
+    getElicitation.mockResolvedValue(null);
+    await hydrateElicitations([run('r1', 'awaiting_human'), run('r2', 'executing')]);
+    await hydrateElicitations([run('r1', 'awaiting_human'), run('r2', 'executing')]);
+    expect(getElicitation).toHaveBeenCalledTimes(2);
+    await hydrateElicitations([run('r1', 'executing'), run('r2', 'executing')]);
+    expect(getElicitation.mock.calls.map((c) => c[0])).toEqual(['r1', 'r2', 'r1']);
+  });
+
   it('reads the open question of a live run the store holds none for', async () => {
     getElicitation.mockImplementation(async (id: string) => (id === 'r1' ? info('r1', 'q1') : null));
     await hydrateElicitations([run('r1', 'executing'), run('r2', 'executing')]);

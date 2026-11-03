@@ -11,8 +11,11 @@
  */
 
 export type AboutChip =
-  /** A subject: the next message is about it. `label` is the words after "about: ". */
-  | { kind: 'about'; key: string; label: string }
+  /** A subject: the next message is about it. `label` is the words after "about: ". A part of an artifact (an element,
+   *  a slide) keeps its artifact (`ref`, `<mount>/<doc>`) and its `data-wid` (`wid`), so the message can say which. */
+  | { kind: 'about'; key: string; label: string; ref?: string; wid?: string }
+  /** DES-CHAT-ARTIFACTS-001 §6.3: the artifact itself ("Ask about this"): the next message carries it. One at a time. */
+  | { kind: 'artifact'; key: string; label: string; ref: string }
   /** A destination: the project the message goes to. */
   | { kind: 'project'; key: string; label: string; projectId: string }
   /** S19a: the workflow this message STARTS (`/workflow-<id>` is `label`). One at a time. */
@@ -36,6 +39,7 @@ export function quoteLabel(selected: string): string | null {
 export function addChip(chips: readonly AboutChip[], chip: AboutChip): AboutChip[] {
   if (chip.kind === 'project') return [...chips.filter((c) => c.kind !== 'project'), chip];
   if (chip.kind === 'workflow') return [...chips.filter((c) => c.kind !== 'workflow'), chip];
+  if (chip.kind === 'artifact') return [...chips.filter((c) => c.kind !== 'artifact'), chip];
   if (chips.some((c) => c.kind === 'about' && c.key === chip.key)) {
     return chips.map((c) => (c.kind === 'about' && c.key === chip.key ? chip : c));
   }
@@ -70,7 +74,25 @@ export function projectChip(chips: readonly AboutChip[]): Extract<AboutChip, { k
  */
 export function messageWithAbout(text: string, chips: readonly AboutChip[]): string {
   const body = text.trim();
-  const about = chips.filter((c) => c.kind === 'about').map((c) => c.label);
+  const about = chips.filter((c) => c.kind === 'about' || c.kind === 'artifact').map((c) => c.label);
   if (about.length === 0) return body;
   return `About ${about.join(' and ')}: ${body}`;
+}
+
+/** The artifact chip "Ask about this" puts on a composer. */
+export function artifactChip(ref: string, title: string): AboutChip {
+  return { kind: 'artifact', key: `art:${ref}`, label: title.trim() === '' ? ref : title.trim(), ref };
+}
+
+/**
+ * The artifact the chips say the message is about, with the parts selected in it: the artifact chip's, else the first
+ * part's artifact. `null` when no chip names an artifact. (DES-CHAT-ARTIFACTS-001 §5.1: `context.artifact.anchors`.)
+ */
+export function artifactOfChips(chips: readonly AboutChip[]): { ref: string; anchors: string[] } | null {
+  const art = chips.find((c): c is Extract<AboutChip, { kind: 'artifact' }> => c.kind === 'artifact');
+  const part = chips.find((c): c is Extract<AboutChip, { kind: 'about' }> => c.kind === 'about' && c.ref !== undefined);
+  const ref = art?.ref ?? part?.ref;
+  if (ref === undefined) return null;
+  const anchors = chips.flatMap((c) => (c.kind === 'about' && c.ref === ref && c.wid !== undefined ? [c.wid] : []));
+  return { ref, anchors };
 }

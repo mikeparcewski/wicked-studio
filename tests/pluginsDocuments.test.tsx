@@ -149,6 +149,6 @@ describe('the Plugins page: the app builder is coming soon', () => {
     expect(soon.textContent).toContain('Coming soon');
     expect(soon.textContent).toContain(VIBE_SOON.line);
     expect(soon.querySelector('a, button')).toBeNull();
-    expect(VIBE_SOON).toEqual({ name: 'Vibe — app builder', line: 'Build and preview an app visually. Apps are already built by pipelines today.' });
+    expect(VIBE_SOON).toEqual({ name: 'Apps', line: 'A live app or dashboard over your APIs and databases.' });
   });
 });

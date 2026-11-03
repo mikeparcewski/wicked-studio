@@ -236,14 +236,39 @@ export function jobsSentence(stats: RunsView['stats'] | null, window: string, an
 
 function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+/** What a job with no project is called on Jobs (operator 2026-11-01: "display ... by project"). */
+export const NO_PROJECT = 'No project';
+
+/** A job's project in words: its name, or {@link NO_PROJECT} for an unfiled job (`default`). */
+export function projectWord(id: string, projectName: (id: string) => string): string {
+  return id === 'default' ? NO_PROJECT : projectName(id);
+}
+
 /**
- * A row's muted line: where (the repo, else the project when the page shows several, else the
- * workflow), who, and how far ("step 3 of 9"; a finished job says when it ended instead).
+ * The Jobs project picker's choices: every project studio knows and every project a job is filed in,
+ * by name, then No project last. `count` is how many of `rows` (the list as shown with every project:
+ * the same group, status, search and range) each holds, so a choice says what picking it shows.
+ */
+export function projectChoices(rows: readonly Pick<RunRow, 'project'>[], known: readonly string[], projectName: (id: string) => string):
+  { value: string; label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.project, (counts.get(r.project) ?? 0) + 1);
+  const ids = [...new Set([...known, ...counts.keys()])].filter((id) => id !== 'default');
+  const named = ids.map((id) => ({ value: id, label: projectName(id), count: counts.get(id) ?? 0 }))
+    .sort((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value));
+  return [...named, { value: 'default', label: NO_PROJECT, count: counts.get('default') ?? 0 }];
+}
+
+/**
+ * A row's muted line: the project when the page shows several (No project for an unfiled job), where
+ * (the repo, else the workflow), who, and how far ("step 3 of 9"; a finished job says when it ended
+ * instead).
  */
 export function jobLine(r: RunRow, { agentName, projectName, showProject, ago }: {
   agentName: (cli: string) => string; projectName: (id: string) => string; showProject: boolean; ago: (ms: number) => string;
 }): string {
-  const where = r.repo ?? (showProject && r.project !== 'default' ? projectName(r.project) : r.workflow);
+  const project = showProject ? projectWord(r.project, projectName) : null;
+  const where = r.repo ?? r.workflow;
   const who = r.agent === null ? null : agentName(r.agent);
   const at = Math.min(r.steps, r.stepsDone + 1);
   const how = r.group === 'active'
@@ -251,7 +276,7 @@ export function jobLine(r: RunRow, { agentName, projectName, showProject, ago }:
     : r.word === 'Failed' && r.steps > 0
       ? `stopped at step ${at} of ${r.steps}${r.endedAt !== null ? ` · ${ago(r.endedAt)}` : ''}`
       : r.endedAt !== null ? ago(r.endedAt) : r.startedAt !== null ? `started ${ago(r.startedAt)}` : null;
-  return [where, who, how].filter((x): x is string => x !== null && x !== '').join(' · ');
+  return [project, where, who, how].filter((x): x is string => x !== null && x !== '').join(' · ');
 }
 
 /** A run's duration words: "4 min", "2 h 5 min", "3 d"; null when it has no start. */

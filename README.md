@@ -23,9 +23,11 @@ The [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon runs the 
 Coding agents are fast but unsupervised — they assert "done," grade their own work, and bury the
 reasoning in a scrollback you'll never read. wicked-studio flips that:
 
-- **Start with a chat.** **New job → Start with chat**: describe what you want, the chat proposes a
-  plan, and nothing starts until you confirm it. (Tick "Don't show this again" to go straight to
-  chat next time.)
+- **Pick the job, or talk it through.** **New job** opens a catalog of workflows: search it in your
+  own words ("write docs for the auth service"), filter by category or by whether it needs a
+  repository, and your most-used ones are on top. Each workflow asks only for what it needs. Not sure
+  yet? **Talk it through first**: describe what you want, the chat proposes a plan, and nothing starts
+  until you confirm it. (Tick "Don't show this again" to go straight to chat next time.)
 - **Sign your agents in once.** The **Agents** page signs each agent in: Claude Code and GitHub
   Copilot through a login container; Codex, Pi and OpenCode with their host CLIs and a temporary
   home (wicked-core `src/seat_login.rs`). Jobs run every agent in a hardened sandbox (crew needs a

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_REFINE, type Refine } from '../src/board/deskInsights.js';
-import { durationWords, jobLine, jobsSentence, jobWord, needHolds, runsView, type JobGroup, type NeedHold, type RunStatusFilter } from '../src/board/deskRuns.js';
+import { durationWords, jobLine, jobsSentence, jobWord, needHolds, NO_PROJECT, projectChoices, projectWord, runsView, type JobGroup, type NeedHold, type RunStatusFilter } from '../src/board/deskRuns.js';
 import type { NeedRow } from '../src/board/needsYou.js';
 import { makeUnit } from './factories.js';
 import { markHeld } from '../src/board/heldRuns.js';
@@ -152,16 +152,53 @@ describe('jobsSentence', () => {
 
 describe('jobLine', () => {
   const opts = { agentName: names.agent, projectName: names.project, showProject: true, ago: () => '2 hours ago' };
-  it('says where, who and how far for an active job', () => {
+  it('leads with the project on the every-project list, then where, who and how far', () => {
     const r = view([deskRun('w', { status: 'executing', repo_ref: 'wicked-core' })], { group: 'active' }).rows[0]!;
-    expect(jobLine(r, opts)).toBe('wicked-core · Codex · step 2 of 2');
+    expect(jobLine(r, opts)).toBe('Studio Desk · wicked-core · Codex · step 2 of 2');
+    // A project's own page: every row is in that project, so the line does not say it.
+    expect(jobLine(r, { ...opts, showProject: false })).toBe('wicked-core · Codex · step 2 of 2');
   });
-  it('names the project, else the workflow, when the job names no repo; a finished job says when it ended', () => {
+  it('says the workflow when the job names no repo; a finished job says when it ended', () => {
     const r = view([deskRun('f')]).rows[0]!;
-    expect(jobLine(r, opts)).toBe('Studio Desk · Claude Sonnet · 2 hours ago');
+    expect(jobLine(r, opts)).toBe('Studio Desk · Fix bug · Claude Sonnet · 2 hours ago');
     expect(jobLine(r, { ...opts, showProject: false })).toBe('Fix bug · Claude Sonnet · 2 hours ago');
     const failed = view([deskRun('x', { status: 'failed' })]).rows[0]!;
-    expect(jobLine(failed, opts)).toBe('Studio Desk · Claude Sonnet · stopped at step 2 of 2 · 2 hours ago');
+    expect(jobLine(failed, opts)).toBe('Studio Desk · Fix bug · Claude Sonnet · stopped at step 2 of 2 · 2 hours ago');
+  });
+  it('says No project for a job filed nowhere (operator 2026-11-01)', () => {
+    const r = view([deskRun('u', { project_id: null })]).rows[0]!;
+    expect(r.project).toBe('default');
+    expect(jobLine(r, opts)).toBe('No project · Fix bug · Claude Sonnet · 2 hours ago');
+  });
+});
+
+describe('projectWord / projectChoices (the Jobs project filter)', () => {
+  const name = (id: string): string => ({ a: 'Alpha', b: 'Beta', c: 'Colors' } as Record<string, string>)[id] ?? 'A project';
+  it('names an unfiled job No project, never the default id or the project page title', () => {
+    expect(projectWord('default', name)).toBe(NO_PROJECT);
+    expect(NO_PROJECT).toBe('No project');
+    expect(projectWord('b', name)).toBe('Beta');
+  });
+  it('lists every known project and every project a job is in, by name, with No project last and counts of the shown rows', () => {
+    const rows = [{ project: 'b' }, { project: 'default' }, { project: 'b' }, { project: 'z' }, { project: 'default' }];
+    expect(projectChoices(rows, ['c', 'a', 'default'], name)).toEqual([
+      { value: 'z', label: 'A project', count: 1 },
+      { value: 'a', label: 'Alpha', count: 0 },
+      { value: 'b', label: 'Beta', count: 2 },
+      { value: 'c', label: 'Colors', count: 0 },
+      { value: 'default', label: 'No project', count: 2 },
+    ]);
+  });
+  it('always offers No project, even when every job is filed', () => {
+    expect(projectChoices([{ project: 'a' }], [], name)).toEqual([
+      { value: 'a', label: 'Alpha', count: 1 },
+      { value: 'default', label: 'No project', count: 0 },
+    ]);
+  });
+  it('the refine filter on default keeps exactly the unfiled jobs', () => {
+    const runs = [deskRun('in', { project_id: 'studio' }), deskRun('out', { project_id: null }), deskRun('blank', { project_id: '' })];
+    expect(view(runs, { refine: { project: 'default' } }).rows.map((r) => r.id).sort()).toEqual(['blank', 'out']);
+    expect(view(runs, { refine: { project: 'studio' } }).rows.map((r) => r.id)).toEqual(['in']);
   });
 });
 

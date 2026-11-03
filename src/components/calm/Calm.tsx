@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import { OverflowMenu, type MenuItem } from '../ui/OverflowMenu.js';
 
@@ -77,6 +77,24 @@ export function CalmAction({ label, onClick, disabled, title, testId, icon, menu
   );
 }
 
+/**
+ * The header's action when the page has no one primary move (Memory, Steer: operator 2026-11-01, "drop it
+ * as a button and go to the 3 dot dropdown"): only the quiet ⋯ menu, its first item the main way to add.
+ */
+export function CalmMenu({ menu, menuLabel, menuTestId }: {
+  menu: readonly MenuItem[];
+  menuLabel: string;
+  menuTestId?: string | undefined;
+}): React.ReactElement {
+  return (
+    <span className="wk-calm-action wk-calm-action--menu">
+      <span className="wk-calm-menu">
+        <OverflowMenu label={menuLabel} items={menu} {...(menuTestId !== undefined ? { 'data-testid': menuTestId } : {})} />
+      </span>
+    </span>
+  );
+}
+
 /** A secondary button in the calm look (outlined, the same height as the primary). */
 export function CalmButton({ children, onClick, disabled, testId, title, ariaLabel, tone = 'secondary' }: {
   children: React.ReactNode; onClick: () => void; disabled?: boolean | undefined; testId?: string | undefined; title?: string | undefined; ariaLabel?: string | undefined;
@@ -109,7 +127,8 @@ export function CalmSection({ label, labelNode, tools, children, 'data-testid': 
   );
 }
 
-/** The one filter: two (or three) words in a quiet pill track. */
+/** The one filter: two (or three) words in a quiet pill track. A radio group: one tab stop (the chosen
+ *  word, else the first), and the arrows move and choose (Segmented's pattern). */
 export function CalmSeg<V extends string>({ label, value, onChange, options, 'data-testid': testId }: {
   label: string;
   value: V;
@@ -117,11 +136,26 @@ export function CalmSeg<V extends string>({ label, value, onChange, options, 'da
   options: readonly { value: V; label: string; testId?: string }[];
   'data-testid'?: string | undefined;
 }): React.ReactElement {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const chosen = options.findIndex((o) => o.value === value);
+  const tabStop = chosen >= 0 ? chosen : 0;
+  const move = (from: number, step: number): void => {
+    const n = options.length;
+    if (n === 0) return;
+    const to = (((from + step) % n) + n) % n;
+    onChange(options[to]!.value);
+    refs.current[to]?.focus();
+  };
   return (
     <div className="wk-calm-seg" role="radiogroup" aria-label={label} data-testid={testId}>
-      {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} data-testid={o.testId}
-          className={`wk-calm-seg-btn${o.value === value ? ' is-on' : ''}`} onClick={() => onChange(o.value)}>{o.label}</button>
+      {options.map((o, i) => (
+        <button key={o.value} ref={(el) => { refs.current[i] = el; }} type="button" role="radio" aria-checked={o.value === value} data-testid={o.testId}
+          tabIndex={i === tabStop ? 0 : -1}
+          className={`wk-calm-seg-btn${o.value === value ? ' is-on' : ''}`} onClick={() => onChange(o.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); move(i, 1); }
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); move(i, -1); }
+          }}>{o.label}</button>
       ))}
     </div>
   );
@@ -145,9 +179,11 @@ export function CalmSearch({ value, onChange, onSubmit, placeholder, label, test
   buttonTestId?: string | undefined;
 }): React.ReactElement {
   const [open, setOpen] = useState(startOpen || value !== '');
+  // Focus moves into the field only when someone pressed Search, never when a kept search is shown again.
+  const [pressed, setPressed] = useState(false);
   if (!open) {
     return (
-      <button type="button" className="wk-calm-quiet-btn" onClick={() => setOpen(true)} aria-label={label} data-testid={buttonTestId}>
+      <button type="button" className="wk-calm-quiet-btn" onClick={() => { setPressed(true); setOpen(true); }} aria-label={label} data-testid={buttonTestId}>
         <Search size={15} aria-hidden /> <span>Search</span>
       </button>
     );
@@ -158,7 +194,7 @@ export function CalmSearch({ value, onChange, onSubmit, placeholder, label, test
         <Search size={15} aria-hidden className="wk-calm-search-icon" />
         {/* autoFocus: the field opened because someone pressed Search. */}
         <input type="search" className="wk-calm-search-input" placeholder={placeholder} aria-label={label} data-testid={testId}
-          value={value} spellCheck={false} autoFocus={!startOpen}
+          value={value} spellCheck={false} autoFocus={pressed}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && onSubmit !== undefined) { e.preventDefault(); onSubmit(); } if (e.key === 'Escape' && value === '') setOpen(false); }} />
       </span>

@@ -58,18 +58,19 @@ describe('fonts are self-hosted', () => {
     ]);
   });
 
-  // Operator 2026-11-01 (round 5): Wicked Sans v2 is the text and UI face (Regular 400, SemiBold for 500-700, Inter as
-  // the per-character fallback), Wicked Serif the default wordmark, JetBrains Mono the code face.
-  it('the body and UI are Wicked Sans (two weights, no faked bold); the wordmark is Wicked Serif', () => {
+  // Operator 2026-11-01 (round 5): Wicked Sans is the text and UI face (Regular 400, SemiBold for 500-700, Inter as
+  // the per-character fallback), JetBrains Mono the code face. Since fonts-v3 (2026-11-02) Wicked Sans is the OFL cut
+  // of Inter (WickedSansA-*) and the wordmark is drawn (BrandMarks.tsx); .wk-wordmark keeps the serif for brand text.
+  it('the body and UI are Wicked Sans A (two weights, no faked bold); the serif stays on .wk-wordmark only', () => {
     const css = readFileSync(FONTS_CSS, 'utf8');
     // One source: the vendored design package (wicked-web packages/design-system/fonts/wicked).
-    for (const f of ['WickedSans-Regular', 'WickedSans-SemiBold', 'WickedSerif-Regular', 'WickedScript-Regular']) {
+    for (const f of ['WickedSansA-Regular', 'WickedSansA-SemiBold', 'WickedSerif-Regular', 'WickedScript-Regular']) {
       expect(existsSync(join(REPO, 'src', 'vendor', 'wicked-design', 'fonts', 'wicked', `${f}.woff2`)), f).toBe(true);
       expect(css).toContain(`url('../vendor/wicked-design/fonts/wicked/${f}.woff2')`);
     }
     expect(existsSync(join(REPO, 'src', 'assets', 'fonts', 'wicked'))).toBe(false);
     const sans = [...css.matchAll(/@font-face\s*\{([^}]*)\}/gu)].map((m) => m[1]!).filter((f) => /'Wicked Sans'/u.test(f));
-    expect(sans.map((f) => [/font-weight:\s*([^;]+);/u.exec(f)?.[1], /WickedSans-(\w+)\.woff2/u.exec(f)?.[1]])).toEqual([['100 499', 'Regular'], ['500 900', 'SemiBold']]);
+    expect(sans.map((f) => [/font-weight:\s*([^;]+);/u.exec(f)?.[1], /WickedSansA-(\w+)\.woff2/u.exec(f)?.[1]])).toEqual([['100 499', 'Regular'], ['500 900', 'SemiBold']]);
     expect(css).toMatch(/html \{ font-synthesis-weight: none; \}/u);
     expect(css).toMatch(/\.wk-wordmark \{ font-family: var\(--font-display\)/u);
     const sansStack = /--font-sans: 'Wicked Sans', 'Inter',/u;
@@ -90,5 +91,8 @@ describe('fonts are self-hosted', () => {
       const text = readFileSync(join(REPO, 'src', 'assets', 'fonts', f), 'utf8');
       expect(text).toMatch(/SIL Open Font License/);
     }
+    // Wicked Sans is OFL too (a Modified Version of Inter): the build emits its licence as dist/fonts/LICENSE-WickedSans.txt.
+    expect(readFileSync(join(REPO, 'src', 'vendor', 'wicked-design', 'licenses', 'LICENSE-WickedSans.txt'), 'utf8')).toMatch(/SIL OPEN FONT LICENSE Version 1\.1/u);
+    expect(readFileSync(join(REPO, 'vite.config.ts'), 'utf8')).toContain("fileName: 'fonts/LICENSE-WickedSans.txt'");
   });
 });

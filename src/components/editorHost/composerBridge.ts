@@ -3,6 +3,7 @@ import type { ArtifactBinding } from '../../editors/hostApi.js';
 import { focusBeside } from '../../editors/focus.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
+import { artifactRefOf, isAnchorWid } from '../../api/chatArtifacts-wire.js';
 
 /**
  * What every plugin instance (card, full screen, options) hands the session composer, in the host's words:
@@ -22,12 +23,23 @@ function pressInHost(init: KeyboardEventInit): void {
   document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
 }
 
-/** Elements and chapters become chips; the label is the host's own (the host resolved it from its inventory). */
+/** Is the composer with this key on screen? */
+export function composerOnScreen(composerKey: string): boolean {
+  return document.querySelector(`[data-testid="composer"][data-composer="${composerKey.replace(/["\\]/g, '\\$&')}"] textarea`) !== null;
+}
+
+/** Elements and chapters become chips; the label is the host's own (the host resolved it from its inventory). An
+ *  element of an interactive document keeps its artifact and `data-wid`, so the message names the part it is about
+ *  (DES-CHAT-ARTIFACTS-001 §6.1). */
 export function chipsToComposer(b: ArtifactBinding, chips: readonly Chip[]): void {
   const doc = b.docId ?? b.artifactKey;
+  const ref = b.source === 'interactive-doc' ? artifactRefOf(b.projectId, b.docId) : null;
   for (const c of chips) {
-    if (c.anchor.kind === 'element') addAboutChip(b.composerKey, { kind: 'about', key: `el:${doc}/${c.anchor.id}`, label: c.label });
-    else if (c.anchor.kind === 'chapter') addAboutChip(b.composerKey, { kind: 'about', key: `ch:${doc}/${c.anchor.id}`, label: c.label });
+    if (c.anchor.kind === 'element') {
+      addAboutChip(b.composerKey, { kind: 'about', key: `el:${doc}/${c.anchor.id}`, label: c.label, ...(ref !== null ? { ref } : {}), ...(ref !== null && isAnchorWid(c.anchor.id) ? { wid: c.anchor.id } : {}) });
+    } else if (c.anchor.kind === 'chapter') {
+      addAboutChip(b.composerKey, { kind: 'about', key: `ch:${doc}/${c.anchor.id}`, label: c.label, ...(ref !== null ? { ref } : {}) });
+    }
   }
 }
 

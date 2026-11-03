@@ -1,0 +1,163 @@
+/* ── UNDERSTAND as a chat (operator, round 10: "should look more like a chatgpt chat except with a right sidebar
+ * that allows you to see recent q&a and has quick links to the repo graphs (code and requirements)").
+ *  - the page fills the Desk's height; the Desk scroller stops scrolling on this tab, the thread and the
+ *    sidebar scroll on their own (the document never scrolls);
+ *  - the thread and the composer share one centred 760 px measure, the composer pinned at the bottom;
+ *  - the sidebar (320 px) holds Recent answers, the repository graph links and More; under 1024 px it is a
+ *    drawer behind the header's button.
+ * Type 12/14/16/20/28, weights 400/600; hover fills are the ink (see .wk-ue in calm-ue.css). */
+
+.wk-desk2[data-tab="understand"] > .wk-desk2-scroll { overflow: hidden; padding-right: 0; padding-bottom: 0; }
+.wk-desk2[data-tab="understand"] > .wk-desk2-scroll > .wk-understand { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+
+.wk-ue.wk-uc {
+  flex: 1 1 auto; min-height: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px;
+  /* One row the height of the page: a tall sidebar or pane scrolls inside instead of pushing the composer out. */
+  grid-template-rows: minmax(0, 1fr); justify-content: stretch; align-items: stretch;
+}
+/* Compare side by side and Coverage are wide views: from 1024 px they take the whole width (Back to the chat returns);
+   under it the sidebar is a drawer anyway, and its header button still opens it. */
+@media (min-width: 1024px) {
+  .wk-ue.wk-uc:not([data-pane="chat"]) { grid-template-columns: minmax(0, 1fr); }
+  .wk-ue.wk-uc:not([data-pane="chat"]) .wk-uc-side { display: none; }
+}
+.wk-uc-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.wk-uc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; padding: 0 24px 8px 0; }
+.wk-uc-title { margin: 0; font-size: var(--text-title); line-height: 1.15; font-weight: var(--weight-strong); color: var(--ink-high); letter-spacing: var(--tracking-title); }
+.wk-uc-sidebtn { display: none; }
+
+/* One measure for the thread, the greeting and the composer. */
+.wk-uc-measure { width: 100%; max-width: 760px; margin: 0 auto; box-sizing: border-box; }
+.wk-uc-measure--wide { max-width: 1040px; }
+.wk-uc-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 24px 0 0; }
+.wk-uc-body[hidden] { display: none; }
+.wk-uc-back { flex-shrink: 0; padding: 0 0 8px; }
+.wk-uc-pane-title { margin: 8px 0 16px; font-size: var(--text-section); line-height: 1.3; font-weight: var(--weight-strong); color: var(--ink-high); }
+.wk-uc-pane { padding-bottom: 32px; }
+
+/* Nothing asked yet: the greeting sits in the middle of the column, the composer under it at the bottom. */
+.wk-uc-empty { display: flex; flex-direction: column; }
+.wk-uc-hello { margin: auto; padding: 24px 0; display: flex; flex-direction: column; gap: 20px; }
+.wk-uc-hello-title { margin: 0; font-size: var(--text-title); line-height: 1.2; font-weight: var(--weight-strong); color: var(--ink-high); letter-spacing: var(--tracking-title); }
+.wk-uc-hello .wk-ue-sentence { margin-top: -8px; }
+.wk-uc-composer { flex-shrink: 0; padding: 12px 24px 24px 0; }
+.wk-uc-composer[hidden] { display: none; }
+
+/* Asked: the page chat fills the column, unboxed, its header, thread and composer on the same measure. */
+.wk-ue-chat.wk-uc-chat { margin: 0; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.wk-ue-chat.wk-uc-chat[hidden] { display: none; }
+.wk-uc-chat .wk-pagechat[data-variant="inline"] {
+  flex: 1 1 auto; height: auto; min-height: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: hidden;
+}
+.wk-uc-chat .wk-assist--page > * {
+  padding-left: max(0px, calc((100% - 760px) / 2)); padding-right: max(24px, calc((100% - 760px) / 2));
+}
+.wk-uc-chat .wk-assist--page .wk-assist-header { border-bottom: 0 !important; padding-top: 0; }
+.wk-uc-chat .wk-assist--page .wk-pagechat-scope { border-bottom: 0; padding-top: 0; }
+.wk-uc-chat .wk-assist--page [data-testid="assist-thread"] { gap: 16px; }
+.wk-uc-chat .wk-assist--page [data-testid="assist-chat-msg"] .text-\[11px\] { font-size: var(--text-lead); line-height: 1.6; }
+.wk-uc-chat .wk-assist--page [data-testid="assist-user-msg"] p { font-size: var(--text-lead); }
+.wk-uc-chat .wk-assist--page textarea[data-testid="assist-input"] { font-size: var(--text-lead); line-height: 1.5; }
+.wk-uc-chat .wk-assist--page [data-testid="assist-send"] { font-size: var(--text-body); padding: 8px 16px; }
+/* The page header already has New question. */
+.wk-uc-chat [data-testid="page-chat-new"] { display: none; }
+
+/* ── The sidebar ── */
+.wk-uc-side {
+  min-height: 0; overflow-y: auto; border-left: 1px solid var(--border-subtle); padding: 4px 24px 32px;
+  display: flex; flex-direction: column; gap: 28px; background: transparent;
+}
+.wk-uc-sec { display: flex; flex-direction: column; gap: 8px; min-width: 0; outline: none; }
+.wk-uc-label { margin: 0; font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink-muted); }
+.wk-uc-quiet { margin: 0; font-size: var(--text-body); line-height: 1.5; color: var(--ink-muted); }
+
+/* Recent answers: compact two-line rows, the open one marked. */
+.wk-uc-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wk-uc-row {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: start; column-gap: 10px;
+  margin: 0 -10px; padding: 10px; border-radius: 10px; color: inherit; text-decoration: none; transition: background-color 0.14s;
+}
+.wk-uc-row > .wk-ue-dot { width: 8px; height: 8px; margin-top: 6px; }
+.wk-uc-row:hover { background: var(--ue-hover); }
+.wk-uc-row:active { background: var(--ue-press); }
+.wk-uc-row:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-uc-row[aria-current="true"] { background: var(--ue-hover-strong); }
+.wk-uc-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wk-uc-row-title {
+  font-size: var(--text-body); font-weight: var(--weight-strong); line-height: 1.4; color: var(--ink-high);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+}
+.wk-uc-row-sub { font-size: var(--text-caption); line-height: 1.4; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-uc-row-meta { font-size: var(--text-caption); line-height: 1.4; color: var(--ink-muted); white-space: nowrap; margin-top: 2px; }
+
+/* Repository graphs: the name (its page), then its two graphs. */
+.wk-uc-graphs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.wk-uc-graph { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wk-uc-graph-name {
+  align-self: flex-start; max-width: 100%; font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink-high);
+  text-decoration: none; border-radius: var(--radius-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wk-uc-graph-name:hover { text-decoration: underline; text-underline-offset: 3px; }
+.wk-uc-graph-name:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-uc-graph-links { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.wk-uc-graphbtn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--border-subtle); background: transparent; color: var(--ue-link); font-family: inherit;
+  font-size: var(--text-caption); font-weight: var(--weight-strong); cursor: pointer; transition: background-color 0.14s, border-color 0.14s;
+}
+.wk-uc-graphbtn:hover { background: var(--ue-hover-strong); border-color: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); }
+.wk-uc-graphbtn:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-uc-graphbtn .wk-know-dot { width: 7px; height: 7px; }
+.wk-uc-graphbtn[data-tone="ok"] .wk-know-dot { background: var(--status-ok); }
+.wk-uc-graphbtn[data-tone="run"] .wk-know-dot { background: var(--status-run); }
+.wk-uc-graphbtn[data-tone="warn"] .wk-know-dot { background: var(--status-warn); }
+.wk-uc-graphbtn[data-tone="fail"] .wk-know-dot { background: var(--status-fail); }
+.wk-uc-graphbtn[data-tone="gate"] .wk-know-dot { background: var(--status-gate); }
+.wk-uc-graphbtn[data-tone="none"] .wk-know-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
+.wk-uc-graphbtn[data-tone="unknown"] .wk-know-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); opacity: 0.6; }
+/* The state in words beside the name (never colour alone): "46k symbols", "build 3 · 38 domains", "not built".
+   Name and state each stay whole; when both do not fit, the state goes under the name. */
+.wk-uc-graphbtn { max-width: 100%; flex-wrap: wrap; justify-content: flex-start; text-align: left; row-gap: 2px; padding-top: 4px; padding-bottom: 4px; border-radius: 15px; white-space: nowrap; }
+.wk-uc-graphval { font-weight: var(--weight-regular); color: var(--ink-muted); white-space: nowrap; }
+.wk-uc-all { align-self: flex-start; }
+
+/* More: two quiet rows. */
+.wk-uc-more { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wk-uc-morebtn {
+  display: flex; align-items: center; gap: 10px; width: calc(100% + 20px); margin: 0 -10px; padding: 8px 10px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--ink-body); font-family: inherit; font-size: var(--text-body); text-align: left; cursor: pointer;
+  transition: background-color 0.14s;
+}
+.wk-uc-morebtn:hover { background: var(--ue-hover); color: var(--ink-high); }
+.wk-uc-morebtn[aria-pressed="true"] { background: var(--ue-hover-strong); color: var(--ink-high); font-weight: var(--weight-strong); }
+.wk-uc-morebtn:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-uc-morebtn svg { color: var(--ink-muted); flex-shrink: 0; }
+
+.wk-uc-scrim { display: none; }
+.wk-uc-sideclose { align-self: flex-end; margin: -8px -8px -16px 0; }
+
+/* Under 1024 px: one column; the sidebar is a drawer from the right, behind the header's button. */
+@media (max-width: 1023px) {
+  .wk-ue.wk-uc { grid-template-columns: minmax(0, 1fr); }
+  .wk-desk2[data-tab="understand"] > .wk-desk2-scroll { padding-right: var(--space-4, 16px); }
+  .wk-uc-sidebtn { display: inline-flex; }
+  .wk-uc-head, .wk-uc-body, .wk-uc-composer { padding-right: 0; }
+  .wk-uc-chat .wk-assist--page > * { padding-left: 0; padding-right: 0; }
+  .wk-uc-side { display: none; }
+  /* Above the top bar and the Ask bubble (40), under voice mode (45): ⌥V from the drawer closes it anyway. */
+  .wk-uc[data-side="open"] .wk-uc-side {
+    display: flex; position: fixed; top: 0; right: 0; bottom: 0; z-index: 44; width: min(340px, 88vw); padding: 20px;
+    background: var(--surface-card); border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-overlay);
+  }
+  .wk-uc[data-side="open"] .wk-uc-scrim { display: block; position: fixed; inset: 0; z-index: 43; background: var(--scrim, color-mix(in oklab, black 40%, transparent)); }
+}
+@media (max-width: 767px) {
+  .wk-uc-title, .wk-uc-hello-title { font-size: var(--text-section); }
+  .wk-uc-composer { padding-bottom: 16px; }
+  /* The floating chat's bubble keeps its corner (components.css, council M1): both composers leave it a gutter. */
+  .wk-uc-composer, .wk-uc-chat .wk-assist--page > div:has(> div > [data-testid="assist-input"]) { padding-right: var(--fab-clear) !important; }
+  /* The chat's box as the empty state's: the words on their own row, the mic and Send under them. */
+  .wk-uc-chat div:has(> [data-testid="assist-input"]) { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
+  .wk-uc-chat [data-testid="assist-input"] { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .wk-uc-row, .wk-uc-graphbtn, .wk-uc-morebtn { transition: none; } }

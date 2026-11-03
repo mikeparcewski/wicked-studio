@@ -5,7 +5,7 @@ import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { FLOOR_FIX_LABEL, namedSendBackNote, SEND_BACK_NAMED_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { AskCard, AskRecord, type AskReason } from '../ask/AskCard.js';
-import { askFromGate, gateOption } from '../../board/askModel.js';
+import { askFromGate, gateOption, REASON_KEYS } from '../../board/askModel.js';
 import type { AskOption } from '../../api/ask.js';
 import { repoNameOf, stepNoun } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
@@ -667,7 +667,16 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     ?? [...model.choices, ...model.overflow].find((c) => c.key === 'steer' && c.decision !== null)
     ?? [...model.choices, ...model.overflow].find((c) => c.key === 'free-text-send' && c.decision !== null) ?? null;
   const replySend = useRef<((text: string) => void) | null>(null);
-  useOfferReply(runId, replyChoice === null || chosen !== null ? null : { label: replyChoice.label, send: (t) => replySend.current?.(t) });
+  // artifact-runs-fix (rig run 2e6059da): a card that asks for its own words ("Retry this step with a note") opened
+  // its box while the reply box below still said "Replies to this decision (Send back)" and sent a Send back. While
+  // a card's box is open, the reply box stands down (it asks a separate question): one note input per choice.
+  const [cardNoteOpen, setCardNoteOpen] = useState<string | null>(null);
+  // …and while ANOTHER choice that takes its own note is the selected one (review r2: Escape closes its box but
+  // leaves it selected), the reply box must not answer through Send back either.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const selectedTakesNote = model !== null && selectedKey !== null && replyChoice !== null && selectedKey !== replyChoice.key
+    && [...model.choices, ...model.overflow].some((c) => c.key === selectedKey && (c.needsNote === true || REASON_KEYS.has(c.key)));
+  useOfferReply(runId, replyChoice === null || chosen !== null || cardNoteOpen !== null || selectedTakesNote ? null : { label: replyChoice.label, send: (t) => replySend.current?.(t) });
 
   // A new gate instance is a fresh question — reset all state.
   // When gate clears (becomes undefined) after a successful send, do NOT clear `chosen`:
@@ -896,6 +905,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         busy={action.busy}
         start={recKey}
         reasonFor={reasonFor}
+        onReasonOpen={setCardNoteOpen}
+        onSelect={setSelectedKey}
         reasonId={`session-gate-note-${runId}`}
         confirmLabel={(o) => (o.id === 'rerun' && rerunOffer !== null ? `Rerun from ${rerunOffer.phase}` : o.label)}
         testIds={{ root: /* testid */ 'session-gate-ask', group: /* testid */ 'session-gate-choices', option: /* testid */ 'session-gate-choice', consequence: /* testid */ 'session-gate-consequence', confirm: /* testid */ 'session-gate-confirm', send: /* testid */ 'session-gate-send', reason: /* testid */ 'session-gate-note', reasonLabel: /* testid */ 'session-gate-note-label' }}

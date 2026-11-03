@@ -12,7 +12,10 @@ the Desk at 1440x700 against the in-process fixture's registered repo:
   4. NO REQUIREMENTS GRAPH YET (lane repo-page): Requirements says so plainly (crew's typed 404
      `code: notGenerated`), never "the daemon refused this"; "Generate it" opens New job filled in with
      the generating workflow and this repository, and sends nothing (no POST).
-  5. 0 page errors.
+  5. WHAT WE KNOW (round 10): the band's five marks say the code graph's size, the real share against the
+     minimum (a meter), the requirements graph's build (behind) and the runs; Requirements opens the
+     requirements, Requirements graph opens the graph on its domain view.
+  6. 0 page errors.
 
 Captures: e2e/shots/desk-repo-page-*.png. Env: FEEDBACK_PORT (default 4359).
 """
@@ -137,6 +140,40 @@ with sync_playwright() as p:
     check("generate-opens-new-job", panel.count() == 0 and intent.startswith("Map the domain of studio-api")
           and not posts, intent=intent, posts=posts[:5], wizard_step=page.get_by_test_id("launch-wizard-step").get_attribute("data-step"))
     page.get_by_test_id("launch-wizard-close").click()
+
+    # ── 5. what we know (round 10): the band's marks, each opening the thing itself ──
+    cov = {"realPct": 54, "minPct": 80, "behaviorBearing": 100, "real": 54, "placeholders": 6, "unmapped": 40, "notProduct": 12}
+    set_fixture(origin, requirements={"studio-api": [{"key": "booking::REQ-001", "reqId": "REQ-001", "title": "A booking needs a date"}]},
+                requirements_header={"studio-api": {"coverage": cov, "graphBuild": {"generation": 2, "coverage": None, "behind": True}}},
+                graph_kinds={"studio-api": [{"kind": "File", "count": 2}, {"kind": "Function", "count": 5}, {"kind": "domain", "count": 3}]})
+    page.goto(f"{origin}/repo-detail/studio-api", wait_until="networkidle")
+    band = page.get_by_test_id("repo-know-band")
+    band.wait_for(state="visible", timeout=15000)
+    page.wait_for_function("() => [...document.querySelectorAll('[data-testid=repo-know-value]')].every((v) => v.textContent !== '…')", timeout=15000)
+    marks = band.locator('[data-testid="repo-know-mark"]').evaluate_all(
+        "(ms) => ms.map((m) => [m.dataset.mark, m.dataset.tone, m.querySelector('[data-testid=repo-know-value]').textContent, m.tagName])")
+    page.screenshot(path=str(SHOTS / "desk-repo-page-know.png"))
+    by = {m[0]: m for m in marks}
+    check("what-we-know-marks", [m[0] for m in marks] == ["code", "reqs", "reqgraph", "domain-runs", "runs"]
+          and by["reqs"][1] == "warn" and by["reqs"][2] == "54% real"
+          and by["reqgraph"][1] == "warn" and by["reqgraph"][2] == "build 2 · 3 domains"
+          and band.get_by_test_id("repo-know-flag").inner_text() == "behind"
+          and by["code"][2] == "10 symbols", marks=marks)
+    meter = band.get_by_test_id("repo-know-meter")
+    check("requirements-meter", meter.get_attribute("data-pct") == "54" and meter.get_attribute("data-min") == "80")
+    band.locator('[data-mark="reqs"]').click()
+    page.get_by_test_id("requirement-row").first.wait_for(state="visible", timeout=10000)
+    behind = page.get_by_test_id("requirements-graph-behind").count()
+    check("requirements-mark-opens-requirements", page.get_by_test_id("requirement-row").count() == 1, behind_note=behind)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    band.locator('[data-mark="reqgraph"]').click()
+    page.get_by_role("button", name="Close graph").wait_for(state="visible", timeout=10000)
+    pressed = page.evaluate("() => [...document.querySelectorAll('button')].filter((b) => b.textContent === 'Domain').map((b) => b.getAttribute('aria-pressed'))")
+    page.screenshot(path=str(SHOTS / "desk-repo-page-know-reqgraph.png"))
+    check("requirements-graph-mark-opens-the-domain-graph", pressed == ["true"], pressed=pressed)
+    page.get_by_role("button", name="Close graph").click()
+    set_fixture(origin, requirements=None, requirements_header=None, graph_kinds=None)
     set_fixture(origin, repo=False, workflow_catalog=False)
 
     check("no-errors", not errors, errors=errors[:5])

@@ -10,6 +10,7 @@ import type { RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { demoBlocker, demoUrlProblem } from '../src/board/demoLaunch.js';
 import { DEMO_VIDEO_ID, openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
+import { resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
 import { resetComposerSeats, useLaunchSeats } from '../src/store/composerSeats.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
@@ -47,6 +48,7 @@ beforeEach(() => {
   setCachedWorkflows(WF);
   clearRepoCache();
   resetLaunchWizard();
+  resetWorkflowCatalog();
   useProjectsStore.setState({ projects: [
     { id: 'default', name: 'Unfiled', status: 'active' },
     { id: 'upload-endpoint', name: 'Upload endpoint', status: 'active' },
@@ -55,6 +57,8 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetComposerSeats(); });
 
 const step = (): string | undefined => screen.getByTestId('launch-wizard-step').dataset.step;
+/** The wizard waits for the daemon's catalog answer (launch-modal r6): let the stubbed read land. */
+const settle = async (): Promise<void> => { await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 const next = (): void => { fireEvent.click(screen.getByTestId('launch-wizard-next')); };
 function fillForm(): void {
   fireEvent.change(screen.getByTestId('launch-wizard-demo-url'), { target: { value: `  ${APP}  ` } });
@@ -67,12 +71,13 @@ describe('the Demo video job (studio#664)', () => {
     const navigate = vi.fn();
     render(<LaunchWizard navigate={navigate} />);
     act(() => openLaunchWizard({}));
-    fireEvent.click(screen.getByTestId(`launch-wizard-workflow-${DEMO_VIDEO_ID}`));
+    fireEvent.click(await screen.findByTestId(`launch-wizard-workflow-${DEMO_VIDEO_ID}`));
     expect(step()).toBe('demo');
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('New job: Demo video');
     expect(document.activeElement).toBe(screen.getByTestId('launch-wizard-demo-url'));
     fillForm();
     fireEvent.change(screen.getByTestId('launch-wizard-demo-project'), { target: { value: 'upload-endpoint' } });
+    await settle();
     // Unfiled is the "Not in a project" choice, never listed twice.
     const opts = [...(screen.getByTestId('launch-wizard-demo-project') as HTMLSelectElement).options].map((o) => o.value);
     expect(opts).toEqual(['', 'upload-endpoint']);
@@ -103,6 +108,7 @@ describe('the Demo video job (studio#664)', () => {
   it('not in a project: the launch goes to the unfiled mount (crew launches it unfiled)', async () => {
     render(<LaunchWizard navigate={() => {}} />);
     act(() => openLaunchWizard({ workflowId: DEMO_VIDEO_ID }));
+    await settle();
     expect(step()).toBe('demo');
     fillForm();
     next();
@@ -123,9 +129,10 @@ describe('the Demo video job (studio#664)', () => {
     expect((screen.getByTestId('launch-wizard-demo-project') as HTMLSelectElement).value).toBe('');
   });
 
-  it('Next waits for a real http(s) address, an audience and what to show, and says which is missing', () => {
+  it('Next waits for a real http(s) address, an audience and what to show, and says which is missing', async () => {
     render(<LaunchWizard />);
     act(() => openLaunchWizard({ workflowId: DEMO_VIDEO_ID }));
+    await settle();
     expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
     expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Give the address of the running app.');
     fireEvent.change(screen.getByTestId('launch-wizard-demo-url'), { target: { value: 'localhost:5173' } });
@@ -143,6 +150,7 @@ describe('the Demo video job (studio#664)', () => {
     launchStatus = 409;
     render(<LaunchWizard navigate={() => {}} />);
     act(() => openLaunchWizard({ workflowId: DEMO_VIDEO_ID }));
+    await settle();
     fillForm();
     next();
     next();

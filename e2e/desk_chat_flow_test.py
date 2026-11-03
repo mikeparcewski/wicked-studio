@@ -102,8 +102,9 @@ with sync_playwright() as p:
         body: JSON.stringify({ 'studio.composer': { deliverPr: true, startInChat: false } }) })""")
     page.goto(f"{origin}/", wait_until="networkidle")
 
-    # 1. New job offers "Start with chat" first, and it lands on a new chat's page — and an Ask panel
-    #    left open (another conversation) closes (codex r1).
+    # 1. New job offers "Talk it through first" beside its search (launch-modal; was the first card,
+    #    "Start with chat"), and it lands on a new chat's page — and an Ask panel left open (another
+    #    conversation) closes (codex r1).
     page.get_by_test_id("desk-rail-chat").click()
     page.get_by_test_id("assist-input").wait_for(state="visible", timeout=8000)
     # The Ask panel covers the Desk's buttons: New job from ⌘K, as an operator in Ask would reach it.
@@ -111,14 +112,15 @@ with sync_playwright() as p:
     page.get_by_test_id("palette-input").wait_for(state="visible", timeout=5000)
     page.get_by_test_id("palette-input").fill("> New job")
     page.keyboard.press("Enter")
-    page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
+    page.get_by_test_id("launch-catalog-results").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(300)
-    first = page.evaluate("""() => { const b = document.querySelector('[data-testid="launch-wizard-cards"] button');
-      return { id: b?.dataset.testid, text: b?.innerText, focused: document.activeElement === b }; }""")
+    first = page.evaluate("""() => { const b = document.querySelector('[data-testid="launch-wizard-start-chat"]');
+      return { id: b?.dataset.testid, text: b?.innerText,
+        focused: document.activeElement?.dataset?.testid === 'launch-catalog-search' }; }""")
     for t in ("wicked-light", "wicked-dark"):
         theme(page, t)
         page.screenshot(path=str(SHOTS / f"desk-chat-flow-newjob-{t}.png"))
-    check("newjob-offers-chat-first", first["id"] == "launch-wizard-start-chat" and "Start with chat" in (first["text"] or "") and first["focused"], first=first)
+    check("newjob-offers-chat-first", first["id"] == "launch-wizard-start-chat" and "Talk it through first" in (first["text"] or "") and first["focused"], first=first)
     page.get_by_test_id("launch-wizard-start-chat").click()
     chat_id = landed_on_new_chat(page, "start-with-chat-lands-in-chat")
     for t in ("wicked-light", "wicked-dark"):
@@ -189,7 +191,7 @@ with sync_playwright() as p:
         page.wait_for_timeout(100)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
-    page.get_by_test_id("launch-wizard-cards").wait_for(state="visible", timeout=8000)
+    page.get_by_test_id("launch-catalog-results").wait_for(state="visible", timeout=8000)
     check("settings-restores-picker", True)
     ctx.close()
 

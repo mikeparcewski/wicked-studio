@@ -99,18 +99,19 @@
   unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 
-/* The Wicked faces (operator 2026-11-01): ONE source, the vendored design package (src/vendor/wicked-design,
- * wicked-web packages/design-system/fonts/wicked, re-vendored from wicked-web a05beb7, #42). Wicked Sans is the text and
- * UI face: Regular serves weights up to 499, SemiBold 500 and up; Serif and Script take any weight (100-900), the same
- * ranges as the package's own wicked-fonts.css.
- * Wicked Sans covers ASCII and common punctuation: an accented letter falls back, per character, to Inter (next in
- * --font-sans). Wicked Serif is the default wordmark (--font-display); Wicked Script is for the lockup. */
+/* The Wicked faces: ONE source, the vendored design package (src/vendor/wicked-design, wicked-web
+ * packages/design-system/fonts/wicked; VENDORED.json names the commit). Wicked Sans is the text and UI face, since
+ * fonts-v3 (the operator's pick 2026-11-02) the OFL cut of Inter, WickedSansA-*: Regular serves weights up to 499,
+ * SemiBold 500 and up; Serif and Script take any weight (100-900), the same ranges as the package's own wicked-fonts.css.
+ * Wicked Sans covers Latin-1 and Latin Extended-A: anything else falls back, per character, to Inter (next in
+ * --font-sans). The wordmark is drawn now (components/ui/BrandMarks.tsx), so Wicked Serif (--font-display, the
+ * .wk-wordmark class) and Wicked Script load only if something sets them. */
 @font-face {
   font-family: 'Wicked Sans';
   font-style: normal;
   font-display: swap;
   font-weight: 100 499;
-  src: url('../vendor/wicked-design/fonts/wicked/WickedSans-Regular.woff2') format('woff2');
+  src: url('../vendor/wicked-design/fonts/wicked/WickedSansA-Regular.woff2') format('woff2');
 }
 
 @font-face {
@@ -118,7 +119,7 @@
   font-style: normal;
   font-display: swap;
   font-weight: 500 900;
-  src: url('../vendor/wicked-design/fonts/wicked/WickedSans-SemiBold.woff2') format('woff2');
+  src: url('../vendor/wicked-design/fonts/wicked/WickedSansA-SemiBold.woff2') format('woff2');
 }
 
 @font-face {
@@ -140,5 +141,6 @@
 /* Two weights ship: a bold is never faked (italic may still be slanted; Wicked Sans has no italic). */
 html { font-synthesis-weight: none; }
 
-/* The default wordmark only: the brand face, never synthesised bold (one weight ships). */
+/* The serif wordmark class (the brand face, never synthesised bold: one weight ships). The shell's wordmark is
+   drawn since fonts-v3 (BrandMarks.tsx); this stays for any text set in the brand serif. */
 .wk-wordmark { font-family: var(--font-display); font-synthesis: none;  text-transform: capitalize; }

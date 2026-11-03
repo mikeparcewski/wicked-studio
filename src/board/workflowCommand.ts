@@ -87,6 +87,7 @@ export function workflowItems(
   query: string,
   defs: readonly WorkflowDef[] | null,
   presets: readonly Preset[] | null,
+  max: number = WORKFLOW_ROWS_MAX,
 ): WorkflowRow[] {
   const q = query.toLowerCase();
   const rows: WorkflowRow[] = [];
@@ -103,5 +104,5 @@ export function workflowItems(
   }
   return rows
     .filter((r) => q === '' || r.cmd.toLowerCase().startsWith(q) || r.key.toLowerCase().startsWith(q))
-    .slice(0, WORKFLOW_ROWS_MAX);
+    .slice(0, max);
 }

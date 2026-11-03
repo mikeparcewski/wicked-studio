@@ -14,6 +14,8 @@ interface Props {
   onSelectRun?: (runId: string) => void;
   /** Deep-link: open focused on this symbol (ego-slice + selected node). */
   initialFocus?: string | null;
+  /** Which graph it opens on: the code graph (default) or the requirements (domain) graph. */
+  initialView?: 'code' | 'domain';
 }
 
 type TabId = 'graph' | 'hotspots';
@@ -452,9 +454,9 @@ function PanelDots(): React.ReactElement {
   );
 }
 
-export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Props): React.ReactElement {
+export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus, initialView = 'code' }: Props): React.ReactElement {
   const [tab, setTab] = useState<TabId>('graph');
-  const [graphType, setGraphType] = useState<GraphType>('code');
+  const [graphType, setGraphType] = useState<GraphType>(initialView);
   const [loading, setLoading] = useState(true);
   const [codeData, setCodeData] = useState<CodeGraphData | null>(null);
   const [domainData, setDomainData] = useState<DomainGraph | null>(null);
@@ -621,6 +623,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
     return (
       <button
         type="button"
+        aria-pressed={active}
         onClick={() => onChange(value)}
         className="rounded px-2.5 py-1 text-xs font-medium transition-colors"
         style={{
@@ -727,7 +730,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
 
         {/* ── Content ────────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-hidden" style={{ background: T.blue }}>
-          {loading ? (
+          {loading && graphType === 'code' ? (
             <div className="flex items-center justify-center h-full">
               <span className="text-sm" style={{ color: T.muted }}>Loading…</span>
             </div>

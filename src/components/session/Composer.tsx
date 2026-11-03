@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
-import { chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
+import { artifactOfChips, chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
+import { inViewFor } from '../../store/artifactInView.js';
 import { composerSendRefusal } from '../../board/launchModel.js';
 import {
   parseWorkflowCommand, workflowItems, WORKFLOWS_LOADING_LINE, type WorkflowRow,
@@ -49,6 +50,9 @@ export interface ComposerSend {
    *  repositories it reads. Sent only when `capabilities.chatWorkflows` names the workflow. */
   workflow?: string;
   repos?: Array<{ id: string; name: string }>;
+  /** DES-CHAT-ARTIFACTS-001 §5.1: the artifact the message is about (its chip, else the one this composer's surface
+   *  shows) and the parts selected in it. The chat names its version at send time, after the editor's writes settle. */
+  artifact?: { ref: string; anchors: string[]; composerKey: string };
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
@@ -388,9 +392,14 @@ export function Composer({
     // re-framed it as a question about the helper (and titled the session that way).
     const helper = opensChat && askPathOn ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:')) : undefined;
     const message = messageWithAbout(text, helper === undefined ? chips : chips.filter((c) => c !== helper));
+    // The artifact the message is about: a chip names it, else the one this composer's surface shows (full screen,
+    // its pane, its newest card).
+    const shown = inViewFor(composerKey);
+    const artifact = artifactOfChips(chips) ?? (shown !== null ? { ref: shown.ref, anchors: [] } : null);
     onSend(message, {
       ...(project === null ? {} : { projectId: project.projectId, fresh: started }),
       ...(helper !== undefined ? { primary: helper.key.slice(2) } : {}),
+      ...(artifact !== null ? { artifact: { ...artifact, composerKey } } : {}),
     });
     clearAboutChips(composerKey);
     setText('');

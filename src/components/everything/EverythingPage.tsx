@@ -792,9 +792,11 @@ function MadeTab({ runs, runsLoaded = true, q, navigate, go }: { runs: SessionVi
       </div>
       {doorOpen && (
         <NewDocument
+          // launch-modal (xreview r2): a new request (New job's card names a format and project) is a new form.
+          key={`${q.format ?? ''}|${q.project ?? ''}`}
           projects={projects}
           initialProject={q.project}
-          initialFormat={formatForMadeKind(q.kind)}
+          initialFormat={q.format ?? formatForMadeKind(q.kind)}
           onClose={() => navigate(withDoor(false), { replace: true })}
           // studio#768: land on the list the new item is filed under (a web page under Pages), never
           // on a filter that says "No documents yet" beside it; an existing one opens on All.

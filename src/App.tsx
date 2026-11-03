@@ -253,7 +253,9 @@ export function App(): React.ReactElement {
       );
     }
     // `address`: moves inside the surface stay on the Steer tab's own address (no redirect, no remount).
-    return <SteerSurface pathname={u.pathname} search={hs} navigate={navigate} runs={runs} address={(p) => deskTabPath('steer', p)} />;
+    // A project's Steer tab keeps its moves (a pill, a rule) in the project, as Memory does.
+    const steerBase = project === null ? '/' : projectDetailPath(project);
+    return <SteerSurface pathname={u.pathname} search={hs} navigate={navigate} runs={runs} address={(p) => deskTabPath('steer', p, steerBase)} />;
   };
 
   useEventStream(handleEvent);
@@ -550,15 +552,17 @@ export function App(): React.ReactElement {
   // ── Repo graph modal — opened from RepoDetailPage via onOpenGraph ───────────
   const [graphModalRepo, setGraphModalRepo] = useState<RepoEntry | null>(null);
   const [graphModalFocus, setGraphModalFocus] = useState<string | null>(null);
+  const [graphModalView, setGraphModalView] = useState<'code' | 'domain'>('code');
 
   const openGraphModal = useCallback(
-    (focus?: string) => {
+    (focus?: string, view: 'code' | 'domain' = 'code') => {
       if (!repoId) return;
       setGraphModalFocus(focus ?? null);
+      setGraphModalView(view);
       void api.listRepos().then(({ repos }) => {
         const r = repos.find((x) => x.id === repoId);
         if (r) setGraphModalRepo(r);
-      });
+      }, () => undefined);
     },
     [repoId],
   );
@@ -874,6 +878,7 @@ export function App(): React.ReactElement {
               ...(askHandoff.openChatId !== undefined ? { sendOpenChatId: askHandoff.openChatId } : {}),
               ...(askHandoff.workflow !== undefined ? { sendWorkflow: askHandoff.workflow } : {}),
               ...(askHandoff.repos !== undefined ? { sendRepos: askHandoff.repos } : {}),
+              ...(askHandoff.artifact !== undefined ? { sendArtifact: askHandoff.artifact } : {}),
             } : {})}
             {...(askHandoff === null && askStart !== null ? {
               ...(askStart.projectId !== null ? { startProjectId: askStart.projectId } : {}),
@@ -927,8 +932,10 @@ export function App(): React.ReactElement {
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (
         <RepoGraphModal
+          key={`${graphModalRepo.id}:${graphModalView}`}
           repo={graphModalRepo}
           initialFocus={graphModalFocus}
+          initialView={graphModalView}
           onClose={() => { setGraphModalRepo(null); setGraphModalFocus(null); }}
           onSelectRun={selectRun}
         />

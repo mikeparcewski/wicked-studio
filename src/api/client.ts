@@ -41,6 +41,7 @@ import { ApiError, apiStatus } from './errors.js';
 import type { GuidanceUpdate } from './guidance.js';
 import type { ElicitationAnswerBody } from './ask.js';
 import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
+import type { ChatMessageContext, ChatProposalDecisionBody, ChatProposalDecisionResponse } from './chatArtifacts-wire.js';
 
 export type * from './types.js';
 export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
@@ -85,6 +86,9 @@ export const terminalWsUrl = (id: string): string =>
 
 /** The largest gate-answer body sent with `keepalive` (under the browser's 64 KiB shared budget). */
 export const KEEPALIVE_MAX_BYTES = 48 * 1024;
+
+/** The catalog route New job reads (wf-catalog WIRE). */
+export const WORKFLOW_CATALOG_PATH = '/workflows/catalog';
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // Only advertise a JSON body when we actually send one — Fastify v5 rejects
@@ -172,6 +176,10 @@ export const api = {
    *  to get the complete history. */
   listRuns: (includeArchived?: boolean) =>
     apiFetch<{ runs: SessionView[] }>(includeArchived ? '/runs?include=archived' : '/runs'),
+  /** The runs that answered one interactive document (`GET /runs?doc=<id>`, crew's doc↔run index): "Ask about this"
+   *  finds the chat a document was made in from its draft run's `chat_id` (DES-CHAT-ARTIFACTS-001 §6.3). */
+  listRunsForDoc: (docId: string) =>
+    apiFetch<{ runs: SessionView[] }>(`/runs?doc=${encodeURIComponent(docId)}`),
 
   /** Archive (or unarchive) a TERMINAL run (crew#265) — write-off, not delete.
    *  404 unknown; 409 when the run is non-terminal. */
@@ -325,11 +333,18 @@ export const api = {
   // daemon predating the turn index.
   // `attachments` (api-types 0.137.0, `capabilities.chatAttachments`): ids from `uploadChatAttachments`;
   // never sent to a daemon without the capability (the caller holds the gate).
-  sendChatMessage: (chatId: string, text: string, targets?: string[], attachments?: string[]) =>
+  // `context` (api-types 0.169.0, `capabilities.chatArtifacts.context`): what studio shows beside the message; never
+  // sent to a daemon without the capability (the caller holds the gate; its strict body would refuse the field).
+  sendChatMessage: (chatId: string, text: string, targets?: string[], attachments?: string[], context?: ChatMessageContext) =>
     apiFetch<ChatMessageResponse>(`/chats/${encodeURIComponent(chatId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, ...(targets !== undefined ? { targets } : {}), ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}) }),
+      body: JSON.stringify({
+        text,
+        ...(targets !== undefined ? { targets } : {}),
+        ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
+        ...(context !== undefined && Object.keys(context).length > 0 ? { context } : {}),
+      }),
     }),
   /** F-W1-005: re-seat NAMED seats on a LIVE chat — the engine's per-seat `chat_ensure` with the
    *  scope recorded at open, same pool key (crew ≥ 0.7.36 `POST /chats/:id/seats`; api-types 0.39.0
@@ -356,6 +371,13 @@ export const api = {
   },
   /** A chat's messages, open or closed (`capabilities.chatList`); 404 for an id with no history. */
   getChatMessages: (chatId: string) => apiFetch<ChatMessagesResponse>(`/chats/${encodeURIComponent(chatId)}/messages`),
+  /** (api-types 0.170.0, DES-CHAT-ARTIFACTS-001 §4.3) Answer a chat's proposal: the only way one starts anything. A
+   *  repeat of the same decision answers the stored result again, so a retry after a lost response is safe. */
+  decideChatProposal: (chatId: string, pid: string, body: ChatProposalDecisionBody) =>
+    apiFetch<ChatProposalDecisionResponse>(`/chats/${encodeURIComponent(chatId)}/proposals/${encodeURIComponent(pid)}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   /** End a chat and KEEP its history (`capabilities.chatList`) — unlike `closeChat` (DELETE), which
    *  on that daemon also deletes it. Idempotent. */
   endChat: (chatId: string) => apiFetch<ChatCloseResponse>(`/chats/${encodeURIComponent(chatId)}/close`, { method: 'POST' }),
@@ -571,6 +593,16 @@ export const api = {
   listWorkflows: () =>
     apiFetch<{ workflows: import('./types.js').WorkflowDef[]; unavailable?: import('./wave6-wire.js').RefusedWorkflow[] }>('/workflows'),
 
+  /**
+   * (launch-modal, wf-catalog WIRE v1) The workflow catalog for New job: categories, each entry's
+   * metadata and this operator's usage (`?projectId` counts that project's runs and adds its saved presets). Read as `unknown` (`catalogFromWire` parses it); an older
+   * daemon answers 404 and New job falls back to `listWorkflows`.
+   */
+  // A 200 whose body is not JSON (an older service's HTML page) is "not a catalog" (null), not a failure.
+  getWorkflowCatalog: (projectId?: string | null) =>
+    apiFetch<unknown>(projectId != null && projectId !== '' ? `${WORKFLOW_CATALOG_PATH}?projectId=${encodeURIComponent(projectId)}` : WORKFLOW_CATALOG_PATH)
+      .catch((err: unknown) => { if (err instanceof SyntaxError) return null; throw err; }),
+
   /** One workflow definition by id; 404 if unknown. */
   getWorkflow: (id: string) => apiFetch<{ workflow: import('./types.js').WorkflowDef }>(`/workflows/${encodeURIComponent(id)}`),
 
@@ -586,7 +618,7 @@ export const api = {
     }),
 
   /** Server-side requirements search: tokenized AND-match + risk/domain filters + pagination. */
-  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; category?: 'functional' | 'config-data'; domain?: string; offset?: number; limit?: number }) => {
+  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; category?: 'functional' | 'config-data'; domain?: string; offset?: number; limit?: number }, opts: { signal?: AbortSignal } = {}) => {
     const qs = new URLSearchParams();
     if (params.q) qs.set('q', params.q);
     if (params.risk) qs.set('risk', params.risk);
@@ -594,7 +626,7 @@ export const api = {
     if (params.domain) qs.set('domain', params.domain);
     qs.set('offset', String(params.offset ?? 0));
     qs.set('limit', String(params.limit ?? 50));
-    return apiFetch<import('./types.js').RequirementsPage>(`/repos/${encodeURIComponent(repoId)}/requirements?${qs.toString()}`);
+    return apiFetch<import('./types.js').RequirementsPage>(`/repos/${encodeURIComponent(repoId)}/requirements?${qs.toString()}`, opts.signal !== undefined ? { signal: opts.signal } : undefined);
   },
   getRequirement: (repoId: string, key: string) =>
     apiFetch<{ requirement: import('./types.js').RequirementDetail }>(`/repos/${encodeURIComponent(repoId)}/requirements/${encodeURIComponent(key)}`),
@@ -667,9 +699,10 @@ export const api = {
 
   /** A repo's code-graph summary — node counts by kind, over that repo's OWN store (#122). Repo-scoped
    *  only; the daemon 404s an unknown repo and 400s a missing one. */
-  getGraphKindsForRepo: (repoRef: string) =>
+  getGraphKindsForRepo: (repoRef: string, opts: { signal?: AbortSignal } = {}) =>
     apiFetch<{ kinds: import('./types.js').GraphKind[] }>(
       `/governance/graph?repo=${encodeURIComponent(repoRef)}`,
+      opts.signal !== undefined ? { signal: opts.signal } : undefined,
     ),
 
   /** All recorded governance claims (decisions) from the conformance store. */

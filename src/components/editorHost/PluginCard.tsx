@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
-import type { EditorView } from '../../api/editors.js';
+import { editorSaves, type EditorView } from '../../api/editors.js';
 import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, type WriteVerb } from '../../board/artifactMorph.js';
-import { EditorHost, type HostLogEntry, type HostUi } from '../../editors/host.js';
+import { adapterWritesSettled, EditorHost, type HostLogEntry, type HostUi } from '../../editors/host.js';
 import {
-  LIVE_FRAME_CAP, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, replayGroupSelection, touchLive, useHostChrome, useHostPanel, useLiveCards,
+  LIVE_FRAME_CAP, PANEL_RIBBON_BELOW_PX, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, replayGroupSelection, touchLive, useGroupShown, useHostChrome, useHostPanel, useLiveCards,
   type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
@@ -14,11 +14,14 @@ import { readThemeTokens } from '../../editors/theme.js';
 import { artifactSizeOf, registerArtifact, setArtifactSize, useArtifactSizes } from '../../store/artifactSizes.js';
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { VersionLens } from '../session/ArtifactVersions.js';
-import { useEditorFor } from '../../store/editors.js';
+import { useEditorChoices, useEditorFor, useEditorPicks } from '../../store/editors.js';
 import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import '../../editors/adapters/index.js';
 import './hostTabs.js';
-import { chipsToComposer, focusComposer, forwardedKey, typedToComposer } from './composerBridge.js';
+import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge.js';
+import { askAbout } from '../../board/askAbout.js';
+import { artifactRefOf } from '../../api/chatArtifacts-wire.js';
+import { noteShown, noteWritten, placementEntry, registerInView } from '../../store/artifactInView.js';
 import { FullShell } from './FullShell.js';
 import { useRunHost } from './RunHostContext.js';
 
@@ -58,7 +61,36 @@ export function PluginCard(props: PluginCardProps): React.ReactElement {
       </section>
     );
   }
-  return <CappedCard {...props} editor={editor} />;
+  return <CappedCard key={editor.id} {...props} editor={editor} />;
+}
+
+/** One editor's name in the "Open with" choice: its title, and "only views" when it cannot save (no `artifact.write`). */
+export function openWithLabel(e: EditorView): string {
+  return `${e.title}${e.first_party ? '' : ' (installed)'}${editorSaves(e) ? '' : ' · only views, can’t save changes'}`;
+}
+
+/**
+ * "Open with" (artifact-runs-fix), drawn by the artifact host (`ArtifactMorph`, its one caller): when more than one
+ * editor declares this kind — an installed pack beside the
+ * first-party editor — the person picks which opens it; the pick is remembered for the kind. Nothing shows when one
+ * editor fits. An editor that cannot save says so here, before it is picked.
+ */
+export function OpenWith({ kind, current }: { kind: string; current: EditorView }): React.ReactElement | null {
+  const choices = useEditorChoices(kind);
+  const pick = useEditorPicks((s) => s.pick);
+  if (choices.length < 2) return null;
+  return (
+    <label data-testid="plugin-card-open-with" className="wk-host-note wk-pcard-openwith">
+      Open with{' '}
+      <select
+        data-testid="plugin-card-open-with-select"
+        value={current.id}
+        onChange={(e) => pick(kind, e.target.value === choices[0]?.id ? null : e.target.value)}
+      >
+        {choices.map((e) => <option key={e.id} value={e.id}>{openWithLabel(e)}</option>)}
+      </select>
+    </label>
+  );
 }
 
 /** The cards whose Options group an address opened: Back closes it (codex h2-r8/r9 P2). Kept outside the live card,
@@ -149,6 +181,35 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   );
   const group = groupKey(editor.id, binding.artifactKey);
   const full = useHostChrome((s) => s.full === binding.artifactKey);
+  // DES-CHAT-ARTIFACTS-001 §5.1: a document card on screen is what a chat message from its composer (or the floating
+  // chat beside it) is about. The send reads the version it shows after its writes in flight have settled.
+  const inViewRef = binding.source === 'interactive-doc' ? artifactRefOf(binding.projectId, binding.docId) : null;
+  const inViewRefNow = useRef(inViewRef);
+  inViewRefNow.current = inViewRef;
+  const lensRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (adapter === null || inViewRef === null) return undefined;
+    const key = binding.artifactKey;
+    return registerInView(placementEntry({
+      key,
+      ref: inViewRef,
+      title: bindingRef.current.title,
+      composerKey: bindingRef.current.composerKey,
+      surface: () => {
+        if (useHostChrome.getState().full === key) return 'full';
+        const panel = useHostPanel.getState();
+        // The panel's own visibility rule: below its ribbon width it shows only as the overlay, else unless folded.
+        const narrow = typeof matchMedia === 'function' && matchMedia(`(max-width: ${PANEL_RIBBON_BELOW_PX - 1}px)`).matches;
+        const visible = narrow ? panel.overlay : !panel.folded;
+        return panel.group?.key === group && visible && panel.tab.owner !== 'run' ? 'pane' : 'inline';
+      },
+      lens: () => lensRef.current,
+      groupShown: () => useGroupShown.getState().shown[group] ?? null,
+      adapter: adapter as SurfaceAdapter & { made?: ReadonlySet<number> },
+      // Every host of this artifact (its card's and its Options') shares the adapter, and so the write barrier.
+      host: () => ({ writesSettled: () => adapterWritesSettled(adapter) }),
+    }));
+  }, [adapter, inViewRef, binding.artifactKey, binding.composerKey, group]);
   const enterFull = useHostChrome((s) => s.enterFull);
   const exitFull = useHostChrome((s) => s.exitFull);
   const openGroup = useHostPanel((s) => s.openGroup);
@@ -185,6 +246,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     // Card and Options writes use the same host words, edit line and Undo handler.
     const written: NonNullable<HostUi['written']> = (w) => {
       announced.current = w.version;
+      // A chat message sent before the plugin re-reads names the version this edit made (DES-CHAT-ARTIFACTS-001 §5.1).
+      if (inViewRefNow.current !== null) noteWritten(inViewRefNow.current, w.version);
       relay(group, 'card', { type: 'changed', head: w.version, kind: w.verb === 'restyled' ? 'theme' : 'deterministic' });
       if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, binding.kind as EditorKind), verb: w.verb });
     };
@@ -241,7 +304,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           thread: () => undefined,
           written,
           writeFailed: (text) => { if (live.current) setLine({ kind: 'failed', text }); },
-          shown: (v) => setGroupShown(group, v),
+          shown: (v) => { if (inViewRefNow.current !== null) noteShown(inViewRefNow.current); setGroupShown(group, v); },
           fullscreen: async () => { if (live.current) setOffer('full'); return false; },
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
@@ -336,6 +399,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const seekRun = binding.kind === 'walkthrough' ? binding.runId : undefined;
   const seek = useWalkthroughSeek((s) => seekRun === undefined ? undefined : s.byRun[seekRun]);
   const lensVersion = address !== null && address.routeKey === key ? address.routeVersion : null;
+  // A full-screen version lens shows an older version over the editor: a chat message is about that one.
+  lensRef.current = full && lensVersion !== null ? lensVersion : null;
   useEffect(() => {
     const owner = useHostChrome.getState().full;
     if (size === 'full' && owner !== key) enterFull(key);
@@ -436,7 +501,12 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     if (!live.current) return;
     const head = adapter.artifact().head;
     if ('error' in r) setLine(r.error === 'head_moved' ? { kind: 'not-undone', head: r.head ?? head } : { kind: 'failed', text: `Could not undo: ${r.message}` });
-    else { setLine({ kind: 'undone', version: head }); relay(group, 'card', { type: 'changed', head, kind: 'fork' }); }
+    else {
+      setLine({ kind: 'undone', version: head });
+      relay(group, 'card', { type: 'changed', head, kind: 'fork' });
+      // The undo's own version is what the person now sees (a chat message names it, not the undone one).
+      if (inViewRef !== null) noteWritten(inViewRef, head);
+    }
     setBusy(false);
   };
 
@@ -471,7 +541,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
 
   const runAction = async (a: CardAction): Promise<void> => {
     if (a.verb === 'host:export') { setExportOpen((o) => !o); return; }
-    if (a.verb === 'host:ask') { focusComposer(binding.composerKey); return; }
+    // DES-CHAT-ARTIFACTS-001 §6.3: the composer on screen gets the artifact chip, else a chat opens beside it.
+    if (a.verb === 'host:ask') { void askAbout(binding); return; }
     const r = await hostRef.current?.action(a.id);
     if (!live.current) return;
     if (r === null || r === undefined) setLine({ kind: 'status', text: `${a.label}: no answer from ${editor.title}` });

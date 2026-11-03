@@ -59,7 +59,7 @@ with sync_playwright() as p:
 
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
-    page.get_by_test_id("launch-wizard-cards").wait_for(state="visible")
+    page.get_by_test_id("launch-catalog-results").wait_for(state="visible")
     page.get_by_test_id("launch-wizard-workflow-demo-video").click()
     page.get_by_test_id("launch-wizard-demo-show").fill(DEMO_WORDS)
     page.get_by_test_id("launch-wizard-close").click()

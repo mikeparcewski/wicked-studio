@@ -256,6 +256,10 @@ describe('the New job wizard: a launch refused because QE acceptance is required
     vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: ['claude', 'codex'].map((k) => ({ key: k, display_name: k, binary: k, enabled_for_council: true, auth: 'signed_in' })) } as never);
     vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [{ id: 'repo-1', name: 'app', root_path: '/srv/app' }] } as never);
     vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
+    // An older daemon (launch-modal): no catalog route, so today's list and its rules apply.
+    vi.spyOn(client.api, 'getWorkflowCatalog').mockRejectedValue(new ApiError(404, 'not found'));
+    const { resetWorkflowCatalog } = await import('../src/store/workflowCatalog.js');
+    resetWorkflowCatalog();
   });
 
   async function launchToRefusal(): Promise<ReturnType<typeof userEvent.setup>> {

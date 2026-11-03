@@ -195,6 +195,22 @@ function projectOf(v: SessionView, projectIdByRun: Readonly<Record<string, strin
  * or what the projects opened this session listed) plus every demo run's video. Filtered by `kind`
  * and, when one is named, by `project`.
  */
+/** crew's `workingDocName` (`working-doc/service.ts`): the name a run's working document carries. */
+export function workingDocNameOf(runId: string): string {
+  const slug = runId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 40).replace(/-+$/, '');
+  return `working-${slug === '' ? 'run' : slug}`;
+}
+
+/**
+ * A run's WORKING DOCUMENT (crew `working-doc/service.ts` `workingDocName`: `working-<run id>`), the notes a run keeps
+ * while it works. It is shown in that run's own thread, never as something made (artifact-runs-fix: the Made list
+ * showed twelve `working-<uuid>` rows). Known by a run this list holds, or by the engine's run-id shape (a run not in
+ * the list: archived, another page's).
+ */
+export function isRunWorkingDoc(name: string, runNames: ReadonlySet<string> = new Set()): boolean {
+  return runNames.has(name) || /^working-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name);
+}
+
 export function madeRows(
   byProject: Readonly<Record<string, readonly DocSummary[]>>,
   runs: readonly SessionView[],
@@ -204,8 +220,20 @@ export function madeRows(
   project: string | null = null,
 ): MadeRow[] {
   const out: MadeRow[] = [];
+  // A run's working doc lives in its own project (review r2: never hide another project's document of that name).
+  // A known run decides by its project; the run-id shape decides only a name no known run owns (review r3).
+  // Two caller-chosen run ids can normalise to one name (review r4): every owning project is kept.
+  const owners = new Map<string, Set<string>>();
+  for (const v of runs) {
+    const name = workingDocNameOf(v.session.id);
+    const set = owners.get(name) ?? new Set<string>();
+    set.add(projectOf(v, projectIdByRun) ?? 'default');
+    owners.set(name, set);
+  }
   for (const [pid, docs] of Object.entries(byProject)) {
     for (const d of docs) {
+      const known = owners.get(d.name);
+      if (known !== undefined ? known.has(pid) : isRunWorkingDoc(d.name)) continue;
       out.push({ key: `doc:${pid}:${d.name}`, kind: madeKindOf(d), title: d.name, projectId: pid, updatedAt: isoMs(d.updated_at), doc: { name: d.name, kind: d.kind, ...(d.style !== undefined ? { style: d.style } : {}), ...(d.grounding !== undefined ? { grounding: d.grounding } : {}), ...(typeof d.head === 'number' && (d as { head_unknown?: boolean }).head_unknown !== true ? { head: d.head } : {}) } });
     }
   }
@@ -293,6 +321,16 @@ export interface EverythingQuery {
   open?: string | null;
   /** S16a-4d: on the Made tab, the "New document" door open (`?new=document`); other values drop. */
   new?: 'document' | null;
+  /** launch-modal: the format New document starts on (`?format=`, only with `new=document`): New job's
+   *  catalog card names it exactly (a Document is `doc`, not "from the brief"). */
+  format?: DocStyle | null;
+}
+
+/** The document formats New document makes (crew DOC_STYLES). */
+export type DocStyle = 'web' | 'doc' | 'ppt' | 'brochure';
+const DOC_STYLES: readonly string[] = ['web', 'doc', 'ppt', 'brochure'];
+export function isDocFormat(v: unknown): v is DocStyle {
+  return typeof v === 'string' && DOC_STYLES.includes(v);
 }
 
 /** `?tab=` · `?filter=` · `?project=` · `?kind=` off a `location.search`; anything unknown takes the default. */
@@ -311,6 +349,7 @@ export function readEverythingQuery(search: string): EverythingQuery {
     view: isEverythingView(view) ? view : 'grouped',
     open: q.get('open') !== null && q.get('open') !== '' ? q.get('open') : null,
     new: q.get('new') === 'document' ? 'document' : null,
+    format: q.get('new') === 'document' && isDocFormat(q.get('format')) ? q.get('format') as DocStyle : null,
   };
 }
 
@@ -327,6 +366,7 @@ export function everythingPath(q: Partial<EverythingQuery> = {}): string {
   if (q.view !== undefined && q.view !== 'grouped') p.set('view', q.view);
   if (q.open !== undefined && q.open !== null && q.open !== '') p.set('open', q.open);
   if (q.new === 'document') p.set('new', 'document');
+  if (q.new === 'document' && q.format !== undefined && q.format !== null) p.set('format', q.format);
   const s = p.toString();
   return s === '' ? '/everything' : `/everything?${s}`;
 }

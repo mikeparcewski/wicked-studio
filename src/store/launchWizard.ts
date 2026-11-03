@@ -39,6 +39,9 @@ export interface LaunchDraft {
   /** studio#767: the words typed for each OTHER kind of job, by its id. `intent` is the current
    *  kind's; changing kinds parks it here and brings back the new kind's own (empty the first time). */
   intentsByKind: Readonly<Record<string, string>>;
+  /** launch-modal: the catalog card picked (two cards may launch one workflow; the shaping step reads
+   *  this card's needs and form). null = opened by a workflow id, not from the catalog. */
+  catalogEntryId: string | null;
 }
 
 /** The wizard's own job kind that is not a daemon workflow: drafting epics from a project's
@@ -91,6 +94,7 @@ export function freshDraft(init: OpenLaunchWizard): LaunchDraft {
     demoUrl: '',
     demoAudience: '',
     intentsByKind: {},
+    catalogEntryId: null,
   };
 }
 
@@ -104,9 +108,12 @@ export function withJobKind(draft: LaunchDraft, id: string): LaunchDraft {
   if (id === draft.workflowId) return draft;
   const prev = draft.workflowId;
   const intentsByKind = prev === null ? draft.intentsByKind : { ...draft.intentsByKind, [prev]: draft.intent };
-  const intent = prev === null ? draft.intent : intentsByKind[id] ?? '';
+  // Own keys only (xreview r2): a workflow named `constructor` must not read Object's.
+  const intent = prev === null ? draft.intent : (Object.prototype.hasOwnProperty.call(intentsByKind, id) ? intentsByKind[id]! : '');
   // codex r1 (S5): another kind of job starts its own options (nothing carried over).
-  return { ...draft, workflowId: id, intent, intentsByKind, reduced: false, skipQe: false, skipQeReason: '' };
+  // launch-modal (xreview r2): and its own repository choice (a repository picked for one kind is not
+  // carried into a kind that may need none, nor a "none" into one that needs one).
+  return { ...draft, workflowId: id, intent, intentsByKind, reduced: false, skipQe: false, skipQeReason: '', catalogEntryId: null, repoRef: null };
 }
 
 export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({

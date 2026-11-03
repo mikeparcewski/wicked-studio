@@ -11,13 +11,16 @@ import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { CLOSED_LINE, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import { useCapabilities } from '../../store/capabilities.js';
+import { proposalIsStub, useCapabilities } from '../../store/capabilities.js';
+import { useConnectionStore } from '../../store/connection.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import { isChatScopeProblem, plainRunTitle } from '../../board/deskWords.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
+import { ArtifactProposalCard } from '../chat/ArtifactProposalCard.js';
+import { foldChatProposals, reconcileProposals, type ProposalEntry } from '../../board/artifactProposal.js';
 import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
 import { chatPromotePrefill } from '../../board/chatPromote.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
@@ -137,7 +140,9 @@ type ThreadEntry =
   | { kind: 'typing'; key: string; at: number; who: string; ord: number }
   /** A run's step is executing: the helper on it is working now (studio: the thread shows it). */
   | { kind: 'working'; key: string; at: number; who: string; runId: string; ord: number; step: string }
-  | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
+  | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal }
+  /** DES-CHAT-ARTIFACTS-001 §4.2 (A2): a seat's proposal to make an artifact, as crew resolved it. */
+  | { kind: 'artifact'; key: string; at: number; entry: ProposalEntry };
 
 
 /** How long a just-decided proposal keeps the run's block away while the daemon's status catches up. */
@@ -272,6 +277,56 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     : chatError !== null ? 'unreadable'
       : chatDetail === null ? 'pending' : conversationOf(ref, chatDetail);
   const messages = useMemo(() => chatDetail?.messages ?? [], [chatDetail]);
+  // DES-CHAT-ARTIFACTS-001 §4 (A2): the chat's proposal cards, from the transcript's proposal records. A CLOSED chat's
+  // live transcript is gone, but its kept history holds them (an open proposal stays answerable after it ends).
+  const proposalsOn = useCapabilities((s) => s.chatProposals);
+  const proposalsStub = useCapabilities((s) => s.chatArtifactsStub);
+  const proposalsStubOps = useCapabilities((s) => s.chatArtifactsStubOps);
+  const historyOn = useCapabilities((s) => s.chatList);
+  const [kept, setKept] = useState<{ id: string; records: readonly unknown[]; error: string | null } | null>(null);
+  const keptChat = ref.kind === 'chat' && proposalsOn && historyOn && conversation === 'closed' ? ref.chatId : null;
+  // A proposal record on an ended chat (another tab's answer) ticks the chat's re-read too.
+  const keptSeq = useAskThreadStore((s) => (keptChat === null ? 0 : s.replySeq[keptChat] ?? 0));
+  useEffect(() => {
+    if (keptChat === null) return;
+    let cancelled = false;
+    api.getChatMessages(keptChat)
+      .then((r) => { if (!cancelled) setKept({ id: keptChat, records: r.messages as readonly unknown[], error: null }); })
+      // A failed read is said (with Retry) and keeps whatever this chat's cards last showed; a 404 is no kept history.
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const gone = e instanceof ApiError && e.status === 404;
+        setKept((k) => ({ id: keptChat, records: gone ? [] : k?.id === keptChat ? k.records : [], error: gone ? null : e instanceof Error ? e.message : String(e) }));
+      });
+    return () => { cancelled = true; };
+  }, [keptChat, chatTry, keptSeq]);
+  // While an ended chat's kept history is being read, the cards it last showed stay (never a blank flash that would
+  // drop what a card just answered); a settled card never reopens on an older read (`reconcileProposals`).
+  const lastEntries = useRef<{ chatId: string; entries: ProposalEntry[] } | null>(null);
+  const waitingForKept = keptChat !== null && kept?.id !== keptChat;
+  const keptError = keptChat !== null && kept?.id === keptChat ? kept.error : null;
+  const proposalEntries = useMemo<ProposalEntry[]>(() => {
+    if (!proposalsOn || ref.kind !== 'chat') return [];
+    const source = keptChat !== null && kept?.id === keptChat ? kept.records : messages;
+    const folded = foldChatProposals(source);
+    // Only THIS chat's earlier cards stand in while its kept history loads (never another chat's).
+    const held = lastEntries.current?.chatId === ref.chatId ? lastEntries.current.entries : [];
+    // While a read is pending, or after one failed (the kept history, or the chat's own status), this chat's cards stay
+    // as they were, beside the error and Retry: only a read that answered replaces them.
+    // (A Retry clears the status read while it runs: that pending read holds them too.)
+    const unread = waitingForKept || keptError !== null || chatError !== null || mineChat === null;
+    return reconcileProposals(ref.chatId, unread && folded.length === 0 ? held : folded);
+  }, [proposalsOn, ref, keptChat, kept, messages, waitingForKept, keptError, chatError, mineChat]);
+  useEffect(() => { if (ref.kind === 'chat') lastEntries.current = { chatId: ref.chatId, entries: proposalEntries }; }, [ref, proposalEntries]);
+  // `/ws` replays nothing: a proposal crew resolved (or another tab answered) while this tab was disconnected is read
+  // back on reconnect.
+  const wsStatus = useConnectionStore((st) => st.status);
+  const wasConnected = useRef(wsStatus === 'connected');
+  useEffect(() => {
+    const now = wsStatus === 'connected';
+    if (now && !wasConnected.current && proposalsOn && ref.kind === 'chat') setChatTry((n) => n + 1);
+    wasConnected.current = now;
+  }, [wsStatus, proposalsOn, ref]);
   // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
   // live run here is NOT what Send reaches (it starts a separate Ask), and the composer says so.
   const scopeNote = composerScopeNote(mine, ref.kind === 'chat' && conversation === 'live');
@@ -403,7 +458,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // H3: who responded, per thread entry (the roster names the seats).
   const roster = useRoster();
   const whoOfEntry = (e: ThreadEntry): Responder => (e.kind === 'turn' || e.kind === 'typing' || e.kind === 'working' ? turnResponder(e.who, roster)
-    : e.kind === 'proposal' ? turnResponder(e.ask.by, roster) : CREW);
+    : e.kind === 'proposal' ? turnResponder(e.ask.by, roster) : e.kind === 'artifact' ? turnResponder(e.entry.proposal.seat, roster) : CREW);
   // The closed line above the entries is crew's: the first crew entry under it needs no second label.
   const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
@@ -567,6 +622,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
       out.push({ kind: 'run', key: `r:${v.session.id}`, at: launchedMs(v), view: v });
     }
+    // A2: each proposal card sits where crew recorded it (after the reply that carried its block).
+    for (const p of proposalEntries) out.push({ kind: 'artifact', key: `ap:${p.pid}`, at: p.at, entry: p });
     // Something visible while a helper works: a step executing (and not held by Needs you) gets a
     // live line at the thread's foot, so nobody types again or clicks because nothing seems to move.
     // A chat's own "thinking" line already says it for the answering step.
@@ -583,7 +640,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses, proposalEntries]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -820,7 +877,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const readers = useMemo(() => [...mine].reverse().map((v) => ({
     id: v.session.id, workdir: typeof v.session.workdir === 'string' ? v.session.workdir : null,
   })).filter((r) => r.workdir !== null), [mine]);
-  const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none');
+  // An ended chat whose kept history still holds its proposal cards is not "nothing here".
+  const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none') && proposalEntries.length === 0
+    && !waitingForKept && keptError === null;
   // studio#631 (2): a chat's thread has its own Stop — the same 10 s-undo stop ⌘K offers ("Stop this
   // session"), on every run of the chat still going. Hidden when nothing in it is running.
   const liveRuns = useMemo(() => mine.filter((v) => !['completed', 'cancelled', 'failed'].includes(v.session.status)).map((v) => v.session.id), [mine]);
@@ -1132,7 +1191,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const who = whoOfEntry(e);
             const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
             // DES-CHAT-NATIVE-RUN: a run's messages carry their own speakers, and the working line names its helper.
-            const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && (prev === null || responderKey(prev) !== responderKey(who))
+            // A proposal card names its seat in its own header (no second speaker line above it).
+            const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && e.kind !== 'artifact' && (prev === null || responderKey(prev) !== responderKey(who))
               ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} at={e.kind === 'line' ? e.line.at : e.kind === 'proposal' ? e.at : null} />
               : null;
             const node = (e.kind === 'line'
@@ -1162,6 +1222,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               )
               : e.kind === 'proposal'
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />
+              : e.kind === 'artifact' && ref.kind === 'chat'
+                ? <ArtifactProposalCard key={e.key} chatId={ref.chatId} entry={e.entry} seatName={who.name} stub={proposalIsStub(proposalsStub, proposalsStubOps, e.entry.proposal.kind)} onChanged={() => setChatTry((n) => n + 1)} />
+              : e.kind === 'artifact'
+                ? null
                 : e.kind === 'turn'
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})}
@@ -1200,6 +1264,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} solo={mine.length === 1 ? title : null} />);
             return <Fragment key={e.key}>{label}{node}</Fragment>;
           })}
+          {/* A2: an ended chat's proposal cards come from its kept history; a failed read says so, with Retry. */}
+          {keptError !== null && (
+            <StateBanner data-testid="artifact-proposals-read-error" kind={readErrorKind(keptError)} what="this chat's proposals" error={keptError} onRetry={() => setChatTry((n) => n + 1)} />
+          )}
           {/* S16a-4g: the chat's own question and gate (keyed by the chat id) at the thread's foot. */}
           {ref.kind === 'chat' && <ChatQuestions chatId={ref.chatId} />}
         </div>

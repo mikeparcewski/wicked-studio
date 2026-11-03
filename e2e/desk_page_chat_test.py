@@ -138,6 +138,63 @@ with sync_playwright() as pw:
           and page.locator('[data-testid="system-chat"]').count() == 0 and tid(page, "understand-answer").count() >= 1)
     page.wait_for_timeout(700)
     page.screenshot(path=str(SHOTS / "desk-page-chat-understand.png"))
+    # Round 10: a ChatGPT-like page: the thread and its composer in the main column, the composer at the bottom,
+    # a right sidebar with Recent answers (the open one marked), the repository graph links and More; the
+    # document never scrolls.
+    side = tid(page, "understand-side")
+    geo = page.evaluate("""() => {
+      const r = (t) => document.querySelector(`[data-testid="${t}"]`).getBoundingClientRect();
+      const input = document.querySelector('[data-testid="understand-chat"] [data-testid="assist-input"]').getBoundingClientRect();
+      return { side: r('understand-side'), chat: r('understand-chat'), inputBottom: input.bottom, vh: innerHeight,
+               docScroll: document.scrollingElement.scrollHeight - document.scrollingElement.clientHeight };
+    }""")
+    check("understand-chat-layout", side.is_visible() and geo["side"]["left"] >= geo["chat"]["right"] - 1
+          and 0 <= geo["vh"] - geo["inputBottom"] < 120 and geo["docScroll"] == 0, geo=geo)
+    check("understand-side-parts", tid(page, "understand-answer").first.get_attribute("aria-current") == "true"
+          and side.locator('[data-testid="understand-graph"]').count() == 1
+          and side.locator('[data-testid="understand-compare-toggle"]').count() == 1)
+    tid(page, "understand-compare-toggle").click()
+    tid(page, "understand-compare").wait_for(state="visible", timeout=10_000)
+    tid(page, "understand-back").click()
+    check("understand-compare-and-back", tid(page, "understand-chat").is_visible() and not tid(page, "understand-compare").is_visible())
+    # A phone: the sidebar is behind the header's button.
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.wait_for_timeout(400)
+    hidden_first = not side.is_visible()
+    tid(page, "understand-side-toggle").click()
+    side.wait_for(state="visible", timeout=5_000)
+    page.screenshot(path=str(SHOTS / "desk-page-chat-understand-side-390.png"))
+    focus_in = page.evaluate("() => document.querySelector('[data-testid=understand-side]').contains(document.activeElement)")
+    # Focus stays in the drawer: twenty Tabs and five Shift+Tabs never leave it.
+    stays = []
+    for k in range(25):
+        page.keyboard.press("Shift+Tab" if k >= 20 else "Tab")
+        stays.append(page.evaluate("() => document.querySelector('[data-testid=understand-side]').contains(document.activeElement)"))
+    check("understand-drawer-holds-focus", all(stays), stays=stays)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    back_on_toggle = page.evaluate("() => document.activeElement?.dataset?.testid") == "understand-side-toggle"
+    phone = page.evaluate("""() => {
+      const i = document.querySelector('[data-testid="understand-chat"] [data-testid="assist-input"]').getBoundingClientRect();
+      const send = document.querySelector('[data-testid="understand-chat"] [data-testid="assist-send"]').getBoundingClientRect();
+      return { vh: innerHeight, vw: innerWidth, inputBottom: i.bottom, sendRight: send.right, sendBottom: send.bottom,
+               docScroll: document.scrollingElement.scrollHeight - document.scrollingElement.clientHeight };
+    }""")
+    check("understand-side-drawer", hidden_first and focus_in and back_on_toggle and not side.is_visible())
+    # Opened from Compare (a wide view on a desktop), the drawer still shows: never an empty modal.
+    tid(page, "understand-side-toggle").click()
+    tid(page, "understand-compare-toggle").click()
+    page.wait_for_timeout(300)
+    tid(page, "understand-side-toggle").click()
+    page.wait_for_timeout(300)
+    on_compare = page.evaluate("() => getComputedStyle(document.querySelector('[data-testid=understand-side]')).display")
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(200)
+    tid(page, "understand-back").click()
+    check("understand-drawer-on-compare", on_compare == "flex", display=on_compare)
+    check("understand-phone-composer-in-view", 0 <= phone["vh"] - phone["sendBottom"] < 160 and phone["sendRight"] <= phone["vw"]
+          and phone["docScroll"] == 0, phone=phone)
+    page.set_viewport_size({"width": 1440, "height": 900})
 
     # ── 4. Evaluate ───────────────────────────────────────────────────────────────────────────
     page.goto(f"{origin}/testing/evals")

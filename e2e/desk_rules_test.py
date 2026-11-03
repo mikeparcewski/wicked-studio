@@ -232,7 +232,7 @@ with sync_playwright() as p:
     check("rules-close", page.get_by_test_id("steering-rule-drawer").count() == 0 and page.get_by_test_id("rules-row").count() == 3,
           drawers=page.get_by_test_id("steering-rule-drawer").count(), rows=page.get_by_test_id("rules-row").count())
     # "Edit as a table" reaches the steering grid (DES-steer-eval §2.2); Back returns to the Steer surface.
-    # Behind Add a rule's menu since the calm page (2026-10-26).
+    # Behind the header's ⋯ menu since the calm page (2026-10-26; no header button since 2026-11-01).
     page.get_by_test_id("steer-more-button").click()
     page.get_by_test_id("steer-table").click()
     page.wait_for_function("() => " + ADDR + ".pathname === '/steering/policies' && " + ADDR + ".searchParams.get('view') === 'table'", timeout=8000)

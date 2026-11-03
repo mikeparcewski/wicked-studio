@@ -545,6 +545,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #                 the repos named here; every other repo answers the 404 a repo
          #                 with no requirements read does. Default None (no repo is served).
          "requirements": None,
+         # Round 10 (what we know about a repository):
+         #   requirements_header — {repoId: {coverage, graphBuild}}: merged into a served RequirementsPage
+         #                         (the real share against the minimum, the requirements graph's build).
+         #   graph_kinds         — {repoId: [{kind, count}, …]}: GET /governance/graph?repo=<id> answers
+         #                         {kinds}; any other repo answers 404 (no code graph read). Default None.
+         "requirements_header": None,
+         "graph_kinds": None,
          # EP-P3 (the page editor's acts + the checks panel):
          #   doc_checks — {docId: [DocCheck, …]}: GET /projects/<pid>/interactive/docs/<doc>/checks
          #                serves crew's DocChecksResponse (EP-C2) for a listed doc (200 {checks: []}
@@ -906,7 +913,8 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   predating the proposal queue). A list: the pending governed-knowledge proposals
          #   the route serves (`{proposals: [...]}`, the crew wire), filtered by `?state=`.
          #   POST /proposals/<id>/approve (crew's route) flips a pending one to `approved` and answers
-         #   crew's outcome (memory → promoted, policy → handed_off); receipts at
+         #   crew's outcome (memory → promoted, policy → handed_off); POST /proposals/<id>/reject flips
+         #   it to `rejected` and keeps it (Not accepted lists it); approve receipts at
          #   GET /__fixture/approve-posts, cleared by `reset_repairs`.
          "proposals": None,
          # memories — None: GET /memory* answers the standing unknown-route 404 (a daemon predating
@@ -6626,8 +6634,21 @@ class W2Handler(SimpleHTTPRequestHandler):
                       "category": "functional", "statement": r["title"], "status": "active",
                       "risk": bool(r.get("risk")), "riskSource": "data" if r.get("risk") else None,
                       "edited": False} for r in served]
+            with state_lock:
+                header = (state["requirements_header"] or {}).get(rid) or {}
             self._json(200, {"total": len(items), "corpus": len(items), "offset": offset, "limit": limit,
-                             "items": items[offset:offset + limit], "source": "store"})
+                             "items": items[offset:offset + limit], "source": "store", **header})
+            return True
+        # Round 10: GET /api/v1/governance/graph?repo=<id> — a repo's node counts by kind.
+        if path == "/api/v1/governance/graph":
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            rid = (qs.get("repo") or [""])[0]
+            with state_lock:
+                kinds = (state["graph_kinds"] or {}).get(rid)
+            if kinds is None:
+                self._json(404, {"error": f"no code graph for {rid}"})
+            else:
+                self._json(200, {"kinds": kinds})
             return True
         if path == "/api/v1/repos":
             with state_lock:
@@ -9836,6 +9857,21 @@ class W2Handler(SimpleHTTPRequestHandler):
                 return self._json(200, {"outcome": "promoted", "active_id": f"mem-active-{pid}"})
             return self._json(200, {"outcome": "handed_off", "payload": row.get("payload"),
                                     "landing": {"outcome": "landed", "ruleId": f"proposal:{pid}"}})
+        # crew's POST /proposals/<id>/reject over the `proposals` switch: the store KEEPS the row, marked
+        # `rejected` (estate's reject_proposal), so GET /proposals?state=rejected lists it (Not accepted).
+        m = re.match(r"^/api/v1/proposals/([^/]+)/reject$", path)
+        if m:
+            pid = urllib.parse.unquote(m.group(1))
+            with state_lock:
+                rows = state["proposals"]
+                row = next((r for r in (rows or []) if r.get("id") == pid and r.get("state") == "pending"), None)
+                if row is not None:
+                    state["proposals"] = [dict(r, state="rejected") if r is row else r for r in rows]
+            if rows is None:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            if row is None:
+                return self._json(502, {"error": f"proposal {pid} is not pending"})
+            return self._json(200, {"ok": True})
         # Wave 2 (studio#251): the re-onboard remedy's wire, POST /repos/<id>/onboard → {runId}.
         m = re.match(r"^/api/v1/repos/([^/]+)/onboard$", path)
         if m:

@@ -116,7 +116,7 @@ with sync_playwright() as p:
         page.get_by_test_id("desk-rail-new-job").click()
         page.get_by_test_id("launch-wizard").wait_for(state="visible", timeout=10000)
         if page.get_by_test_id("launch-wizard-step").get_attribute("data-step") == "workflow":
-            card = page.locator('[data-testid="launch-wizard-cards"] button[data-testid^="launch-wizard-workflow-"]'
+            card = page.locator('[data-testid="launch-catalog-results"] button[data-testid^="launch-wizard-workflow-"]'
                                 ':not([data-testid$="demo-video"]):not([data-testid$="draft-epics"])').first
             card.click()
         page.get_by_test_id("launch-wizard-intent").fill("add a CSV export")
