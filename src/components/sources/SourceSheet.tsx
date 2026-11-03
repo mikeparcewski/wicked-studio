@@ -44,6 +44,7 @@ import {
   withRange,
 } from './sourceModel.js';
 import { TestCall } from './TestCall.js';
+import { focusRadio, radioKey } from './radioKeys.js';
 import { useDialogFocus } from './useDialogFocus.js';
 
 const KIND_ICON: Record<SheetKind, LucideIcon> = {
@@ -65,12 +66,14 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose }: {
+export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescribed, onClose }: {
   target: SheetTarget;
   /** Names already registered (a new source of the same name replaces it; the sheet says so). */
   existing: readonly string[];
   onSaved: (server: McpServer) => void;
   onAllowWrites: (name: string, allowed: boolean) => void;
+  /** The source was described again (its tables may have changed). */
+  onDescribed?: (name: string) => void;
   onClose: () => void;
 }): React.ReactElement {
   const titleId = useId();
@@ -218,6 +221,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
       const c = await sourcesApi.describe(saved.name);
       // A later read (or another describe) supersedes this one; an earlier read can't overwrite it.
       if (gen === catalogGen.current) setCatalog(c);
+      onDescribed?.(saved.name);
     } catch (e) {
       if (gen === catalogGen.current) setError(words(e));
     } finally {
@@ -277,19 +281,29 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onClose 
         <div className="wk-src-sheet-main">
           {isNew && (
             <div className="wk-src-kinds" role="radiogroup" aria-label="Kind of source" data-testid="source-kinds">
-              {SHEET_KINDS.map((k) => {
+              {SHEET_KINDS.map((k, i) => {
                 const I = KIND_ICON[k.kind];
+                const pick = (next: SheetKind): void => {
+                  if (next === kind) return;
+                  setForm({ ...EMPTY_FORM, kind: next, name: form.name });
+                  // The password field may unmount: what the sheet knows of the secret starts over too.
+                  secret.current?.clear();
+                  setHasSecret(false);
+                  setSecretEdits((n) => n + 1);
+                  setHeld(null); setAsks([]); setError(null); setAcceptedFor(null); setOriginFor(null);
+                };
                 return (
                   <button key={k.kind} type="button" role="radio" aria-checked={kind === k.kind} data-testid={`source-kind-${k.kind}`}
+                    tabIndex={kind === k.kind ? 0 : -1}
                     className={`wk-src-kind${kind === k.kind ? ' wk-src-kind--on' : ''}`} disabled={busy !== null}
-                    onClick={() => {
-                      setForm({ ...EMPTY_FORM, kind: k.kind, name: form.name });
-                      // The password field may unmount: what the sheet knows of the secret starts over too.
-                      secret.current?.clear();
-                      setHasSecret(false);
-                      setSecretEdits((n) => n + 1);
-                      setHeld(null); setAsks([]); setError(null); setAcceptedFor(null); setOriginFor(null);
-                    }}>
+                    onKeyDown={(e) => {
+                      const j = radioKey(e.key, i, SHEET_KINDS.length);
+                      if (j === null) return;
+                      e.preventDefault();
+                      pick(SHEET_KINDS[j]!.kind);
+                      focusRadio(e.currentTarget, j);
+                    }}
+                    onClick={() => pick(k.kind)}>
                     <I size={16} aria-hidden className="wk-src-ico" /><span>{k.label}</span>{k.meta !== undefined && <span className="wk-src-meta">{k.meta}</span>}
                   </button>
                 );

@@ -87,14 +87,17 @@ export function confirmedAddress(f: SourceForm): McpAddressPolicy | null {
 /**
  * The form with one asked range ticked or unticked; the other ticks for the SAME connection are kept.
  * A confirmation given for another connection is dropped whole, its "without TLS" consent included, so
- * no consent ever carries to a host, port or URL the person did not give it for.
+ * no consent ever carries to a host, port or URL the person did not give it for; and adding a range drops
+ * "without TLS", which was given for the ranges shown then.
  */
 export function withRange(f: SourceForm, range: string, on: boolean): SourceForm {
   const forTarget = targetKey(f);
   const same = f.confirm !== null && f.confirm.forTarget === forTarget ? f.confirm : null;
   const held = same?.ranges ?? [];
   const ranges = on ? (held.includes(range) ? held : [...held, range]) : held.filter((r) => r !== range);
-  return { ...f, confirm: ranges.length === 0 ? null : { ranges, plaintext: same?.plaintext ?? false, forTarget } };
+  // "Without TLS" was given for the ranges shown then: a range added since needs it asked again.
+  const widened = on && !held.includes(range);
+  return { ...f, confirm: ranges.length === 0 ? null : { ranges, plaintext: !widened && (same?.plaintext ?? false), forTarget } };
 }
 
 /** The "without TLS" consent, only on a confirmation for this very connection. */

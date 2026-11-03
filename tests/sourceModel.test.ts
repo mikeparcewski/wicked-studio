@@ -74,6 +74,15 @@ describe('no consent carries to another connection (review r1: codex S1, pi P2)'
     const b = withRange({ ...a, host: 'db-b.support.internal' }, '10.40.9.0/24', true);
     expect(confirmedAddress(b)).toEqual({ allow: ['10.40.9.0/24'] });
   });
+  it('adding a range drops "without TLS": it was given for the ranges shown then (codex r2)', () => {
+    const a = withPlaintext(withRange({ ...PG, tls: 'disable' }, '10.40.2.0/24', true), true);
+    const widened = withRange(a, '10.40.9.0/24', true);
+    expect(confirmedAddress(widened)).toEqual({ allow: ['10.40.2.0/24', '10.40.9.0/24'] });
+    // Narrowing keeps it; re-ticking a range already held keeps it.
+    const both = withPlaintext(widened, true);
+    expect(confirmedAddress(withRange(both, '10.40.9.0/24', false))).toEqual({ allow: ['10.40.2.0/24'], plaintext: true });
+    expect(confirmedAddress(withRange(both, '10.40.2.0/24', true))?.plaintext).toBe(true);
+  });
   it('an edit that moves the connection drops the confirmation; a name edit keeps it', () => {
     const a = withRange(PG, '10.40.2.0/24', true);
     expect(withEdit(a, { host: 'elsewhere' }).confirm).toBeNull();

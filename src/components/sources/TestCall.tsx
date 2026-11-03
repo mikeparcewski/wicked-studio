@@ -78,14 +78,17 @@ export function TestCall({ source, kind, reads, 'data-testid': testId = 'source-
     // Exactly what was named: the target and arguments it was named with, and its hash. The named
     // request is spent as the send starts, whatever comes back: another send is named again first.
     const sending = named;
+    const mine = gen.current;
     const args = JSON.parse(sending.args.trim() === '' ? '{}' : sending.args) as Record<string, unknown>;
     setNamed(null);
     setBusy('send');
     setError(null);
     try {
       const r = await sourcesApi.testCall(source, sending.target, args, sending.hash);
-      if (r.sent) setResult(r);
+      // What was sent is shown even if the fields changed meanwhile: it names its own request.
+      if (r.sent && mine === gen.current) setResult(r);
     } catch (e) {
+      if (mine !== gen.current) return;
       if (e instanceof ApiError && (e.body as { code?: unknown } | undefined)?.code === 'request_changed') {
         setError('The request changed since it was named (the source was saved again). Nothing was sent. Name it again to see what would be sent.');
       } else {
@@ -103,21 +106,21 @@ export function TestCall({ source, kind, reads, 'data-testid': testId = 'source-
       {kind === 'graphql' ? (
         <label className="wk-src-field">
           <span className="wk-src-label">Query</span>
-          <textarea data-testid={`${testId}-query`} className="wk-field wk-src-textarea" rows={3} spellCheck={false} value={target} placeholder="query { tickets { id status } }" onChange={(e) => { setTarget(e.target.value); edited(); }} />
+          <textarea data-testid={`${testId}-query`} className="wk-field wk-src-textarea" rows={3} spellCheck={false} disabled={busy === 'send'} value={target} placeholder="query { tickets { id status } }" onChange={(e) => { setTarget(e.target.value); edited(); }} />
         </label>
       ) : reads.length === 0 ? (
         <p className="wk-src-note" data-testid={`${testId}-no-reads`}>This source has no read operation, so there is nothing a test call may send.</p>
       ) : (
         <label className="wk-src-field">
           <span className="wk-src-label">{kind === 'rest' ? 'Operation (a read)' : 'Tool (a read)'}</span>
-          <select data-testid={`${testId}-target`} className="wk-field wk-src-input" value={target} onChange={(e) => { setTarget(e.target.value); edited(); }}>
+          <select data-testid={`${testId}-target`} className="wk-field wk-src-input" disabled={busy === 'send'} value={target} onChange={(e) => { setTarget(e.target.value); edited(); }}>
             {reads.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </label>
       )}
       <label className="wk-src-field">
         <span className="wk-src-label">{kind === 'graphql' ? 'Variables (JSON)' : 'Arguments (JSON)'}</span>
-        <input data-testid={`${testId}-args`} className="wk-field wk-src-input wk-src-mono" spellCheck={false} value={argsText} onChange={(e) => { setArgsText(e.target.value); edited(); }} />
+        <input data-testid={`${testId}-args`} className="wk-field wk-src-input wk-src-mono" spellCheck={false} disabled={busy === 'send'} value={argsText} onChange={(e) => { setArgsText(e.target.value); edited(); }} />
       </label>
       {named === null ? (
         <div className="wk-src-row-btns">

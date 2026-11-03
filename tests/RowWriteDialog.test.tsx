@@ -158,3 +158,46 @@ describe('review r1 folds (codex C13, pi P3)', () => {
     expect(out.className).not.toContain('okbox');
   });
 });
+
+describe('review r2 folds (codex): a check in flight stops when the dialog closes or writes are turned off', () => {
+  it('closing while the safety check is out: no privileges, no grant', async () => {
+    let answer: (v: unknown) => void = () => {};
+    apiFetch.mockImplementation((path: string) => { calls.push({ path, method: 'POST', body: undefined }); return path.endsWith('/safety') ? new Promise((r) => { answer = r; }) : Promise.resolve({ ...WRITER, writes: [{ write: {}, missing: [] }] }); });
+    const grant = vi.fn(async () => null);
+    const { unmount } = render(<Host relation={TICKETS} writes port={{ grant }} />);
+    declareOwner();
+    fireEvent.click(screen.getByTestId('row-write-grant'));
+    unmount();
+    answer(TICKETS_SAFE);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls.map((c) => c.path)).toEqual(['/sources/support-pg-writer/safety']);
+    expect(grant).not.toHaveBeenCalled();
+  });
+
+  it('Allow writes turned off while the safety check is out: no privileges, no grant', async () => {
+    let answer: (v: unknown) => void = () => {};
+    apiFetch.mockImplementation((path: string) => { calls.push({ path, method: 'POST', body: undefined }); return path.endsWith('/safety') ? new Promise((r) => { answer = r; }) : Promise.resolve({ ...WRITER, writes: [{ write: {}, missing: [] }] }); });
+    const grant = vi.fn(async () => null);
+    const source = (allow: boolean) => pgServer({ name: 'support-pg-writer', allowWrites: allow });
+    const props = { relation: TICKETS, privileges: WRITER, declared: null, port: { grant }, onDeclared: () => {}, onAllowWrites: () => {}, onClose: () => {} };
+    const { rerender } = render(<RowWriteDialog source={source(true)} {...props} />);
+    declareOwner();
+    fireEvent.click(screen.getByTestId('row-write-grant'));
+    rerender(<RowWriteDialog source={source(false)} {...props} />);
+    answer(TICKETS_SAFE);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls.map((c) => c.path)).toEqual(['/sources/support-pg-writer/safety']);
+    expect(grant).not.toHaveBeenCalled();
+    expect(screen.getByTestId('row-write-grant')).not.toBeDisabled();
+  });
+
+  it('the operation is a radio group: arrows move and select (codex r2 P3)', () => {
+    render(<Host relation={TICKETS} writes port={{ grant: async () => null }} />);
+    const update = screen.getByTestId('row-write-op-update');
+    expect(update.tabIndex).toBe(0);
+    expect(screen.getByTestId('row-write-op-insert').tabIndex).toBe(-1);
+    fireEvent.keyDown(update, { key: 'ArrowRight' });
+    expect(screen.getByTestId('row-write-op-insert').getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByTestId('row-write-op-insert'));
+  });
+});

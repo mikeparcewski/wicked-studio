@@ -1,10 +1,11 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { sourcesApi, type McpServer, type SourceCatalogRelation, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
 import { useModalEscape } from '../Modal.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { CodeWords } from './CodeWords.js';
 import { declareRowWrite, grantGate, relationName, rowWriteLine, type GrantGate, type RowWriteOp } from './sourceModel.js';
+import { focusRadio, radioKey } from './radioKeys.js';
 import { useDialogFocus } from './useDialogFocus.js';
 
 /**
@@ -61,6 +62,17 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
   const [outcome, setOutcome] = useState<{ granted: boolean; words: string } | null>(null);
   /** The grant pipeline's generation: an edit to the declaration (or a new Grant) stops the old one. */
   const gen = useRef(0);
+  /** A grant check in flight (a second click in the same tick asks nothing). */
+  const inFlight = useRef(false);
+  /** The source's switch and descriptor as rendered now: a check started under others stops. */
+  const live = useRef({ allowWrites: source.allowWrites === true, descriptor: source.descriptorHash ?? null, mounted: true });
+  live.current = { ...live.current, allowWrites: source.allowWrites === true, descriptor: source.descriptorHash ?? null };
+  useEffect(() => {
+    live.current.mounted = true;
+    return () => { live.current.mounted = false; gen.current++; };
+  }, []);
+  // Turning Allow writes off, or the source saved again, stops a check in flight.
+  useEffect(() => { gen.current++; inFlight.current = false; setBusy(false); }, [source.allowWrites, source.descriptorHash]);
   const draft = declareRowWrite(relation, op, picked);
 
   const declare = (): void => {
@@ -72,25 +84,28 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
   };
 
   const grant = async (): Promise<void> => {
-    if (write === null || busy) return;
+    if (write === null || inFlight.current) return;
     const mine = ++gen.current;
-    const still = (): boolean => mine === gen.current;
+    const startedFor = source.descriptorHash ?? null;
+    // Every stage re-checks: this dialog is open, nothing was edited, Allow writes is still on, same source.
+    const still = (): boolean => mine === gen.current && live.current.mounted && live.current.allowWrites && live.current.descriptor === startedFor;
     setError(null);
     setOutcome(null);
     // (1) Allow writes first: nothing is asked of the source while it is off.
     const off = grantGate(source.name, source.allowWrites === true, null, null);
     if (off !== null) { setGate(off); return; }
+    inFlight.current = true;
     setBusy(true);
     try {
       // (2) The table safety check, with the declaration.
       const safety = await sourcesApi.safety(source.name, { schema: write.schema, table: write.table, write: { op: write.op, set: write.set, key: write.key } });
       if (!still()) return;
-      const unsafe = grantGate(source.name, true, safety, null);
+      const unsafe = grantGate(source.name, live.current.allowWrites, safety, null);
       if (unsafe !== null) { setGate(unsafe); return; }
       // (3) The privileges this login still needs for it.
       const report = await sourcesApi.privileges(source.name, [write]);
       if (!still()) return;
-      const g = grantGate(source.name, true, safety, report.writes[0]?.missing ?? []);
+      const g = grantGate(source.name, live.current.allowWrites, safety, report.writes[0]?.missing ?? []);
       setGate(g);
       if (g?.step !== 'ready') return;
       // (4) The host's grant.
@@ -100,6 +115,7 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
     } catch (e) {
       if (still()) setError(e instanceof Error ? e.message : String(e));
     } finally {
+      inFlight.current = false;
       if (still()) setBusy(false);
     }
   };
@@ -108,17 +124,30 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
     <div className="wk-src-scrim" data-testid="row-write-scrim">
       <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className="wk-src-dialog" data-testid="row-write-dialog">
         <header className="wk-src-sheet-head">
-          <h2 id={titleId} className="wk-src-title">Row write on {relationName(relation)}</h2>
-          <span className="wk-src-cap wk-src-head-src">{source.name}</span>
+          <div className="wk-src-head-text">
+            <h2 id={titleId} className="wk-src-title">Row write on {relationName(relation)}</h2>
+            <span className="wk-src-cap">{source.name}</span>
+          </div>
           <button type="button" aria-label="Close" className="wk-btn wk-btn--quiet wk-btn--icon" onClick={onClose} data-testid="row-write-close"><X size={16} aria-hidden /></button>
         </header>
         <div className="wk-src-dialog-body">
           <div className="wk-src-seg" role="radiogroup" aria-label="Operation">
-            {OPS.map((o) => (
-              <button key={o.op} type="button" role="radio" aria-checked={op === o.op} data-testid={`row-write-op-${o.op}`}
-                className={`wk-src-seg-btn${op === o.op ? ' wk-src-seg-btn--on' : ''}`} disabled={busy}
-                onClick={() => { gen.current++; setOp(o.op); setWrite(null); setGate(null); setOutcome(null); }}>{o.label}</button>
-            ))}
+            {OPS.map((o, i) => {
+              const pick = (next: RowWriteOp): void => { if (next === op) return; gen.current++; setOp(next); setWrite(null); setGate(null); setOutcome(null); };
+              return (
+                <button key={o.op} type="button" role="radio" aria-checked={op === o.op} data-testid={`row-write-op-${o.op}`}
+                  tabIndex={op === o.op ? 0 : -1}
+                  className={`wk-src-seg-btn${op === o.op ? ' wk-src-seg-btn--on' : ''}`} disabled={busy}
+                  onKeyDown={(e) => {
+                    const j = radioKey(e.key, i, OPS.length);
+                    if (j === null) return;
+                    e.preventDefault();
+                    pick(OPS[j]!.op);
+                    focusRadio(e.currentTarget, j);
+                  }}
+                  onClick={() => pick(o.op)}>{o.label}</button>
+              );
+            })}
           </div>
           <p className="wk-src-note">{OPS.find((o) => o.op === op)?.note}</p>
           <p className="wk-src-note" data-testid="row-write-key">Key: {keyCols.length > 0 ? keyCols.join(', ') : 'none'} (the whole primary key, each from a parameter).</p>
@@ -134,7 +163,9 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
               ))}
             </fieldset>
           )}
-          <code className="wk-src-code" data-testid="row-write-line">{typeof draft === 'string' ? draft : rowWriteLine(draft)}</code>
+          {typeof draft === 'string'
+            ? <p className="wk-src-note" data-testid="row-write-line">{draft}</p>
+            : <code className="wk-src-code" data-testid="row-write-line">{rowWriteLine(draft)}</code>}
           {write === null ? (
             <div className="wk-src-row-btns">
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="row-write-declare" disabled={typeof draft === 'string'} onClick={declare}>Declare</button>

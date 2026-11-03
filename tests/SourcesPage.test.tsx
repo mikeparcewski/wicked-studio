@@ -85,3 +85,53 @@ describe('the Sources page', () => {
     expect(screen.getAllByTestId('data-panel-source').map((e) => e.getAttribute('data-source'))).toEqual(['support-pg-writer', 'support-pg', 'crew']);
   });
 });
+
+describe('review r2 folds (codex): grants per descriptor, the latest Grant opens, a switch re-reads the list', () => {
+  it('a source saved again under a new descriptor shows its old grants as not granted', async () => {
+    const grant = vi.fn(async () => null);
+    const { rerender } = render(<SourcesPage navigate={vi.fn()} search="" grants={{ grant }} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Show support-pg-writer/ }));
+    await screen.findByTestId('data-panel-table-menu-support.tickets-button');
+    await declareOn('support.tickets', 'owner');
+    fireEvent.click(screen.getByTestId('row-write-grant'));
+    await screen.findByTestId('row-write-outcome');
+    fireEvent.click(screen.getByTestId('row-write-close'));
+    expect(screen.getByTestId('data-panel-action').getAttribute('data-granted')).toBe('yes');
+    // The person saves the source again under the same name with another connection: crew answers a
+    // new descriptor (Allow writes kept on, to show the descriptor alone decides).
+    servers = [{ ...servers[0]!, descriptorHash: 'e'.repeat(64) }];
+    fireEvent.click(screen.getByTestId('sources-add'));
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'support-pg-writer' } });
+    fireEvent.change(screen.getByTestId('source-host'), { target: { value: 'db2.support.internal' } });
+    fireEvent.change(screen.getByTestId('source-database'), { target: { value: 'support' } });
+    fireEvent.change(screen.getByTestId('source-user'), { target: { value: 'writer' } });
+    fireEvent.click(screen.getByTestId('source-test-run'));
+    await screen.findByTestId('source-test-ok');
+    fireEvent.click(screen.getByTestId('source-save'));
+    await screen.findByTestId('source-done');
+    // The grant was for the old descriptor: it does not show as granted on the new one.
+    await waitFor(() => expect(screen.getByTestId('data-panel-action').getAttribute('data-granted')).toBe('no'));
+    void rerender;
+  });
+
+  it('two Grant clicks whose reads come back out of order open the later one', async () => {
+    render(<SourcesPage navigate={vi.fn()} search="" grants={{ grant: async () => null }} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Show support-pg-writer/ }));
+    await screen.findByTestId('data-panel-table-menu-support.tickets-button');
+    await declareOn('support.tickets', 'owner');
+    fireEvent.click(screen.getByTestId('row-write-close'));
+    await declareOn('support.tickets', 'status');
+    fireEvent.click(screen.getByTestId('row-write-close'));
+    const answers: Array<(v: unknown) => void> = [];
+    apiFetch.mockImplementation((path: string) => (path.endsWith('/catalog') ? new Promise((r) => answers.push(r)) : Promise.reject(new Error(path))));
+    const [owner, status] = screen.getAllByTestId('data-panel-grant');
+    fireEvent.click(owner!);
+    fireEvent.click(status!);
+    const reply = { name: 'support-pg-writer', kind: 'sql', catalog: CATALOG, privileges: WRITER, descriptorHash: servers[0]!.descriptorHash };
+    answers[1]!(reply);
+    await screen.findByTestId('row-write-dialog');
+    answers[0]!(reply);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByTestId('row-write-line').textContent).toBe('UPDATE support.tickets SET status WHERE id');
+  });
+});

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Database, Lock, Plus, Table2 } from 'lucide-react';
 import { CREW_SOURCE, sourcesApi, type McpServer, type SourceCatalogRelation, type SourceCatalogResponse, type SourceRowWrite } from '../../api/sources.js';
 import { OverflowMenu, type MenuItem } from '../ui/OverflowMenu.js';
@@ -37,8 +37,10 @@ export function rowWriteMenuBlocker(source: McpServer, r: SourceCatalogRelation)
  * presentation over what it is handed, except the catalog of a source the person opens (read-only).
  * The components palette is the runtime's (K4) and rides `children`.
  */
-export function DataPanel({ sources, loading, error, onAdd, onOpen, onDeclare, queries, actions, onGrantAction, children, 'data-testid': testId = 'data-panel' }: {
+export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onDeclare, queries, actions, onGrantAction, children, 'data-testid': testId = 'data-panel' }: {
   sources: readonly McpServer[];
+  /** Per source, a count the host bumps when it was described again (its tables may have changed). */
+  epochs?: Readonly<Record<string, number>>;
   loading: boolean;
   error: string | null;
   onAdd: () => void;
@@ -53,22 +55,45 @@ export function DataPanel({ sources, loading, error, onAdd, onOpen, onDeclare, q
   const [open, setOpen] = useState<Record<string, boolean>>({});
   /** Catalogs by source AND version (its descriptor, else its last save): a re-saved source reads afresh. */
   const [catalogs, setCatalogs] = useState<Record<string, SourceCatalogResponse | string>>({});
-  const versionOf = (s: McpServer): string => `${s.name}@${s.descriptorHash ?? s.updatedAt}`;
+  const versionOf = (s: McpServer): string => `${s.name}@${s.descriptorHash ?? ''}@${s.updatedAt}@${epochs?.[s.name] ?? 0}`;
+  /** The latest request per version: an older answer (or error) never lands over a newer one. */
+  const reqGen = useRef<Record<string, number>>({});
 
-  const toggle = async (s: McpServer): Promise<void> => {
-    const next = !(open[s.name] ?? false);
-    setOpen((o) => ({ ...o, [s.name]: next }));
+  /** Versions with a read out: one request per version at a time. */
+  const pending = useRef(new Set<string>());
+  const load = async (s: McpServer): Promise<void> => {
     const v = versionOf(s);
-    if (!next || typeof catalogs[v] === 'object') return;
+    const gen = (reqGen.current[v] ?? 0) + 1;
+    reqGen.current[v] = gen;
+    pending.current.add(v);
     try {
       const c = await sourcesApi.catalog(s.name);
-      // An answer for an older version of the source is not this one's.
-      if (c.descriptorHash !== null && s.descriptorHash !== undefined && c.descriptorHash !== s.descriptorHash) return;
-      setCatalogs((m) => ({ ...m, [v]: c }));
+      if (reqGen.current[v] !== gen) return;
+      // An answer for another version of the source is not this one's: say so, never show it.
+      const other = c.descriptorHash !== null && s.descriptorHash !== undefined && c.descriptorHash !== s.descriptorHash;
+      setCatalogs((m) => ({ ...m, [v]: other ? `${s.name} changed while its tables were read: close and open it again` : c }));
     } catch (e) {
-      setCatalogs((m) => ({ ...m, [v]: e instanceof Error ? e.message : String(e) }));
+      if (reqGen.current[v] === gen) setCatalogs((m) => ({ ...m, [v]: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      if (reqGen.current[v] === gen) pending.current.delete(v);
     }
   };
+  /** Read when there is nothing for this version yet, or only an error (reopening retries it). */
+  const needsRead = (s: McpServer): boolean => {
+    const v = versionOf(s);
+    return !pending.current.has(v) && (catalogs[v] === undefined || typeof catalogs[v] === 'string');
+  };
+  const toggle = (s: McpServer): void => {
+    const next = !(open[s.name] ?? false);
+    setOpen((o) => ({ ...o, [s.name]: next }));
+    if (next && needsRead(s)) void load(s);
+  };
+  // A source saved (or described) again while its tables are open is read again: its old tables are not its tables.
+  const versions = sources.map(versionOf).join('|');
+  useEffect(() => {
+    for (const s of sources) if ((open[s.name] ?? false) && catalogs[versionOf(s)] === undefined && !pending.current.has(versionOf(s))) void load(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the versions; load reads the latest state
+  }, [versions]);
 
   const menuFor = (s: McpServer, r: SourceCatalogRelation, c: SourceCatalogResponse): MenuItem[] => [
     { id: 'row-write', label: 'Declare a row write…', disabled: rowWriteMenuBlocker(s, r), onSelect: () => onDeclare(s, r, c), testId: 'data-panel-declare' },
@@ -94,7 +119,7 @@ export function DataPanel({ sources, loading, error, onAdd, onOpen, onDeclare, q
               <li key={s.name} data-testid="data-panel-source" data-source={s.name}>
                 <div className="wk-src-row">
                   {s.kind === 'sql' ? (
-                    <button type="button" className="wk-src-disclose" aria-expanded={isOpen} aria-label={`${isOpen ? 'Hide' : 'Show'} ${s.name}’s tables`} onClick={() => void toggle(s)}>
+                    <button type="button" className="wk-src-disclose" aria-expanded={isOpen} aria-label={`${isOpen ? 'Hide' : 'Show'} ${s.name}’s tables`} onClick={() => toggle(s)}>
                       {isOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
                     </button>
                   ) : <span className="wk-src-disclose" aria-hidden />}
