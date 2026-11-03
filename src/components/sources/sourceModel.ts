@@ -261,8 +261,11 @@ export function relationName(r: Pick<SourceCatalogRelation, 'schema' | 'name'>):
 }
 
 /** "What agents see" (DES §5.2): the structure, the declared enums, never a value. */
-export function agentsSeeWords(kind: SheetKind | 'sqlite', catalog: SourceCatalog | null): string {
-  const tail = 'No values from rows, ever. Agents building an app can’t call this source.';
+export function agentsSeeWords(kind: SheetKind | 'sqlite', catalog: SourceCatalog | null, agentQuery = false): string {
+  // (DES-APPS-001 rev 12 §5.4) A SQL source's rows reach agents only once a person turns on "Agents can query".
+  const tail = agentQuery
+    ? 'Agents in the projects below may also query it, and the rows they read go to their model provider. Agents building an app can’t call this source.'
+    : 'No values from rows: agents can’t query it unless you turn that on below. Agents building an app can’t call this source.';
   if (kind === 'crew') return 'The allowlisted routes and the shape of what each answers. Reads run in crew as the person viewing. Agents building an app can’t call this source.';
   if (kind === 'rest' || kind === 'mcp') {
     return 'Each operation’s name, arguments and response schema, and the enums the schema declares. No values from responses, ever. Agents building an app can’t call this source.';

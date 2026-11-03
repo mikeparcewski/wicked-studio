@@ -5,7 +5,7 @@ import { dataUseWords, sourceAgentsApi, type RunDataUseResponse } from '../../ap
  * (DES-APPS-001 rev 12 §5.4) Which data sources a job's agents queried, on its gate cards and its delivery,
  * the way assurance is shown: "Agents read data: support-pg · 3 queries · 12 rows". Nothing when they read
  * none; "not known" when crew's record could not be read (never "none"); nothing on a crew without the
- * record (before api-types 0.180.0). `refresh` re-reads it (a new event on the run).
+ * record (before api-types 0.181.0). `refresh` re-reads it (a new event on the run).
  */
 export function RunDataUse({ runId, refresh = 0, testId = 'run-data-use' }: { runId: string; refresh?: number; testId?: string }): React.ReactElement | null {
   const [use, setUse] = useState<RunDataUseResponse | null>(null);

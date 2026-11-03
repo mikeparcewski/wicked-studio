@@ -9,7 +9,7 @@ import { RunDataUse } from '../src/components/session/RunDataUse.js';
 import { agentAccessOf, type SourceAgentAccess } from '../src/api/sourceAgents.js';
 
 /**
- * The source sheet's agent controls (DES-APPS-001 rev 12 §5.4, crew api-types 0.180.0) over a mocked crew
+ * The source sheet's agent controls (DES-APPS-001 rev 12 §5.4, crew api-types 0.181.0) over a mocked crew
  * wire: a new source reaches no agent (no project); "query" is off, says that rows go to the agent's model
  * provider, and turns on only through a second, explicit confirmation; the projects are the person's ticks;
  * recent agent queries link to their jobs; a job's gate card says which sources its agents read.

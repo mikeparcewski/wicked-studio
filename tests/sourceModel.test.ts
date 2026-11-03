@@ -166,7 +166,9 @@ describe('the grant gate, in crew\'s order', () => {
 describe('the words', () => {
   it('what agents see names the declared enum types and says no values', () => {
     expect(agentsSeeWords('postgres', { ...CATALOG, relations: [TICKETS, ASSIGNMENTS] }))
-      .toBe('Table and column names, types, keys, row estimates, and the 1 enum type the schema declares (ticket_status). No values from rows, ever. Agents building an app can’t call this source.');
+      .toBe('Table and column names, types, keys, row estimates, and the 1 enum type the schema declares (ticket_status). No values from rows: agents can’t query it unless you turn that on below. Agents building an app can’t call this source.');
+    // (rev 12 §5.4) Once a person lets agents query it, the box says where the rows go.
+    expect(agentsSeeWords('postgres', { ...CATALOG, relations: [TICKETS] }, true)).toMatch(/may also query it, and the rows they read go to their model provider\./);
   });
   it('the privilege line: read only, or how many tables the login can also change', () => {
     expect(privilegeLine(READ_ONLY)).toEqual({ tone: 'ok', text: 'Read only: reader can’t change any table.' });

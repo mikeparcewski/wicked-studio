@@ -43,7 +43,8 @@ export function AgentAccess({ source, kind, agents, onChanged, 'data-testid': te
     let live = true;
     // Read-only calls; a crew without them (or a failed read) leaves an empty list and "not known".
     Promise.resolve().then(() => sourceAgentsApi.projects()).then(
-      (r) => { if (live) setProjects(Array.isArray(r?.projects) ? r.projects.map((p) => ({ id: p.id, name: p.name })) : []); },
+      // "Unfiled" (crew's synthesized `default`) is no project a run is filed into: "Every project" covers it.
+      (r) => { if (live) setProjects(Array.isArray(r?.projects) ? r.projects.filter((p) => p.id !== 'default').map((p) => ({ id: p.id, name: p.name })) : []); },
       () => { if (live) setProjects([]); },
     );
     Promise.resolve().then(() => sourceAgentsApi.agentQueries(source)).then(
@@ -139,7 +140,7 @@ export function AgentAccess({ source, kind, agents, onChanged, 'data-testid': te
         <p className="wk-src-note" data-testid={`${testId}-projects-state`}>{projectsWords(a, names)}</p>
         <label className="wk-src-check-row">
           <input type="checkbox" data-testid={`${testId}-every`} checked={a.everyProject} onChange={(e) => void apply({ everyProject: e.target.checked })} />
-          <span className="wk-src-note">Every project on this daemon</span>
+          <span className="wk-src-note">Every project on this daemon, and jobs and chats in none</span>
         </label>
         {projects === null ? <p className="wk-src-cap">Reading the projects…</p> : projects.map((p) => (
           <label key={p.id} className="wk-src-check-row">

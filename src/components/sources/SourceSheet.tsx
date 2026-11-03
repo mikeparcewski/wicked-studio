@@ -14,6 +14,7 @@ import {
 } from '../../api/sources.js';
 import { useModalEscape } from '../Modal.js';
 import { AgentAccess } from './AgentAccess.js';
+import { agentAccessOf } from '../../api/sourceAgents.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
 import {
@@ -539,7 +540,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
               {kind !== 'upload' || upload !== null ? (
                 <div className="wk-src-box" data-testid="source-agents-see">
                   <p className="wk-src-okline wk-src-strong"><Eye size={16} aria-hidden className="wk-src-ico" />What agents see</p>
-                  <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog)}</p>
+                  <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog, agentAccessOf(saved as { agents?: unknown } | null).query)}</p>
                 </div>
               ) : null}
               {!isNew && saved !== null && (saved.kind === 'sql' || saved.kind === 'graphql') && (

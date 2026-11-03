@@ -1,5 +1,5 @@
 /**
- * Data sources as live knowledge for agents (DES-APPS-001 rev 12 §5.4; crew api-types 0.180.0): the calls
+ * Data sources as live knowledge for agents (DES-APPS-001 rev 12 §5.4; crew api-types 0.181.0): the calls
  * the source sheet's "Agents" box and a job's gate cards make.
  *
  * - `setAgentAccess` is the agent switches' own call: `AgentAccess` is its only caller
@@ -7,12 +7,12 @@
  *   reach it. crew refuses it to anything but a human operator, too.
  * - `agentQueries` and `runDataUse` only read crew's agent-query record: never the SQL, never a value.
  *
- * The shapes are mirrored from `wicked-crew-api-types` 0.180.0 until studio pins it (then this mirror goes).
+ * The shapes are mirrored from `wicked-crew-api-types` 0.181.0 until studio pins it (then this mirror goes).
  */
 
 import { apiFetch } from './client.js';
 
-/** (api-types 0.180.0) Which agents may use a `sql`/`graphql` source. */
+/** (api-types 0.181.0) Which agents may use a `sql`/`graphql` source. */
 export interface SourceAgentAccess {
   /** "Agents can see this structure": on for a new source. */
   see: boolean;
@@ -76,7 +76,7 @@ export interface RunDataUseResponse {
   sources: SourceDataUse[];
 }
 
-/** What a source without the field (a crew before 0.180.0) reads as: nothing reaches an agent. */
+/** What a source without the field (a crew before 0.181.0) reads as: nothing reaches an agent. */
 export const AGENTS_NONE: SourceAgentAccess = { see: true, query: false, projects: [], everyProject: false };
 
 const at = (name: string, rest: string): string => `/sources/${encodeURIComponent(name)}/${rest}`;
@@ -93,7 +93,7 @@ export const sourceAgentsApi = {
   projects: () => apiFetch<{ projects: Array<{ id: string; name: string }> }>('/projects?status=active'),
 };
 
-/** A source's agent controls from its registry view (`McpServer.agents`, api-types 0.180.0), or the defaults. */
+/** A source's agent controls from its registry view (`McpServer.agents`, api-types 0.181.0), or the defaults. */
 export function agentAccessOf(server: { agents?: unknown } | null | undefined): SourceAgentAccess {
   const a = (server?.agents ?? null) as Partial<SourceAgentAccess> | null;
   if (a === null || typeof a !== 'object') return AGENTS_NONE;
