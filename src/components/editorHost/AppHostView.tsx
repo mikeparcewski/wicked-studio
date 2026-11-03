@@ -302,7 +302,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
 
   const move = async (direction: 'undo' | 'redo'): Promise<void> => {
     const s = sessionRef.current;
-    if (s === null) return;
+    // A framed studio changes nothing, from the frame or from its own chrome (§7.1, S8; codex r2 P1).
+    if (s === null || framed) return;
     const r = await s.move(direction, s.head);
     setStatus(r.ok ? `${direction === 'undo' ? 'Undone' : 'Redone'}: now v${r.version}` : r.message);
   };
@@ -319,13 +320,13 @@ export function AppHostView({ editor, version, sha, app: slug, sample }: AppHost
           <span className="wk-apps-pill" data-testid="apps-version"><span className="wk-apps-dot" aria-hidden="true" />v{detail.head.version} · {receiptWords(detail)}</span>
         )}
         <span className="wk-apps-history" role="group" aria-label="History">
-          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-undo" disabled={history?.canUndo !== true || busy} onClick={() => void move('undo')} aria-label="Undo">Undo</button>
-          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-redo" disabled={history?.canRedo !== true || busy} onClick={() => void move('redo')} aria-label="Redo">Redo</button>
+          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-undo" disabled={history?.canUndo !== true || busy || framed} onClick={() => void move('undo')} aria-label="Undo">Undo</button>
+          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-redo" disabled={history?.canRedo !== true || busy || framed} onClick={() => void move('redo')} aria-label="Redo">Redo</button>
         </span>
         <span className="wk-apps-spacer" />
         {shown === 'preview' && viewer !== null && <span className="wk-apps-pill" data-testid="apps-viewer">Viewing as {viewer}</span>}
         <span className="wk-seg" role="group" aria-label="Mode">
-          <button type="button" className={`wk-seg-btn${shown === 'edit' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-edit" aria-pressed={shown === 'edit'} disabled={narrow} title={narrow ? 'Edit on a larger screen' : undefined} onClick={() => setMode('edit')}>Edit</button>
+          <button type="button" className={`wk-seg-btn${shown === 'edit' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-edit" aria-pressed={shown === 'edit'} disabled={narrow || framed} title={framed ? 'Open studio on its own to change the app' : narrow ? 'Edit on a larger screen' : undefined} onClick={() => setMode('edit')}>Edit</button>
           <button type="button" className={`wk-seg-btn${shown === 'preview' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-preview" aria-pressed={shown === 'preview'} onClick={() => setMode('preview')}>Preview</button>
         </span>
       </header>

@@ -107,8 +107,11 @@ export class SampleAppStore implements AppStorePort {
   constructor(readonly slug: string, spec: AppSpec, private readonly storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null, private readonly now: () => number = Date.now, private readonly locks: SampleLocks | null = browserLocks()) {
     this.key = `wicked-apps-sample:${slug}`;
     this.mem = this.load() ?? sampleDetail(slug, spec, now());
-    this.save();
+    // First use writes the sample's first state, under the same lock as every change, and only if no tab has
+    // written one meanwhile: a tab opening late never puts an older state back (codex r2).
+    this.ready = this.tx(() => { if (this.load() === null) this.save(); else this.sync(); });
   }
+  private readonly ready: Promise<void>;
   private load(): SampleState | null {
     try {
       const raw = this.storage?.getItem(this.key);
@@ -126,9 +129,9 @@ export class SampleAppStore implements AppStorePort {
     return this.locks === null ? Promise.resolve().then(fn) : this.locks.request(this.key, async () => fn());
   }
   /** Put the sample back as it started (the test page's "Start the sample again"). */
-  reset(spec: AppSpec): void { this.mem = sampleDetail(this.slug, spec, this.now()); this.save(); }
+  async reset(spec: AppSpec): Promise<void> { await this.ready; await this.tx(() => { this.mem = sampleDetail(this.slug, spec, this.now()); this.save(); }); }
 
-  async detail(): Promise<AppDetail> { this.sync(); return structuredClone(this.mem.detail); }
+  async detail(): Promise<AppDetail> { await this.ready; this.sync(); return structuredClone(this.mem.detail); }
 
   private land(spec: AppSpec, summary: string, receipt: (v: number, tree: string, at: number) => AppReceipt, history: (v: number) => void): StoreResult {
     const d = this.mem.detail;
@@ -155,6 +158,7 @@ export class SampleAppStore implements AppStorePort {
   }
 
   async edit(base: number, spec: AppSpec, summary: string): Promise<StoreResult> {
+    await this.ready;
     return this.tx(() => this.editNow(base, spec, summary));
   }
 
@@ -170,6 +174,7 @@ export class SampleAppStore implements AppStorePort {
   }
 
   async move(direction: 'undo' | 'redo', base: number): Promise<StoreResult> {
+    await this.ready;
     return this.tx(() => this.moveNow(direction, base));
   }
 

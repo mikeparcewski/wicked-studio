@@ -127,10 +127,26 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   const H = 220;
   const L = 36;
   const B = 24;
-  // A stacked area draws each series on top of the ones before it (cumulative); a line never stacks.
+  // Each series' band per row: [lower, upper]. A stacked area puts each series on the ones before it, positive values
+  // upward from the positive stack and negative ones downward from the negative stack; otherwise a band runs from zero
+  // to the value. A line draws its value (a line never stacks).
   const stackArea = c.chart === 'area' && c.stacked === true && series.length > 1;
-  const level = (r: AppCell[], k: number): number => (stackArea ? series.slice(0, k + 1).reduce((t, s) => t + num(r[s.i]), 0) : num(r[series[k]!.i]));
-  const values = series.flatMap((_, k) => rows.map((r) => level(r, k)));
+  const bands: Array<Array<[number, number]>> = series.map(() => []);
+  rows.forEach((r, i) => {
+    let pos = 0;
+    let neg = 0;
+    series.forEach((s, k) => {
+      const v = num(r[s.i]);
+      if (!stackArea) { bands[k]![i] = [Math.min(0, v), Math.max(0, v)]; return; }
+      if (v >= 0) { bands[k]![i] = [pos, pos + v]; pos += v; } else { bands[k]![i] = [neg + v, neg]; neg += v; }
+    });
+  });
+  const level = (k: number, i: number): number => {
+    const v = num(rows[i]![series[k]!.i]);
+    const [lo, hi] = bands[k]![i]!;
+    return stackArea ? (v >= 0 ? hi : lo) : v;
+  };
+  const values = bands.flatMap((b) => b.flat());
   const max = Math.max(1, ...values);
   const min = Math.min(0, ...values);
   const sx = (i: number): number => L + (rows.length === 1 ? 0 : (i / (rows.length - 1)) * (W - L - 8));
@@ -144,8 +160,13 @@ export function drawChart(root: HTMLElement, c: AppChartComponent, data: Rows, l
   const ticks = rows.length <= 4 ? rows.map((_, i) => i) : [0, Math.floor((rows.length - 1) / 3), Math.floor(((rows.length - 1) * 2) / 3), rows.length - 1];
   for (const i of ticks) svg.append(svgText(r1(sx(i)), H - 6, cats[i]!.slice(0, 14), 'wk-axis', i === 0 ? 'start' : i === rows.length - 1 ? 'end' : 'middle'));
   series.forEach((_, k) => {
-    const pts = rows.map((r, i) => `${r1(sx(i))},${r1(sy(level(r, k)))}`);
-    if (c.chart === 'area') svg.append(svgEl('path', { d: `M ${r1(sx(0))},${r1(sy(min))} L ${pts.join(' L ')} L ${r1(sx(rows.length - 1))},${r1(sy(min))} Z` }, `wk-area wk-series-${k}`));
+    const pts = rows.map((_r, i) => `${r1(sx(i))},${r1(sy(level(k, i)))}`);
+    if (c.chart === 'area') {
+      // The band: along its upper edge left to right, back along its lower edge right to left.
+      const upper = rows.map((_r, i) => `${r1(sx(i))},${r1(sy(bands[k]![i]![1]))}`);
+      const lower = rows.map((_r, i) => `${r1(sx(i))},${r1(sy(bands[k]![i]![0]))}`).reverse();
+      svg.append(svgEl('path', { d: `M ${upper.join(' L ')} L ${lower.join(' L ')} Z` }, `wk-area wk-series-${k}`));
+    }
     svg.append(svgEl('polyline', { points: pts.join(' '), fill: 'none' }, `wk-stroke wk-series-${k}`));
   });
   root.append(svg);

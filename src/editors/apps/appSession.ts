@@ -51,6 +51,8 @@ export class AppSession {
   private burstStarted = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private landing: Promise<boolean> | null = null;
+  /** How many of the burst's first ops the landing in flight carries (the rest arrived after it began). */
+  private inFlight = 0;
   /** An undo or a redo in flight (its burst landing first included): edits and a second move wait for it. */
   private moving = false;
   /** Bumped whenever the head this session holds changes: an answer begun under an older generation is dropped. */
@@ -125,7 +127,13 @@ export class AppSession {
     if (this.readonly) return { ok: false, code: 'refused', message: 'a chat turn is changing the app; it is read-only until the turn ends' };
     if (this.moving) return { ok: false, code: 'refused', message: 'an undo or redo is landing; try again in a moment' };
     if (base !== this.app.head.version) return { ok: false, code: 'head_moved', message: 'the app changed since', head: this.app.head.version };
-    if (this.landing !== null && this.burst.length >= BURST_MAX_OPS) return { ok: false, code: 'refused', message: 'still saving the last changes; try again in a moment' };
+    // At most BURST_MAX_OPS per version: a batch that would take the burst past it lands the burst so far first, and
+    // while that landing is in flight a further full burst waits (codex r2: a 50-op batch at 199 made 249).
+    const queued = this.burst.length - this.inFlight;
+    if (queued > 0 && queued + ops.length > BURST_MAX_OPS) {
+      if (this.landing !== null) return { ok: false, code: 'refused', message: 'still saving the last changes; try again in a moment' };
+      void this.flush(); // takes the burst as it is now, synchronously; these ops follow it
+    }
     const r = applyOps(this.working, ops);
     if (!r.ok) return { ok: false, code: r.code, message: r.message };
     if (this.burst.length === 0) { this.burstBefore = this.working; this.burstStarted = this.now(); }
@@ -135,7 +143,7 @@ export class AppSession {
     // A burst is a person's gesture or two: it lands 1 s after the last op, but never later than its maximum age and
     // never larger than its maximum size, however a runtime keeps sending.
     const age = this.now() - this.burstStarted;
-    if (this.burst.length >= BURST_MAX_OPS || age >= BURST_MAX_AGE_MS) void this.flush();
+    if (this.burst.length - this.inFlight >= BURST_MAX_OPS || age >= BURST_MAX_AGE_MS) void this.flush();
     else this.timer = setTimeout(() => { void this.flush(); }, Math.min(this.burstMs, BURST_MAX_AGE_MS - age));
     this.emit({ kind: 'pending', count: this.burst.length });
     return { ok: true, spec: r.spec, added: r.added, pending: this.burst.length };
@@ -147,14 +155,16 @@ export class AppSession {
    *  false when crew refused it or the answer was lost (the burst is dropped and the head re-read). */
   async flush(): Promise<boolean> {
     this.clearTimer();
-    while (this.landing !== null) await this.landing;
+    // A landing already in flight is part of what this flush stands for: if crew refused it, so does this (codex r2).
+    while (this.landing !== null) if (!(await this.landing)) return false;
     if (this.burst.length === 0 || this.app === null || this.working === null) return true;
     const base = this.app.head.version;
     const spec = this.working;
     const landedOps = this.burst.length;
     const summary = opsSummary(this.burstBefore ?? this.app.spec, spec, this.burst);
+    this.inFlight = landedOps;
     const job = (async (): Promise<boolean> => {
-      const r = await this.store.edit(base, spec, summary);
+      const r = await this.store.edit(base, spec, summary).finally(() => { this.inFlight = 0; });
       if (r.ok) {
         // Ops that arrived while this landed were made on top of it: they stay in the burst, on the new head.
         const later = this.burst.slice(landedOps);
@@ -202,7 +212,7 @@ export class AppSession {
     this.moving = true;
     try {
       if (!(await this.flush())) return { ok: false, code: 'refused', message: `Not ${what}: your last change did not land`, ...(this.app !== null ? { head: this.app.head.version } : {}) };
-      while (this.landing !== null) await this.landing;
+      while (this.landing !== null) if (!(await this.landing)) return { ok: false, code: 'refused', message: `Not ${what}: your last change did not land` };
       const from = this.app.head.version;
       const r = await this.store.move(direction, from);
       if (r.ok) {
