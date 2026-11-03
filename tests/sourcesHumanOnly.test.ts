@@ -36,8 +36,9 @@ describe('Allow writes is reached only by the switch', () => {
     expect(sw).toMatch(/confirm-on`\} onClick=\{\(\) => void apply\(true\)\}/);
     expect(sw).toMatch(/confirm-off`\} onClick=\{\(\) => void apply\(false\)\}/);
   });
-  it('no plugin, editor host or chat module imports the sources API', () => {
-    const importers = all.filter((f) => /from ['"][./]*(?:\.\.\/)*api\/sources\.js['"]/.test(f.text)).map((f) => f.path).sort();
+  it('no plugin, editor host or chat module imports the sources API (a path constant, for the sidebar, is not the API)', () => {
+    const importers = all.filter((f) => /import\s*\{[^}]*\bsourcesApi\b[^}]*\}\s*from\s*['"][./]*(?:\.\.\/)*api\/sources\.js['"]/.test(f.text)).map((f) => f.path).sort();
+    expect(importers.length).toBeGreaterThan(0);
     expect(importers.every((p) => p.startsWith('src/components/sources/'))).toBe(true);
   });
 });
