@@ -12,6 +12,15 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.14.1] — 2026-11-03
+
+A patch release for the package's own words: no UI or behaviour change since 0.14.0.
+
+### Changed
+
+- **Studio says it is the ADE (#952).** The README's lead line and the npm package description now read "The ADE
+  (agentic development environment) for running a team of coding agents" where they said "The IDE".
+
 ## [0.14.0] — 2026-11-02
 
 A minor release: UI v3 (#937), the studio the operator signed off on 2026-11-01, with release fix rounds 9b, 9c and 9d. It brings the Wicked Dark, Wicked Light and Ambient themes, Wicked Sans v2 on one strict type scale, a chat on every page, voice, power mode on the job page, guided asks, Learn and Memory, and the requirements view with real-requirements coverage and not-counted rows. Also: every message in a job's thread says when it was said (#929), and run plugins with the working document in the Phase report (#927, #928). The `wicked-crew-api-types` pin stays at 0.128.0; newer crew wire shapes are mirrored in `src/api/*` and read tolerantly, so an older crew degrades rather than breaks.
@@ -2746,7 +2755,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.3...v0.13.0
 [0.12.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.2...v0.12.3
