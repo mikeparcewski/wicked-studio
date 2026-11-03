@@ -98,6 +98,21 @@ export const EDITORS = [
       { id: 'selection.chip', why: 'to point at the recommendation you pick, so you can accept or dismiss it' },
     ],
   },
+  {
+    // DES-APPS-001 §7.1 (K4): the Apps runtime. It interprets an app's spec; no agent code runs. Its live rows and its
+    // action requests (`data.read`, `data.write`) are the app HOST's to give to this bundle only: crew's registry does
+    // not list them, so they are not declared here (a manifest naming them would be refused).
+    id: 'wicked-apps',
+    title: 'App',
+    protocol: [1, 2],
+    kinds: ['app'],
+    sizes: ['inline', 'pane', 'full'],
+    permissions: [
+      { id: 'artifact.read', why: 'to show the app: its pages, components and layout' },
+      { id: 'artifact.write', why: 'to add, move, resize, change or delete a component in Edit, each burst one version with Undo' },
+      { id: 'selection.chip', why: 'to make the component you select the subject of your next message' },
+    ],
+  },
 ];
 
 /**

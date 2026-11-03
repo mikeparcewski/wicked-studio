@@ -1,6 +1,6 @@
 import { apiFetch } from '../api/client.js';
 import { isRouteUnsupported } from '../api/errors.js';
-import { LEDGER_ONLY, PERMISSIONS, RUN_THREAD_ONLY, type AnchorRef, type PermissionId } from './protocol.js';
+import { APP_ONLY, LEDGER_ONLY, PERMISSIONS, RUN_THREAD_ONLY, type AnchorRef, type PermissionId } from './protocol.js';
 
 /**
  * The editor host's small models (DES-EDITOR-PLUGINS-001 §5.1, §5.5, §5.7, §6; EP-P1). Pure, except
@@ -89,13 +89,15 @@ export const PERMISSION_WORDS: Record<PermissionId, string> = {
   'doc.read': 'read the job’s working document',
   'doc.propose_edit': 'suggest edits to the job’s working document',
   'steer.propose': 'suggest a note to the job',
+  'data.read': 'show live rows from the app’s named queries',
+  'data.write': 'ask to run the app’s actions (studio asks you every time)',
 };
 
 
 /** The first-party default set (§6.1 column 4): every permission except `network.media`, which only
  *  `wicked-page` and `wicked-doc` hold by default, and the ledger-only ones (`mcp.session`), which no default grants. */
 export function builtinDefaults(editorId: string): PermissionId[] {
-  return PERMISSIONS.filter((p) => !LEDGER_ONLY.has(p) && !RUN_THREAD_ONLY.has(p) && (p !== 'network.media' || editorId === 'wicked-page' || editorId === 'wicked-doc'));
+  return PERMISSIONS.filter((p) => !LEDGER_ONLY.has(p) && !RUN_THREAD_ONLY.has(p) && !APP_ONLY.has(p) && (p !== 'network.media' || editorId === 'wicked-page' || editorId === 'wicked-doc'));
 }
 
 /** One decided grant as crew answers it (api-types `EditorGrant`, EP-C1): the permission, the engine's
@@ -114,10 +116,12 @@ export function grantedOf(raw: unknown): { grants: PermissionId[]; asking: Permi
   };
   if (!Array.isArray(raw)) return { grants: [], asking: [] };
   for (const g of raw) {
-    if (typeof g === 'string') { if (PERMISSIONS.includes(g as PermissionId)) decided.set(g as PermissionId, worse(decided.get(g as PermissionId), 'allow')); continue; }
+    if (typeof g === 'string') { if (PERMISSIONS.includes(g as PermissionId) && !APP_ONLY.has(g as PermissionId)) decided.set(g as PermissionId, worse(decided.get(g as PermissionId), 'allow')); continue; }
     if (typeof g !== 'object' || g === null) continue;
     const d = g as Partial<DecidedGrant>;
     if (typeof d.permission !== 'string' || !PERMISSIONS.includes(d.permission as PermissionId)) continue;
+    // The app permissions are the app host's own (DES-APPS-001 K4): no decided set carries them.
+    if (APP_ONLY.has(d.permission as PermissionId)) continue;
     if (d.decision !== 'allow' && d.decision !== 'ask' && d.decision !== 'deny') continue;
     const p = d.permission as PermissionId;
     decided.set(p, worse(decided.get(p), d.decision));

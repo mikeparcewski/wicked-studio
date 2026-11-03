@@ -2,8 +2,11 @@ import { judgeKey, judgeTyped } from './keys.js';
 import type { WriteVerb } from '../board/artifactMorph.js';
 import { changedBy, chipsFor, elementLabel, type Chip, type VersionKind } from './model.js';
 import { chapterInventoryOf, checkOps, inventoryOf, themeTokensOf, type Inventory, type WireItem } from './ops.js';
+import type { AppParamsSchema, AppSpec } from '../api/types.js';
+import type { AppHostPort, AppMode } from './apps/appAdapter.js';
+import { componentWords } from './apps/appOps.js';
 import {
-  EVENTS, LIMITS, MCP_METHODS, PANEL_SUMMARY_CHARS, REQUESTS, event, negotiate, parseInbound, parseReady, refuse, reply, request, sizeOf,
+  APP_ONLY, APPS_EDITOR, EVENTS, LIMITS, MCP_METHODS, PANEL_SUMMARY_CHARS, REQUESTS, event, negotiate, parseInbound, parseReady, refuse, reply, request, sizeOf,
   type MediaRef, type PanelTone, type AnchorRef, type ErrorCode, type PermissionId, type Size,
 } from './protocol.js';
 import type { EventsBatch } from './runEvents.js';
@@ -216,6 +219,9 @@ export interface HostOptions {
   events?: HostEvents;
   /** Protocol 3: the run's working document (a run-thread plugin). Absent = `doc.*` answers `unavailable`. */
   doc?: HostDoc;
+  /** DES-APPS-001 K4: an app (kind `app`). Present = the host answers `spec.edit`, `app.history`, `data.query`,
+   *  `data.action` and `link.open`, and gives the first-party `wicked-apps` bundle {@link APP_ONLY}. */
+  app?: AppHostPort;
   /** The `ui.height` bounds this instance accepts (a folded run-thread block is one line); default the card's. */
   heightRange?: { min: number; max: number };
   /** The host's real user activation at receipt (`navigator.userActivation.isActive`). */
@@ -326,6 +332,9 @@ export class EditorHost {
   private pendingMcpLog: unknown[] = [];
   private unsubscribeMcp: (() => void) | undefined;
   private unsubscribeEvents: (() => void) | undefined;
+  private unsubscribeApp: (() => void) | undefined;
+  /** One action card or link question at a time (DES-APPS-001 §7.3). */
+  private asking = false;
   /** Window messages after the handshake: counted against the flood limit, logged only the first few. */
   private ignoredWindow = 0;
   /** One typed character per gesture (§5.10): spent by an accepted `ui.typed`, re-armed only when
@@ -351,7 +360,7 @@ export class EditorHost {
 
   constructor(private readonly o: HostOptions) {
     this.now = o.now ?? Date.now;
-    this.grants = new Set(o.grants);
+    this.grants = this.appGrants(o.grants);
     const f = document.createElement('iframe');
     // A props-style object, so the testid scanner (scripts/testid-inventory.mjs) sees `editor-frame`.
     const attrs: Record<string, string> = {
@@ -437,13 +446,22 @@ export class EditorHost {
     const sc = this.o.events?.scope;
     const v3 = observes ? { observe: { runId: this.o.events!.runId, topics: [...this.o.events!.topics], ...(sc !== undefined ? { scope: { phase: sc.phase, label: sc.label, ords: [...sc.ords] } } : {}), ...(this.o.events?.panel !== undefined ? { panel: { slot: this.o.events.panel.slot, id: this.o.events.panel.id } } : {}) } } : {};
     this.frame.contentWindow?.postMessage(event('host.hello', {
-      protocol: this.protocol, ...v2, ...v3, artifact: a, size: this.o.size, grants: [...this.grants],
+      protocol: this.protocol, ...v2, ...v3,
+      ...(this.o.app !== undefined ? { app: { framed: this.o.app.framed(), mode: this.o.app.mode(), viewer: this.o.app.viewer() } } : {}),
+      artifact: a, size: this.o.size, grants: [...this.grants],
       theme: this.o.theme, artifactTheme: null, prefs: this.o.prefs,
       limits: { messageBytes: LIMITS.messageBytes, writeOps: LIMITS.writeOps, writeBytes: LIMITS.writeBytes },
     }), '*', [channel.port2]);
     this.log({ kind: 'handshake', editor: ready.editor, version: ready.version });
     this.o.ui.surfaces?.(this.decl, this.protocol, note);
     this.pingTimer = setInterval(() => this.ping(), LIMITS.pingEveryMs);
+    // An app: every head the session adopts (a landed burst, an undo, another tab's version) reaches the runtime.
+    if (this.o.app !== undefined) {
+      this.unsubscribeApp = this.o.app.session.on((e) => {
+        if (e.kind !== 'head') return;
+        this.post(event('artifact.changed', { version: e.app.head.version, head: e.app.head.version, by: e.by === 'this-session' ? 'this-editor' : 'other', kind: 'deterministic' }));
+      });
+    }
     // Protocol 3: the events start only now, on the port, after `host.hello` (never on the window, never before).
     if (observes) this.unsubscribeEvents = this.o.events!.subscribe((batch) => this.post(event('events.batch', batch)));
     if (this.pendingMcpState !== null) this.post(event('mcp.state', this.pendingMcpState));
@@ -507,7 +525,7 @@ export class EditorHost {
     this.log({ kind: 'in', type: msg.type, ok: true });
     if (msg.kind === 'event') { this.handleEvent(msg.type, msg.payload); return; }
     const need = REQUESTS[msg.type];
-    const isWrite = msg.type === 'version.write' || msg.type === 'theme.set';
+    const isWrite = msg.type === 'version.write' || msg.type === 'theme.set' || msg.type === 'spec.edit' || msg.type === 'app.history';
     if (!this.grants.has(need)) {
       this.log({ kind: 'refused', type: msg.type, code: 'not_granted', why: `needs ${need}` });
       this.post(refuse(msg.id, 'not_granted', `needs ${need}`));
@@ -516,7 +534,7 @@ export class EditorHost {
     }
     const id = msg.id;
     let settled = false;
-    const limitMs = msg.type === 'mcp.request' ? LIMITS.mcpReplyMs : LIMITS.replyMs;
+    const limitMs = msg.type === 'mcp.request' ? LIMITS.mcpReplyMs : msg.type === 'data.action' || msg.type === 'link.open' ? LIMITS.askReplyMs : LIMITS.replyMs;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -697,10 +715,93 @@ export class EditorHost {
           this.writing = false;
         }
       }
+      case 'spec.edit': case 'app.history': case 'data.query': case 'data.action': case 'link.open':
+        return this.appRequest(type, p);
       default:
         return { error: 'unsupported', message: `${type} is not available for this artifact` };
     }
   }
+
+  // ── DES-APPS-001 K4: the app requests ─────────────────────────────────────────────────────
+
+  /** Whether this frame holds the person's click right now: real activation with focus in THIS frame (judged at
+   *  receipt, before any await, as `mcp.request` is). */
+  private clickedNow(): boolean {
+    return (this.o.activation ?? NO_ACTIVATION)() && (this.o.focusInFrame ?? ((f) => document.activeElement === f))(this.frame);
+  }
+
+  private async appRequest(type: 'spec.edit' | 'app.history' | 'data.query' | 'data.action' | 'link.open', p: Record<string, unknown>): Promise<unknown> {
+    const app = this.o.app;
+    if (app === undefined) return { error: 'unsupported', message: `${type} is available only on an app` };
+    // Everything a refusal depends on is read NOW, before the first await.
+    const clicked = this.clickedNow();
+    const framed = app.framed();
+    const mode = app.mode();
+    switch (type) {
+      case 'spec.edit': {
+        if (mode !== 'edit') return { error: 'refused', message: 'the app changes in Edit; this is Preview' };
+        const r = app.session.edit(p['base'] as number, p['ops'] as unknown[]);
+        if (!r.ok) return { error: r.code, message: r.message, ...(r.head !== undefined ? { head: r.head } : {}) };
+        return { spec: r.spec, added: r.added, pending: r.pending };
+      }
+      case 'app.history': {
+        const r = await app.session.move(p['move'] as 'undo' | 'redo', p['base'] as number);
+        if (!r.ok) return { error: r.code === 'head_moved' ? 'head_moved' : 'refused', message: r.message, ...(r.head !== undefined ? { head: r.head } : {}) };
+        return { version: r.version };
+      }
+      case 'data.query': {
+        // §7.2 steps 1-2, the host's half: only a query of THIS app's landed version, with its declared parameters.
+        const spec = app.session.landedSpec;
+        const q = spec?.queries.find((x) => x.id === p['query']);
+        if (spec === null || q === undefined) return { error: 'refused', message: `this app has no query ${String(p['query'])}` };
+        const params = (p['params'] ?? {}) as Record<string, unknown>;
+        const bad = paramsRefusal(q.params, params);
+        if (bad !== null) return { error: 'bad_request', message: bad };
+        const r = await app.data.query(app.session.head, q.id, params);
+        return 'error' in r ? { error: r.error, message: r.message } : r;
+      }
+      case 'data.action': {
+        // §7.1: a framed host refuses here, whatever the runtime believes; then Preview only, then the person's click.
+        if (framed) return { error: 'refused', message: 'Open to make changes: actions never run inside a frame' };
+        if (mode !== 'preview') return { error: 'refused', message: 'Switch to Preview to run an action: nothing writes to a source in Edit' };
+        if (!clicked) return { error: 'refused', message: 'an action runs only from your click in the app' };
+        if (this.asking) return { error: 'rate_limited', message: 'another question is waiting for you' };
+        const spec = app.session.landedSpec;
+        const a = spec?.actions.find((x) => x.id === p['action']);
+        if (spec === null || a === undefined) return { error: 'refused', message: `this app has no action ${String(p['action'])}` };
+        const params = (p['params'] ?? {}) as Record<string, unknown>;
+        const bad = paramsRefusal(a.params, params);
+        if (bad !== null) return { error: 'bad_request', message: bad };
+        this.asking = true;
+        try {
+          const prepared = await app.data.prepare(app.session.head, a.id, params);
+          if ('error' in prepared) return { error: prepared.error, message: prepared.message };
+          if (this.torn) return { state: 'cancelled' };
+          // §7.3: the card is drawn by the HOST, outside the frame; nothing runs without the person's Run there.
+          const yes = await app.confirm(prepared);
+          if (!yes || this.torn) return { state: 'cancelled' };
+          const outcome = await app.data.run(a.id, prepared.record);
+          app.outcome?.(outcome, prepared.card);
+          // Any outcome invalidates what the app shows (§7.2 "Cache and coalescing"): the runtime re-reads.
+          this.post(event('data.invalidate', { action: a.id, state: outcome.state }));
+          return { state: outcome.state, ...(outcome.reason !== null ? { reason: outcome.reason } : {}) };
+        } finally {
+          this.asking = false;
+        }
+      }
+      case 'link.open': {
+        if (!clicked) return { error: 'refused', message: 'a link opens only from your click in the app' };
+        if (this.asking) return { error: 'rate_limited', message: 'another question is waiting for you' };
+        const url = linkOf(String(p['href']), app.session.landedSpec);
+        if (typeof url !== 'string' || url.startsWith('!')) return { error: 'refused', message: typeof url === 'string' ? url.slice(1) : 'not a link this app may open' };
+        this.asking = true;
+        try { return { opened: await app.openLink(url) }; } finally { this.asking = false; }
+      }
+    }
+  }
+
+  /** DES-APPS-001: Edit or Preview changed in the host's chrome. */
+  setAppMode(mode: AppMode): void { if (this.o.app !== undefined) this.post(event('app.mode', { mode })); }
 
   private reportMcpCall(call: McpCall): void {
     this.o.ui.mcpCall?.(call);
@@ -758,6 +859,17 @@ export class EditorHost {
   }
 
   private async chipsOf(anchors: readonly AnchorRef[]): Promise<Chip[]> {
+    if (this.o.app !== undefined) {
+      // An app's chip: the component's type and title from the HOST's spec, its page and the version (§6.1).
+      const spec = this.o.app.session.spec;
+      const head = this.o.app.session.head;
+      return chipsFor(anchors, (x) => {
+        if (x.kind !== 'element' || spec === null) return null;
+        const words = componentWords(spec, x.id);
+        const page = spec.pages.find((pg) => pg.components.some((c) => c.id === x.id));
+        return words === null || page === undefined ? null : `${words} (${page.title}, v${head})`;
+      });
+    }
     const inv = await this.currentInventory();
     const wids = 'error' in inv ? new Map<string, { text: string }>() : inv.inv.wids;
     // Only anchors the HOST can resolve get a chip: elements in its own inventory. A page has no
@@ -980,7 +1092,15 @@ export class EditorHost {
     }
   }
   setTheme(theme: Record<string, string>): void { this.post(event('host.theme', { theme, artifactTheme: null })); }
-  setGrants(grants: readonly PermissionId[]): void { this.grants = new Set(grants); }
+  setGrants(grants: readonly PermissionId[]): void { this.grants = this.appGrants(grants); }
+
+  /** DES-APPS-001 §7.1: `data.read` / `data.write` are the app host's to give, to the first-party `wicked-apps` bundle
+   *  only; every other editor (and any host that is not an app host) never holds them, whatever it was handed. */
+  private appGrants(grants: readonly PermissionId[]): Set<PermissionId> {
+    const out = new Set(grants.filter((g) => !APP_ONLY.has(g)));
+    if (this.o.app !== undefined && this.o.editor === APPS_EDITOR && this.o.firstParty) for (const g of APP_ONLY) out.add(g);
+    return out;
+  }
   selectionCleared(): void { this.post(event('selection.cleared', {})); }
 
   /** `mcp.state` (DES-MCP-INSPECTOR-001 §4): only to a frame holding `mcp.session`; the latest one is
@@ -1055,6 +1175,8 @@ export class EditorHost {
     this.unsubscribeMcp = undefined;
     this.unsubscribeEvents?.();
     this.unsubscribeEvents = undefined;
+    this.unsubscribeApp?.();
+    this.unsubscribeApp = undefined;
     window.removeEventListener('message', this.onWindow);
     window.removeEventListener('blur', this.onHostBlur);
     this.frame.removeEventListener('load', this.onLoad);
@@ -1073,4 +1195,31 @@ export class EditorHost {
   private log(entry: Omit<HostLogEntry, 'at'> & Record<string, unknown>): void {
     this.o.ui.log({ ...entry, at: this.now() } as HostLogEntry);
   }
+}
+
+/**
+ * The host's parameter check (DES-APPS-001 §7.2 step 3, the host's half; crew checks again): only declared names, and
+ * never a viewer-bound one — the server fills those from the viewer's verified sign-in (S15). `null` = fine.
+ */
+export function paramsRefusal(schema: AppParamsSchema | undefined, params: Record<string, unknown>): string | null {
+  const props = schema?.properties ?? {};
+  for (const k of Object.keys(params)) {
+    if (!Object.hasOwn(props, k)) return `${k} is not a parameter of it`;
+    if (props[k]!.from !== undefined) return `${k} is filled from your sign-in, never by the app`;
+  }
+  return null;
+}
+
+/**
+ * A link component's URL, if this app may open it (DES-APPS-001 §7.1): `https:` only, no credentials, no port, and the
+ * host one the landed spec lists in `linkHosts` (exact, lower case). Otherwise a string starting `!` with the reason.
+ */
+export function linkOf(href: string, spec: AppSpec | null): string {
+  let u: URL;
+  try { u = new URL(href); } catch { return '!not a web address'; }
+  if (u.protocol !== 'https:') return `!only https links open (this is ${u.protocol.replace(/:$/u, '') || 'none'})`;
+  if (u.username !== '' || u.password !== '' || u.port !== '') return '!a link with a sign-in or a port does not open';
+  const host = u.hostname.toLowerCase();
+  if (spec === null || !spec.linkHosts.includes(host)) return `!${host} is not one of the hosts this app lists`;
+  return u.href;
 }

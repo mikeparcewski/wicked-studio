@@ -33,6 +33,7 @@ const KIND_WORDS: Record<string, string> = {
   'demo-video': 'demo videos',
   walkthrough: 'walkthroughs',
   'rfp-response': 'RFP responses',
+  app: 'apps',
   [MCP_SERVER_KIND]: 'MCP servers',
 };
 
@@ -60,7 +61,9 @@ export function devHostHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 't
   const q = new URLSearchParams({ editor: e.id, version: e.version, sha: e.sha256, title: e.title });
   // A deck editor opens over a sample deck (P-D1), a video editor over the sample four-chapter cut; everything else
   // over the sample page.
-  if (e.kinds?.includes('deck') === true && !e.kinds.includes('page')) q.set('kind', 'deck');
+  // An app editor (DES-APPS-001 K4) opens over a sample app, or crew's own app when the page names one.
+  if (e.kinds?.includes('app') === true && !e.kinds.includes('page')) q.set('kind', 'app');
+  else if (e.kinds?.includes('deck') === true && !e.kinds.includes('page')) q.set('kind', 'deck');
   else if ((e.kinds?.includes('demo-video') === true || e.kinds?.includes('walkthrough') === true) && !e.kinds.includes('page')) q.set('kind', 'demo-video');
   return `/editors/dev?${q.toString()}`;
 }
@@ -70,6 +73,7 @@ export function devHostHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 't
 export function openHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 'title' | 'kinds'>): { href: string; text: string } {
   if (e.kinds.includes(MCP_SERVER_KIND)) return { href: mcpInspectPath(), text: 'Inspect an MCP server' };
   // A deck editor's sample is a deck (P-D1).
+  if (e.kinds.includes('app') && !e.kinds.includes('page')) return { href: devHostHref(e), text: 'Try it on a sample app' };
   return { href: devHostHref(e), text: e.kinds.includes('deck') && !e.kinds.includes('page') ? 'Try it on a sample deck' : 'Try it on a sample page' };
 }
 

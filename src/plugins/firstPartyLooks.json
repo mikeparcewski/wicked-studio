@@ -1,5 +1,9 @@
 {
   "$doc": "How studio's first-party EDITORS look on the Plugins page (program DES-LEARN §2): one line and a colour each; the icon is <id>/icon.svg. scripts/build-editors.mjs writes these into each editor's editor.json (`description`, `visuals`) for crew's registry; studio falls back to them for a crew that predates the fields. A run plugin declares its own in its manifest.json.",
+  "wicked-apps": {
+    "description": "Opens apps: live dashboards and tools over your data, built by chat and by hand.",
+    "color": "#0369a1"
+  },
   "wicked-insights": {
     "description": "What the weekly review found: patterns across runs and what to change.",
     "color": "#0f766e"
