@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 296,
-    "occurrences": 4192,
-    "static": 3548,
-    "dynamic": 118,
+    "files": 300,
+    "occurrences": 4272,
+    "static": 3619,
+    "dynamic": 120,
     "computed": 48
   },
   "static": [
@@ -564,6 +564,429 @@
       "testId": "appearance-settings",
       "files": [
         "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card",
+      "files": [
+        "src/components/apps/AppsPage.tsx",
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-cancel",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-desc",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-edit",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-key",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-kpis",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-name",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-nonumbers",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-note",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-open",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-operation",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-preview",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-request",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-row",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-run",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-sample",
+      "files": [
+        "src/components/apps/AppsPage.tsx",
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-share",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-source",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-sources",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-version",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-chip",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-chips",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-crumb",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-dock",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-edit-hint",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-empty",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-error",
+      "files": [
+        "src/components/apps/AppsPage.tsx",
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-error-retry",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-frame-box",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-grid",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-host",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-link-cancel",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-link-confirm",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-link-open",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-link-url",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-loading",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-mode-edit",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-mode-preview",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-outcome",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-page",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-phone-note",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-preview-limit",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-redo",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-retry",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-route",
+      "files": [
+        "src/components/apps/AppRoutePage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-route-failed",
+      "files": [
+        "src/components/apps/AppRoutePage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-route-loading",
+      "files": [
+        "src/components/apps/AppRoutePage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-route-noeditor",
+      "files": [
+        "src/components/apps/AppRoutePage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-route-retry",
+      "files": [
+        "src/components/apps/AppRoutePage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-route-unknown",
+      "files": [
+        "src/components/apps/AppRoutePage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-sample-note",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-samples-note",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-audience",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-close",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-embed",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-link",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-open",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-publish",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-scrim",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-state",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-studio",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-when",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-skipped",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-status",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-title",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-torn",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-undo",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-version",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-viewer",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
       ]
     },
     {
@@ -9278,6 +9701,12 @@
     },
     {
       "testId": "nav-agents",
+      "files": [
+        "src/board/navModel.ts"
+      ]
+    },
+    {
+      "testId": "nav-apps",
       "files": [
         "src/board/navModel.ts"
       ]
@@ -21484,6 +21913,12 @@
       ]
     },
     {
+      "pattern": "*-copy",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
       "pattern": "*-detail",
       "files": [
         "src/components/QeRefusalWarning.tsx",
@@ -21508,6 +21943,12 @@
       "files": [
         "src/components/sources/AllowWritesSwitch.tsx",
         "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-field",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
       ]
     },
     {

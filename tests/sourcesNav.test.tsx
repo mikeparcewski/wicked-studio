@@ -36,9 +36,9 @@ const rail = (pathname: string) => render(<SessionRail runs={[]} needRows={[]} n
 describe('the sidebar\'s Data sources entry', () => {
   it('the model: last in Work with the capability, nowhere without it', () => {
     const work = (sources: boolean) => navGroups('insight', { sources }).find((g) => g.id === 'work')!.items.map((i) => i.label);
-    expect(work(true)).toEqual(['Projects', 'Jobs', 'Repositories', 'Data sources']);
-    expect(work(false)).toEqual(['Projects', 'Jobs', 'Repositories']);
-    expect(navGroups('start', { sources: true }).find((g) => g.id === 'work')!.items.map((i) => i.label)).toEqual(['Learn', 'Projects', 'Jobs', 'Repositories', 'Data sources']);
+    expect(work(true)).toEqual(['Projects', 'Jobs', 'Apps', 'Repositories', 'Data sources']);
+    expect(work(false)).toEqual(['Projects', 'Jobs', 'Apps', 'Repositories']);
+    expect(navGroups('start', { sources: true }).find((g) => g.id === 'work')!.items.map((i) => i.label)).toEqual(['Learn', 'Projects', 'Jobs', 'Apps', 'Repositories', 'Data sources']);
     expect(navCurrent('/sources', { sources: true })).toBe('sources');
     expect(navCurrent('/sources')).toBe('build');
   });
@@ -54,7 +54,7 @@ describe('the sidebar\'s Data sources entry', () => {
     expect(screen.getByTestId('desk-rail-build')).not.toHaveAttribute('aria-current');
     // In the Work group, right after Repositories.
     const work = screen.getByRole('group', { name: 'Work' });
-    expect([...work.querySelectorAll('a')].map((a) => a.getAttribute('data-testid'))).toEqual(['nav-projects', 'nav-jobs', 'nav-repos', 'nav-sources']);
+    expect([...work.querySelectorAll('a')].map((a) => a.getAttribute('data-testid'))).toEqual(['nav-projects', 'nav-jobs', 'nav-apps', 'nav-repos', 'nav-sources']);
   });
 
   it('is not current on another page', () => {
