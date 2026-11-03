@@ -70,39 +70,16 @@ html .footer { scroll-snap-align: end; }
 @media (max-width: 768px) {
   .frame { min-height: 0; padding: 44px 0; }
 }
-/* Big windows: scale each frame as a whole (type, cards, scenes and the demo together) so it fills
-   the frame instead of floating in it, and widen the topbar's row to the same measure so the
-   wordmark stays on the content's left edge. The platform band keeps its own size.
-   The tiers follow the window's HEIGHT (that is where the empty space was: a 1440x900 window had
-   200px above and below most frames), each guarded by a width at which the zoomed content still
-   lays out at 1200px or wider (width / zoom >= 1200), the narrowest desktop layout it is built for. */
-@media (min-width: 1320px) and (min-height: 800px) {
-  .frame > .wrap { zoom: 1.1; }
-  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.1); padding-inline: calc(28px * 1.1); }
-}
-@media (min-width: 1440px) and (min-height: 880px) {
-  .frame > .wrap { zoom: 1.2; }
-  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.2); padding-inline: calc(28px * 1.2); }
-}
-@media (min-width: 1560px) and (min-height: 960px) {
-  .frame > .wrap { zoom: 1.3; }
-  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.3); padding-inline: calc(28px * 1.3); }
-}
-@media (min-width: 1680px) and (min-height: 1040px) {
-  .frame > .wrap { zoom: 1.4; }
-  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.4); padding-inline: calc(28px * 1.4); }
-}
-@media (min-width: 1920px) and (min-height: 1200px) {
-  .frame > .wrap { zoom: 1.6; }
-  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.6); padding-inline: calc(28px * 1.6); }
-}
-@media (min-width: 2160px) and (min-height: 1360px) {
-  .frame > .wrap { zoom: 1.8; }
-  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 1.8); padding-inline: calc(28px * 1.8); }
-}
-@media (min-width: 2400px) and (min-height: 1400px) {
-  .frame > .wrap { zoom: 2; }
-  html .topbar__inner, html .beat-thread { max-width: calc(1240px * 2); padding-inline: calc(28px * 2); }
+/* Big windows: the family grid, the same box as wicked-crew's (crew.css .wrap): each frame's content
+   is 1240px wide (28px padding) up to 1700px and 1400px from 1700px, and at 1800x1000 and up each frame
+   is re-laid out 12% larger inside that same 1400px (zoom, not bitmap scaling). The topbar row stays the
+   family's 1240px at every width, as on crew (the thread follows the frames: beats.css). So at every
+   window size the lockup, the content and the right gutter sit where crew's do, and the beat track
+   shows exactly where crew's does. (The frames used to zoom up to 2x with the window's height, which
+   widened them past the grid and left no gutter for the track at 1440x900.) */
+@media (min-width: 1700px) { .wrap { max-width: 1400px; } }
+@media (min-width: 1800px) and (min-height: 1000px) {
+  .frame > .wrap { zoom: 1.12; max-width: 1250px; }
 }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -1288,6 +1265,7 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { transit
   }
   .beat-thread.is-on { opacity: 1; }
 }
+@media (min-width: 1700px) and (min-height: 640px) { .beat-thread { max-width: 1400px; } }
 .beat-thread i { display: block; height: 100%; border-radius: 0 0 2px 2px; background: color-mix(in oklab, var(--beat-c) 16%, transparent); overflow: hidden; }
 .beat-thread b { display: block; height: 100%; background: var(--beat-c); box-shadow: 0 0 10px color-mix(in oklab, var(--beat-c) 60%, transparent); transform-origin: 0 50%; transform: scaleX(var(--f, 0)); }
 
