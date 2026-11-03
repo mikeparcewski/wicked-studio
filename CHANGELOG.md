@@ -12,6 +12,49 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **Understand reads like a chat (operator, round 10).** The page fills the Desk's height: the thread and its
+  composer share one centred 760 px column, the composer pinned at the bottom (mic and Ask, as before), and the
+  thread scrolls, not the document. A right sidebar holds Recent answers (crew's chat history merged with this
+  browser's; the open one marked; each reopens in place), links to the code graph and the requirements graph of the
+  repositories the open conversation asked about (all of them when none was chosen), and More (Compare side by
+  side, Coverage), which take the main column with a way back. Under 1024 px the sidebar is a drawer behind the
+  header's button. A follow-up keeps its conversation's repositories; a new question takes the ones its chat chose.
+- **Repositories say what we know about each one (round 10).** Each row carries five small marks, each a link to
+  the thing itself: Code graph (its size and age, the engine's findings first), Requirements (the real share against
+  the minimum as a meter), Requirements graph (its build, domains, and whether it is behind), Domain runs and Other
+  runs (the newest one linked). A repository's page shows the same marks as a "What we know" band. Reads are lazy
+  (at most three at once, kept for a minute, timed out after 20 s), and a read that failed says unknown, never
+  none. Every value is one crew already serves.
+- **New job opens on a workflow catalog (round 11).** Search sits on top: titles, what you get, tags and synonyms,
+  so a sentence ("write docs for the auth service") ranks the right workflow. Category chips with counts, and
+  Filters (needs a repository / works without one, Show coming soon), narrow it. Best fit for the words New job was
+  opened with comes first, then Your top (what you start most, recent first; hidden until you have launched
+  something), then a section per category. A coming-soon or unavailable workflow is shown with its tag, never
+  offered. **Talk it through first** opens the chat. The next step says what the workflow gives and needs, lists
+  its inputs, and asks for a repository only when the workflow needs one; no repository means no pull request
+  offer. Studio reads crew's `GET /workflows/catalog`; on an older crew it builds the list from `GET /workflows`
+  and the presets (uncategorised, still searchable, no Your top). The data builder's coming-soon card is
+  **Apps** ("Apps: a live app or dashboard over your APIs and databases", where studio says it itself).
+- **The chat sees the artifact you have open (DES-CHAT-ARTIFACTS-001 A1, `capabilities.chatArtifacts.context`).**
+  A chat message carries the artifact on the surface it was sent from (its chip, else the card in full screen, a
+  pane, Made, or the composer's newest card), at the version shown once the editor's writes in flight have
+  settled, with the parts you selected; the page summary rides as context instead of inside your words. An older
+  crew is sent exactly what it was sent before. **Ask about this** on a document now works everywhere: a composer
+  on screen gets the artifact's chip; else the chat the document was made in, if it is open; else a new chat
+  beside it in the document's project.
+- **A chat's proposal is a card in the thread; only your click answers it (A2,
+  `capabilities.chatArtifacts.proposals`).** Crew's facts are lines on the card (what and the outcome, its sources
+  with any struck one and why, the helpers, time and cost, what stops it, where it is filed). Make it (or Make the
+  change, or Preview) is preselected but never focused, so Enter in the composer still sends; Make it and Not now
+  answer crew (`POST /chats/:id/proposals/:pid`). A newer proposal replaces the open one; answered, replaced and
+  interrupted cards fold to one line, and an ended chat's cards come from its kept history.
+- **Change something on a create card opens New document answering the proposal (A3,
+  `capabilities.chatArtifacts.create`).** The form is filled with crew's resolution: the title, what it is about,
+  the sources as chips (a struck one with crew's reason), the repositories and two helpers. Make it answers the
+  proposal with only what changed and never creates a document itself; a refusal stays in the form in crew's
+  words. Under the test configuration, the "starts nothing" notice follows `capabilities.chatArtifacts.stubOps`.
+
 ### Changed
 - **The type and the marks (fonts-v3, the operator's pick 2026-11-02).** The text face is Wicked Sans A, an OFL cut
   of Inter (same family name and weights; its licence ships as `dist/fonts/LICENSE-WickedSans.txt`). The rail's
@@ -38,6 +81,27 @@ npm publish dates. Every version listed here exists on
   - **Jobs:** each row's line starts with the job's project, or "No project" for an unfiled job. A project picker in
     the list head (All projects / each project / No project, with counts for the list as shown) replaces the
     Project select that was hidden under Search and filter.
+
+### Fixed
+- **Document, deck, page and video runs (round 12, from a rig pass over each).**
+  - A gate never offers a reviewer the engine refuses: the choices read crew's refused set
+    (`WorkUnit.reassign_refused`), so "Approve and retry with <seat>" is never a 409.
+  - The decision dock's reply box stands down while a card asks for its own words, or while another choice that
+    takes a note (Retry with a note, Stop) is picked; before, it still posted a Send back.
+  - A chat message refused because a turn is still running keeps its words in the box, and Send waits until the
+    turn has closed. Nothing is sent on your behalf.
+  - Every editor that declares a kind is an **Open with** choice on the artifact host, remembered per kind; an
+    editor that cannot save says it only views. A pending permission is said in words ("asks to load images and
+    fonts from the internet", not `network.media`).
+  - Voice uses one running rule (working, quiet, stalled) for the Running jobs widget and the narration, and never
+    shows the engine's synthetic step id. Made no longer lists a run's working document.
+- **The page and deck editors' nested frames cannot use WebRTC (F3; pairs with wicked-crew#1269, in crew 0.16.13).**
+  The page editor (Document, Page) and the deck's slide frame show agent-authored HTML in a nested
+  `sandbox="allow-scripts"` frame, whose inherited `connect-src 'none'` no browser applies to WebRTC. The last step
+  before that frame's `srcdoc` (`guardNestedHtml`, `src/plugins/_shared/nestedGuard.ts`) now puts crew's WebRTC
+  prelude first in every inline script and a Content-Security-Policy first in `<head>` whose `script-src` is exactly
+  those scripts' hashes, with `frame-src`, `child-src` and `worker-src` `'none'`. `javascript:` URLs, inline handlers
+  and new script text are refused. Thumbnails stay `sandbox=""`.
 
 ## [0.14.1] — 2026-11-03
 
