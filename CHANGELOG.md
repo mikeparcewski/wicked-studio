@@ -93,15 +93,18 @@ npm publish dates. Every version listed here exists on
     panel beside the canvas.
     - It lists the app's queries: each one's source and kind, its text, parameters and output columns, and the
       components that read it.
-    - A query's text can be edited, and its source changed to another of the same kind. Check & save first asks crew
-      to check the text against the source (crew's read policy, then a describe; nothing runs). The columns it returns
-      become the query's output. Then one version lands through crew's staged check. A refusal shows crew's codes and
-      words, and lands nothing. Components that would lose a column are named before anything is sent.
+    - A query's text can be edited, and its source changed to another of the same kind and SQL dialect (or, when its
+      source is gone from crew's registry, to any source of that kind). For SQL, Check & save first asks crew to check
+      the text against the source (crew's read policy, then a describe; nothing runs), and the columns it returns become
+      the query's output. A GraphQL text is checked against the schema and keeps its declared output. Then one version
+      lands through crew's staged check. A refusal shows crew's codes and words, and lands nothing. Components that
+      would lose a column are named before anything is sent. A save is refused, with nothing landed, if the query
+      changed meanwhile (an undo, another tab). Studio is never editable inside a frame.
     - Add data turns a source's table into a starter read (its columns, `LIMIT 100`), or a question into SQL a seat
       drafts (shown first). The new query then becomes a new table, or the picked component reads it.
     - With no data source, the panel links to Data sources. On the sample apps a query's text saves in the browser only,
       labelled as unchecked.
-    - A component whose column the rows no longer carry says "Column gone" instead of showing a blank.
+    - A table, chart or KPI whose column its rows no longer carry says "Column gone" instead of showing a blank.
 
 ### Changed
 - **The type and the marks (fonts-v3, the operator's pick 2026-11-02).** The text face is Wicked Sans A, an OFL cut

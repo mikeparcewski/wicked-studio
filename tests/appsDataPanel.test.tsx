@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppDetail, AppSpec } from '../src/api/types.js';
 import { AppDataPanel } from '../src/components/apps/AppDataPanel.js';
 import {
-  addTableFor, bindTo, columnsGone, freshQueryId, outputOf, outputTypeOf, queryRows, sqlIdent, starterSql,
+  addTableFor, badOutputNames, bindTo, columnsGone, freshQueryId, outputOf, outputTypeOf, queryRows, sqlIdent, starterSql,
 } from '../src/editors/apps/appQueries.js';
 import { AppSession } from '../src/editors/apps/appSession.js';
 import { SampleAppStore, sampleTexts, type AppStorePort, type StoreResult } from '../src/editors/apps/appStore.js';
@@ -58,6 +58,9 @@ describe('the model', () => {
     expect(['smallint', 'integer', 'bigint', 'numeric(10,2)', 'double precision', 'boolean', 'date', 'timestamp with time zone', 'text', 'support.ticket_status', 'uuid']
       .map(outputTypeOf)).toStrictEqual(['integer', 'integer', 'integer', 'number', 'number', 'boolean', 'date', 'datetime', 'string', 'string', 'string']);
     expect(outputOf([{ name: 'n', type: 'bigint' }])).toStrictEqual([{ name: 'n', type: 'integer' }]);
+    // codex r13: MySQL's describe answers protocol names.
+    expect(['LONG', 'LONGLONG', 'SHORT', 'INT24', 'TINY', 'NEWDECIMAL', 'DOUBLE', 'DATE', 'DATETIME', 'TIMESTAMP', 'VAR_STRING'].map(outputTypeOf))
+      .toStrictEqual(['integer', 'integer', 'integer', 'integer', 'integer', 'number', 'number', 'date', 'datetime', 'datetime', 'string']);
   });
 
   it('names the components a narrower output would leave without a column', () => {
@@ -65,10 +68,14 @@ describe('the model', () => {
     expect(columnsGone(SPEC(), 'tickets', outputOf([{ name: 'id', type: 'integer' }, { name: 'subject', type: 'text' }, { name: 'owner', type: 'text' }, { name: 'status', type: 'text' }]))).toStrictEqual([]);
   });
 
-  it('writes a schema-qualified starter read, quoting any identifier that is not plainly safe', () => {
+  it('writes a schema-qualified starter read, every identifier quoted, and an output-name alias where one is needed', () => {
     const r = { schema: 'support', name: 'tickets', kind: 'table', rowEstimate: 1, primaryKey: ['id'], foreignKeys: [], columns: [{ name: 'id' }, { name: 'Odd "col"' }] } as never;
-    expect(starterSql(r, 'postgres')).toBe('SELECT id, "Odd ""col"""\nFROM support.tickets\nLIMIT 100');
+    expect(starterSql(r, 'postgres')).toBe('SELECT "id", "Odd ""col""" AS "odd_col"\nFROM "support"."tickets"\nLIMIT 100');
     expect(sqlIdent('a`b', 'mysql')).toBe('`a``b`');
+    // codex r13: reserved words stay identifiers; names outside crew's output grammar get an alias that is in it.
+    const reserved = { schema: 'sales', name: 'order', kind: 'table', rowEstimate: 1, primaryKey: [], foreignKeys: [], columns: [{ name: 'select' }, { name: 'Order ID' }, { name: '2nd' }, { name: 'order_id' }] } as never;
+    expect(starterSql(reserved, 'mysql')).toBe('SELECT `select`, `Order ID` AS `order_id_2`, `2nd` AS `c_2nd`, `order_id`\nFROM `sales`.`order`\nLIMIT 100');
+    expect(badOutputNames([{ name: 'ok_1' }, { name: 'Order ID' }, { name: '2nd' }, { name: 'é' }])).toStrictEqual(['Order ID', '2nd', 'é']);
     expect(freshQueryId(SPEC(), 'tickets')).toBe('tickets_2');
     expect(freshQueryId(SPEC(), '9 Weird-Name')).toBe('q_9_weird_name');
   });
@@ -106,6 +113,23 @@ describe('the session lands a Data panel change as ONE version, after the runtim
     expect(no).toMatchObject({ ok: false, code: 'check_failed', findings: [{ code: 'statements' }] });
     expect(s2.head).toBe(head);
     expect(events).toStrictEqual([]);
+  });
+
+  it('codex r13: a sample saved before texts were kept migrates, so an undo never keeps the newer text', async () => {
+    const storage = new MemStorage();
+    const spec = SAMPLE_APPS['escalations']!.spec;
+    const fresh = new SampleAppStore('esc', spec, storage, Date.now, null);
+    await fresh.detail();
+    const raw = JSON.parse(storage.getItem('wicked-apps-sample:esc')!) as { texts?: unknown; detail: { queryText: unknown } };
+    delete raw.texts;
+    raw.detail.queryText = {};
+    storage.setItem('wicked-apps-sample:esc', JSON.stringify(raw));
+    const old = new SampleAppStore('esc', spec, storage, Date.now, null);
+    const d = await old.detail();
+    expect(d.queryText['unassigned']).toBe(sampleTexts(spec)['unassigned']);
+    await old.edit(1, d.spec, 'Changed', { unassigned: 'SELECT 9 AS unassigned' });
+    const back = await old.move('undo', 2);
+    expect(back.ok && back.app.queryText['unassigned']).toBe(sampleTexts(spec)['unassigned']);
   });
 
   it('the sample store keeps a query’s text per version: undo puts the earlier text back', async () => {
@@ -211,7 +235,7 @@ describe('the Data panel', () => {
     render(<AppDataPanel session={session} detail={d} sample={false} selectedId="open" page="main" onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getAllByTestId('apps-data-table')).toHaveLength(1));
     fireEvent.click(screen.getByTestId('apps-data-table'));
-    expect((screen.getByTestId('apps-data-add-text') as HTMLTextAreaElement).value).toBe('SELECT name, sla_hours\nFROM support.regions\nLIMIT 100');
+    expect((screen.getByTestId('apps-data-add-text') as HTMLTextAreaElement).value).toBe('SELECT "name", "sla_hours"\nFROM "support"."regions"\nLIMIT 100');
     // The selected KPI is the target the panel offers first.
     expect((screen.getByTestId('apps-data-target') as HTMLSelectElement).value).toBe('open');
     fireEvent.change(screen.getByTestId('apps-data-target'), { target: { value: 'new-table' } });
@@ -221,7 +245,7 @@ describe('the Data panel', () => {
     const m = made[0] as Exclude<Made, string>;
     expect(m.spec.queries.find((q) => q.id === 'regions')).toStrictEqual({ id: 'regions', source: 'support-pg', kind: 'sql', output: [{ name: 'name', type: 'string' }, { name: 'sla_hours', type: 'integer' }] });
     expect(m.spec.pages[0]!.components.some((c) => c.type === 'table' && (c as { data?: { query: string } }).data?.query === 'regions')).toBe(true);
-    expect(m.texts).toStrictEqual({ regions: 'SELECT name, sla_hours\nFROM support.regions\nLIMIT 100' });
+    expect(m.texts).toStrictEqual({ regions: 'SELECT "name", "sla_hours"\nFROM "support"."regions"\nLIMIT 100' });
   });
 
   it('Ask in words shows the drafted SQL and the seat’s words as text first; Use this SQL fills the editor', async () => {
@@ -252,6 +276,100 @@ describe('the Data panel', () => {
     await waitFor(() => expect(screen.getByTestId('apps-data-nosource')).toBeTruthy());
     fireEvent.click(screen.getByTestId('apps-data-sources-link'));
     expect(navigate).toHaveBeenCalledWith('/sources');
+  });
+
+  it('codex r13: a save on a query that changed meanwhile (an undo) lands nothing and says so', async () => {
+    mockCrew({ '/mcp/servers': () => SERVERS, '/sources/support-pg/check': () => ({ ok: true, columns: [{ name: 'id', type: 'integer' }, { name: 'subject', type: 'text' }, { name: 'owner', type: 'text' }], params: [], relations: [] }) });
+    const d = detailOf(SPEC(), TEXT);
+    const undone = detailOf(SPEC(), { ...TEXT, tickets: 'SELECT the text before' }, 3);
+    const made: Made[] = [];
+    const session = { landDirect: vi.fn(async (build: (h: AppDetail) => Made) => { const m = build(undone); made.push(m); return typeof m === 'string' ? { ok: false, code: 'refused', message: m, findings: [] } : { ok: true, version: 4, app: undone }; }) } as unknown as AppSession;
+    render(<AppDataPanel session={session} detail={d} sample={false} selectedId={null} page="main" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('tickets'));
+    fireEvent.change(screen.getByTestId('apps-data-text'), { target: { value: 'SELECT t.id, t.subject, t.owner FROM support.tickets AS t LIMIT 5' } });
+    fireEvent.click(screen.getByTestId('apps-data-save'));
+    await waitFor(() => expect(screen.getByTestId('apps-data-save-refused').textContent).toMatch(/this query changed meanwhile/));
+    expect(typeof made[0]).toBe('string');
+  });
+
+  it('codex r13: a draft survives a landing that did not touch its query, and is opened afresh when the query changed', async () => {
+    mockCrew({ '/mcp/servers': () => SERVERS });
+    const d1 = detailOf(SPEC(), TEXT, 1);
+    const { session } = fakeSession(d1);
+    const { rerender } = render(<AppDataPanel session={session} detail={d1} sample={false} selectedId={null} page="main" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('tickets'));
+    fireEvent.change(screen.getByTestId('apps-data-text'), { target: { value: 'my draft' } });
+    const moved = SPEC();
+    moved.pages[0]!.components[1]!.box = { x: 3, y: 0, w: 3, h: 2 };
+    rerender(<AppDataPanel session={session} detail={detailOf(moved, TEXT, 2)} sample={false} selectedId={null} page="main" onClose={vi.fn()} />);
+    expect((screen.getByTestId('apps-data-text') as HTMLTextAreaElement).value).toBe('my draft');
+    rerender(<AppDataPanel session={session} detail={detailOf(moved, { ...TEXT, tickets: 'SELECT from another tab' }, 3)} sample={false} selectedId={null} page="main" onClose={vi.fn()} />);
+    expect((screen.getByTestId('apps-data-text') as HTMLTextAreaElement).value).toBe('SELECT from another tab');
+  });
+
+  it('codex r13: a draft asked of one source never shows under another', async () => {
+    let answer: ((v: unknown) => void) | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
+      const path = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, 'http://studio.local').pathname.replace(/^\/api\/v1/u, '');
+      const json = (v: unknown): Response => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if (path === '/mcp/servers') return json({ servers: [...SERVERS.servers, { name: 'other-pg', kind: 'sql', sql: { driver: 'postgres' }, enabled: true }], discovered: [] });
+      if (path.endsWith('/catalog')) return json(CATALOG);
+      if (path === '/sources/support-pg/ask') return new Promise<Response>((res) => { answer = (v) => res(json(v)); });
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch);
+    const d = detailOf(SPEC(), TEXT);
+    render(<AppDataPanel session={fakeSession(d).session} detail={d} sample={false} selectedId={null} page="main" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('apps-data-ask')).toBeTruthy());
+    fireEvent.change(screen.getByTestId('apps-data-ask'), { target: { value: 'Which regions?' } });
+    fireEvent.click(screen.getByTestId('apps-data-ask-go'));
+    await waitFor(() => expect(answer).not.toBeNull());
+    // The source is held while the draft is out.
+    expect((screen.getByTestId('apps-data-add-source') as HTMLSelectElement).disabled).toBe(true);
+    answer!({ sql: 'SELECT 1 AS x', explanation: 'one', seat: 'claude', check: null, confirm: null });
+    await waitFor(() => expect(screen.getByTestId('apps-data-draft').textContent).toMatch(/^Drafted for support-pg: one/));
+    // Switching source clears it: a draft belongs to the source it was asked of.
+    fireEvent.change(screen.getByTestId('apps-data-add-source'), { target: { value: 'other-pg' } });
+    await waitFor(() => expect(screen.queryByTestId('apps-data-draft')).toBeNull());
+  });
+
+  it('codex r13: a column name crew would refuse is said before anything lands', async () => {
+    mockCrew({ '/mcp/servers': () => SERVERS, '/sources/support-pg/check': () => ({ ok: true, columns: [{ name: 'id', type: 'integer' }, { name: 'Order ID', type: 'text' }], params: [], relations: [] }) });
+    const d = detailOf(SPEC(), TEXT);
+    const { session } = fakeSession(d);
+    render(<AppDataPanel session={session} detail={d} sample={false} selectedId={null} page="main" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('open_count'));
+    fireEvent.change(screen.getByTestId('apps-data-text'), { target: { value: 'SELECT t.id, t."Order ID" FROM support.tickets AS t' } });
+    fireEvent.click(screen.getByTestId('apps-data-save'));
+    await waitFor(() => expect(screen.getByTestId('apps-data-refused-code').textContent).toBe('output_name'));
+    expect(session.landDirect).not.toHaveBeenCalled();
+  });
+
+  it('codex r13: a GraphQL text keeps its declared output; a REST query has no pre-check; a deleted source can be replaced', async () => {
+    const spec = SPEC();
+    spec.queries.push({ id: 'gql', source: 'shop-gql', kind: 'graphql', rowPath: '$.data.orders[*]', output: [{ name: 'id', type: 'string' }] } as never);
+    spec.queries.push({ id: 'rest', source: 'ops-api', kind: 'rest', rowPath: '$.items[*]', output: [{ name: 'id', type: 'string' }] } as never);
+    spec.queries[0]!.source = 'gone-pg';
+    const texts = { ...TEXT, gql: 'query { orders { id } }', rest: '{"tool":"GET /items"}' };
+    const { calls } = mockCrew({
+      '/mcp/servers': () => ({ servers: [...SERVERS.servers, { name: 'shop-gql', kind: 'graphql', enabled: true }], discovered: [] }),
+      '/sources/shop-gql/check': () => ({ ok: true, columns: [], params: [], relations: [] }),
+    });
+    const d = detailOf(spec, texts);
+    const { session, made } = fakeSession(d);
+    render(<AppDataPanel session={session} detail={d} sample={false} selectedId={null} page="main" onClose={vi.fn()} />);
+    await waitFor(() => expect(calls.some((c) => c.path === '/mcp/servers')).toBe(true));
+    fireEvent.click(screen.getByText('gql'));
+    fireEvent.change(screen.getByTestId('apps-data-text'), { target: { value: 'query { orders(first: 5) { id } }' } });
+    fireEvent.click(screen.getByTestId('apps-data-save'));
+    await waitFor(() => expect(screen.getByTestId('apps-data-last').textContent).toBe('Saved as v2: checked by crew'));
+    expect((made[0] as Exclude<Made, string>).spec.queries.find((q) => q.id === 'gql')!.output).toStrictEqual([{ name: 'id', type: 'string' }]);
+    fireEvent.click(screen.getByText('rest'));
+    expect(screen.queryByTestId('apps-data-check')).toBeNull();
+    expect(screen.getByTestId('apps-data-save').textContent).toBe('Save');
+    fireEvent.click(screen.getByText('tickets'));
+    await waitFor(() => expect(screen.getByTestId('apps-data-source-select')).toBeTruthy());
+    const options = [...(screen.getByTestId('apps-data-source-select') as HTMLSelectElement).options].map((o) => o.textContent);
+    expect(options).toStrictEqual(['gone-pg (not in crew’s registry)', 'support-pg']);
   });
 
   it('the sample store: labelled, no source call, and the text saves as the sample’s', async () => {

@@ -133,7 +133,14 @@ export class SampleAppStore implements AppStorePort {
       const raw = this.storage?.getItem(this.key);
       if (raw == null) return null;
       const s = JSON.parse(raw) as SampleState;
-      return typeof s?.detail?.head?.version === 'number' ? s : null;
+      if (typeof s?.detail?.head?.version !== 'number') return null;
+      // A sample written before query texts were kept (codex r13): every version gets the stand-in texts its own spec
+      // implies, so an undo never puts a later text on an earlier version.
+      if (s.texts === undefined) {
+        s.texts = Object.fromEntries(Object.entries(s.specs ?? {}).map(([v, spec]) => [v, sampleTexts(spec)]));
+        if (Object.keys(s.detail.queryText ?? {}).length === 0) s.detail.queryText = sampleTexts(s.detail.spec);
+      }
+      return s;
     } catch { return null; }
   }
   private save(): void { try { this.storage?.setItem(this.key, JSON.stringify(this.mem)); } catch { /* a full or absent storage keeps the tab's own copy */ } }
@@ -209,7 +216,7 @@ export class SampleAppStore implements AppStorePort {
     const target = this.mem.detail.versions[states[to]! - 1]!;
     if (target.receipt === null || !ACCEPTED.has(target.receipt.kind)) return { ok: false, code: 'not_accepted', message: `v${target.version} holds no accepted receipt` };
     const spec = this.mem.specs[target.version]!;
-    const texts = this.mem.texts?.[target.version] ?? declaredTexts(spec, this.mem.detail.queryText ?? {});
+    const texts = this.mem.texts?.[target.version] ?? sampleTexts(spec);
     const origin = target.receipt.restoredFrom ?? { version: target.version, originKind: target.receipt.kind === 'reviewed' ? 'reviewed' as const : 'you' as const, originVersion: target.version };
     return this.land(spec, texts, `${direction === 'undo' ? 'Undo' : 'Redo'} to v${target.version}`, (version, tree, at) => ({
       kind: 'restored', tree, version, at, actor: SAMPLE_ACTOR, restoredFrom: { version: target.version, originKind: origin.originKind, originVersion: origin.originVersion },

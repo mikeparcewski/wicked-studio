@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 301,
-    "occurrences": 4312,
-    "static": 3657,
+    "occurrences": 4313,
+    "static": 3658,
     "dynamic": 120,
     "computed": 48
   },
@@ -828,6 +828,12 @@
     },
     {
       "testId": "apps-data-output",
+      "files": [
+        "src/components/apps/AppDataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "apps-data-page",
       "files": [
         "src/components/apps/AppDataPanel.tsx"
       ]

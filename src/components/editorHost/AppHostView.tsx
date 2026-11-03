@@ -153,7 +153,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const [sharing, setSharing] = useState(false);
   /** Edit's Data panel (the app's queries; Add data): drawn by the host beside the frame. */
   const [dataOpen, setDataOpen] = useState(false);
-  const shown = narrow ? 'preview' : mode;
+  // A framed studio is Preview, whatever the address asked for (`?mode=edit`): nothing changes inside a frame (§7.1).
+  const framedNow = useMemo(() => { try { return window.top !== window.self; } catch { return true; } }, []);
+  const shown = narrow || framedNow ? 'preview' : mode;
   // When Edit was left: a field typed in Edit commits as the person clicks Preview, and that op is still Edit's.
   const editLeftRef = useRef(Number.NEGATIVE_INFINITY);
   if (modeRef.current === 'edit' && shown !== 'edit') editLeftRef.current = Date.now();
@@ -351,7 +353,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         {shown === 'edit' && <span className="wk-apps-hint" data-testid="apps-edit-hint">Changes save as you make them · Undo to go back</span>}
         <span className="wk-apps-spacer" />
         {shown === 'preview' && viewer !== null && <span className="wk-apps-pill" data-testid="apps-viewer">Viewing as {viewer}</span>}
-        {shown === 'edit' && (
+        {shown === 'edit' && !framed && (
           <button type="button" className={`wk-btn wk-btn--secondary wk-btn--sm${dataOpen ? ' wk-btn--on' : ''}`} data-testid="apps-data-open" aria-pressed={dataOpen}
             disabled={detail === null || kind === null} onClick={() => setDataOpen((o) => !o)}>Data</button>
         )}
@@ -392,7 +394,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           )}
           <div ref={frameBox} key={mountKey} className="wk-apps-frame-box" data-testid="apps-frame-box" />
         </div>
-        {shown === 'edit' && dataOpen && detail !== null && kind !== null && sessionRef.current !== null && (() => {
+        {shown === 'edit' && !framed && dataOpen && detail !== null && kind !== null && sessionRef.current !== null && (() => {
           const anchor = chips[0]?.anchor;
           const selectedId = anchor !== undefined && 'id' in anchor ? anchor.id : null;
           const page = detail.spec.pages.find((pg) => pg.components.some((c) => c.id === selectedId))?.id ?? detail.spec.pages[0]?.id ?? '';

@@ -285,21 +285,33 @@ def _describe(text: str) -> list:
         parts = it.split()
         name = parts[-1] if len(parts) >= 3 and parts[-2].lower() == "as" else it.split(".")[-1]
         name = name.strip('"')
-        typ = "bigint" if "count(" in it.lower() else SOURCE_TYPES.get(it.split(".")[-1].split()[0].strip('"'), "text")
+        base = it.split()[0].split(".")[-1].strip('"')
+        typ = "bigint" if "count(" in it.lower() else SOURCE_TYPES.get(base, "text")
         out.append({"name": name, "type": typ})
     return out
 
 
+def _fits(declared: str, pg: str) -> bool:
+    """crew's outputTypeFits (apps/exec/source-stage.ts) for the Postgres types the fixture describes."""
+    return {"integer": pg in ("smallint", "integer", "bigint"), "number": pg in ("smallint", "integer", "bigint", "numeric", "real", "double precision"),
+            "boolean": pg == "boolean", "date": pg == "date", "datetime": pg.startswith("timestamp"), "string": True}.get(declared, False)
+
+
 def _source_check(q: dict, text: str):
     """The source stage for one query (crew's apps/exec/source-stage.ts): the policy, then the described columns
-    against the declared output (names and count). Answers a finding or None."""
+    against the declared output (names, count and Postgres types). Answers a finding or None."""
     bad = _policy(text)
     if bad is not None:
         return {"stage": "source", "code": bad[0], "path": "$.queries", "message": f"query {q['id']}: {bad[1]}"}
-    cols = [c["name"] for c in _describe(text)]
+    described = _describe(text)
+    cols = [c["name"] for c in described]
     declared = [o["name"] for o in q.get("output", [])]
     if sorted(cols) != sorted(declared):
         return {"stage": "source", "code": "output_columns", "path": "$.queries", "message": f"query {q['id']}: the query returns {len(cols)} columns ({', '.join(cols)}); {len(declared)} are declared"}
+    types = {c["name"]: c["type"] for c in described}
+    for o in q.get("output", []):
+        if not _fits(o["type"], types[o["name"]]):
+            return {"stage": "source", "code": "output_type", "path": "$.queries", "message": f"query {q['id']}: column {o['name']} is {types[o['name']]} at the source, which is not a declared {o['type']}"}
     return None
 
 

@@ -59,17 +59,26 @@ export function queryRows(spec: AppSpec, queryText: Readonly<Record<string, stri
 /**
  * The declared type a source column carries, by crew's own fit rules (`apps/exec/source-stage.ts` `outputTypeFits`):
  * Postgres integral types are `integer`, the other numbers `number`, `boolean`, `date`, the two timestamps `datetime`,
- * and anything else `string` (rendered as text, which every column fits). MySQL and SQLite type names map the same way
- * where they say so plainly; crew types those loosely, so `string` is never wrong.
+ * and anything else `string` (rendered as text, which every column fits). MySQL's describe answers its protocol names
+ * (`LONG`, `LONGLONG`, `NEWDECIMAL`, …) and SQLite's its declared affinities; both map the same way (codex r13).
  */
 export function outputTypeOf(sourceType: string): AppOutputColumn['type'] {
   const t = sourceType.toLowerCase().replace(/\(.*\)$/u, '').trim();
-  if (['smallint', 'integer', 'bigint', 'int', 'int2', 'int4', 'int8', 'tinyint', 'mediumint'].includes(t)) return 'integer';
-  if (['numeric', 'real', 'double precision', 'decimal', 'float', 'double', 'float4', 'float8'].includes(t)) return 'number';
+  if (['smallint', 'integer', 'bigint', 'int', 'int2', 'int4', 'int8', 'tinyint', 'mediumint',
+    'tiny', 'short', 'long', 'longlong', 'int24', 'year'].includes(t)) return 'integer';
+  if (['numeric', 'real', 'double precision', 'decimal', 'float', 'double', 'float4', 'float8', 'newdecimal'].includes(t)) return 'number';
   if (t === 'boolean' || t === 'bool') return 'boolean';
-  if (t === 'date') return 'date';
-  if (t === 'timestamp without time zone' || t === 'timestamp with time zone' || t === 'timestamp' || t === 'timestamptz' || t === 'datetime') return 'datetime';
+  if (t === 'date' || t === 'newdate') return 'date';
+  if (t === 'timestamp without time zone' || t === 'timestamp with time zone' || t === 'timestamp' || t === 'timestamptz' || t === 'datetime' || t === 'datetime2') return 'datetime';
   return 'string';
+}
+
+/** crew's grammar for an app output column's name (`apps/spec.ts`): a letter or `_` first, then letters, digits, `_`, `-`. */
+export const OUTPUT_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,127}$/u;
+
+/** The described columns whose names crew would refuse as output names (they need an alias in the SQL). */
+export function badOutputNames(columns: ReadonlyArray<{ name: string }>): string[] {
+  return columns.map((c) => c.name).filter((n) => !OUTPUT_NAME.test(n));
 }
 
 /** The declared output for the columns crew's check described (at most 200, as crew's schema allows). */
@@ -108,15 +117,27 @@ export function columnsGone(spec: AppSpec, queryId: string, output: readonly App
   return columnUses(spec, queryId).filter((u) => !have.has(u.column));
 }
 
-/** A Postgres or MySQL identifier as SQL: plain when it is plainly safe, else quoted (quotes doubled). */
+/** A catalog identifier as SQL, always quoted in the dialect's way (quotes doubled): a reserved word (`order`, `select`)
+ *  or any punctuation stays one identifier (codex r13). */
 export function sqlIdent(name: string, dialect: 'postgres' | 'mysql' | 'sqlite'): string {
-  if (/^[a-z_][a-z0-9_]*$/u.test(name)) return name;
   return dialect === 'mysql' ? `\`${name.replace(/`/gu, '``')}\`` : `"${name.replace(/"/gu, '""')}"`;
 }
 
-/** The starter read for a table: its columns (at most 40), schema-qualified, `LIMIT 100` (crew's policy then checks it). */
+/** An output name for a column crew's grammar would refuse: its words kept as `_`-joined letters and digits, unique. */
+function aliasFor(name: string, taken: Set<string>): string {
+  let a = name.normalize('NFKD').replace(/[^A-Za-z0-9_]+/gu, '_').replace(/^_+|_+$/gu, '').toLowerCase().slice(0, 60);
+  if (!/^[A-Za-z_]/u.test(a)) a = `c_${a}`;
+  let out = a;
+  for (let n = 2; taken.has(out); n += 1) out = `${a}_${n}`;
+  taken.add(out);
+  return out;
+}
+
+/** The starter read for a table: its columns (at most 40), schema-qualified, `LIMIT 100` (crew's policy then checks it).
+ *  A column whose name is no output name gets an alias that is one (`"Order ID" AS order_id`). */
 export function starterSql(r: SourceCatalogRelation, dialect: 'postgres' | 'mysql' | 'sqlite'): string {
-  const cols = r.columns.slice(0, 40).map((c) => sqlIdent(c.name, dialect));
+  const taken = new Set(r.columns.map((c) => c.name).filter((n) => OUTPUT_NAME.test(n)));
+  const cols = r.columns.slice(0, 40).map((c) => (OUTPUT_NAME.test(c.name) ? sqlIdent(c.name, dialect) : `${sqlIdent(c.name, dialect)} AS ${sqlIdent(aliasFor(c.name, taken), dialect)}`));
   const table = r.schema !== null && r.schema !== '' ? `${sqlIdent(r.schema, dialect)}.${sqlIdent(r.name, dialect)}` : sqlIdent(r.name, dialect);
   return `SELECT ${cols.length > 0 ? cols.join(', ') : '*'}\nFROM ${table}\nLIMIT 100`;
 }

@@ -509,7 +509,7 @@ def main() -> None:
         spec3 = landed["body"]["ops"][0]["spec"]
         reads = [c for c in spec3["pages"][0]["components"] if c.get("data", {}).get("query") == "regions"]
         df.wait_for_function("() => [...document.querySelectorAll('.wk-cell-title')].some(t => t.textContent.trim().toLowerCase() === 'regions')", timeout=10_000)
-        check("data_add", starter == "SELECT id, name, sla_hours\nFROM support.regions\nLIMIT 100" and target == "new-table" and e3 - e2 == 1 and landed["status"] == 200
+        check("data_add", starter == 'SELECT "id", "name", "sla_hours"\nFROM "support"."regions"\nLIMIT 100' and target == "new-table" and e3 - e2 == 1 and landed["status"] == 200
               and any(q["id"] == "regions" for q in spec3["queries"]) and len(reads) == 1 and reads[0]["type"] == "table"
               and {"op": "query-text", "query": "regions", "text": starter} in landed["body"]["ops"], starter=starter, edits=e3 - e2, reads=len(reads))
         # Ask in words: the drafted SQL and the seat's words are shown first, as text; nothing lands until Check & add.
@@ -550,6 +550,23 @@ def main() -> None:
         check("framed_refuses", offered == 0 and "Open to make changes" in says and r5 and r5["error"]["code"] == "refused"
               and "Open to make changes" in r5["error"]["message"] and count(origin, "POST", "/prepare") == p0
               and chrome == [True, True, True] and undo_after == undo_before, buttons=offered, says=says, sent=r5, chrome_disabled=chrome)
+        framer.close()
+
+        # 9'. a framed studio asked for Edit (?mode=edit) still opens in Preview: no Data panel, nothing to change (codex r13 P1)
+        framer = ctx.new_page()
+        framer.goto(f"{origin}/__fixture/apps-framer?{urllib.parse.urlencode({'src': '/apps/fixture-app?mode=edit'})}")
+        end = time.time() + 20
+        studio = None
+        while time.time() < end and studio is None:
+            studio = next((f for f in framer.frames if "/apps/fixture-app" in f.url), None)
+            framer.wait_for_timeout(100)
+        if studio is None:
+            fail("framed_edit", "no framed studio")
+        studio.wait_for_selector('[data-testid="apps-mode-preview"]', timeout=20_000)
+        framer.wait_for_timeout(1_500)
+        fe = {"data": studio.locator('[data-testid="apps-data-open"]').count(), "panel": studio.locator('[data-testid="apps-data"]').count(),
+              "edit_pressed": studio.get_attribute('[data-testid="apps-mode-edit"]', "aria-pressed"), "edit_disabled": studio.is_disabled('[data-testid="apps-mode-edit"]')}
+        check("framed_edit_is_preview", fe["data"] == 0 and fe["panel"] == 0 and fe["edit_pressed"] == "false" and fe["edit_disabled"], **fe)
         framer.close()
 
         # 10. a window too narrow for the builder: the frame decides (under 640 px), so Edit is not offered
