@@ -2,11 +2,11 @@
 
 > [![npm](https://img.shields.io/npm/v/wicked-studio)](https://www.npmjs.com/package/wicked-studio) · [![CI](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml) · [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-**The IDE for running a team of coding agents.** *Your coding agents do the work. A different agent
-checks it against your rules. You get the evidence.* By default a different agent reviews the work.
-When none can, the job stops unless you launch it as "reduced assurance", which is labelled on the
-job, every gate and the delivery. A saved workflow may require fewer checks; its requirements are
-listed in the receipts.
+**The ADE (agentic development environment) for running a team of coding agents.** *Your coding
+agents do the work. A different agent checks it against your rules. You get the evidence.* By
+default a different agent reviews the work. When none can, the job stops unless you launch it as
+"reduced assurance", which is labelled on the job, every gate and the delivery. A saved workflow may
+require fewer checks; its requirements are listed in the receipts.
 
 wicked-studio is the browser app where you run Claude Code, Codex, GitHub Copilot, OpenCode and Pi
 as a team. Start a job with a chat: it proposes a plan, and once you confirm it the agents work in
