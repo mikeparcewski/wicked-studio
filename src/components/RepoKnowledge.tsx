@@ -1,4 +1,5 @@
 import type { KnowMark, MarkTarget } from '../board/repoKnowledge.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 
 /**
  * What we know about a repository, as small marks (board/repoKnowledge.ts). Each mark is a link to the thing
@@ -13,6 +14,9 @@ export function KnowMarks({ marks, onOpen, variant = 'strip', repoName, testId =
   repoName?: string;
   testId?: string;
 }): React.ReactElement {
+  // A mark's sentence can carry the engine's own words (a code-graph finding names a path), so it is drawn through the
+  // default layer's formatter: `~/…` for the home directory unless "Show technical details" is on (studio#458).
+  const display = useDisplayText();
   return (
     <ul className={`wk-know wk-know--${variant}`} data-testid={testId} aria-label={repoName === undefined ? 'What we know' : `What we know about ${repoName}`}>
       {marks.map((m) => {
@@ -26,13 +30,14 @@ export function KnowMarks({ marks, onOpen, variant = 'strip', repoName, testId =
             {m.flag !== undefined && <span className="wk-know-flag" data-testid="repo-know-flag">{m.flag}</span>}
           </>
         );
-        const common = { className: 'wk-know-mark', 'data-testid': 'repo-know-mark', 'data-mark': m.id, 'data-tone': m.tone, title: m.title };
+        const title = display(m.title);
+        const common = { className: 'wk-know-mark', 'data-testid': 'repo-know-mark', 'data-mark': m.id, 'data-tone': m.tone, title };
         return (
           <li key={m.id}>
             {m.target.kind === 'none' ? (
               <span {...common} data-link="false">{body}</span>
             ) : (
-              <button type="button" {...common} data-link="true" aria-label={`${repoName !== undefined ? `${repoName}: ` : ''}${m.title.replace(/\.$/, '')}. Open it`}
+              <button type="button" {...common} data-link="true" aria-label={`${repoName !== undefined ? `${repoName}: ` : ''}${title.replace(/\.$/, '')}. Open it`}
                 onClick={() => onOpen(m.target, m)}>
                 {body}
               </button>

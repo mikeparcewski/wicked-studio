@@ -24,6 +24,7 @@ import { Skeleton } from '../ui/index.js';
 import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 import { isTopModal, useLayerStore } from '../../store/layers.js';
 import { isShortcutsPaletteOpen } from '../../hooks/useGlobalShortcuts.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useVoiceStore } from '../../store/voice.js';
 
 /** Below this the sidebar is a drawer (understand-chat.css uses the same width). */
@@ -444,6 +445,8 @@ function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef,
   const shown = useMemo(() => graphLinkRepos(repos ?? [], scope), [repos, scope]);
   const inScope = useMemo(() => (scope.length === 0 ? repos ?? [] : (repos ?? []).filter((r) => scope.includes(r.id))), [repos, scope]);
   const knowledge = useRepoKnowledgeFor(shown.map((r) => r.id));
+  // The marks' sentences can carry the engine's words (a code-graph finding names a path): `~/…` in the default layer.
+  const display = useDisplayText();
   const go = (path: string) => (e: React.MouseEvent): void => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault(); navigate(path);
@@ -462,17 +465,17 @@ function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef,
             const code = marks.find((m) => m.id === 'code')!;
             const req = marks.find((m) => m.id === 'reqgraph')!;
             const page = `/repo-detail/${encodeURIComponent(r.id)}`;
-            const label = (m: typeof code): string => `${r.name}: ${m.title.replace(/\.$/, '')}. Open it`;
+            const label = (m: typeof code): string => `${r.name}: ${display(m.title).replace(/\.$/, '')}. Open it`;
             return (
               <li key={r.id} className="wk-uc-graph" data-testid="understand-graph-repo" data-repo-id={r.id}>
                 <a href={page} className="wk-uc-graph-name" onClick={go(page)}>{r.name}</a>
                 <span className="wk-uc-graph-links">
-                  <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-open" data-tone={code.tone} title={code.title} aria-label={label(code)} onClick={() => onOpen(r, 'code')}>
+                  <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-open" data-tone={code.tone} title={display(code.title)} aria-label={label(code)} onClick={() => onOpen(r, 'code')}>
                     <span className="wk-know-dot" aria-hidden /><Network size={14} aria-hidden />Code graph
                     <span className="wk-uc-graphval" data-testid="understand-graph-value">{code.value}</span>
                     {flagOf(code) !== null && <span className="wk-know-flag" data-testid="understand-graph-flag">{flagOf(code)}</span>}
                   </button>
-                  <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-req" data-tone={req.tone} title={req.title} aria-label={label(req)} onClick={() => onOpen(r, 'domain')}>
+                  <button type="button" className="wk-uc-graphbtn" data-testid="understand-graph-req" data-tone={req.tone} title={display(req.title)} aria-label={label(req)} onClick={() => onOpen(r, 'domain')}>
                     <span className="wk-know-dot" aria-hidden /><Share2 size={14} aria-hidden />Requirements graph
                     <span className="wk-uc-graphval" data-testid="understand-graph-value">{req.value}</span>
                     {flagOf(req) !== null && <span className="wk-know-flag" data-testid="understand-graph-flag">{flagOf(req)}</span>}
