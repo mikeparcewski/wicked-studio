@@ -47,6 +47,32 @@ const httpUrl = (v: unknown): string | null => {
 const line = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, max) : null);
 const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && !Number.isNaN(new Date(v).getTime());
 
+/** The attributes an embed snippet may carry, each at most once (anything else, `srcdoc` or `on*` included, refuses it). */
+const SNIPPET_ATTRS = new Set(['src', 'title', 'width', 'height', 'loading', 'allow', 'referrerpolicy', 'sandbox', 'allowfullscreen']);
+
+/**
+ * crew's embed snippet, only when it is exactly ONE `<iframe …></iframe>` of the published site: double-quoted
+ * attributes from {@link SNIPPET_ATTRS}, no `&`, `<`, `>` or quote inside a value, a `src` on the share link's own
+ * origin, nothing before or after it, and no CR (a text area would show a different string than Copy copies). The
+ * person pastes it into their own pages, so anything else (another element, a handler, `srcdoc`, a lookalike host) is
+ * not shown at all (codex/pi r10).
+ */
+export function snippetOf(v: unknown, shareUrl: string): string | null {
+  if (typeof v !== 'string' || v.length > 2_000 || v.includes('\r')) return null;
+  const m = /^<iframe((?:[ \t\n]+[a-z]+(?:="[^"<>&]*")?)*)[ \t\n]*><\/iframe>$/u.exec(v);
+  if (m === null) return null;
+  const seen = new Set<string>();
+  let src: string | null = null;
+  for (const a of m[1]!.matchAll(/([a-z]+)(?:="([^"]*)")?/gu)) {
+    const name = a[1]!;
+    if (!SNIPPET_ATTRS.has(name) || seen.has(name)) return null;
+    seen.add(name);
+    if (name === 'src') src = a[2] ?? null;
+  }
+  const at = httpUrl(src);
+  return at !== null && new URL(at).origin === new URL(shareUrl).origin ? v : null;
+}
+
 /** crew's published record, read field by field; anything missing or malformed means "not published". */
 export function publishedOf(detail: unknown): AppPublished | null {
   const p = typeof detail === 'object' && detail !== null ? (detail as { published?: unknown }).published : undefined;
@@ -56,9 +82,7 @@ export function publishedOf(detail: unknown): AppPublished | null {
   const audience = line(r['audience'], 300);
   const version = r['version'];
   if (shareUrl === null || audience === null || typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1 || !isTime(r['at'])) return null;
-  // A snippet shows only when it is crew's text for this site (it names the share link's origin).
-  const snippet = typeof r['snippet'] === 'string' && r['snippet'].trim() !== '' && r['snippet'].length <= 4_000 && r['snippet'].includes(new URL(shareUrl).origin) ? r['snippet'] : null;
-  return { shareUrl, audience, snippet, version, at: r['at'] };
+  return { shareUrl, audience, snippet: snippetOf(r['snippet'], shareUrl), version, at: r['at'] };
 }
 
 export interface TileKpi { title: string; value: string | null }
@@ -99,7 +123,8 @@ export function receiptWords(app: AppDetail): string {
 }
 
 function sourcesOf(spec: AppSpec): string[] {
-  return [...new Set([...spec.queries.map((q) => q.source), ...spec.actions.map((a) => a.source)])].slice(0, 6);
+  const named = [...spec.queries, ...spec.actions].map((x) => (x as { source?: unknown }).source).filter((v): v is string => typeof v === 'string' && v !== '');
+  return [...new Set(named.map((v) => v.slice(0, 60)))].slice(0, 6);
 }
 
 /** The first page's KPI components (up to three): their titles, and their values when the rows are at hand. */
@@ -182,8 +207,10 @@ export async function loadAppsDirectory(hasStore: boolean): Promise<AppsDirector
   } catch (e) {
     return { source: 'error', message: why(e) };
   }
-  const entries = (Array.isArray(list?.apps) ? list.apps as unknown[] : []).filter((a): a is Record<string, unknown> => typeof a === 'object' && a !== null);
-  const listed = entries.filter((a) => isAppSlug(a['slug']));
+  // crew's answer is data too: a list that is not a list is an error to retry, never an empty store.
+  if (typeof list !== 'object' || list === null || !Array.isArray((list as { apps?: unknown }).apps)) return { source: 'error', message: 'crew’s list of apps was not a list' };
+  const entries = list.apps as unknown[];
+  const listed = entries.filter((a): a is Record<string, unknown> => typeof a === 'object' && a !== null && isAppSlug((a as Record<string, unknown>)['slug']));
   const apps = await Promise.all(listed.map(async (a, i): Promise<AppTileData> => {
     const slug = a['slug'] as string;
     if (i >= PREVIEW_LIMIT) return summaryTile(a, slug, null);

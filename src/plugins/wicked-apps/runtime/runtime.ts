@@ -114,7 +114,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   let closed = false;
   /** The words open in place on the canvas, if any (see `startInline`): a redraw keeps them open only while the newest
    *  spec still has the words they started from; `drop` closes them with nothing sent. */
-  let inline: { id: string; prop: string; before: string; drop: () => void } | null = null;
+  let inline: { id: string; prop: string; before: string; drop: () => void; hold: () => void; place: () => void } | null = null;
   /** The last tap on a component's words, for a double tap (see `tap`). */
   let lastTap: { id: string; prop: string; at: number } | null = null;
 
@@ -914,17 +914,24 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
    * a value the spec does not (no stale draft is carried onto a newer version). A rebuilt panel gives focus back to
    * the control that had it.
    */
+  /**
+   * Draw everything. Words open in place are carried across: while the newest spec still has the words the field
+   * started from (the person's own burst landing, a theme change, another component changing), the same field, with
+   * its text and caret, goes back where the words now are. Otherwise (another tab changed those words, the component
+   * is gone, Edit ended) the field closes first, with nothing sent (codex r9/r10).
+   */
   const draw = (opts: { keepProps?: boolean } = {}): void => {
-    if (inline !== null) {
-      // Words open in place stay open across a redraw that leaves them as they were (the person's own burst landing, a
-      // theme change); the field's commit draws everything. Anything else (another tab changed those words, the
-      // component is gone, Edit ended) closes the field first, with nothing sent (codex r9: a removed field's blur
-      // committed its draft on the newer version).
-      const open = inline;
+    const open = inline;
+    let carry = false;
+    if (open !== null) {
       const c = editing() ? components().find((x) => x.id === open.id) : undefined;
-      if (c !== undefined && wordsOf(c, open.prop) === open.before) return;
-      open.drop();
+      carry = c !== undefined && wordsOf(c, open.prop) === open.before;
+      if (carry) open.hold(); else open.drop();
     }
+    drawNow(opts);
+    if (carry && open !== null && inline === open) open.place();
+  };
+  const drawNow = (opts: { keepProps?: boolean }): void => {
     const had = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.getAttribute('data-prop') : null;
     bodies.clear();
     index.clear();
@@ -1066,7 +1073,24 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     ed.select();
     let done = false;
     let composing = false;
-    const me = { id, prop, before, drop: (): void => { done = true; if (inline === me) inline = null; } };
+    /** The field is being moved into a redrawn canvas: its removal is not the person leaving it. */
+    let moving = false;
+    let caret: [number | null, number | null] = [null, null];
+    const me = {
+      id, prop, before,
+      drop: (): void => { done = true; moving = false; if (inline === me) inline = null; },
+      hold: (): void => { moving = true; caret = [ed.selectionStart, ed.selectionEnd]; },
+      place: (): void => {
+        // The redrawn words, found by comparing attributes (a component id never goes into a selector).
+        const cell = [...root.querySelectorAll('[data-component]')].find((x) => x.getAttribute('data-component') === id);
+        const words = cell === undefined ? undefined : [...cell.querySelectorAll('[data-inline]')].find((x) => x.getAttribute('data-inline') === prop);
+        if (words === undefined) { me.drop(); return; }
+        words.replaceWith(ed);
+        ed.focus();
+        if (caret[0] !== null && caret[1] !== null) ed.setSelectionRange(caret[0], caret[1]);
+        moving = false;
+      },
+    };
     inline = me;
     const finish = (commit: boolean): void => {
       if (done) return;
@@ -1083,12 +1107,12 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       if (k.key === 'Enter' && !(multi && k.shiftKey)) { k.preventDefault(); k.stopPropagation(); finish(true); }
     });
     // Leaving the field keeps the words; a field taken out of the page (Chromium fires blur for that) sends nothing.
-    ed.addEventListener('blur', () => { if (ed.isConnected) finish(true); else me.drop(); });
+    ed.addEventListener('blur', () => { if (moving) return; if (ed.isConnected) finish(true); else me.drop(); });
   };
 
   root.addEventListener('dblclick', (e) => {
     // A Button's or a Link's label (no drag starts on them); a double tap elsewhere has already opened the field.
-    if (!editing() || root.querySelector('[data-testid="apps-inline"]') !== null) return;
+    if (!editing() || inline !== null) return;
     // The element under the pointer (a drag's pointer capture retargets the event to the component's cell).
     const at = (typeof document.elementFromPoint === 'function' ? document.elementFromPoint(e.clientX, e.clientY) : null) ?? (e.target as Element | null);
     const target = at?.closest('[data-inline]') as HTMLElement | null;

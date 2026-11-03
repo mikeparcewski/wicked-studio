@@ -10,7 +10,8 @@ import { AppRoutePage } from '../src/components/apps/AppRoutePage.js';
 import { ShareSheet, studioLink } from '../src/components/apps/ShareSheet.js';
 import { AppAdapter } from '../src/editors/apps/appAdapter.js';
 import { AppSession } from '../src/editors/apps/appSession.js';
-import { FixedAppStore, PREVIEW_LIMIT, isAppSlug, loadAppsDirectory, publishedOf, tileHostPort } from '../src/editors/apps/appsDirectory.js';
+import { FixedAppStore, PREVIEW_LIMIT, isAppSlug, loadAppsDirectory, publishedOf, snippetOf, tileHostPort } from '../src/editors/apps/appsDirectory.js';
+import { AppHostView } from '../src/components/editorHost/AppHostView.js';
 import { SAMPLE_APPS } from '../src/editors/apps/samples.js';
 import { EditorHost } from '../src/editors/host.js';
 
@@ -188,6 +189,39 @@ describe('/apps: crew’s records are data (codex r9)', () => {
   });
 });
 
+describe('crew’s records are data (codex r10)', () => {
+  it('a list that is not a list is an error to retry; entries that are not apps are counted, not shown', async () => {
+    for (const body of [{}, { apps: null }, { apps: { desk: 1 } }]) {
+      vi.restoreAllMocks();
+      mockDaemon({ '/apps': body });
+      expect(await loadAppsDirectory(true)).toMatchObject({ source: 'error' });
+    }
+    vi.restoreAllMocks();
+    mockDaemon({ '/apps': { apps: [null, 5, 'desk', { slug: 'desk', name: 'Desk' }] }, '/apps/desk': crewDetail('desk', 'Desk') });
+    expect(await loadAppsDirectory(true)).toMatchObject({ source: 'crew', skipped: 3, apps: [{ slug: 'desk' }] });
+  });
+
+  it('a source that is not a string is not shown, and the card stays whole', async () => {
+    const d = crewDetail('desk', 'Desk');
+    (d.app.spec.queries[0] as unknown as { source: unknown }).source = { toString: 5 };
+    mockDaemon({ '/health': { status: 'ok', capabilities: CAPS }, '/apps': { apps: [{ slug: 'desk', name: 'Desk' }] }, '/apps/desk': d, '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] } });
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    expect(screen.getByTestId('apps-card-sources').textContent).toMatch(/^Reads support-pg/);
+    expect(screen.queryByTestId('apps-card-note')).toBeNull();
+  });
+
+  it('the app view opened directly (?app=) says when the daemon did not answer, with Try again', async () => {
+    mockDaemon({ '/health': { __status: 503 } });
+    render(<AppHostView editor="wicked-apps" version="0.13.0" sha={'a'.repeat(64)} app="desk" sample={null} />);
+    await waitFor(() => expect(screen.getByTestId('apps-error').textContent).toMatch(/did not answer/));
+    vi.restoreAllMocks();
+    const { urls } = mockDaemon({ '/health': { __status: 503 } });
+    fireEvent.click(screen.getByTestId('apps-error-retry'));
+    await waitFor(() => expect(urls).toContain('/health'));
+  });
+});
+
 describe('/apps/<slug>: one store decision (codex r9)', () => {
   it('a daemon that does not answer says so with Try again; it never opens a sample for crew’s app', async () => {
     mockDaemon({ '/health': { __status: 503 }, '/editors': EDITORS });
@@ -268,6 +302,20 @@ describe('Share: a published link only when crew reports one', () => {
     expect(studioLink('a b', 'http://h')).toBe('http://h/apps/a%20b');
   });
 
+  it('codex/pi r10: a snippet shows only when it is exactly one iframe of the published site', () => {
+    const site = 'https://desk.example.test/';
+    const ok = '<iframe src="https://desk.example.test/" title="Desk" width="100%" height="640" loading="lazy" allowfullscreen></iframe>';
+    expect(snippetOf(ok, site)).toBe(ok);
+    expect(snippetOf('<iframe\n  src="https://desk.example.test/embed"\n  title="Desk"></iframe>', site)).not.toBeNull();
+    for (const bad of [
+      `${ok}<img src=x onerror=alert(1)>`, `<!-- https://desk.example.test/ -->${ok}`, ok.replace('<iframe ', '<iframe onload="alert(1)" '),
+      '<iframe srcdoc="&lt;script&gt;" src="https://desk.example.test/"></iframe>', '<iframe src="https://desk.example.test.evil.test/"></iframe>',
+      '<iframe src="https://desk.example.test@evil.test/"></iframe>', '<iframe src="javascript:alert(1)"></iframe>', '<iframe title="no src"></iframe>',
+      '<iframe src="https://desk.example.test/" src="https://evil.test/"></iframe>', ok.replace(' title', '\r\n title'), "<iframe src='https://desk.example.test/'></iframe>",
+      '<iframe src="https://desk.example.test/?a=1&b=2"></iframe>', '<IFRAME src="https://desk.example.test/"></IFRAME>', `${ok} `, 7, null,
+    ]) expect(snippetOf(bad, site)).toBeNull();
+  });
+
   it('is a modal: Escape closes the top layer only, and Tab stays inside', async () => {
     const onClose = vi.fn();
     const before = document.createElement('button');
@@ -296,6 +344,9 @@ interface Booted {
   set: (version: number, spec: AppSpec) => void;
   /** A host event on the port. */
   send: (type: string, payload: Record<string, unknown>) => void;
+  /** Hold every `spec.edit` answer until `release()` (a slow acknowledgement). */
+  hold: () => void;
+  release: () => void;
 }
 async function boot(spec: AppSpec): Promise<Booted> {
   vi.resetModules();
@@ -309,6 +360,7 @@ async function boot(spec: AppSpec): Promise<Booted> {
   const seen: Array<{ type: string; payload: Record<string, unknown> }> = [];
   let current = spec;
   let ver = 1;
+  let held: Array<() => void> | null = null;
   ch.port1.onmessage = (m) => {
     const d = m.data as { type: string; id?: string; payload: Record<string, unknown> };
     seen.push(d);
@@ -321,6 +373,7 @@ async function boot(spec: AppSpec): Promise<Booted> {
       const c = next.pages[0]!.components.find((x) => x.id === op['id'])! as unknown as Record<string, unknown>;
       if (op['prop'] === 'label' && c['type'] === 'button') (c['action'] as { label: string }).label = op['value'] as string; else c[op['prop'] as string] = op['value'];
       current = next;
+      if (held !== null) { held.push(() => reply({ spec: next, added: [], pending: 1 })); return; }
       reply({ spec: next, added: [], pending: 1 });
       return;
     }
@@ -335,6 +388,8 @@ async function boot(spec: AppSpec): Promise<Booted> {
     seen,
     set: (v, sp) => { ver = v; current = sp; },
     send: (type, payload) => ch.port1.postMessage({ p: 'wicked.editor', v: 1, type, payload }),
+    hold: () => { held = []; },
+    release: () => { const h = held ?? []; held = null; for (const f of h) f(); },
   };
 }
 const SPEC = (): AppSpec => ({
@@ -451,6 +506,38 @@ describe('Edit: a component’s own words, in place on the canvas', () => {
     expect(document.querySelector('[data-component="k"] .wk-cell-title')!.textContent).toBe('Theirs');
   });
 
+  it('codex r10: a redraw carries the open field (same node, text, caret) and draws the rest; a finished field never lingers', async () => {
+    const b = await boot(SPEC());
+    b.hold();
+    dbl(document.querySelector('[data-component="k"] .wk-cell-title')!);
+    const a = document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement;
+    a.value = 'Open now';
+    a.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(edits(b.seen)).toBe(1));
+    // Field B opens before A's answer arrives.
+    dbl(document.querySelector('[data-component="note"] .wk-text')!);
+    const fields = [...document.querySelectorAll('[data-testid="apps-inline"]')];
+    const field = fields.find((x) => x.tagName === 'TEXTAREA') as HTMLTextAreaElement;
+    field.value = 'Hello there';
+    field.setSelectionRange(5, 5);
+    b.release();
+    await vi.waitFor(() => expect(document.querySelector('[data-component="k"] .wk-cell-title')?.textContent).toBe('Open now'));
+    expect([...document.querySelectorAll('[data-testid="apps-inline"]')]).toStrictEqual([field]);
+    expect(field.value).toBe('Hello there');
+    expect(field.selectionStart).toBe(5);
+    // Another tab renames ANOTHER component: it is drawn now, and the field stays as it is.
+    const theirs = SPEC();
+    (theirs.pages[0]!.components[2] as { action: { label: string } }).action.label = 'Go elsewhere';
+    (theirs.pages[0]!.components[0] as { title?: string }).title = 'Open now';
+    b.set(3, theirs);
+    b.send('artifact.changed', { version: 3, head: 3, by: 'other', kind: 'deterministic' });
+    await vi.waitFor(() => expect(document.querySelector('[data-component="go"] button')?.textContent).toBe('Go elsewhere'));
+    expect([...document.querySelectorAll('[data-testid="apps-inline"]')]).toStrictEqual([field]);
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(edits(b.seen)).toBe(2));
+    expect(b.seen.filter((m) => m.type === 'spec.edit')[1]!.payload).toMatchObject({ base: 3, ops: [{ id: 'note', prop: 'text', value: 'Hello there' }] });
+  });
+
   it('codex r9: two taps on a Button’s label open it, with no dblclick (Firefox and WebKit fire none for two touch taps)', async () => {
     await boot(SPEC());
     for (let i = 0; i < 2; i += 1) {
@@ -515,7 +602,10 @@ describe('a tile’s host refuses everything a compromised frame could ask', () 
     expect(await ask('app.history', { move: 'undo', base: 3 }, 'h')).toMatchObject({ ok: false });
     expect(await ask('data.query', { query: 'open_count', params: {} }, 'q')).toMatchObject({ ok: false });
     expect(await ask('data.action', { action: 'assign_to_me', params: { id: 1 } }, 'a')).toMatchObject({ ok: false });
-    expect(await ask('link.open', { url: 'https://docs.example.com/' }, 'l')).toMatchObject({ ok: false });
+    const openLink = vi.spyOn(port, 'openLink');
+    const link = await ask('link.open', { href: 'https://status.example.com/support' }, 'l') as { ok?: boolean; payload?: { opened?: boolean } };
+    expect(link.ok === false || link.payload?.opened === false).toBe(true);
+    expect(await Promise.all(openLink.mock.results.map((r) => r.value))).not.toContain(true);
     expect(edit).not.toHaveBeenCalled();
     expect(move).not.toHaveBeenCalled();
     expect(urls).toStrictEqual([]);

@@ -364,7 +364,11 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         </p>
       )}
       {(status !== null || pending > 0) && <p className="wk-apps-line" data-testid="apps-status" aria-live="polite">{pending > 0 ? `Saving ${pending} change${pending === 1 ? '' : 's'}…` : status}</p>}
-      {error !== null && <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-error">{error}</p>}
+      {error !== null && (
+        <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-error">
+          {error} · <button type="button" className="wk-btn wk-btn--link" data-testid="apps-error-retry" onClick={() => setMountKey((k) => k + 1)}>Try again</button>
+        </p>
+      )}
       {/* Always there in Edit (selecting must never move the app under the pointer: a double-click's second press
           would land on another component). */}
       {shown === 'edit' && (
