@@ -557,7 +557,7 @@ describe('codex r2 #6, #7, r1 #23 (stacking), #12, #13: the runtime', () => {
       { id: 'sb', type: 'chart', chart: 'bar', stacked: true, data: { query: 'r' }, x: 'c', series: [{ column: 'a' }, { column: 'b' }], box: { x: 0, y: 0, w: 6, h: 4 } },
       { id: 'sa', type: 'chart', chart: 'area', stacked: true, data: { query: 'r' }, x: 'c', series: [{ column: 'a' }, { column: 'b' }], box: { x: 6, y: 0, w: 6, h: 4 } },
     ], { queries: [q] });
-    await boot(spec, () => rowsFor(q, [['x', 10, 20], ['y', 10, -8]]));
+    await boot(spec, () => rowsFor(q, [['x', 10, 10], ['y', 10, -8]]));
     await vi.waitFor(() => expect(document.querySelectorAll('[data-component="sb"] rect')).toHaveLength(4));
     const rect = (i: number) => document.querySelectorAll('[data-component="sb"] rect')[i]!;
     // Row x: a's segment ends where b's begins.
@@ -584,7 +584,15 @@ describe('codex r2 #6, #7, r1 #23 (stacking), #12, #13: the runtime', () => {
     expect(bNeg.lower[2]!).toBeGreaterThan(zeroY); // …down to -8
     expect(bNeg.lower[1]!).toBeCloseTo(bNeg.upper[1]!, 0); // and starts at the crossing with no thickness
     // b's stroke is split at its sign change: one run on its positive edge, one on its negative edge.
-    expect(document.querySelectorAll('[data-component="sa"] polyline.wk-series-1')).toHaveLength(2);
+    expect([...document.querySelectorAll('[data-component="sa"] polyline.wk-series-1')].map((l) => l.getAttribute('points')!.split(' ').length)).toStrictEqual([2, 2]);
+  });
+
+  it('pi r5: a crossing that rounds (7 then -36: the interpolated value is -8.9e-16, not 0) still draws both stroke runs', async () => {
+    const q = { id: 'r', source: 's', kind: 'sql' as const, output: [{ name: 'c', type: 'string' as const }, { name: 'a', type: 'integer' as const }, { name: 'b', type: 'integer' as const }] };
+    const spec = base([{ id: 'sa', type: 'chart', chart: 'area', stacked: true, data: { query: 'r' }, x: 'c', series: [{ column: 'a' }, { column: 'b' }], box: { x: 0, y: 0, w: 6, h: 4 } }], { queries: [q] });
+    await boot(spec, () => rowsFor(q, [['x', 5, 7], ['y', 5, -36]]));
+    await vi.waitFor(() => expect(document.querySelector('[data-component="sa"] path.wk-area')).not.toBeNull());
+    expect([...document.querySelectorAll('[data-component="sa"] polyline.wk-series-1')].map((l) => l.getAttribute('points')!.split(' ').length)).toStrictEqual([2, 2]);
   });
 
   it('#12 spec ids named like Object.prototype members are plain keys (filters, forms, sample rows); nothing inherited changes', async () => {
@@ -831,5 +839,69 @@ describe('codex r4: IME Enter, a slow read across edits', () => {
     expect(seen.filter((m) => m.type === 'data.query')).toHaveLength(1);
     release();
     await vi.waitFor(() => expect(document.querySelector('[data-component="kpi"] .wk-kpi-value')?.textContent).toBe('9'));
+  });
+});
+
+describe('codex r5: long stacked areas, stroke ends at a crossing, a cleared number', () => {
+  beforeEach(() => { document.body.innerHTML = ''; });
+  const q = { id: 'r', source: 's', kind: 'sql' as const, output: [{ name: 'c', type: 'string' as const }, ...Array.from({ length: 12 }, (_, k) => ({ name: `s${k}`, type: 'integer' as const }))] };
+  const chart = (n: number): AppSpec => base([{ id: 'sa', type: 'chart', chart: 'area', stacked: true, data: { query: 'r' }, x: 'c', series: Array.from({ length: n }, (_, k) => ({ column: `s${k}` })), box: { x: 0, y: 0, w: 6, h: 4 } }], { queries: [q] });
+  const lines = (k: number): Array<Array<[number, number]>> => [...document.querySelectorAll(`[data-component="sa"] polyline.wk-series-${k}`)]
+    .map((l) => l.getAttribute('points')!.split(' ').map((p) => p.split(',').map(Number) as [number, number]));
+
+  it('#1 500 rows × 12 series crossing zero every row renders (the domain is never spread into Math.max)', async () => {
+    const rows = Array.from({ length: 500 }, (_, i) => [`r${i}`, ...Array.from({ length: 12 }, (_, k) => (i % 2 === 0 ? k + 1 : -(13 - k)))]);
+    await boot(chart(12), () => rowsFor(q, rows));
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-component="sa"] path.wk-area').length).toBeGreaterThan(12), { timeout: 5_000 });
+  });
+
+  it('#2 a positive-to-negative stroke starts its negative run on the negative stack; #3 a rounding crossing loses no run', async () => {
+    await boot(chart(2), () => rowsFor(q, [['x', 10, 20, ...Array(10).fill(0)], ['y', 10, -8, ...Array(10).fill(0)]]));
+    await vi.waitFor(() => expect(lines(1)).toHaveLength(2));
+    const aTopY = lines(0)[0]![0]![1]; // a is 10 throughout: its stroke is the positive stack base under b
+    const [up, down] = lines(1) as [Array<[number, number]>, Array<[number, number]>];
+    // The positive run ends at the crossing on b's positive stack base (a's top, 10); the negative run starts there on
+    // the NEGATIVE stack base (zero), below a's band, and ends at -8.
+    expect(up.at(-1)![1]).toBeCloseTo(aTopY, 0);
+    expect(down[0]![1]).toBeGreaterThan(up.at(-1)![1]);
+    expect(down[0]![0]).toBeCloseTo(up.at(-1)![0], 1); // same x: the crossing
+    expect(down.at(-1)![1]).toBeGreaterThan(down[0]![1]);
+  });
+
+  it('#3 three rows, b = -8, -8, 20 (its crossing rounds): the positive run from the crossing to 20 is drawn', async () => {
+    await boot(chart(2), () => rowsFor(q, [['x', 10, -8, ...Array(10).fill(0)], ['y', 10, -8, ...Array(10).fill(0)], ['z', 10, 20, ...Array(10).fill(0)]]));
+    await vi.waitFor(() => expect(lines(1)).toHaveLength(2));
+    expect(lines(1).map((l) => l.length)).toStrictEqual([3, 2]);
+    // the 7 / -36 pair from pi r5 too
+    document.body.innerHTML = '';
+    await boot(chart(2), () => rowsFor(q, [['x', 5, 7, ...Array(10).fill(0)], ['y', 5, -36, ...Array(10).fill(0)]]));
+    await vi.waitFor(() => expect(lines(1).map((l) => l.length)).toStrictEqual([2, 2]));
+  });
+
+  it('#4 clearing a number while its edit is in flight still shows the saved value after the answer', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { configurable: true, value: () => {} });
+    const spec = base([{ id: 'note', type: 'text', text: 'Hello', box: { x: 0, y: 0, w: 6, h: 2 } }]);
+    let answer: () => void = () => {};
+    await boot(spec, (type, p) => {
+      if (type !== 'spec.edit') return {};
+      const next = structuredClone(spec);
+      const op = (p['ops'] as Array<Record<string, number>>)[0]!;
+      next.pages[0]!.components[0]!.box = { x: 0, y: 0, w: op['w']!, h: Math.min(50, op['h']!) };
+      return new Promise((res) => { answer = () => res({ spec: next, added: [], pending: 1 }); });
+    }, { framed: false, mode: 'edit' });
+    const cell = document.querySelector('[data-component="note"]') as HTMLElement;
+    cell.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    cell.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }));
+    const h = await vi.waitFor(() => { const el = document.querySelector('[data-prop="box-h"]') as HTMLInputElement | null; expect(el).not.toBeNull(); return el!; });
+    h.focus();
+    h.value = '100';
+    h.dispatchEvent(new Event('input'));
+    await new Promise((res) => setTimeout(res, 20));
+    h.value = '';
+    h.dispatchEvent(new Event('input'));
+    await Promise.resolve();
+    h.blur();
+    answer();
+    await vi.waitFor(() => expect(h.value).toBe('50'));
   });
 });
