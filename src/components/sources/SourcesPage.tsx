@@ -71,6 +71,8 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
   }, [deep, sources, loading]);
 
   const open = (name: string): void => { openGen.current++; navigate(sourcesPath(name)); };
+  /** "Add a data source" (the page's button and the panel's ＋): a Grant still reading its table never opens over it. */
+  const openAdd = (): void => { openGen.current++; setSheet({ mode: 'new' }); };
   const close = (): void => { setSheet(null); if (deep !== null) navigate(sourcesPath()); };
   const setWrites = (name: string, allowed: boolean): void => {
     setSources((list) => list.map((s) => (s.name === name ? { ...s, allowWrites: allowed } : s)));
@@ -136,7 +138,7 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
       <CalmHead
         title={PAGE_NAMES.sources}
         sentence={loading ? 'Reading sources…' : `${count === 0 ? 'No sources yet' : `${count} source${count === 1 ? '' : 's'}`} plus crew’s own API. Apps read them through queries crew checks; agents see their structure, never their rows.`}
-        action={<CalmAction label="Add a data source" onClick={() => setSheet({ mode: 'new' })} testId="sources-add" />}
+        action={<CalmAction label="Add a data source" onClick={openAdd} testId="sources-add" />}
       />
       <div className="wk-src-page-body">
         <DataPanel
@@ -144,7 +146,7 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
           epochs={epochs}
           loading={loading}
           error={error}
-          onAdd={() => setSheet({ mode: 'new' })}
+          onAdd={openAdd}
           onOpen={open}
           onDeclare={declare}
           actions={shownActions}
@@ -159,11 +161,9 @@ export function SourcesPage({ navigate, search, grants = NO_APP_GRANTS }: { navi
           existing={sources.map((s) => s.name)}
           onSaved={(saved) => {
             // The saved record now, before the list re-read lands; a new descriptor withdraws old grants.
-            setSources((list) => {
-              const prior = list.find((s) => s.name === saved.name);
-              if (prior !== undefined && prior.descriptorHash !== saved.descriptorHash) bumpRevoked(saved.name);
-              return prior === undefined ? (appReadable(saved) ? [...list, saved] : list) : list.map((s) => (s.name === saved.name ? saved : s));
-            });
+            const prior = sources.find((s) => s.name === saved.name);
+            if (prior !== undefined && prior.descriptorHash !== saved.descriptorHash) bumpRevoked(saved.name);
+            setSources((list) => (list.some((s) => s.name === saved.name) ? list.map((s) => (s.name === saved.name ? saved : s)) : appReadable(saved) ? [...list, saved] : list));
             void refresh();
           }}
           onAllowWrites={setWrites}

@@ -177,7 +177,7 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
               ? <p className="wk-src-note" data-testid="row-write-line">{draft}</p>
               : <code className="wk-src-code" data-testid="row-write-line">{rowWriteLine(draft)}</code>}
           {stale && (
-            <p className="wk-src-note wk-src-tone-warn" data-testid="row-write-stale">
+            <p className="wk-src-note wk-src-tone-warn" role="status" data-testid="row-write-stale">
               {relationName(relation)} changed since this was declared{fresh === null || typeof fresh === 'string' ? '' : ` (it would now be ${rowWriteLine(fresh)}, keyed on ${fresh.key.join(', ')})`}. Declare it again to grant it.
             </p>
           )}
@@ -188,7 +188,7 @@ export function RowWriteDialog({ source, relation, privileges, declared, port, o
             </div>
           ) : (
             <div className="wk-src-row-btns">
-              {stale && <button type="button" className="wk-btn wk-btn--secondary" data-testid="row-write-redeclare" disabled={busy} onClick={() => { gen.current++; setWrite(null); setGate(null); setOutcome(null); }}>Declare again</button>}
+              {stale && <button type="button" className="wk-btn wk-btn--secondary" data-testid="row-write-redeclare" disabled={busy} onClick={() => { gen.current++; setWrite(null); setGate(null); setOutcome(null); setError(null); }}>Declare again</button>}
               <button type="button" className="wk-btn wk-btn--primary" data-testid="row-write-grant" disabled={busy || stale} onClick={() => void grant()}>{busy ? 'Checking…' : gate === null ? 'Grant' : 'Check again and grant'}</button>
               <span className="wk-src-cap">Declared. Granting checks Allow writes, the table and this login first.</span>
             </div>

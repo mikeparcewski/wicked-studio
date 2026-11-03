@@ -334,3 +334,19 @@ describe('review r3 folds (codex): a saved sheet follows its source', () => {
     await waitFor(() => expect(screen.getByTestId('source-allow-writes-switch').getAttribute('aria-checked')).toBe('true'));
   });
 });
+
+describe('review r4 fold (codex): a file chosen before a kind switch is not uploaded', () => {
+  it('Upload, pick a file, switch to Postgres and back: the empty picker uploads nothing', () => {
+    sheet();
+    fireEvent.click(screen.getByTestId('source-kind-upload'));
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'refunds' } });
+    const file = new File(['id,amount\n1,2\n'], 'earlier.csv', { type: 'text/csv' });
+    fireEvent.change(screen.getByTestId('source-file'), { target: { files: [file] } });
+    expect(screen.getByTestId('source-upload')).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId('source-kind-postgres'));
+    fireEvent.click(screen.getByTestId('source-kind-upload'));
+    expect(screen.getByTestId('source-upload')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('source-upload'));
+    expect(calls.filter((c) => c.path.startsWith('/apps/uploads'))).toEqual([]);
+  });
+});

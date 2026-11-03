@@ -295,6 +295,8 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
                   setHasSecret(false);
                   setSecretEdits((n) => n + 1);
                   setHeld(null); setAsks([]); setError(null); setAcceptedFor(null); setOriginFor(null);
+                  // The file picker may unmount too: a file chosen before is not the form's any more.
+                  setFile(null);
                 };
                 return (
                   <button key={k.kind} type="button" role="radio" aria-checked={kind === k.kind} data-testid={`source-kind-${k.kind}`}
