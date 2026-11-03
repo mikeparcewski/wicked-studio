@@ -47,13 +47,14 @@ npm publish dates. Every version listed here exists on
   `capabilities.chatArtifacts.proposals`).** Crew's facts are lines on the card (what and the outcome, its sources
   with any struck one and why, the helpers, time and cost, what stops it, where it is filed). Make it (or Make the
   change, or Preview) is preselected but never focused, so Enter in the composer still sends; Make it and Not now
-  answer crew (`POST /chats/:id/proposals/:pid`). A newer proposal replaces the open one; answered, replaced and
-  interrupted cards fold to one line, and an ended chat's cards come from its kept history.
+  answer crew (`POST /chats/:id/proposals/:pid`). A newer proposal replaces the open one; answered and replaced
+  cards fold to one line, and an ended chat's cards come from its kept history. A Go that was interrupted keeps
+  its facts and offers **Go again** (and, on a create card, **Change helpers**, since a helper may have signed out).
 - **Change something on a create card opens New document answering the proposal (A3,
   `capabilities.chatArtifacts.create`).** The form is filled with crew's resolution: the title, what it is about,
   the sources as chips (a struck one with crew's reason), the repositories and two helpers. Make it answers the
-  proposal with only what changed and never creates a document itself; a refusal stays in the form in crew's
-  words. Under the test configuration, the "starts nothing" notice follows `capabilities.chatArtifacts.stubOps`.
+  proposal with only what changed and never creates a document itself. A refusal is shown in crew's words: in the
+  form while the proposal is still open, else under the card. Under the test configuration, the "starts nothing" notice follows `capabilities.chatArtifacts.stubOps`.
 
 ### Changed
 - **The type and the marks (fonts-v3, the operator's pick 2026-11-02).** The text face is Wicked Sans A, an OFL cut
@@ -95,6 +96,8 @@ npm publish dates. Every version listed here exists on
     fonts from the internet", not `network.media`).
   - Voice uses one running rule (working, quiet, stalled) for the Running jobs widget and the narration, and never
     shows the engine's synthetic step id. Made no longer lists a run's working document.
+  - A live run whose elicitation read answered none is not read again until its status changes; every live run is
+    read again after a reconnect, and a stale read records nothing.
 - **The page and deck editors' nested frames cannot use WebRTC (F3; pairs with wicked-crew#1269, in crew 0.16.13).**
   The page editor (Document, Page) and the deck's slide frame show agent-authored HTML in a nested
   `sandbox="allow-scripts"` frame, whose inherited `connect-src 'none'` no browser applies to WebRTC. The last step
