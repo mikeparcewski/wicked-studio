@@ -68,7 +68,7 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, servers, onSaved, onAllowWrites, onAgents, onDescribed, onClose }: {
+export function SourceSheet({ target, existing, servers, agentsUnverified, onReread, onSaved, onAllowWrites, onAgents, onDescribed, onClose }: {
   target: SheetTarget;
   /** Names already registered (a new source of the same name replaces it; the sheet says so). */
   existing: readonly string[];
@@ -79,6 +79,10 @@ export function SourceSheet({ target, existing, servers, onSaved, onAllowWrites,
   /** The page's latest read of the registry: a sheet opened as NEW follows its saved source's record in it (its
    *  agent switches, as crew reads them again after a write), as a saved sheet follows `target.server`. */
   servers?: readonly McpServer[];
+  /** Sources whose agent switches crew could not be asked again after a write: their box says so and holds them. */
+  agentsUnverified?: ReadonlySet<string>;
+  /** Read the registry again (the box's "Read again"). */
+  onReread?: () => void;
   /** The source was described again (its tables may have changed). */
   onDescribed?: (name: string) => void;
   onClose: () => void;
@@ -267,6 +271,8 @@ export function SourceSheet({ target, existing, servers, onSaved, onAllowWrites,
   /** The saved SQL source's agent switches, when crew sends them (`null`: no Agents box). GraphQL sources carry the
    *  field too, but crew's switches route refuses them (`not_a_source`), so they get no box. */
   const agentAccess = saved !== null && saved.kind === 'sql' ? agentAccessOf(saved as { agents?: unknown }) : null;
+  /** crew sent the field but not as crew's shape: no box, and "What agents see" claims nothing either way. */
+  const agentsUnreadable = agentAccess === null && saved !== null && saved.kind === 'sql' && (saved as { agents?: unknown }).agents !== undefined;
   const savedSheetKind = saved !== null ? sheetKindOf(saved) : null;
   const agentDialect = savedSheetKind === 'postgres' ? 'postgres' : savedSheetKind === 'mysql' ? 'mysql' : 'sqlite';
   const sql = saved?.sql ?? null;
@@ -560,7 +566,7 @@ export function SourceSheet({ target, existing, servers, onSaved, onAllowWrites,
               {kind !== 'upload' || upload !== null ? (
                 <div className="wk-src-box" data-testid="source-agents-see">
                   <p className="wk-src-okline wk-src-strong"><Eye size={16} aria-hidden className="wk-src-ico" />What agents see</p>
-                  <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog, agentAccess === null ? undefined : !agentAccess.see ? 'hidden' : agentDialect !== 'postgres' ? 'never' : agentAccess.query ? 'on' : 'off')}</p>
+                  <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog, agentAccess === null ? (agentsUnreadable ? 'unknown' : undefined) : !agentAccess.see ? 'hidden' : agentDialect !== 'postgres' ? 'never' : agentAccess.query ? 'on' : 'off')}</p>
                 </div>
               ) : null}
               {/* (DES-KNOWLEDGE-DATA-001 §19 B5) Only when crew sends the switches (api-types 0.183.0): an older crew gets no box. */}
@@ -569,6 +575,8 @@ export function SourceSheet({ target, existing, servers, onSaved, onAllowWrites,
                   source={saved.name}
                   dialect={agentDialect}
                   agents={agentAccess}
+                  unverified={agentsUnverified?.has(saved.name) === true}
+                  {...(onReread !== undefined ? { onReread } : {})}
                   data-testid="source-agent-controls"
                   onChanged={(agents) => {
                     const name = saved.name;

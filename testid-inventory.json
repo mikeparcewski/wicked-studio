@@ -12,9 +12,9 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 302,
-    "occurrences": 4316,
+    "occurrences": 4318,
     "static": 3629,
-    "dynamic": 139,
+    "dynamic": 140,
     "computed": 49
   },
   "static": [
@@ -22229,6 +22229,12 @@
       ]
     },
     {
+      "pattern": "*-reread",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
       "pattern": "*-result",
       "files": [
         "src/components/sources/TestCall.tsx"
@@ -22370,7 +22376,8 @@
     {
       "pattern": "*-unverified",
       "files": [
-        "src/components/session/AssuranceReceipt.tsx"
+        "src/components/session/AssuranceReceipt.tsx",
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {

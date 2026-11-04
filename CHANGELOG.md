@@ -23,9 +23,11 @@ npm publish dates. Every version listed here exists on
   operator can change it; a 409: turn "see" on first); an answer that may have landed (a gateway timeout, no answer)
   says so instead. A late answer never undoes a newer switch: per source, only the newest write's answer is applied,
   and every write that settles has the Sources page that is open now read crew's switches again (a sheet opened as new
-  and saved follows them too). Below the switches, the source's recent agent queries (time, job link, seat, rows or
+  and saved follows them too); if that read fails, the box says its switches may be out of date and holds them until
+  crew answers (Read again). Below the switches, the source's recent agent queries (time, job link, seat, rows or
   the refusal; never the SQL); a record studio can't read whole says so rather than showing a shorter one. The box is
-  hidden when crew sends no `agents` field, or one crew could not have sent (an older crew), and on GraphQL sources,
+  hidden when crew sends no `agents` field (an older crew; "What agents see" keeps its words) or one crew could not
+  have sent (then "What agents see" says it is not known), and on GraphQL sources,
   which crew's switches route doesn't take. A job's gate cards and its delivery say which sources its agents read
   ("Agents read data: support-pg · 3 queries · 12 rows"), or "not known" when crew's record (or its answer) could not
   be read, never "none". The shapes are mirrored in `src/api/sourceAgents-wire.ts` until studio pins api-types 0.184.0

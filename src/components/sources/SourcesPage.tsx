@@ -71,6 +71,11 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
 
   /** Each list read's generation: an older answer never replaces a newer one (a save re-reads the list). */
   const listGen = useRef(0);
+  /** (DES-KNOWLEDGE-DATA-001 §19 B5) Sources an agent-switch write settled on since the last list read landed: their
+   *  shown switches are crew's again only once one does. */
+  const toVerify = useRef(new Set<string>());
+  /** Sources whose re-read after such a write failed: the box says its switches may be out of date, and holds them. */
+  const [unverified, setUnverified] = useState<ReadonlySet<string>>(() => new Set());
   const refresh = useCallback(async (): Promise<void> => {
     const gen = ++listGen.current;
     try {
@@ -78,8 +83,12 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
       if (gen !== listGen.current) return;
       setSources(r.servers.filter(appReadable));
       setError(null);
+      toVerify.current.clear();
+      setUnverified((cur) => (cur.size === 0 ? cur : new Set()));
     } catch (e) {
-      if (gen === listGen.current) setError(e instanceof Error ? e.message : String(e));
+      if (gen !== listGen.current) return;
+      setError(e instanceof Error ? e.message : String(e));
+      if (toVerify.current.size > 0) setUnverified(new Set(toVerify.current));
     } finally {
       if (gen === listGen.current) setLoading(false);
     }
@@ -88,7 +97,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
   useEffect(() => { void refresh(); }, [refresh]);
   // (DES-KNOWLEDGE-DATA-001 §19 B5) Every agent-switch write that settles, from any sheet (or a page since unmounted),
   // reads crew's switches again: whatever order crew applied overlapping writes in, this page shows crew's.
-  useEffect(() => agentSwitchWrites.subscribe(() => void refresh()), [refresh]);
+  useEffect(() => agentSwitchWrites.subscribe((source) => { toVerify.current.add(source); void refresh(); }), [refresh]);
 
   // `?source=<name>` opens that source's sheet: the address owns it, so Back (or a link to a source that
   // isn't there) closes it. A new source's sheet is the page's own, not the address's.
@@ -201,6 +210,8 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           }}
           onAllowWrites={setWrites}
           servers={sources}
+          agentsUnverified={unverified}
+          onReread={() => void refresh()}
           // crew's answer now; the read below (every settled write) supersedes any list read that was out before it.
           onAgents={(name, agents) => setSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)))}
           onDescribed={(name) => setEpochs((m) => ({ ...m, [name]: (Object.hasOwn(m, name) ? (m[name] ?? 0) : 0) + 1 }))}

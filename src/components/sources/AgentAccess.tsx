@@ -43,12 +43,16 @@ export function projectsWords(a: SourceAgentAccess, names: ReadonlyMap<string, s
  * ONLY caller of `sourceAgentsApi.setAgentAccess` (pinned by `tests/sourceAgentsHumanOnly.test.ts`), and it changes
  * a switch only on a click. No URL parameter, palette verb, plugin request or chat reply reaches it.
  */
-export function AgentAccess({ source, dialect, agents, onChanged, 'data-testid': testId = 'source-agent-controls' }: {
+export function AgentAccess({ source, dialect, agents, unverified = false, onReread, onChanged, 'data-testid': testId = 'source-agent-controls' }: {
   source: string;
   /** Only a Postgres source can be queried by agents in this release; MySQL and uploads are structure only. */
   dialect: 'postgres' | 'mysql' | 'sqlite';
   /** crew's switches for the source (the sheet shows no box when crew sent none). */
   agents: SourceAgentAccess;
+  /** crew could not be asked again after a write settled: what is shown may be out of date, so the switches hold. */
+  unverified?: boolean;
+  /** Ask crew again (the page's list read). */
+  onReread?: () => void;
   /** crew answered the newest change: the switches it now holds. */
   onChanged: (agents: SourceAgentAccess) => void;
   'data-testid'?: string;
@@ -59,6 +63,11 @@ export function AgentAccess({ source, dialect, agents, onChanged, 'data-testid':
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Array<{ id: string; name: string }> | null>(null);
   const [recent, setRecent] = useState<SourceAgentQuery[] | null | 'unknown'>(null);
+
+  // A confirmation never outlives "see" (crew turned it off, or another box did).
+  useEffect(() => {
+    if (!a.see) setAsking(false);
+  }, [a.see]);
 
   const confirmOn = useRef<HTMLButtonElement | null>(null);
   // The confirmation takes focus when it opens, so a keyboard or screen-reader user meets it.
@@ -115,10 +124,18 @@ export function AgentAccess({ source, dialect, agents, onChanged, 'data-testid':
   const listed = projects === null ? [] : [...projects, ...a.projects.filter((p) => !projects.some((x) => x.id === p)).map((p) => ({ id: p, name: `${p} (not an active project)` }))];
   const queryable = dialect === 'postgres';
   const full = a.projects.length >= AGENT_PROJECTS_MAX;
+  /** Nothing is sent from switches that may not be crew's. */
+  const held = busy || unverified;
 
   return (
-    <div className="wk-src-box wk-src-writes" data-testid={testId} data-see={a.see ? 'on' : 'off'} data-query={a.query ? 'on' : 'off'} aria-busy={busy}>
+    <div className="wk-src-box wk-src-writes" data-testid={testId} data-see={a.see ? 'on' : 'off'} data-query={a.query ? 'on' : 'off'} data-verified={unverified ? 'false' : 'true'} aria-busy={busy}>
       <p className="wk-src-strong">Agents</p>
+      {unverified && (
+        <p role="status" className="wk-src-note wk-src-tone-fail" data-testid={`${testId}-unverified`}>
+          crew couldn’t be asked again after a change, so these switches may be out of date. They stay put until crew answers.{' '}
+          {onReread !== undefined && <button type="button" className="wk-btn wk-btn--quiet" data-testid={`${testId}-reread`} onClick={onReread}>Read again</button>}
+        </p>
+      )}
 
       <div className="wk-src-writes-head">
         <button
@@ -127,7 +144,7 @@ export function AgentAccess({ source, dialect, agents, onChanged, 'data-testid':
           aria-checked={a.see}
           aria-label={`Agents can see the structure of ${source}`}
           data-testid={`${testId}-see`}
-          disabled={busy || asking}
+          disabled={held || asking}
           className={`wk-src-toggle${a.see ? ' wk-src-toggle--on' : ''}`}
           onClick={() => void apply({ see: !a.see })}
         >
@@ -148,7 +165,7 @@ export function AgentAccess({ source, dialect, agents, onChanged, 'data-testid':
               aria-checked={a.query}
               aria-label={`Agents can query ${source}`}
               data-testid={`${testId}-query`}
-              disabled={busy || asking || !a.see}
+              disabled={held || asking || !a.see}
               className={`wk-src-toggle${a.query ? ' wk-src-toggle--on' : ''}`}
               onClick={() => { setError(null); if (a.query) void apply({ query: false }); else setAsking(true); }}
             >
@@ -167,7 +184,7 @@ export function AgentAccess({ source, dialect, agents, onChanged, 'data-testid':
                 off at any time: the next query is refused, even in a job that is running.
               </p>
               <div className="wk-src-row-btns">
-                <button ref={confirmOn} type="button" className="wk-btn wk-btn--primary" disabled={busy} data-testid={`${testId}-confirm-on`} onClick={() => void apply({ query: true })}>{busy ? 'Turning on…' : 'Turn on'}</button>
+                <button ref={confirmOn} type="button" className="wk-btn wk-btn--primary" disabled={held} data-testid={`${testId}-confirm-on`} onClick={() => void apply({ query: true })}>{busy ? 'Turning on…' : 'Turn on'}</button>
                 <button type="button" className="wk-btn wk-btn--quiet" disabled={busy} data-testid={`${testId}-confirm-off`} onClick={() => setAsking(false)}>Keep it off</button>
               </div>
             </div>
@@ -179,7 +196,7 @@ export function AgentAccess({ source, dialect, agents, onChanged, 'data-testid':
         </p>
       )}
 
-      <fieldset className="wk-src-field" data-testid={`${testId}-projects`} disabled={busy || asking}>
+      <fieldset className="wk-src-field" data-testid={`${testId}-projects`} disabled={held || asking}>
         <legend className="wk-src-label">Projects whose agents may use it</legend>
         <p className="wk-src-note" data-testid={`${testId}-projects-state`}>{projectsWords(a, names)}</p>
         <label className="wk-src-check-row">

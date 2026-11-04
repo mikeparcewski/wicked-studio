@@ -7,12 +7,13 @@
  *   pins that), so no URL, palette verb, plugin request or chat path can reach it. crew refuses it to anything but a
  *   human operator, too (403 `agents_switch_human_only`).
  * - `agentQueries` and `runDataUse` only read crew's agent-read record: never the SQL, never a value.
- * - The shapes are not published yet, so every answer goes through a reader here that returns `null` (or drops an
- *   entry) for anything that is not crew's shape, rather than trusting the type.
+ * - The shapes are not published yet, so every answer goes through a reader here rather than trusting the type: the
+ *   switches read as `null` (no box) unless they are crew's whole shape; a recent-query or data-use record that is
+ *   not crew's whole answer reads as UNKNOWN, never as a shorter list or "none". Only the project picker drops entries.
  */
 
 import { apiFetch } from './client.js';
-import { ApiError } from './errors.js';
+import { ApiError, isRouteAbsent } from './errors.js';
 import type {
   RunDataUseResponse,
   SourceAgentAccess,
@@ -38,8 +39,9 @@ export const sourceAgentsApi = {
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 const isText = (v: unknown): v is string => typeof v === 'string' && v !== '';
+/** A whole, non-negative count, as crew's record keeps them. */
+const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
 /** At most this many projects per source (crew's `AGENT_PROJECTS_MAX`). */
 export const AGENT_PROJECTS_MAX = 64;
@@ -73,12 +75,14 @@ export function agentQueriesOf(r: unknown, name: string): SourceAgentQuery[] | '
   if (!isObj(r) || r.name !== name || r.known !== true || !Array.isArray(r.queries)) return 'unknown';
   const out: SourceAgentQuery[] = [];
   for (const q of r.queries as unknown[]) {
-    if (!isObj(q) || q.source !== name || !isText(q.callId) || !isText(q.at) || !isText(q.runId) || typeof q.seat !== 'string'
-      || !isText(q.outcome) || !isCount(q.rows) || typeof q.released !== 'boolean') return 'unknown';
+    // Every field crew's record writes (B2 `knowledge/gate/record.ts`), each well typed, for THIS source.
+    if (!isObj(q) || q.source !== name || !isText(q.callId) || !isText(q.at) || !isText(q.runId) || !isInt(q.unit) || !isInt(q.attempt)
+      || typeof q.seat !== 'string' || typeof q.sourceId !== 'string' || typeof q.sqlHash !== 'string' || !isText(q.outcome)
+      || !isInt(q.rows) || typeof q.truncated !== 'boolean' || !isInt(q.ms) || typeof q.released !== 'boolean') return 'unknown';
     out.push({
-      callId: q.callId, at: q.at, runId: q.runId, unit: isCount(q.unit) ? q.unit : 0, attempt: isCount(q.attempt) ? q.attempt : 0,
-      seat: q.seat, source: name, sourceId: typeof q.sourceId === 'string' ? q.sourceId : '', sqlHash: '', outcome: q.outcome,
-      rows: q.rows, truncated: q.truncated === true, ms: isCount(q.ms) ? q.ms : 0, released: q.released,
+      callId: q.callId, at: q.at, runId: q.runId, unit: q.unit, attempt: q.attempt, seat: q.seat, source: name, sourceId: q.sourceId,
+      // Never kept: studio shows no SQL, and no hash of it either.
+      sqlHash: '', outcome: q.outcome, rows: q.rows, truncated: q.truncated, ms: q.ms, released: q.released,
     });
   }
   return out;
@@ -86,7 +90,9 @@ export function agentQueriesOf(r: unknown, name: string): SourceAgentQuery[] | '
 
 /**
  * A job's data use for `runId` (only the fields studio shows). Anything that is not crew's whole answer for THIS run
- * (another run's, a malformed entry) reads as UNKNOWN (`known: false`), never as "none" or as a shorter list.
+ * (another run's, an entry with a field missing or mistyped, or counts crew's record can't produce: no query, more
+ * releases than queries, rows or a cap with nothing released) reads as UNKNOWN (`known: false`), never as "none" or as
+ * a shorter list.
  */
 export function runDataUseOf(r: unknown, runId: string): RunDataUseResponse {
   const unknown: RunDataUseResponse = { runId, known: false, sources: [] };
@@ -94,8 +100,9 @@ export function runDataUseOf(r: unknown, runId: string): RunDataUseResponse {
   if (!r.known) return unknown;
   const sources: SourceDataUse[] = [];
   for (const s of r.sources as unknown[]) {
-    if (!isObj(s) || !isText(s.source) || !isCount(s.queries) || !isCount(s.released) || !isCount(s.rows)) return unknown;
-    sources.push({ source: s.source, queries: s.queries, released: s.released, rows: s.rows, truncated: s.truncated === true, lastAt: typeof s.lastAt === 'string' ? s.lastAt : '' });
+    if (!isObj(s) || !isText(s.source) || !isInt(s.queries) || !isInt(s.released) || !isInt(s.rows) || typeof s.truncated !== 'boolean' || !isText(s.lastAt)) return unknown;
+    if (s.queries < 1 || s.released > s.queries || (s.released === 0 && (s.rows > 0 || s.truncated))) return unknown;
+    sources.push({ source: s.source, queries: s.queries, released: s.released, rows: s.rows, truncated: s.truncated, lastAt: s.lastAt });
   }
   return { runId, known: true, sources };
 }
@@ -129,6 +136,8 @@ export function refusalCode(e: unknown): string | null {
  * crew's switches again after every write either way.
  */
 export function agentSwitchRefusal(e: unknown): string {
+  // A crew that sends the switches but has no route to change them (B1 without B2): nothing ran.
+  if (isRouteAbsent(e)) return 'This crew can’t change agent switches yet: update crew. Nothing changed.';
   const code = refusalCode(e);
   if (code === 'agents_switch_human_only') return 'Only a person signed in as an operator can change what agents may do with a source. Nothing changed.';
   if (code === 'see_off') return 'Agents can query only a source whose structure they can see. Turn on “Agents can see this structure” first. Nothing changed.';

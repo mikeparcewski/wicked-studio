@@ -208,6 +208,21 @@ describe('the Agents box on a saved source', () => {
     heard.stop();
   });
 
+  it('an answer for another source, or a crew without the route, never moves a switch', async () => {
+    const heard = hearSettled();
+    putImpl = () => Promise.resolve({ name: 'other-source', agents: { ...DEFAULTS, see: false } });
+    render(<Box />);
+    fireEvent.click(screen.getByTestId('source-agent-controls-see'));
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls-error').textContent).toMatch(/crew’s answer could not be read/));
+    expect(agents.see).toBe(true);
+    await waitFor(() => expect(heard.settled).toHaveLength(1));
+    putImpl = () => Promise.reject(new ApiError(404, 'not found'));
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls-see')).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId('source-agent-controls-see'));
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls-error').textContent).toBe('This crew can’t change agent switches yet: update crew. Nothing changed.'));
+    heard.stop();
+  });
+
   it('at 64 projects no further one can be ticked; one can still be taken away', async () => {
     agents = { ...DEFAULTS, projects: Array.from({ length: 63 }, (_, i) => `proj_${i}`).concat('proj_support') };
     render(<Box />);
@@ -250,7 +265,8 @@ describe('the Agents box on a saved source', () => {
     cleanup();
     // The right envelope holding another source's entry, or an entry that is not crew's: the record is unreadable,
     // never a shorter history (nor "none").
-    for (const bad of [{ callId: 'x', at: 'x', runId: 'r', unit: 1, attempt: 1, seat: 's', source: 'other-source', outcome: 'ok', rows: 1, truncated: false, ms: 1, released: true }, { junk: true }]) {
+    const full = { callId: 'x', at: 'x', runId: 'r', unit: 1, attempt: 1, seat: 's', source: 'support-pg', sourceId: 'id', sqlHash: 'h', outcome: 'ok', rows: 1, truncated: false, ms: 1, released: true };
+    for (const bad of [{ ...full, source: 'other-source' }, { junk: true }, { ...full, truncated: undefined }, { ...full, rows: 1.5 }, { ...full, sourceId: undefined }]) {
       recent = { name: 'support-pg', known: true, queries: [bad] };
       render(<Box />);
       await waitFor(() => expect(screen.getByTestId('source-agent-controls-recent-unknown')).toBeTruthy());
@@ -281,6 +297,9 @@ describe('NEGATIVE CONTROL: no Agents box without crew\'s `agents` field', () =>
       sheet(pgServer({ agents: bad } as never));
       await screen.findByTestId('source-agents-see');
       expect(screen.queryByTestId('source-agent-controls')).toBeNull();
+      // Present but unreadable is not an older crew: "What agents see" claims nothing either way (codex r2 F1).
+      expect(screen.getByTestId('source-agents-see').textContent).toMatch(/Not known here: crew sent agent switches/);
+      expect(screen.getByTestId('source-agents-see').textContent).not.toMatch(/No values from rows/);
       cleanup();
     }
   });
@@ -513,6 +532,44 @@ describe('NEGATIVE CONTROL (review r1): crew\'s switches reach the box after a w
     await screen.findByTestId('source-agent-controls-error');
     await waitFor(() => expect((screen.getByTestId('source-agent-controls-every') as HTMLInputElement).checked).toBe(true));
   });
+
+  it('review r2: an older write lands after a newer one and the re-read fails: the box says it may be out of date and holds', async () => {
+    useCapabilities.setState({ loaded: true, dataSources: true });
+    const w = crewWire(DEFAULTS);
+    const navigate = vi.fn();
+    const { rerender } = render(<SourcesPage navigate={navigate} search="?source=support-pg" />);
+    // An older write (query on) is out when the sheet closes...
+    fireEvent.click(await screen.findByTestId('source-agent-controls-query'));
+    fireEvent.click(screen.getByTestId('source-agent-controls-confirm-on'));
+    await waitFor(() => expect(w.held).toHaveLength(1));
+    rerender(<SourcesPage navigate={navigate} search="" />);
+    await waitFor(() => expect(screen.queryByTestId('source-sheet')).toBeNull());
+    rerender(<SourcesPage navigate={navigate} search="?source=support-pg" />);
+    const a = await screen.findByTestId('source-agent-controls-project-proj_a');
+    await waitFor(() => expect(a).not.toBeDisabled());
+    // ...a newer one (a project) lands first; then the older one lands at crew, and crew can't be read again.
+    fireEvent.click(a);
+    await waitFor(() => expect(w.held).toHaveLength(2));
+    await act(async () => { w.held[1]!.release(); });
+    await waitFor(() => expect((screen.getByTestId('source-agent-controls-project-proj_a') as HTMLInputElement).checked).toBe(true));
+    const base = apiFetch.getMockImplementation()!;
+    let listFails = true;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => (path === '/mcp/servers' && (init?.method ?? 'GET') === 'GET' && listFails ? Promise.reject(new TypeError('Failed to fetch')) : base(path, init)));
+    await act(async () => { w.held[0]!.release(); });
+    expect(w.crew.state.query).toBe(true);
+    await screen.findByTestId('source-agent-controls-unverified');
+    expect(screen.getByTestId('source-agent-controls').getAttribute('data-verified')).toBe('false');
+    // The shown "query off" is not crew's: nothing can be sent from it.
+    expect(screen.getByTestId('source-agent-controls-query')).toBeDisabled();
+    expect(screen.getByTestId('source-agent-controls-see')).toBeDisabled();
+    expect(screen.getByTestId('source-agent-controls-projects')).toBeDisabled();
+    // Read again, once crew answers: crew's switches, and the warning goes.
+    listFails = false;
+    fireEvent.click(screen.getByTestId('source-agent-controls-reread'));
+    await waitFor(() => expect(screen.queryByTestId('source-agent-controls-unverified')).toBeNull());
+    expect(shown()).toEqual(w.crew.state);
+    expect(screen.getByTestId('source-agent-controls').getAttribute('data-query')).toBe('on');
+  });
 });
 
 describe('a job\'s data use on its gate card', () => {
@@ -562,6 +619,24 @@ describe('a job\'s data use on its gate card', () => {
     dataUse = { runId: 'run-1', known: true, sources: [{ source: 'support-pg', queries: 'many', released: 1, rows: 1 }, { source: 'crm-pg', queries: 1, released: 1, rows: 4, truncated: true, lastAt: 'x' }] };
     render(<RunDataUse runId="run-1" testId="gate-data" />);
     await waitFor(() => expect(screen.getByTestId('gate-data').getAttribute('data-known')).toBe('false'));
+  });
+
+  it('review r2: a field missing or mistyped, or counts crew\'s record can\'t produce, are "not known"; extra fields never render', async () => {
+    const ok = { source: 'support-pg', queries: 2, released: 1, rows: 3, truncated: false, lastAt: '2026-11-04T07:00:00.000Z' };
+    const bads = [
+      { ...ok, truncated: undefined }, { ...ok, truncated: 'no' }, { ...ok, lastAt: undefined }, { ...ok, rows: 2.5 }, { ...ok, queries: 1.5 },
+      { ...ok, queries: 0, released: 0, rows: 0 }, { ...ok, released: 3 }, { ...ok, released: 0, rows: 4 }, { ...ok, released: 0, rows: 0, truncated: true },
+    ];
+    for (const bad of bads) {
+      dataUse = { runId: 'run-1', known: true, sources: [bad] };
+      render(<RunDataUse runId="run-1" testId="gate-data" />);
+      await waitFor(() => expect(screen.getByTestId('gate-data').getAttribute('data-known')).toBe('false'));
+      cleanup();
+    }
+    dataUse = { runId: 'run-1', known: true, sources: [{ ...ok, sql: 'SELECT SQL_SENTINEL', rowsData: [['VALUE_SENTINEL']] }] };
+    const { container } = render(<RunDataUse runId="run-1" testId="gate-data" />);
+    await waitFor(() => expect(screen.getByTestId('gate-data').textContent).toMatch(/support-pg · 2 queries · 3 rows\./));
+    expect(container.innerHTML).not.toMatch(/SQL_SENTINEL|VALUE_SENTINEL/);
   });
 
   it('a late answer for the previous run never shows under the next one; a refresh\'s older answer never lands', async () => {
