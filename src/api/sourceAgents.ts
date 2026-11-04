@@ -3,7 +3,7 @@
  * the source sheet's "Agents" box and a job's gate cards make.
  *
  * - `setAgentAccess` is the agent switches' own call: `AgentAccess` is its only caller
- *   (`tests/sourcesHumanOnly.test.ts` pins that), so no URL, palette verb, plugin request or chat path can
+ *   (`tests/sourceAgentsHumanOnly.test.ts` pins that), so no URL, palette verb, plugin request or chat path can
  *   reach it. crew refuses it to anything but a human operator, too.
  * - `agentQueries` and `runDataUse` only read crew's agent-query record: never the SQL, never a value.
  *

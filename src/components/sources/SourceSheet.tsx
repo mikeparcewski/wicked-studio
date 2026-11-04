@@ -14,7 +14,7 @@ import {
 } from '../../api/sources.js';
 import { useModalEscape } from '../Modal.js';
 import { AgentAccess } from './AgentAccess.js';
-import { agentAccessOf } from '../../api/sourceAgents.js';
+import { agentAccessOf, type SourceAgentAccess } from '../../api/sourceAgents.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
 import {
@@ -68,12 +68,14 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescribed, onClose }: {
+export function SourceSheet({ target, existing, onSaved, onAllowWrites, onAgents, onDescribed, onClose }: {
   target: SheetTarget;
   /** Names already registered (a new source of the same name replaces it; the sheet says so). */
   existing: readonly string[];
   onSaved: (server: McpServer) => void;
   onAllowWrites: (name: string, allowed: boolean) => void;
+  /** (rev 12 §5.4) The source's agent controls changed: the page keeps them, so a reopened sheet shows them. */
+  onAgents?: (name: string, agents: SourceAgentAccess) => void;
   /** The source was described again (its tables may have changed). */
   onDescribed?: (name: string) => void;
   onClose: () => void;
@@ -419,7 +421,13 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
                   allowWrites={saved?.allowWrites === true}
                   saved={saved !== null}
                   privileges={shownPrivileges}
-                  onChanged={(allowed) => { if (saved !== null) { setSaved({ ...saved, allowWrites: allowed }); onAllowWrites(saved.name, allowed); } }}
+                  onChanged={(allowed) => {
+                    if (saved === null) return;
+                    // Merged into the CURRENT record: an agent-controls answer landing meanwhile is kept (codex r1).
+                    const name = saved.name;
+                    setSaved((cur) => (cur !== null && cur.name === name ? { ...cur, allowWrites: allowed } : cur));
+                    onAllowWrites(name, allowed);
+                  }}
                 />
               )}
               {kind === 'mysql' && <div className="wk-src-box"><p className="wk-src-strong">Writes</p><p className="wk-src-note">MySQL sources get no writes in v1: reads only.</p></div>}
@@ -494,7 +502,7 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
                   {upload.sample.length > 0 && (
                     <div className="wk-src-scroll">
                       <table className="wk-src-table" data-testid="source-upload-sample">
-                        <caption className="wk-src-cap">The first {upload.sample.length} rows, shown to you only (agents never get values)</caption>
+                        <caption className="wk-src-cap">The first {upload.sample.length} rows, shown to you only (agents get values only if you let them query it)</caption>
                         {upload.header !== null && <thead><tr>{upload.header.columns.map((c) => <th key={c} scope="col">{c}</th>)}</tr></thead>}
                         <tbody>{upload.sample.map((row, i) => <tr key={i}>{row.map((v, j) => <td key={j}>{v}</td>)}</tr>)}</tbody>
                       </table>
@@ -543,12 +551,18 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
                   <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog, agentAccessOf(saved as { agents?: unknown } | null).query)}</p>
                 </div>
               ) : null}
-              {!isNew && saved !== null && (saved.kind === 'sql' || saved.kind === 'graphql') && (
+              {/* Only on a crew that has the controls (api-types 0.181.0 sends `agents` on every source). */}
+              {!isNew && saved !== null && (saved.kind === 'sql' || saved.kind === 'graphql') && (saved as { agents?: unknown }).agents !== undefined && (
                 <AgentAccess
                   source={saved.name}
                   kind={saved.kind}
                   agents={(saved as { agents?: unknown }).agents}
-                  onChanged={(agents) => setSaved({ ...saved, agents } as McpServer)}
+                  data-testid="source-agent-controls"
+                  onChanged={(agents) => {
+                    const name = saved.name;
+                    setSaved((cur) => (cur !== null && cur.name === name ? ({ ...cur, agents } as McpServer) : cur));
+                    onAgents?.(name, agents);
+                  }}
                 />
               )}
             </div>

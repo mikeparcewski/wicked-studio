@@ -164,7 +164,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     <CalmPage data-testid="sources-page" className="wk-src-page">
       <CalmHead
         title={PAGE_NAMES.sources}
-        sentence={loading ? 'Reading sources…' : `${count === 0 ? 'No sources yet' : `${count} source${count === 1 ? '' : 's'}`} plus crew’s own API. Apps read them through queries crew checks; agents see their structure, never their rows.`}
+        sentence={loading ? 'Reading sources…' : `${count === 0 ? 'No sources yet' : `${count} source${count === 1 ? '' : 's'}`} plus crew’s own API. Apps read them through queries crew checks; agents see a source’s structure, and its rows only where you let them query it.`}
         action={<CalmAction label="Add a data source" onClick={openAdd} testId="sources-add" />}
       />
       <div className="wk-src-page-body">
@@ -194,6 +194,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
             void refresh();
           }}
           onAllowWrites={setWrites}
+          onAgents={(name, agents) => setSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)))}
           onDescribed={(name) => setEpochs((m) => ({ ...m, [name]: (Object.hasOwn(m, name) ? (m[name] ?? 0) : 0) + 1 }))}
           onClose={close}
         />

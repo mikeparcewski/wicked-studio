@@ -23,15 +23,16 @@ describe('the agent switches are reached only by a person\'s click', () => {
   });
   it('the component reads no URL, storage, message or timer', () => {
     const c = all.find((f) => f.path === 'src/components/sources/AgentAccess.tsx')!.text;
-    for (const banned of ['location', 'URLSearchParams', 'localStorage', 'sessionStorage', 'postMessage', 'addEventListener', 'setTimeout']) {
+    for (const banned of ['location', 'URLSearchParams', 'localStorage', 'sessionStorage', 'postMessage', 'addEventListener', 'setTimeout', 'setInterval', 'requestAnimationFrame']) {
       expect(c, banned).not.toContain(banned);
     }
     // Every change is a click or a tick; "query" turns on only from the confirmation's button.
     expect([...c.matchAll(/apply\(\{ query: true \}\)/g)]).toHaveLength(1);
     expect(c).toMatch(/confirm-on`\} onClick=\{\(\) => void apply\(\{ query: true \}\)\}/);
-    // The reads in its effect are reads: no apply, no setAgentAccess there.
-    const effect = c.slice(c.indexOf('useEffect('), c.indexOf('}, [source]);'));
-    expect(effect).not.toMatch(/apply\(|setAgentAccess/);
+    // EVERY effect only reads or focuses: no apply, no setAgentAccess in any of them.
+    const effects = c.split('useEffect(').slice(1).map((chunk) => chunk.slice(0, chunk.search(/\}, \[[^\]]*\]\);/)));
+    expect(effects.length).toBeGreaterThan(0);
+    for (const e of effects) expect(e).not.toMatch(/apply\(|setAgentAccess/);
   });
   it('only the sources components import the agent API', () => {
     const importers = all.filter((f) => /\bsourceAgentsApi\b/.test(f.text) && f.path !== 'src/api/sourceAgents.ts').map((f) => f.path).sort();

@@ -548,7 +548,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
       {lift !== null && recorded?.via !== 'post_hoc' && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
       {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && !unverified ? true : null} testId="run-delivery-assurance" units={view.units} />}
       <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-delivery" />
-      <RunDataUse runId={view.session.id} testId="run-delivery-data-use" />
+      <RunDataUse runId={view.session.id} refresh={`${view.session.status}:${view.units.map((u) => u.status).join(',')}`} testId="run-delivery-data-use" />
       {/* crew#720: the credentials-missing state, and the final-codebase zip in every outcome. */}
       <DeliverCredentialsNotice view={view} />
       <CodebaseDownload view={view} testId="run-delivery-codebase-zip" />

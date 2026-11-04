@@ -12,9 +12,9 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 298,
-    "occurrences": 4218,
-    "static": 3552,
-    "dynamic": 132,
+    "occurrences": 4221,
+    "static": 3553,
+    "dynamic": 133,
     "computed": 49
   },
   "static": [
@@ -16029,6 +16029,12 @@
       ]
     },
     {
+      "testId": "session-proposal-data-use",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-deliver-amendment",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -17762,9 +17768,10 @@
       ]
     },
     {
-      "testId": "source-agents",
+      "testId": "source-agent-controls",
       "files": [
-        "src/components/sources/AgentAccess.tsx"
+        "src/components/sources/AgentAccess.tsx",
+        "src/components/sources/SourceSheet.tsx"
       ]
     },
     {
@@ -21865,6 +21872,12 @@
       ]
     },
     {
+      "pattern": "*-tried",
+      "files": [
+        "src/components/session/RunDataUse.tsx"
+      ]
+    },
+    {
       "pattern": "*-unsaved",
       "files": [
         "src/components/sources/AllowWritesSwitch.tsx"
@@ -22457,7 +22470,7 @@
       ]
     },
     {
-      "expression": "testId = 'source-agents'",
+      "expression": "testId = 'source-agent-controls'",
       "files": [
         "src/components/sources/AgentAccess.tsx"
       ]

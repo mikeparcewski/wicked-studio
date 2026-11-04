@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { agentAccessOf, sourceAgentsApi, type SourceAgentAccess, type SourceAgentAccessBody, type SourceAgentQuery } from '../../api/sourceAgents.js';
 import { sessionPath } from '../../board/sessionModel.js';
 
 /** What turning query on means, said on the sheet whether it is on or off (DES-APPS-001 rev 12 §5.4). */
 export const AGENT_QUERY_CONSEQUENCE =
   "Rows from this source go to the agent's model provider. crew checks each query first, reads it read-only, and gives at most 200 rows.";
+/** Outcomes where the query ran but its rows never reached the agent (crew withheld them at release). */
+const NOT_RELEASED = new Set(['unconfirmed', 'changed_while_running', 'record_failed']);
 export const AGENT_SEE_MEANS = 'Agents in the projects below can list it and read its structure: tables, columns, types and keys. Never a row, never its login.';
 
 /** One line for the projects the source reaches. */
@@ -24,7 +26,7 @@ export function projectsWords(a: SourceAgentAccess, names: ReadonlyMap<string, s
  * the ONLY caller of `sourceAgentsApi.setAgentAccess` (pinned by `tests/sourceAgentsHumanOnly.test.ts`), and
  * it changes a control only on a click. No URL parameter, palette verb, plugin request or chat reply reaches it.
  */
-export function AgentAccess({ source, kind, agents, onChanged, 'data-testid': testId = 'source-agents' }: {
+export function AgentAccess({ source, kind, agents, onChanged, 'data-testid': testId = 'source-agent-controls' }: {
   source: string;
   /** `sql` sources can be queried; a GraphQL source is catalog-only for agents. */
   kind: 'sql' | 'graphql';
@@ -39,8 +41,17 @@ export function AgentAccess({ source, kind, agents, onChanged, 'data-testid': te
   const [projects, setProjects] = useState<Array<{ id: string; name: string }> | null>(null);
   const [recent, setRecent] = useState<SourceAgentQuery[] | null | 'unknown'>(null);
 
+  const confirmOn = useRef<HTMLButtonElement | null>(null);
+  // The confirmation takes focus when it opens, so a keyboard or screen-reader user meets it (pi r1).
+  useEffect(() => {
+    if (asking) confirmOn.current?.focus();
+  }, [asking]);
+
   useEffect(() => {
     let live = true;
+    // Another source's projects and queries never show under this one (pi r1).
+    setProjects(null);
+    setRecent(null);
     // Read-only calls; a crew without them (or a failed read) leaves an empty list and "not known".
     Promise.resolve().then(() => sourceAgentsApi.projects()).then(
       // "Unfiled" (crew's synthesized `default`) is no project a run is filed into: "Every project" covers it.
@@ -48,7 +59,7 @@ export function AgentAccess({ source, kind, agents, onChanged, 'data-testid': te
       () => { if (live) setProjects([]); },
     );
     Promise.resolve().then(() => sourceAgentsApi.agentQueries(source)).then(
-      (r) => { if (live) setRecent(r?.known === true && Array.isArray(r.queries) ? r.queries : 'unknown'); },
+      (r) => { if (live) setRecent(r?.known === true && r.name === source && Array.isArray(r.queries) ? r.queries : 'unknown'); },
       () => { if (live) setRecent('unknown'); },
     );
     return () => { live = false; };
@@ -121,11 +132,11 @@ export function AgentAccess({ source, kind, agents, onChanged, 'data-testid': te
           {asking && (
             <div className="wk-src-confirm" role="group" aria-label="Turn on agent queries" data-testid={`${testId}-confirm`}>
               <p>
-                Let agents query <b>{source}</b>? Rows they read go to their model provider. Writes stay impossible, and you can turn it
+                Let agents query <b style={{ overflowWrap: 'anywhere' }}>{source}</b>? Rows they read go to their model provider. Writes stay impossible, and you can turn it
                 off at any time: the next query is refused, even in a job that is running.
               </p>
               <div className="wk-src-row-btns">
-                <button type="button" className="wk-btn wk-btn--primary" disabled={busy} data-testid={`${testId}-confirm-on`} onClick={() => void apply({ query: true })}>{busy ? 'Turning on…' : 'Turn on'}</button>
+                <button ref={confirmOn} type="button" className="wk-btn wk-btn--primary" disabled={busy} data-testid={`${testId}-confirm-on`} onClick={() => void apply({ query: true })}>{busy ? 'Turning on…' : 'Turn on'}</button>
                 <button type="button" className="wk-btn wk-btn--quiet" disabled={busy} onClick={() => setAsking(false)}>Keep it off</button>
               </div>
             </div>
@@ -164,7 +175,7 @@ export function AgentAccess({ source, kind, agents, onChanged, 'data-testid': te
                       <time dateTime={q.at}>{new Date(q.at).toLocaleString()}</time>
                       {' · '}<a href={sessionPath(`run:${q.runId}`)}>job {q.runId.slice(0, 8)}</a>
                       {' · '}{q.seat}
-                      {' · '}{q.released ? `${q.rows} row${q.rows === 1 ? '' : 's'}${q.truncated ? ' (cut)' : ''}` : `refused: ${q.outcome}`}
+                      {' · '}{q.released ? `${q.rows} row${q.rows === 1 ? '' : 's'}${q.truncated ? ' (cut)' : ''}` : NOT_RELEASED.has(q.outcome) ? 'rows withheld' : `refused: ${q.outcome}`}
                     </li>
                   ))}
                 </ul>

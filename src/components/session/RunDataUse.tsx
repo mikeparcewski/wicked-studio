@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ApiError } from '../../api/errors.js';
 import { dataUseWords, sourceAgentsApi, type RunDataUseResponse } from '../../api/sourceAgents.js';
 
 /**
@@ -7,13 +8,14 @@ import { dataUseWords, sourceAgentsApi, type RunDataUseResponse } from '../../ap
  * none; "not known" when crew's record could not be read (never "none"); nothing on a crew without the
  * record (before api-types 0.181.0). `refresh` re-reads it (a new event on the run).
  */
-export function RunDataUse({ runId, refresh = 0, testId = 'run-data-use' }: { runId: string; refresh?: number; testId?: string }): React.ReactElement | null {
+export function RunDataUse({ runId, refresh = 0, testId = 'run-data-use' }: { runId: string; refresh?: number | string; testId?: string }): React.ReactElement | null {
   const [use, setUse] = useState<RunDataUseResponse | null>(null);
   useEffect(() => {
     let live = true;
     Promise.resolve().then(() => sourceAgentsApi.runDataUse(runId)).then(
       (r) => { if (live) setUse(r); },
-      () => { if (live) setUse(null); },
+      // A crew without the route (404) shows nothing; any other failure is UNKNOWN, never "none" (codex r1).
+      (e: unknown) => { if (live) setUse(e instanceof ApiError && e.status === 404 ? null : { runId, known: false, sources: [] }); },
     );
     return () => { live = false; };
   }, [runId, refresh]);
@@ -22,12 +24,21 @@ export function RunDataUse({ runId, refresh = 0, testId = 'run-data-use' }: { ru
   if (!use.known) {
     return <p className="wk-assurance" data-testid={testId} data-known="false"><span className="wk-assurance-line">Data read by agents: not known (crew’s record could not be read).</span></p>;
   }
-  const read = use.sources.filter((s) => s.queries > 0);
-  if (read.length === 0) return null;
+  // "Read" means rows reached the agent; a query refused or withheld released nothing (codex r1).
+  const read = use.sources.filter((s) => s.released > 0);
+  const tried = use.sources.filter((s) => s.queries > 0 && s.released === 0);
+  if (read.length === 0 && tried.length === 0) return null;
   return (
-    <p className="wk-assurance" data-testid={testId} data-known="true">
-      <span className="wk-assurance-kind" data-testid={`${testId}-label`}>Agents read data</span>{' '}
-      <span className="wk-assurance-line">{read.map(dataUseWords).join('; ')}. The work may hold values copied from it.</span>
+    <p className="wk-assurance" data-testid={testId} data-known="true" data-read={read.length > 0 ? 'yes' : 'no'}>
+      {read.length > 0 && (
+        <>
+          <span className="wk-assurance-kind" data-testid={`${testId}-label`}>Agents read data:</span>{' '}
+          <span className="wk-assurance-line">{read.map(dataUseWords).join('; ')}. The work may hold values copied from it.</span>
+        </>
+      )}
+      {tried.length > 0 && (
+        <span className="wk-assurance-line" data-testid={`${testId}-tried`}>{read.length > 0 ? ' ' : ''}Agents asked {tried.map((s) => s.source).join(', ')}, and no rows reached them.</span>
+      )}
     </p>
   );
 }

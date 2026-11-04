@@ -29,6 +29,7 @@ import { useDiffDrift } from '../../store/gateDiffSeen.js';
 import { deliveryAssuranceOf, deliveryReceiptOf, sessionQe } from '../../board/assuranceModel.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
+import { RunDataUse } from './RunDataUse.js';
 import { QeDeliveryFixLine, QeRefusalWarning } from '../QeRefusalWarning.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import { retryPrefillOf } from '../../board/needsYou.js';
@@ -383,6 +384,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
               )}
               {/* A re-opened deliver gate after a failed hand-over: what checked the work, never "accepted". */}
               {card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed={deliverFailure === null ? true : null} testId="session-proposal-assurance" />}
+              {/* (DES-APPS-001 rev 12 §5.4) Which data sources the job's agents read, on the plan and hand-over gates too. */}
+              <RunDataUse runId={runId} refresh={eventsRaw?.length ?? 0} testId="session-proposal-data-use" />
               {/* The way on: turn QE acceptance off for later jobs (the link lands on the switch), or what else. */}
               {deliverRefused && card.state === 'ask' && <QeDeliveryFixLine refusalKey={`${runId}:parked`} testId="session-proposal-qe-fix" />}
           {/* The engine's own card (the origin's path, the run branch): underneath only (studio#444). */}
