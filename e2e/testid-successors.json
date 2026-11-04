@@ -1000,6 +1000,7 @@
     "session-gate-choice-default": "ask-option-meta",
     "launch-wizard-cards": "launch-catalog-results",
     "launch-wizard-soon": "launch-catalog-soon-*",
-    "*-mark": "nav-learn"
+    "*-mark": "nav-learn",
+    "source-describe": "source-test-connection"
   }
 }

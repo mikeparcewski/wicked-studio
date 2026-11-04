@@ -57,6 +57,9 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
+  /** What the sheet of ONE source opens on, from the data panel's menu (test at once, or the question):
+   *  used once, and forgotten when that sheet closes (Back, then Forward, does not test again). */
+  const [sheetFocus, setSheetFocus] = useState<{ name: string; focus: 'test' | 'ask' } | null>(null);
   const [actions, setActions] = useState<PageRowWrite[]>([]);
   const [dialog, setDialog] = useState<{ source: string; relation: SourceCatalogRelation; privileges: SourcePrivilegeReport | null; declared: PageRowWrite | null } | null>(null);
   /** Per source, bumped when the sheet described it again: the panel reads its tables afresh. */
@@ -110,10 +113,12 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`No source named ${deep}.`); }
   }, [deep, sources, loading]);
 
-  const open = (name: string): void => { openGen.current++; navigate(sourcesPath(name)); };
+  const open = (name: string, focus: 'test' | 'ask' | null = null): void => { openGen.current++; setSheetFocus(focus === null ? null : { name, focus }); navigate(sourcesPath(name)); };
+  // A sheet closed by the address (Back) forgets what it was opened for.
+  useEffect(() => { if (sheet === null) setSheetFocus(null); }, [sheet]);
   /** "Add a data source" (the page's button and the panel's ＋): a Grant still reading its table never opens over it. */
   const openAdd = (): void => { openGen.current++; setSheet({ mode: 'new' }); };
-  const close = (): void => { setSheet(null); if (deep !== null) navigate(sourcesPath()); };
+  const close = (): void => { setSheet(null); setSheetFocus(null); if (deep !== null) navigate(sourcesPath()); };
   const setWrites = (name: string, allowed: boolean): void => {
     setSources((list) => list.map((s) => (s.name === name ? { ...s, allowWrites: allowed } : s)));
     // Turning it off withdraws every row-write grant on the source (crew does; the list says so too).
@@ -190,7 +195,9 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           loading={loading}
           error={error}
           onAdd={openAdd}
-          onOpen={open}
+          onOpen={(name) => open(name)}
+          onTest={(name) => open(name, 'test')}
+          onAsk={(name) => open(name, 'ask')}
           onDeclare={declare}
           actions={shownActions}
           onGrantAction={(id) => void grantAction(id)}
@@ -201,6 +208,8 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           // A saved source's sheet is its connection's: saved again elsewhere (a new descriptor), it opens afresh.
           key={sheet.mode === 'saved' ? `saved:${sheet.server.name}:${sheet.server.descriptorHash ?? ''}` : sheet.mode}
           target={sheet}
+          focus={sheet.mode === 'saved' && sheetFocus !== null && sheetFocus.name === sheet.server.name ? sheetFocus.focus : null}
+          onFocusUsed={() => setSheetFocus(null)}
           existing={sources.map((s) => s.name)}
           onSaved={(saved) => {
             // The saved record now, before the list re-read lands; a new descriptor withdraws old grants.

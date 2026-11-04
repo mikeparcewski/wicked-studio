@@ -42,3 +42,18 @@ describe('Allow writes is reached only by the switch', () => {
     expect(importers.every((p) => p.startsWith('src/components/sources/'))).toBe(true);
   });
 });
+
+describe('ask and query are reached only from the Ask box (operator 2026-11-03)', () => {
+  it('only src/api/sources.ts names the ask and query routes', () => {
+    expect(all.filter((f) => /\bat\(name, ['"](ask|query)['"]\)/.test(f.text)).map((f) => f.path)).toEqual(['src/api/sources.ts']);
+  });
+  it('sourcesApi.ask and sourcesApi.query are called only by AskData, on a click', () => {
+    const callers = all.filter((f) => /\.(ask|query)\s*\(\s*source\b/.test(f.text) || /sourcesApi\.(ask|query)\s*\(/.test(f.text)).map((f) => f.path);
+    expect(callers).toEqual(['src/components/sources/AskData.tsx']);
+    const ask = all.find((f) => f.path === 'src/components/sources/AskData.tsx')!.text;
+    // Nothing runs by itself: the run is a click handler, and no effect, timer, URL or message starts one.
+    for (const banned of ['location', 'URLSearchParams', 'localStorage', 'sessionStorage', 'postMessage', 'setTimeout', 'setInterval']) expect(ask, banned).not.toContain(banned);
+    expect([...ask.matchAll(/void run\(\)/g)]).toHaveLength(1);
+    expect(ask).toMatch(/data-testid=\{`\$\{testId\}-run`\}[^>]*onClick=\{\(\) => void run\(\)\}/);
+  });
+});
