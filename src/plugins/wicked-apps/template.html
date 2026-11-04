@@ -88,9 +88,6 @@
   .wk-axis { fill: var(--ink-muted); }
   .wk-value { fill: var(--ink-high); font-family: var(--font-mono); }
   .wk-grid-line { stroke: var(--border); stroke-width: 1; }
-  .wk-stroke { fill: none; stroke-width: 2.5; stroke-linejoin: round; }
-  .wk-stroke.wk-series-1 { stroke-dasharray: 5 4; stroke-width: 2; }
-  .wk-area { opacity: .25; stroke: none; }
   .wk-legend { display: flex; gap: 14px; list-style: none; margin: 4px 0 0; padding: 0; font-size: 12px; color: var(--ink-muted); flex-wrap: wrap; }
   .wk-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
   .wk-series-0 { fill: var(--c0, var(--s0)); stroke: var(--c0, var(--s0)); background: var(--c0, var(--s0)); }
@@ -105,6 +102,12 @@
   .wk-series-9 { fill: var(--c9, var(--s9)); stroke: var(--c9, var(--s9)); background: var(--c9, var(--s9)); }
   .wk-series-10 { fill: var(--c10, var(--s10)); stroke: var(--c10, var(--s10)); background: var(--c10, var(--s10)); }
   .wk-series-11 { fill: var(--c11, var(--s11)); stroke: var(--c11, var(--s11)); background: var(--c11, var(--s11)); }
+  /* A mark's role outranks its series colour (studio#963). Each `.wk-series-N` rule above sets fill AND stroke; a role
+     rule of the same specificity placed before them lost on order, and a line drew as a filled shape. These rules are
+     scoped to the chart (more specific) AND come after the palette, so both the cascade and source order agree. */
+  .wk-chart .wk-stroke { fill: none; stroke-width: 2.5; stroke-linejoin: round; }
+  .wk-chart .wk-stroke.wk-series-1 { stroke-dasharray: 5 4; stroke-width: 2; }
+  .wk-chart .wk-area { opacity: .25; stroke: none; }
   .wk-palette, .wk-props { flex: 0 0 auto; overflow: auto; padding: 14px; background: var(--surface-base); }
   .wk-palette { width: 190px; border-right: 1px solid var(--border); }
   .wk-props { width: 270px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }

@@ -39,12 +39,19 @@ SPEC_A = {
         {"id": "tickets", "type": "table", "title": "Tickets", "box": {"x": 0, "y": 5, "w": 12, "h": 5},
          "data": {"query": "tickets", "params": {"search": "filter.search"}},
          "rowActions": [{"label": "Assign to me", "action": "assign_to_me", "params": {"id": "row.id"}}]},
+        # studio#963: a line chart must draw lines (and the line over an area must not fill it in).
+        {"id": "trend", "type": "chart", "chart": "line", "title": "Per week", "box": {"x": 0, "y": 10, "w": 6, "h": 4},
+         "data": {"query": "per_week"}, "x": "week", "series": [{"column": "opened"}, {"column": "closed"}]},
+        {"id": "trend_area", "type": "chart", "chart": "area", "title": "Opened per week", "box": {"x": 6, "y": 10, "w": 6, "h": 4},
+         "data": {"query": "per_week"}, "x": "week", "series": [{"column": "opened"}]},
     ]}],
     "queries": [
         {"id": "open_count", "source": "support-pg", "kind": "sql", "output": [{"name": "open", "type": "integer"}]},
         {"id": "by_region", "source": "support-pg", "kind": "sql", "output": [{"name": "region", "type": "string"}, {"name": "n", "type": "integer"}]},
         {"id": "tickets", "source": "support-pg", "kind": "sql", "params": {"type": "object", "properties": {"search": {"type": "string"}}},
          "output": [{"name": "id", "type": "integer"}, {"name": "subject", "type": "string"}, {"name": "owner", "type": "string"}]},
+        {"id": "per_week", "source": "support-pg", "kind": "sql",
+         "output": [{"name": "week", "type": "string"}, {"name": "opened", "type": "integer"}, {"name": "closed", "type": "integer"}]},
     ],
     "actions": [
         {"id": "assign_to_me", "kind": "row-write", "source": "support-pg-writer", "table": "support.tickets", "op": "update",
@@ -59,6 +66,8 @@ HOSTILE = ["<img src=x onerror=window.__pwned=1>", "javascript:alert(1)", "<scri
 ROWS_A = {
     "open_count": [[4]],
     "by_region": [["EMEA", 3], ["APAC", 1]],
+    # A hump: a line closed back to its first point (the studio#963 bug) fills most of the plot.
+    "per_week": [["W1", 1, 2], ["W2", 5, 3], ["W3", 6, 4], ["W4", 2, 3]],
     "tickets": [[4821, HOSTILE[0], "unassigned"], [4822, HOSTILE[1], "unassigned"], [4823, HOSTILE[2], "m.chen"], [4824, "Printer on fire", "unassigned"]],
 }
 
