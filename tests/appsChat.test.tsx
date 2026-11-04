@@ -76,6 +76,8 @@ describe('the app chat: crew\'s turn log, in words', () => {
     fireEvent.keyDown(box, { key: 'Enter' });
     await waitFor(() => expect(onSent).toHaveBeenCalledTimes(1));
     expect(calls.find((c) => c.path === '/apps/desk/turns')!.body).toStrictEqual({ base: 3, message: 'make this a line chart', about: ['open_kpi'] });
+    // A message crew took leaves the box (xreview r2: it stayed, to be sent twice).
+    await waitFor(() => expect((screen.getByTestId('app-composer-input') as HTMLTextAreaElement).value).toBe(''));
     fireEvent.change(box, { target: { value: 'and another' } });
     fireEvent.keyDown(box, { key: 'Enter' });
     await waitFor(() => expect(screen.getByTestId('app-chat-note').textContent).toMatch(/already running/));
@@ -102,6 +104,42 @@ describe('the app chat: crew\'s turn log, in words', () => {
     fireEvent.keyDown(screen.getByTestId('app-composer-input'), { key: 'Enter' });
     expect(screen.queryByTestId('app-chat-undo')).toBeNull();
     expect(calls.slice(before).filter((c) => c.path.endsWith('/turns'))).toHaveLength(0);
+  });
+
+  it('a refusal that lands after the next message was typed keeps the refused one whole, to put back', async () => {
+    let release: (() => void) | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/turns')) {
+        await new Promise<void>((r) => { release = r; });
+        return new Response(JSON.stringify({ code: 'turn_in_flight', error: 'busy' }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ servers: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch);
+    render(<AppChat slug="desk" detail={detail()} runs={[]} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    const box = screen.getByTestId('app-composer-input') as HTMLTextAreaElement;
+    const long = `first ${'x'.repeat(300)}`;
+    fireEvent.change(box, { target: { value: long } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(release).not.toBeNull());
+    fireEvent.change(box, { target: { value: 'second' } });
+    act(() => release!());
+    await waitFor(() => expect(screen.getByTestId('app-chat-putback')).toBeTruthy());
+    expect((screen.getByTestId('app-composer-input') as HTMLTextAreaElement).value).toBe('second');
+    fireEvent.click(screen.getByTestId('app-chat-putback'));
+    expect((screen.getByTestId('app-composer-input') as HTMLTextAreaElement).value).toBe(long);
+  });
+
+  it('framed, a running turn shows its steps but no live controls; a turn\'s Undo waits while an edit saves', () => {
+    mockFetch(() => null);
+    const runs = [{ session: { id: 'apps-desk-000000000009', status: 'executing' }, units: [{ id: 'apps-desk-000000000009:build', ord: 1, status: 'distributed', assigned_cli: 'claude' }] }] as unknown as SessionView[];
+    const running = detail({ turn: { runId: 'apps-desk-000000000009', startedAt: 1, base: 3, actor: 'local' }, turns: [turn({ runId: 'apps-desk-000000000009', state: 'running', endedAt: null, version: null })] });
+    const { unmount } = render(<AppChat slug="desk" detail={running} runs={runs} framed navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    expect(screen.getByTestId('app-chat-busy')).toBeTruthy();
+    expect(document.querySelector('[data-testid="live-activity"], [data-testid="inflight-check"]')).toBeNull();
+    unmount();
+    render(<AppChat slug="desk" detail={detail()} runs={[]} framed={false} pending={1} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    expect(screen.queryByTestId('app-chat-undo')).toBeNull();
   });
 
   it('an edit burst the person just made lands before the message, which is sent on the head it made', async () => {
@@ -147,6 +185,16 @@ describe('the dashboard\'s live numbers', () => {
     ] };
     // The first page's first three KPIs, with the parameters the app opens with (a filter's default).
     expect(tileKpis(two).map((k) => [k.query, k.params])).toStrictEqual([['q1', { region: 'East' }], ['q1', {}], ['q2', {}]]);
+    // As the runtime starts: a date range's last N days (30 unset) through .from/.to, values in their declared types.
+    const typed = { ...two, queries: [{ id: 'q1', source: 's', kind: 'sql', params: { type: 'object', properties: { top: { type: 'integer' }, since: { type: 'string' }, until: { type: 'string' } } }, output: [{ name: 'n', type: 'integer' }] }], pages: [{ id: 'a', title: 'A', components: [
+      { id: 'lim', type: 'filter', filter: 'select', box: { x: 0, y: 0, w: 2, h: 1 }, default: '10' },
+      { id: 'dates', type: 'filter', filter: 'date-range', box: { x: 2, y: 0, w: 2, h: 1 }, default: { lastDays: 7 } },
+      { id: 'k', type: 'kpi', box: { x: 0, y: 1, w: 3, h: 2 }, data: { query: 'q1', params: { top: 'filter.lim', since: 'filter.dates.from', until: 'filter.dates.to' } }, value: 'n' },
+    ] as never }] } as AppSpec;
+    const p = tileKpis(typed)[0]!.params;
+    expect(p['top']).toBe(10);
+    expect(String(p['until'])).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+    expect((Date.parse(String(p['until'])) - Date.parse(String(p['since']))) / 86_400_000).toBe(7);
     expect(tileEveryMs(s, tileKpis(s))).toBe(30_000);
     const fast = { ...s, queries: s.queries.map((q) => ({ ...q, refresh: { mode: 'every', seconds: 4 } })) } as AppSpec;
     expect(tileEveryMs(fast, tileKpis(fast))).toBe(10_000);

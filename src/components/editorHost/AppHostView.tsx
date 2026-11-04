@@ -354,8 +354,10 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const prepareSend = async (): Promise<number | null> => {
     const s = sessionRef.current;
     if (s === null) return null;
-    if (s.pending > 0 && !(await s.flush())) return null;
-    return s.head;
+    // Every edit made before Send lands first, those made while one landed included (xreview r2: one flush left
+    // them for a later burst that the turn would then refuse).
+    for (let i = 0; i < 6 && s.pending > 0; i += 1) if (!(await s.flush())) return null;
+    return s.pending > 0 ? null : s.head;
   };
 
   const history = detail?.history;
@@ -448,7 +450,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             <div className="wk-apps-side">
               {dock}
               <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
-                onSent={() => { void sessionRef.current?.refresh(); }} onUndo={() => void move('undo')} prepareSend={prepareSend} />
+                onSent={() => { void sessionRef.current?.refresh(); }} prepareSend={prepareSend} pending={pending}
+                onUndo={() => { if ((sessionRef.current?.pending ?? 0) > 0) { setStatus('Your last edit is still saving: Undo after it lands.'); return; } void move('undo'); }} />
             </div>
           ) : dock;
         })()}

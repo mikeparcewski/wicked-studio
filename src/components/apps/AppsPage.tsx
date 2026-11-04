@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, apiBase } from '../../api/client.js';
-import type { AppSpec } from '../../api/types.js';
+import { api, apiBase, apiFetch } from '../../api/client.js';
+import type { AppDetail, AppDetailResponse, AppSpec } from '../../api/types.js';
 import { listEditors } from '../../api/editors.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { AppAdapter } from '../../editors/apps/appAdapter.js';
@@ -106,13 +106,30 @@ function AppCard({ tile, editor, navigate, onShare, scheduler }: { tile: AppTile
   const [live, setLive] = useState<TileState | null>(null);
   const [seen, setSeen] = useState(false);
   const now = useNow(5_000);
-  const crew = !tile.sample && tile.detail !== null && scheduler !== null;
-  const spec: AppSpec | null = tile.detail?.spec ?? null;
+  // A card past the preview limit has no detail from the list: it reads it when it first comes on screen, so its
+  // headline numbers are live too (xreview r2 on K5).
+  const [lazy, setLazy] = useState<AppDetail | null>(null);
+  const detail = tile.detail ?? lazy;
+  const crew = !tile.sample && detail !== null && scheduler !== null;
+  const spec: AppSpec | null = detail?.spec ?? null;
+  useEffect(() => {
+    if (tile.sample || tile.detail !== null || scheduler === null || lazy !== null) return undefined;
+    const node = el.current;
+    if (node === null || typeof IntersectionObserver !== 'function') return undefined;
+    let live = true;
+    const io = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      io.disconnect();
+      void apiFetch<AppDetailResponse>(`/apps/${encodeURIComponent(tile.slug)}`).then((r) => { if (live && r?.app?.slug === tile.slug && Array.isArray(r.app.spec?.pages)) setLazy(r.app); }, () => undefined);
+    });
+    io.observe(node);
+    return () => { live = false; io.disconnect(); };
+  }, [tile, scheduler, lazy]);
   const kpiDefs = useMemo(() => (spec === null ? [] : tileKpis(spec)), [spec]);
   // Live numbers: only while the card is on screen (and the tab visible: the scheduler's rule).
   useEffect(() => {
-    if (!crew || tile.detail === null || scheduler === null) return undefined;
-    const handle = scheduler.register(tile.slug, { slug: tile.slug, version: tile.detail.head.version, spec: tile.detail.spec }, (st) => setLive({ ...st }));
+    if (!crew || detail === null || scheduler === null) return undefined;
+    const handle = scheduler.register(tile.slug, { slug: tile.slug, version: detail.head.version, spec: detail.spec }, (st) => setLive({ ...st }));
     const node = el.current;
     let io: IntersectionObserver | null = null;
     if (node !== null && typeof IntersectionObserver === 'function') {
@@ -124,9 +141,9 @@ function AppCard({ tile, editor, navigate, onShare, scheduler }: { tile: AppTile
       io.observe(node);
     } else { handle.seen(true); setSeen(true); }
     return () => { io?.disconnect(); handle.dispose(); };
-  }, [crew, tile, scheduler]);
+  }, [crew, tile.slug, detail, scheduler]);
   const snapAt = tile.detail === null ? null : snapshotAt(tile.slug, tile.detail.head.version);
-  const livePort = useMemo<AppDataPort | null>(() => (crew && tile.detail !== null && snapAt !== null ? snapshotPort(tile.slug, tile.detail.head.version) : null), [crew, tile, snapAt]);
+  const livePort = useMemo<AppDataPort | null>(() => (tile.detail !== null && snapAt !== null ? snapshotPort(tile.slug, tile.detail.head.version) : null), [tile, snapAt]);
   const locale = typeof navigator !== 'undefined' ? navigator.language : 'en';
   const shownKpis = crew
     ? kpiDefs.map((k, i) => ({ title: k.title, value: live !== null && live.code === null && live.values[i]?.ok === true ? cellText(live.values[i]!.cell as never, k.format as never, locale) : null }))

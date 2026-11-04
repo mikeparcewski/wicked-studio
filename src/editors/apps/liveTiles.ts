@@ -1,6 +1,7 @@
 import { apiFetch } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
 import type { AppSpec } from '../../api/types.js';
+import { coerceParam } from '../../plugins/wicked-apps/runtime/runtime.js';
 
 /**
  * LIVE NUMBERS ON THE APPS DASHBOARD (operator 2026-11-04: "dashboard should show real time information").
@@ -32,19 +33,31 @@ export const TILE_TICK_MS = 1_000;
 /** One headline number a card shows: the KPI's title, the query and column it reads, and the parameters it binds. */
 export interface TileKpiDef { title: string; query: string; column: string; params: Record<string, unknown>; format?: unknown }
 
+const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+
 /**
- * A KPI's parameters as the app opens (xreview r1 on K5: a card must read what the app reads): a `filter.<id>` binding
- * takes that filter's default when it is a plain value, as the page starts; anything else (a date range, a form, a
- * row, a URL value) is left unset, exactly as an app opened without it.
+ * A KPI's parameters exactly as the app opens (xreview r1, r2 on K5: a card must read what the app reads): the runtime's
+ * own start values for its filters (a select or search its `default`, a date range the last `lastDays` days, 30 when
+ * unset; `runtime.ts` initFilters), bound through `filter.<id>` and `filter.<id>.from|to`, and each value in its
+ * parameter's declared type (the runtime's `coerceParam`). A form, a row or a URL value is unset, as on a fresh open.
  */
-function initialParams(spec: AppSpec, bindings: Record<string, string> | undefined): Record<string, unknown> {
+function initialParams(spec: AppSpec, query: string, bindings: Record<string, string> | undefined, now: Date = new Date()): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const comps = spec.pages.flatMap((p) => p.components);
+  const props = (spec.queries.find((q) => q.id === query) as { params?: { properties?: Record<string, unknown> } } | undefined)?.params?.properties ?? {};
   for (const [name, binding] of Object.entries(bindings ?? {})) {
-    const m = /^filter\.([A-Za-z][A-Za-z0-9_-]*)$/u.exec(binding);
-    if (m === null) continue;
-    const f = comps.find((c) => c.id === m[1] && c.type === 'filter') as { default?: unknown } | undefined;
-    if (typeof f?.default === 'string' && f.default !== '') out[name] = f.default;
+    const [kind, id, part] = binding.split('.');
+    if (kind !== 'filter' || id === undefined) continue;
+    const f = comps.find((c) => c.id === id && c.type === 'filter') as { filter?: string; default?: unknown } | undefined;
+    if (f === undefined) continue;
+    let v: string | undefined;
+    if (f.filter === 'date-range') {
+      const d = typeof f.default === 'object' && f.default !== null && Number.isInteger((f.default as { lastDays?: unknown }).lastDays) ? Math.min(3_650, Math.max(1, (f.default as { lastDays: number }).lastDays)) : 30;
+      v = part === 'from' ? isoDay(new Date(now.getTime() - d * 86_400_000)) : part === 'to' ? isoDay(now) : undefined;
+    } else if (part === undefined) {
+      v = typeof f.default === 'string' ? f.default : undefined;
+    }
+    if (v !== undefined && v !== '') out[name] = coerceParam(Object.hasOwn(props, name) ? props[name] as never : undefined, v);
   }
   return out;
 }
@@ -55,7 +68,7 @@ export function tileKpis(spec: AppSpec): TileKpiDef[] {
   for (const c of spec.pages[0]?.components ?? []) {
     if (c.type !== 'kpi' || out.length >= 3) continue;
     const k = c as unknown as { title?: string; value: string; data: { query: string; params?: Record<string, string> }; format?: unknown };
-    out.push({ title: (k.title ?? k.value).slice(0, 60), query: k.data.query, column: k.value, params: initialParams(spec, k.data.params), ...(k.format !== undefined ? { format: k.format } : {}) });
+    out.push({ title: (k.title ?? k.value).slice(0, 60), query: k.data.query, column: k.value, params: initialParams(spec, k.data.query, k.data.params), ...(k.format !== undefined ? { format: k.format } : {}) });
   }
   return out;
 }

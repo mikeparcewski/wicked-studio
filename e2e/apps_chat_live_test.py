@@ -16,6 +16,7 @@ described SQL source). Everything goes through the studio UI, at 1440x900:
      saved source); the card's number changes within one refresh; then --unbump puts it back.
   8. 0 page errors overall. Shots: <shots>/k5-*.png.
 
+LIVE (e2e/run_journeys.py lists it in LIVE: the ordinary runner never starts it). Run it by hand against a rig:
 usage: apps_chat_live_test.py --base http://127.0.0.1:7721 --shots DIR --source support-pg [--bump CMD --unbump CMD]
        [--card escalations] [--only dash|new|...]. Prints one JSON report; exit 0 only when every step passed.
 """
@@ -100,7 +101,7 @@ def wait_turn_end(slug, run_id, page=None, shot=None):
 
 
 def send(page, text):
-    box = page.locator('[data-testid="app-chat"] [data-testid="session-composer-input"]')
+    box = page.locator('[data-testid="app-chat"] [data-testid="app-composer-input"]')
     box.click()
     box.fill(text)
     box.press("Enter")

@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 304,
-    "occurrences": 4356,
-    "static": 3657,
+    "occurrences": 4357,
+    "static": 3658,
     "dynamic": 144,
     "computed": 49
   },
@@ -604,6 +604,12 @@
     },
     {
       "testId": "app-chat-note",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-putback",
       "files": [
         "src/components/apps/AppChat.tsx"
       ]

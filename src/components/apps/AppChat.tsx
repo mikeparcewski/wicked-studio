@@ -45,12 +45,18 @@ const DRAFT_KEY = (slug: string): string => `wicked.apps.draft.${slug}`;
 export function stashDraft(slug: string, text: string): void {
   try { sessionStorage.setItem(DRAFT_KEY(slug), text.slice(0, 8000)); } catch { /* no storage: the note says what was not sent */ }
 }
-function takeDraft(slug: string): string {
-  try { const t = sessionStorage.getItem(DRAFT_KEY(slug)) ?? ''; sessionStorage.removeItem(DRAFT_KEY(slug)); return t; } catch { return ''; }
+/** Read (never consume: StrictMode runs an initializer twice) the stashed draft; it is dropped once mounted. */
+function peekDraft(slug: string): string {
+  try { return sessionStorage.getItem(DRAFT_KEY(slug)) ?? ''; } catch { return ''; }
+}
+function dropDraft(slug: string): void {
+  try { sessionStorage.removeItem(DRAFT_KEY(slug)); } catch { /* nothing kept */ }
 }
 
-function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed }: {
+function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed, pending }: {
   t: AppTurnRecord; view: SessionView | null; detail: AppDetail; onUndo: () => void; navigate: (p: string) => void; now: number; latestLanded: boolean;
+  /** The person's own edits still saving: a turn's Undo waits (it would undo those instead). */
+  pending: number;
   /** A framed studio changes nothing: no Undo, and the run's questions are not answered here (xreview r1 on K5). */
   framed: boolean;
 }): React.ReactElement {
@@ -72,14 +78,15 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
             return <li key={s} data-testid="app-chat-step" data-state={state}>{label}{who}</li>;
           })}
         </ol>
-        {view !== null && busy.ord !== null && <LiveActivity runId={t.runId} ord={busy.ord} seat={busy.seat} />}
+        {/* The live activity offers Steer and Stop: never inside another page (xreview r2 on K5). */}
+        {view !== null && busy.ord !== null && !framed && <LiveActivity runId={t.runId} ord={busy.ord} seat={busy.seat} />}
         {view !== null && !framed && <RunQuestions view={view} />}
         <p className="wk-appchat-meta">The app is read-only until this lands. Preview still works. · {job}</p>
       </div>
     );
   }
   if (t.state === 'landed') {
-    const undoable = !framed && latestLanded && detail.head.version === t.version && detail.history.canUndo && detail.turn == null;
+    const undoable = !framed && pending === 0 && latestLanded && detail.head.version === t.version && detail.history.canUndo && detail.turn == null;
     return (
       <div className="wk-appchat-reply wk-appchat-reply--landed" data-testid="app-chat-landed">
         <p className="wk-appchat-change" data-testid="app-chat-change">{changeLine(t)}</p>
@@ -103,7 +110,7 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
   );
 }
 
-export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend }: {
+export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend, pending = 0 }: {
   slug: string;
   detail: AppDetail | null;
   runs: readonly SessionView[];
@@ -114,9 +121,14 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   onUndo: () => void;
   /** Settle the host's pending edit burst first and answer the head to send on (null: it could not be saved). */
   prepareSend?: () => Promise<number | null>;
+  /** The host's edits still saving. */
+  pending?: number;
 }): React.ReactElement {
   const key = appComposerKey(slug);
-  const [text, setTextState] = useState(() => takeDraft(slug));
+  const [text, setTextState] = useState(() => peekDraft(slug));
+  useEffect(() => { dropDraft(slug); }, [slug]);
+  /** A message crew did not take while a newer one was typed: kept whole, to put back. */
+  const [refused, setRefused] = useState<{ words: string; about: string[] } | null>(null);
   const textRef = useRef(text);
   textRef.current = text;
   const setText = (t: string): void => setTextState(t);
@@ -171,7 +183,8 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
     // The box still holds this message (it was not taken), unless the person has typed another meanwhile: then the
     // refused one is named in the note and the newer draft is left alone.
     if (textRef.current.trim() !== words) {
-      setNote(`Not sent (${why}): “${words.slice(0, 120)}”`);
+      setRefused({ words, about });
+      setNote(`Not sent (${why}). It is kept: put it back when you are ready.`);
     } else {
       setNote(`Not sent: ${why}.`);
     }
@@ -200,11 +213,25 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
                 <p className="wk-appchat-about">{t.about.map((id) => <span key={id} className="wk-source-chip">about: {componentWords(detail.spec, id) ?? id}</span>)}</p>
               )}
             </div>
-            <TurnReply t={t} view={runs.find((v) => v.session.id === t.runId) ?? null} detail={detail} onUndo={onUndo} navigate={navigate} now={now} latestLanded={t.runId === latestLandedRun} framed={framed} />
+            <TurnReply t={t} view={runs.find((v) => v.session.id === t.runId) ?? null} detail={detail} onUndo={onUndo} navigate={navigate} now={now} latestLanded={t.runId === latestLandedRun} framed={framed} pending={pending} />
           </article>
         ))}
       </div>
-      {note !== null && <p className="wk-appchat-note" data-testid="app-chat-note" role="status">{note}</p>}
+      {note !== null && (
+        <p className="wk-appchat-note" data-testid="app-chat-note" role="status">
+          {note}
+          {refused !== null && (
+            <> <button type="button" className="wk-btn wk-btn--link" data-testid="app-chat-putback" onClick={() => {
+              // Swap: the kept message goes back in the box (with its components); the draft there is kept in its place.
+              const now = textRef.current;
+              setTextState(refused.words);
+              for (const id of refused.about) addAboutChip(key, { kind: 'about', key: `cmp:${id}`, label: componentWords(detail?.spec ?? null, id) ?? id });
+              setRefused(now.trim() !== '' ? { words: now, about: [] } : null);
+              if (now.trim() === '') setNote(null);
+            }}>Put it back in the box</button></>
+          )}
+        </p>
+      )}
       <div className="wk-appchat-composer">
         <AppComposer composerKey={key} text={text} setText={setText} onSubmit={send} busy={sending}
           placeholder={busy ? 'A change is being made… type the next one' : 'Ask for a change…'} ariaLabel="Ask for a change to this app"

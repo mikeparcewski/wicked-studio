@@ -30,15 +30,20 @@ export function AppComposer({ composerKey, text, setText, onSubmit, placeholder,
 }): React.ReactElement {
   const chips = useComposerChips((s) => chipsOf(s, composerKey));
   const box = useRef<HTMLTextAreaElement | null>(null);
+  const latest = useRef(text);
+  latest.current = text;
   const about = chips.filter((c) => c.kind === 'about' && c.key.startsWith('cmp:'));
   const canSend = readOnly === null && !busy && text.trim() !== '';
   const submit = async (): Promise<void> => {
     if (!canSend) return;
     const ids = about.map((c) => c.key.slice(4));
     const keys = about.map((c) => c.key);
+    const sent = text;
     const taken = await onSubmit(text.trim(), ids);
     if (!taken) return;
     for (const k of keys) removeAboutChip(composerKey, k);
+    // The box empties for the message that was taken, unless the person has typed the next one meanwhile.
+    if (latest.current === sent) setText('');
   };
   return (
     <div className="wk-composer" data-testid={testId} data-composer={composerKey}>
