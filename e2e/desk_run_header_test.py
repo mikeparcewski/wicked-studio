@@ -244,7 +244,7 @@ with sync_playwright() as p:
     # Unfolded, the sheet takes the thread's room; the jump-to-latest button it leaves at the thread's foot never
     # floats over the job's title (it is hidden while the sheet is unfolded).
     jt = page.evaluate(JUMP_OVER_TITLE)
-    check("phone-unfolded-no-jump-over-title", jt["title"] is not None and not jt["over"], jump=jt)
+    check("phone-unfolded-no-jump-over-title", jt["title"] is not None and jt["rendered"] and not jt["shown"] and not jt["over"], jump=jt)
     page.get_by_test_id("run-details-handle").click()
     page.locator('[data-testid="host-panel"]').wait_for(state="visible", timeout=5000)
     page.screenshot(path=str(SHOTS / "desk-run-header-panel-390.png"))
