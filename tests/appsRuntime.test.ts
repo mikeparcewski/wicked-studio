@@ -126,6 +126,7 @@ describe('studio#963: a line chart draws lines, not shapes', () => {
     expect(overArea).toHaveLength(1);
     expect(areas).toHaveLength(1);
     // The series rules set fill and stroke; the role rules must win over them (they lost on order before the fix).
+    // jsdom resolves by source order only; e2e/apps_runtime_test.py step 6b checks the real cascade in every engine.
     for (const l of [...lines, ...overArea]) expect(getComputedStyle(l).fill, l.getAttribute('class')!).toBe('none');
     for (const a of areas) expect(getComputedStyle(a).stroke).toBe('none');
     expect(getComputedStyle(lines[0]!).stroke).toMatch(/--c0|--s0/u);

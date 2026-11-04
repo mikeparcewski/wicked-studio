@@ -257,7 +257,9 @@ def main() -> None:
         # 6b. studio#963: a line chart draws lines. The series rules set fill AND stroke; the role rules must win in
         # this engine's cascade (the presentation attribute fill="none" loses to any rule). After the card steps, not
         # before S6: S6 counts every request, and the host re-reads the app on a 5 s timer (codex r1).
-        # The charts' query lands on its own: wait for every mark before reading a style (codex r1).
+        # The charts' query lands on its own: wait for every mark before reading a style (codex r1), and first for the
+        # runtime to take the Preview click above, or the waits match Edit's marks that Preview then redraws (codex r2).
+        frame.wait_for_selector('.wk-app[data-mode="preview"]', timeout=10_000)
         frame.wait_for_selector('[data-component="trend"] polyline.wk-stroke >> nth=1', timeout=10_000)
         frame.wait_for_selector('[data-component="trend_area"] polyline.wk-stroke', timeout=10_000)
         frame.wait_for_selector('[data-component="trend_area"] path.wk-area', timeout=10_000)
