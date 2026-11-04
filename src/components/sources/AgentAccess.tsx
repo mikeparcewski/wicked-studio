@@ -17,6 +17,10 @@ import { sessionPath } from '../../board/sessionModel.js';
 export const AGENT_QUERY_CONSEQUENCE =
   "Rows from this source go to the agent's model provider. crew checks each query first, reads it read-only, and gives at most 200 rows.";
 export const AGENT_SEE_MEANS = 'Agents in the projects below can list it and read its structure: tables, columns, types and keys. Never a row, never its login.';
+/** (DES-PM-001 §3.1) The same two switches on a project-management source: its trackers' structure, then its issues. */
+export const PM_SEE_MEANS = 'Agents in the projects below can see the structure of the trackers linked to their project or its repositories: issue types, fields and workflow states. Never an issue, never its token.';
+export const PM_QUERY_CONSEQUENCE =
+  "Issues go to the agent's model provider. crew limits every call to the trackers linked to the job's project or its repositories, and drops anything else from an answer before the agent sees it.";
 /** Outcomes where the query ran but its rows never reached the agent (crew withheld them at release). */
 const NOT_RELEASED = new Set(['unconfirmed', 'changed_while_running', 'record_failed']);
 
@@ -45,8 +49,9 @@ export function projectsWords(a: SourceAgentAccess, names: ReadonlyMap<string, s
  */
 export function AgentAccess({ source, dialect, agents, unverified = false, onReread, onChanged, 'data-testid': testId = 'source-agent-controls' }: {
   source: string;
-  /** Only a Postgres source can be queried by agents in this release; MySQL and uploads are structure only. */
-  dialect: 'postgres' | 'mysql' | 'sqlite';
+  /** Only a Postgres source can be queried by agents in this release; MySQL and uploads are structure only. A
+   *  project-management source (`pm`, DES-PM-001) reads issues, bound to the linked trackers. */
+  dialect: 'postgres' | 'mysql' | 'sqlite' | 'pm';
   /** crew's switches for the source (the sheet shows no box when crew sent none). */
   agents: SourceAgentAccess;
   /** crew could not be asked again after a write settled: what is shown may be out of date, so the switches hold. */
@@ -122,7 +127,9 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
   };
   // A project the source names that is no longer active still shows, so a person can take it away.
   const listed = projects === null ? [] : [...projects, ...a.projects.filter((p) => !projects.some((x) => x.id === p)).map((p) => ({ id: p, name: `${p} (not an active project)` }))];
-  const queryable = dialect === 'postgres';
+  const queryable = dialect === 'postgres' || dialect === 'pm';
+  const pm = dialect === 'pm';
+  const unit = pm ? 'item' : 'row';
   const full = a.projects.length >= AGENT_PROJECTS_MAX;
   /** Nothing is sent from switches that may not be crew's. */
   const held = busy || unverified;
@@ -142,7 +149,7 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
           type="button"
           role="switch"
           aria-checked={a.see}
-          aria-label={`Agents can see the structure of ${source}`}
+          aria-label={pm ? `Agents can see the structure of ${source}’s linked trackers` : `Agents can see the structure of ${source}`}
           data-testid={`${testId}-see`}
           disabled={held || asking}
           className={`wk-src-toggle${a.see ? ' wk-src-toggle--on' : ''}`}
@@ -150,11 +157,11 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
         >
           <span aria-hidden className="wk-src-toggle-thumb" />
         </button>
-        <span className="wk-src-strong">Agents can see this structure</span>
+        <span className="wk-src-strong">{pm ? 'Agents can see its structure' : 'Agents can see this structure'}</span>
         <span className="wk-src-sp" />
         <span className="wk-src-cap" data-testid={`${testId}-see-state`}>{a.see ? 'on' : 'off'}</span>
       </div>
-      <p className="wk-src-note">{AGENT_SEE_MEANS}</p>
+      <p className="wk-src-note">{pm ? PM_SEE_MEANS : AGENT_SEE_MEANS}</p>
 
       {queryable ? (
         <>
@@ -163,7 +170,7 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
               type="button"
               role="switch"
               aria-checked={a.query}
-              aria-label={`Agents can query ${source}`}
+              aria-label={pm ? `Agents can read issues from ${source}` : `Agents can query ${source}`}
               data-testid={`${testId}-query`}
               disabled={held || asking || !a.see}
               className={`wk-src-toggle${a.query ? ' wk-src-toggle--on' : ''}`}
@@ -171,18 +178,25 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
             >
               <span aria-hidden className="wk-src-toggle-thumb" />
             </button>
-            <span className="wk-src-strong">Agents can query this source</span>
+            <span className="wk-src-strong">{pm ? 'Agents can read issues' : 'Agents can query this source'}</span>
             <span className="wk-src-sp" />
             <span className="wk-src-cap" data-testid={`${testId}-query-state`}>{a.query ? 'on' : 'off'}</span>
           </div>
-          <p className="wk-src-note" data-testid={`${testId}-consequence`}>{AGENT_QUERY_CONSEQUENCE}</p>
-          {!a.see && <p className="wk-src-note" data-testid={`${testId}-see-first`}>Turn on “see” first: agents query only a structure they can see.</p>}
+          <p className="wk-src-note" data-testid={`${testId}-consequence`}>{pm ? PM_QUERY_CONSEQUENCE : AGENT_QUERY_CONSEQUENCE}</p>
+          {!a.see && <p className="wk-src-note" data-testid={`${testId}-see-first`}>{pm ? 'Turn on “see” first: agents read issues only of trackers whose structure they can see.' : 'Turn on “see” first: agents query only a structure they can see.'}</p>}
           {asking && (
-            <div className="wk-src-confirm" role="group" aria-label="Turn on agent queries" data-testid={`${testId}-confirm`}>
-              <p>
-                Let agents query <b style={{ overflowWrap: 'anywhere' }}>{source}</b>? Rows they read go to their model provider. Writes stay impossible, and you can turn it
-                off at any time: the next query is refused, even in a job that is running.
-              </p>
+            <div className="wk-src-confirm" role="group" aria-label={pm ? 'Turn on agent issue reads' : 'Turn on agent queries'} data-testid={`${testId}-confirm`}>
+              {pm ? (
+                <p>
+                  Let agents read issues from <b style={{ overflowWrap: 'anywhere' }}>{source}</b>? Issues they read go to their model provider. They read only the trackers
+                  linked to their project or its repositories, writes always ask you, and you can turn it off at any time: the next read is refused, even in a job that is running.
+                </p>
+              ) : (
+                <p>
+                  Let agents query <b style={{ overflowWrap: 'anywhere' }}>{source}</b>? Rows they read go to their model provider. Writes stay impossible, and you can turn it
+                  off at any time: the next query is refused, even in a job that is running.
+                </p>
+              )}
               <div className="wk-src-row-btns">
                 <button ref={confirmOn} type="button" className="wk-btn wk-btn--primary" disabled={held} data-testid={`${testId}-confirm-on`} onClick={() => void apply({ query: true })}>{busy ? 'Turning on…' : 'Turn on'}</button>
                 <button type="button" className="wk-btn wk-btn--quiet" disabled={busy} data-testid={`${testId}-confirm-off`} onClick={() => setAsking(false)}>Keep it off</button>
@@ -216,10 +230,10 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
       {error !== null && <p role="alert" className="wk-src-note wk-src-tone-fail" data-testid={`${testId}-error`}>{error}</p>}
 
       <div data-testid={`${testId}-recent`}>
-        <p className="wk-src-label">Recent agent queries</p>
+        <p className="wk-src-label">{pm ? 'Recent agent reads' : 'Recent agent queries'}</p>
         {recent === null ? <p className="wk-src-cap">Reading…</p>
           : recent === 'unknown' ? <p className="wk-src-note" data-testid={`${testId}-recent-unknown`}>crew’s record of agent queries could not be read.</p>
-            : recent.length === 0 ? <p className="wk-src-note" data-testid={`${testId}-recent-none`}>No agent has queried it yet.</p>
+            : recent.length === 0 ? <p className="wk-src-note" data-testid={`${testId}-recent-none`}>{pm ? 'No agent has read it yet.' : 'No agent has queried it yet.'}</p>
               : (
                 <ul className="wk-src-list">
                   {recent.map((q) => (
@@ -227,7 +241,7 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
                       <time dateTime={q.at}>{new Date(q.at).toLocaleString()}</time>
                       {' · '}<a href={sessionPath(`run:${q.runId}`)}>job {q.runId.slice(0, 8)}</a>
                       {' · '}{q.seat}
-                      {' · '}{q.released ? `${q.rows} row${q.rows === 1 ? '' : 's'}${q.truncated === true ? ' (cut)' : ''}` : NOT_RELEASED.has(q.outcome) ? 'rows withheld' : `refused: ${q.outcome}`}
+                      {' · '}{q.released ? `${q.rows} ${unit}${q.rows === 1 ? '' : 's'}${q.truncated === true ? ' (cut)' : ''}` : NOT_RELEASED.has(q.outcome) ? `${unit}s withheld` : `refused: ${q.outcome}`}
                     </li>
                   ))}
                 </ul>

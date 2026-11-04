@@ -1,0 +1,113 @@
+/* Project-management trackers (DES-PM-001 rev 4, mockup design/mockups/pm-links.html): the Linked trackers cards, the
+ * Link a tracker picker, a job's tracker set, "From an issue", and the Jira / GitHub Issues source sheets. Tokens only,
+ * plus each tool's own mark colour (`--pm-*` in tokens.css). */
+
+
+/* ── the card ── */
+.wk-trk-card { position: relative; display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-trk-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; min-width: 0; }
+.wk-trk-head .wk-section-title { margin: 0; }
+.wk-trk-head .wk-btn svg { margin-right: 4px; }
+.wk-trk-rule { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--accent-wash); font-size: var(--text-body); line-height: 1.5; color: var(--ink-body); }
+.wk-trk-rule b { color: var(--ink-high); }
+.wk-trk-cols { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.wk-trk-col { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.wk-trk-sub { margin: var(--space-1) 0 0; font-size: var(--text-caption); font-weight: var(--weight-strong); color: var(--ink-muted); }
+
+/* ── one tracker ── */
+/* The mark: on the type scale (caption, strong); a wider mark (ADO) grows its box rather than shrinking its letters. */
+.wk-trk-sys { min-width: 28px; height: 28px; padding: 0 3px; flex: none; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 7px; font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: 1; }
+.wk-trk-sys--sm { min-width: 22px; height: 22px; padding: 0 2px; border-radius: 6px; }
+.wk-trk-sys[data-system="jira"] { color: var(--pm-jira); }
+.wk-trk-sys[data-system="github"] { color: var(--pm-github); }
+.wk-trk-sys[data-system="ado"] { color: var(--pm-ado); }
+.wk-trk-sys[data-system="gitlab"] { color: var(--pm-gitlab); }
+.wk-trk { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); min-width: 0; }
+.wk-trk--ro { background: var(--surface-base); grid-template-columns: auto minmax(0, 1fr) auto; }
+/* A small row (a job's set, in the narrow Run tab): where it comes from goes under its name. */
+.wk-trk--sm { padding: 6px var(--space-2); gap: 4px var(--space-2); grid-template-columns: auto minmax(0, 1fr); }
+.wk-trk--sm .wk-trk-st { grid-column: 2; justify-content: flex-start; }
+.wk-trk--sm .wk-trk-st:empty { display: none; }
+.wk-trk--sm .wk-trk-sys { min-width: 24px; height: 24px; }
+.wk-trk-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wk-trk-t b { color: var(--ink-high); font-weight: var(--weight-strong); font-size: var(--text-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-trk-t span { font-size: var(--text-caption); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-trk-st { display: inline-flex; gap: var(--space-1); flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+.wk-trk-act { display: inline-flex; }
+.wk-trk-warn { grid-column: 2 / -1; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: var(--text-caption); color: var(--status-warn); }
+.wk-trk-warn > span { display: flex; gap: 6px; align-items: flex-start; min-width: 0; }
+.wk-trk-warn svg { flex: none; margin-top: 2px; }
+.wk-trk-st .wk-tag { border: 1px solid var(--border-strong); background: transparent; }
+.wk-trk-warn .wk-link { color: var(--status-warn); text-decoration: underline; font-weight: var(--weight-strong); }
+.wk-trk-from { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: var(--weight-strong); white-space: nowrap; }
+.wk-trk-from[data-via="project"] { background: var(--status-gate-dim); color: var(--status-gate); }
+.wk-trk-from[data-via="repo"] { background: var(--accent-wash); color: var(--ink-high); }
+.wk-trk-chips { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+.wk-trk-chip { display: inline-flex; align-items: center; gap: var(--space-2); padding: 6px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); color: var(--ink-high); font-weight: var(--weight-strong); text-decoration: none; }
+.wk-trk-chip:hover { background: var(--accent-wash); }
+.wk-trk-chip:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+
+/* ── Link a tracker (a popover on the card; a sheet on a phone) ── */
+.wk-trk-pop { position: absolute; z-index: 20; top: 56px; right: var(--space-4); width: min(420px, calc(100% - 2 * var(--space-4))); display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); }
+.wk-trk-pop-title { margin: 0; font-weight: var(--weight-strong); color: var(--ink-high); }
+.wk-trk-pop-foot { display: flex; justify-content: flex-end; }
+.wk-trk-select { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.wk-trk-search { position: relative; display: flex; align-items: center; min-width: 0; }
+.wk-trk-search > svg { position: absolute; left: 10px; color: var(--ink-muted); pointer-events: none; }
+.wk-trk-search > input.wk-field { padding-left: 30px; }
+.wk-trk-opts { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow-y: auto; }
+.wk-trk-opt { display: flex; align-items: center; gap: var(--space-2); padding: 6px var(--space-2); border-radius: var(--radius-sm); min-width: 0; }
+.wk-trk-opt:hover { background: var(--accent-wash); }
+.wk-trk-opt b { color: var(--ink-high); font-weight: var(--weight-strong); }
+.wk-trk-opt-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); font-size: var(--text-caption); }
+
+/* ── a job's tracker set (the Run tab; a chat's disclosure) ── */
+.wk-trk-set { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); min-width: 0; }
+.wk-trk-set-title { margin: 0; font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink-high); }
+.wk-trk-bound { display: flex; gap: var(--space-2); margin: 0; font-size: var(--text-caption); line-height: 1.5; color: var(--ink-body); }
+.wk-trk-bound svg { flex: none; margin-top: 2px; color: var(--status-ok); }
+.wk-trk-excl { margin: 0; padding-top: var(--space-2); border-top: 1px solid var(--border); font-size: var(--text-caption); line-height: 1.5; color: var(--ink-muted); }
+.wk-trk-excl b { color: var(--ink-high); }
+.wk-trk-chat { margin: 0 auto var(--space-2); }
+.wk-trk-chat > summary { cursor: pointer; font-size: var(--text-caption); color: var(--ink-muted); padding: var(--space-1) 0; }
+.wk-trk-chat[open] > summary { margin-bottom: var(--space-2); }
+
+/* ── From an issue (the composer) ── */
+.wk-trk-issues { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); }
+.wk-trk-ig { display: flex; flex-direction: column; gap: 2px; }
+.wk-trk-ig h4 { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: var(--space-2) 0 2px; font-size: var(--text-caption); font-weight: var(--weight-strong); color: var(--ink-muted); }
+.wk-trk-iss { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: 5px var(--space-2); border: 0; border-radius: var(--radius-sm); background: none; font: inherit; font-size: var(--text-body); text-align: left; color: inherit; cursor: pointer; }
+.wk-trk-iss:hover { background: var(--accent-wash); }
+.wk-trk-iss:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+.wk-trk-iss code { color: var(--ink-high); font-weight: var(--weight-strong); overflow: hidden; text-overflow: ellipsis; }
+.wk-trk-iss span { color: var(--ink-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-trk-iss em { font-style: normal; font-size: var(--text-xs); color: var(--ink-muted); white-space: nowrap; }
+.wk-linked-issue-pick { display: inline-flex; gap: var(--space-1); flex-wrap: wrap; margin-left: var(--space-2); }
+
+/* ── the Jira / GitHub Issues sheets ── */
+.wk-pm-lede { margin: 0; font-size: var(--text-body); line-height: 1.5; color: var(--ink-body); }
+.wk-pm-guide { padding: var(--space-2) var(--space-3); border-left: 3px solid var(--status-warn); border-radius: var(--radius-md); background: var(--status-warn-dim); font-size: var(--text-caption); line-height: 1.5; color: var(--ink-body); }
+.wk-pm-guide[data-tone="ok"] { border-left-color: var(--status-ok); background: var(--status-ok-dim); }
+.wk-pm-guide b { color: var(--ink-high); }
+.wk-pm-lines { margin: 0; padding-left: var(--space-4); font-size: var(--text-caption); line-height: 1.55; color: var(--ink-body); }
+.wk-pm-tools { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wk-pm-tool { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2) 0; border-top: 1px solid var(--border-subtle); }
+.wk-pm-tool-head { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.wk-pm-tool-head code { color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-code); overflow-wrap: anywhere; }
+.wk-pm-list-title { margin: 0; font-size: var(--text-body); }
+.wk-pm-kind { border: 1px solid var(--border); background: transparent; }
+.wk-pm-pair { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+.wk-pm-row { width: 100%; }
+
+@media (max-width: 760px) {
+  .wk-trk-cols { grid-template-columns: 1fr; }
+  .wk-trk { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .wk-trk .wk-trk-st { grid-column: 2 / -1; grid-row: 2; justify-content: flex-start; }
+  .wk-trk .wk-trk-act { grid-column: 3; grid-row: 1; }
+  .wk-trk .wk-trk-warn { grid-row: 3; }
+  .wk-trk .wk-trk-st:empty { display: none; }
+  .wk-trk-pop { position: static; width: auto; box-shadow: none; }
+  .wk-trk-iss { grid-template-columns: 80px minmax(0, 1fr); }
+  .wk-trk-iss em { display: none; }
+  .wk-pm-sheet .wk-src-pair { grid-template-columns: 1fr; }
+}

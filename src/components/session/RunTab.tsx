@@ -51,6 +51,9 @@ import { RUN_PLUGINS } from '../../plugins/runPlugins.js';
 import { useRunPhases } from '../../hooks/useRunPhases.js';
 import { useRunPluginView } from '../../store/runPluginView.js';
 import { RunPluginSection } from './RunThreadPlugin.js';
+import { TrackerSet } from '../trackers/TrackerSet.js';
+import { useMembershipStore } from '../../store/membership.js';
+import { useProjectsStore } from '../../store/projects.js';
 
 function isTerminal(view: SessionView): boolean {
   return ['completed', 'cancelled', 'failed'].includes(view.session.status);
@@ -165,6 +168,11 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const planItem = extra.some((s) => s.id === 'plan');
   const deliveryItem = extra.some((s) => s.id === 'delivery');
   const go = navigate ?? NO_NAVIGATE;
+  // The job's project: its own claim, else the membership the board read (unlisted = none).
+  const claimedProject = (session as { project_id?: unknown }).project_id;
+  const joinedProject = useMembershipStore((st) => st.projectIdByRun[id]);
+  const runProject = typeof claimedProject === 'string' && claimedProject !== '' ? claimedProject : claimedProject === undefined ? joinedProject ?? null : null;
+  const runProjectName = useProjectsStore((st) => (runProject === null ? null : st.projects.find((p) => p.id === runProject)?.name ?? null));
 
   // Which sections are open: the run's state picks the default, the operator's choice (per state) wins.
   const kind = panelStateKind(view, gate === undefined ? undefined : { gateKind: isDeliverGate(id, view.units, gate.ord) ? 'deliver' : gate.gateKind, prompt: gate.prompt });
@@ -282,6 +290,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
             <button type="button" data-testid="run-tab-stop-keep" className="wk-run-tab-button" onClick={() => setConfirmStop(false)}>Keep going</button>
           </div>
         )}
+        {/* (DES-PM-001 §3.2) The trackers this job's agents may read: crew's tracker set for its project and repo. */}
+        <TrackerSet projectId={runProject} projectName={runProjectName} repoId={typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' ? session.repo_ref : null} data-testid="run-tab-trackers" />
         <Item section="now" id="goal">{() => <div data-testid="sheet-goal" className="wk-sheet-section"><GoalBrief problem={session.problem} /></div>}</Item>
       </Section>
     ),

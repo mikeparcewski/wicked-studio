@@ -21,8 +21,20 @@ export function linkedIssuesLine(preview: LinkedIssuesPreviewResponse): string |
   return `${n} (≈${preview.appendedChars.toLocaleString('en-US')} chars).`;
 }
 
+/** (DES-PM-001 §3.2, api-types 0.187.0) Why crew did not read a ref through the tracker set, in plain words. */
+const NOT_READ: Record<string, string> = {
+  not_linked: 'not in a tracker linked to this project or its repositories',
+  ambiguous: 'two linked trackers have this key: pick one below',
+  hidden: 'the tool’s Agents switches keep this project out',
+  query_off: 'agents can’t read issues from that tool (its “read issues” switch is off)',
+  unavailable: 'the tool couldn’t be reached',
+  not_found: 'the tracker has no such issue',
+};
+
 /** One issue's words: "#539 — Title · 2,140 chars", or why it is not appended. Pure. */
 export function linkedIssueWords(issue: LinkedIssue): string {
+  const code = (issue as { code?: unknown }).code;
+  if (!issue.resolved && issue.excluded !== true && typeof code === 'string' && Object.hasOwn(NOT_READ, code)) return `${issue.ref} — not read: ${NOT_READ[code]}`;
   // crew answers a left-out ref as `{resolved: false, excluded: true}` (it was not read): left out,
   // not unreadable (codex r1).
   if (issue.excluded === true) return `${issue.ref}${issue.title !== undefined ? ` — ${issue.title}` : ''} · left out`;
@@ -32,32 +44,36 @@ export function linkedIssueWords(issue: LinkedIssue): string {
 }
 
 /** Reads the preview for `problem` (debounced), re-read whenever the left-out set changes. */
-export function useLinkedIssuesPreview(input: { enabled: boolean; problem: string; repoRef: string | null; exclude: readonly string[] }): LinkedIssuesPreviewResponse | null {
+export function useLinkedIssuesPreview(input: { enabled: boolean; problem: string; repoRef: string | null; exclude: readonly string[]; projectId?: string | null }): LinkedIssuesPreviewResponse | null {
   const { enabled, problem, repoRef, exclude } = input;
+  // (DES-PM-001 §3.2) Sent only by a caller on a crew with tracker links: an older crew's preview schema never sees it.
+  const projectId = input.projectId === undefined || input.projectId === null || input.projectId === 'default' ? null : input.projectId;
   // The preview is shown only for the inputs it was read for (codex r1): while the text, the repo or
   // the left-out set changes, the old answer is not displayed as this launch's.
   const [read, setRead] = useState<{ key: string; preview: LinkedIssuesPreviewResponse } | null>(null);
   const text = problem.trim();
-  const key = [text, repoRef ?? '', ...exclude].join('\u0000');
+  const key = [text, repoRef ?? '', projectId ?? '', ...exclude].join('\u0000');
   useEffect(() => {
     if (!enabled || text === '') return;
     let live = true;
     const timer = setTimeout(() => {
-      api.previewLinkedIssues({ problem: text, ...(repoRef !== null ? { repoRef } : {}), ...(exclude.length > 0 ? { excludeLinkedIssues: [...exclude] } : {}) })
+      api.previewLinkedIssues({ problem: text, ...(repoRef !== null ? { repoRef } : {}), ...(projectId !== null ? { projectId } : {}), ...(exclude.length > 0 ? { excludeLinkedIssues: [...exclude] } : {}) } as Parameters<typeof api.previewLinkedIssues>[0])
         .then((p) => { if (live) setRead({ key, preview: p }); })
         .catch((e: unknown) => { if (live) setRead({ key, preview: { issues: [], appendedChars: 0, error: e instanceof Error ? e.message : String(e) } }); });
     }, 500);
     return () => { live = false; clearTimeout(timer); };
-    // `key` stands for `text`, `repoRef` and `exclude` (a fresh array each render).
+    // `key` stands for `text`, `repoRef`, `projectId` and `exclude` (a fresh array each render).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, key]);
   return enabled && text !== '' && read !== null && read.key === key ? read.preview : null;
 }
 
-export function LinkedIssuesLine({ preview, exclude, onToggle }: {
+export function LinkedIssuesLine({ preview, exclude, onToggle, onQualify }: {
   preview: LinkedIssuesPreviewResponse | null;
   exclude: readonly string[];
   onToggle: (ref: string, leaveOut: boolean) => void;
+  /** (DES-PM-001 §3.2) A key two linked trackers share: the person picks one, which writes `<source>:<ref>`. */
+  onQualify?: (ref: string, qualified: string) => void;
 }): React.ReactElement | null {
   if (preview === null) return null;
   const line = linkedIssuesLine(preview);
@@ -85,6 +101,7 @@ export function LinkedIssuesLine({ preview, exclude, onToggle }: {
                     {linkedIssueWords(issue)}
                   </label>
                 ) : linkedIssueWords(issue)}
+                {onQualify !== undefined && <AmbiguousPick issue={issue} onQualify={onQualify} />}
               </li>
             );
           })}
@@ -94,5 +111,27 @@ export function LinkedIssuesLine({ preview, exclude, onToggle }: {
         <p data-testid="launch-linked-issues-error">Linked issues could not be read ({preview.error}); the launch runs on your words alone.</p>
       )}
     </div>
+  );
+}
+
+/** The trackers an ambiguous key is in, as buttons: picking one writes `<source>:<ref>` into the intent. */
+function AmbiguousPick({ issue, onQualify }: { issue: LinkedIssue; onQualify: (ref: string, qualified: string) => void }): React.ReactElement | null {
+  const raw = issue as { code?: unknown; candidates?: unknown };
+  if (raw.code !== 'ambiguous' || !Array.isArray(raw.candidates)) return null;
+  const cands = (raw.candidates as unknown[]).filter((c): c is { source: string; tenant: string; tenantLabel?: string } =>
+    typeof c === 'object' && c !== null && typeof (c as { source?: unknown }).source === 'string' && typeof (c as { tenant?: unknown }).tenant === 'string');
+  if (cands.length === 0) return null;
+  // The key itself, whatever qualification the ref already had (Jira keys and GitHub refs hold no colon).
+  const bare = issue.ref.slice(issue.ref.lastIndexOf(':') + 1);
+  return (
+    <span className="wk-linked-issue-pick" data-testid="launch-linked-issue-ambiguous">
+      {cands.map((c) => (
+        <button key={`${c.source}\u0000${c.tenant}`} type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="launch-linked-issue-qualify"
+          // Two sites behind one source: the site names it too (`<source>@<cloudId>:KEY-N`, DES-PM-001 §3.2).
+          onClick={() => onQualify(issue.ref, cands.filter((o) => o.source === c.source).length > 1 ? `${c.source}@${c.tenant}:${bare}` : `${c.source}:${bare}`)}>
+          {c.source}{typeof c.tenantLabel === 'string' ? ` · ${c.tenantLabel}` : cands.filter((o) => o.source === c.source).length > 1 ? ` · ${c.tenant}` : ''}
+        </button>
+      ))}
+    </span>
   );
 }

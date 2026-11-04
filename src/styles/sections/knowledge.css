@@ -21,6 +21,11 @@
 .wk-know-swatch[data-kind="repo"] { background: var(--ink-muted); clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
 .wk-know-swatch[data-kind="code"] { background: var(--status-run); border-radius: 50%; }
 .wk-know-swatch[data-kind="knowledge"] { background: var(--ink-muted); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.wk-know-swatch[data-kind="tracker"] { background: var(--ink-high); clip-path: polygon(0 0, 70% 0, 100% 50%, 70% 100%, 0 100%); }
+.wk-know-swatch[data-kind="project"] { background: var(--kn-project); border-radius: 6px / 4px; width: 14px; }
+.wk-know-swatch[data-kind="issue"] { background: var(--kn-issue); clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%); }
+.wk-know-swatch[data-kind="pr"] { background: var(--kn-pr); transform: skewX(-18deg) scale(0.85); }
+.wk-know-swatch[data-kind="run"] { background: var(--kn-run); clip-path: polygon(20% 0, 80% 0, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0 80%, 0 20%); }
 .wk-know-inventory { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; max-width: 100%; color: var(--ink-body); overflow-wrap: anywhere; }
 .wk-know-inventory > summary { cursor: pointer; color: var(--ink-muted); }
 .wk-know-inventory[open] > summary { margin-bottom: var(--space-2); }
@@ -29,6 +34,8 @@
 .wk-know-line[data-rel="joins"] { border-top: 2px solid var(--accent); }
 .wk-know-line[data-rel="describes"] { border-top: 2px dashed var(--status-run); }
 .wk-know-line[data-rel="governed_by"] { border-top: 3px dotted var(--status-gate); }
+.wk-know-line[data-rel="tracked_in"] { border-top: 2px solid var(--ink-muted); }
+.wk-know-line[data-rel="addresses"], .wk-know-line[data-rel="closes"] { border-top: 2px dashed var(--status-warn); }
 
 /* The Knowledge map's button under the repositories' graph links. */
 .wk-uc-knowbtn { margin-top: var(--space-2); }

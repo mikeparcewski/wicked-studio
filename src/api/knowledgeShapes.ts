@@ -20,7 +20,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
-const NODE_KINDS = new Set(['source', 'table', 'shape', 'code', 'repo', 'knowledge']);
+const NODE_KINDS = new Set(['source', 'table', 'shape', 'code', 'repo', 'knowledge', 'tracker', 'project', 'issue', 'run', 'pr']);
 
 /** The map as crew answered it, every node and edge checked; one of the wrong shape is dropped. */
 export function readKnowledgeMap(raw: unknown): KnowledgeMapResponse {
@@ -39,6 +39,8 @@ export function readKnowledgeMap(raw: unknown): KnowledgeMapResponse {
       ...(str(n['repo']) !== null ? { repo: str(n['repo'])! } : {}),
       ...(str(n['proposalId']) !== null ? { proposalId: str(n['proposalId'])! } : {}),
       ...(str(n['summary']) !== null ? { summary: str(n['summary'])! } : {}),
+      // (api-types 0.187.0) A tracker's source and key, only whole.
+      ...(isObj(n['tracker']) && str(n['tracker']['source']) !== null && str(n['tracker']['key']) !== null ? { tracker: { source: str(n['tracker']['source'])!, key: str(n['tracker']['key'])! } } : {}),
     }];
   });
   const keys = new Set(nodes.map((n) => n.key));
