@@ -171,6 +171,22 @@ npm publish dates. Every version listed here exists on
   workflows") and lists nothing in its place; one that lists nothing says "This daemon lists no workflows." in New job
   and the menu alike (studio's own Demo video and Draft epics no longer stand in for an empty catalog). The launch
   form's problem box lists the same catalog's workflows.
+- **The chat window: each reply sits under its own question, and nothing is drawn over an answer (knowledge journey
+  2026-11-04).** A follow-up in the system chat was drawn after the chat's block while its reply streamed into the
+  block above it, so the second question seemed to have no answer; a follow-up now joins its chat's block in every
+  chat. The window also drew the narrow dock's boxed block, a "chat session" seat-chip header over a 288 px scroller
+  pinned to its end, so a long answer's first lines sat clipped under the header. It now flows like a page chat (no
+  seat header, no inner scroller; the window follows the end as an answer arrives), as the system-chat mockup draws
+  it. A question stays above a reply that streamed in before its send was acknowledged, a failed follow-up and its
+  error stay under it (before a retry), and a follow-up sent while a past chat's history loads comes after that
+  history.
+- **Understand's review labels each knowledge proposal by what it is, and Approve lands on its own card.** Every
+  `knowledge` proposal said "Data shape", though most were notes agents filed about a repository. Only one that links
+  something (`relate`/`relate_code`, what crew's map draws) is a **Data shape**; any other is a **Knowledge note**,
+  whose card no longer says the map draws it, and the section is **Knowledge to review**. In a long review, Chromium's
+  scroll anchoring moved the list two to five cards under the pointer when something else on the page changed, so an
+  Approve could land on another card's; review cards are never scroll anchors now (every review list shares them: a
+  card decided above the view no longer holds the view still).
 - **An Apps line chart draws lines, not filled shapes (studio#963).** In the wicked-apps runtime's stylesheet each
   `.wk-series-N` rule sets `fill` and `stroke`, and it came after `.wk-stroke { fill: none }` with the same specificity,
   so a line series filled the shape between its points and its first point in the series colour (the Escalations

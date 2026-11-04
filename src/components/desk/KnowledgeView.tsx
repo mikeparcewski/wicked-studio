@@ -124,7 +124,8 @@ export function KnowledgeView(): React.ReactElement {
         Your data sources, your repositories and the data shapes you approved, in one map. A shape says what a table is: what it joins, which code describes it, which rule governs it. Agents propose shapes; nothing is added until you approve it here.
       </p>
 
-      <ProposalsSection kind="knowledge" heading="Data shapes to review" onDecision={load} />
+      {/* Data shapes and the knowledge notes agents filed: one kind on the wire, each card says which it is. */}
+      <ProposalsSection kind="knowledge" heading="Knowledge to review" onDecision={load} />
 
       <section className="wk-know-map" aria-labelledby="wk-know-map-title" data-testid="knowledge-map">
         <div className="wk-gk-row">

@@ -7,7 +7,7 @@ import {
   type Proposal,
 } from '../api/proposals.js';
 import { readErrorKind } from '../api/errors.js';
-import { knowledgePayload } from '../api/knowledgeShapes.js';
+import { knowledgeKind, knowledgePayload } from '../api/knowledgeShapes.js';
 import { KindChip, severityWord } from './ProposalChips.js';
 import { StateBanner, EmptyState, Skeleton, TechDetails } from './ui/index.js';
 import { sessionPath } from '../board/sessionModel.js';
@@ -94,7 +94,9 @@ function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
       {/* studio#689 row 79: what approving does, said once, in plain words. */}
       {kind === 'knowledge' && (
         <p data-testid="proposal-knowledge-effect" className="wk-gk-muted">
-          Approving adds it to the Knowledge map in Understand. Agents recall it only where they may see its source and repositories.
+          {knowledgeKind(proposal) === 'shape'
+            ? 'Approving adds it to the Knowledge map in Understand. Agents recall it only where they may see its source and repositories.'
+            : 'Approving adds it to what agents recall about the code. It links nothing, so the Knowledge map does not draw it.'}
         </p>
       )}
       {kind === 'policy' && (

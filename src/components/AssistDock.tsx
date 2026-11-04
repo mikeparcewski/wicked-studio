@@ -262,10 +262,19 @@ interface DockChatMsg {
   files?: string[];
   /** A page chat's operator turn: the item it asked about. */
   chip?: string;
+  /** When it began: a seat's first frame, or an operator turn's send (orders a question before a reply that streamed
+   *  in before its send was acknowledged). */
+  at?: number;
+  /** Not a bubble: the dock's own line under an operator turn (a send that failed, in the fail ink). */
+  note?: true;
 }
 
-/** A page chat's follow-up turn, drawn inside its chat block so it sits above its own answer. */
-export interface InlineTurn { id: number; text: string; files: string[]; chip?: string }
+/** A follow-up turn, drawn inside its chat block so it sits above its own answer. `at`: when its send began. `failed`:
+ *  the send failed with this message (the turn and its error stay where they were asked, before any retry). */
+export interface InlineTurn { id: number; text: string; files: string[]; chip?: string; at: number; failed?: string }
+
+/** Whether a block holds only the operator's own follow-ups so far (no seat has said anything yet). */
+const onlyOwnTurns = (msgs: readonly DockChatMsg[]): boolean => msgs.every((m) => m.cliKey === 'you' || m.note === true);
 
 /**
  * One launched CHAT session (the retired chat page's seat machinery's wire — `POST /chats` +
@@ -301,8 +310,12 @@ type ResumeProbe = { kind: 'gone' } | { kind: 'ended' } | { kind: 'error'; messa
 /** A chat's kept history (the system chat's past chats): its records, and whether it has ended. */
 export type ChatHistoryLoader = (chatId: string) => Promise<{ records: readonly unknown[]; closed: boolean }>;
 
-function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns }: {
+function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns, flow = false }: {
   chatId: string;
+  /** A chat window or page chat (journey 2026-11-04): the block is the conversation itself, not a box in a dock. No
+   *  seat-chip header and no inner scroller: the thread around it is the one scroller, so no line of an answer ever
+   *  sits under a header. The narrow dock (Steering) keeps the boxed, capped block. */
+  flow?: boolean;
   /** A page chat's follow-ups (AssistDock `inlineTurns`): each joins the block in order, so a question sits
    *  above its answer. */
   turns?: readonly InlineTurn[] | undefined;
@@ -330,7 +343,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
   const [pathPa, setPathPa] = useState<string | null>(null);
   const pathEvents = useRunEventStore((s) => (pathRun !== null ? s.byRun[pathRun] : undefined));
   const liveOrd = useMemo(() => workingOrdOf(pathEvents), [pathEvents]);
-  const waiting = msgs.length === 0 || msgs.some((m) => m.pending) || msgs[msgs.length - 1]?.cliKey === 'you';
+  const last = msgs[msgs.length - 1];
+  const waiting = msgs.length === 0 || msgs.some((m) => m.pending) || (last?.cliKey === 'you' && last.note !== true);
   // Until the path is known, read the chat again while it may be answering (a fresh chat has no path at first).
   useEffect(() => {
     if (pathRun !== null || !useCapabilities.getState().askPath) return;
@@ -373,7 +387,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
       .then((h) => {
         if (cancelled || h === null) return 'live' as const;
         replayedFromHistory = true;
-        setMsgs((prev) => (prev.length > 0 ? prev : footed(h.records)));
+        // A follow-up sent while the history loaded comes after it; a seat's frames that streamed in meanwhile win.
+        setMsgs((prev) => (onlyOwnTurns(prev) ? [...footed(h.records), ...prev] : prev));
         if (h.closed) {
           onResumeProbeRef.current?.({ kind: 'ended' });
           return 'ended' as const;
@@ -402,7 +417,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
         const messages = (detail as { messages?: unknown }).messages;
         if (resumed && !replayedFromHistory && Array.isArray(messages)) {
           const replayed = footed(messages);
-          setMsgs((prev) => (prev.length > 0 ? prev : replayed));
+          setMsgs((prev) => (onlyOwnTurns(prev) ? [...replayed, ...prev] : prev));
         }
       })
       .catch((e: unknown) => {
@@ -429,7 +444,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
           return next;
         }
       }
-      next.push({ cliKey, text, pending: true, ok: false });
+      next.push({ cliKey, text, pending: true, ok: false, at: Date.now() });
       return next;
     });
   };
@@ -452,18 +467,34 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
           return next;
         }
       }
-      next.push({ cliKey, text, pending: false, ok, foot: ok ? footRef.current?.(cliKey) ?? null : null });
+      next.push({ cliKey, text, pending: false, ok, foot: ok ? footRef.current?.(cliKey) ?? null : null, at: Date.now() });
       return next;
     });
   };
 
-  // A page chat's follow-up joins the block where it was asked: after what has streamed so far.
+  // A follow-up joins the block where it was asked: after what had streamed when its send began. Its reply's frames
+  // can arrive before the send is acknowledged (the turn lands here only then), so a seat's message that began at or
+  // after the send stays below the question.
   const turnsSeen = useRef(0);
   useEffect(() => {
     if (turns === undefined || turns.length <= turnsSeen.current) return;
     const fresh = turns.slice(turnsSeen.current);
     turnsSeen.current = turns.length;
-    setMsgs((prev) => [...prev, ...fresh.map((t) => ({ cliKey: 'you', text: t.text, pending: false, ok: true, ...(t.files.length > 0 ? { files: t.files } : {}), ...(t.chip !== undefined ? { chip: t.chip } : {}) }))]);
+    setMsgs((prev) => {
+      const next = [...prev];
+      for (const t of fresh) {
+        const own: DockChatMsg[] = [{ cliKey: 'you', text: t.text, pending: false, ok: true, at: t.at, ...(t.files.length > 0 ? { files: t.files } : {}), ...(t.chip !== undefined ? { chip: t.chip } : {}) }];
+        if (t.failed !== undefined) own.push({ cliKey: 'you', text: t.failed, pending: false, ok: false, note: true, at: t.at });
+        let at = next.length;
+        while (at > 0) {
+          const m = next[at - 1]!;
+          if (m.cliKey === 'you' || m.at === undefined || m.at < t.at) break;
+          at -= 1;
+        }
+        next.splice(at, 0, ...own);
+      }
+      return next;
+    });
   }, [turns]);
 
   useEventStream((ev: CoreEvent) => {
@@ -495,55 +526,69 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
     }
   });
 
-  // Tail-pinned inside the block — replies stream long; the dock thread stays one column.
+  // Tail-pinned inside the block — replies stream long; the dock thread stays one column. A flowing block has no
+  // scroller of its own: the thread follows the tail instead.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [msgs]);
+    if (el && !flow) el.scrollTop = el.scrollHeight;
+  }, [msgs, flow]);
 
   return (
     <div
       data-testid="assist-chat"
       data-chat-id={chatId}
-      className="flex flex-col gap-1.5 overflow-hidden rounded-lg px-3 py-2"
-      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
+      data-flow={flow ? 'true' : undefined}
+      className={flow ? 'flex flex-col gap-2' : 'flex flex-col gap-1.5 overflow-hidden rounded-lg px-3 py-2'}
+      style={flow ? undefined : { border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
     >
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="font-mono text-xs " style={{ color: 'var(--ink-dim)' }}>
-          chat session
-        </span>
-        {Object.entries(seats).map(([k, st]) => (
-          <span
-            key={k}
-            data-testid="assist-chat-seat"
-            data-agent={k}
-            data-state={st}
-            title={st === 'failed' ? `${k} could not hold a session` : `${k} — connected`}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs"
-            style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', opacity: st === 'failed' ? 0.5 : 1 }}
-          >
-            <span
-              aria-hidden
-              className="inline-block h-1.5 w-1.5 rounded-full"
-              style={{ background: st === 'failed' ? 'var(--status-fail)' : 'var(--status-run)' }}
-            />
-            {k}
+      {/* A flowing block draws no seat header. A hidden placeholder keeps its first child a div, the element page-chat.css's
+          `> div:first-child` rule hides (a page chat's header once). */}
+      {flow ? <div hidden /> : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-mono text-xs " style={{ color: 'var(--ink-dim)' }}>
+            chat session
           </span>
-        ))}
-      </div>
-      <div ref={scrollRef} className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+          {Object.entries(seats).map(([k, st]) => (
+            <span
+              key={k}
+              data-testid="assist-chat-seat"
+              data-agent={k}
+              data-state={st}
+              title={st === 'failed' ? `${k} could not hold a session` : `${k} — connected`}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs"
+              style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', opacity: st === 'failed' ? 0.5 : 1 }}
+            >
+              <span
+                aria-hidden
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ background: st === 'failed' ? 'var(--status-fail)' : 'var(--status-run)' }}
+              />
+              {k}
+            </span>
+          ))}
+        </div>
+      )}
+      <div ref={scrollRef} className={flow ? 'flex flex-col gap-2' : 'flex max-h-72 flex-col gap-1.5 overflow-y-auto'}>
         {msgs.length === 0 ? (
           <p data-testid="assist-chat-waiting" className="font-mono text-xs" style={{ color: 'var(--ink-dim)' }}>
             Sent — the agents answer here as their replies stream in.
           </p>
         ) : (
-          msgs.map((m, i) => (
+          msgs.map((m, i) => m.note === true ? (
+            // The dock's own line, the way the thread says it (a send that failed stays under its question).
+            <p key={i} data-testid="assist-note" data-tone="fail" className="font-mono text-xs leading-relaxed" style={{ color: TONE_COLOR.fail }}>
+              · {m.text}
+            </p>
+          ) : (
             // A helper's reply is a bubble on the left (operator 2026-10-16), the operator's own on the right.
             <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending} className={m.cliKey === 'you' ? 'wk-assist-you self-end max-w-[88%] rounded-2xl rounded-tr-md px-3 py-2' : 'self-start max-w-[92%] rounded-2xl rounded-tl-md px-3 py-2'} style={{ background: m.cliKey === 'you' ? 'var(--accent-subtle)' : 'var(--surface-raised)' }}>
               {m.chip !== undefined && <span className="wk-assist-chip" data-testid="assist-msg-chip">{m.chip}</span>}
-              <span className="font-mono text-xs font-semibold" style={{ color: 'var(--accent)' }}>
-                {m.cliKey}
-              </span>
+              {/* A flowing block's own question needs no "you" label: it reads like the first one, on the right. */}
+              {!(flow && m.cliKey === 'you') && (
+                <span className="font-mono text-xs font-semibold" style={{ color: 'var(--accent)' }}>
+                  {m.cliKey}
+                </span>
+              )}
               {!m.pending && !m.ok ? (
                 // A failed turn's text is the daemon's error prose — it stays
                 // verbatim in the fail ink, never dressed as markdown.
@@ -637,8 +682,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   /** A resumed chat's kept history (the system chat's past chats). */
   loadHistory?: ChatHistoryLoader | undefined;
   /** `page`: drawn inside a page (DES-LEARN §6.2): the context label is its own line under the header, the
-   *  chat block is not boxed or capped, follow-ups sit above their answers, and the thread follows the tail. */
-  variant?: 'page' | undefined;
+   *  chat block is not boxed or capped, follow-ups sit above their answers, and the thread follows the tail.
+   *  `window`: the system chat's own window (DES-SYSTEM-CHAT mockup v4): its chat block flows the same way (no seat
+   *  header, no inner scroller), with the window's header and context line as they are. */
+  variant?: 'page' | 'window' | undefined;
   /** Drawn at the end of the thread (a page chat's "What next?" after an answer). */
   threadTail?: React.ReactNode;
   /** Words to put in the box now (a page's "Ask about this"), sent when `send` (the person pressed Ask). */
@@ -651,6 +698,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   composerRef?: React.MutableRefObject<HTMLTextAreaElement | null> | undefined;
 }): React.ReactElement {
   const page = variant === 'page';
+  /** The chat block is the conversation (a page chat or the chat window), not a capped box in a narrow dock. */
+  const flow = page || variant === 'window';
   const [items, setItems] = useState<ThreadItem[]>(() =>
     resumeChatId !== null
       ? [
@@ -663,6 +712,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   /** A page chat's follow-ups, by chat: drawn inside that chat's block. */
   const [inlineTurns, setInlineTurns] = useState<Record<string, InlineTurn[]>>({});
   const turnSeq = useRef(0);
+  /** Chats shown from their kept history that have ended: a failed send never joins one (the next question starts anew). */
+  const endedChats = useRef(new Set<string>());
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   /** File mode: the files the next send uploads (removable chips above the input). Each has its own id:
    *  two different files may share a name and a size. */
@@ -791,6 +842,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     inFlight.current = true;
     setSending(true);
     onStatus?.('thinking');
+    const sentAt = Date.now();
     // An attachment still sitting at the fork when the operator hits send rides as analysis —
     // they attached it and asked; silently dropping it would run a different request.
     const documents = attachments.map((a) => ({ name: a.name, content: a.content }));
@@ -803,9 +855,10 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       const chip = sendChip ?? undefined;
       const launched = await (fileMode ? verbs.send(body, documents, sentFiles) : verbs.send(body, documents));
       const into = 'chatId' in launched ? launched.chatId : null;
-      // A page chat's follow-up into a chat already on screen joins that chat's block (above its answer).
-      if (page && into !== null && itemsRef.current.some((it) => it.kind === 'chat' && it.chatId === into)) {
-        setInlineTurns((cur) => ({ ...cur, [into]: [...(cur[into] ?? []), { id: (turnSeq.current += 1), text: body, files: fileNames, ...(chip !== undefined ? { chip } : {}) }] }));
+      // A follow-up into a chat already on screen joins that chat's block, above its answer: its reply streams into
+      // that block, so a question drawn after the block would sit below its own answer (journey 2026-11-04).
+      if (into !== null && itemsRef.current.some((it) => it.kind === 'chat' && it.chatId === into)) {
+        setInlineTurns((cur) => ({ ...cur, [into]: [...(cur[into] ?? []), { id: (turnSeq.current += 1), text: body, files: fileNames, at: sentAt, ...(chip !== undefined ? { chip } : {}) }] }));
       } else {
         push({ kind: 'user', text: body, files: fileNames, ...(chip !== undefined ? { chip } : {}) });
       }
@@ -833,8 +886,17 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         return;
       }
       const msg = e instanceof Error ? e.message : String(e);
-      push({ kind: 'user', text: body, files: fileNames });
-      note('fail', msg);
+      // A failed follow-up stays where it was asked: when the newest launch on screen is a chat that has not ended
+      // (notes after it do not count), the question and its error join that chat's block, so a retry that succeeds
+      // (it joins the same block) reads after them, not above.
+      const launch = [...itemsRef.current].reverse().find((it) => it.kind === 'chat' || it.kind === 'run');
+      if (launch !== undefined && launch.kind === 'chat' && !endedChats.current.has(launch.chatId)) {
+        const into = launch.chatId;
+        setInlineTurns((cur) => ({ ...cur, [into]: [...(cur[into] ?? []), { id: (turnSeq.current += 1), text: body, files: fileNames, at: sentAt, failed: msg }] }));
+      } else {
+        push({ kind: 'user', text: body, files: fileNames });
+        note('fail', msg);
+      }
       onStatus?.('ready');
       onError?.(msg);
     } finally {
@@ -891,23 +953,24 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per seed
   }, [seed?.nonce]);
 
-  // A page chat follows its tail while an answer streams in, unless the person scrolled up to read.
+  // A flowing chat (page or window) follows its tail while an answer streams in, unless the person scrolled up to read.
   useEffect(() => {
     const el = threadRef.current;
-    if (!page || el === null || typeof MutationObserver === 'undefined') return undefined;
+    if (!flow || el === null || typeof MutationObserver === 'undefined') return undefined;
     let pinned = true;
     const onScroll = (): void => { pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 48; };
     const mo = new MutationObserver(() => { if (pinned) el.scrollTop = el.scrollHeight; });
     mo.observe(el, { childList: true, subtree: true, characterData: true });
     el.addEventListener('scroll', onScroll);
     return () => { mo.disconnect(); el.removeEventListener('scroll', onScroll); };
-  }, [page]);
+  }, [flow]);
 
   /** studio#328: a resumed block's probe answered. Reclaimed → drop the resumed block
    *  (and its "still on the line" note), say so, and let the surface forget it; could
    *  not tell → keep it and show the transient error. */
   const onResumeProbe = (chatId: string, outcome: ResumeProbe): void => {
     if (outcome.kind === 'ended') {
+      endedChats.current.add(chatId);
       // Closed with its history kept: the block stays (read-only), and the next question starts anew.
       setItems((cur) => [
         ...cur.filter((it) => !(it.kind === 'note' && it.text === RESUMED_NOTE)),
@@ -1098,7 +1161,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                 onStatus={onStatus}
                 answerFooter={answerFooter}
                 loadHistory={loadHistory}
-                turns={page ? inlineTurns[item.chatId] : undefined}
+                turns={inlineTurns[item.chatId]}
+                flow={flow}
               />
             );
           }

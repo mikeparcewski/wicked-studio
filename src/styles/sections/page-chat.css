@@ -26,7 +26,6 @@
 .wk-assist--page [data-testid="assist-user-msg"] p { font-size: var(--text-sm); line-height: 1.45; }
 .wk-assist--page [data-testid="assist-chat"] { border: 0 !important; background: transparent !important; padding: 0; overflow: visible; gap: 12px; }
 .wk-assist--page [data-testid="assist-chat"] > div:first-child { display: none; }
-.wk-assist--page [data-testid="assist-chat"] .max-h-72 { max-height: none; overflow: visible; gap: 12px; }
 .wk-assist--page [data-testid="assist-chat-msg"] { background: transparent !important; padding: 0; max-width: 100%; border-radius: 0; }
 .wk-assist--page [data-testid="assist-chat-msg"] .text-\[11px\] { font-size: var(--text-sm); line-height: 1.55; color: var(--ink-body); }
 .wk-assist--page [data-testid="assist-chat-msg"] > span.font-mono { font-family: inherit; font-size: var(--text-xs); color: var(--ink-high); }

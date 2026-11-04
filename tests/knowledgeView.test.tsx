@@ -148,6 +148,8 @@ describe('Understand → Knowledge', () => {
     const review = await screen.findByTestId('proposals-section');
     expect(review.getAttribute('data-kind')).toBe('knowledge');
     const cards = await within(review).findAllByTestId('proposal-card');
+    // It holds every knowledge proposal (data shapes and agents' notes), so its heading names neither alone.
+    expect(within(review).getByRole('heading').textContent).toContain('Knowledge to review');
     expect(cards.map((c) => c.getAttribute('data-proposal-id'))).toEqual(['p-pend']);
     expect(within(cards[0]!).getByTestId('proposal-kind-chip').textContent).toBe('Data shape');
     expect(within(cards[0]!).getByTestId('proposal-knowledge-subject').textContent).toContain('support.assignments');
@@ -273,6 +275,36 @@ describe('Understand → Knowledge', () => {
     const p = readSourceProfile({ name: 'pg', relations: [{ key: 's.t', rows: '1-99', columns: [{ name: 'c', cardinality: ['unique'] }, { name: 'd', cardinality: { toString: null } }] }], proposed: [], joins: [{ from: 's.t', to: 's.u', overlap: ['all'] }, { from: 's.t', to: 's.v', overlap: { toString: null } }] });
     expect(p.relations[0]!.columns.map((c) => c.cardinality)).toEqual(['unknown', 'unknown']);
     expect(p.joins.map((j) => j.overlap)).toEqual([null, null]);
+  });
+
+  // Journey 2026-11-04 (apps-k5-chat, shot 8-knowledge-before): all 30 cards in Understand's review said "Data shape",
+  // though 24 were knowledge notes agents filed about repositories (one a "__PROBE__ test"). Payloads as :7721 held them.
+  it('labels each knowledge proposal by what it is: only one that links something is a data shape', () => {
+    const note = (id: string, content: string, source: string, rev: string, agent: string): Proposal => ({
+      id, kind_type: 'knowledge', payload: { content, class: 'concept', source, source_rev: rev },
+      facets: { project: 'wicked-core', repo: 'wicked-core' }, provenance: { run_agent: agent, run_id: 'r-1' }, state: 'pending', created_at: 1_700_000_000,
+    });
+    const gardenShape: Proposal = {
+      id: 'p-garden', kind_type: 'knowledge', facets: {}, provenance: { run_agent: 'claude', run_id: 'r-2' }, state: 'pending', created_at: 1_700_000_000,
+      // Only `relate_code` (review r2: each link key on its own makes a shape).
+      payload: { content: 'support.tickets: one row per ticket.', source: 'garden:data-shapes/support-pg/support.tickets', class: 'concept', scope: `source:${SID}`, capture: 'shapes', relate_code: [{ rel: 'describes', code_id: 'x', repo: 'escalations' }] },
+    };
+    const cards = [
+      note('p-probe', '__PROBE__ test', 'wicked-core:src/actor.rs', 'probe', 'pi'),
+      note('p-note', 'src/actor.rs single-writer model: one thread owns the writable store.', 'wicked-core:src/actor.rs', 'a340826', 'pi'),
+      shapeProposal('p-shape', 'support.assignments', 'support.tickets'),
+      gardenShape,
+    ];
+    render(<ProposalsList proposals={cards} loading={false} error={null} decidingIds={new Set()} onApprove={() => undefined} onReject={() => undefined} />);
+    const shown = screen.getAllByTestId('proposal-card').map((c) => [c.getAttribute('data-proposal-id'), within(c).getByTestId('proposal-kind-chip').textContent]);
+    expect(shown).toEqual([['p-probe', 'Knowledge note'], ['p-note', 'Knowledge note'], ['p-shape', 'Data shape'], ['p-garden', 'Data shape']]);
+    // A note is never promised a place on the map; a shape is.
+    const effect = (id: string): string => within(screen.getAllByTestId('proposal-card').find((c) => c.getAttribute('data-proposal-id') === id)!).getByTestId('proposal-knowledge-effect').textContent ?? '';
+    expect(effect('p-note')).toContain('the Knowledge map does not draw it');
+    expect(effect('p-shape')).toContain('Approving adds it to the Knowledge map');
+    // The needs-you line says the same.
+    expect(proposalConsequenceLine(cards[1]!)).toBe('Adds a knowledge note agents recall; no rule changes');
+    expect(proposalConsequenceLine(cards[3]!)).toBe('Adds a data shape to the Knowledge map; no rule changes');
   });
 
   it('a data shape takes no memory or policy path: its consequence is its own, and it is reviewed in the Knowledge map', () => {

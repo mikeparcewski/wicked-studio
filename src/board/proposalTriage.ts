@@ -1,4 +1,5 @@
 import { policyPayload, policySteeringType, proposalKind, type Proposal } from '../api/proposals.js';
+import { knowledgeKind } from '../api/knowledgeShapes.js';
 
 /**
  * TRIAGE BY CONSEQUENCE (studio Wave B, idea 4) — the pending-proposal queue split by what an
@@ -71,7 +72,9 @@ export function proposalConsequenceLine(p: Proposal): string {
     // ledger backs says "From your words" (needsYou.ts, with the ledger's own statement).
     return `Adds ${what}${captured === 'rule' ? ' from your capture' : ''}`;
   }
-  if (proposalKind(p) === 'knowledge') return 'Adds a data shape to the Knowledge map; no rule changes';
+  if (proposalKind(p) === 'knowledge') {
+    return knowledgeKind(p) === 'shape' ? 'Adds a data shape to the Knowledge map; no rule changes' : 'Adds a knowledge note agents recall; no rule changes';
+  }
   return `Unknown kind "${p.kind_type}" — review it`;
 }
 
