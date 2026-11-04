@@ -226,6 +226,7 @@ from pathlib import Path
 
 import chat_native_corpus  # noqa: E402 — e2e/ is on sys.path for every rig (they import this module from there)
 import power_mode_corpus  # noqa: E402 — the power-mode run page (switch `power_mode`)
+import apps_fixture  # noqa: E402 — crew's app store and app data routes (switch `apps`; DES-APPS-001 K4)
 
 REPO = Path(__file__).resolve().parent.parent
 SHOTS = REPO / "e2e" / "shots" / "uxfix"
@@ -1115,6 +1116,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   byte for byte (e2e/editor-fixtures/changelog-entry.html), and its grants are crew's decided set for
          #   it (ui.fullscreen, allowed by EDITOR-OPEN-DEFAULTS).
          "installed_editor": False,
+         # apps — (DES-APPS-001 K4, e2e/apps_runtime_test.py) crew's app store and the app data routes, in
+         #   e2e/apps_fixture.py: GET /api/v1/apps/<slug>, POST edits/undo/redo (409 stale_base, one undo pointer),
+         #   query, actions/<id>/prepare and run; GET /health.capabilities.apps; GET /__fixture/apps-framer?src=
+         #   (a same-origin page framing studio). Every call is recorded (GET /__fixture/apps-calls). Off: no app routes.
+         "apps": False,
          }
 state_lock = threading.Lock()
 # mcp_inspect: the fake bridge's sessions (id -> dict) and the writes it received.
@@ -6398,6 +6404,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                     caps["askPath"] = True  # ASK-C1 (api-types 0.92.0)
                 if state["sessions"] and state["walkthrough"]:
                     caps["walkthroughRoots"] = True  # WT-W1 (api-types 0.74.0)
+                apps_on = state["apps"]
                 if state["chat_native"]:
                     caps["launchPrimary"] = True  # the Lead agent (crew#1077, api-types 0.128.0)
                 if state["power_mode"]:
@@ -6405,6 +6412,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                     # GET /system answers as crew will once wicked-crew#1206 lands: a paused power run waits on you.
                     caps["system"] = True
                     caps["attentionRanked"] = True
+            if apps_on:
+                caps["apps"] = apps_fixture.capabilities()  # DES-APPS-001 (api-types 0.172.0)
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong", "capabilities": caps})
             return True
         # Idea 15: the delivery freeze switch (crew#694).
@@ -8805,6 +8814,22 @@ class W2Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"posts": posts})
         if (path == "/api/v1/editors" or path.startswith("/api/v1/editors/")) and self._editor_routes(path):
             return None
+        if path == "/api/v1/apps" or path.startswith("/api/v1/apps/") or path.startswith("/__fixture/apps"):
+            with state_lock:
+                apps_on = state["apps"]
+            if apps_on:
+                if path == "/__fixture/apps-framer":
+                    src = (urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("src") or ["/"])[0]
+                    page = apps_fixture.framer_html(src if src.startswith("/") and not src.startswith("//") else "/").encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(page)))
+                    self.end_headers()
+                    self.wfile.write(page)
+                    return None
+                answered = apps_fixture.handle("GET", path, None)
+                if answered is not None:
+                    return self._json(*answered)
         if self._api(path):
             return None
         if not Path(self.translate_path(self.path)).is_file():
@@ -9070,6 +9095,13 @@ class W2Handler(SimpleHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if path.startswith("/api/v1/mcp-inspect/") and self._mcp_inspect("POST", path, body):
             return None
+        if path.startswith("/api/v1/apps/") or path.startswith("/__fixture/apps"):
+            with state_lock:
+                apps_on = state["apps"]
+            if apps_on:
+                answered = apps_fixture.handle("POST", path, body)
+                if answered is not None:
+                    return self._json(*answered)
         if path == "/api/v1/testing/corpora/import":
             with state_lock:
                 on = state["eval_plan"]

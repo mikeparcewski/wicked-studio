@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
+import { AppsPage } from './components/apps/AppsPage.js';
+import { AppRoutePage } from './components/apps/AppRoutePage.js';
 import { useHostChrome } from './editors/hostApi.js';
 import { AskDock } from './components/AskDock.js';
 import { PageChatColumn } from './components/chat/PageChat.js';
@@ -627,6 +629,12 @@ export function App(): React.ReactElement {
           navigate={navigate}
         />
       );
+    }
+    // `/apps` (DES-APPS-001): the apps dashboard; `/apps/<slug>` one app in the runtime.
+    if (panel === 'apps') {
+      return artifactId === null
+        ? <div className="flex-1 overflow-y-auto"><AppsPage navigate={navigate} /></div>
+        : <AppRoutePage slug={artifactId} search={search} navigate={navigate} />;
     }
     // `/editors/{dev,conformance}` (EP-P1): one editor plugin in its sandboxed host, behind a dev route.
     if (panel === 'editors' && (artifactId === 'dev' || artifactId === 'conformance')) {

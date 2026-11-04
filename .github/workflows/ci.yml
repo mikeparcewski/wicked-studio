@@ -128,3 +128,49 @@ jobs:
           name: journey-shots-desk-${{ strategy.job-index }}
           path: e2e/shots/
           if-no-files-found: ignore
+
+  # DES-APPS-001 K4: the Apps runtime journey in the two engines the desk journeys do not run (chromium runs it in the
+  # desk shards). Its acceptance is per browser: hostile values as text, CSSOM only, the host's refusals, the card,
+  # one version per drag, two tabs agreeing.
+  apps-runtime-engines:
+    name: apps runtime (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [firefox, webkit]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install (clean, from lockfile)
+        run: npm ci
+
+      - name: Install Python Playwright + ${{ matrix.browser }}
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Same-origin build
+        run: VITE_API_HOST= npx vite build --outDir dist-sameorigin
+
+      - name: Apps runtime journey
+        run: SKIP_STUDIO_BUILD=1 python e2e/apps_runtime_test.py --browser ${{ matrix.browser }}
+
+      - name: Upload screenshots
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: apps-runtime-${{ matrix.browser }}
+          path: e2e/shots/
+          if-no-files-found: ignore

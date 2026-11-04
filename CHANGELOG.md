@@ -55,6 +55,40 @@ npm publish dates. Every version listed here exists on
   the sources as chips (a struck one with crew's reason), the repositories and two helpers. Make it answers the
   proposal with only what changed and never creates a document itself. A refusal is shown in crew's words: in the
   form while the proposal is still open, else under the card. Under the test configuration, the "starts nothing" notice follows `capabilities.chatArtifacts.stubOps`.
+- **Apps: the `wicked-apps` runtime and the app host (DES-APPS-001 slice K4).** A first-party editor plugin of kind
+  `app` interprets an app's spec (pages of tables, charts, KPIs, text, filters, forms, buttons, images and links on a
+  12-column grid) and nothing else: no agent code runs, every value renders as text, and it styles itself only through
+  its one stylesheet's CSSOM (no `style` attribute anywhere). **Preview** is the app as a viewer gets it; **Edit** has
+  a palette, drag to move, a corner to resize and a Properties panel, and each gesture is one spec op on the version
+  shown. The host applies the ops to its own copy of the spec, lands an edit burst (1 s) as ONE version through
+  crew's `POST /apps/:app/edits` with its base, and moves Undo and Redo on crew's pointer, so tabs agree. Live rows
+  (`data.query`) and actions (`data.action`) go through one data seam: crew's routes once `capabilities.apps.query` /
+  `.actions` say crew runs them, sample rows and a sample card until then. Before an action runs, studio draws the
+  card outside the app (the operation, every value and where it comes from, the request as sent) and runs it only on
+  the person's Run there; a framed studio refuses every action. A link opens only an https host the app lists, after
+  studio shows the whole address. It opens from Settings → Developer → Editor plugins → "Try it on a sample app".
+  Its data permissions are the app host's own: crew's registry does not list them yet.
+- **Apps under Work, a dashboard of apps, inline edits and Share (DES-APPS-001 slice K4, operator 2026-11-03).**
+  - **Apps** sits under Work between Jobs and Repositories. `/apps` is a dashboard of the apps: one card each, with a
+    small read-only preview of its first page drawn by the runtime, its headline numbers, its version and receipt, when
+    it last changed and the sources it reads. Studio lists crew's apps when crew reports the apps capability, and the
+    two sample apps (marked as samples, with sample numbers) until then. Drawing a card never starts a source read: with
+    crew's apps a card shows no numbers until the app is opened. Every app crew lists gets a card. The first 24 get a
+    preview, and a card whose details can't be read says so. A daemon that doesn't answer shows an error with Try
+    again, never the samples. A card opens `/apps/<slug>` in Preview; its Edit link opens `?mode=edit`.
+  - **Inline edits:** in Edit, double-click (or double-tap) a chart or table title, a KPI label, a Text's words, or a
+    Button's, Link's or Filter's label to change it in place. Enter or leaving the field keeps the change, and Escape
+    drops it. Each change is one spec op, and it lands in a version with the rest of its edit burst, as every other
+    edit does. The field stays open while the person's own changes land, and closes with nothing sent if another tab
+    changes those words first. Properties stays for the rest. The header says "Changes save as you make them · Undo
+    to go back".
+  - **Share** in the app header and on each card. If crew reports a published copy (`AppDetail.published`, the record
+    K6 proposed), the sheet gives its link and its embed snippet, each with Copy, plus who can open it and the version
+    published and when. Until then it says plainly that others need a published copy, which Publish will build. The
+    Publish button is disabled ("Coming with Publish"), and the only link offered is this studio's own address,
+    labelled as such.
+  - **Edits from the frame:** the 1.5 s after focus leaves an app's frame counts only from the last moment the frame
+    held both focus and the person's activation, so a click on studio's chrome after an idle frame grants it nothing.
 
 ### Changed
 - **The type and the marks (fonts-v3, the operator's pick 2026-11-02).** The text face is Wicked Sans A, an OFL cut

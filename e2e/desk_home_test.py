@@ -222,7 +222,7 @@ with sync_playwright() as p:
     dests = page.evaluate("""() => [...document.querySelectorAll(
       '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)""")
     # DES-LEARN §3.0: a fresh fixture has never used Learn, so it leads Work, above Projects.
-    expected = ["page:home", "page:learn", "page:projects", "page:jobs", "page:repos", "page:report", "page:understand", "page:evaluate",
+    expected = ["page:home", "page:learn", "page:projects", "page:jobs", "page:apps", "page:repos", "page:report", "page:understand", "page:evaluate",
                 "page:steering", "page:memory", "page:agents", "page:build", "watch"]
     page.get_by_test_id("desk-rail-build").click()
     page.get_by_test_id("build-link-settings").click()

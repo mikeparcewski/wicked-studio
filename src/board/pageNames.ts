@@ -12,6 +12,8 @@ export const PAGE_NAMES = {
   /** `/needs` — everything waiting on you, in full (the landing's "N more waiting"). */
   needs: 'Needs you',
   jobs: 'Jobs',
+  /** `/apps` — the apps, as a dashboard of them (DES-APPS-001; `/apps/<slug>` is one app). */
+  apps: 'Apps',
   report: 'Report',
   understand: 'Understand',
   build: 'Build & settings',
@@ -40,6 +42,7 @@ export const PAGE_NAMES = {
 const BY_PATH: ReadonlyArray<[string, string]> = [
   ['/needs', PAGE_NAMES.needs],
   ['/jobs', PAGE_NAMES.jobs],
+  ['/apps', PAGE_NAMES.apps],
   ['/report', PAGE_NAMES.report],
   ['/understand', PAGE_NAMES.understand],
   ['/build', PAGE_NAMES.build],

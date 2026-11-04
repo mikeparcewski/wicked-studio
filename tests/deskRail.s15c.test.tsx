@@ -31,16 +31,16 @@ function rail(pathname = '/'): ReturnType<typeof render> {
 }
 
 describe('the rail, top to bottom', () => {
-  it('wordmark · New job · New project · the nine pages in three groups · Build & settings · Nerve Center', () => {
+  it('wordmark · New job · New project · the ten pages in three groups · Build & settings · Nerve Center', () => {
     rail();
     const nav = screen.getByTestId('session-rail');
-    const pages = ['nav-projects', 'nav-jobs', 'nav-repos', 'nav-report', 'nav-understand', 'nav-evaluate', 'nav-learn', 'nav-steering', 'nav-memory', 'nav-agents'];
+    const pages = ['nav-projects', 'nav-jobs', 'nav-apps', 'nav-repos', 'nav-report', 'nav-understand', 'nav-evaluate', 'nav-learn', 'nav-steering', 'nav-memory', 'nav-agents'];
     const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', ...pages, 'desk-rail-build', 'desk-rail-nerve'];
     const order = [...nav.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => ids.includes(id));
     expect(order).toEqual(ids);
     // The groups, their small-caps labels and their pages, in the mockup's words.
     expect(NAV_GROUPS.map((g) => [g.label, g.items.map((i) => i.label)])).toEqual([
-      ['Work', ['Projects', 'Jobs', 'Repositories']], ['Insight', ['Report', 'Understand', 'Evaluate']], ['Govern', ['Steering', 'Memory', 'Agents']],
+      ['Work', ['Projects', 'Jobs', 'Apps', 'Repositories']], ['Insight', ['Report', 'Understand', 'Evaluate']], ['Govern', ['Steering', 'Memory', 'Agents']],
     ]);
     for (const g of navGroups('insight')) {
       const group = screen.getByRole('group', { name: g.label });
@@ -72,11 +72,11 @@ describe('the rail, top to bottom', () => {
   it('the rail entries carry the skin contract\'s nav-dest marks', () => {
     rail();
     const dests = [...screen.getByTestId('session-rail').querySelectorAll('[data-nav-dest]')].map((e) => e.getAttribute('data-nav-dest'));
-    expect(dests).toEqual(['page:home', 'page:projects', 'page:jobs', 'page:repos', 'page:report', 'page:understand', 'page:evaluate', 'page:learn', 'page:steering', 'page:memory', 'page:agents', 'page:build', 'watch']);
+    expect(dests).toEqual(['page:home', 'page:projects', 'page:jobs', 'page:apps', 'page:repos', 'page:report', 'page:understand', 'page:evaluate', 'page:learn', 'page:steering', 'page:memory', 'page:agents', 'page:build', 'watch']);
   });
 
   it.each([
-    ['/', 'desk-rail-wordmark'], ['/needs', 'desk-rail-wordmark'], ['/projects', 'nav-projects'], ['/projects/p1', 'nav-projects'], ['/jobs', 'nav-jobs'], ['/repos', 'nav-repos'], ['/repo-detail/r1', 'nav-repos'], ['/report', 'nav-report'],
+    ['/', 'desk-rail-wordmark'], ['/needs', 'desk-rail-wordmark'], ['/projects', 'nav-projects'], ['/projects/p1', 'nav-projects'], ['/jobs', 'nav-jobs'], ['/apps', 'nav-apps'], ['/apps/escalations', 'nav-apps'], ['/repos', 'nav-repos'], ['/repo-detail/r1', 'nav-repos'], ['/report', 'nav-report'],
     ['/understand', 'nav-understand'], ['/testing/evals', 'nav-evaluate'], ['/rules/R1', 'nav-steering'], ['/steering/proposals', 'nav-steering'],
     ['/memory', 'nav-memory'], ['/agents', 'nav-agents'], ['/build', 'desk-rail-build'], ['/system', 'desk-rail-build'], ['/skills', 'desk-rail-build'],
     ['/mcp/inspect', 'desk-rail-build'], ['/plugins', 'desk-rail-build'], ['/workflows', 'desk-rail-build'],
@@ -103,7 +103,7 @@ describe('Learn in the rail (DES-LEARN §3.0)', () => {
     useFirstRun.setState({ read: 'ok', state: {} });
     rail();
     const work = screen.getByRole('group', { name: 'Work' });
-    expect([...work.querySelectorAll('a')].map((a) => a.getAttribute('data-testid'))).toEqual(['nav-learn', 'nav-projects', 'nav-jobs', 'nav-repos']);
+    expect([...work.querySelectorAll('a')].map((a) => a.getAttribute('data-testid'))).toEqual(['nav-learn', 'nav-projects', 'nav-jobs', 'nav-apps', 'nav-repos']);
     expect(screen.getByTestId('nav-learn-mark')).toHaveTextContent('Start here');
     expect(screen.getByTestId('nav-learn')).toHaveAttribute('href', '/learn');
   });

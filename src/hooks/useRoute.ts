@@ -46,10 +46,10 @@ import { announceHistoryChange, announceNavigateAway, inAppEntryState, isInAppEn
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'needs' | 'projects' | 'jobs' | 'report' | 'understand' | 'build' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'memory' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'agents' | 'learn' | 'insights' | 'health' | 'sources' | 'not-found';
+export type Panel = 'home' | 'needs' | 'projects' | 'jobs' | 'report' | 'understand' | 'build' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'memory' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'project-requirements' | 'plugins' | 'agents' | 'learn' | 'insights' | 'health' | 'sources' | 'apps' | 'not-found';
 
 /** Every panel, exhaustively (the compile-time check below fails when the union grows without it). */
-export const ALL_PANELS = ['home', 'needs', 'projects', 'jobs', 'report', 'understand', 'build', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'memory', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'agents', 'learn', 'insights', 'health', 'sources', 'not-found'] as const satisfies readonly Panel[];
+export const ALL_PANELS = ['home', 'needs', 'projects', 'jobs', 'report', 'understand', 'build', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'memory', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'project-requirements', 'plugins', 'agents', 'learn', 'insights', 'health', 'sources', 'apps', 'not-found'] as const satisfies readonly Panel[];
 type MissingPanel = Exclude<Panel, (typeof ALL_PANELS)[number]>;
 export const PANELS_EXHAUSTIVE: MissingPanel extends never ? true : MissingPanel = true;
 
@@ -271,6 +271,11 @@ function parse(pathname: string): Route {
   // host's chrome. Under the MCP page (its rail item stays current); `?server=` preselects a server.
   if (first === 'mcp' && second === 'inspect' && !third) {
     return route({ panel: 'mcp', artifactId: 'inspect' });
+  }
+  // `/apps` — the apps dashboard; `/apps/<slug>` one app (DES-APPS-001; `?mode=edit` opens it in Edit).
+  if (first === 'apps') {
+    if (!second) return restEmpty(2) ? route({ panel: 'apps' }) : route({ panel: 'not-found' });
+    return third ? route({ panel: 'not-found' }) : route({ panel: 'apps', artifactId: safeDecode(second) });
   }
   if (first === 'editors' && (second === 'dev' || second === 'conformance') && !third) {
     return route({ panel: 'editors', artifactId: second });

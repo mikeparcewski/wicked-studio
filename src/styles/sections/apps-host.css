@@ -1,0 +1,109 @@
+/* DES-APPS-001 K4 — the app host: the header, the frame and the "Needs you" dock with the action card. Everything here
+   is the HOST's chrome around the wicked-apps frame (mockup states B, C, E). Tokens only. */
+.wk-editor-page--app { display: flex; padding: 0; gap: 0; }
+.wk-apps-host { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.wk-apps-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--border); min-width: 0; flex-wrap: wrap; }
+.wk-apps-crumb { color: var(--ink-muted); font-size: var(--text-body); }
+.wk-apps-title { color: var(--ink-high); font-size: var(--text-section); font-weight: var(--weight-strong); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-apps-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--ink-body); font-size: var(--text-caption); white-space: nowrap; }
+.wk-apps-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--status-ok); }
+.wk-apps-history { display: inline-flex; gap: var(--space-1); }
+.wk-apps-spacer { flex: 1 1 auto; }
+.wk-apps-line { margin: 0; padding: var(--space-2) var(--space-5); color: var(--ink-body); font-size: var(--text-caption); border-bottom: 1px solid var(--border); }
+.wk-apps-line--note { color: var(--ink-muted); }
+.wk-apps-line--fail { color: var(--status-fail); }
+.wk-apps-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+/* Edit: the builder takes the whole width (actions run only in Preview, so the dock waits there). */
+.wk-apps-body[data-mode='edit'] { grid-template-columns: minmax(0, 1fr); }
+.wk-apps-body[data-mode='edit'] .wk-apps-dock { display: none; }
+.wk-apps-frame { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.wk-apps-frame-box { flex: 1 1 auto; min-height: 0; display: flex; }
+.wk-apps-frame-box .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 420px; border: 0; background: var(--surface-base); }
+.wk-apps-dock { min-width: 0; overflow: auto; padding: var(--space-4); border-left: 1px solid var(--border); background: var(--surface-base); display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-apps-dock-title { margin: 0; display: flex; align-items: baseline; justify-content: space-between; color: var(--ink-high); font-size: var(--text-body); font-weight: var(--weight-strong); }
+.wk-apps-dock-count { color: var(--ink-muted); font-size: var(--text-caption); font-weight: var(--weight-regular); }
+.wk-apps-dock-hint, .wk-apps-outcome { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-apps-outcome { color: var(--ink-body); }
+/* The line's placeholder is the same box as a chip (padding, border, size), so selecting a component moves nothing. */
+.wk-apps-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.wk-apps-chips .wk-apps-line--note { padding: 2px 0; border: 1px solid transparent; font-size: var(--text-xs); color: var(--ink-muted); }
+/* The card: drawn by the host from the resolved operation (§7.3). Every value is text. */
+.wk-apps-card { border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-card); overflow: hidden; }
+.wk-apps-card-head { padding: var(--space-3) var(--space-4); background: var(--accent-wash); color: var(--ink-high); font-size: var(--text-lead); font-weight: var(--weight-strong); }
+.wk-apps-card-lock, .wk-apps-card-sample, .wk-apps-card-checks, .wk-apps-card-says, .wk-apps-card-note { margin: var(--space-2) var(--space-4) 0; color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-apps-card-sample { color: var(--status-warn); }
+.wk-apps-card-checks { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--ink-body); }
+.wk-apps-card-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px var(--space-3); margin: var(--space-3) var(--space-4) 0; font-size: var(--text-caption); }
+.wk-apps-card-row { display: contents; }
+.wk-apps-card-rows dt { color: var(--ink-muted); }
+.wk-apps-card-rows dd { margin: 0; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-apps-card-from { color: var(--ink-muted); }
+.wk-apps-card-request { margin: var(--space-3) var(--space-4) 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-code); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-apps-card-foot { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+.wk-apps-card-expiry { margin-left: auto; color: var(--ink-muted); font-size: var(--text-caption); }
+/* Phone (DES §6.1): Preview only; the dock is a sheet over the bottom, shown only while something waits. */
+@media (max-width: 639px) {
+  .wk-apps-head { padding: var(--space-2) var(--space-3); gap: var(--space-2); }
+  .wk-apps-crumb, .wk-apps-history { display: none; }
+  .wk-apps-title { font-size: var(--text-lead); }
+  .wk-apps-line { padding: var(--space-2) var(--space-3); }
+  .wk-apps-body { grid-template-columns: minmax(0, 1fr); }
+  .wk-apps-frame-box .wk-editor-frame { min-height: 0; }
+  .wk-apps-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 44; max-height: 72vh; border-left: 0; border-top: 1px solid var(--border-strong); box-shadow: var(--shadow-card); }
+  .wk-apps-dock--quiet { display: none; }
+}
+.wk-apps-hint { color: var(--ink-muted); font-size: var(--text-caption); white-space: nowrap; }
+.wk-apps-route { flex: 1 1 auto; min-height: 0; display: flex; }
+.wk-apps-route--msg { flex-direction: column; gap: var(--space-2); padding: var(--space-6); color: var(--ink-body); font-size: var(--text-body); }
+
+/* The Apps dashboard (operator 2026-11-03): one card per app, in a grid that is 3-4 across at 1440, 2 at 1024, 1 on
+   phones. A card is the app's own dashboard look: its first page in a read-only frame, its KPIs, its state. */
+.wk-apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
+.wk-apps-dash-line { margin: 0 0 var(--space-3); color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-apps-dash-line--fail { color: var(--status-fail); }
+.wk-appcard { position: relative; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-card); overflow: hidden; }
+.wk-appcard:hover { border-color: var(--border-strong); }
+.wk-appcard:focus-within { box-shadow: var(--focus-ring); }
+.wk-appcard--ghost { min-height: 260px; background: var(--surface-raised); }
+.wk-appcard--empty { justify-content: flex-end; }
+.wk-appcard-prev { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: var(--surface-base); border-bottom: 1px solid var(--border); container-type: inline-size; }
+/* The frame is the app at desktop width (so its own layout is the desktop one), scaled to the card. */
+.wk-appcard-frame { position: absolute; inset: 0; pointer-events: none; }
+.wk-appcard-frame .wk-editor-frame { position: absolute; top: 0; left: 0; width: 1200px; height: 675px; border: 0; transform: scale(0.3); transform-origin: 0 0; pointer-events: none; background: var(--surface-base); }
+@container (max-width: 330px) { .wk-appcard-frame .wk-editor-frame { transform: scale(0.27); } }
+@container (min-width: 400px) { .wk-appcard-frame .wk-editor-frame { transform: scale(0.34); } }
+@container (min-width: 460px) { .wk-appcard-frame .wk-editor-frame { transform: scale(0.385); } }
+.wk-appcard-noprev { position: absolute; inset: auto var(--space-3) var(--space-3); margin: 0; color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-appcard-prev--ghost { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); padding: var(--space-3); aspect-ratio: 16 / 9; }
+.wk-appcard-prev--ghost i { border-radius: var(--radius-md); background: color-mix(in srgb, var(--ink-muted) 14%, transparent); }
+.wk-appcard-body { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-4); }
+.wk-appcard-titlerow { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.wk-appcard-open { min-width: 0; color: inherit; text-decoration: none; }
+/* The whole card opens the app; Edit and Share sit above that. */
+.wk-appcard-open::after { content: ""; position: absolute; inset: 0; z-index: 0; }
+.wk-appcard-open:focus-visible { outline: none; }
+.wk-appcard-name { margin: 0; color: var(--ink-high); font-size: var(--text-lead); font-weight: var(--weight-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-appcard-desc { margin: 0; color: var(--ink-body); font-size: var(--text-caption); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wk-appcard-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-1) 0 0; }
+.wk-appcard-kpi { min-width: 0; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-base); }
+.wk-appcard-kpi dt { color: var(--ink-muted); font-size: var(--text-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-appcard-kpi dd { margin: 0; color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-lead); font-weight: var(--weight-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-appcard-muted, .wk-appcard-meta { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.wk-appcard-actions { position: relative; z-index: 1; display: flex; gap: var(--space-2); margin-top: var(--space-1); }
+
+/* Share: a sheet over the page, drawn by studio. */
+.wk-share-scrim { position: fixed; inset: 0; z-index: 46; display: flex; align-items: center; justify-content: center; padding: var(--space-4); background: color-mix(in srgb, var(--surface-base) 62%, transparent); }
+.wk-share { width: min(560px, 100%); max-height: 90vh; overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-overlay); }
+.wk-share-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.wk-share-title { margin: 0; color: var(--ink-high); font-size: var(--text-section); font-weight: var(--weight-strong); overflow-wrap: anywhere; }
+.wk-share-lead { margin: 0; color: var(--ink-high); font-size: var(--text-body); }
+.wk-share-body, .wk-share-meta { margin: 0; color: var(--ink-body); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.wk-share-k { color: var(--ink-muted); }
+.wk-share-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.wk-share-label { color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-share-copy { display: flex; align-items: flex-start; gap: var(--space-2); }
+.wk-share-field { flex: 1 1 auto; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-code); }
+.wk-share-field--multi { resize: vertical; white-space: pre-wrap; word-break: break-all; }
+.wk-share-note { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-share-actions { display: flex; align-items: center; gap: var(--space-2); }
+@media (max-width: 639px) { .wk-apps-hint { display: none; } }

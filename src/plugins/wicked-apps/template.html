@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="wicked-editor" content="wicked-apps">
+<meta name="wicked-editor-version" content="__VERSION__">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App</title>
+<!-- THE one stylesheet (DES-APPS-001 §7.1). The runtime adds its geometry and colours to THIS sheet through the CSSOM
+     only (runtime/sheet.ts); no element ever carries a style attribute. -->
+<style id="wk-apps-sheet">
+  :root {
+    --surface-base: #ffffff; --surface-card: #f6f7f9; --surface-raised: #ffffff; --ink-high: #0d1117; --ink-body: #24292f;
+    --ink-muted: #5b6673; --border: #d5dae1; --accent: #224a5e; --accent-fg: #ffffff; --status-fail: #b4232c; --status-ok: #1a7f37;
+    --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif; --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+    --s0: #4c9be8; --s1: #a78bfa; --s2: #f59e0b; --s3: #34d399; --s4: #f87171; --s5: #60a5fa;
+    --s6: #f472b6; --s7: #a3e635; --s8: #fb923c; --s9: #22d3ee; --s10: #c084fc; --s11: #94a3b8;
+    --row: 44px; --gap: 12px; --radius: 10px;
+    /* The app's own accent (theme.accent, set through the CSSOM) over the host's. */
+    --ui-accent: var(--app-accent, var(--accent));
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 13px/1.4 var(--font-sans); color: var(--ink-high); background: var(--surface-base); overflow: hidden; }
+  .wk-app { display: flex; height: 100%; min-width: 0; }
+  .wk-main { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 14px 18px 24px; }
+  .wk-app[data-mode="edit"] .wk-main {
+    background-image: radial-gradient(circle, color-mix(in srgb, var(--ink-muted) 28%, transparent) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+  .wk-pages { display: flex; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--border); }
+  .wk-page { font: inherit; font-size: 14px; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--ink-muted); cursor: pointer; }
+  .wk-page.is-on { color: var(--ink-high); border-bottom-color: var(--ink-high); font-weight: 600; }
+  .wk-page:focus-visible, .wk-btn:focus-visible, .wk-tile:focus-visible, .wk-link:focus-visible, .wk-cell:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+  .wk-grid { position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: var(--row); gap: var(--gap); }
+  .wk-cell { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
+  .wk-cell--filter, .wk-cell--button, .wk-cell--link, .wk-cell--text { background: none; border-color: transparent; padding: 4px 2px; }
+  .wk-cell-title { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-body); }
+  .wk-cell-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .wk-cell.is-editable { cursor: grab; }
+  .wk-cell.is-editable:hover { border-color: color-mix(in srgb, var(--ui-accent) 55%, var(--border)); }
+  .wk-cell.is-dragging { cursor: grabbing; opacity: .85; z-index: 3; }
+  .wk-cell.is-selected { border: 2px solid var(--s0); padding: 9px 13px; z-index: 2; }
+  .wk-tag { position: absolute; right: 6px; top: 4px; display: none; font-size: 11px; padding: 1px 6px; border-radius: 4px;
+    background: var(--s0); color: #0b1a2a; pointer-events: none; }
+  .wk-cell.is-editable:hover .wk-tag, .wk-cell.is-selected .wk-tag { display: block; }
+  .wk-handle { position: absolute; right: 2px; bottom: 2px; width: 12px; height: 12px; border-radius: 2px; background: var(--s0); cursor: nwse-resize; opacity: 0; }
+  .wk-cell.is-editable:hover .wk-handle, .wk-cell.is-selected .wk-handle { opacity: 1; }
+  .wk-drop { border: 2px dashed var(--s0); border-radius: var(--radius); background: color-mix(in srgb, var(--s0) 12%, transparent); pointer-events: none; }
+  .wk-kpi-value { font: 600 30px/1.1 var(--font-mono); color: var(--ink-high); }
+  .wk-kpi-caption { margin-top: 4px; font-size: 12px; color: var(--ink-muted); }
+  .wk-delta--up { color: var(--status-fail); }
+  .wk-delta--down { color: var(--status-ok); }
+  .wk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .wk-table th { text-align: left; font-weight: 500; color: var(--ink-muted); padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .wk-table td { padding: 6px 8px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); color: var(--ink-high); overflow-wrap: anywhere; }
+  .wk-table td.wk-num { font-family: var(--font-mono); text-align: right; white-space: nowrap; }
+  .wk-td-actions { white-space: nowrap; text-align: right; }
+  .wk-td-actions .wk-btn + .wk-btn { margin-left: 4px; }
+  .wk-table-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .wk-btn { font: inherit; font-weight: 600; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-raised); color: var(--ink-high); cursor: pointer; }
+  .wk-btn--sm { padding: 2px 9px; font-size: 12px; }
+  .wk-btn:disabled { opacity: .55; cursor: default; }
+  .wk-btn--danger { color: var(--status-fail); margin-top: 10px; }
+  .wk-muted { color: var(--ink-muted); font-size: 12px; }
+  .wk-error { color: var(--status-fail); font-size: 12px; overflow-wrap: anywhere; margin: 0; }
+  .wk-status { color: var(--ink-body); font-size: 12px; margin: 6px 0 0; }
+  .wk-notice { margin: 0 0 10px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-card); color: var(--ink-body); }
+  .wk-empty { color: var(--ink-muted); padding: 24px; grid-column: 1 / -1; }
+  .wk-text { margin: 0; color: var(--ink-high); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .wk-text--heading { font-size: 18px; font-weight: 650; }
+  .wk-text--caption { font-size: 12px; color: var(--ink-muted); }
+  .wk-filter { display: flex; align-items: center; gap: 6px; height: 100%; }
+  .wk-filter-label { font-size: 12px; color: var(--ink-muted); white-space: nowrap; }
+  .wk-input { font: inherit; min-width: 0; flex: 1 1 auto; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-raised); color: var(--ink-high); }
+  .wk-input--date { flex: 0 1 140px; }
+  .wk-input--num { width: 64px; flex: 0 0 auto; }
+  textarea.wk-input { min-height: 64px; resize: vertical; }
+  .wk-form { display: flex; flex-direction: column; gap: 8px; }
+  .wk-field { display: flex; flex-direction: column; gap: 3px; }
+  .wk-form-foot { display: flex; align-items: center; gap: 10px; }
+  .wk-link { font: inherit; padding: 0; border: 0; background: none; color: var(--ui-accent); text-decoration: underline; cursor: pointer; }
+  .wk-image { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .wk-chart { display: block; width: 100%; height: auto; max-height: 100%; overflow: visible; }
+  .wk-chart text { font: 11px var(--font-sans); }
+  .wk-axis { fill: var(--ink-muted); }
+  .wk-value { fill: var(--ink-high); font-family: var(--font-mono); }
+  .wk-grid-line { stroke: var(--border); stroke-width: 1; }
+  .wk-stroke { fill: none; stroke-width: 2.5; stroke-linejoin: round; }
+  .wk-stroke.wk-series-1 { stroke-dasharray: 5 4; stroke-width: 2; }
+  .wk-area { opacity: .25; stroke: none; }
+  .wk-legend { display: flex; gap: 14px; list-style: none; margin: 4px 0 0; padding: 0; font-size: 12px; color: var(--ink-muted); flex-wrap: wrap; }
+  .wk-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+  .wk-series-0 { fill: var(--c0, var(--s0)); stroke: var(--c0, var(--s0)); background: var(--c0, var(--s0)); }
+  .wk-series-1 { fill: var(--c1, var(--s1)); stroke: var(--c1, var(--s1)); background: var(--c1, var(--s1)); }
+  .wk-series-2 { fill: var(--c2, var(--s2)); stroke: var(--c2, var(--s2)); background: var(--c2, var(--s2)); }
+  .wk-series-3 { fill: var(--c3, var(--s3)); stroke: var(--c3, var(--s3)); background: var(--c3, var(--s3)); }
+  .wk-series-4 { fill: var(--c4, var(--s4)); stroke: var(--c4, var(--s4)); background: var(--c4, var(--s4)); }
+  .wk-series-5 { fill: var(--c5, var(--s5)); stroke: var(--c5, var(--s5)); background: var(--c5, var(--s5)); }
+  .wk-series-6 { fill: var(--c6, var(--s6)); stroke: var(--c6, var(--s6)); background: var(--c6, var(--s6)); }
+  .wk-series-7 { fill: var(--c7, var(--s7)); stroke: var(--c7, var(--s7)); background: var(--c7, var(--s7)); }
+  .wk-series-8 { fill: var(--c8, var(--s8)); stroke: var(--c8, var(--s8)); background: var(--c8, var(--s8)); }
+  .wk-series-9 { fill: var(--c9, var(--s9)); stroke: var(--c9, var(--s9)); background: var(--c9, var(--s9)); }
+  .wk-series-10 { fill: var(--c10, var(--s10)); stroke: var(--c10, var(--s10)); background: var(--c10, var(--s10)); }
+  .wk-series-11 { fill: var(--c11, var(--s11)); stroke: var(--c11, var(--s11)); background: var(--c11, var(--s11)); }
+  .wk-palette, .wk-props { flex: 0 0 auto; overflow: auto; padding: 14px; background: var(--surface-base); }
+  .wk-palette { width: 190px; border-right: 1px solid var(--border); }
+  .wk-props { width: 270px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+  .wk-props-title { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-body); }
+  .wk-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .wk-tile { font: inherit; font-size: 12px; padding: 14px 4px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-card); color: var(--ink-high); cursor: grab; touch-action: none; }
+  .wk-prop { display: flex; flex-direction: column; gap: 3px; }
+  .wk-prop-label { font-size: 12px; color: var(--ink-muted); }
+  .wk-prop-box { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .wk-check { align-self: flex-start; }
+  .wk-cell, .wk-handle { touch-action: none; }
+  /* Edit in place: a component's own words show they can be edited (an outline and a pencil on hover). */
+  .wk-app[data-mode="edit"] .wk-editable { cursor: text; border-radius: 3px; }
+  .wk-app[data-mode="edit"] .wk-editable:hover { outline: 1px dashed var(--ui-accent); outline-offset: 2px; }
+  .wk-app[data-mode="edit"] .wk-editable:hover::after { content: "\270E"; margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--ui-accent); }
+  .wk-inline-input { font: inherit; width: 100%; padding: 2px 6px; border: 2px solid var(--ui-accent); border-radius: 4px; background: var(--surface-raised); color: var(--ink-high); outline: none; }
+  .wk-cell.is-inline > .wk-tag { visibility: hidden; }
+  .wk-inline-input--multi { min-height: 3.2em; resize: vertical; }
+  .wk-btn[aria-disabled="true"] { opacity: .55; cursor: default; }
+  .wk-app[data-mode="edit"] .wk-btn[aria-disabled="true"].wk-editable { opacity: .8; cursor: text; }
+  /* A dashboard tile: the app as it looks, read-only; with no rows, each data component is its shape. */
+  .wk-app[data-tile="true"] { pointer-events: none; }
+  .wk-app[data-tile="true"] .wk-main { overflow: hidden; }
+  .wk-app[data-tile="true"] .wk-pages, .wk-app[data-tile="true"] .wk-notice { display: none; }
+  .wk-skeleton { height: 100%; min-height: 16px; border-radius: 6px; background: color-mix(in srgb, var(--ink-muted) 14%, transparent); }
+  .wk-skeleton--kpi { height: 28px; width: 60%; }
+  /* Below 640 px the grid is one column, in (row, column) order (the order per component is a CSSOM rule). */
+  @media (max-width: 639px) {
+    .wk-main { padding: 10px; }
+    .wk-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+    .wk-grid > .wk-cell { grid-column: 1 !important; grid-row: auto !important; min-height: var(--row); }
+    .wk-cell--chart, .wk-cell--table { min-height: 220px; }
+    .wk-palette, .wk-props { display: none; }
+  }
+</style>
+</head>
+<body>
+<script>__PLUGIN__</script>
+</body>
+</html>
