@@ -1,4 +1,5 @@
 import type { SessionView } from '../api/types.js';
+import { useHeldRuns } from '../store/heldRuns.js';
 
 /**
  * HELD RUNS (studio#805): a run whose DTO still reads live (`executing`, `planning`, …) but that a
@@ -11,13 +12,18 @@ import type { SessionView } from '../api/types.js';
  * The wire `status` is untouched: gate logic, actions and anything reading the raw status see the
  * daemon's own word. A run at a gate (`awaiting_human`) or ended is never marked — it already says
  * what it is.
+ *
+ * (crew#1042) The same set is in the shared store ({@link useHeldRuns}), so a surface that fetches its
+ * own runs — the run page, the repositories list, a repository's page — reads it here too, by run id.
+ * Such a surface subscribes to the store so it re-renders when the set changes.
  */
 const HELD_KEY = 'studio_held';
 const NOT_LIVE: ReadonlySet<string> = new Set(['awaiting_human', 'completed', 'failed', 'cancelled']);
 
-/** True when App marked this run as held by a Needs-you row. */
+/** True when a Needs-you row holds this live run (App's mark, or the shared store by id), or power mode paused it. */
 export function isHeldRun(session: SessionView['session']): boolean {
-  return (session as unknown as Record<string, unknown>)[HELD_KEY] === true || isPowerPaused(session);
+  if ((session as unknown as Record<string, unknown>)[HELD_KEY] === true || isPowerPaused(session)) return true;
+  return !NOT_LIVE.has(session.status) && useHeldRuns.getState().held.has(session.id);
 }
 
 /**

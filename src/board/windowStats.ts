@@ -2,6 +2,7 @@ import type { SessionView, SessionWithDelivery } from '../api/types.js';
 import { canDeliver } from '../components/delivery.js';
 import type { IsSystemWorkflow } from '../components/runMode.js';
 import { outcomeOf } from './metrics.js';
+import { isHeldRun } from './heldRuns.js';
 import { RANGE_LIMITS, rangeWord, type TimeRange } from '../hooks/useTimeRange.js';
 
 /**
@@ -96,7 +97,8 @@ export function statusCounts(runs: SessionView[]): StatusCounts {
   for (const v of runs) {
     if (v.session.archived_at != null) continue;
     c.total += 1;
-    const o = outcomeOf(v.session.status);
+    // (crew#1042) A live run a Needs-you row holds waits on you: it counts with the gates, not as working.
+    const o = isHeldRun(v.session) ? 'gate' : outcomeOf(v.session.status);
     if (o === 'run') c.active += 1;
     else if (o === 'gate') c.gates += 1;
     else if (o === 'fail') { c.failed += 1; c.terminal += 1; }

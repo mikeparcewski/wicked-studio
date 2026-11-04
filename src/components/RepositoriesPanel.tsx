@@ -28,6 +28,7 @@ import { knowledgeMarks, type MarkTarget } from '../board/repoKnowledge.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { KnowMarks } from './RepoKnowledge.js';
 import { RepoGraphModal } from './RepoGraphModal.js';
+import { useHeldRuns } from '../store/heldRuns.js';
 import { RequirementsModal } from './RequirementsModal.js';
 
 type SourceMode = 'local' | 'remote';
@@ -139,6 +140,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   usePageChatFor('repos', 'Knows Repositories: each registered repository, its code graph and its work.', 'repos-page');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [runs, setRuns] = useState<SessionView[]>([]);
+  // (crew#1042) The runs a Needs-you row holds: the fleet folds them as waiting, not working. Subscribed.
+  const heldIds = useHeldRuns((s) => s.held);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [search, setSearch] = useState('');
@@ -382,7 +385,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   // ── The fleet models — one fold per card, shared by grid, chips and tiles ──
   const fleet = useMemo(
     () => repoFleetModels(repos, repoRuns, attachedAt, windowIds),
-    [repos, repoRuns, attachedAt, windowIds],
+    // heldIds: repoFleetModels reads the shared held set (isHeldRun), so a change in it re-folds.
+    [repos, repoRuns, attachedAt, windowIds, heldIds],
   );
   const activeRepoN = fleet.filter((m) => m.activeNow).length;
   // F-2R2-003: READY means the onboard completed AND the engine names no live-graph gap; a

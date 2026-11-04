@@ -45,6 +45,8 @@ import { FileViewer } from '../FileViewer.js';
 import { ActivityTail, EvidenceTab, GoalBrief, HelpersList, RunSection, SignIns, StepsList } from '../sheets/ObjectSheet.js';
 import { PANEL_SECTIONS, panelStateKind, quietSections, sectionOpen, type PanelSectionId } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
+import { useHeldRuns } from '../../store/heldRuns.js';
+import { isHeldRun } from '../../board/heldRuns.js';
 import { TeamRosterLines } from './TeamRosterLines.js';
 import { panelRows, pluginSections } from '../../board/runPluginPanels.js';
 import { RUN_PLUGINS } from '../../plugins/runPlugins.js';
@@ -129,6 +131,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // The whole log (not only while executing): a finished run's delivery receipt reads it too.
   const { events } = useRunEvents(id);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
+  // (crew#1042) Held by a Needs-you row (an orphan, a stall): the status line and helpers read it. Subscribed.
+  const held = useHeldRuns((s) => s.held.has(id)) || isHeldRun(view.session);
   // (J4 0.16.6) The step silent past crew's quiet mark: the Now section says so, as the header does.
   const silent = useSilentStep(view);
   const floor = useRunningFloor(view);
@@ -190,7 +194,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const total = chain.steps.length;
   const stepAt = current !== undefined ? chain.steps.indexOf(current) + 1 : doneSteps;
   const builder = builderResponder(view, gate?.ord ?? null, roster);
-  const runningOrd = executingOrd(view.session, view.units);
+  // (crew#1042) A held run has no helper "building" or "reviewing": nothing is working on it.
+  const runningOrd = held ? null : executingOrd(view.session, view.units);
   const helpers = clis.filter(isHelperSeat).map((cli) => {
     const seat = roster?.find((entry) => entry.key === cli);
     const name = seat === undefined ? cli : seatLabel(seat);

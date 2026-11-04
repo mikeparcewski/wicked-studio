@@ -156,6 +156,14 @@ npm publish dates. Every version listed here exists on
     Project select that was hidden under Search and filter.
 
 ### Fixed
+- **A run nothing is working on says so on the run page and the repositories too (crew#1042).** A live run a
+  Needs-you row holds (an orphan the daemon restart left, a stall, an open question) read as waiting on you on the
+  Desk only (studio#805): the run page said "Build is running" with a "now" badge on the chain ("Build: working,
+  now"), and Repositories and a repository's page said "1 working" and "Working now". The held set is now one shared
+  store (operator ruling 2026-10-18: studio-only, no crew field) that App fills from the Needs-you rows and that
+  `isHeldRun` reads by run id, so every surface agrees: the run page's status line reads "Waiting on you — see Needs
+  you" and its chain marks the step "waiting on you"; the repositories fold a held run as waiting, not working now,
+  and count it with the gates. The wire status is untouched: gate logic and actions still read the daemon's word.
 - **The `/` menu in a chat box lists what New job lists (operator 2026-11-04: "the slash commands in the chatbox
   don't match the list of workflows when I see the new job modal").** A composer's `/` menu now reads New job's catalog
   (crew's `GET /workflows/catalog`, with studio's own Demo video and Draft epics; an older daemon's list is still

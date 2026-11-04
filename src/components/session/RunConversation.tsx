@@ -27,6 +27,8 @@ import { useRunCoverage } from '../../hooks/useRunCoverage.js';
 import { useGateStore } from '../../store/gates.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { useRunEventStore } from '../../store/events.js';
+import { useHeldRuns } from '../../store/heldRuns.js';
+import { isHeldRun } from '../../board/heldRuns.js';
 import { usePlanDrafts } from '../../store/planDrafts.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
 import { openSheet } from '../../store/sheets.js';
@@ -236,8 +238,11 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   const runEvents = useRunEvents(id).events;
   const noEvidenceSummary = useRunCoverage(view);
   const trail = useRunEventStore((s) => s.byRun[id]) ?? NO_EVENTS;
+  // (crew#1042) A run a Needs-you row holds marks no step "now": nothing is working on it. Subscribed, so the
+  // page follows the shared held set (an orphan or a stall the Desk folds) without being handed it.
+  const held = useHeldRuns((s) => s.held.has(id)) || isHeldRun(view.session);
   const phase: RunPhase = status === 'executing'
-    ? (orphanedOf(status, trail) === null ? 'working' : 'other')
+    ? (held ? 'held' : orphanedOf(status, trail) === null ? 'working' : 'other')
     : status === 'failed' || status === 'cancelled' ? 'stopped' : 'other';
   const gate = useGateStore((s) => s.gates[id]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
