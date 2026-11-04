@@ -1,4 +1,5 @@
 import { proposalKind, type Proposal } from '../api/proposals.js';
+import { knowledgeKind } from '../api/knowledgeShapes.js';
 import { TechDetails } from './ui/index.js';
 
 export const KIND_COLOR: Record<'memory' | 'policy' | 'knowledge' | 'other', string> = {
@@ -20,8 +21,8 @@ export function shortContent(content: string): string {
 export function KindChip({ proposal }: { proposal: Proposal }): React.ReactElement {
   const kind = proposalKind(proposal);
   return (
-    <span data-testid="proposal-kind-chip" data-kind={kind} className="wk-tag">
-      {kind === 'memory' ? 'Memory' : kind === 'policy' ? 'Policy' : kind === 'knowledge' ? 'Data shape' : 'Proposal'}
+    <span data-testid="proposal-kind-chip" data-kind={kind} data-knowledge={kind === 'knowledge' ? knowledgeKind(proposal) : undefined} className="wk-tag">
+      {kind === 'memory' ? 'Memory' : kind === 'policy' ? 'Policy' : kind === 'knowledge' ? (knowledgeKind(proposal) === 'shape' ? 'Data shape' : 'Knowledge note') : 'Proposal'}
     </span>
   );
 }

@@ -979,7 +979,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         {...(page !== undefined ? {
           variant: 'page' as const, threadTail: page.threadTail, seed: page.seed ?? null, onSeedTaken: page.onSeedTaken,
           sendChip: page.focus?.label ?? null, composerRef: page.composerRef,
-        } : {})}
+        } : { variant: 'window' as const })}
         onExpandChat={
           navigate === undefined
             ? undefined

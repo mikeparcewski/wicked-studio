@@ -149,6 +149,10 @@
 .wk-gk-row > .wk-btn--quiet:last-child { margin-left: auto; }
 .wk-gk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); align-items: start; gap: var(--space-4); min-width: 0; }
 .wk-gk-card { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); min-width: 0; padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); overflow-wrap: anywhere; }
+/* A review card is never a scroll anchor (journey 2026-11-04): in a long review, Chromium's scroll anchoring re-anchored
+   on an unrelated layout (the rail's Nerve Center line) and moved the list two to five cards, so an Approve landed on
+   another card's. The list scrolls only when the person scrolls it. */
+.wk-gk-card { overflow-anchor: none; }
 .wk-gk-card > .wk-tag, .wk-gk-stack > .wk-tag { align-self: flex-start; }
 .wk-gk-content { margin: 0; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .wk-gk-grow { flex: 1 1 12rem; }
