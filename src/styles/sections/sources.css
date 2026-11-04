@@ -124,6 +124,21 @@
 .wk-src-tables { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
 .wk-src-row--table .wk-menu-wrap .wk-btn--icon { min-height: 26px; height: 26px; width: 26px; padding: 0; }
 
+/* ── Ask a question of this data; Test connection (operator 2026-11-03) ── */
+.wk-src-ask { gap: var(--space-2); }
+.wk-src-ask-q { display: flex; gap: var(--space-2); align-items: center; min-width: 0; }
+.wk-src-ask-q .wk-src-input { flex: 1 1 auto; }
+.wk-src-ask-q .wk-btn { flex: none; }
+.wk-src-grow-text { flex: 1 1 200px; min-width: 0; }
+/* A result's columns are data: none is squeezed to make room for another. */
+.wk-src-table--result td:first-child { width: auto; max-width: none; }
+/* Every value can be read whole: long ones wrap inside a readable column. */
+.wk-src-table--result td { white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; min-width: 6ch; max-width: 48ch; }
+/* A scrolling result takes the keyboard focus (WebKit skips a plain overflow box). */
+.wk-src-scroll--focus:focus-visible { box-shadow: var(--focus-ring); outline: none; border-radius: var(--radius-sm); }
+/* A source row's menu sits in the row's own height, like a table row's. */
+.wk-src-row .wk-menu-wrap .wk-btn--icon { min-height: 26px; height: 26px; width: 26px; padding: 0; }
+
 /* ── phone and narrow: one column (the sheet fills the screen, the kinds become a wrap of chips) ── */
 @media (max-width: 760px) {
   .wk-src-scrim { padding: 0; align-items: stretch; }
@@ -138,4 +153,6 @@
   .wk-src-sheet-foot { flex-wrap: wrap; }
   .wk-src-foot-msg { flex-basis: 100%; }
   .wk-src-grow { min-height: 0; }
+  .wk-src-ask-q { flex-wrap: wrap; }
+  .wk-src-ask-q .wk-btn { flex: 1 1 auto; }
 }

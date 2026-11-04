@@ -306,17 +306,17 @@ describe('review r1 folds: stale state', () => {
     expect(screen.getByTestId('source-sheet').getAttribute('data-kind')).toBe('postgres');
   });
 
-  it('an older catalog read never overwrites a newer "Describe again" (codex C15)', async () => {
+  it('an older catalog read never overwrites a newer "Test connection" (codex C15)', async () => {
     let firstGet: (v: unknown) => void = () => {};
     const fresh = { ...CATALOG, relations: [CATALOG.relations[0]!] };
     apiFetch.mockImplementation((path: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
       if (path === '/sources/support-pg/catalog') return new Promise((r) => { firstGet = r; });
-      if (path === '/sources/support-pg/describe' && method === 'POST') return Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: fresh, descriptorHash: 'd' });
+      if (path === '/sources/support-pg/test' && method === 'POST') return Promise.resolve({ name: 'support-pg', kind: 'sql', driver: 'postgres', ok: true, ms: 9, testedAt: '2026-11-03T18:00:00Z', tls: 'off', catalog: { name: 'support-pg', kind: 'sql', catalog: fresh, descriptorHash: 'd' }, readCheck: null });
       return Promise.reject(new Error(`unexpected ${method} ${path}`));
     });
     render(<SourceSheet target={{ mode: 'saved', server: pgServer() }} existing={['support-pg']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
-    fireEvent.click(screen.getByTestId('source-describe'));
+    fireEvent.click(screen.getByTestId('source-test-connection'));
     await waitFor(() => expect(screen.getAllByTestId('source-described-row')).toHaveLength(1));
     firstGet({ name: 'support-pg', kind: 'sql', catalog: pgPreview('support-pg').source!.catalog, descriptorHash: 'd' });
     await new Promise((r) => setTimeout(r, 0));
@@ -348,5 +348,27 @@ describe('review r4 fold (codex): a file chosen before a kind switch is not uplo
     expect(screen.getByTestId('source-upload')).toBeDisabled();
     fireEvent.click(screen.getByTestId('source-upload'));
     expect(calls.filter((c) => c.path.startsWith('/apps/uploads'))).toEqual([]);
+  });
+});
+
+describe('Test connection after a save in the same sheet (sources-ask review r1, codex C1)', () => {
+  it('the preview\'s old "Connected" lines never stand beside a newer failed test', async () => {
+    const onSaved = vi.fn();
+    sheet(onSaved);
+    fillPostgres();
+    fireEvent.click(screen.getByTestId('source-test-run'));
+    await screen.findByTestId('source-test-ok');
+    fireEvent.click(screen.getByTestId('source-save'));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    apiFetch.mockImplementation((path: string) => {
+      if (path === '/sources/support-pg/test') return Promise.resolve({ name: 'support-pg', kind: 'sql', driver: 'postgres', ok: false, ms: 4, testedAt: '2026-11-03T18:00:00Z', tls: 'verified', code: 'source_connection', error: 'connection refused' });
+      if (path === '/sources/support-pg/catalog') return Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: CATALOG, privileges: WRITER, descriptorHash: 'd' });
+      return Promise.reject(new Error(`unexpected ${path}`));
+    });
+    fireEvent.click(await screen.findByTestId('source-test-connection'));
+    const box = await screen.findByTestId('source-connection-test');
+    expect(box.getAttribute('data-ok')).toBe('no');
+    expect(screen.queryByTestId('source-test-ok')).toBeNull();
+    expect(screen.getByTestId('source-test').textContent).not.toMatch(/Connected and described/);
   });
 });

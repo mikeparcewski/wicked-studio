@@ -10,12 +10,14 @@
  *
  * `setAllowWrites` is the Allow writes switch's own call: `AllowWritesSwitch` is its only caller
  * (`tests/sourcesHumanOnly.test.ts` pins that), so no URL, palette verb, plugin request or chat path can
- * reach it. crew refuses it to anything but a human operator, too.
+ * reach it. crew refuses it to anything but a human operator, too. `ask` and `query` are the same:
+ * `AskData` is their only caller, and crew answers them to a human operator only.
  */
 
 import { apiFetch } from './client.js';
 import type {
   McpPreviewResponse,
+  SourceCheckResponse,
   McpServer,
   McpServerConfigBody,
   McpServersResponse,
@@ -53,6 +55,39 @@ export type {
   SqlSourceConfigBody,
 } from 'wicked-crew-api-types';
 
+// ── Test connection, and ask a question of the data (crew api-types 0.179.0) ─────────────────────
+// Declared here, as crew's wire contract 0.179.0 spells them, until that version of
+// wicked-crew-api-types is published; then they are imported from it like the rest.
+
+/** `POST /sources/:name/test`: connect, describe again (saved) and check a probe read (never run). */
+export interface SourceConnectionTestResponse {
+  name: string;
+  kind: 'sql' | 'graphql';
+  driver: 'postgres' | 'mysql' | 'sqlite' | null;
+  ok: boolean;
+  ms: number;
+  testedAt: string;
+  tls: 'verified' | 'off' | 'local';
+  catalog?: SourceCatalogResponse;
+  readCheck?: ({ ok: true; text: string; relation: string } | { ok: false; text: string; relation: string; code: string; detail: string }) | null;
+  code?: string;
+  error?: string;
+}
+
+/** `POST /sources/:name/ask` (human operator only): one seat's draft, checked; nothing ran. */
+export interface SourceAskResponse {
+  sql: string;
+  explanation: string;
+  seat: string;
+  check: SourceCheckResponse | null;
+  confirm: string | null;
+}
+
+/** `POST /sources/:name/query` (human operator only): the check (`ran: false`), or the run. */
+export type SourceQueryResponse =
+  | { ran: false; check: SourceCheckResponse; confirm: string | null }
+  | { ran: true; columns: Array<{ name: string; type: string }>; rows: unknown[][]; truncated: boolean; rowCap: number; ms: number };
+
 /** The page's address: `/sources` (Build & settings → Data sources). `?source=<name>` opens one. */
 export const SOURCES_PATH = '/sources';
 export function sourcesPath(source?: string | null): string {
@@ -85,7 +120,12 @@ export const sourcesApi = {
   save: (previewHash: string, allowOrigin?: string) =>
     apiFetch<McpServer>('/mcp/servers', post(allowOrigin === undefined ? { previewHash } : { previewHash, allowOrigin })),
   catalog: (name: string) => apiFetch<SourceCatalogResponse>(at(name, 'catalog')),
-  describe: (name: string) => apiFetch<SourceCatalogResponse>(at(name, 'describe'), { method: 'POST' }),
+  /** Test connection: connect with the saved login, describe again (saved) and check a read; no row is read. */
+  testConnection: (name: string) => apiFetch<SourceConnectionTestResponse>(at(name, 'test'), { method: 'POST' }),
+  /** A seat drafts one read query from the question and the structure; crew checks it; nothing runs. */
+  ask: (name: string, question: string) => apiFetch<SourceAskResponse>(at(name, 'ask'), post({ question })),
+  /** Without `confirm`, crew checks `sql`; with crew's token for exactly that text, it runs it (read only, 50 rows). */
+  query: (name: string, sql: string, confirm?: string) => apiFetch<SourceQueryResponse>(at(name, 'query'), post(confirm === undefined ? { sql } : { sql, confirm })),
   privileges: (name: string, writes: SourceRowWrite[]) => apiFetch<SourcePrivilegeReport>(at(name, 'privileges'), post({ writes })),
   safety: (name: string, body: SourceSafetyBody) => apiFetch<SourceSafetyResponse>(at(name, 'safety'), post(body)),
   /** The Allow writes switch. Human operator only (crew answers 403 to anything else). */

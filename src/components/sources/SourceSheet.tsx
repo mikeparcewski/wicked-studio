@@ -9,6 +9,7 @@ import {
   type McpServer,
   type SourceCatalog,
   type SourceCatalogResponse,
+  type SourceConnectionTestResponse,
   type SourcePrivilegeReport,
   type SourceUploadResponse,
 } from '../../api/sources.js';
@@ -17,6 +18,8 @@ import { agentAccessOf, type SourceAgentAccess } from '../../api/sourceAgents.js
 import { AgentAccess } from './AgentAccess.js';
 import { ProfileBox } from './ProfileBox.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
+import { AskData } from './AskData.js';
+import { ConnectionTestLines } from './ConnectionTest.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
 import {
   agentsSeeWords,
@@ -69,8 +72,12 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, servers, agentsUnverified: agentsUnverifiedSet, onReread, onSaved, onAllowWrites, onAgents, onDescribed, onClose }: {
+export function SourceSheet({ target, existing, servers, agentsUnverified: agentsUnverifiedSet, onReread, onSaved, onAllowWrites, onAgents, onDescribed, onClose, focus = null, onFocusUsed }: {
   target: SheetTarget;
+  /** Opened from the data panel's menu: "Test connection" tests at once, "Ask a question…" focuses the question. */
+  focus?: 'test' | 'ask' | null;
+  /** The sheet acted on `focus` (once): the host forgets it, so no later opening inherits it. */
+  onFocusUsed?: () => void;
   /** Names already registered (a new source of the same name replaces it; the sheet says so). */
   existing: readonly string[];
   onSaved: (server: McpServer) => void;
@@ -113,7 +120,9 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   const [held, setHeld] = useState<{ key: string; preview: McpPreviewResponse; ms: number } | null>(null);
   /** Every loopback/private address crew named for a connection (a name can resolve to several). */
   const [asks, setAsks] = useState<Array<UnconfirmedAddress & { forTarget: string }>>([]);
-  const [busy, setBusy] = useState<null | 'test' | 'save' | 'describe' | 'upload'>(null);
+  const [busy, setBusy] = useState<null | 'test' | 'save' | 'retest' | 'upload'>(null);
+  /** The saved source's latest Test connection (its lines replace the stored describe's). */
+  const [tested, setTested] = useState<SourceConnectionTestResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** The preview whose reads the person accepted (an acceptance is for the operations it showed, only). */
   const [acceptedFor, setAcceptedFor] = useState<string | null>(null);
@@ -123,6 +132,9 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   const inFlight = useRef(false);
   /** Catalog reads and re-describes: only the latest one's answer is shown. */
   const catalogGen = useRef(0);
+  /** Once a Test connection started, the test brings the catalog: no catalog read starts or lands after it
+   *  (StrictMode's replayed mount read included) until the source changes. */
+  const testOwnsCatalog = useRef(false);
   const [catalog, setCatalog] = useState<SourceCatalogResponse | null>(null);
   const [crewCatalog, setCrewCatalog] = useState<CrewSourceCatalog | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -145,11 +157,13 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   useEffect(() => {
     const name = target.mode === 'crew' || form.kind === 'crew' ? CREW_SOURCE : savedName !== null && (savedKind === 'sql' || savedKind === 'graphql') ? savedName : null;
     if (name === null || upload !== null || (name === CREW_SOURCE && crewCatalog !== null)) return;
+    if (name !== CREW_SOURCE && testOwnsCatalog.current) return;
     const gen = ++catalogGen.current;
     let live = true;
+    const mine = (): boolean => live && gen === catalogGen.current && (name === CREW_SOURCE || !testOwnsCatalog.current);
     sourcesApi.catalog(name).then(
-      (c) => { if (!live || gen !== catalogGen.current) return; if (c.kind === 'crew') setCrewCatalog(c.catalog as CrewSourceCatalog); else setCatalog(c); },
-      (e: unknown) => { if (live && gen === catalogGen.current && codeOf(e) !== 'not_described') setError(words(e)); },
+      (c) => { if (!mine()) return; if (c.kind === 'crew') setCrewCatalog(c.catalog as CrewSourceCatalog); else setCatalog(c); },
+      (e: unknown) => { if (mine() && codeOf(e) !== 'not_described') setError(words(e)); },
     );
     return () => { live = false; };
   }, [target.mode, form.kind, savedName, savedKind, upload, crewCatalog]);
@@ -233,21 +247,76 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
     }
   };
 
-  const describeAgain = async (): Promise<void> => {
+  /**
+   * TEST CONNECTION (replaces Describe again): crew connects with the saved login, describes the source
+   * again (and saves it), and checks a read without running it. A failure is a result too, with its time.
+   */
+  /** Test connection's own generation: a catalog read (StrictMode runs the mount's twice) never drops a test's answer. */
+  const testGen = useRef(0);
+  const testSaved = async (): Promise<void> => {
     if (saved === null) return;
-    const gen = ++catalogGen.current;
-    setBusy('describe');
+    const mine = ++testGen.current;
+    // Any catalog read still out is older than this test, whatever the test answers: it lands nowhere,
+    // and none starts after it.
+    ++catalogGen.current;
+    testOwnsCatalog.current = true;
+    const started = Date.now();
+    setBusy('retest');
     setError(null);
+    // The lines are this test's or none: an older result never stands beside a newer failure.
+    setTested(null);
     try {
-      const c = await sourcesApi.describe(saved.name);
-      // A later read (or another describe) supersedes this one; an earlier read can't overwrite it.
-      if (gen === catalogGen.current) { setCatalog(c); onDescribed?.(saved.name); }
+      const t = await sourcesApi.testConnection(saved.name);
+      // Only the latest test's answer is shown.
+      if (mine !== testGen.current) return;
+      setTested(t);
+      // The fresh describe supersedes any catalog read still out (it is older than this answer), and
+      // an error an older read left is not this test's.
+      if (t.ok && t.catalog !== undefined) { ++catalogGen.current; setCatalog(t.catalog); setError(null); onDescribed?.(saved.name); }
     } catch (e) {
-      if (gen === catalogGen.current) setError(words(e));
+      // No answer is a failed test too: its line goes in the Test box, never the stored describe's.
+      if (mine === testGen.current) {
+        // `ms` is how long studio waited (crew measured nothing): the line says so.
+        setTested({ name: saved.name, kind: saved.kind === 'graphql' ? 'graphql' : 'sql', driver: saved.kind === 'graphql' ? null : saved.sql?.driver ?? null, ok: false, ms: Date.now() - started, testedAt: new Date().toISOString(), tls: 'off', code: 'not_answered', error: `crew did not answer the test: ${words(e)}` });
+      }
     } finally {
-      setBusy(null);
+      if (mine === testGen.current) setBusy(null);
     }
   };
+  // The saved source's identity (a re-save or a replaced upload is another source): a test of the old
+  // one is not this one's. Checked before the menu's action below, so its own test is never dropped.
+  const identity = saved === null ? '' : `${saved.name}\u0000${saved.descriptorHash ?? ''}\u0000${saved.sql?.snapshot ?? ''}`;
+  const lastIdentity = useRef(identity);
+  useEffect(() => {
+    if (lastIdentity.current === identity) return;
+    lastIdentity.current = identity;
+    testGen.current++;
+    testOwnsCatalog.current = false;
+    setTested(null);
+    setBusy((b) => (b === 'retest' ? null : b));
+  }, [identity]);
+  // From the data panel's menu, as the sheet opens (after the dialog took the focus, so the dialog's own
+  // focus handling records the real opener): "Test connection" tests ONCE and brings the Test box into
+  // view (on a phone it is below the form); "Ask a question…" puts the focus in the question (again if
+  // the dialog took it back, as a StrictMode replay does).
+  const focusUsed = useRef(false);
+  const testBox = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (focus === null || saved === null) return;
+    if (focus === 'ask') {
+      box.current?.querySelector<HTMLInputElement>('[data-testid="source-ask-question"]')?.focus();
+      if (!focusUsed.current) { focusUsed.current = true; onFocusUsed?.(); }
+      return;
+    }
+    if (focusUsed.current) return;
+    focusUsed.current = true;
+    if (focus === 'test' && (saved.kind === 'sql' || saved.kind === 'graphql')) {
+      void testSaved();
+      testBox.current?.scrollIntoView?.({ block: 'start' });
+    }
+    onFocusUsed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- when the sheet opens on a saved source
+  }, [focus, saved]);
 
   const doUpload = async (): Promise<void> => {
     if (file === null || inFlight.current) return;
@@ -345,6 +414,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
           )}
           <div className="wk-src-grid">
             <div className="wk-src-col" data-testid="source-form">
+              {!isNew && saved !== null && saved.kind === 'sql' && <AskData key={identity} source={saved.name} />}
               {kind === 'crew' ? (
                 <div className="wk-src-box">
                   <p className="wk-src-strong">Nothing to add</p>
@@ -471,8 +541,8 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
             </div>
 
             <div className="wk-src-col" data-testid="source-results">
-              {(isSqlKind(kind) || isApiKind(kind)) && (
-                <div className="wk-src-box" data-testid="source-test">
+              {(isSqlKind(kind) || isApiKind(kind) || (!isNew && kind === 'upload' && saved?.kind === 'sql')) && (
+                <div ref={testBox} className="wk-src-box" data-testid="source-test">
                   <div className="wk-src-box-head">
                     <span className="wk-src-strong">Test</span>
                     <span className="wk-src-sp" />
@@ -481,14 +551,16 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                         {busy === 'test' ? 'Testing…' : held !== null ? 'Test again' : 'Test'}
                       </button>
                     ) : (saved?.kind === 'sql' || saved?.kind === 'graphql') && (
-                      <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="source-describe" disabled={busy !== null} onClick={() => void describeAgain()}>{busy === 'describe' ? 'Describing…' : 'Describe again'}</button>
+                      <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="source-test-connection" disabled={busy !== null} onClick={() => void testSaved()}>{busy === 'retest' ? 'Testing…' : 'Test connection'}</button>
                     )}
                   </div>
                   {isNew && preview === null && askNow === null && busy !== 'test' && <p className="wk-src-note">{blocker ?? 'Test connects, describes the structure and reads no rows.'}</p>}
                   {isNew && askNow !== null && <p className="wk-src-note wk-src-tone-warn" data-testid="source-test-unconfirmed">Not connected: {askNow.address} is a {askNow.cls} address. Confirm the range on the left to connect.</p>}
-                  {(preview !== null || (!isNew && shownCatalog !== null)) && (
+                  {!isNew && tested !== null && <ConnectionTestLines result={tested} />}
+                  {!isNew && tested === null && busy !== 'retest' && (saved?.kind === 'sql' || saved?.kind === 'graphql') && <p className="wk-src-note" data-testid="source-test-connection-note">Test connection connects with the saved login, describes the source again and checks a read. It reads no rows.</p>}
+                  {((isNew && preview !== null) || (!isNew && tested === null && busy !== 'retest' && shownCatalog !== null)) && (
                     <div className="wk-src-lines" data-testid="source-test-ok">
-                      <p className="wk-src-okline"><Check size={16} aria-hidden className="wk-src-ico wk-src-tone-ok" />{preview !== null ? `Connected and described in ${held?.ms ?? 0} ms` : 'Described'} · {kindName(kind)}</p>
+                      <p className="wk-src-okline"><Check size={16} aria-hidden className="wk-src-ico wk-src-tone-ok" />{isNew && preview !== null ? `Connected and described in ${held?.ms ?? 0} ms` : 'Described'} · {kindName(kind)}</p>
                       {isSqlKind(kind) && <p className="wk-src-okline"><Check size={16} aria-hidden className="wk-src-ico wk-src-tone-ok" />{(saved?.sql?.tls ?? form.tls) === 'verify-full' ? 'TLS verified (verify-full)' : 'No TLS (allowed on this address)'}</p>}
                       {isSqlKind(kind) && <p className="wk-src-okline"><Check size={16} aria-hidden className="wk-src-ico wk-src-tone-ok" />Reads: read policy, then a read-only transaction</p>}
                       {shownPrivileges !== null && <PrivilegeLine report={shownPrivileges} />}
