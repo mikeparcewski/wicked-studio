@@ -125,6 +125,24 @@ describe('Understand words (pure)', () => {
 });
 
 describe('the Understand page', () => {
+  it('keeps the Knowledge map and the address in step both ways, on a mounted page too', async () => {
+    const navigate = vi.fn();
+    const page = (search: string) => <UnderstandPage project={null} navigate={navigate} now={NOW} search={search} compare={<div data-testid="compare-stub" />} />;
+    let view!: ReturnType<typeof render>;
+    await act(async () => { view = render(page('')); });
+    expect(screen.queryByTestId('knowledge-view-stub')).toBeNull();
+    // A review link lands on the mounted page.
+    await act(async () => { view.rerender(page('?view=knowledge')); });
+    expect(screen.getByTestId('knowledge-view-stub')).toBeInTheDocument();
+    // Leaving it writes the address back (a replace, no history entry).
+    fireEvent.click(screen.getByTestId('understand-back'));
+    expect(navigate).toHaveBeenLastCalledWith(expect.not.stringContaining('view=knowledge'), { replace: true });
+    await act(async () => { view.rerender(page('')); });
+    expect(screen.queryByTestId('knowledge-view-stub')).toBeNull();
+    fireEvent.click(screen.getByTestId('understand-knowledge-toggle'));
+    expect(navigate).toHaveBeenLastCalledWith(expect.stringContaining('?view=knowledge'), { replace: true });
+  });
+
   it('opens the Knowledge map beside the repository graphs, and on a ?view=knowledge address (DES-KNOWLEDGE-DATA-001 §10.3)', async () => {
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={<div data-testid="compare-stub" />} />); });
     const toggle = screen.getByTestId('understand-knowledge-toggle');

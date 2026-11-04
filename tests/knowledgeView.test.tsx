@@ -15,14 +15,17 @@ const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 // The canvas is cytoscape's (it has its own tests in the graph modal); here it shows what it was handed.
 vi.mock('../src/components/desk/KnowledgeGraph.js', () => ({
-  KnowledgeGraph: ({ nodes, edges }: { nodes: Array<{ key: string; label: string }>; edges: Array<{ rel: string }> }) => (
-    <div data-testid="knowledge-graph-stub" data-nodes={nodes.map((n) => n.label).join('|')} data-rels={edges.map((e) => e.rel).join('|')} />
+  KnowledgeGraph: ({ nodes, edges, onSelect }: { nodes: Array<{ key: string; label: string }>; edges: Array<{ rel: string; from: string; to: string }>; onSelect?: (n: unknown) => void }) => (
+    <div data-testid="knowledge-graph-stub" data-nodes={nodes.map((n) => n.label).join('|')} data-rels={edges.map((e) => e.rel).join('|')} data-edges={edges.map((e) => `${e.rel}:${e.from}->${e.to}`).join('|')}>
+      {nodes.map((n) => <button key={n.key} type="button" data-testid="graph-stub-node" data-key={n.key} onClick={() => onSelect?.(n)}>{n.label}</button>)}
+    </div>
   ),
 }));
 
 const { KnowledgeView, edgeWords } = await import('../src/components/desk/KnowledgeView.js');
-const { ProfileBox, profileRefusal } = await import('../src/components/sources/ProfileBox.js');
-const { readKnowledgeMap, knowledgePayload, KNOWLEDGE_VIEW_PATH } = await import('../src/api/knowledgeShapes.js');
+const { ProfileBox, profileRefusal, profileWords } = await import('../src/components/sources/ProfileBox.js');
+const { readKnowledgeMap, readSourceProfile, knowledgePayload, KNOWLEDGE_VIEW_PATH, ProfileWireError } = await import('../src/api/knowledgeShapes.js');
+const { ProposalsList } = await import('../src/components/ProposalsList.js');
 const { proposalKind } = await import('../src/api/proposals.js');
 const { ApiError } = await import('../src/api/errors.js');
 type Proposal = import('../src/api/proposals.js').Proposal;
@@ -32,6 +35,7 @@ const T = `knowledge:kdoc synthetic source:${SID}/support.tickets:`;
 const R = `knowledge:kdoc synthetic source:${SID}/support.regions:`;
 const A = `knowledge:kdoc synthetic source:${SID}/support.assignments:`;
 const SHAPE_OK = 'knowledge:kconcept synthetic proposal:p-ok:';
+const SHAPE_A = 'knowledge:kconcept synthetic proposal:p-pend:';
 const CODE = 'estate:scip-typescript npm escalations 1.0 src/`ticket.ts`/Ticket#';
 
 function shapeProposal(id: string, relation: string, joinsTo: string, state: Proposal['state'] = 'pending'): Proposal {
@@ -146,21 +150,83 @@ describe('Understand → Knowledge', () => {
     expect(screen.getByTestId('knowledge-map-summary').textContent).toBe('1 data source · 3 tables · 1 approved shape · 2 connections');
   });
 
-  it('NEGATIVE CONTROL: a pending or declined shape is never drawn; approving reads the map again', async () => {
+  it('NEGATIVE CONTROL: a pending or declined shape is never drawn (no node, no edge, no line); approved, it is', async () => {
     const user = userEvent.setup();
     render(<KnowledgeView />);
-    const stub = await screen.findByTestId('knowledge-graph-stub');
-    // p-pend (pending) names support.assignments -> support.tickets: the map has no such edge, so nothing shows it.
-    const drawn = () => [...screen.getAllByTestId('knowledge-connection').map((c) => c.textContent ?? ''), stub.getAttribute('data-nodes') ?? ''].join('\n');
+    await screen.findByTestId('knowledge-graph-stub');
+    // p-pend (pending) is about support.assignments -> support.tickets: the map has no such shape or edge.
+    const drawn = (): string => {
+      const stub = screen.getByTestId('knowledge-graph-stub');
+      return [...screen.getAllByTestId('knowledge-connection').map((c) => c.textContent ?? ''), stub.getAttribute('data-nodes') ?? '', stub.getAttribute('data-edges') ?? ''].join('\n');
+    };
     expect(drawn()).not.toContain('support.assignments joins');
-    expect(stub.getAttribute('data-nodes')).not.toContain('support.assignments shape');
+    expect(screen.getByTestId('knowledge-graph-stub').getAttribute('data-edges')).not.toContain(`->${A}`);
+    expect(screen.getByTestId('knowledge-graph-stub').getAttribute('data-edges')).not.toContain(`${A}->`);
+    expect(drawn()).not.toContain('support.assignments shape');
     // Decline it: it leaves the review, and still nothing draws it.
     await user.click(within(await screen.findByTestId('proposal-card')).getByTestId('proposal-reject'));
     await waitFor(() => expect(screen.queryByTestId('proposal-card')).toBeNull());
-    expect(drawn()).not.toContain('support.assignments joins');
-    expect(calls).toContain('POST /proposals/p-pend/reject');
-    // A decision reads the map again (an approved shape appears once crew answers it).
     await waitFor(() => expect(calls.filter((c) => c === 'GET /knowledge/map')).toHaveLength(2));
+    expect(drawn()).not.toContain('support.assignments joins');
+    expect(screen.getByTestId('knowledge-graph-stub').getAttribute('data-edges')).not.toContain(`${A}->`);
+    expect(calls).toContain('POST /proposals/p-pend/reject');
+  });
+
+  it('approving a shape reads the map again and draws what crew now answers', async () => {
+    const user = userEvent.setup();
+    let approved = false;
+    const after = structuredClone(MAP);
+    after.nodes.push({ key: SHAPE_A, kind: 'shape', label: 'support.assignments shape', proposalId: 'p-pend', summary: 's' } as never);
+    after.edges.push({ rel: 'joins', from: A, to: T, confidence: 0.75, evidence: { basis: 'name_type', on: [{ columns: ['ticket_id'], references: ['id'], basis: 'name_type' }] }, owner: 'kconcept synthetic proposal:p-pend:' } as never);
+    apiFetch.mockImplementation((path: unknown) => {
+      const s = String(path);
+      if (s === '/knowledge/map') return Promise.resolve(structuredClone(approved ? after : MAP));
+      if (s.endsWith('/approve')) {
+        approved = true;
+        queue = queue.filter((p) => p.id !== 'p-pend');
+        return Promise.resolve({ outcome: 'promoted', active_id: 'kconcept synthetic proposal:p-pend:' });
+      }
+      return Promise.resolve({ proposals: queue });
+    });
+    render(<KnowledgeView />);
+    await user.click(within(await screen.findByTestId('proposal-card')).getByTestId('proposal-approve'));
+    await waitFor(() => expect(screen.getByTestId('knowledge-graph-stub').getAttribute('data-edges')).toContain(`joins:${A}->${T}`));
+    expect(screen.getAllByTestId('knowledge-connection').map((c) => c.textContent)).toContain('support.assignments joins support.tickets on ticket_id = id (matching name and type)');
+  });
+
+  it('only the newest map read is shown; a selection the map no longer holds is cleared', async () => {
+    const user = userEvent.setup();
+    const pending: Array<(v: unknown) => void> = [];
+    apiFetch.mockImplementation((path: unknown) => (String(path) === '/knowledge/map' ? new Promise((r) => pending.push(r)) : Promise.resolve({ proposals: [] })));
+    render(<KnowledgeView />);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    pending[0]!(structuredClone(MAP));
+    await user.click((await screen.findAllByTestId('graph-stub-node')).find((b) => b.getAttribute('data-key') === SHAPE_OK)!);
+    expect(screen.getByTestId('knowledge-selected').textContent).toContain('support.tickets shape');
+    // Two refreshes: the older answers last, and must not win; the newer one no longer holds the shape.
+    await user.click(screen.getByTestId('knowledge-map-refresh'));
+    await user.click(screen.getByTestId('knowledge-map-refresh'));
+    const without = structuredClone(MAP);
+    without.nodes = without.nodes.filter((n) => n.key !== SHAPE_OK);
+    pending[2]!(without);
+    await waitFor(() => expect(screen.queryByTestId('knowledge-selected')).toBeNull());
+    pending[1]!(structuredClone(MAP));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId('knowledge-graph-stub').getAttribute('data-nodes')).not.toContain('support.tickets shape');
+  });
+
+  it('says what crew noted even when the map is empty, and how many approved shapes it could not draw', async () => {
+    apiFetch.mockImplementation((path: unknown) => (String(path) === '/knowledge/map' ? Promise.resolve({ nodes: [], edges: [], sources: [], shapes: 0, skipped: 2, truncated: true, notes: ["pg's tables could not be read from estate just now"] }) : Promise.resolve({ proposals: [] })));
+    render(<KnowledgeView />);
+    expect((await screen.findByTestId('knowledge-map-note')).textContent).toContain('could not be read');
+    expect(screen.getByTestId('knowledge-map-skipped').textContent).toContain('2 approved shapes are not drawn');
+  });
+
+  it('holds the whole map as a list: every shape with its summary, each source\'s tables, each repository\'s code', async () => {
+    render(<KnowledgeView />);
+    const inv = await screen.findByTestId('knowledge-inventory');
+    expect(within(inv).getAllByTestId('knowledge-inventory-shape').map((x) => x.textContent)).toEqual(['support.tickets shape support.tickets in data source support-pg …']);
+    expect(within(inv).getAllByTestId('knowledge-inventory-group').map((x) => x.textContent)).toEqual(['Data source: support-pgsupport.tickets', 'Repository: escalationsNothing listed.']);
   });
 
   it('says what to do when there is nothing to map, and a failed read with a retry', async () => {
@@ -196,10 +262,53 @@ describe('the source sheet\'s Profile box', () => {
     await user.click(screen.getByTestId('source-profile-run'));
     const out = await screen.findByTestId('source-profile-result');
     expect(calls).toEqual(['POST /sources/support-pg/profile']);
-    expect(out.textContent).toContain('Profiled 2 tables, found 1 join. 2 data shapes are waiting for your review.');
+    expect(out.textContent).toContain('Profiled 1 table, found 1 join. 2 data shapes are waiting for your review. 1 table could not be read.');
     expect(within(out).getByTestId('source-profile-rows').textContent).toBe('support.tickets: 100-9,999 rows · key id · joins support.regionssupport.audit_log: not read (timeout)');
     expect(within(out).getByTestId('source-profile-review').getAttribute('href')).toBe(KNOWLEDGE_VIEW_PATH);
     expect(screen.getByTestId('source-profile-run').textContent).toBe('Profile again');
+  });
+
+  it('reads a profile defensively: a malformed answer is an error the box says, never a crash', async () => {
+    expect(() => readSourceProfile({ name: 'support-pg' })).toThrow(ProfileWireError);
+    const p = readSourceProfile({ name: 'pg', relations: [{ key: 's.t', rows: 'lots', columns: [{ name: 'c', cardinality: 'weird' }, 7] }, 'x'], proposed: [{ id: 'p1' }, null], joins: [{ from: 's.t' }], alreadyProposed: 'x' });
+    expect(p.relations).toEqual([{ key: 's.t', rows: null, error: 'unreadable', columns: [{ name: 'c', type: '', nullPct: null, hasNulls: false, cardinality: 'unknown', keyCandidate: false }] }]);
+    expect(p.joins).toEqual([]);
+    expect(p.alreadyProposed).toBe(0);
+    const user = userEvent.setup();
+    apiFetch.mockImplementation(() => Promise.resolve({ name: 'support-pg' }));
+    render(<ProfileBox source="support-pg" />);
+    await user.click(screen.getByTestId('source-profile-run'));
+    expect((await screen.findByTestId('source-profile-error')).textContent).toContain('does not read');
+  });
+
+  it('says what a profile did: filed, already queued, unread, left out', () => {
+    const base = PROFILE as unknown as import('../src/api/knowledgeShapes.js').SourceProfileResponse;
+    expect(profileWords({ ...base, proposed: [], alreadyProposed: 2 })).toContain('2 shapes were already in the review queue, unchanged.');
+    const none = profileWords({ ...base, proposed: [], alreadyProposed: 0, notInKnowledge: 3, catalogTruncated: true });
+    expect(none).toContain('No data shape was filed.');
+    expect(none).toContain('3 tables that knowledge holds are not in crew');
+    expect(none).toContain('more tables than one profile reads');
+    expect(profileWords(base)).toContain('Profiled 1 table, found 1 join. 2 data shapes are waiting for your review. 1 table could not be read.');
+  });
+
+  it('never throws on a payload whose fields are not strings', () => {
+    const odd = shapeProposal('p9', 'support.x', 'support.y');
+    (odd.payload as { shape: { joins: unknown[]; describes: unknown[] } }).shape.joins = [{ to: { toString: null }, columns: [{ toString: null }] }];
+    (odd.payload as { shape: { joins: unknown[]; describes: unknown[] } }).shape.describes = [{ name: { toString: null } }];
+    expect(() => knowledgePayload(odd)).not.toThrow();
+    const m = readKnowledgeMap(MAP);
+    const byKey = new Map(m.nodes.map((n) => [n.key, n]));
+    expect(() => edgeWords({ ...m.edges[2]!, evidence: { on: [{ columns: [{ toString: null }], references: ['id'] }] } }, byKey)).not.toThrow();
+  });
+
+  it('calls a shape crew\'s profiler only when no run or agent filed it', () => {
+    const run = { ...shapeProposal('p1', 'support.t', 'support.u'), provenance: { run_id: 'r1', run_agent: 'worker' } };
+    const mine = shapeProposal('p2', 'support.t', 'support.u');
+    render(<ProposalsList proposals={[run, mine]} loading={false} error={null} decidingIds={new Set()} onApprove={() => undefined} onReject={() => undefined} />);
+    const [a, b] = screen.getAllByTestId('proposal-provenance');
+    expect(a!.textContent).toContain('worker');
+    expect(a!.textContent).not.toContain('profiler');
+    expect(b!.textContent).toContain('crew’s profiler');
   });
 
   it('says why a profile did not run', () => {

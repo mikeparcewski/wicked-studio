@@ -25,7 +25,7 @@ const NODE_SHAPES: Record<KnowledgeMapNode['kind'], cytoscape.Css.NodeShape> = {
   shape: 'diamond',
   code: 'ellipse',
   repo: 'hexagon',
-  knowledge: 'ellipse',
+  knowledge: 'triangle',
 };
 const NODE_SIZE: Record<KnowledgeMapNode['kind'], number> = { source: 34, table: 24, shape: 26, code: 22, repo: 30, knowledge: 18 };
 

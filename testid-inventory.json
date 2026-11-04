@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 305,
-    "occurrences": 4346,
-    "static": 3657,
+    "occurrences": 4350,
+    "static": 3661,
     "dynamic": 140,
     "computed": 49
   },
@@ -7124,6 +7124,24 @@
       ]
     },
     {
+      "testId": "knowledge-inventory",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-inventory-group",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-inventory-shape",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
       "testId": "knowledge-map",
       "files": [
         "src/components/desk/KnowledgeView.tsx"
@@ -7155,6 +7173,12 @@
     },
     {
       "testId": "knowledge-map-refresh",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map-skipped",
       "files": [
         "src/components/desk/KnowledgeView.tsx"
       ]

@@ -72,7 +72,7 @@ type AnswerRead =
  *    of them before any is chosen; their state is read once a minute through store/repoKnowledge), and More.
  *  - Under 1024 px the sidebar is a modal drawer behind the header's button.
  */
-export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
+export function UnderstandPage({ project, navigate, now, compare, runs = [], search }: {
   /** The project on screen (a project's page): the chat is scoped to it. */
   project: string | null;
   /** The jobs the page already holds: the default repository is the most active one this week. */
@@ -81,6 +81,8 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   now: number;
   /** Compare side by side (DeskUnderstand), folded away. */
   compare: React.ReactNode;
+  /** The address's query (the router's): `?view=knowledge` is the Knowledge map, kept in step both ways. */
+  search?: string;
 }): React.ReactElement {
   const boxId = useId();
   const recentId = useId();
@@ -177,11 +179,26 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     askPage('understand', { text: questionMessage(question), send: true, fresh: true });
     setQ('');
   };
+  // The Knowledge map has an address (a review link lands on it): the pane follows it, and it follows the pane.
+  const wantsKnowledge = search === undefined ? null : new URLSearchParams(search).get('view') === 'knowledge';
+  useEffect(() => {
+    if (wantsKnowledge === null) return;
+    setPane((cur) => (wantsKnowledge ? 'knowledge' : cur === 'knowledge' ? 'chat' : cur));
+  }, [wantsKnowledge]);
+  const syncUrl = (next: Pane): void => {
+    if (search === undefined || (next === 'knowledge') === wantsKnowledge) return;
+    const q = new URLSearchParams(search);
+    if (next === 'knowledge') q.set('view', 'knowledge');
+    else q.delete('view');
+    const rest = q.toString();
+    navigate(`${window.location.pathname}${rest === '' ? '' : `?${rest}`}`, { replace: true });
+  };
   const newQuestion = (): void => {
     usePageChat.getState().fresh('understand');
     setInline(false);
     setOpenChat(null);
     setOpenScope(null);
+    syncUrl('chat');
     setPane('chat');
     setTimeout(() => inputRef.current?.focus(), 0);
   };
@@ -190,6 +207,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     setInline(true);
     setOpenChat(a.chatId);
     setOpenScope(a.repos ?? null);
+    syncUrl('chat');
     setPane('chat');
     if (drawer) closeSide('content'); else focusContent();
   };
@@ -237,6 +255,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     }, 0);
   };
   const showPane = (next: Pane): void => {
+    syncUrl(next);
     setPane(next);
     if (drawer) closeSide('content'); else focusContent();
   };

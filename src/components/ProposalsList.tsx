@@ -66,8 +66,9 @@ function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
   const tier = kind === 'memory' ? memoryPayload(proposal).tier : null;
   // A worker's proposal carries the engine-stamped `run_agent` (crew's own learnings say `crew`); older ones `agent`.
   const agent = proposal.provenance['run_agent'] ?? proposal.provenance.agent ?? proposal.provenance.helper;
-  // A data shape crew's profiler filed when the person profiled a source (no run behind it).
-  const profiled = kind === 'knowledge' && (proposal.payload as { capture?: unknown } | undefined)?.capture === 'profile';
+  // A data shape crew's profiler filed when the person profiled a source: no run and no agent behind it (a worker's
+  // proposal carries the engine-stamped `run_agent`, which a payload cannot overwrite, so it is never called crew's).
+  const profiled = kind === 'knowledge' && agent === undefined && (proposal.provenance['run_id'] ?? '') === '' && (proposal.payload as { capture?: unknown } | undefined)?.capture === 'profile';
   const proposer = profiled ? 'crew\u2019s profiler, when you profiled the source' : agent === 'crew' ? 'crew (from the run\u2019s record)' : agent;
   const fromRun = proposal.provenance['run_id'];
   // One disclosure for every internal: the proposal id, provenance and tags (studio#689 row 47).

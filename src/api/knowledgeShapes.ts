@@ -69,8 +69,61 @@ export async function getKnowledgeMap(): Promise<KnowledgeMapResponse> {
   return readKnowledgeMap(await apiFetch<unknown>('/knowledge/map'));
 }
 
-export function profileSource(name: string): Promise<SourceProfileResponse> {
-  return apiFetch<SourceProfileResponse>(`/sources/${encodeURIComponent(name)}/profile`, { method: 'POST' });
+/** crew answered something that is not a profile: said, never shown as an empty profile. */
+export class ProfileWireError extends Error {}
+
+const BANDS = new Set(['0', '1-99', '100-9,999', '10,000-999,999', '1,000,000+']);
+const CARDS = new Set(['none', 'single', 'low', 'high', 'unique', 'unknown']);
+const OVERLAPS = new Set(['empty', 'none', 'some', 'most', 'all']);
+
+/** A profile as crew answered it, checked field by field; the lists it needs must be there, the rest is dropped. */
+export function readSourceProfile(raw: unknown): SourceProfileResponse {
+  const r = isObj(raw) ? raw : null;
+  if (r === null || str(r['name']) === null || !Array.isArray(r['relations']) || !Array.isArray(r['proposed'])) {
+    throw new ProfileWireError('crew answered the profile in a form this studio does not read: update studio or crew');
+  }
+  const relations = (r['relations'] as unknown[]).flatMap((x): SourceProfileResponse['relations'] => {
+    if (!isObj(x) || str(x['key']) === null) return [];
+    const columns = (Array.isArray(x['columns']) ? x['columns'] : []).flatMap((c): SourceProfileResponse['relations'][number]['columns'] => {
+      if (!isObj(c) || str(c['name']) === null) return [];
+      return [{
+        name: str(c['name'])!,
+        type: str(c['type']) ?? '',
+        nullPct: typeof c['nullPct'] === 'number' ? c['nullPct'] : null,
+        hasNulls: c['hasNulls'] === true,
+        cardinality: CARDS.has(String(c['cardinality'])) ? (c['cardinality'] as SourceProfileResponse['relations'][number]['columns'][number]['cardinality']) : 'unknown',
+        keyCandidate: c['keyCandidate'] === true,
+      }];
+    });
+    const rows = typeof x['rows'] === 'string' && BANDS.has(x['rows']) ? (x['rows'] as SourceProfileResponse['relations'][number]['rows']) : null;
+    return [{ key: str(x['key'])!, rows, columns, error: rows === null ? str(x['error']) ?? 'unreadable' : null, ...(typeof x['columnsNotListed'] === 'number' ? { columnsNotListed: x['columnsNotListed'] } : {}) }];
+  });
+  const joins = (Array.isArray(r['joins']) ? r['joins'] : []).flatMap((j): SourceProfileJoin[] => {
+    if (!isObj(j) || str(j['from']) === null || str(j['to']) === null) return [];
+    return [{ from: str(j['from'])!, to: str(j['to'])!, columns: strs(j['columns']), references: strs(j['references']), basis: j['basis'] === 'fk' ? 'fk' : 'name_type', overlap: OVERLAPS.has(String(j['overlap'])) ? (j['overlap'] as SourceProfileJoin['overlap']) : null }];
+  });
+  const describes = (Array.isArray(r['describes']) ? r['describes'] : []).flatMap((d): SourceProfileResponse['describes'] => (isObj(d) && str(d['relation']) !== null && str(d['name']) !== null ? [{ relation: str(d['relation'])!, repo: str(d['repo']) ?? '', name: str(d['name'])!, kind: str(d['kind']) ?? '', file: str(d['file']) ?? '' }] : []));
+  const proposed = (r['proposed'] as unknown[]).flatMap((p): SourceProfileResponse['proposed'] => (isObj(p) && str(p['id']) !== null ? [{ id: str(p['id'])!, relation: str(p['relation']) ?? '' }] : []));
+  const cs = isObj(r['codeSearch']) ? r['codeSearch'] : {};
+  const n = (v: unknown): number | undefined => (typeof v === 'number' && v > 0 ? v : undefined);
+  return {
+    name: str(r['name'])!,
+    sourceId: str(r['sourceId']) ?? '',
+    profiledAt: str(r['profiledAt']) ?? '',
+    relations,
+    joins,
+    describes,
+    proposed,
+    alreadyProposed: typeof r['alreadyProposed'] === 'number' ? r['alreadyProposed'] : 0,
+    codeSearch: { searched: strs(cs['searched']), notSearched: strs(cs['notSearched']) },
+    ...(n(r['notInKnowledge']) !== undefined ? { notInKnowledge: n(r['notInKnowledge'])! } : {}),
+    ...(n(r['notListed']) !== undefined ? { notListed: n(r['notListed'])! } : {}),
+    ...(r['catalogTruncated'] === true ? { catalogTruncated: true as const } : {}),
+  };
+}
+
+export async function profileSource(name: string): Promise<SourceProfileResponse> {
+  return readSourceProfile(await apiFetch<unknown>(`/sources/${encodeURIComponent(name)}/profile`, { method: 'POST' }));
 }
 
 /** A data-shape proposal's crew record (`payload.shape`), or `null` when it carries none (a garden-proposed shape). */
@@ -79,7 +132,7 @@ export function shapeRecordOf(p: Proposal): KnowledgeShapeRecord | null {
   if (!isObj(payload) || !isObj(payload['shape'])) return null;
   const s = payload['shape'];
   if (str(s['relation']) === null || str(s['source']) === null) return null;
-  return s as unknown as KnowledgeShapeRecord;
+  return { ...(s as unknown as KnowledgeShapeRecord), relation: str(s['relation'])!, source: str(s['source'])! };
 }
 
 /** What a knowledge proposal says, for its card: its content, the relation it is about, and its typed links in words. */
@@ -89,15 +142,16 @@ export function knowledgePayload(p: Proposal): { content: string | null; relatio
   const rec = shapeRecordOf(p);
   const links: Array<{ rel: string; text: string }> = [];
   if (rec !== null) {
-    for (const j of Array.isArray(rec.joins) ? rec.joins : []) {
-      if (!isObj(j)) continue;
+    for (const j of Array.isArray(rec.joins) ? (rec.joins as unknown[]) : []) {
+      if (!isObj(j) || str(j['to']) === null) continue;
       const basis = j['basis'] === 'fk' ? 'a foreign key' : 'matching name and type';
       const overlap = str(j['overlap']);
-      links.push({ rel: 'joins', text: `joins ${String(j['to'])} on ${strs(j['columns']).join(', ')} = ${strs(j['references']).join(', ')} (${basis}${overlap !== null ? `; ${overlap === 'all' ? 'every value matches' : overlap === 'most' ? 'most values match' : `${overlap} match`}` : ''})` });
+      const self = j['to'] === rec.relation;
+      links.push({ rel: 'joins', text: `joins ${self ? 'itself' : str(j['to'])!} on ${strs(j['columns']).join(', ')} = ${strs(j['references']).join(', ')} (${basis}${overlap !== null ? `; ${overlap === 'all' ? 'every value matches' : overlap === 'most' ? 'most values match' : `${overlap} match`}` : ''})` });
     }
-    for (const d of Array.isArray(rec.describes) ? rec.describes : []) {
-      if (!isObj(d)) continue;
-      links.push({ rel: 'describes', text: `describes ${String(d['name'])} (${String(d['kind'])}) in ${String(d['repo'])}` });
+    for (const d of Array.isArray(rec.describes) ? (rec.describes as unknown[]) : []) {
+      if (!isObj(d) || str(d['name']) === null) continue;
+      links.push({ rel: 'describes', text: `describes ${str(d['name'])!}${str(d['kind']) !== null ? ` (${str(d['kind'])!})` : ''}${str(d['repo']) !== null ? ` in ${str(d['repo'])!}` : ''}` });
     }
   } else {
     // A shape proposed by an agent (garden's data skill): its links, named by their own words.

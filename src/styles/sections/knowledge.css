@@ -20,6 +20,11 @@
 .wk-know-swatch[data-kind="shape"] { background: var(--accent); transform: rotate(45deg) scale(0.8); }
 .wk-know-swatch[data-kind="repo"] { background: var(--ink-muted); clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
 .wk-know-swatch[data-kind="code"] { background: var(--status-run); border-radius: 50%; }
+.wk-know-swatch[data-kind="knowledge"] { background: var(--ink-muted); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.wk-know-inventory { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; color: var(--ink-body); }
+.wk-know-inventory > summary { cursor: pointer; color: var(--ink-muted); }
+.wk-know-inventory[open] > summary { margin-bottom: var(--space-2); }
+.wk-know-list { display: flex; flex-direction: column; gap: var(--space-1); margin: 0 0 var(--space-2); padding-left: var(--space-4); min-width: 0; overflow-wrap: anywhere; }
 .wk-know-line { display: inline-block; width: 20px; height: 0; flex-shrink: 0; align-self: center; border-top: 2px solid var(--ink-dim); }
 .wk-know-line[data-rel="joins"] { border-top: 2px solid var(--accent); }
 .wk-know-line[data-rel="describes"] { border-top: 2px dashed var(--status-run); }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { ApiError } from '../../api/errors.js';
-import { KNOWLEDGE_VIEW_PATH, profileSource, type SourceProfileResponse } from '../../api/knowledgeShapes.js';
+import { KNOWLEDGE_VIEW_PATH, ProfileWireError, profileSource, type SourceProfileResponse } from '../../api/knowledgeShapes.js';
 
 /** What profiling does, said before the person starts it (DES-KNOWLEDGE-DATA-001 §10.2). */
 export const PROFILE_MEANS =
@@ -28,11 +28,29 @@ export function profileRefusal(e: unknown): string {
     case 'profile_human_only':
       return 'Only a person signed in as an operator can profile a source.';
     case null:
+      if (e instanceof ProfileWireError) return e.message;
       if (e instanceof ApiError && e.status === 404) return 'The crew on this daemon does not profile sources yet: update crew.';
       return e instanceof Error ? e.message : String(e);
     default:
       return e instanceof Error ? e.message : String(e);
   }
+}
+
+/** What a profile did, in words: what was read, what was filed, what was already in the queue, what was left out. */
+export function profileWords(p: SourceProfileResponse): string {
+  const read = p.relations.filter((r) => r.rows !== null).length;
+  const unread = p.relations.length - read;
+  const n = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
+  const parts = [
+    `Profiled ${n(read, 'table', 'tables')}${p.joins.length > 0 ? `, found ${n(p.joins.length, 'join', 'joins')}` : ''}${p.describes.length > 0 ? `, and ${n(p.describes.length, 'code entity', 'code entities')} named like a table` : ''}.`,
+    p.proposed.length > 0 ? `${n(p.proposed.length, 'data shape is', 'data shapes are')} waiting for your review.` : '',
+    p.alreadyProposed > 0 ? `${n(p.alreadyProposed, 'shape was', 'shapes were')} already in the review queue, unchanged.` : '',
+    p.proposed.length === 0 && p.alreadyProposed === 0 ? 'No data shape was filed.' : '',
+    unread > 0 ? `${n(unread, 'table', 'tables')} could not be read.` : '',
+    (p.notInKnowledge ?? 0) > 0 ? `${n(p.notInKnowledge!, 'table', 'tables')} that knowledge holds are not in crew's catalog and were not profiled.` : '',
+    (p.notListed ?? 0) > 0 || p.catalogTruncated === true ? 'The source has more tables than one profile reads; the rest were not profiled.' : '',
+  ];
+  return parts.filter((x) => x !== '').join(' ');
 }
 
 /** One relation's result in a line: its rows band, its key, its joins. */
@@ -55,33 +73,36 @@ export function ProfileBox({ source }: { source: string }): React.ReactElement {
   const [result, setResult] = useState<SourceProfileResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const live = useRef(true);
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
   useEffect(() => {
     live.current = true;
     return () => {
       live.current = false;
     };
   }, []);
-  // Another source's sheet: nothing of this one's answer stays.
+  // Another source's sheet: nothing of this one's answer, or its run, stays.
   useEffect(() => {
     setResult(null);
     setError(null);
+    setRunning(false);
   }, [source]);
   const run = (): void => {
     setRunning(true);
     setError(null);
-    profileSource(source).then(
+    const asked = source;
+    profileSource(asked).then(
       (r) => {
-        if (!live.current || r.name !== source) return;
+        if (!live.current || r.name !== asked || sourceRef.current !== asked) return;
         setResult(r);
       },
       (e: unknown) => {
-        if (live.current) setError(profileRefusal(e));
+        if (live.current && sourceRef.current === asked) setError(profileRefusal(e));
       },
     ).finally(() => {
-      if (live.current) setRunning(false);
+      if (live.current && sourceRef.current === asked) setRunning(false);
     });
   };
-  const filed = result?.proposed.length ?? 0;
   return (
     <div className="wk-src-box" data-testid="source-profile">
       <p className="wk-src-okline wk-src-strong"><BarChart3 size={16} aria-hidden className="wk-src-ico" />Data shapes</p>
@@ -94,12 +115,7 @@ export function ProfileBox({ source }: { source: string }): React.ReactElement {
       {error !== null && <p role="alert" className="wk-src-note wk-src-tone-fail" data-testid="source-profile-error">{error}</p>}
       {result !== null && (
         <div data-testid="source-profile-result" role="status">
-          <p className="wk-src-note">
-            Profiled {result.relations.length === 1 ? '1 table' : `${result.relations.length} tables`}
-            {result.joins.length > 0 && `, found ${result.joins.length === 1 ? '1 join' : `${result.joins.length} joins`}`}
-            {result.describes.length > 0 && `, and ${result.describes.length === 1 ? '1 code entity' : `${result.describes.length} code entities`} named like a table`}.
-            {' '}{filed > 0 ? `${filed === 1 ? '1 data shape is' : `${filed} data shapes are`} waiting for your review.` : 'Nothing new to review: the same shapes are already in the queue.'}
-          </p>
+          <p className="wk-src-note">{profileWords(result)}</p>
           <ul className="wk-src-profile-rows" data-testid="source-profile-rows">
             {result.relations.map((r) => <li key={r.key}>{relationLine(result, r.key)}</li>)}
           </ul>
