@@ -56,27 +56,28 @@ export function edgeWords(e: KnowledgeMapEdge, byKey: ReadonlyMap<string, Knowle
 export function KnowledgeView(): React.ReactElement {
   const [read, setRead] = useState<MapRead>({ phase: 'loading' });
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  /** Each read's number: only the newest one's answer (or failure) is applied, and none after unmount. */
+  /** Each read's number (only ever counts up, Strict Mode's remount included): only the newest read's answer, or
+   *  failure, is applied, and none while unmounted. */
   const gen = useRef(0);
-  useEffect(() => () => {
-    gen.current = -1;
-  }, []);
+  const mounted = useRef(false);
   const load = useCallback((): void => {
-    if (gen.current < 0) return;
     const mine = ++gen.current;
     setRead((cur) => (cur.phase === 'ok' ? cur : { phase: 'loading' }));
     getKnowledgeMap().then(
       (map) => {
-        if (gen.current === mine) setRead({ phase: 'ok', map });
+        if (mounted.current && gen.current === mine) setRead({ phase: 'ok', map });
       },
       (e: unknown) => {
-        if (gen.current === mine) setRead({ phase: 'failed', kind: readErrorKind(e), message: e instanceof Error ? e.message : String(e) });
+        if (mounted.current && gen.current === mine) setRead({ phase: 'failed', kind: readErrorKind(e), message: e instanceof Error ? e.message : String(e) });
       },
     );
   }, []);
   useEffect(() => {
-    gen.current = Math.max(gen.current, 0);
+    mounted.current = true;
     load();
+    return () => {
+      mounted.current = false;
+    };
   }, [load]);
 
   const map = read.phase === 'ok' ? read.map : null;
@@ -84,13 +85,22 @@ export function KnowledgeView(): React.ReactElement {
   const typed = useMemo(() => (map?.edges ?? []).filter((e) => LISTED.has(e.rel)), [map]);
   const shapes = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'shape'), [map]);
   const selected = selectedKey === null ? null : byKey.get(selectedKey) ?? null;
-  // The inventory: each source with its tables, each repository with its code (by the drawn `contains` edges).
+  // The inventory holds EVERY node the map draws: each source with its tables, each repository with its code (by the
+  // node's own source/repo, or a drawn `contains` edge), and every other node on its own.
   const groups = useMemo(() => {
     const nodes = map?.nodes ?? [];
     const contains = (map?.edges ?? []).filter((e) => e.rel === 'contains');
-    const of = (k: string): KnowledgeMapNode[] => contains.filter((e) => e.from === k).map((e) => byKey.get(e.to)).filter((n): n is KnowledgeMapNode => n !== undefined);
-    return nodes.filter((n) => n.kind === 'source' || n.kind === 'repo').map((n) => ({ node: n, members: of(n.key) }));
-  }, [map, byKey]);
+    const placed = new Set<string>();
+    const out: Array<{ node: KnowledgeMapNode; members: KnowledgeMapNode[] }> = [];
+    for (const g of nodes.filter((n) => n.kind === 'source' || n.kind === 'repo')) {
+      const viaEdge = new Set(contains.filter((e) => e.from === g.key).map((e) => e.to));
+      const members = nodes.filter((n) => viaEdge.has(n.key) || (g.kind === 'source' && n.kind === 'table' && n.source === g.label) || (g.kind === 'repo' && n.kind === 'code' && n.repo === g.label));
+      for (const m of members) placed.add(m.key);
+      placed.add(g.key);
+      out.push({ node: g, members });
+    }
+    return { out, others: nodes.filter((n) => n.kind !== 'shape' && !placed.has(n.key)) };
+  }, [map]);
 
   const notes = map !== null && (
     <>
@@ -197,12 +207,33 @@ export function KnowledgeView(): React.ReactElement {
                   </ul>
                 </>
               )}
-              {groups.map((g) => (
+              {groups.out.map((g) => (
                 <div key={g.node.key} data-testid="knowledge-inventory-group">
                   <h3 className="wk-know-subtitle">{KIND_WORDS[g.node.kind]}: {g.node.label}</h3>
-                  {g.members.length === 0 ? <p className="wk-gk-muted">Nothing listed.</p> : <p className="wk-gk-content">{g.members.map((m) => m.label).join(', ')}</p>}
+                  {g.members.length === 0 ? <p className="wk-gk-muted">Nothing listed.</p> : (
+                    <ul className="wk-know-list">
+                      {g.members.map((m) => (
+                        <li key={m.key} data-testid="knowledge-inventory-node" data-key={m.key}>
+                          <button type="button" className="wk-ue-link wk-ue-linkbtn" onClick={() => setSelectedKey(m.key)}>{m.label}</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               ))}
+              {groups.others.length > 0 && (
+                <>
+                  <h3 className="wk-know-subtitle">Also on the map</h3>
+                  <ul className="wk-know-list">
+                    {groups.others.map((m) => (
+                      <li key={m.key} data-testid="knowledge-inventory-node" data-key={m.key}>
+                        <button type="button" className="wk-ue-link wk-ue-linkbtn" onClick={() => setSelectedKey(m.key)}>{m.label}</button>
+                        <span className="wk-gk-muted"> {KIND_WORDS[m.kind]}{m.source !== undefined ? ` in ${m.source}` : ''}{m.repo !== undefined ? ` in ${m.repo}` : ''}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </details>
           </>
         )}

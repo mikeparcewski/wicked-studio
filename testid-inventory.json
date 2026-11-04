@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 305,
-    "occurrences": 4350,
-    "static": 3661,
+    "occurrences": 4352,
+    "static": 3662,
     "dynamic": 140,
     "computed": 49
   },
@@ -7131,6 +7131,12 @@
     },
     {
       "testId": "knowledge-inventory-group",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-inventory-node",
       "files": [
         "src/components/desk/KnowledgeView.tsx"
       ]

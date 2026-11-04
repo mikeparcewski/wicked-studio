@@ -91,7 +91,7 @@ export function readSourceProfile(raw: unknown): SourceProfileResponse {
         type: str(c['type']) ?? '',
         nullPct: typeof c['nullPct'] === 'number' ? c['nullPct'] : null,
         hasNulls: c['hasNulls'] === true,
-        cardinality: CARDS.has(String(c['cardinality'])) ? (c['cardinality'] as SourceProfileResponse['relations'][number]['columns'][number]['cardinality']) : 'unknown',
+        cardinality: typeof c['cardinality'] === 'string' && CARDS.has(c['cardinality']) ? (c['cardinality'] as SourceProfileResponse['relations'][number]['columns'][number]['cardinality']) : 'unknown',
         keyCandidate: c['keyCandidate'] === true,
       }];
     });
@@ -100,7 +100,7 @@ export function readSourceProfile(raw: unknown): SourceProfileResponse {
   });
   const joins = (Array.isArray(r['joins']) ? r['joins'] : []).flatMap((j): SourceProfileJoin[] => {
     if (!isObj(j) || str(j['from']) === null || str(j['to']) === null) return [];
-    return [{ from: str(j['from'])!, to: str(j['to'])!, columns: strs(j['columns']), references: strs(j['references']), basis: j['basis'] === 'fk' ? 'fk' : 'name_type', overlap: OVERLAPS.has(String(j['overlap'])) ? (j['overlap'] as SourceProfileJoin['overlap']) : null }];
+    return [{ from: str(j['from'])!, to: str(j['to'])!, columns: strs(j['columns']), references: strs(j['references']), basis: j['basis'] === 'fk' ? 'fk' : 'name_type', overlap: typeof j['overlap'] === 'string' && OVERLAPS.has(j['overlap']) ? (j['overlap'] as SourceProfileJoin['overlap']) : null }];
   });
   const describes = (Array.isArray(r['describes']) ? r['describes'] : []).flatMap((d): SourceProfileResponse['describes'] => (isObj(d) && str(d['relation']) !== null && str(d['name']) !== null ? [{ relation: str(d['relation'])!, repo: str(d['repo']) ?? '', name: str(d['name'])!, kind: str(d['kind']) ?? '', file: str(d['file']) ?? '' }] : []));
   const proposed = (r['proposed'] as unknown[]).flatMap((p): SourceProfileResponse['proposed'] => (isObj(p) && str(p['id']) !== null ? [{ id: str(p['id'])!, relation: str(p['relation']) ?? '' }] : []));

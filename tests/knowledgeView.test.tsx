@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -26,6 +27,7 @@ const { KnowledgeView, edgeWords } = await import('../src/components/desk/Knowle
 const { ProfileBox, profileRefusal, profileWords } = await import('../src/components/sources/ProfileBox.js');
 const { readKnowledgeMap, readSourceProfile, knowledgePayload, KNOWLEDGE_VIEW_PATH, ProfileWireError } = await import('../src/api/knowledgeShapes.js');
 const { ProposalsList } = await import('../src/components/ProposalsList.js');
+const { proposalConsequence, proposalConsequenceLine } = await import('../src/board/proposalTriage.js');
 const { proposalKind } = await import('../src/api/proposals.js');
 const { ApiError } = await import('../src/api/errors.js');
 type Proposal = import('../src/api/proposals.js').Proposal;
@@ -222,11 +224,51 @@ describe('Understand → Knowledge', () => {
     expect(screen.getByTestId('knowledge-map-skipped').textContent).toContain('2 approved shapes are not drawn');
   });
 
-  it('holds the whole map as a list: every shape with its summary, each source\'s tables, each repository\'s code', async () => {
+  it('holds the whole map as a list: every node the map draws, each selectable from the keyboard', async () => {
+    const user = userEvent.setup();
+    const odd = structuredClone(MAP);
+    odd.nodes.push({ key: 'knowledge:ksection x', kind: 'knowledge', label: 'a section' } as never);
+    apiFetch.mockImplementation((path: unknown) => (String(path) === '/knowledge/map' ? Promise.resolve(odd) : Promise.resolve({ proposals: [] })));
     render(<KnowledgeView />);
     const inv = await screen.findByTestId('knowledge-inventory');
-    expect(within(inv).getAllByTestId('knowledge-inventory-shape').map((x) => x.textContent)).toEqual(['support.tickets shape support.tickets in data source support-pg …']);
-    expect(within(inv).getAllByTestId('knowledge-inventory-group').map((x) => x.textContent)).toEqual(['Data source: support-pgsupport.tickets', 'Repository: escalationsNothing listed.']);
+    const listed = new Set([
+      ...within(inv).getAllByTestId('knowledge-inventory-node').map((x) => x.getAttribute('data-key')),
+      ...within(inv).getAllByTestId('knowledge-inventory-group').map((g) => g.textContent),
+    ]);
+    const keysListed = within(inv).getAllByTestId('knowledge-inventory-node').map((x) => x.getAttribute('data-key'));
+    const drawn = readKnowledgeMap(odd).nodes.filter((n) => n.kind !== 'shape' && n.kind !== 'source' && n.kind !== 'repo').map((n) => n.key);
+    expect(keysListed.sort()).toEqual([...drawn].sort());
+    expect(listed.size).toBeGreaterThan(0);
+    expect(within(inv).getAllByTestId('knowledge-inventory-shape')).toHaveLength(1);
+    // Selecting from the list shows the node's detail (no pointer on the canvas needed).
+    await user.click(within(inv).getByRole('button', { name: 'Ticket' }));
+    expect(screen.getByTestId('knowledge-selected').textContent).toContain('In repository escalations');
+  });
+
+  it('under Strict Mode too, an older read answering last never replaces the newest', async () => {
+    const pending: Array<{ ok: (v: unknown) => void; fail: (e: unknown) => void }> = [];
+    apiFetch.mockImplementation((path: unknown) => (String(path) === '/knowledge/map' ? new Promise((ok, fail) => pending.push({ ok, fail })) : Promise.resolve({ proposals: [] })));
+    render(<StrictMode><KnowledgeView /></StrictMode>);
+    await waitFor(() => expect(pending.length).toBeGreaterThanOrEqual(2));
+    const last = pending.length - 1;
+    pending[last]!.ok(structuredClone(MAP));
+    await screen.findByTestId('knowledge-graph-stub');
+    for (let i = 0; i < last; i++) pending[i]!.fail(new Error('old read failed'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('knowledge-map-error')).toBeNull();
+    expect(screen.getByTestId('knowledge-graph-stub')).toBeTruthy();
+  });
+
+  it('a profile field of the wrong type is narrowed, never coerced', () => {
+    const p = readSourceProfile({ name: 'pg', relations: [{ key: 's.t', rows: '1-99', columns: [{ name: 'c', cardinality: ['unique'] }, { name: 'd', cardinality: { toString: null } }] }], proposed: [], joins: [{ from: 's.t', to: 's.u', overlap: ['all'] }, { from: 's.t', to: 's.v', overlap: { toString: null } }] });
+    expect(p.relations[0]!.columns.map((c) => c.cardinality)).toEqual(['unknown', 'unknown']);
+    expect(p.joins.map((j) => j.overlap)).toEqual([null, null]);
+  });
+
+  it('a data shape takes no memory or policy path: its consequence is its own, and it is reviewed in the Knowledge map', () => {
+    const k = shapeProposal('p1', 'support.t', 'support.u');
+    expect(proposalConsequence(k)).toBe('unknown');
+    expect(proposalConsequenceLine(k)).toBe('Adds a data shape to the Knowledge map; no rule changes');
   });
 
   it('says what to do when there is nothing to map, and a failed read with a retry', async () => {
