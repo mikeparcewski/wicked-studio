@@ -50,6 +50,14 @@ describe('the app chat: crew\'s turn log, in words', () => {
     expect(changeLine(t[0]!)).toBe('v3 · Added 1 chart and 1 query · reviewed by Codex');
     expect(endedLine(t[1]!)).toBe('Nothing landed: crew\'s check refused the change: pg_sleep is not allowed');
     expect(turnsOf(detail({ turns: undefined }))).toStrictEqual([]);
+    // An old record in the engine's words reads in crew's own (the stored record is not rewritten).
+    const old = turnsOf(detail({ turns: [
+      turn({ runId: 'r9', state: 'failed', code: 'step_failed', version: null, reason: 'The build did not pass: executes-code phase reported done but left no change in the worktree (done is re-derived from the diff, never asserted)' }),
+      turn({ runId: 'r8', summary: 'Counts: derived 3 / submitted 3 / failed 0. Memories proposed 0: nothing bit.' }),
+    ] }));
+    expect(old[0]).toMatchObject({ code: 'no_change', reason: 'The builder made no change it could hand on. Nothing landed.' });
+    expect(endedLine(old[0]!)).toBe('This turn could not finish, so nothing landed: The builder made no change it could hand on');
+    expect(old[1]!.summary).toBeNull();
   });
 
   it('busy text names the step and its seat; a new app\'s slug comes from the message\'s own words', () => {

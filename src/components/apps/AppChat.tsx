@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppDetail, SessionView } from '../../api/types.js';
-import { sourcesApi } from '../../api/sources.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { busyText, changeLine, componentWords, endedLine, hasTurnLog, seatWord, sendTurn, suggestionsFor, turnsOf, type AppTurnRecord } from '../../editors/apps/appTurns.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
@@ -135,20 +134,11 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   const setText = (t: string): void => setTextState(t);
   const [note, setNote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [sources, setSources] = useState<string[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const thread = useRef<HTMLDivElement | null>(null);
   const turns = useMemo(() => turnsOf(detail), [detail]);
   const busy = detail?.turn != null;
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
-  useEffect(() => {
-    let live = true;
-    sourcesApi.list().then((r) => {
-      if (!live) return;
-      setSources((r.servers ?? []).filter((s) => s.kind === 'sql' || s.kind === 'graphql').map((s) => s.name).slice(0, 20));
-    }, () => undefined);
-    return () => { live = false; };
-  }, []);
   // The newest message in view as the thread grows.
   const last = turns[turns.length - 1];
   useEffect(() => {
@@ -157,9 +147,12 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   }, [turns.length, last?.state]);
   const latestLandedRun = [...turns].reverse().find((t) => t.state === 'landed')?.runId ?? null;
   const supported = detail === null || hasTurnLog(detail);
-  const suggestions: ComposerSuggestion[] = useMemo(() => (busy || framed ? [] : suggestionsFor(detail?.spec ?? null, sources).map((s, i) => ({
+  // The sources this app already reads, from its own spec: a chat module never reaches the sources API (the
+  // human-only source sheet's; tests/sourcesHumanOnly.test.ts).
+  const appSources = useMemo(() => [...new Set((detail?.spec.queries ?? []).map((q) => q.source))].slice(0, 20), [detail]);
+  const suggestions: ComposerSuggestion[] = useMemo(() => (busy || framed ? [] : suggestionsFor(detail?.spec ?? null, appSources).map((s, i) => ({
     id: `app-suggest-${i}`, label: s, title: 'Put this in the box', onPick: () => setTextState(s),
-  }))), [busy, framed, detail, sources]);
+  }))), [busy, framed, detail, appSources]);
 
   /** The composer's submit: true when the message was taken (the box and the chips then clear). */
   const send = async (words: string, about: string[]): Promise<boolean> => {

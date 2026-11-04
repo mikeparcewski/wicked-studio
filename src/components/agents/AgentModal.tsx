@@ -164,6 +164,8 @@ export function AgentModal({ agentKey, onClose, intent }: {
   useEffect(() => {
     if (!covered) return undefined;
     const release = holdInert(scrim.current);
+    // The dialog node as this cover found it (the cleanup must not read a ref that may have moved on).
+    const dialogNode = dialog.current;
     return () => {
       release();
       // Focus comes back here only now that this modal is no longer inert (codex r7): the trigger the login
@@ -171,8 +173,8 @@ export function AgentModal({ agentKey, onClose, intent }: {
       const a = document.activeElement;
       if (a !== null && a !== document.body && a.isConnected) return;
       const to = useLoginCover.getState().returnTo;
-      if (to !== null && to.isConnected && dialog.current?.contains(to) === true && !to.matches(':disabled')) to.focus();
-      else dialog.current?.focus();
+      if (to !== null && to.isConnected && dialogNode?.contains(to) === true && !to.matches(':disabled')) to.focus();
+      else dialogNode?.focus();
     };
   }, [covered]);
 

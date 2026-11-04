@@ -264,7 +264,6 @@ export function AppsPage({ navigate }: { navigate: (path: string) => void }): Re
   const [queriesOn, setQueriesOn] = useState(false);
   // A framed studio changes nothing (§7.1, S8): no app is made from inside another page.
   const framed = useMemo(() => { try { return window.top !== window.self; } catch { return true; } }, []);
-  const [sources, setSources] = useState<string[]>([]);
   // ONE scheduler for the page: every card's live reads share its limit (at most 3 at once) and its stagger.
   const scheduler = useMemo(() => new TileScheduler(), []);
   useEffect(() => {
@@ -273,13 +272,6 @@ export function AppsPage({ navigate }: { navigate: (path: string) => void }): Re
     document.addEventListener('visibilitychange', tick);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', tick); };
   }, [scheduler]);
-  useEffect(() => {
-    let live = true;
-    void import('../../api/sources.js').then(({ sourcesApi }) => sourcesApi.list()).then((r) => {
-      if (live) setSources((r.servers ?? []).filter((x) => x.kind === 'sql' || x.kind === 'graphql').map((x) => x.name).slice(0, 20));
-    }, () => undefined);
-    return () => { live = false; };
-  }, []);
   useEffect(() => {
     let cancelled = false;
     setDir(null);
@@ -311,7 +303,7 @@ export function AppsPage({ navigate }: { navigate: (path: string) => void }): Re
     <PageFrame data-testid="apps-page" title={PAGE_NAMES.apps}
       intro="Dashboards and tools over your data, built by chat. Open one to use it and to ask for changes; Edit is for fine-tuning by hand.">
       {turnsOn && dir !== null && dir.source === 'crew' && (
-        <NewAppChat navigate={navigate} sources={sources} projectOfApps={dir.apps.find((a) => a.detail !== null)?.detail?.projectId ?? null} framed={framed} />
+        <NewAppChat navigate={navigate} sources={[...new Set(dir.apps.flatMap((a) => a.sources))].slice(0, 20)} projectOfApps={dir.apps.find((a) => a.detail !== null)?.detail?.projectId ?? null} framed={framed} />
       )}
       {dir === null && <div className="wk-apps-grid" data-testid="apps-loading">{[0, 1, 2].map((i) => <div key={i} className="wk-appcard wk-appcard--ghost" />)}</div>}
       {dir !== null && dir.source === 'error' && (

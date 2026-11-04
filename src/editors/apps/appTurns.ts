@@ -37,6 +37,25 @@ const STATES = new Set(['running', 'landed', 'refused', 'failed', 'cancelled']);
 const str = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
 const int = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) ? v : null);
 
+/** The words a turn whose build made no change shows (crew's own, as new turns carry them: `no_change`). */
+export const NO_CHANGE_WORDS = 'The builder made no change it could hand on. Nothing landed.';
+
+/**
+ * Records crew wrote before it had words of its own for them, read in today's words (at render; the stored record
+ * is never rewritten): a build the engine failed for leaving no change reads as `no_change`, and a landed turn's
+ * lines drop the worker skill's bookkeeping ("Counts: …", "Memories proposed …").
+ */
+function plainOld(t: AppTurnRecord): AppTurnRecord {
+  let r = t;
+  if (r.code === 'step_failed' && /left no change in the worktree/u.test(r.reason ?? '')) r = { ...r, code: 'no_change', reason: NO_CHANGE_WORDS };
+  if (r.summary !== null) {
+    const lines = r.summary.split('\n').filter((l) => !/^(Counts|Memories proposed)\b/iu.test(l.trim()));
+    const joined = lines.join('\n').replace(/\s*Counts: .*$/u, '').trim();
+    r = { ...r, summary: joined === '' ? null : joined };
+  }
+  return r;
+}
+
 /** crew's turn records, oldest first; a malformed record is dropped, never shown half-read. */
 export function turnsOf(detail: AppDetail | null): AppTurnRecord[] {
   const raw = (detail as unknown as { turns?: unknown } | null)?.turns;
@@ -49,12 +68,12 @@ export function turnsOf(detail: AppDetail | null): AppTurnRecord[] {
     const message = str(o['message'], 8000);
     const state = o['state'];
     if (runId === null || message === null || typeof state !== 'string' || !STATES.has(state) || int(o['at']) === null) continue;
-    out.push({
+    out.push(plainOld({
       runId, message, state: state as AppTurnRecord['state'],
       at: int(o['at'])!, actor: str(o['actor'], 128) ?? '', about: Array.isArray(o['about']) ? o['about'].filter((x): x is string => typeof x === 'string').slice(0, 20) : [],
       base: int(o['base']) ?? 0, endedAt: int(o['endedAt']), version: int(o['version']), change: str(o['change'], 300), summary: str(o['summary'], 600),
       builder: str(o['builder'], 64), reviewer: str(o['reviewer'], 64), code: str(o['code'], 64), reason: str(o['reason'], 2000),
-    });
+    }));
   }
   return out;
 }
