@@ -5,9 +5,11 @@ desk_slash_workflows_test.py — S19a (DES-STUDIO-REBUILD-001 §5.5/§5.7): a wo
 in-process fixture (`workflow_catalog` serves GET /workflows; `repo` serves GET /repos; `sessions`
 records POST /runs):
 
-  1. MENU: `/wo` groups "Start work" with the daemon's five ordinary defs (feature, bug, migration,
-     domain-extraction, capture-learnings), each line read off the catalog ("2 steps: plan → build"),
-     and never the system flow (chat); a mid-text `/workflow-` is a sentence — no rows.
+  1. MENU: `/wo` lists the daemon's five ordinary defs (feature, bug, migration, domain-extraction,
+     capture-learnings) as New job lists them (slash-catalog: this fixture is an older daemon with no
+     catalog route, so New job's list is today's, "All workflows"), each row New job's card title and
+     line ("Design, build, test and review a new feature"), and never the system flow (chat); a
+     mid-text `/workflow-` is a sentence — no rows.
   2. WIZARD (operator 2026-10-11): picking a row opens the launch wizard — a modal dialog on its
      "what" step, focus in the box, no inline strip, no POST.
   3. REFUSE: with no repository the wizard's Where step holds Next and says why; nothing is sent.
@@ -110,8 +112,8 @@ with sync_playwright() as p:
     ordinary = ["workflow-feature", "workflow-bug", "workflow-migration", "workflow-domain-extraction",
                 "workflow-capture-learnings"]
     check("menu-lists-workflows",
-          "start-work" in groups and all(c in cmds for c in ordinary) and "workflow-chat" not in cmds
-          and len(feature_line) == 1 and "2 steps: plan → build" in feature_line[0],
+          "start-work" in groups and sorted(cmds) == sorted(ordinary) and "workflow-chat" not in cmds
+          and len(feature_line) == 1 and "Design, build, test and review a new feature" in feature_line[0],
           groups=groups, cmds=cmds, feature_line=feature_line)
 
     # ── compact menu geometry: 1440×700 ──────────────────────────────────────────
@@ -121,8 +123,15 @@ with sync_playwright() as p:
         const box = menu.getBoundingClientRect();
         const items = [...document.querySelectorAll('[data-testid="composer-menu-item"]')];
         const rowHeights = items.map(e => Math.round(e.getBoundingClientRect().height));
+        // A row names its work once: a catalog row by its one title, its line something else (slash-catalog);
+        // a step by its command, never repeated as a word.
         const keyOnce = items.every(e => {
-            const key = e.dataset.workflow || e.dataset.cmd || '';
+            if (e.dataset.group === 'start-work') {
+                const names = e.querySelectorAll('b'), line = e.querySelector('small');
+                const title = (names[0]?.textContent || '').trim();
+                return names.length === 1 && title !== '' && (line === null || line.textContent.trim() !== title);
+            }
+            const key = e.dataset.cmd || '';
             if (!key) return true;
             const cnt = (e.innerText.toLowerCase().split(key.toLowerCase())).length - 1;
             return cnt === 1;

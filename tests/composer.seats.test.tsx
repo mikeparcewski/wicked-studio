@@ -85,6 +85,8 @@ describe('studio#631: the composer helpers row', () => {
     fireEvent.click(seatButton('codex'));
     expect(seatButton('codex').getAttribute('aria-pressed')).toBe('false');
     type('/workflow-mcp-server');
+    // slash-catalog: the row comes from the catalog read (an older daemon here: today's list).
+    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
     key('Enter'); // opens the launch wizard on that workflow
     fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
     fireEvent.click(screen.getByTestId('launch-wizard-next'));

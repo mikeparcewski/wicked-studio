@@ -3,9 +3,12 @@ import type { SessionView } from '../../api/types.js';
 import { artifactOfChips, chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
 import { inViewFor } from '../../store/artifactInView.js';
 import { composerSendRefusal } from '../../board/launchModel.js';
-import {
-  parseWorkflowCommand, workflowItems, WORKFLOWS_LOADING_LINE, type WorkflowRow,
-} from '../../board/workflowCommand.js';
+import { parseWorkflowCommand, WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
+import { catalogRows, notOfferedLine, workflowEntry, type CatalogRow } from '../../board/slashCatalog.js';
+import { entryOffered, jobCatalogView, type CatalogEntry } from '../../board/workflowCatalog.js';
+import { catalogProjectOf, useWorkflowCatalog } from '../../store/workflowCatalog.js';
+import { startCatalogEntry } from '../../store/startCatalogEntry.js';
+import { goToPath } from '../QeRefusalWarning.js';
 import {
   draftTarget, dropToken, menuToken, slashItems, wordOf, type DraftRunState, type DraftTarget, type SlashItem,
 } from '../../board/planDraft.js';
@@ -99,9 +102,10 @@ function useDraftTarget(runs: readonly SessionView[]): { target: DraftTarget; ga
  *  - `/`: adds a step to the session's chain — a plan draft (§5.7): on the plan gate's card while
  *    one is open (nothing is sent here), else queued 10 s with Undo and then one plan POST.
  *    A command the engine cannot take is refused in the menu with the reason.
- *  - `/workflow-<key>` as the FIRST token (S19a): names a workflow from the daemon's own catalog and
- *    Enter LAUNCHES it — the rest of the line is the intent. The row under the chip picks the
- *    repository (and the delivery); with none chosen the composer refuses and sends nothing.
+ *  - `/` as the FIRST token (S19a; slash-catalog): New job's catalog, the same entries, titles and
+ *    categories, "Your top" first. A pick starts what New job's card starts (`startCatalogEntry`):
+ *    New job opened on a workflow, New document, a new chat. `/workflow-<key>` typed whole still names
+ *    a workflow entry; the rest of the line is the intent.
  *  - studio#315: when the roster says no helper can take the message, Send is refused and says why.
  *
  * Typing never answers a question and never reshapes the chain: only a picked `/` command does.
@@ -138,7 +142,7 @@ export interface ComposerSuggestion { id: string; label: string; title?: string;
 
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null, suggestions = [],
+  inputRef, hint = false, footer = null, suggestions = [], navigate,
 }: {
   /** `desk`, or the session id. */
   composerKey: string;
@@ -200,6 +204,8 @@ export function Composer({
   }, [box, placeholder]);
   const [caret, setCaret] = useState(0);
   const [cursor, setCursor] = useState(0);
+  /** The row the arrows moved to, by identity: a refresh that reorders the rows keeps it active (codex r1). */
+  const [cursorKey, setCursorKey] = useState<string | null>(null);
   const [closedAt, setClosedAt] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -224,12 +230,18 @@ export function Composer({
   // `/workflow-<key>` rows lead the `/` menu only as a FIRST token (a named work), and only while no
   // workflow is already named (a second pick replaces the chip).
   const startCommands = token?.trigger === '/' && token.start === 0 && wfChip === null;
+  // slash-catalog: the rows are New job's catalog for this box's project, read each time a `/` line starts.
+  const catalogLoad = useWorkflowCatalog(catalogProjectOf(project?.projectId ?? null), text.trimStart().startsWith('/'));
+  const catalogView = useMemo(() => jobCatalogView(catalogLoad, defs, presets), [catalogLoad, defs, presets]);
+  // An older daemon's list is today's workflows: still being read until they land.
+  const wfCatalogState: 'loading' | 'error' | 'ready' = catalogLoad.state === 'error' ? 'error'
+    : catalogLoad.state === 'loading' || (catalogLoad.state === 'unavailable' && defs === null) ? 'loading' : 'ready';
   const wf = useMemo(
-    () => (startCommands && token !== null ? workflowItems(token.query, defs, presets) : []),
+    () => (startCommands && token !== null ? catalogRows(catalogView, token.query, Date.now()) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startCommands, token?.query, defs, presets],
+    [startCommands, token?.query, catalogView],
   );
-  const anyWorkflows = useMemo(() => workflowItems('', defs, presets).length > 0, [defs, presets]);
+  const anyWorkflows = useMemo(() => catalogRows(catalogView, '', Date.now()).length > 0, [catalogView]);
 
   const slash: SlashItem[] = useMemo(
     () => (token?.trigger === '/' ? slashItems(token.query, target, catalog) : []),
@@ -267,7 +279,12 @@ export function Composer({
     return [...p, ...h].filter((x) => x.label.toLowerCase().startsWith(q) || x.id.toLowerCase().startsWith(q)).slice(0, 8);
   }, [token?.trigger, token?.query, projects, roster, eligibleSeats]);
   const count = token?.trigger === '/' ? wf.length + slash.length : ats.length;
-  const active = count === 0 ? 0 : Math.min(cursor, count - 1);
+  const rowKeys = token?.trigger === '/'
+    ? [...wf.map((r) => `e:${r.entry.id}`), ...slash.map((it) => `s:${it.command.cmd}`)]
+    : ats.map((it) => `a:${it.kind}:${it.id}`);
+  const keyedAt = cursorKey === null ? -1 : rowKeys.indexOf(cursorKey);
+  const active = count === 0 ? 0 : keyedAt >= 0 ? keyedAt : Math.min(cursor, count - 1);
+  const moveCursor = (i: number): void => { setCursor(i); setCursorKey(rowKeys[i] ?? null); };
   // Shown while a send is being composed (words typed, or a workflow named) — an idle Desk keeps its
   // fold (the desk_home fit), and the row is there whenever there is something to send.
   // A send opens a chat before the first send, and after it whenever an `@project` chip starts a
@@ -314,6 +331,7 @@ export function Composer({
     setText(words);
     setClosedAt(null);
     setCursor(0);
+    setCursorKey(null);
     setNote(null);
     focusEnd(words);
     // focusEnd/setText are this render's closures; the seed is read at its edge only.
@@ -352,17 +370,25 @@ export function Composer({
       ? (started ? `Your next message starts a new session in ${item.label}.` : null)
       : (!started && useCapabilities.getState().askPath ? `${item.label} will answer this conversation.` : null));
   };
-  // The launch wizard (operator 2026-10-11): naming a workflow opens the one modal, prefilled with
-  // what this composer knows — the words so far, its project chip, the session's repository — and
-  // the words move into the wizard's draft. Nothing is sent from here.
-  const startJob = (workflowId: string, words: string): void => {
-    openLaunchWizard({ workflowId, intent: words.trim(), projectId: project?.projectId ?? null, composerKey, contextRepo: sessionRepo });
+  // A pick starts what New job's card starts (slash-catalog): a workflow, Demo video or Draft epics opens
+  // the one modal on that card, prefilled with what this composer knows — the words so far, its project
+  // chip, the session's repository; a document opens New document with the words as its brief; chat
+  // opens a new chat with them. Nothing is sent from here.
+  const startEntry = (entry: CatalogEntry, words: string): void => {
+    const intent = words.trim();
+    const projectId = project?.projectId ?? null;
+    startCatalogEntry(entry, {
+      projectId, intent, navigate: navigate ?? goToPath,
+      shape: (e) => openLaunchWizard({ workflowId: e.launchId, catalogEntryId: e.id, intent, projectId, composerKey, contextRepo: sessionRepo }),
+    });
     setText('');
     setNote(null);
   };
-  const pickWorkflow = (item: WorkflowRow): void => {
+  const pickWorkflow = (item: CatalogRow): void => {
     if (token === null) return;
-    startJob(item.workflowId, dropToken(text, token.start, caret));
+    // Shown as New job shows it (coming soon, not available), never started.
+    if (!item.offered) { setNote(notOfferedLine(item.entry)); return; }
+    startEntry(item.entry, dropToken(text, token.start, caret));
   };
   const pick = (i: number): void => {
     if (token?.trigger === '/') {
@@ -377,13 +403,15 @@ export function Composer({
     // then asks for the repository. Nothing is sent until the next Enter.
     const typed = parseWorkflowCommand(text);
     if (typed !== null && refusal === null) {
-      // Only a key the daemon lists becomes a chip — studio keeps no list and never invents a name.
-      const known = workflowItems(typed.key, defs, presets).find((r) => r.key === typed.key);
-      if (known === undefined) {
-        setNote(defs === null ? WORKFLOWS_LOADING_LINE : `This daemon lists no workflow named ${typed.key} — nothing was sent.`);
+      // Only a workflow the catalog lists is started — studio keeps no list and never invents a name.
+      const known = workflowEntry(catalogView, typed.key);
+      if (known === null) {
+        setNote(wfCatalogState === 'loading' ? WORKFLOWS_LOADING_LINE : wfCatalogState === 'error' ? WORKFLOWS_FAILED_LINE
+          : `This daemon lists no workflow named ${typed.key} — nothing was sent.`);
         return;
       }
-      startJob(known.workflowId, typed.rest);
+      if (!entryOffered(known)) { setNote(notOfferedLine(known)); return; }
+      startEntry(known, typed.rest);
       return;
     }
     if (!canSend) return;
@@ -413,7 +441,7 @@ export function Composer({
           menuKey={composerKey}
           trigger={token.trigger}
           startCommands={startCommands}
-          defsLoading={defs === null}
+          catalogState={wfCatalogState}
           anyWorkflows={anyWorkflows}
           wf={wf}
           slash={slash}
@@ -483,7 +511,7 @@ export function Composer({
           rows={1}
           value={text}
           onChange={(e) => {
-            setText(e.target.value); syncCaret(e.target); setCursor(0); if (note !== null && e.target.value !== '') setNote(null);
+            setText(e.target.value); syncCaret(e.target); setCursor(0); setCursorKey(null); if (note !== null && e.target.value !== '') setNote(null);
             // studio#623 (#620's launch-form rule): an Escape closes THIS token's menu; once that token
             // is gone (or the caret is in another one), a new `/` or `@` opens the menu again.
             const tok = menuToken(e.target.value, e.target.selectionStart ?? e.target.value.length);
@@ -494,8 +522,8 @@ export function Composer({
             // An IME confirming its composition with Enter picks nothing and sends nothing (codex on S7).
             if (e.nativeEvent.isComposing) return;
             if (menuOpen && count > 0) {
-              if (e.key === 'ArrowDown') { e.preventDefault(); setCursor((active + 1) % count); return; }
-              if (e.key === 'ArrowUp') { e.preventDefault(); setCursor((active - 1 + count) % count); return; }
+              if (e.key === 'ArrowDown') { e.preventDefault(); moveCursor((active + 1) % count); return; }
+              if (e.key === 'ArrowUp') { e.preventDefault(); moveCursor((active - 1 + count) % count); return; }
               if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pick(active); return; }
             }
             if (menuOpen && e.key === 'Escape' && token !== null) { e.preventDefault(); e.stopPropagation(); setClosedAt(`${token.trigger}${token.start}`); return; }

@@ -3,13 +3,19 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
+import { resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
 import { pickLaunchWorkflow } from './launchWorkflowPick.js';
+import rig from './fixtures/workflowCatalog-rig.json';
 
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: [] });
   vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
   vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] });
+  // slash-catalog: the menu reads New job's catalog; these cases are an older daemon (no catalog
+  // route), whose list is today's workflows.
+  vi.spyOn(client.api, 'getWorkflowCatalog').mockRejectedValue(new client.ApiError(404, 'Not found'));
+  resetWorkflowCatalog();
 });
 
 /** Type `/` at the start of the problem box and read the menu's "Start work" rows. */
@@ -141,5 +147,52 @@ describe('codex r1 on S19b', () => {
     expect(box.value).toBe('/ fix it');
     // The caret sits after the `/` at the start: a fresh leading token, so the menu opens again.
     await waitFor(() => expect(screen.getByTestId('composer-menu')).toBeInTheDocument());
+  });
+});
+
+describe('slash-catalog: the launch form names a workflow off New job’s catalog', () => {
+  it('lists the catalog’s workflow entries by title, in New job’s order; a pick names its workflow', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-04T12:00:00Z'));
+    try {
+      const user = userEvent.setup();
+      vi.mocked(client.api.getWorkflowCatalog).mockResolvedValue(rig as never);
+      vi.mocked(client.api.listWorkflows).mockResolvedValue({ workflows: [{ id: 'bug', phases: [] }, { id: 'distill-learnings', phases: [] }] as never });
+      render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+      const values = await openMenuAndGetWorkflows(user);
+      // Your top (bug, the domain map, a feature), then each category's workflows; no document, chat,
+      // demo or Draft epics (this form launches a workflow), and nothing the catalog leaves out.
+      expect(values).toEqual(['bug', 'domain-extraction', 'feature', 'docs', 'editor-plugin', 'mcp-server', 'migration',
+        'review-recent-work', 'validate-docs', 'test-plan', 'test-analysis', 'qe-author-tests', 'learn', 'run-evals', 'apps-publish', 'apps-turn']);
+      const bug = document.querySelector<HTMLElement>('[data-testid="composer-menu-item"][data-workflow="bug"]')!;
+      expect(bug.querySelector('b')?.textContent).toBe('Fix a bug');
+      fireEvent.mouseDown(document.querySelector<HTMLElement>('[data-testid="composer-menu-item"][data-workflow="apps-turn"]')!);
+      await waitFor(() => expect(screen.getByTestId('launch-workflow-pill').dataset.workflow).toBe('apps-turn'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a catalog that cannot be read says so and names nothing in its place (never today’s list)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.api.getWorkflowCatalog).mockRejectedValue(new client.ApiError(500, 'down'));
+    vi.mocked(client.api.listWorkflows).mockResolvedValue({ workflows: [{ id: 'bug', phases: [] }] as never });
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await user.type(screen.getByTestId('launch-problem'), '/');
+    await waitFor(() => expect(screen.getByTestId('composer-menu-empty').dataset.state).toBe('failed'));
+    expect(document.querySelectorAll('[data-testid="composer-menu-item"][data-group="start-work"]')).toHaveLength(0);
+  });
+
+  it('a workflow the catalog shows as coming soon is listed dimmed and never named', async () => {
+    const user = userEvent.setup();
+    const soon = { ...rig, entries: (rig as { entries: Array<Record<string, unknown>> }).entries.map((e) => (e['id'] === 'bug' ? { ...e, status: 'coming_soon', statusNote: null } : e)) };
+    vi.mocked(client.api.getWorkflowCatalog).mockResolvedValue(soon as never);
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await openMenuAndGetWorkflows(user);
+    const bug = document.querySelector<HTMLElement>('[data-testid="composer-menu-item"][data-workflow="bug"]')!;
+    expect(bug).toHaveAttribute('aria-disabled', 'true');
+    expect(bug.querySelector('small')?.textContent).toBe('Coming soon');
+    fireEvent.mouseDown(bug);
+    expect(screen.queryByTestId('launch-workflow-pill')).toBeNull();
   });
 });

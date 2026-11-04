@@ -63,6 +63,8 @@ export interface OpenLaunchWizard {
   composerKey?: string | null;
   contextRepo?: string | null;
   requirements?: readonly { repoId: string; key: string; title: string }[];
+  /** The catalog card picked (a box's `/` row names its entry, as New job's own card pick does). */
+  catalogEntryId?: string | null;
 }
 
 interface LaunchWizardStore {
@@ -94,7 +96,7 @@ export function freshDraft(init: OpenLaunchWizard): LaunchDraft {
     demoUrl: '',
     demoAudience: '',
     intentsByKind: {},
-    catalogEntryId: null,
+    catalogEntryId: init.catalogEntryId ?? null,
   };
 }
 
@@ -133,7 +135,12 @@ export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({
     const otherProject = typeof init.projectId === 'string' && init.projectId !== cur?.projectId;
     if (cur !== null && sameOrigin && (wf === null || wf === cur.workflowId) && !freshPicks && !otherProject) {
       const intent = cur.intent.trim() === '' && (init.intent ?? '').trim() !== '' ? init.intent ?? '' : cur.intent;
-      set({ open: true, draft: { ...cur, intent } });
+      // A pick of a card (a `/` row) names that card for the resumed draft too; another card for the same
+      // workflow starts its own options and repository choice, as New job's own card pick does (codex r1).
+      const named = init.catalogEntryId ?? null;
+      const card = named === null || named === cur.catalogEntryId ? {}
+        : { catalogEntryId: named, reduced: false, skipQe: false, skipQeReason: '', repoRef: null };
+      set({ open: true, draft: { ...cur, intent, ...card } });
       return;
     }
     set({ open: true, draft: freshDraft(init) });

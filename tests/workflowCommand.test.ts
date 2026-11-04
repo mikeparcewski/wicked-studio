@@ -120,7 +120,8 @@ describe('workflowItems', () => {
 
 describe('the menu lines', () => {
   it('are one plain sentence each', () => {
-    expect(WORKFLOWS_LOADING_LINE).toBe("Reading the daemon's workflows…");
+    // slash-catalog: New job's words.
+    expect(WORKFLOWS_LOADING_LINE).toBe('Reading the workflows…');
     expect(WORKFLOWS_EMPTY_LINE).toBe('This daemon lists no workflows.');
   });
 });

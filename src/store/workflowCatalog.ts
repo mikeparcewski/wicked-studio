@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client.js';
+import { UNFILED_MOUNT } from '../api/interactive.js';
 import { catalogFromWire, type CatalogView } from '../board/workflowCatalog.js';
 
 /**
@@ -23,6 +24,11 @@ export type CatalogLoad =
 
 const cache = new Map<string, CatalogLoad>();
 const asked = new Map<string, number>();
+/** Projects with a read out, and when it was asked: a box does not ask again while one is (codex r1-r2),
+ *  so a fresh answer is never superseded by a redundant read that then fails. One out longer than
+ *  PENDING_MS is taken as lost and asked again. */
+const pending = new Map<string, number>();
+const PENDING_MS = 15_000;
 let epoch = 0;
 /** This daemon has answered with its catalog at least once this session. */
 let served = false;
@@ -36,6 +42,7 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   const key = keyOf(projectId);
   const gen = (asked.get(key) ?? 0) + 1;
   asked.set(key, gen);
+  pending.set(key, Date.now());
   const atEpoch = epoch;
   // A retry after a failure is a read in flight, not the failure still standing.
   if (cache.get(key)?.state === 'error') { cache.set(key, { state: 'loading' }); notify(); }
@@ -53,6 +60,7 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   }
   // A read that is no longer the newest for its project changes nothing shared (codex r7).
   if (atEpoch !== epoch || asked.get(key) !== gen) return null;
+  pending.delete(key);
   const prev = cache.get(key);
   const routeAbsent = failure instanceof ApiError && failure.status === 404;
   if (routeAbsent) {
@@ -72,16 +80,34 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   return load;
 }
 
-export function useWorkflowCatalog(projectId: string | null): CatalogLoad {
+/** The project a catalog read is scoped to: none for no project, '' or the unfiled mount (New job's rule). */
+export function catalogProjectOf(projectId: string | null | undefined): string | null {
+  return projectId === null || projectId === undefined || projectId === '' || projectId === UNFILED_MOUNT ? null : projectId;
+}
+
+const LOADING: CatalogLoad = { state: 'loading' };
+
+/**
+ * One project's catalog, read when `enabled` turns on (New job: every open; a box's `/` menu: every
+ * time a `/` line starts, so "Your top" is as of now and a failed read is retried) and shown from the
+ * cache meanwhile. A box with nothing cached for its project reads once when it mounts, so its first
+ * `/` lists at once instead of "Reading the workflows…".
+ */
+export function useWorkflowCatalog(projectId: string | null, enabled = true): CatalogLoad {
   const key = keyOf(projectId);
   const [, setTick] = useState(0);
   useEffect(() => {
     const fn = (): void => setTick((n) => n + 1);
     listeners.add(fn);
-    void readWorkflowCatalog(projectId);
     return () => { listeners.delete(fn); };
-  }, [projectId]);
-  return cache.get(key) ?? { state: 'loading' };
+  }, []);
+  useEffect(() => {
+    const key = keyOf(projectId);
+    const out = pending.get(key);
+    if (out !== undefined && Date.now() - out < PENDING_MS) return;
+    if (enabled || !cache.has(key)) void readWorkflowCatalog(projectId);
+  }, [projectId, enabled]);
+  return cache.get(key) ?? LOADING;
 }
 
 /** What the cache holds for a project now (tests, and nothing else). */
@@ -93,6 +119,7 @@ export function peekWorkflowCatalog(projectId: string | null): CatalogLoad | und
 export function resetWorkflowCatalog(): void {
   cache.clear();
   asked.clear();
+  pending.clear();
   served = false;
   epoch += 1;
 }

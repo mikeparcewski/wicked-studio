@@ -26,7 +26,9 @@ import { baseSkillRefusalOf, describeBaseSkill, detectWorkflow, gatePostureWord,
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { menuToken, dropToken } from '../board/planDraft.js';
-import { workflowItems, type WorkflowRow } from '../board/workflowCommand.js';
+import { catalogRows, workflowsOnly, type CatalogRow } from '../board/slashCatalog.js';
+import { jobCatalogView } from '../board/workflowCatalog.js';
+import { catalogProjectOf, useWorkflowCatalog } from '../store/workflowCatalog.js';
 import { SlashMenu } from './session/SlashMenu.js';
 import { ContextPopover } from './ContextPopover.js';
 import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
@@ -553,6 +555,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // S19b: the problem box takes the composer's grammar — a leading `/` opens the workflow menu.
   const [problemCaret, setProblemCaret] = useState(0);
   const [menuCursor, setMenuCursor] = useState(0);
+  /** The row the arrows moved to, by identity: a catalog refresh that reorders the rows keeps it active. */
+  const [menuCursorKey, setMenuCursorKey] = useState<string | null>(null);
   const [menuClosedAt, setMenuClosedAt] = useState<number | null>(null);
 
   // ── Popover state ──────────────────────────────────────────────────────────
@@ -974,8 +978,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }
 
   // S19b: the `/` menu on the problem box (DES-STUDIO-REBUILD-001 §5.5) — the composer's "Start work"
-  // rows, read off the daemon's own catalog, as the box's FIRST token only. A forced workflow
-  // (`workflowOverride`) or a composed plan already names the work: no menu then.
+  // rows, read off New job's catalog (slash-catalog: the same titles, categories and order), as the
+  // box's FIRST token only. This form launches a workflow, so it lists the catalog's workflow entries;
+  // a document, a chat, a demo video or Draft epics start elsewhere (the composer's menu and New job
+  // offer them). A forced workflow (`workflowOverride`) or a composed plan already names the work: no menu then.
   const slashToken = runId || workflowOverride?.trim() || selection.composing ? null : menuToken(problem, problemCaret);
   const startToken = slashToken !== null && slashToken.trigger === '/' && slashToken.start === 0 ? slashToken : null;
   const launchMenuOpen = startToken !== null && menuClosedAt !== startToken.start;
@@ -983,23 +989,30 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const menuPresetsState = presets[menuProjectId ?? ''];
   const menuPresets = Array.isArray(menuPresetsState) ? menuPresetsState : null;
   const menuDefs = workflowsRead ? workflows : null;
+  const menuCatalogLoad = useWorkflowCatalog(catalogProjectOf(menuProjectId), launchMenuOpen);
+  const menuView = useMemo(() => jobCatalogView(menuCatalogLoad, menuDefs, menuPresets), [menuCatalogLoad, menuDefs, menuPresets]);
+  const menuCatalogState: 'loading' | 'error' | 'ready' = menuCatalogLoad.state === 'error' ? 'error'
+    : menuCatalogLoad.state === 'loading' || (menuCatalogLoad.state === 'unavailable' && menuDefs === null) ? 'loading' : 'ready';
   const menuRows = useMemo(
-    () => (startToken !== null ? workflowItems(startToken.query, menuDefs, menuPresets) : []),
+    () => (startToken !== null ? catalogRows(menuView, startToken.query, Date.now(), workflowsOnly) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startToken?.query, startToken !== null, menuDefs, menuPresets],
+    [startToken?.query, startToken !== null, menuView],
   );
-  const anyMenuWorkflows = useMemo(() => workflowItems('', menuDefs, menuPresets).length > 0, [menuDefs, menuPresets]);
-  const menuActive = menuRows.length === 0 ? 0 : Math.min(menuCursor, menuRows.length - 1);
+  const anyMenuWorkflows = useMemo(() => catalogRows(menuView, '', Date.now(), workflowsOnly).length > 0, [menuView]);
+  const menuKeyedAt = menuCursorKey === null ? -1 : menuRows.findIndex((r) => r.entry.id === menuCursorKey);
+  const menuActive = menuRows.length === 0 ? 0 : menuKeyedAt >= 0 ? menuKeyedAt : Math.min(menuCursor, menuRows.length - 1);
+  const moveMenuCursor = (i: number): void => { setMenuCursor(i); setMenuCursorKey(menuRows[i]?.entry.id ?? null); };
   useEffect(() => {
     if (launchMenuOpen) loadPresets(menuProjectId ?? null);
   }, [launchMenuOpen, menuProjectId]);
   /** A pick names the form's workflow and takes the `/…` token out of the problem. */
-  const pickLaunchWorkflow = (row: WorkflowRow): void => {
-    if (startToken === null) return;
+  const pickLaunchWorkflow = (row: CatalogRow): void => {
+    // A workflow the catalog shows as coming soon or not available is never named (New job's rule).
+    if (startToken === null || !row.offered) return;
     const next = dropToken(problem, startToken.start, problemCaret).replace(/^\s+/, '');
     setProblem(next);
-    setWorkflow(row.workflowId);
-    setMenuCursor(0);
+    setWorkflow(row.entry.launchId);
+    setMenuCursor(0); setMenuCursorKey(null);
     requestAnimationFrame(() => {
       const el = textareaRef.current;
       if (el === null) return;
@@ -1918,7 +1931,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             menuKey="launch"
             trigger="/"
             startCommands
-            defsLoading={menuDefs === null}
+            catalogState={menuCatalogState}
             anyWorkflows={anyMenuWorkflows}
             wf={menuRows}
             active={menuActive}
@@ -1998,7 +2011,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             setProblem(e.target.value);
             const caretNow = e.target.selectionStart ?? e.target.value.length;
             setProblemCaret(caretNow);
-            setMenuCursor(0);
+            setMenuCursor(0); setMenuCursorKey(null);
             // An Escape closes THIS leading token's menu; once the token is gone, a new `/` opens it again.
             if (menuToken(e.target.value, caretNow)?.start !== 0) setMenuClosedAt(null);
           }}
@@ -2007,8 +2020,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             if (e.nativeEvent.isComposing) return;
             if (launchMenuOpen && startToken !== null) {
               const n = menuRows.length;
-              if (n > 0 && e.key === 'ArrowDown') { e.preventDefault(); setMenuCursor((menuActive + 1) % n); return; }
-              if (n > 0 && e.key === 'ArrowUp') { e.preventDefault(); setMenuCursor((menuActive - 1 + n) % n); return; }
+              if (n > 0 && e.key === 'ArrowDown') { e.preventDefault(); moveMenuCursor((menuActive + 1) % n); return; }
+              if (n > 0 && e.key === 'ArrowUp') { e.preventDefault(); moveMenuCursor((menuActive - 1 + n) % n); return; }
               if (n > 0 && ((e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) || e.key === 'Tab')) {
                 e.preventDefault();
                 const row = menuRows[menuActive];

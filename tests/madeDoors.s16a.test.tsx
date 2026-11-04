@@ -2,7 +2,7 @@
 // collision named with "Open it"; any other refusal in the daemon's words) and a Delete per
 // document row (DocDeleteConfirm, one DELETE) — plus the name derivation shared with the thread.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect } from 'react';
 import * as interactive from '../src/api/interactive.js';
@@ -11,6 +11,7 @@ import { docNameFromBrief, newDocBody, newDocName } from '../src/board/newDocume
 import { everythingPath, readEverythingQuery } from '../src/board/everythingModel.js';
 import { NewDocument } from '../src/components/everything/NewDocument.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
+import { clearNewDocumentBrief, peekNewDocumentBrief, seedNewDocumentBrief } from '../src/store/newDocumentSeed.js';
 import type { RosterSeat } from '../src/api/types.js';
 
 vi.mock('../src/api/interactive.js', async (orig) => {
@@ -131,5 +132,36 @@ describe('S16a-4d — the New document door', () => {
     await userEvent.click(screen.getByTestId('made-new-document-create'));
     expect(await screen.findByTestId('made-new-document-error')).toHaveTextContent('the bridge refused the bind: project notes is archived');
     expect(interactive.createDoc).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('slash-catalog — the words a Document pick carries are New document’s brief', () => {
+  it('opens with the seeded brief once; the next New document starts empty', () => {
+    seedNewDocumentBrief('the offsite one-pager');
+    const first = render(<NewDocument projects={PROJECTS} initialProject="notes" onClose={vi.fn()} onCreated={vi.fn()} onOpen={vi.fn()} />);
+    expect((screen.getByTestId('made-new-document-brief') as HTMLTextAreaElement).value).toBe('the offsite one-pager');
+    first.unmount();
+    render(<NewDocument projects={PROJECTS} initialProject="notes" onClose={vi.fn()} onCreated={vi.fn()} onOpen={vi.fn()} />);
+    expect((screen.getByTestId('made-new-document-brief') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('a pick that lands while New document is already open replaces its brief (the same address does not remount it)', () => {
+    render(<NewDocument projects={PROJECTS} initialProject="notes" onClose={vi.fn()} onCreated={vi.fn()} onOpen={vi.fn()} />);
+    expect((screen.getByTestId('made-new-document-brief') as HTMLTextAreaElement).value).toBe('');
+    act(() => seedNewDocumentBrief('the second brief'));
+    expect((screen.getByTestId('made-new-document-brief') as HTMLTextAreaElement).value).toBe('the second brief');
+    expect(peekNewDocumentBrief()).toBe('');
+  });
+
+  it('a seed no form took lapses', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      seedNewDocumentBrief('stale words');
+      vi.setSystemTime(Date.now() + 11_000);
+      expect(peekNewDocumentBrief()).toBe('');
+    } finally {
+      vi.useRealTimers();
+      clearNewDocumentBrief();
+    }
   });
 });

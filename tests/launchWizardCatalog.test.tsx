@@ -108,13 +108,13 @@ describe('an older daemon (no catalog)', () => {
     await waitFor(() => expect(screen.queryByTestId('launch-catalog-loading')).toBeNull());
   });
 
-  it('a daemon that lists no workflows of its own still offers studio’s kinds', async () => {
+  it('a daemon whose catalog lists nothing says so: studio’s kinds never stand in for it (slash-catalog)', async () => {
     clearCachedWorkflows();
     setCachedWorkflows([]);
     catalog = { categories: [], entries: [] };
     await openCatalog();
-    expect(screen.queryByTestId('launch-catalog-empty')).toBeNull();
-    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toContain('demo-video');
+    expect(screen.getByTestId('launch-catalog-empty')).toHaveTextContent('This daemon lists no workflows.');
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual([]);
   });
 
   it('the empty state: nothing at all to list says so and offers chat (agy r1: was untested)', () => {

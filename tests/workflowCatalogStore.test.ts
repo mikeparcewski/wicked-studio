@@ -89,7 +89,7 @@ describe('readWorkflowCatalog', () => {
 });
 
 describe('useWorkflowCatalog', () => {
-  it('two mounted readers of one project both show the newer answer, and keep it after a stale one lands (codex r3)', async () => {
+  it('two mounted readers of one project share one read, both show the newer answer, and keep it after a stale one lands (codex r3)', async () => {
     let releaseFirst!: (v: unknown) => void;
     let releaseSecond!: (v: unknown) => void;
     vi.spyOn(api, 'getWorkflowCatalog')
@@ -98,6 +98,11 @@ describe('useWorkflowCatalog', () => {
     const a = renderHook(() => useWorkflowCatalog('p1'));
     const b = renderHook(() => useWorkflowCatalog('p1'));
     expect(a.result.current.state).toBe('loading');
+    // slash-catalog (codex r2): a reader that mounts while a read is out shares it rather than asking again …
+    expect(api.getWorkflowCatalog).toHaveBeenCalledTimes(1);
+    // … and a newer read asked meanwhile (New job's open after it lapsed, say) still wins over the stale one.
+    act(() => { void readWorkflowCatalog('p1'); });
+    expect(api.getWorkflowCatalog).toHaveBeenCalledTimes(2);
     await act(async () => { releaseSecond(catalog('newer')); await Promise.resolve(); });
     expect(titleOf(a.result.current)).toBe('newer');
     expect(titleOf(b.result.current)).toBe('newer');
