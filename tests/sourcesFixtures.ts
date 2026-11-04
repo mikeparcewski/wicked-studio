@@ -46,6 +46,7 @@ export const WRITER: SourcePrivilegeReport = {
 
 export function pgServer(over: Partial<McpServer> = {}): McpServer {
   return {
+    id: `id-${over.name ?? 'support-pg'}`,
     name: 'support-pg', kind: 'sql', command: null, args: [], url: null, auth: { ref: 'keychain:wicked-mcp/support-pg' },
     sql: { driver: 'postgres', host: 'db.support.internal', port: 5432, database: 'support', user: 'reader', tls: 'verify-full', ca: false, snapshot: null },
     viewsAllowed: [], allowWrites: false, descriptorHash: 'd'.repeat(64), address: { allow: ['10.40.2.0/24'], plaintext: false },
@@ -81,7 +82,7 @@ export const TICKETS_SAFE: SourceSafetyResponse = { table: { schema: 'support', 
 
 /** A REST preview: one read, one write; `egress` when the base URL is not one of the document's servers. */
 export function restPreview(hash: string, egress: McpPreviewResponse['egress'] = { origin: 'https://api.support.test', basePath: '/v1', servers: ['https://api.support.test/v1'], matches: true, privateAddress: false, resolved: true, confirmRequired: false }): McpPreviewResponse {
-  const tool = (name: string, cls: 'read' | 'write') => ({ name, rest: null, subject: `mcp:tickets-api/${name}`, description: null, annotations: null, inputSchema: null, class: cls, classOverride: null, schemaHash: `h-${name}`, enabledOnSave: cls === 'read' });
+  const tool = (name: string, cls: 'read' | 'write') => ({ name, rest: null, subject: `mcp:tickets-api/${name}`, description: null, annotations: null, inputSchema: null, class: cls, classOverride: null, schemaHash: `h-${name}`, enabledOnSave: cls === 'read', disclosure: null });
   return {
     previewHash: hash, expiresAt: '2026-11-03T14:10:00.000Z',
     server: { name: 'tickets-api', kind: 'rest', command: null, args: [], url: 'https://api.support.test/v1', auth: null, openapiUrl: 'https://api.support.test/openapi.json' },
