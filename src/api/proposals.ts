@@ -39,13 +39,14 @@ export interface ProposalApproveOutcome {
 
 /**
  * The concrete kind a proposal belongs to, folded from its `kind_type`: `"memory"` → `memory`,
- * anything starting `"policy"` (`"policy:security"`, `"policy"`) → `policy`, everything else →
- * `other`. A proposal whose kind studio does not recognize is still counted in Needs you, so it is
+ * anything starting `"policy"` (`"policy:security"`, `"policy"`) → `policy`, `"knowledge"` (a data shape or
+ * another piece of knowledge, DES-KNOWLEDGE-DATA-001 §10) → `knowledge`, everything else → `other`. A proposal whose kind studio does not recognize is still counted in Needs you, so it is
  * never silently dropped.
  */
-export function proposalKind(p: Proposal): 'memory' | 'policy' | 'other' {
+export function proposalKind(p: Proposal): 'memory' | 'policy' | 'knowledge' | 'other' {
   const raw = p.kind_type.trim().toLowerCase();
   if (raw === 'memory') return 'memory';
+  if (raw === 'knowledge') return 'knowledge';
   if (raw === 'policy' || raw.startsWith('policy:')) return 'policy';
   return 'other';
 }

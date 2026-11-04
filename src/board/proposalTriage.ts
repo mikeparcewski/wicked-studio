@@ -71,6 +71,7 @@ export function proposalConsequenceLine(p: Proposal): string {
     // ledger backs says "From your words" (needsYou.ts, with the ledger's own statement).
     return `Adds ${what}${captured === 'rule' ? ' from your capture' : ''}`;
   }
+  if (proposalKind(p) === 'knowledge') return 'Adds a data shape to the Knowledge map; no rule changes';
   return `Unknown kind "${p.kind_type}" — review it`;
 }
 

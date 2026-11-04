@@ -7,6 +7,7 @@ import {
   type Proposal,
 } from '../api/proposals.js';
 import { readErrorKind } from '../api/errors.js';
+import { knowledgePayload } from '../api/knowledgeShapes.js';
 import { KindChip, severityWord } from './ProposalChips.js';
 import { StateBanner, EmptyState, Skeleton, TechDetails } from './ui/index.js';
 import { sessionPath } from '../board/sessionModel.js';
@@ -23,7 +24,28 @@ function PayloadText({ proposal }: { proposal: Proposal }): React.ReactElement {
     const { rule } = policyPayload(proposal);
     return <p data-testid="proposal-policy-rule" className="wk-gk-content">{rule ?? 'No rule text provided.'}</p>;
   }
+  if (kind === 'knowledge') return <KnowledgeText proposal={proposal} />;
   return <p data-testid="proposal-raw-payload" className="wk-gk-content">A proposal Studio can&rsquo;t show in words; its details are below.</p>;
+}
+
+/** A data shape (DES-KNOWLEDGE-DATA-001 §10): the relation it is about, its value-free summary, and what it links. */
+function KnowledgeText({ proposal }: { proposal: Proposal }): React.ReactElement {
+  const k = knowledgePayload(proposal);
+  return (
+    <div data-testid="proposal-knowledge" className="wk-gk-stack wk-gk-stack--tight">
+      {k.relation !== null && (
+        <p data-testid="proposal-knowledge-subject" className="wk-gk-strong">
+          {k.relation}{k.source !== null && <span className="wk-gk-muted"> · data source {k.source}</span>}
+        </p>
+      )}
+      <p data-testid="proposal-knowledge-content" className="wk-gk-content">{k.content ?? 'No content provided.'}</p>
+      {k.links.length > 0 && (
+        <ul data-testid="proposal-knowledge-links" className="wk-gk-links" aria-label="What this shape links">
+          {k.links.map((l, i) => <li key={`${l.rel}-${i}`} data-rel={l.rel}>{l.text}</li>)}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
@@ -44,7 +66,9 @@ function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
   const tier = kind === 'memory' ? memoryPayload(proposal).tier : null;
   // A worker's proposal carries the engine-stamped `run_agent` (crew's own learnings say `crew`); older ones `agent`.
   const agent = proposal.provenance['run_agent'] ?? proposal.provenance.agent ?? proposal.provenance.helper;
-  const proposer = agent === 'crew' ? 'crew (from the run\u2019s record)' : agent;
+  // A data shape crew's profiler filed when the person profiled a source (no run behind it).
+  const profiled = kind === 'knowledge' && (proposal.payload as { capture?: unknown } | undefined)?.capture === 'profile';
+  const proposer = profiled ? 'crew\u2019s profiler, when you profiled the source' : agent === 'crew' ? 'crew (from the run\u2019s record)' : agent;
   const fromRun = proposal.provenance['run_id'];
   // One disclosure for every internal: the proposal id, provenance and tags (studio#689 row 47).
   const details = [
@@ -67,6 +91,11 @@ function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
         </label>
       )}
       {/* studio#689 row 79: what approving does, said once, in plain words. */}
+      {kind === 'knowledge' && (
+        <p data-testid="proposal-knowledge-effect" className="wk-gk-muted">
+          Approving adds it to the Knowledge map in Understand. Agents recall it only where they may see its source and repositories.
+        </p>
+      )}
       {kind === 'policy' && (
         <p className="wk-gk-muted">
           Approving adds a {steeringType ?? 'steering'} rule
