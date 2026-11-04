@@ -59,6 +59,10 @@ body { padding-top: var(--topbar-h); }
   padding: clamp(16px, 2.8svh, 40px) 0;
 }
 html .footer { scroll-snap-align: end; }
+/* The page never follows content that swaps on a timer: Chromium's scroll anchoring would pick a part of
+   a playing demo as its anchor and scroll the page whenever it moved. Every swapping region here is as
+   tall as its tallest state, so anchoring has nothing to correct; snapping is unaffected. */
+html { overflow-anchor: none; }
 @media (prefers-reduced-motion: no-preference) and (pointer: fine) and (min-width: 1260px) and (min-height: 660px),
        (prefers-reduced-motion: no-preference) and (pointer: fine) and (min-width: 941px) and (min-height: 760px) {
   html { scroll-snap-type: y mandatory; }
@@ -1012,6 +1016,11 @@ html.frames-overflow .hero { height: auto; min-height: var(--frame); }
 .ide.is-still .dot, .ide.is-still .pulse, .ide.is-still .ide-steps li { animation: none; }
 .ide.is-still .msg.is-live { animation: msg-in .3s var(--ease) backwards; }
 .scene.is-frozen .pulse { animation: none; }
+/* Nothing animates while nobody can see it: an interactive carries data-offscreen while under a quarter
+   of it shows or the tab is hidden (demo.js, page.js inView, scripts/offscreen.js) */
+:is([data-offscreen], [data-offscreen] *),
+:is([data-offscreen], [data-offscreen] *)::before,
+:is([data-offscreen], [data-offscreen] *)::after { animation-play-state: paused !important; }
 
 /* ── Colour: the experience amber under the demo, one status hue per frame ── */
 .amber-floor {

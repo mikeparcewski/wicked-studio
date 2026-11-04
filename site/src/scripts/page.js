@@ -5,11 +5,15 @@
      fixed-height box, so a step, a selection or a reveal changes opacity, colour or a transform
      inside that box and nothing else moves.
    - Scenes and tours run only while they are on screen, stop on hover and focus, and reset when they
-     leave. Sections that loop carry a visible Pause button.
+     leave. Off screen (under a quarter showing) or in a hidden tab, nothing in them changes and their
+     CSS loops pause (data-offscreen, studio.css). Sections that loop carry a visible Pause button.
+   - A timer never moves the page: no scrollIntoView, scrollTo or focus() on a tick (focus moves only
+     on the visitor's action, with preventScroll), and strips scroll only themselves.
    - prefers-reduced-motion: no timers and no typing. Scenes show their final frame, tours stay where
      you put them, counters show their values.
    - Keyboard: every tablist has roving tabindex with arrows, Home and End. */
 import 'wicked-web/scripts/scroll-wheel.js';
+import { settle } from './offscreen.js';
 
 const reduceMq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
 const reduced = !!(reduceMq && reduceMq.matches);
@@ -111,21 +115,40 @@ window.addEventListener(
 
 /* ── helpers ─────────────────────────────────────────────────────────────────────────────── */
 // "In view" is `ratio` of the element, or half the window for an element too tall to ever show that
-// much (minimum font sizes and short windows make cards taller than the screen).
-function inView(el, ratio, enter, leave) {
+// much (minimum font sizes and short windows make cards taller than the screen). It leaves once under
+// a quarter of it (and of the window) shows, or the tab is hidden; while it is out, the element carries
+// data-offscreen and studio.css pauses every CSS animation in it; its one-shot animations land on their end
+// as it leaves. `scope` (default: the element) is the whole interactive that carries the mark.
+const STEPS = Array.from({ length: 101 }, (_, i) => i / 100);
+function inView(el, ratio, enter, leave, scope = el) {
   if (!('IntersectionObserver' in window)) { enter(); return; }
-  let on = false;
+  let near = false, on = false;
+  scope.setAttribute('data-offscreen', '');
+  const emit = () => {
+    const want = near && !document.hidden;
+    if (want === on) return;
+    on = want;
+    scope.toggleAttribute('data-offscreen', !on);
+    if (on) { enter(); return; }
+    if (leave) leave();
+    // after leave(): a reset to the first frame lands at once too, instead of easing back off screen (and
+    // again on the next frame, for a transition another observer started on the way out)
+    settle(scope);
+    requestAnimationFrame(() => { if (!on) settle(scope); });
+  };
   const io = new IntersectionObserver(
     (es) => {
       es.forEach((x) => {
         const seen = x.intersectionRatio >= ratio - 0.001 || x.intersectionRect.height >= window.innerHeight * 0.5;
-        if (!on && seen) { on = true; enter(); }
-        else if (on && x.intersectionRatio < 0.12 && x.intersectionRect.height < window.innerHeight * 0.1) { on = false; if (leave) leave(); }
+        if (!near && seen) near = true;
+        else if (near && x.intersectionRatio < 0.25 && x.intersectionRect.height < window.innerHeight * 0.25) near = false;
       });
+      emit();
     },
-    { threshold: [0, 0.05, 0.12, 0.25, 0.4, 0.5, ratio, 0.75, 1] },
+    { threshold: STEPS.concat([ratio]) },
   );
   io.observe(el);
+  document.addEventListener('visibilitychange', emit);
 }
 function hold(el, fn) {
   let hover = false, focus = false;
@@ -382,7 +405,9 @@ $$('[data-tour]').forEach((el) => {
   const tick = () => {
     clearTimeout(t); t = null; clearTimeout(loop); loop = null;
     if (run) {
-      if (!driven && !live()) return; // stopped on step k; tick() carries on when it is live again
+      // stopped on step k; tick() carries on when it is live again. A run you started plays through a
+      // hover or Pause, but not off screen.
+      if (!seen || (!driven && !live())) return;
       t = setTimeout(() => {
         k++;
         apply(seq()[k]);
@@ -418,7 +443,7 @@ $$('[data-tour]').forEach((el) => {
     seen = true;
     if (g.paused) { if (k < 0) { k = seq().length - 1; apply(seq()[k]); } tick(); }
     else start(false);
-  }, () => { seen = false; tick(); });
+  }, () => { seen = false; tick(); }, sec);
 })();
 
 /* ── Rules / memory / knowledge drawers: each acts on its own sample, locally ───────────────── */

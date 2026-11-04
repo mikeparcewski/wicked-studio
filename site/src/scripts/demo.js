@@ -7,14 +7,19 @@
    card waiting on you pulse. The Pause button in the title bar (and leaving the screen) stills
    everything that runs by itself: the prompt waits untyped (or its plan waits unposted), the
    background job stops between steps, and the pulses stop (studio.css .ide.is-still). Your own
-   decisions always play out. There is no hold on hover here, unlike the explanatory scenes: the
+   decisions play out under Pause; off screen (under a quarter of the demo showing) or in a hidden
+   tab their next steps wait too, with the time they had left, and carry on when it is back
+   (offscreen.js). There is no hold on hover here, unlike the explanatory scenes: the
    pulses are the status of jobs you are driving, and a working job must not look frozen while you
    use it; the Pause button is the WCAG 2.2.2 control.
 
    Keyboard: the thread is re-rendered with innerHTML, so a decision would drop focus to <body>.
    Every render that removes the focused control hands focus to the newest decision card's first
-   action, or to the thread itself (tabindex=-1). The rail and the side-panel tabs are tablists with
-   roving tabindex and arrow keys. */
+   action, or to the thread itself (tabindex=-1), without scrolling. The rail and the side-panel tabs
+   are tablists with roving tabindex and arrow keys; a focused job scrolls into view inside the rail
+   only, never the page. */
+import { pauseWhenOffscreen } from './offscreen.js';
+
 (function () {
   var root = document.querySelector('[data-ide]');
   if (!root) return;
@@ -93,12 +98,26 @@
   var ORDER = ['rate', 'flaky', 'node'];
   var cur = 'rate';
   var pane = 'changes';
+  // the pending steps of a run: { fn, left (ms), at, id }. Off screen they wait with the time they had left.
   var timers = [];
   var userTouched = false;
   var typing = null, typingPost = null, typingGen = 0, typingAuto = false;
   var lastNeeds = -1;
 
-  function later(ms, fn) { if (reduced) { fn(); return; } timers.push(setTimeout(fn, ms)); }
+  function arm(t) {
+    t.at = Date.now();
+    t.id = setTimeout(function () { var k = timers.indexOf(t); if (k >= 0) timers.splice(k, 1); t.fn(); }, t.left);
+  }
+  function later(ms, fn) {
+    if (reduced) { fn(); return; }
+    var t = { fn: fn, left: ms, at: 0, id: 0 };
+    timers.push(t);
+    if (onScreen) arm(t);
+  }
+  function holdLater() {
+    timers.forEach(function (t) { if (t.id) { clearTimeout(t.id); t.id = 0; t.left = Math.max(0, t.left - (Date.now() - t.at)); } });
+  }
+  function resumeLater() { timers.forEach(function (t) { if (!t.id) arm(t); }); }
   // still = paused or off screen: the background job waits between steps, and the pulses stop
   function bgSync() {
     var still = isStill();
@@ -129,7 +148,7 @@
       bgSync();
     });
   }
-  function clearTimers() { timers.forEach(clearTimeout); timers = []; pendingPlan = null; stopTyping(); }
+  function clearTimers() { timers.forEach(function (t) { clearTimeout(t.id); }); timers = []; pendingPlan = null; stopTyping(); }
   function focusQuiet(el) { if (!el) return; try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } }
 
   // ── rendering ───────────────────────────────────────────────────────
@@ -464,9 +483,17 @@
   roving(sessionsEl, '[role="tab"]', true, function (t) { openJob(t.getAttribute('data-id')); focusQuiet(sessionsEl.querySelector('[data-id="' + cur + '"]')); });
   var paneTabs = root.querySelector('.ide-pane-tabs');
   roving(paneTabs, '[role="tab"]', false, function (t) { pane = t.getAttribute('data-pane-tab'); renderPane(); focusQuiet(t); });
+  // The focused job comes into view inside the rail (a phone's rail scrolls sideways), never by moving
+  // the page: a timer's re-render hands focus back to the job it was on, and scrollIntoView would pull
+  // the page back to the demo each time.
   sessionsEl.addEventListener('focusin', function (e) {
     var t = e.target.closest && e.target.closest('.ide-sess');
-    if (t && t.scrollIntoView) t.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (!t) return;
+    var r = t.getBoundingClientRect(), b = sessionsEl.getBoundingClientRect();
+    if (r.left < b.left) sessionsEl.scrollLeft -= b.left - r.left;
+    else if (r.right > b.right) sessionsEl.scrollLeft += r.right - b.right;
+    if (r.top < b.top) sessionsEl.scrollTop -= b.top - r.top;
+    else if (r.bottom > b.bottom) sessionsEl.scrollTop += r.bottom - b.bottom;
   });
   input.addEventListener('focus', function () { if (typing || typingPost) { stopTyping(); input.value = PROMPT; } userTouched = true; });
   form.addEventListener('submit', function (e) {
@@ -493,14 +520,21 @@
     typeThenStart(true);
   }
   if (reduced) { autoStart(); return; }
+  // A prompt typing for a run you started ("Watch a job") finishes at once when the demo leaves the
+  // screen and posts; the run's next steps then wait for it to be back.
+  function finishTyping() {
+    if (!(typing || typingPost) || typingAuto) return;
+    stopTyping();
+    if (S.rate.state === 'draft' && cur === 'rate') { input.value = ''; start(PROMPT); }
+  }
+  pauseWhenOffscreen(root, {
+    start: function () { onScreen = true; resumeLater(); bgSync(); },
+    stop: function () { onScreen = false; finishTyping(); holdLater(); bgSync(); },
+  });
   if ('IntersectionObserver' in window) {
     var io = new IntersectionObserver(function (es) {
       if (es.some(function (x) { return x.isIntersecting; })) { io.disconnect(); setTimeout(autoStart, 700); }
     }, { threshold: 0.25 });
     io.observe(root);
-    new IntersectionObserver(function (es) {
-      es.forEach(function (x) { onScreen = x.isIntersecting; });
-      bgSync();
-    }, { threshold: 0.1 }).observe(root);
-  } else { onScreen = true; autoStart(); bgSync(); }
+  } else autoStart();
 })();
