@@ -431,3 +431,73 @@ describe('studio.sidebar.v1, read', () => {
     expect(useSidebar.getState().open).toEqual(new Set(['work']));
   });
 });
+
+describe('the list fade keeps one ResizeObserver per list (studio#970)', () => {
+  // WebKit reported "ResizeObserver loop completed with undelivered notifications" on the desk app page: the rail
+  // made a new observer on every change, and each new one's first observation could land mid-delivery.
+  class FakeObserver {
+    static made: FakeObserver[] = [];
+    readonly observed: Element[] = [];
+    disconnects = 0;
+    constructor(private readonly cb: ResizeObserverCallback) { FakeObserver.made.push(this); }
+    observe(el: Element): void { this.observed.push(el); }
+    unobserve(): void {}
+    disconnect(): void { this.disconnects += 1; }
+    deliver(): void { this.cb([], this as unknown as ResizeObserver); }
+  }
+  const list = (): Element => screen.getByTestId('session-rail').querySelector('.wk-rail-groups')!;
+  beforeEach(() => { FakeObserver.made = []; vi.stubGlobal('ResizeObserver', FakeObserver); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('is made once and survives a heading, a page and a content change, and its delivery still measures', () => {
+    let height = 100;
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('wk-rail-groups') ? height : 0; });
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('wk-rail-groups') ? 200 : 0; });
+    const { rerender } = rail('/');
+    const first = list();
+    expect(FakeObserver.made).toHaveLength(1);
+    expect(FakeObserver.made[0]!.observed).toEqual([first]);
+    fireEvent.click(screen.getByTestId('rail-sec-toggle-govern')); // the open headings change
+    rerender(<SessionRail runs={RUNS} needRows={[]} navigate={() => {}} pathname="/agents" />); // the page changes
+    rerender(<SessionRail runs={RUNS} needRows={[{ key: 'fail:u0', kind: 'failed-run', severity: 100, stakes: 1, subject: 'x', text: 'Run failed', tone: 'fail', at: 1, subjectPath: '/', action: { kind: 'open', path: '/', label: 'Open' } }] as never} navigate={() => {}} pathname="/agents" />); // a need on a run: the rail's groups change
+    expect(list()).toBe(first);
+    expect(FakeObserver.made).toHaveLength(1);
+    expect(FakeObserver.made[0]!.disconnects).toBe(0);
+    expect(first).toHaveAttribute('data-more-below', 'false');
+    height = 600; // the list grew past its box: the same observer's delivery marks more below
+    act(() => { FakeObserver.made[0]!.deliver(); });
+    expect(first).toHaveAttribute('data-more-below', 'true');
+  });
+
+  it('a content change re-measures without a new observer', () => {
+    let height = 600;
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('wk-rail-groups') ? height : 0; });
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('wk-rail-groups') ? 200 : 0; });
+    const { rerender } = rail('/');
+    expect(list()).toHaveAttribute('data-more-below', 'true');
+    height = 100;
+    rerender(<SessionRail runs={RUNS} needRows={[]} navigate={() => {}} pathname="/agents" />);
+    expect(list()).toHaveAttribute('data-more-below', 'false');
+    expect(FakeObserver.made).toHaveLength(1);
+  });
+
+  it('folding to icons drops the observer, and unfolding makes exactly one for the new list', () => {
+    rail('/');
+    fireEvent.click(screen.getByTestId('rail-fold'));
+    expect(screen.getByTestId('session-rail')).toHaveAttribute('data-rail', 'icons');
+    expect(FakeObserver.made).toHaveLength(1);
+    expect(FakeObserver.made[0]!.disconnects).toBe(1);
+    fireEvent.click(screen.getByTestId('rail-fold'));
+    expect(screen.getByTestId('session-rail')).toHaveAttribute('data-rail', 'full');
+    expect(FakeObserver.made).toHaveLength(2);
+    expect(FakeObserver.made[1]!.observed).toEqual([list()]);
+    expect(FakeObserver.made[1]!.disconnects).toBe(0);
+  });
+
+  it('unmounting the rail disconnects its observer', () => {
+    const { unmount } = rail('/');
+    unmount();
+    expect(FakeObserver.made).toHaveLength(1);
+    expect(FakeObserver.made[0]!.disconnects).toBe(1);
+  });
+});
