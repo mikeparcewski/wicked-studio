@@ -367,7 +367,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-undo" disabled={history?.canUndo !== true || busy || framed} onClick={() => void move('undo')} aria-label="Undo">Undo</button>
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-redo" disabled={history?.canRedo !== true || busy || framed} onClick={() => void move('redo')} aria-label="Redo">Redo</button>
         </span>
-        {shown === 'edit' && <span className="wk-apps-hint" data-testid="apps-edit-hint">Fine-tune by hand: changes save as you make them · for anything bigger, ask in the chat</span>}
+        {shown === 'edit' && <span className="wk-apps-hint" data-testid="apps-edit-hint">{chatOn ? 'Fine-tune by hand: changes save as you make them · for anything bigger, ask in the chat' : 'Changes save as you make them · Undo to go back'}</span>}
         <span className="wk-apps-spacer" />
         {shown === 'preview' && viewer !== null && <span className="wk-apps-pill" data-testid="apps-viewer">Viewing as {viewer}</span>}
         <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-share-open" disabled={detail === null} onClick={() => setSharing(true)}>Share</button>
@@ -397,7 +397,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         <p className="wk-apps-line wk-apps-chips" data-testid="apps-chips">
           {chips.length > 0
             ? chips.map((c, i) => <span key={i} className="wk-source-chip" data-testid="apps-chip">about: {c.label}</span>)
-            : <span className="wk-apps-line--note">Select a component to ask the chat about just that one.</span>}
+            : <span className="wk-apps-line--note">{chatOn ? 'Select a component to ask the chat about just that one.' : 'Select a component to make it the subject of your next message.'}</span>}
         </p>
       )}
       <div className="wk-apps-body" data-mode={shown} data-chat={chatOn}>
