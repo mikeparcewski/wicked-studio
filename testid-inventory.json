@@ -13,7 +13,7 @@
   "counts": {
     "files": 306,
     "occurrences": 4383,
-    "static": 3675,
+    "static": 3676,
     "dynamic": 146,
     "computed": 49
   },
@@ -694,6 +694,12 @@
     },
     {
       "testId": "app-panel-properties",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-selected",
       "files": [
         "src/components/apps/AppSidePanel.tsx"
       ]

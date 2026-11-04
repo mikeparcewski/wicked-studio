@@ -127,8 +127,9 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   const key = appComposerKey(slug);
   const [text, setTextState] = useState(() => peekDraft(slug));
   useEffect(() => { dropDraft(slug); }, [slug]);
-  /** A message crew did not take while a newer one was typed: kept whole, to put back. */
-  const [refused, setRefused] = useState<{ words: string; about: string[] } | null>(null);
+  /** Messages crew did not take while a newer one was typed: each kept whole, to put back (xreview r4: a list). */
+  const [kept, setKept] = useState<Array<{ id: number; words: string; about: string[] }>>([]);
+  const keptId = useRef(0);
   const textRef = useRef(text);
   textRef.current = text;
   const setText = (t: string): void => setTextState(t);
@@ -183,7 +184,9 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
     // The box still holds this message (it was not taken), unless the person has typed another meanwhile: then the
     // refused one is named in the note and the newer draft is left alone.
     if (textRef.current.trim() !== words) {
-      setRefused({ words, about });
+      keptId.current += 1;
+      const id = keptId.current;
+      setKept((k) => [...k, { id, words, about }].slice(-10));
       setNote(`Not sent (${why}). It is kept below: put it back when you are ready.`);
     } else {
       setNote(`Not sent: ${why}.`);
@@ -218,23 +221,27 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
         ))}
       </div>
       {note !== null && <p className="wk-appchat-note" data-testid="app-chat-note" role="status">{note}</p>}
-      {refused !== null && (
-        // Kept until it is put back, whatever is sent meanwhile (xreview r3 on K5).
-        <p className="wk-appchat-note wk-appchat-kept" data-testid="app-chat-kept">
-          Kept, not sent: “{refused.words.length > 80 ? `${refused.words.slice(0, 79)}…` : refused.words}”{' '}
-          <button type="button" className="wk-btn wk-btn--link" data-testid="app-chat-putback" onClick={() => {
+      {kept.map((k) => (
+        // Kept until it is put back, whatever is sent meanwhile (xreview r3, r4).
+        <p key={k.id} className="wk-appchat-note wk-appchat-kept" data-testid="app-chat-kept">
+          Kept, not sent: “{k.words.length > 80 ? `${k.words.slice(0, 79)}…` : k.words}”{' '}
+          <button type="button" className="wk-btn wk-btn--link" data-testid="app-chat-putback" disabled={sending}
+            title={sending ? 'Wait for the message being sent' : undefined} onClick={() => {
             // Swap, with each message's own components: the kept one goes in the box with ITS chips; the draft there
-            // (with its chips) is kept in its place.
+            // (with its chips) is kept in its place. Not while a send is in flight (it owns the box and its chips).
+            if (sending) return;
             const nowWords = textRef.current;
             const nowChips = chipsOf(useComposerChips.getState(), key).filter((c) => c.kind === 'about' && c.key.startsWith('cmp:'));
             for (const c of nowChips) removeAboutChip(key, c.key);
-            setTextState(refused.words);
-            for (const id of refused.about) addAboutChip(key, { kind: 'about', key: `cmp:${id}`, label: componentWords(detail?.spec ?? null, id) ?? id });
-            setRefused(nowWords.trim() !== '' || nowChips.length > 0 ? { words: nowWords, about: nowChips.map((c) => c.key.slice(4)) } : null);
+            setTextState(k.words);
+            for (const id of k.about) addAboutChip(key, { kind: 'about', key: `cmp:${id}`, label: componentWords(detail?.spec ?? null, id) ?? id });
+            keptId.current += 1;
+            const swapped = nowWords.trim() !== '' || nowChips.length > 0 ? [{ id: keptId.current, words: nowWords, about: nowChips.map((c) => c.key.slice(4)) }] : [];
+            setKept((all) => [...all.filter((x) => x.id !== k.id), ...swapped]);
             setNote(null);
           }}>Put it back in the box</button>
         </p>
-      )}
+      ))}
       <div className="wk-appchat-composer">
         <AppComposer composerKey={key} text={text} setText={setText} onSubmit={send} busy={sending}
           placeholder={busy ? 'A change is being made… type the next one' : 'Ask for a change…'} ariaLabel="Ask for a change to this app"

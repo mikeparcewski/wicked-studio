@@ -64,6 +64,16 @@ describe('the app side panel', () => {
     expect(readCollapsed()).toBe(false);
   });
 
+  it('collapsing keeps the chat mounted (its draft survives a collapse and a reopen)', () => {
+    render(<Harness />);
+    const box = screen.getByTestId('app-composer-input') as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: 'half typed' } });
+    fireEvent.click(screen.getByTestId('app-panel-toggle'));
+    expect(screen.getByTestId('app-composer-input')).toBe(box);
+    fireEvent.click(screen.getByTestId('app-panel-rail-chat'));
+    expect((screen.getByTestId('app-composer-input') as HTMLTextAreaElement).value).toBe('half typed');
+  });
+
   it('collapsed: a running turn shows a busy dot on Chat, an ended unseen one an unread dot', () => {
     const { unmount } = render(<Harness busy initialCollapsed />);
     expect(screen.getByTestId('app-panel-rail-chat').querySelector('[data-testid="app-panel-busy"]')).not.toBeNull();

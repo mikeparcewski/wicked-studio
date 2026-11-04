@@ -35,7 +35,7 @@ export function writeSeen(slug: string, mark: string): void {
 
 const TABS: ReadonlyArray<{ id: PanelTab; label: string }> = [{ id: 'chat', label: 'Chat' }, { id: 'properties', label: 'Properties' }];
 
-export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy, unread, chat, properties, dock, phone }: {
+export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy, unread, chat, properties, dock, phone, selectedWhileCollapsed = false }: {
   slug: string;
   tab: PanelTab;
   setTab: (t: PanelTab) => void;
@@ -50,6 +50,9 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
   /** The "Needs you" dock (an action card, a link question): above the tabs. */
   dock: React.ReactNode;
   phone: boolean;
+  /** Collapsed while a component is selected: the Properties icon says so (selecting never opens the panel, which
+   *  would move the canvas under the pointer). */
+  selectedWhileCollapsed?: boolean;
 }): React.ReactElement {
   const tabRefs = useRef<Record<PanelTab, HTMLButtonElement | null>>({ chat: null, properties: null });
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -68,7 +71,8 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
   };
   const collapse = (v: boolean): void => { setCollapsed(v); writeCollapsed(v); };
   const dot = (t: PanelTab): React.ReactNode => (t === 'chat' && busy ? <span className="wk-apppanel-dot wk-apppanel-dot--busy" data-testid="app-panel-busy" aria-label="a change is being made" />
-    : t === 'chat' && unread ? <span className="wk-apppanel-dot wk-apppanel-dot--unread" data-testid="app-panel-unread" aria-label="new in the chat" /> : null);
+    : t === 'chat' && unread ? <span className="wk-apppanel-dot wk-apppanel-dot--unread" data-testid="app-panel-unread" aria-label="new in the chat" />
+      : t === 'properties' && selectedWhileCollapsed ? <span className="wk-apppanel-dot wk-apppanel-dot--sel" data-testid="app-panel-selected" aria-label="a component is selected" /> : null);
   const onKey = (e: React.KeyboardEvent, i: number): void => {
     const n = TABS.length;
     const to = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? (i + 1) % n : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? (i - 1 + n) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
@@ -78,27 +82,27 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
     setTab(t);
     tabRefs.current[t]?.focus();
   };
-  if (collapsed) {
-    return (
-      <aside className={`wk-apppanel wk-apppanel--collapsed${phone ? ' wk-apppanel--sheet' : ''}`} data-testid="app-panel" data-collapsed="true" data-tab={tab} aria-label="Chat and properties">
-        <button type="button" className="wk-apppanel-rail-btn wk-apppanel-toggle" data-testid="app-panel-toggle" aria-expanded={false} aria-controls={`app-panel-body-${slug}`}
-          title="Open the panel" aria-label="Open the panel" onClick={() => open(tab, false)}>
-          <ChevronsLeft size={16} aria-hidden className={phone ? 'wk-apppanel-rot' : undefined} />
-        </button>
-        {TABS.map((t) => (
-          <button key={t.id} type="button" className="wk-apppanel-rail-btn" data-testid={`app-panel-rail-${t.id}`} aria-label={`Open ${t.label}`} title={t.label} onClick={() => open(t.id)}>
-            {t.id === 'chat' ? <MessageCircle size={18} aria-hidden /> : <SlidersHorizontal size={18} aria-hidden />}
-            {phone && <span className="wk-apppanel-rail-label">{t.label}</span>}
-            {dot(t.id)}
-          </button>
-        ))}
-      </aside>
-    );
-  }
+  // Collapsed, the panes stay MOUNTED (hidden): the chat's draft, a kept message and a send in flight survive a
+  // collapse (xreview r4 on K5). The rail stands in front of them.
   return (
-    <aside className={`wk-apppanel${phone ? ' wk-apppanel--sheet' : ''}`} data-testid="app-panel" data-collapsed="false" data-tab={tab} aria-label="Chat and properties">
-      {dock}
-      <div className="wk-apppanel-head">
+    <aside className={`wk-apppanel${collapsed ? ' wk-apppanel--collapsed' : ''}${phone ? ' wk-apppanel--sheet' : ''}`} data-testid="app-panel" data-collapsed={collapsed ? 'true' : 'false'} data-tab={tab} aria-label="Chat and properties">
+      {collapsed && (
+        <>
+          <button type="button" className="wk-apppanel-rail-btn wk-apppanel-toggle" data-testid="app-panel-toggle" aria-expanded={false} aria-controls={`app-panel-body-${slug}`}
+            title="Open the panel" aria-label="Open the panel" onClick={() => open(tab, false)}>
+            <ChevronsLeft size={16} aria-hidden className={phone ? 'wk-apppanel-rot' : undefined} />
+          </button>
+          {TABS.map((t) => (
+            <button key={t.id} type="button" className={`wk-apppanel-rail-btn${tab === t.id ? ' is-on' : ''}`} data-testid={`app-panel-rail-${t.id}`} aria-label={`Open ${t.label}`} title={t.label} onClick={() => open(t.id)}>
+              {t.id === 'chat' ? <MessageCircle size={18} aria-hidden /> : <SlidersHorizontal size={18} aria-hidden />}
+              {phone && <span className="wk-apppanel-rail-label">{t.label}</span>}
+              {dot(t.id)}
+            </button>
+          ))}
+        </>
+      )}
+      {!collapsed && dock}
+      <div className="wk-apppanel-head" hidden={collapsed}>
         <div className="wk-apppanel-tabs" role="tablist" aria-label="Chat and properties">
           {TABS.map((t, i) => (
             <button key={t.id} ref={(el) => { tabRefs.current[t.id] = el; }} type="button" role="tab" id={`app-tab-${slug}-${t.id}`} aria-selected={tab === t.id}
@@ -108,12 +112,14 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
             </button>
           ))}
         </div>
-        <button type="button" className="wk-apppanel-toggle" data-testid="app-panel-toggle" aria-expanded aria-controls={`app-panel-body-${slug}`}
-          title={phone ? 'Minimise' : 'Collapse the panel'} aria-label={phone ? 'Minimise the panel' : 'Collapse the panel'} onClick={() => collapse(true)}>
-          <ChevronsRight size={16} aria-hidden className={phone ? 'wk-apppanel-rot' : undefined} />
-        </button>
+        {!collapsed && (
+          <button type="button" className="wk-apppanel-toggle" data-testid="app-panel-toggle" aria-expanded aria-controls={`app-panel-body-${slug}`}
+            title={phone ? 'Minimise' : 'Collapse the panel'} aria-label={phone ? 'Minimise the panel' : 'Collapse the panel'} onClick={() => collapse(true)}>
+            <ChevronsRight size={16} aria-hidden className={phone ? 'wk-apppanel-rot' : undefined} />
+          </button>
+        )}
       </div>
-      <div className="wk-apppanel-body" id={`app-panel-body-${slug}`} ref={panelRef}>
+      <div className="wk-apppanel-body" id={`app-panel-body-${slug}`} ref={panelRef} hidden={collapsed}>
         <div role="tabpanel" id={`app-tabpanel-${slug}-chat`} aria-labelledby={`app-tab-${slug}-chat`} hidden={tab !== 'chat'} className="wk-apppanel-pane" data-testid="app-panel-chat">{chat}</div>
         <div role="tabpanel" id={`app-tabpanel-${slug}-properties`} aria-labelledby={`app-tab-${slug}-properties`} hidden={tab !== 'properties'} className="wk-apppanel-pane wk-apppanel-pane--props" data-testid="app-panel-properties">{properties}</div>
       </div>

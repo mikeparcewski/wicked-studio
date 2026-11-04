@@ -296,8 +296,10 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           chips: (c) => {
             setChips(c);
             if (store.kind === 'crew') mirrorSelection(store.slug, c);
-            // (K5) Selecting a component opens Properties for it in the side panel.
-            if (c.some((x) => x.anchor.kind === 'element')) { setPanelTab('properties'); setCollapsed(false); }
+            // (K5) Selecting a component switches the side panel to Properties for it. A collapsed panel stays
+            // collapsed (opening it would move the canvas under the pointer, and could close Edit): its Properties
+            // icon shows the selection (xreview r4).
+            if (c.some((x) => x.anchor.kind === 'element')) setPanelTab('properties');
           }, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {},
           status: (line) => setStatus(line), notes: () => {}, thread: () => {},
           writeFailed: (m) => setStatus(m),
@@ -473,7 +475,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           return (
             <div className="wk-apps-side">
               <AppSidePanel slug={slug} tab={panelTab} setTab={setPanelTab} collapsed={collapsed && !waiting} setCollapsed={setCollapsed}
-                busy={detail.turn != null} unread={unread} dock={dock} phone={narrowWindow}
+                busy={detail.turn != null} unread={unread} dock={dock} phone={narrowWindow} selectedWhileCollapsed={collapsed && selId !== null}
                 chat={(
                   <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
                     onSent={() => { void sessionRef.current?.refresh(); }} prepareSend={prepareSend} pending={pending}

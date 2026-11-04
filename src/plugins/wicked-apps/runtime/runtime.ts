@@ -632,8 +632,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
 
   const select = (id: string | null): void => {
+    const was = selected;
     selected = id;
     if (id !== null && grants.has('selection.chip')) say('selection.set', { anchors: [{ kind: 'element', id }] });
+    // (K5) A selection that ends is said too, so a host's Properties never keeps a component nothing selects.
+    else if (id === null && was !== null && grants.has('selection.chip')) say('selection.set', { anchors: [] });
   };
 
   /** A move or a resize: the box follows the pointer (CSSOM), and ONE op is sent when the pointer comes up. */
@@ -958,7 +961,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       const b = el('button', pg.id === pageId ? 'wk-page is-on' : 'wk-page', lineOf(pg.title, 80));
       b.type = 'button';
       b.setAttribute('aria-current', pg.id === pageId ? 'page' : 'false');
-      b.addEventListener('click', () => { if (pageId !== pg.id) { pageId = pg.id; selected = null; draw(); queryAll(); } });
+      b.addEventListener('click', () => { if (pageId !== pg.id) { pageId = pg.id; select(null); draw(); queryAll(); } });
       nav.append(b);
     }
     main.append(nav);
@@ -1162,11 +1165,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && editing() && selected !== null) {
       e.preventDefault();
       const id = selected;
-      selected = null;
+      select(null);
       void edit([{ op: 'component-remove', id }]);
       return;
     }
-    if (e.key === 'Escape' && selected !== null && !inField) { selected = null; draw(); }
+    if (e.key === 'Escape' && selected !== null && !inField) { select(null); draw(); }
   }
   document.addEventListener('keydown', onKey);
 

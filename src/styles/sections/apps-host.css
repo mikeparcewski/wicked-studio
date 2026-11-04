@@ -88,7 +88,6 @@
   .wk-apps-frame-box .wk-editor-frame { min-height: 0; }
   .wk-apps-body[data-chat='true'] .wk-apps-frame { height: 58vh; }
   .wk-apps-side { border-left: 0; border-top: 1px solid var(--border); }
-  .wk-appchat-thread { overflow: visible; }
   .wk-appchat-composer { position: sticky; bottom: 0; background: var(--surface-base); }
   .wk-apps-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 44; max-height: 72vh; border-left: 0; border-top: 1px solid var(--border-strong); box-shadow: var(--shadow-card); }
   .wk-apps-dock--quiet { display: none; }
@@ -198,4 +197,9 @@
   .wk-apppanel--collapsed.wk-apppanel--sheet { flex-direction: row; justify-content: flex-start; padding: var(--space-2) var(--space-3); }
   .wk-apppanel--sheet .wk-apppanel-rail-btn { width: auto; padding: 0 var(--space-3); }
   .wk-appchat-composer { padding-right: 72px; }
+  .wk-apppanel--sheet .wk-apppanel-body, .wk-apppanel--sheet .wk-apppanel-pane, .wk-apppanel--sheet .wk-appchat { min-height: 0; }
+  .wk-apppanel--sheet .wk-appchat-thread { overflow-y: auto; }
 }
+.wk-apppanel-dot--sel { background: var(--accent); }
+.wk-apppanel-rail-btn.is-on { color: var(--ink-high); }
+.wk-apppanel--collapsed .wk-apppanel-head[hidden], .wk-apppanel--collapsed .wk-apppanel-body[hidden] { display: none; }
