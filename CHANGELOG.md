@@ -13,6 +13,16 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **Understand's Knowledge map, the data-shape review, and Profile on a source sheet (DES-KNOWLEDGE-DATA-001 §10, §19
+  B4; crew api-types 0.186.0, mirrored until it is published).** Understand gains a **Knowledge map** beside the
+  repositories' code and requirements graphs (`/understand?view=knowledge`): the data shapes waiting for review on top
+  (the one proposal review, kind `knowledge`: the table, its value-free summary, what it joins and which code describes
+  it, Approve or Reject), and below it the map crew answers (`GET /knowledge/map`): data sources and their tables,
+  repositories and their code, and the APPROVED shapes, with `joins`, `describes` and `governed_by` drawn with their
+  names and line styles (never colour alone) and listed in words beside the drawing. A pending or declined shape is
+  never drawn. A saved Postgres source's sheet gains **Data shapes**: **Profile this source** asks crew for a
+  value-free profile (`POST /sources/:name/profile`: counts in bands, never a value), says what it found and how many
+  shapes wait for review, and links to the review. Needs-you routes a data-shape proposal to the Knowledge map.
 - **The Agents box on a data source, and what a job's agents read (DES-KNOWLEDGE-DATA-001 §7.1, §7.9, §19 B5; crew
   api-types 0.183.0/0.184.0).** A saved SQL source's sheet has an Agents box: **Agents can see this structure** (on),
   **Agents can query this source** (off; Postgres only, the one dialect crew's data gate reads rows from; it says that

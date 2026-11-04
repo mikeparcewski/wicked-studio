@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 306,
-    "occurrences": 4383,
-    "static": 3676,
+    "files": 309,
+    "occurrences": 4417,
+    "static": 3709,
     "dynamic": 146,
     "computed": 49
   },
@@ -7376,6 +7376,126 @@
       ]
     },
     {
+      "testId": "knowledge-connection",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-connections",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-connections-empty",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-graph",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-graph-canvas",
+      "files": [
+        "src/components/desk/KnowledgeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-inventory",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-inventory-group",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-inventory-node",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-inventory-shape",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map-empty",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map-error",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map-loading",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map-note",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map-refresh",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map-skipped",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map-sources",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-map-summary",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-selected",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-view",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
       "testId": "known-agents",
       "files": [
         "src/components/desk/FirstRun.tsx"
@@ -13402,6 +13522,36 @@
       ]
     },
     {
+      "testId": "proposal-knowledge",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-knowledge-content",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-knowledge-effect",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-knowledge-links",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-knowledge-subject",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
       "testId": "proposal-memory-content",
       "files": [
         "src/components/ProposalsList.tsx"
@@ -18654,6 +18804,42 @@
       ]
     },
     {
+      "testId": "source-profile",
+      "files": [
+        "src/components/sources/ProfileBox.tsx"
+      ]
+    },
+    {
+      "testId": "source-profile-error",
+      "files": [
+        "src/components/sources/ProfileBox.tsx"
+      ]
+    },
+    {
+      "testId": "source-profile-result",
+      "files": [
+        "src/components/sources/ProfileBox.tsx"
+      ]
+    },
+    {
+      "testId": "source-profile-review",
+      "files": [
+        "src/components/sources/ProfileBox.tsx"
+      ]
+    },
+    {
+      "testId": "source-profile-rows",
+      "files": [
+        "src/components/sources/ProfileBox.tsx"
+      ]
+    },
+    {
+      "testId": "source-profile-run",
+      "files": [
+        "src/components/sources/ProfileBox.tsx"
+      ]
+    },
+    {
       "testId": "source-replaces",
       "files": [
         "src/components/sources/SourceSheet.tsx"
@@ -21116,6 +21302,18 @@
     },
     {
       "testId": "understand-graph-value",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-knowledge",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-knowledge-toggle",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]

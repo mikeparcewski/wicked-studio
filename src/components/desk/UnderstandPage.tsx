@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Columns3, ListChecks, MessageSquarePlus, Network, PanelRight, Share2, X } from 'lucide-react';
+import { ArrowLeft, Columns3, Database, ListChecks, MessageSquarePlus, Network, PanelRight, Share2, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { apiStatus } from '../../api/errors.js';
 import type { RepoEntry, SessionView } from '../../api/types.js';
@@ -20,12 +20,16 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { CoverageView } from '../CoverageView.js';
 import { RepoGraphModal } from '../RepoGraphModal.js';
+import { KnowledgeView } from './KnowledgeView.js';
 import { Skeleton } from '../ui/index.js';
 import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 import { isTopModal, useLayerStore } from '../../store/layers.js';
 import { isShortcutsPaletteOpen } from '../../hooks/useGlobalShortcuts.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useVoiceStore } from '../../store/voice.js';
+
+/** The main column's views: the chat, or one the sidebar's More list opens. */
+type Pane = 'chat' | 'compare' | 'coverage' | 'knowledge';
 
 /** Below this the sidebar is a drawer (understand-chat.css uses the same width). */
 const NARROW_QUERY = '(max-width: 1023px)';
@@ -68,7 +72,7 @@ type AnswerRead =
  *    of them before any is chosen; their state is read once a minute through store/repoKnowledge), and More.
  *  - Under 1024 px the sidebar is a modal drawer behind the header's button.
  */
-export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
+export function UnderstandPage({ project, navigate, now, compare, runs = [], search }: {
   /** The project on screen (a project's page): the chat is scoped to it. */
   project: string | null;
   /** The jobs the page already holds: the default repository is the most active one this week. */
@@ -77,6 +81,8 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   now: number;
   /** Compare side by side (DeskUnderstand), folded away. */
   compare: React.ReactNode;
+  /** The address's query (the router's): `?view=knowledge` is the Knowledge map, kept in step both ways. */
+  search?: string;
 }): React.ReactElement {
   const boxId = useId();
   const recentId = useId();
@@ -93,8 +99,8 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
   const drawer = narrow && sideOpen;
   /** A repository's graph, opened from the sidebar (drawn outside it, so a drawer closing never hides it). */
   const [graphOf, setGraphOf] = useState<{ repo: RepoEntry; view: 'code' | 'domain' } | null>(null);
-  /** The main column: the chat, or one of the sidebar's More views. */
-  const [pane, setPane] = useState<'chat' | 'compare' | 'coverage'>('chat');
+  /** The main column: the chat, or one of the sidebar's More views (`?view=knowledge` opens the Knowledge map). */
+  const [pane, setPane] = useState<Pane>(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'knowledge' ? 'knowledge' : 'chat'));
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [q, setQ] = useState('');
   const [asked, setAsked] = useState<AskedQuestion[]>(() => readAsked());
@@ -173,11 +179,26 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     askPage('understand', { text: questionMessage(question), send: true, fresh: true });
     setQ('');
   };
+  // The Knowledge map has an address (a review link lands on it): the pane follows it, and it follows the pane.
+  const wantsKnowledge = search === undefined ? null : new URLSearchParams(search).get('view') === 'knowledge';
+  useEffect(() => {
+    if (wantsKnowledge === null) return;
+    setPane((cur) => (wantsKnowledge ? 'knowledge' : cur === 'knowledge' ? 'chat' : cur));
+  }, [wantsKnowledge]);
+  const syncUrl = (next: Pane): void => {
+    if (search === undefined || (next === 'knowledge') === wantsKnowledge) return;
+    const q = new URLSearchParams(search);
+    if (next === 'knowledge') q.set('view', 'knowledge');
+    else q.delete('view');
+    const rest = q.toString();
+    navigate(`${window.location.pathname}${rest === '' ? '' : `?${rest}`}`, { replace: true });
+  };
   const newQuestion = (): void => {
     usePageChat.getState().fresh('understand');
     setInline(false);
     setOpenChat(null);
     setOpenScope(null);
+    syncUrl('chat');
     setPane('chat');
     setTimeout(() => inputRef.current?.focus(), 0);
   };
@@ -186,6 +207,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
     setInline(true);
     setOpenChat(a.chatId);
     setOpenScope(a.repos ?? null);
+    syncUrl('chat');
     setPane('chat');
     if (drawer) closeSide('content'); else focusContent();
   };
@@ -232,7 +254,8 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
         ?? pick('[data-testid="understand-chat"]'))?.focus();
     }, 0);
   };
-  const showPane = (next: 'chat' | 'compare' | 'coverage'): void => {
+  const showPane = (next: Pane): void => {
+    syncUrl(next);
     setPane(next);
     if (drawer) closeSide('content'); else focusContent();
   };
@@ -317,6 +340,15 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
             <div className="wk-uc-measure wk-uc-measure--wide">
               <h2 className="wk-uc-pane-title">Coverage: which code is tied to a requirement</h2>
               <CoverageView />
+            </div>
+          </div>
+        )}
+
+        {pane === 'knowledge' && (
+          <div className="wk-uc-body wk-uc-pane" data-testid="understand-knowledge">
+            <div className="wk-uc-measure wk-uc-measure--wide">
+              <h2 className="wk-uc-pane-title">Knowledge: what connects to what</h2>
+              <KnowledgeView />
             </div>
           </div>
         )}
@@ -407,7 +439,13 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
         </section>
 
         <RepoGraphLinks repos={repos} failed={reposFailed} scope={graphScope} runs={runs} now={now} navigate={navigate} sectionRef={graphsRef}
-          onOpen={(repo, view) => { if (drawer) closeSide(null); setGraphOf({ repo, view }); }} />
+          onOpen={(repo, view) => { if (drawer) closeSide(null); setGraphOf({ repo, view }); }}
+          after={(
+            // DES-KNOWLEDGE-DATA-001 §10.3: the third view beside the code and requirements graphs, across every store.
+            <button type="button" className="wk-uc-morebtn wk-uc-knowbtn" data-testid="understand-knowledge-toggle" aria-pressed={pane === 'knowledge'} onClick={() => showPane(pane === 'knowledge' ? 'chat' : 'knowledge')}>
+              <Database size={16} aria-hidden /><span>Knowledge map: data, code and shapes</span>
+            </button>
+          )} />
 
         <section className="wk-uc-sec" aria-labelledby={moreId}>
           <h2 id={moreId} className="wk-uc-label">More</h2>
@@ -422,6 +460,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
                 <ListChecks size={16} aria-hidden /><span>Coverage</span>
               </button>
             </li>
+
           </ul>
         </section>
       </aside>
@@ -436,10 +475,12 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [] }: {
 
 /** The sidebar's quick links: each repository in scope (all of them when none is chosen), its code graph and its
  *  requirements graph, each with its state as a dot (board/repoKnowledge.ts). */
-function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef, onOpen }: {
+function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef, onOpen, after }: {
   repos: RepoEntry[] | null; failed: boolean; scope: readonly string[]; runs: readonly SessionView[]; now: number; navigate: Navigate;
   sectionRef: React.MutableRefObject<HTMLElement | null>;
   onOpen: (repo: RepoEntry, view: 'code' | 'domain') => void;
+  /** Drawn under the repositories' links (the Knowledge map's button). */
+  after?: React.ReactNode;
 }): React.ReactElement {
   const titleId = useId();
   const shown = useMemo(() => graphLinkRepos(repos ?? [], scope), [repos, scope]);
@@ -489,6 +530,7 @@ function RepoGraphLinks({ repos, failed, scope, runs, now, navigate, sectionRef,
       {inScope.length > shown.length && (
         <a href="/repos" className="wk-ue-link wk-uc-all" data-testid="understand-graph-all" onClick={go('/repos')}>All {inScope.length} repositories</a>
       )}
+      {after}
     </section>
   );
 }

@@ -16,8 +16,8 @@ import { shortContent } from './ProposalChips.js';
 import { EmptyState, StateBanner } from './ui/index.js';
 
 export function ProposalsSection({ kind, heading, onDecision, onSettled, editable = false, revision = 0, runId = null, onShowAll }: {
-  /** Which proposals this section reviews: Steer reviews policies, Memory reviews memories. */
-  kind: 'memory' | 'policy';
+  /** Which proposals this section reviews: Steer reviews policies, Memory reviews memories, Understand's Knowledge view data shapes. */
+  kind: 'memory' | 'policy' | 'knowledge';
   /** The section title, e.g. "Rule proposals" / "Memory proposals". */
   heading: string;
   /** Memory proposals only: each card can be edited before it is approved (crew's approve-with-edit). */

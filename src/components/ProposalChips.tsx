@@ -1,9 +1,10 @@
 import { proposalKind, type Proposal } from '../api/proposals.js';
 import { TechDetails } from './ui/index.js';
 
-export const KIND_COLOR: Record<'memory' | 'policy' | 'other', string> = {
+export const KIND_COLOR: Record<'memory' | 'policy' | 'knowledge' | 'other', string> = {
   memory: 'var(--accent)',
   policy: 'var(--status-gate)',
+  knowledge: 'var(--status-run)',
   other: 'var(--ink-muted)',
 };
 
@@ -20,7 +21,7 @@ export function KindChip({ proposal }: { proposal: Proposal }): React.ReactEleme
   const kind = proposalKind(proposal);
   return (
     <span data-testid="proposal-kind-chip" data-kind={kind} className="wk-tag">
-      {kind === 'memory' ? 'Memory' : kind === 'policy' ? 'Policy' : 'Proposal'}
+      {kind === 'memory' ? 'Memory' : kind === 'policy' ? 'Policy' : kind === 'knowledge' ? 'Data shape' : 'Proposal'}
     </span>
   );
 }
