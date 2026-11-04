@@ -143,6 +143,11 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const open = useSidebar((st) => st.open);
   const phone = usePhone();
   const icons = useSidebar((st) => st.icons) && !phone;
+  // What the viewer shut while it held the page on screen: it stays shut on this address (whether it was open
+  // for the view or saved open), and every new address starts over, coming back included. Keyed by the address,
+  // so another page never reads it, and cleared when the address changes, so a return does not either.
+  const [shutHere, setShutHere] = useState<{ path: string; ids: ReadonlySet<string> }>({ path: '', ids: new Set() });
+  useEffect(() => { setShutHere((prev) => (prev.path === pathname || prev.ids.size === 0 ? prev : { path: '', ids: new Set() })); }, [pathname]);
   // A list that runs past the rail's fold fades out at its foot instead of slicing a row in half;
   // the fade lifts once the list is scrolled to its end.
   const groupsRef = useRef<HTMLDivElement>(null);
@@ -156,7 +161,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
     ro?.observe(el);
     return () => { el.removeEventListener('scroll', check); ro?.disconnect(); };
-  }, [groups, collapsed, open, icons]);
+  }, [groups, collapsed, open, icons, shutHere, pathname]);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   // DES-APPS-001: Data sources is in Work only when the connected crew serves them (an older crew: Build & settings).
   const dataSources = useCapabilities((s) => s.dataSources);
@@ -183,9 +188,6 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const rowHere = (rows: readonly { path: string }[]): boolean => rows.some((x) => x.path.split('#')[0] === pathname);
   const recentHere = groups.some((g) => rowHere(g.sessions));
   const holding: SidebarSectionId | null = groupHolding(groupsNav, on)?.id ?? (recentHere ? 'recent' : null);
-  // What the viewer shut while it held the page on screen: it stays shut on this address (whether it was open
-  // for the view or saved open), and the next address starts over. Keyed by the address, so nothing lingers.
-  const [shutHere, setShutHere] = useState<{ path: string; ids: ReadonlySet<string> }>({ path: '', ids: new Set() });
   const shut = (id: string): boolean => shutHere.path === pathname && shutHere.ids.has(id);
   const keepShut = (id: string): void => setShutHere((prev) => ({ path: pathname, ids: new Set([...(prev.path === pathname ? prev.ids : []), id]) }));
   const peek = holding !== null && !open.has(holding) && !shut(holding) ? holding : null;

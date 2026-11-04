@@ -248,6 +248,42 @@ describe('the page on screen is always findable', () => {
     expect(screen.getByTestId('rail-group-toggle')).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('coming back to a page starts over: what you shut there opens again for the view (codex r2)', () => {
+    window.localStorage.setItem(RAIL_COLLAPSED_KEY, JSON.stringify(['']));
+    const at = (pathname: string) => <SessionRail runs={RUNS} needRows={[]} navigate={() => {}} pathname={pathname} />;
+    const { rerender } = render(at('/memory'));
+    fireEvent.click(screen.getByTestId('rail-sec-toggle-govern'));
+    expect(screen.getByTestId('rail-sec-toggle-govern')).toHaveAttribute('aria-expanded', 'false');
+    rerender(at('/jobs'));
+    rerender(at('/memory'));
+    expect(screen.getByTestId('rail-sec-toggle-govern')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('nav-memory')).toHaveAttribute('aria-current', 'page');
+    // The same for a project folded inside Recent: session A, then B, then A again.
+    rerender(at('/s/run%3Au1'));
+    fireEvent.click(screen.getByTestId('rail-group-toggle'));
+    expect(screen.getByTestId('rail-group-toggle')).toHaveAttribute('aria-expanded', 'false');
+    rerender(at('/s/run%3Au2'));
+    rerender(at('/s/run%3Au1'));
+    expect(screen.getByTestId('rail-group-toggle')).toHaveAttribute('aria-expanded', 'true');
+    expect(JSON.parse(window.localStorage.getItem(RAIL_COLLAPSED_KEY)!)).toEqual(['']);
+    expect(window.localStorage.getItem(SIDEBAR_KEY)).toBeNull();
+  });
+
+  it('shutting a project opened for the view re-measures the fade (codex r2)', () => {
+    // The list overflows only while a session row is in it.
+    const sh = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('wk-rail-groups') ? (this.querySelector('[data-testid="rail-session"]') ? 600 : 100) : 0;
+    });
+    const ch = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('wk-rail-groups') ? 200 : 0; });
+    window.localStorage.setItem(RAIL_COLLAPSED_KEY, JSON.stringify(['']));
+    rail('/s/run%3Au1');
+    const list = screen.getByTestId('session-rail').querySelector('.wk-rail-groups')!;
+    expect(list).toHaveAttribute('data-more-below', 'true');
+    fireEvent.click(screen.getByTestId('rail-group-toggle'));
+    expect(list).toHaveAttribute('data-more-below', 'false');
+    sh.mockRestore(); ch.mockRestore();
+  });
+
   it('a heading opened by you stays open when you leave its pages', () => {
     rail('/memory');
     fireEvent.click(screen.getByTestId('rail-sec-toggle-govern')); // shut the view's opening
