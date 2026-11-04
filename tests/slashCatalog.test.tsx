@@ -221,25 +221,39 @@ describe('the `/` menu lists New job’s catalog', () => {
     expect(startRows()).toHaveLength(0);
   });
 
-  it('the rows hold still while the menu is open: a refresh that reorders Your top never moves the active row', async () => {
+  it('a refresh that reorders Your top keeps the row the arrows moved to (and its rows are always the newest)', async () => {
     render(<><Harness navigate={() => {}} /><LaunchWizard navigate={() => {}} /></>);
     await waitFor(() => expect(peekWorkflowCatalog(null)?.state).toBe('ready'));
     // Meanwhile Migration became the most used.
     catalog = { ...rig, entries: (rig as { entries: Array<Record<string, unknown>> }).entries.map((e) => (e['id'] === 'migration'
       ? { ...e, usage: { launches: 500, lastUsedAt: '2026-11-04T11:00:00.000Z', medianMinutes: null } } : e)) };
-    const before = gets.filter((p) => p === '/workflows/catalog').length;
     type('/');
     expect(rowsOf()[0]![0]).toBe('bug');
-    await waitFor(() => expect(gets.filter((p) => p === '/workflows/catalog').length).toBe(before + 1));
-    await waitFor(() => expect((peekWorkflowCatalog(null) as { view?: { entries: Array<{ id: string; launches: number }> } }).view?.entries.find((e) => e.id === 'migration')?.launches).toBe(500));
-    expect(rowsOf()[0]![0]).toBe('bug');
-    fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
-    expect(useLaunchWizard.getState().draft?.workflowId).toBe('bug');
-    // The next open shows the newest.
-    act(() => resetLaunchWizard());
-    type('');
-    type('/');
+    fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'ArrowDown' });
+    expect(document.querySelector('[aria-selected="true"]')).toHaveAttribute('data-entry', 'domain-extraction');
+    // The refresh lands: Migration leads now, and the active row is still the one the arrows chose.
     await waitFor(() => expect(rowsOf()[0]![0]).toBe('migration'));
+    expect(document.querySelector('[aria-selected="true"]')).toHaveAttribute('data-entry', 'domain-extraction');
+    fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
+    expect(useLaunchWizard.getState().draft?.workflowId).toBe('domain-extraction');
+  });
+
+  it('opening `/` while the mount-time read is still out asks once, and its answer stands', async () => {
+    let release: (() => void) | null = null;
+    const slow = new Promise<void>((r) => { release = r; });
+    const inner = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      // The answer is made when asked (a 200 for the first read), and held until released.
+      const answer = (inner as (u: string, i?: RequestInit) => Promise<Response>)(url, init);
+      if (String(url).includes('/workflows/catalog')) await slow;
+      return answer;
+    }));
+    render(<Harness navigate={() => {}} />);
+    type('/');
+    catalogStatus = 500; // a second read now would fail
+    act(() => release!());
+    await waitFor(() => expect(startRows().length).toBe(RIG_ROWS.length));
+    expect(gets.filter((p) => p === '/workflows/catalog')).toHaveLength(1);
   });
 
   it('a box reads its catalog once when it mounts, so its first `/` lists at once', async () => {
@@ -338,6 +352,9 @@ describe('/workflow-<key> typed by hand (back-compat)', () => {
     render(<Harness navigate={() => {}} />);
     await openMenu('/workflow-bug');
     expect(rowsOf().map(([id]) => id)).toEqual(['bug', 'bug-long']);
+    // It leads under its own header; no category is split in two.
+    expect([...document.querySelectorAll<HTMLElement>('[data-testid="composer-menu-group"]')].map((g) => g.dataset.category))
+      .toEqual(['match', 'top']);
     fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
     expect(useLaunchWizard.getState().draft?.workflowId).toBe('bug');
   });

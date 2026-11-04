@@ -19,7 +19,7 @@ function sectionsOf(rows: readonly CatalogRow[]): Array<{ key: string; group: st
   rows.forEach((r, i) => {
     const last = out[out.length - 1];
     if (last !== undefined && last.group === r.group) last.rows.push(r);
-    // A group met twice (a typed workflow moved to the front) is two sections with their own keys.
+    // A group met twice is two sections with their own keys (never expected: catalogRows keeps groups whole).
     else out.push({ key: out.some((s) => s.group === r.group) ? `${r.group}-${i}` : r.group, group: r.group, title: r.groupTitle, first: i, rows: [r] });
   });
   return out;
@@ -151,7 +151,7 @@ export function SlashMenu({
         </div>
       ))}
       {trigger === '/' && (wf.length > 0 && slash.length > 0) && (
-        <p role="presentation" data-testid="composer-menu-group" data-group="add-step" className="wk-composer-menu-group">Add a step</p>
+        <p data-testid="composer-menu-group" data-group="add-step" className="wk-composer-menu-group">Add a step</p>
       )}
       {trigger === '/' && slash.map((it, i) => (
         <button
@@ -178,7 +178,7 @@ export function SlashMenu({
           {/* UX audit row 71: one group header per kind says what a pick does, instead of the same
               line on every row. */}
           {(i === 0 || ats[i - 1]?.kind !== it.kind) && (
-            <p role="presentation" data-testid="composer-menu-group" data-group={it.kind} className="wk-composer-menu-group">
+            <p data-testid="composer-menu-group" data-group={it.kind} className="wk-composer-menu-group">
               {it.kind === 'project' ? 'Projects · the message goes there' : helpersHead}
             </p>
           )}

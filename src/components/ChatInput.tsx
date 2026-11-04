@@ -29,7 +29,6 @@ import { menuToken, dropToken } from '../board/planDraft.js';
 import { catalogRows, workflowsOnly, type CatalogRow } from '../board/slashCatalog.js';
 import { jobCatalogView } from '../board/workflowCatalog.js';
 import { catalogProjectOf, useWorkflowCatalog } from '../store/workflowCatalog.js';
-import { useHeldWhileOpen } from '../hooks/useHeldWhileOpen.js';
 import { SlashMenu } from './session/SlashMenu.js';
 import { ContextPopover } from './ContextPopover.js';
 import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
@@ -556,6 +555,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // S19b: the problem box takes the composer's grammar — a leading `/` opens the workflow menu.
   const [problemCaret, setProblemCaret] = useState(0);
   const [menuCursor, setMenuCursor] = useState(0);
+  /** The row the arrows moved to, by identity: a catalog refresh that reorders the rows keeps it active. */
+  const [menuCursorKey, setMenuCursorKey] = useState<string | null>(null);
   const [menuClosedAt, setMenuClosedAt] = useState<number | null>(null);
 
   // ── Popover state ──────────────────────────────────────────────────────────
@@ -992,15 +993,15 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const menuView = useMemo(() => jobCatalogView(menuCatalogLoad, menuDefs, menuPresets), [menuCatalogLoad, menuDefs, menuPresets]);
   const menuCatalogState: 'loading' | 'error' | 'ready' = menuCatalogLoad.state === 'error' ? 'error'
     : menuCatalogLoad.state === 'loading' || (menuCatalogLoad.state === 'unavailable' && menuDefs === null) ? 'loading' : 'ready';
-  // The rows hold still while the menu is open (a refresh landing mid-pick never moves the active row).
-  const shownMenuView = useHeldWhileOpen(menuView, launchMenuOpen);
   const menuRows = useMemo(
-    () => (startToken !== null ? catalogRows(shownMenuView, startToken.query, Date.now(), workflowsOnly) : []),
+    () => (startToken !== null ? catalogRows(menuView, startToken.query, Date.now(), workflowsOnly) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startToken?.query, startToken !== null, shownMenuView],
+    [startToken?.query, startToken !== null, menuView],
   );
   const anyMenuWorkflows = useMemo(() => catalogRows(menuView, '', Date.now(), workflowsOnly).length > 0, [menuView]);
-  const menuActive = menuRows.length === 0 ? 0 : Math.min(menuCursor, menuRows.length - 1);
+  const menuKeyedAt = menuCursorKey === null ? -1 : menuRows.findIndex((r) => r.entry.id === menuCursorKey);
+  const menuActive = menuRows.length === 0 ? 0 : menuKeyedAt >= 0 ? menuKeyedAt : Math.min(menuCursor, menuRows.length - 1);
+  const moveMenuCursor = (i: number): void => { setMenuCursor(i); setMenuCursorKey(menuRows[i]?.entry.id ?? null); };
   useEffect(() => {
     if (launchMenuOpen) loadPresets(menuProjectId ?? null);
   }, [launchMenuOpen, menuProjectId]);
@@ -1011,7 +1012,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     const next = dropToken(problem, startToken.start, problemCaret).replace(/^\s+/, '');
     setProblem(next);
     setWorkflow(row.entry.launchId);
-    setMenuCursor(0);
+    setMenuCursor(0); setMenuCursorKey(null);
     requestAnimationFrame(() => {
       const el = textareaRef.current;
       if (el === null) return;
@@ -2010,7 +2011,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             setProblem(e.target.value);
             const caretNow = e.target.selectionStart ?? e.target.value.length;
             setProblemCaret(caretNow);
-            setMenuCursor(0);
+            setMenuCursor(0); setMenuCursorKey(null);
             // An Escape closes THIS leading token's menu; once the token is gone, a new `/` opens it again.
             if (menuToken(e.target.value, caretNow)?.start !== 0) setMenuClosedAt(null);
           }}
@@ -2019,8 +2020,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             if (e.nativeEvent.isComposing) return;
             if (launchMenuOpen && startToken !== null) {
               const n = menuRows.length;
-              if (n > 0 && e.key === 'ArrowDown') { e.preventDefault(); setMenuCursor((menuActive + 1) % n); return; }
-              if (n > 0 && e.key === 'ArrowUp') { e.preventDefault(); setMenuCursor((menuActive - 1 + n) % n); return; }
+              if (n > 0 && e.key === 'ArrowDown') { e.preventDefault(); moveMenuCursor((menuActive + 1) % n); return; }
+              if (n > 0 && e.key === 'ArrowUp') { e.preventDefault(); moveMenuCursor((menuActive - 1 + n) % n); return; }
               if (n > 0 && ((e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) || e.key === 'Tab')) {
                 e.preventDefault();
                 const row = menuRows[menuActive];

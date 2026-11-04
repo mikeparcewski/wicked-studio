@@ -9,7 +9,6 @@ import { entryOffered, jobCatalogView, type CatalogEntry } from '../../board/wor
 import { catalogProjectOf, useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { startCatalogEntry } from '../../store/startCatalogEntry.js';
 import { goToPath } from '../QeRefusalWarning.js';
-import { useHeldWhileOpen } from '../../hooks/useHeldWhileOpen.js';
 import {
   draftTarget, dropToken, menuToken, slashItems, wordOf, type DraftRunState, type DraftTarget, type SlashItem,
 } from '../../board/planDraft.js';
@@ -205,6 +204,8 @@ export function Composer({
   }, [box, placeholder]);
   const [caret, setCaret] = useState(0);
   const [cursor, setCursor] = useState(0);
+  /** The row the arrows moved to, by identity: a refresh that reorders the rows keeps it active (codex r1). */
+  const [cursorKey, setCursorKey] = useState<string | null>(null);
   const [closedAt, setClosedAt] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -235,12 +236,10 @@ export function Composer({
   // An older daemon's list is today's workflows: still being read until they land.
   const wfCatalogState: 'loading' | 'error' | 'ready' = catalogLoad.state === 'error' ? 'error'
     : catalogLoad.state === 'loading' || (catalogLoad.state === 'unavailable' && defs === null) ? 'loading' : 'ready';
-  // The rows hold still while the menu is open: a refresh landing mid-pick never moves the active row.
-  const shownView = useHeldWhileOpen(catalogView, menuOpen && startCommands);
   const wf = useMemo(
-    () => (startCommands && token !== null ? catalogRows(shownView, token.query, Date.now()) : []),
+    () => (startCommands && token !== null ? catalogRows(catalogView, token.query, Date.now()) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startCommands, token?.query, shownView],
+    [startCommands, token?.query, catalogView],
   );
   const anyWorkflows = useMemo(() => catalogRows(catalogView, '', Date.now()).length > 0, [catalogView]);
 
@@ -280,7 +279,12 @@ export function Composer({
     return [...p, ...h].filter((x) => x.label.toLowerCase().startsWith(q) || x.id.toLowerCase().startsWith(q)).slice(0, 8);
   }, [token?.trigger, token?.query, projects, roster, eligibleSeats]);
   const count = token?.trigger === '/' ? wf.length + slash.length : ats.length;
-  const active = count === 0 ? 0 : Math.min(cursor, count - 1);
+  const rowKeys = token?.trigger === '/'
+    ? [...wf.map((r) => `e:${r.entry.id}`), ...slash.map((it) => `s:${it.command.cmd}`)]
+    : ats.map((it) => `a:${it.kind}:${it.id}`);
+  const keyedAt = cursorKey === null ? -1 : rowKeys.indexOf(cursorKey);
+  const active = count === 0 ? 0 : keyedAt >= 0 ? keyedAt : Math.min(cursor, count - 1);
+  const moveCursor = (i: number): void => { setCursor(i); setCursorKey(rowKeys[i] ?? null); };
   // Shown while a send is being composed (words typed, or a workflow named) — an idle Desk keeps its
   // fold (the desk_home fit), and the row is there whenever there is something to send.
   // A send opens a chat before the first send, and after it whenever an `@project` chip starts a
@@ -327,6 +331,7 @@ export function Composer({
     setText(words);
     setClosedAt(null);
     setCursor(0);
+    setCursorKey(null);
     setNote(null);
     focusEnd(words);
     // focusEnd/setText are this render's closures; the seed is read at its edge only.
@@ -506,7 +511,7 @@ export function Composer({
           rows={1}
           value={text}
           onChange={(e) => {
-            setText(e.target.value); syncCaret(e.target); setCursor(0); if (note !== null && e.target.value !== '') setNote(null);
+            setText(e.target.value); syncCaret(e.target); setCursor(0); setCursorKey(null); if (note !== null && e.target.value !== '') setNote(null);
             // studio#623 (#620's launch-form rule): an Escape closes THIS token's menu; once that token
             // is gone (or the caret is in another one), a new `/` or `@` opens the menu again.
             const tok = menuToken(e.target.value, e.target.selectionStart ?? e.target.value.length);
@@ -517,8 +522,8 @@ export function Composer({
             // An IME confirming its composition with Enter picks nothing and sends nothing (codex on S7).
             if (e.nativeEvent.isComposing) return;
             if (menuOpen && count > 0) {
-              if (e.key === 'ArrowDown') { e.preventDefault(); setCursor((active + 1) % count); return; }
-              if (e.key === 'ArrowUp') { e.preventDefault(); setCursor((active - 1 + count) % count); return; }
+              if (e.key === 'ArrowDown') { e.preventDefault(); moveCursor((active + 1) % count); return; }
+              if (e.key === 'ArrowUp') { e.preventDefault(); moveCursor((active - 1 + count) % count); return; }
               if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pick(active); return; }
             }
             if (menuOpen && e.key === 'Escape' && token !== null) { e.preventDefault(); e.stopPropagation(); setClosedAt(`${token.trigger}${token.start}`); return; }

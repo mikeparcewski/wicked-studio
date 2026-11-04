@@ -24,8 +24,11 @@ export type CatalogLoad =
 
 const cache = new Map<string, CatalogLoad>();
 const asked = new Map<string, number>();
-/** Projects with a read out: a box's mount-time read does not ask again while one is (codex r1). */
-const pending = new Set<string>();
+/** Projects with a read out, and when it was asked: a box does not ask again while one is (codex r1-r2),
+ *  so a fresh answer is never superseded by a redundant read that then fails. One out longer than
+ *  PENDING_MS is taken as lost and asked again. */
+const pending = new Map<string, number>();
+const PENDING_MS = 15_000;
 let epoch = 0;
 /** This daemon has answered with its catalog at least once this session. */
 let served = false;
@@ -39,7 +42,7 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   const key = keyOf(projectId);
   const gen = (asked.get(key) ?? 0) + 1;
   asked.set(key, gen);
-  pending.add(key);
+  pending.set(key, Date.now());
   const atEpoch = epoch;
   // A retry after a failure is a read in flight, not the failure still standing.
   if (cache.get(key)?.state === 'error') { cache.set(key, { state: 'loading' }); notify(); }
@@ -100,7 +103,9 @@ export function useWorkflowCatalog(projectId: string | null, enabled = true): Ca
   }, []);
   useEffect(() => {
     const key = keyOf(projectId);
-    if (enabled || (!cache.has(key) && !pending.has(key))) void readWorkflowCatalog(projectId);
+    const out = pending.get(key);
+    if (out !== undefined && Date.now() - out < PENDING_MS) return;
+    if (enabled || !cache.has(key)) void readWorkflowCatalog(projectId);
   }, [projectId, enabled]);
   return cache.get(key) ?? LOADING;
 }

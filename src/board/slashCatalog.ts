@@ -19,6 +19,8 @@ export interface CatalogRow {
 
 /** New job's "Your top" header. */
 export const TOP_GROUP = { id: 'top', title: 'Your top' } as const;
+/** A `/workflow-<key>` typed whole: the workflow it names, ahead of the groups. */
+export const MATCH_GROUP = { id: 'match', title: 'Best match' } as const;
 /** An older daemon's one uncategorised list (New job's "All workflows"). */
 export const ALL_GROUP = { id: 'all', title: 'All workflows' } as const;
 const WORKFLOW_PREFIX = 'workflow-';
@@ -68,7 +70,8 @@ export function catalogRows(view: CatalogView | null, query: string, now: number
   const q = query.trim().toLowerCase();
   const exact = q.startsWith(WORKFLOW_PREFIX) ? q.slice(WORKFLOW_PREFIX.length) : null;
   const at = exact === null ? -1 : out.findIndex((r) => r.entry.launchKind === 'run' && r.entry.launchId.toLowerCase() === exact);
-  if (at > 0) out.unshift(...out.splice(at, 1));
+  // Under its own header, so its category is not split in two (pi r2).
+  if (at > 0) out.unshift({ ...out.splice(at, 1)[0]!, group: MATCH_GROUP.id, groupTitle: MATCH_GROUP.title });
   return out;
 }
 
