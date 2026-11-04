@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from 'react';
+import { registerRepoPath } from '../../hooks/ambientProject.js';
 import type { Project, SessionView } from '../../api/types.js';
 import type { SystemAttention } from '../../api/system.js';
 import { attentionRows } from '../../board/attention.js';
@@ -128,6 +129,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   const view = (row: NeedRow): SessionView | null => { const id = needRunId(row); return id === null ? null : runs.find((v) => v.session.id === id) ?? null; };
   const report = deskTabPath('report', undefined, base);
   const reposTab = deskTabPath('repositories', undefined, base);
+  const addRepo = registerRepoPath(projectId);
   const jobs = deskTabPath('runs', undefined, base);
 
   const start = (e: React.FormEvent): void => {
@@ -220,7 +222,10 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
               {shownRepos.map((u) => u.repo !== null
                 ? <a key={u.ref} href={`/repo-detail/${encodeURIComponent(u.repo.id)}`} onClick={go(navigate, `/repo-detail/${encodeURIComponent(u.repo.id)}`)} className="wk-pj-chip wk-pj-chip--link" data-testid="project-repo-chip" data-attached={u.attached}>{u.name}</a>
                 : <span key={u.ref} className="wk-pj-chip" data-testid="project-repo-chip" data-attached={u.attached}>{u.name}</span>)}
-              <a href={reposTab} onClick={go(navigate, reposTab)} className="wk-link wk-pj-add" data-testid="project-add-repo">{shownRepos.length === 0 ? 'Attach a repository' : 'Add a repository'}</a>
+              {/* ux-tonight (operator 2026-11-04: "don't I see a way to onboard a repo anymore"): Add a repository
+                  registers a new one in this project (registering onboards it); Attach takes one studio already has. */}
+              <a href={addRepo} onClick={go(navigate, addRepo)} className="wk-link wk-pj-add" data-testid="project-add-repo">Add a repository</a>
+              <a href={reposTab} onClick={go(navigate, reposTab)} className="wk-link wk-pj-add" data-testid="project-attach-repo">Attach one already added</a>
             </div>
           </CalmSection>
         )}

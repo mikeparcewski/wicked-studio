@@ -38,6 +38,7 @@ a.wk-pj-chip--link:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-pj-chips--home .wk-pj-chip { font-size: var(--text-body); padding: 5px 12px; }
 .wk-pj-add { font-size: var(--text-body); }
 .wk-pj-chip + .wk-pj-add { margin-left: 6px; }
+.wk-pj-add + .wk-pj-add { margin-left: 12px; }
 
 /* A project's home: a narrower column (760 px), the back link over the title. */
 .wk-pj-home-col { max-width: 760px; gap: 44px; }

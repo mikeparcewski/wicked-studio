@@ -1009,6 +1009,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     runs: mine,
     started: entries.length > 0,
     navigate,
+    // ux-tonight: a card started on this chat's composer files its job in the project the chat started in.
+    contextProjectId: fresh?.projectId ?? null,
     ariaLabel: 'Ask or tell studio what to do next',
     placeholder: "Ask about this, or say what's next — / adds a step, @ a helper",
     variant: 'session' as const,

@@ -87,18 +87,15 @@ describe('studio#631: the composer helpers row', () => {
     type('/workflow-mcp-server');
     // slash-catalog: the row comes from the catalog read (an older daemon here: today's list).
     await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
-    key('Enter'); // opens the launch wizard on that workflow
-    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
-    fireEvent.click(screen.getByTestId('launch-wizard-next'));
-    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
-    fireEvent.click(screen.getByTestId('launch-wizard-next'));
-    // The wizard starts from its own choice: the composer row's drop is not applied …
-    const pill = (k: string): HTMLElement => screen.getAllByTestId('launch-wizard-seat').find((b) => b.dataset.key === k)!;
-    expect(pill('codex').getAttribute('aria-pressed')).toBe('true');
+    key('Enter'); // ux-tonight: the card goes on this composer (no modal); the row now shows the job's own choice
+    await waitFor(() => expect(screen.getByTestId('composer-start')).toBeInTheDocument());
+    // The job starts from its own choice: the composer row's Ask drop is not applied …
+    expect(seatButton('codex').getAttribute('aria-pressed')).toBe('true');
     // … and a helper turned off for this job stays out of the job only.
-    fireEvent.click(pill('copilot'));
-    fireEvent.click(screen.getByTestId('launch-wizard-next'));
-    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    fireEvent.click(seatButton('copilot'));
+    type('build an MCP server for the ledger');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent(/in /));
+    key('Enter');
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     const seats = (JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>).map((s) => s.key);
     expect(seats).toEqual(['claude', 'codex', 'pi']);

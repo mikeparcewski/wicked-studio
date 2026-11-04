@@ -5,7 +5,9 @@ import { inViewFor } from '../../store/artifactInView.js';
 import { composerSendRefusal } from '../../board/launchModel.js';
 import { parseWorkflowCommand, WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
 import { catalogRows, notOfferedLine, workflowEntry, type CatalogRow } from '../../board/slashCatalog.js';
-import { entryOffered, jobCatalogView, type CatalogEntry } from '../../board/workflowCatalog.js';
+import { entryOffered, entryWords, jobCatalogView, startsInline, type CatalogEntry } from '../../board/workflowCatalog.js';
+import { workflowChipFor } from '../../store/inlineStart.js';
+import { InlineStart, type InlineStartHandle } from './InlineStart.js';
 import { catalogProjectOf, useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { startCatalogEntry } from '../../store/startCatalogEntry.js';
 import { goToPath } from '../QeRefusalWarning.js';
@@ -16,7 +18,7 @@ import { gateInstance } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
 import { defaultSelection } from '../../board/chatOpen.js';
-import { chosenSeats, NO_SEAT_PICKED, seatOff, useComposerSeats } from '../../store/composerSeats.js';
+import { chosenSeats, NO_SEAT_PICKED, seatOff, useComposerSeats, useLaunchSeats } from '../../store/composerSeats.js';
 import { loadCatalog, loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { addGateDraftStep, queueMidRunStep } from '../../store/planDrafts.js';
@@ -103,9 +105,11 @@ function useDraftTarget(runs: readonly SessionView[]): { target: DraftTarget; ga
  *    one is open (nothing is sent here), else queued 10 s with Undo and then one plan POST.
  *    A command the engine cannot take is refused in the menu with the reason.
  *  - `/` as the FIRST token (S19a; slash-catalog): New job's catalog, the same entries, titles and
- *    categories, "Your top" first. A pick starts what New job's card starts (`startCatalogEntry`):
- *    New job opened on a workflow, New document, a new chat. `/workflow-<key>` typed whole still names
- *    a workflow entry; the rest of the line is the intent.
+ *    categories, "Your top" first. A workflow or Apps pick starts HERE (ux-tonight): the card goes on the
+ *    composer, the row under it asks for what it still needs, and Enter starts it into this chat
+ *    (`InlineStart`). A document opens New document, chat a new chat, Add a repository its form; Demo
+ *    video and Draft epics still open New job on their card. `/workflow-<key>` typed whole still names a
+ *    workflow entry; the rest of the line is the intent.
  *  - studio#315: when the roster says no helper can take the message, Send is refused and says why.
  *
  * Typing never answers a question and never reshapes the chain: only a picked `/` command does.
@@ -142,7 +146,7 @@ export interface ComposerSuggestion { id: string; label: string; title?: string;
 
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null, suggestions = [], navigate,
+  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null,
 }: {
   /** `desk`, or the session id. */
   composerKey: string;
@@ -169,6 +173,8 @@ export function Composer({
   /** Turn suggestions: what this conversation could ask next ("Make a demo video of this"), one click each. Shown
    *  while the box is empty and no menu is open. */
   suggestions?: readonly ComposerSuggestion[];
+  /** The project this composer's chat started in (a fresh chat's), used when no `@project` chip names one. */
+  contextProjectId?: string | null;
 }): React.ReactElement {
   const chips = useComposerChips((s) => chipsOf(s, composerKey));
   const roster = useRoster();
@@ -231,7 +237,7 @@ export function Composer({
   // workflow is already named (a second pick replaces the chip).
   const startCommands = token?.trigger === '/' && token.start === 0 && wfChip === null;
   // slash-catalog: the rows are New job's catalog for this box's project, read each time a `/` line starts.
-  const catalogLoad = useWorkflowCatalog(catalogProjectOf(project?.projectId ?? null), text.trimStart().startsWith('/'));
+  const catalogLoad = useWorkflowCatalog(catalogProjectOf(project?.projectId ?? contextProjectId), text.trimStart().startsWith('/') || wfChip !== null);
   const catalogView = useMemo(() => jobCatalogView(catalogLoad, defs, presets), [catalogLoad, defs, presets]);
   // An older daemon's list is today's workflows: still being read until they land.
   const wfCatalogState: 'loading' | 'error' | 'ready' = catalogLoad.state === 'error' ? 'error'
@@ -242,6 +248,15 @@ export function Composer({
     [startCommands, token?.query, catalogView],
   );
   const anyWorkflows = useMemo(() => catalogRows(catalogView, '', Date.now()).length > 0, [catalogView]);
+  // ux-tonight: the card on this composer (its next Enter starts it here), read off the same catalog.
+  const chipEntry = useMemo(() => {
+    if (wfChip === null || catalogView === null) return null;
+    const byCard = wfChip.entryId === undefined ? undefined : catalogView.entries.find((e) => e.id === wfChip.entryId);
+    return byCard ?? (wfChip.entryId === undefined ? workflowEntry(catalogView, wfChip.workflowId) : null);
+  }, [wfChip, catalogView]);
+  const inline = useRef<InlineStartHandle | null>(null);
+  const [startBlocker, setStartBlocker] = useState<string | null>(null);
+  const wordsOptional = chipEntry !== null && entryWords(chipEntry).optional;
 
   const slash: SlashItem[] = useMemo(
     () => (token?.trigger === '/' ? slashItems(token.query, target, catalog) : []),
@@ -252,9 +267,17 @@ export function Composer({
   // ones you turned off), shown and editable here. A workflow launch convenes the council seats; an
   // Ask's first send opens a chat with the seats the daemon would admit to it. A reply into a started
   // chat keeps that chat's seats, so the row is not offered there.
-  const dropped = useComposerSeats((s) => s.dropped);
-  const picked = useComposerSeats((s) => s.picked);
-  const toggleSeat = useComposerSeats((s) => s.toggle);
+  // studio#840: a job keeps New job's own helper choice (the launch store), never the Ask row's: with a card on the
+  // composer the row reads and writes that choice (ux-tonight), so what it shows is what the job launches with.
+  const askDropped = useComposerSeats((s) => s.dropped);
+  const askPicked = useComposerSeats((s) => s.picked);
+  const askToggle = useComposerSeats((s) => s.toggle);
+  const jobDropped = useLaunchSeats((s) => s.dropped);
+  const jobPicked = useLaunchSeats((s) => s.picked);
+  const jobToggle = useLaunchSeats((s) => s.toggle);
+  const dropped = wfChip !== null ? jobDropped : askDropped;
+  const picked = wfChip !== null ? jobPicked : askPicked;
+  const toggleSeat = wfChip !== null ? jobToggle : askToggle;
   const eligibleSeats = useMemo(() => {
     if (roster === null) return [];
     // A handed-over Ask always opens SCOPED (the dock remounts per handoff, and its default scope is
@@ -295,7 +318,8 @@ export function Composer({
   const atMenuOpen = menuOpen && token?.trigger === '@';
   // Whether the seat rules apply to this send — independent of whether the row is on screen, so an
   // open `@` menu never lets a send past the refusals below (codex r2 on S3).
-  const seatsApply = eligibleSeats.length > 0 && (wfChip !== null || (opensChat && text.trim() !== ''));
+  // A new app is made by crew's own helpers (the app's turn): no helpers row for it.
+  const seatsApply = eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
   const showSeats = seatsApply && !atMenuOpen;
   const sendSeats = chosenSeats(eligibleSeats, dropped, picked);
   // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
@@ -308,7 +332,8 @@ export function Composer({
     : sendSeats.length === 0 ? NO_SEAT_PICKED
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
-  const canSend = text.trim() !== '' && refusal === null && seatRefusal === null;
+  const canSend = (text.trim() !== '' || (wfChip !== null && wordsOptional)) && refusal === null && seatRefusal === null
+    && (wfChip === null || startBlocker === null);
 
   const syncCaret = (el: HTMLTextAreaElement): void => setCaret(el.selectionStart ?? el.value.length);
   const focusEnd = (value: string): void => {
@@ -376,7 +401,18 @@ export function Composer({
   // opens a new chat with them. Nothing is sent from here.
   const startEntry = (entry: CatalogEntry, words: string): void => {
     const intent = words.trim();
-    const projectId = project?.projectId ?? null;
+    const projectId = project?.projectId ?? contextProjectId;
+    // ux-tonight (operator 2026-11-04: "clicking on a workflow opens a modal rather than starting an inline chat"):
+    // a workflow or a new app starts HERE. The card goes on this composer, the words stay in the box, and the row
+    // under it asks for what the start still needs; Enter starts it into this chat. Nothing is sent on the pick.
+    if (entryOffered(entry) && startsInline(entry)) {
+      addAboutChip(composerKey, workflowChipFor(entry));
+      setText(intent);
+      setNote(null);
+      setClosedAt(null);
+      focusEnd(intent);
+      return;
+    }
     startCatalogEntry(entry, {
       projectId, intent, navigate: navigate ?? goToPath,
       shape: (e) => openLaunchWizard({ workflowId: e.launchId, catalogEntryId: e.id, intent, projectId, composerKey, contextRepo: sessionRepo }),
@@ -412,6 +448,12 @@ export function Composer({
       }
       if (!entryOffered(known)) { setNote(notOfferedLine(known)); return; }
       startEntry(known, typed.rest);
+      return;
+    }
+    if (wfChip !== null) {
+      if (refusal !== null || seatRefusal !== null) return;
+      const words = text;
+      void inline.current?.start(words).then((ok) => { if (ok) { setText(''); setNote(null); } });
       return;
     }
     if (!canSend) return;
@@ -491,7 +533,22 @@ export function Composer({
           {seatRefusal !== null && <span data-testid="composer-seats-refused" role="status" className="wk-composer-note wk-composer-note--bad">{seatRefusal}</span>}
         </div>
       )}
-      {suggestions.length > 0 && text === '' && !menuOpen && (
+      {wfChip !== null && (
+        <InlineStart
+          composerKey={composerKey}
+          entry={chipEntry}
+          catalogState={wfCatalogState}
+          sessionRepo={sessionRepo}
+          projectId={project?.projectId ?? contextProjectId}
+          seatKeys={sendSeats}
+          picked={picked}
+          words={text}
+          navigate={navigate ?? goToPath}
+          handle={inline}
+          onBlocker={setStartBlocker}
+        />
+      )}
+      {suggestions.length > 0 && text === '' && !menuOpen && wfChip === null && (
         <div data-testid="composer-suggestions" role="group" aria-label="Suggestions" className="wk-composer-chips">
           {suggestions.map((sg) => (
             <button key={sg.id} type="button" data-testid="composer-suggestion" data-id={sg.id} title={sg.title}
@@ -530,11 +587,11 @@ export function Composer({
             if (e.key === 'Backspace' && text === '' && backspaceAboutChip(composerKey, text)) { e.preventDefault(); return; }
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
           }}
-          placeholder={wfChip !== null ? 'Describe the work to launch' : phone || !roomy ? shortPlaceholder(placeholder) : placeholder}
+          placeholder={wfChip !== null ? (chipEntry !== null ? entryWords(chipEntry).label : 'Describe the work to start') : phone || !roomy ? shortPlaceholder(placeholder) : placeholder}
           className="wk-desk-input"
         />
         <VoiceMicButton size="xs" testId={variant === 'desk' ? 'desk-composer-voice' : 'session-composer-voice'} focus={variant === 'session' ? runs[runs.length - 1]?.session.id ?? null : null} />
-        <button type="submit" data-testid={variant === 'desk' ? 'desk-composer-send' : 'session-composer-send'} aria-label={wfChip !== null ? 'Launch' : 'Send'} disabled={!canSend} className="wk-desk-send">↑</button>
+        <button type="submit" data-testid={variant === 'desk' ? 'desk-composer-send' : 'session-composer-send'} aria-label={wfChip !== null ? 'Start' : 'Send'} disabled={!canSend} className="wk-desk-send">↑</button>
       </form>
       {(hint || footer !== null) && (
         <div className="wk-composer-foot">

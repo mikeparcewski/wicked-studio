@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 311,
-    "occurrences": 4444,
-    "static": 3715,
+    "files": 312,
+    "occurrences": 4456,
+    "static": 3727,
     "dynamic": 160,
     "computed": 50
   },
@@ -3168,6 +3168,66 @@
       "testId": "composer-seats-refused",
       "files": [
         "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-add-repo",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-error",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-line",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-project",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-projects",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-reduced",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-repo",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-repo-change",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-repos",
+      "files": [
+        "src/components/session/InlineStart.tsx"
       ]
     },
     {
@@ -12623,6 +12683,12 @@
       ]
     },
     {
+      "testId": "project-attach-repo",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-back",
       "files": [
         "src/components/desk/ProjectHome.tsx"
@@ -13063,6 +13129,12 @@
     },
     {
       "testId": "project-repos",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repos-add",
       "files": [
         "src/components/ProjectRepositories.tsx"
       ]

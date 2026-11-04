@@ -72,8 +72,11 @@ const cardIds = (within0: HTMLElement): string[] =>
   [...within0.querySelectorAll<HTMLElement>('[data-testid^="launch-wizard-workflow-"], [data-testid^="launch-catalog-soon-"]:not([data-testid="launch-catalog-soon-tag"]), [data-testid^="launch-catalog-top-"], [data-testid^="launch-catalog-fit-"]')]
     .map((b) => b.dataset.testid!.replace(/^launch-(wizard-workflow|catalog-soon|catalog-top|catalog-fit)-/, ''));
 const section = (id: string): HTMLElement => document.querySelector<HTMLElement>(`[data-section="${id}"]`)!;
+/** These tests pin New job's shaping steps (what, where, options, review), which a named opener (Learn, Settings'
+ *  editor plugin, Testing) still walks. A card click in the catalog starts the job in a chat instead (ux-tonight,
+ *  tests/inlineStart.test.tsx), so here the catalog step hands its pick to the steps (`cardsStartInChat={false}`). */
 async function openCatalog(init: Parameters<typeof openLaunchWizard>[0] = {}): Promise<void> {
-  render(<LaunchWizard />);
+  render(<LaunchWizard cardsStartInChat={false} />);
   act(() => openLaunchWizard(init));
   await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).not.toBe('loading'));
 }
@@ -102,7 +105,7 @@ describe('an older daemon (no catalog)', () => {
   });
 
   it('shows the loading state until the first answer, then the list', async () => {
-    render(<LaunchWizard />);
+    render(<LaunchWizard cardsStartInChat={false} />);
     act(() => openLaunchWizard({}));
     expect(screen.getByTestId('launch-catalog-loading')).toHaveAttribute('aria-busy', 'true');
     await waitFor(() => expect(screen.queryByTestId('launch-catalog-loading')).toBeNull());
@@ -294,7 +297,7 @@ describe('a daemon with the catalog', () => {
 
   it('a document entry opens New document on its list, in the draft\'s project; a chat entry is the chat flow', async () => {
     const navigate = vi.fn();
-    render(<LaunchWizard navigate={navigate} />);
+    render(<LaunchWizard navigate={navigate} cardsStartInChat={false} />);
     act(() => openLaunchWizard({ projectId: 'p1' }));
     fireEvent.click(await screen.findByTestId('launch-wizard-workflow-document:presentation'));
     expect(navigate).toHaveBeenCalledWith('/everything?tab=made&project=p1&kind=decks&new=document&format=ppt');
@@ -322,7 +325,7 @@ describe('a daemon with the catalog', () => {
 describe('an older daemon whose workflow list never comes', () => {
   it('still offers studio’s own kinds, and the daemon’s join when they land', async () => {
     clearCachedWorkflows();
-    render(<LaunchWizard />);
+    render(<LaunchWizard cardsStartInChat={false} />);
     act(() => openLaunchWizard({}));
     await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).toBe('fallback'));
     expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual(['demo-video', 'draft-epics', 'apps']);
@@ -704,7 +707,7 @@ describe('round 5 (xreview r5): the hold survives a close and reopen, covers dra
 
   it('a draft opened by workflow id waits for the chosen project’s catalog too', async () => {
     catalog = { categories: cats, entries: [rr] };
-    render(<LaunchWizard />);
+    render(<LaunchWizard cardsStartInChat={false} />);
     act(() => openLaunchWizard({ workflowId: 'review-recent-work' }));
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('what');
@@ -770,7 +773,7 @@ describe('round 6 (xreview r6): this project’s own answer first, for every dra
 
   it('a draft opened by id on a fresh page waits for the first answer before anything can launch', async () => {
     stubCatalog(() => new Promise<Response>(() => {}));
-    render(<LaunchWizard />);
+    render(<LaunchWizard cardsStartInChat={false} />);
     act(() => openLaunchWizard({ workflowId: 'review-recent-work', intent: 'look at my runs' }));
     expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('Reading the workflows…');
     expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
@@ -778,7 +781,7 @@ describe('round 6 (xreview r6): this project’s own answer first, for every dra
 
   it('a draft opened by id whose workflow the chosen project’s catalog does not offer is blocked once it answers', async () => {
     stubCatalog((p) => Promise.resolve(json({ categories: cats, entries: p === 'p2' ? [card('other', 'other')] : [card('rr', 'review-recent-work')] })));
-    render(<LaunchWizard />);
+    render(<LaunchWizard cardsStartInChat={false} />);
     act(() => openLaunchWizard({ workflowId: 'review-recent-work', intent: 'look at my runs' }));
     await settle();
     expect(screen.getByTestId('launch-wizard-next')).not.toBeDisabled();
@@ -791,7 +794,7 @@ describe('round 6 (xreview r6): this project’s own answer first, for every dra
 
   it('a failed first read is "couldn’t read", never today’s list, and stays so on a reopen', async () => {
     stubCatalog(() => Promise.resolve(json({ error: 'busy' }, 503)));
-    render(<LaunchWizard />);
+    render(<LaunchWizard cardsStartInChat={false} />);
     act(() => openLaunchWizard({}));
     await settle();
     expect(screen.getByTestId('launch-catalog-failed')).toBeInTheDocument();
@@ -837,7 +840,7 @@ describe('round 7 (agy r7): a card picked from today’s list that is gone block
       }
       return realFetch(url, init);
     }));
-    render(<LaunchWizard />);
+    render(<LaunchWizard cardsStartInChat={false} />);
     act(() => openLaunchWizard({ projectId: 'p1' }));
     fireEvent.click(await screen.findByTestId('launch-wizard-workflow-p1-preset'));
     fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'do the thing' } });

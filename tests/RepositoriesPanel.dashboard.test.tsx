@@ -228,7 +228,7 @@ describe('the filters drive the fleet; the register flow is untouched', () => {
       ? { nodes: [{ file: 'src/a.ts', lang: 'typescript' }, { file: 'src/b.ts', lang: 'typescript' }, { file: 'x.py', lang: 'python' }], edges: [], stats: { nodeCount: 3, edgeCount: 0, fileCount: 3 } }
       : null }));
     await panel();
-    expect(screen.getByTestId('repos-add')).toHaveTextContent('Add repository');
+    expect(screen.getByTestId('repos-add')).toHaveTextContent('Add a repository');
     expect(screen.getByTestId('repos-add').className).toContain('wk-jr-btn--primary');
     expect(listRepos).toHaveBeenCalledTimes(1);
     expect(listRuns).toHaveBeenCalledTimes(1);
@@ -253,7 +253,7 @@ describe('the filters drive the fleet; the register flow is untouched', () => {
     const empty = await screen.findByTestId('repos-empty');
     expect(empty.textContent).toContain('No repositories yet');
     // The CTA is the section's creation verb, INSIDE the empty state.
-    const cta = within(empty).getByRole('button', { name: 'Add repository' });
+    const cta = within(empty).getByRole('button', { name: 'Add a repository' });
     fireEvent.click(cta);
     // The register form opens (the slice-B flow) — nothing was posted.
     expect(screen.getByTestId('repo-project-row')).toBeInTheDocument();
