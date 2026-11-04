@@ -90,6 +90,17 @@ CONTRAST = """(sel) => {
   return { ratio: Math.round(((a + 0.05) / (b + 0.05)) * 100) / 100, fg, bg, red: bg[0] > bg[1] + 60 && bg[0] > bg[2] + 60, redText: fg[0] > fg[1] + 60 && fg[0] > fg[2] + 60 };
 }"""
 
+# The B5 rig shot (gate-data-use-dark-390): whether the thread's jump-to-latest button shows over the job's title.
+JUMP_OVER_TITLE = """() => {
+  const box = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+  const j = document.querySelector('[data-testid="session-jump-latest"]');
+  const t = box(document.querySelector('[data-testid="session-title"]'));
+  const jb = box(j);
+  const shown = j !== null && getComputedStyle(j).display !== 'none' && jb.r > jb.l;
+  const over = shown && t !== null && jb.l < t.r && t.l < jb.r && jb.t < t.b && t.t < jb.b;
+  return { rendered: j !== null, shown, over, title: t, jump: jb };
+}"""
+
 errors: list[str] = []
 
 
@@ -230,6 +241,10 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-run-header-overview-390.png"))
     check("phone-overview-fits", ov is not None and ov["x"] >= 0 and ov["x"] + ov["width"] <= 390
           and page.get_by_test_id("decision-dock").get_attribute("data-collapsed") == "false", overview=ov)
+    # Unfolded, the sheet takes the thread's room; the jump-to-latest button it leaves at the thread's foot never
+    # floats over the job's title (it is hidden while the sheet is unfolded).
+    jt = page.evaluate(JUMP_OVER_TITLE)
+    check("phone-unfolded-no-jump-over-title", jt["title"] is not None and not jt["over"], jump=jt)
     page.get_by_test_id("run-details-handle").click()
     page.locator('[data-testid="host-panel"]').wait_for(state="visible", timeout=5000)
     page.screenshot(path=str(SHOTS / "desk-run-header-panel-390.png"))
