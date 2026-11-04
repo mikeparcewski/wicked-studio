@@ -3,6 +3,7 @@ import type { Campaign } from '../api/campaigns.js';
 import { memoryPayload, policyPayload, proposalKind, type Proposal } from '../api/proposals.js';
 import { memoryPath } from '../api/memory.js';
 import { steerProposalsPath } from '../api/steering.js';
+import { KNOWLEDGE_VIEW_PATH } from '../api/knowledgeShapes.js';
 import type { DecisionView } from '../api/decisions.js';
 import { decisionRowText, statementOf } from './decisionLine.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
@@ -673,7 +674,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
   for (const p of inputs.proposals ?? []) {
     if (p.state !== 'pending') continue;
     const kind = proposalKind(p);
-    const body = kind === 'memory' ? memoryPayload(p).content : kind === 'policy' ? policyPayload(p).rule : null;
+    const body = kind === 'memory' || kind === 'knowledge' ? memoryPayload(p).content : kind === 'policy' ? policyPayload(p).rule : null;
     // DC-S6 (B12): a decision's review proposal is the SAME object the chat's Remember chip answers —
     // the row says it is the operator's rule, in their words; answering either resolves both. Only
     // when the ledger holds that decision: the payload alone proves nothing (a forged one shows as
@@ -694,9 +695,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: decision !== null ? decisionRowText(statement, decision.edits?.steering_type ?? decision.derived.steering_type) : proposalConsequenceLine(p),
       tone: 'gate',
       at: typeof p.created_at === 'number' ? p.created_at * 1000 : null,
-      // A memory proposal is reviewed on the Memory page, a rule proposal on Steer's Proposals view.
-      subjectPath: kind === 'memory' ? memoryPath('proposals') : steerProposalsPath(),
-      action: { kind: 'open', path: kind === 'memory' ? memoryPath('proposals') : steerProposalsPath(), label: 'Review ›' },
+      // A memory proposal is reviewed on the Memory page, a data shape in Understand's Knowledge view, a rule on Steer's Proposals view.
+      subjectPath: reviewPathOf(kind),
+      action: { kind: 'open', path: reviewPathOf(kind), label: 'Review ›' },
     });
   }
 
@@ -761,3 +762,8 @@ export function oldestNeedAt(rows: readonly NeedRow[], now: number = Date.now())
 
 /** Re-exported so the component and tests share the outcome partition. */
 export { outcomeOf };
+
+/** Where a pending proposal of this kind is reviewed. */
+function reviewPathOf(kind: ReturnType<typeof proposalKind>): string {
+  return kind === 'memory' ? memoryPath('proposals') : kind === 'knowledge' ? KNOWLEDGE_VIEW_PATH : steerProposalsPath();
+}

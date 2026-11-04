@@ -15,6 +15,7 @@ import {
 import { useModalEscape } from '../Modal.js';
 import { agentAccessOf, type SourceAgentAccess } from '../../api/sourceAgents.js';
 import { AgentAccess } from './AgentAccess.js';
+import { ProfileBox } from './ProfileBox.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
 import {
@@ -589,6 +590,8 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   }}
                 />
               )}
+              {/* (DES-KNOWLEDGE-DATA-001 §19 B4) A saved Postgres source is profiled here into data shapes for review. */}
+              {saved !== null && saved.kind === 'sql' && savedSheetKind === 'postgres' && !gone && agentAccess !== null && <ProfileBox source={saved.name} />}
             </div>
           </div>
         </div>

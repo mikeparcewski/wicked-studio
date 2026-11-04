@@ -27,6 +27,7 @@ vi.mock('../src/api/client.js', () => ({
 }));
 // The folded views are their own surfaces (with their own tests); here they only need to be reachable.
 vi.mock('../src/components/CoverageView.js', () => ({ CoverageView: () => <div data-testid="coverage-view-stub" /> }));
+vi.mock('../src/components/desk/KnowledgeView.js', () => ({ KnowledgeView: () => <div data-testid="knowledge-view-stub" /> }));
 vi.mock('../src/components/RepoGraphModal.js', () => ({ RepoGraphModal: ({ repo, initialView, onClose }: { repo: { name: string }; initialView?: string; onClose: () => void }) => <div data-testid="repo-graph-stub" data-view={initialView ?? 'code'}>{repo.name}<button type="button" data-testid="repo-graph-stub-close" onClick={onClose}>x</button></div> }));
 // The page chat (DES-LEARN §6.2) has its own tests (pageChat.test.tsx); here it is a stub that shows what the page
 // hands it: its scope chips and its provider (which the page's Recent answers learn the chat id from).
@@ -124,6 +125,43 @@ describe('Understand words (pure)', () => {
 });
 
 describe('the Understand page', () => {
+  it('keeps the Knowledge map and the address in step both ways, on a mounted page too', async () => {
+    const navigate = vi.fn();
+    const page = (search: string) => <UnderstandPage project={null} navigate={navigate} now={NOW} search={search} compare={<div data-testid="compare-stub" />} />;
+    let view!: ReturnType<typeof render>;
+    await act(async () => { view = render(page('')); });
+    expect(screen.queryByTestId('knowledge-view-stub')).toBeNull();
+    // A review link lands on the mounted page.
+    await act(async () => { view.rerender(page('?view=knowledge')); });
+    expect(screen.getByTestId('knowledge-view-stub')).toBeInTheDocument();
+    // Leaving it writes the address back (a replace, no history entry).
+    fireEvent.click(screen.getByTestId('understand-back'));
+    expect(navigate).toHaveBeenLastCalledWith(expect.not.stringContaining('view=knowledge'), { replace: true });
+    await act(async () => { view.rerender(page('')); });
+    expect(screen.queryByTestId('knowledge-view-stub')).toBeNull();
+    fireEvent.click(screen.getByTestId('understand-knowledge-toggle'));
+    expect(navigate).toHaveBeenLastCalledWith(expect.stringContaining('?view=knowledge'), { replace: true });
+  });
+
+  it('opens the Knowledge map beside the repository graphs, and on a ?view=knowledge address (DES-KNOWLEDGE-DATA-001 §10.3)', async () => {
+    await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={<div data-testid="compare-stub" />} />); });
+    const toggle = screen.getByTestId('understand-knowledge-toggle');
+    expect(screen.getByTestId('understand-graph')).toContainElement(toggle);
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('knowledge-view-stub')).toBeInTheDocument();
+    expect(screen.getByTestId('understand-knowledge-toggle')).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByTestId('understand-back'));
+    expect(screen.queryByTestId('understand-knowledge')).toBeNull();
+    cleanup();
+    window.history.pushState({}, '', '/understand?view=knowledge');
+    try {
+      await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={<div data-testid="compare-stub" />} />); });
+      expect(screen.getByTestId('knowledge-view-stub')).toBeInTheDocument();
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
+  });
+
   it('a chat page: the greeting and the composer, a sidebar with Recent answers, the graph links and More', async () => {
     await act(async () => { render(<UnderstandPage project={null} navigate={vi.fn()} now={NOW} compare={<div data-testid="compare-stub" />} />); });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Understand');

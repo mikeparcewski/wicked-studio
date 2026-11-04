@@ -1,0 +1,48 @@
+/* ── UNDERSTAND → KNOWLEDGE (DES-KNOWLEDGE-DATA-001 §10.3): the data-shape review, the map and its list of connections.
+ * A data shape's card in the shared review; the source sheet's Profile box. Tokens only; each node kind has a shape
+ * AND a colour, each typed edge a line style AND its name, so nothing is told by colour alone. */
+
+.wk-know { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; overflow-wrap: anywhere; }
+.wk-know-map { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.wk-know-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); gap: var(--space-4); align-items: start; min-width: 0; }
+.wk-know-canvas { position: relative; min-width: 0; height: 460px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); overflow: hidden; }
+.wk-know-graph { width: 100%; height: 100%; }
+.wk-know-side { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.wk-know-subtitle { margin: 0; font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink-high); overflow-wrap: anywhere; min-width: 0; }
+.wk-know-edges { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; min-width: 0; }
+.wk-know-edges > li { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; color: var(--ink-body); }
+
+.wk-know-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; list-style: none; color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-know-legend > li { display: inline-flex; align-items: center; gap: var(--space-1); }
+.wk-know-swatch { display: inline-block; width: 12px; height: 12px; flex-shrink: 0; }
+.wk-know-swatch[data-kind="source"] { background: var(--status-gate); border-radius: 3px; }
+.wk-know-swatch[data-kind="table"] { background: var(--accent-dim); }
+.wk-know-swatch[data-kind="shape"] { background: var(--accent); transform: rotate(45deg) scale(0.8); }
+.wk-know-swatch[data-kind="repo"] { background: var(--ink-muted); clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.wk-know-swatch[data-kind="code"] { background: var(--status-run); border-radius: 50%; }
+.wk-know-swatch[data-kind="knowledge"] { background: var(--ink-muted); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.wk-know-inventory { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; max-width: 100%; color: var(--ink-body); overflow-wrap: anywhere; }
+.wk-know-inventory > summary { cursor: pointer; color: var(--ink-muted); }
+.wk-know-inventory[open] > summary { margin-bottom: var(--space-2); }
+.wk-know-list { display: flex; flex-direction: column; gap: var(--space-1); margin: 0 0 var(--space-2); padding-left: var(--space-4); min-width: 0; overflow-wrap: anywhere; }
+.wk-know-line { display: inline-block; width: 20px; height: 0; flex-shrink: 0; align-self: center; border-top: 2px solid var(--ink-dim); }
+.wk-know-line[data-rel="joins"] { border-top: 2px solid var(--accent); }
+.wk-know-line[data-rel="describes"] { border-top: 2px dashed var(--status-run); }
+.wk-know-line[data-rel="governed_by"] { border-top: 3px dotted var(--status-gate); }
+
+/* The Knowledge map's button under the repositories' graph links. */
+.wk-uc-knowbtn { margin-top: var(--space-2); }
+
+/* A data shape's card in the review (ProposalsList). */
+.wk-gk-stack--tight { gap: var(--space-1); }
+.wk-gk-strong { margin: 0; font-weight: var(--weight-strong); color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-gk-links { margin: 0; padding-left: var(--space-4); color: var(--ink-body); overflow-wrap: anywhere; }
+
+/* The source sheet's Profile box. */
+.wk-src-profile-rows { margin: var(--space-1) 0; padding-left: var(--space-4); color: var(--ink-body); font-size: var(--text-caption); line-height: 1.5; overflow-wrap: anywhere; }
+.wk-src-profile-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+@media (max-width: 1023px) {
+  .wk-know-body { grid-template-columns: minmax(0, 1fr); }
+  .wk-know-canvas { height: 340px; }
+}
