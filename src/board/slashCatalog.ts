@@ -45,7 +45,9 @@ export function entryMatches(e: CatalogEntry, query: string): boolean {
  */
 export function catalogRows(view: CatalogView | null, query: string, now: number, only?: (e: CatalogEntry) => boolean): CatalogRow[] {
   if (view === null) return [];
-  const pool = only === undefined ? view.entries : view.entries.filter(only);
+  // New job's order over the WHOLE catalog, then `only` (codex r1: a box that lists fewer kinds keeps
+  // New job's "Your top", never promotes its own).
+  const pool = view.entries;
   const row = (e: CatalogEntry, group: string, groupTitle: string): CatalogRow => ({
     entry: e, group, groupTitle, cmd: e.launchKind === 'run' ? `${WORKFLOW_PREFIX}${e.launchId}` : e.id,
     offered: entryOffered(e),
@@ -60,7 +62,14 @@ export function catalogRows(view: CatalogView | null, query: string, now: number
   for (const e of topEntries(pool, now)) add(e, TOP_GROUP.id, TOP_GROUP.title);
   if (view.source === 'fallback') for (const e of pool) add(e, ALL_GROUP.id, ALL_GROUP.title);
   else for (const c of view.categories) for (const e of pool) if (e.category === c.id) add(e, c.id, c.title);
-  return rows.filter((r) => entryMatches(r.entry, query));
+  const out = rows.filter((r) => (only === undefined || only(r.entry)) && entryMatches(r.entry, query));
+  // `/workflow-<key>` typed whole names that workflow: it leads, so Enter starts it and not a longer id
+  // that shares its start (codex r1).
+  const q = query.trim().toLowerCase();
+  const exact = q.startsWith(WORKFLOW_PREFIX) ? q.slice(WORKFLOW_PREFIX.length) : null;
+  const at = exact === null ? -1 : out.findIndex((r) => r.entry.launchKind === 'run' && r.entry.launchId.toLowerCase() === exact);
+  if (at > 0) out.unshift(...out.splice(at, 1));
+  return out;
 }
 
 /** The catalog's workflow entries (the launch form names a workflow; it starts nothing else). */

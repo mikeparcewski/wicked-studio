@@ -135,8 +135,11 @@ export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({
     const otherProject = typeof init.projectId === 'string' && init.projectId !== cur?.projectId;
     if (cur !== null && sameOrigin && (wf === null || wf === cur.workflowId) && !freshPicks && !otherProject) {
       const intent = cur.intent.trim() === '' && (init.intent ?? '').trim() !== '' ? init.intent ?? '' : cur.intent;
-      // A pick of a card (a `/` row) names that card for the resumed draft too.
-      const card = init.catalogEntryId !== undefined && init.catalogEntryId !== null ? { catalogEntryId: init.catalogEntryId } : {};
+      // A pick of a card (a `/` row) names that card for the resumed draft too; another card for the same
+      // workflow starts its own options and repository choice, as New job's own card pick does (codex r1).
+      const named = init.catalogEntryId ?? null;
+      const card = named === null || named === cur.catalogEntryId ? {}
+        : { catalogEntryId: named, reduced: false, skipQe: false, skipQeReason: '', repoRef: null };
       set({ open: true, draft: { ...cur, intent, ...card } });
       return;
     }

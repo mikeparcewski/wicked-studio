@@ -1380,6 +1380,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   box-shadow: var(--shadow-raised); padding: 4px; display: flex; flex-direction: column;
 }
 .wk-composer-menu-head { margin: 0; padding: 6px 8px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-composer-menu-section { display: flex; flex-direction: column; flex-shrink: 0; }
 .wk-composer-menu-group { margin: 0; padding: 6px 8px 2px; font-size: var(--text-xs); color: var(--ink-muted); font-weight: var(--weight-semi); }
 .wk-composer-menu-empty { margin: 0; padding: 8px; font-size: var(--text-xs); color: var(--ink-dim); }
 .wk-composer-menu-item {

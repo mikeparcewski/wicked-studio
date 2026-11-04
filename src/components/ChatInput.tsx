@@ -29,6 +29,7 @@ import { menuToken, dropToken } from '../board/planDraft.js';
 import { catalogRows, workflowsOnly, type CatalogRow } from '../board/slashCatalog.js';
 import { jobCatalogView } from '../board/workflowCatalog.js';
 import { catalogProjectOf, useWorkflowCatalog } from '../store/workflowCatalog.js';
+import { useHeldWhileOpen } from '../hooks/useHeldWhileOpen.js';
 import { SlashMenu } from './session/SlashMenu.js';
 import { ContextPopover } from './ContextPopover.js';
 import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
@@ -991,10 +992,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const menuView = useMemo(() => jobCatalogView(menuCatalogLoad, menuDefs, menuPresets), [menuCatalogLoad, menuDefs, menuPresets]);
   const menuCatalogState: 'loading' | 'error' | 'ready' = menuCatalogLoad.state === 'error' ? 'error'
     : menuCatalogLoad.state === 'loading' || (menuCatalogLoad.state === 'unavailable' && menuDefs === null) ? 'loading' : 'ready';
+  // The rows hold still while the menu is open (a refresh landing mid-pick never moves the active row).
+  const shownMenuView = useHeldWhileOpen(menuView, launchMenuOpen);
   const menuRows = useMemo(
-    () => (startToken !== null ? catalogRows(menuView, startToken.query, Date.now(), workflowsOnly) : []),
+    () => (startToken !== null ? catalogRows(shownMenuView, startToken.query, Date.now(), workflowsOnly) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startToken?.query, startToken !== null, menuView],
+    [startToken?.query, startToken !== null, shownMenuView],
   );
   const anyMenuWorkflows = useMemo(() => catalogRows(menuView, '', Date.now(), workflowsOnly).length > 0, [menuView]);
   const menuActive = menuRows.length === 0 ? 0 : Math.min(menuCursor, menuRows.length - 1);

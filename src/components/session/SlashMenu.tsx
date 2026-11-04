@@ -13,6 +13,18 @@ export interface AtItem {
   line: string;
 }
 
+/** The rows in runs of one group (the order they come in), with each run's first option index. */
+function sectionsOf(rows: readonly CatalogRow[]): Array<{ key: string; group: string; title: string; first: number; rows: CatalogRow[] }> {
+  const out: Array<{ key: string; group: string; title: string; first: number; rows: CatalogRow[] }> = [];
+  rows.forEach((r, i) => {
+    const last = out[out.length - 1];
+    if (last !== undefined && last.group === r.group) last.rows.push(r);
+    // A group met twice (a typed workflow moved to the front) is two sections with their own keys.
+    else out.push({ key: out.some((s) => s.group === r.group) ? `${r.group}-${i}` : r.group, group: r.group, title: r.groupTitle, first: i, rows: [r] });
+  });
+  return out;
+}
+
 /**
  * THE `/` AND `@` MENU (DES-STUDIO-REBUILD-001 §5.5/§5.7; extracted from the composer in S19b) — one
  * listbox for every box that takes the grammar: the Desk's and a session's composer, and the launch
@@ -101,43 +113,45 @@ export function SlashMenu({
       {/* The catalog's own states, said once while nothing else is listed (an "Add a step" row may still be). */}
       {startCommands && wf.length === 0 && catalogState === 'loading' && <p data-testid="composer-menu-empty" data-state="loading" className="wk-composer-menu-empty">{WORKFLOWS_LOADING_LINE}</p>}
       {startCommands && wf.length === 0 && catalogState === 'error' && <p data-testid="composer-menu-empty" data-state="failed" role="alert" className="wk-composer-menu-empty">{WORKFLOWS_FAILED_LINE}</p>}
-      {count === 0 && startCommands && catalogState === 'ready' && !anyWorkflows && <p data-testid="composer-menu-empty" data-state="empty" className="wk-composer-menu-empty">{WORKFLOWS_EMPTY_LINE}</p>}
+      {startCommands && wf.length === 0 && catalogState === 'ready' && !anyWorkflows && <p data-testid="composer-menu-empty" data-state="empty" className="wk-composer-menu-empty">{WORKFLOWS_EMPTY_LINE}</p>}
       {count === 0 && trigger === '@' && atLoading && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">Reading your helpers and projects…</p>}
       {count === 0 && !(trigger === '@' && atLoading) && !(startCommands && (catalogState !== 'ready' || !anyWorkflows)) && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">Nothing matches.</p>}
-      {trigger === '/' && wf.map((it, i) => {
-        const why = it.offered ? null : it.entry.status === 'soon' ? 'Coming soon' : 'Not available';
-        const line = why === null ? it.entry.gets : `${why}${it.entry.statusNote !== null && !/^(coming soon|not available)\.?$/i.test(it.entry.statusNote) ? ` · ${it.entry.statusNote}` : ''}`;
-        return (
-          <Fragment key={`${it.group}:${it.entry.id}`}>
-            {/* New job's grouping: "Your top", then each category (an older daemon: one list). */}
-            {(i === 0 || wf[i - 1]?.group !== it.group) && (
-              <p data-testid="composer-menu-group" data-group="start-work" data-category={it.group} className="wk-composer-menu-group">{it.groupTitle}</p>
-            )}
-            <button
-              type="button"
-              id={`composer-menu-option-${menuKey}-${i}`}
-              role="option"
-              aria-selected={i === active}
-              aria-disabled={!it.offered}
-              data-testid="composer-menu-item"
-              data-cmd={it.cmd}
-              data-group="start-work"
-              data-entry={it.entry.id}
-              data-launch={it.entry.launchKind}
-              data-refused={it.offered ? 'false' : 'true'}
-              {...(it.entry.launchKind === 'run' ? { 'data-workflow': it.entry.launchId } : {})}
-              title={line}
-              onMouseDown={(e) => { e.preventDefault(); onPickWorkflow(it); }}
-              className={`wk-composer-menu-item${i === active ? ' wk-composer-menu-item--on' : ''}${it.offered ? '' : ' wk-composer-menu-item--off'}`}
-            >
-              <span className="wk-composer-cmd wk-composer-cmd--title"><b>{it.entry.title}</b></span>
-              <small className="wk-composer-cmd-desc">{line}</small>
-            </button>
-          </Fragment>
-        );
-      })}
+      {/* New job's grouping: "Your top", then each category (an older daemon: one list), each a named group. */}
+      {trigger === '/' && sectionsOf(wf).map(({ key, group, title, first, rows }) => (
+        <div key={key} role="group" aria-labelledby={`composer-menu-group-${menuKey}-${key}`} className="wk-composer-menu-section">
+          <p role="presentation" id={`composer-menu-group-${menuKey}-${key}`} data-testid="composer-menu-group" data-group="start-work" data-category={group} className="wk-composer-menu-group">{title}</p>
+          {rows.map((it, j) => {
+            const i = first + j;
+            const why = it.offered ? null : it.entry.status === 'soon' ? 'Coming soon' : 'Not available';
+            const line = why === null ? it.entry.gets : `${why}${it.entry.statusNote !== null && !/^(coming soon|not available)\.?$/i.test(it.entry.statusNote) ? ` · ${it.entry.statusNote}` : ''}`;
+            return (
+              <button
+                key={it.entry.id}
+                type="button"
+                id={`composer-menu-option-${menuKey}-${i}`}
+                role="option"
+                aria-selected={i === active}
+                aria-disabled={!it.offered}
+                data-testid="composer-menu-item"
+                data-cmd={it.cmd}
+                data-group="start-work"
+                data-entry={it.entry.id}
+                data-launch={it.entry.launchKind}
+                data-refused={it.offered ? 'false' : 'true'}
+                {...(it.entry.launchKind === 'run' ? { 'data-workflow': it.entry.launchId } : {})}
+                title={line}
+                onMouseDown={(e) => { e.preventDefault(); onPickWorkflow(it); }}
+                className={`wk-composer-menu-item${i === active ? ' wk-composer-menu-item--on' : ''}${it.offered ? '' : ' wk-composer-menu-item--off'}`}
+              >
+                <span className="wk-composer-cmd wk-composer-cmd--title"><b>{it.entry.title}</b></span>
+                <small className="wk-composer-cmd-desc">{line}</small>
+              </button>
+            );
+          })}
+        </div>
+      ))}
       {trigger === '/' && (wf.length > 0 && slash.length > 0) && (
-        <p data-testid="composer-menu-group" data-group="add-step" className="wk-composer-menu-group">Add a step</p>
+        <p role="presentation" data-testid="composer-menu-group" data-group="add-step" className="wk-composer-menu-group">Add a step</p>
       )}
       {trigger === '/' && slash.map((it, i) => (
         <button
@@ -164,7 +178,7 @@ export function SlashMenu({
           {/* UX audit row 71: one group header per kind says what a pick does, instead of the same
               line on every row. */}
           {(i === 0 || ats[i - 1]?.kind !== it.kind) && (
-            <p data-testid="composer-menu-group" data-group={it.kind} className="wk-composer-menu-group">
+            <p role="presentation" data-testid="composer-menu-group" data-group={it.kind} className="wk-composer-menu-group">
               {it.kind === 'project' ? 'Projects · the message goes there' : helpersHead}
             </p>
           )}

@@ -9,8 +9,8 @@ import type { Preset } from '../api/teamPlan.js';
  * with studio's own kinds; today's list on an older daemon) — the same entries, titles and categories,
  * "Your top" first (`catalogRows`, ./slashCatalog.ts) — and a pick starts what New job's card starts
  * (`startCatalogEntry`). Studio keeps
- * no list of its own: what the catalog leaves out (the machine-owned flows, `distill-learnings`) is
- * never offered here.
+ * no list of its own: what crew's catalog leaves out (the machine-owned flows, `distill-learnings`) is
+ * never offered here. (An older daemon has no catalog: there, as in New job, the list is today's.)
  *
  * `/workflow-<key>` typed whole as the FIRST token still names a workflow entry (back-compat): the rest
  * of the line is the intent it runs on.
@@ -80,7 +80,8 @@ export const WORKFLOWS_EMPTY_LINE = 'This daemon lists no workflows.';
 /** The line the menu shows when a daemon that serves a catalog failed to answer: never another list. */
 export const WORKFLOWS_FAILED_LINE = 'Couldn’t read the workflows. Type / again to try again.';
 
-/** How many rows the "Start work" group offers at once. */
+/** How many rows today's list (`workflowItems`) returns by default. The `/` menu lists New job's whole
+ *  catalog (`catalogRows`, no cap: the menu scrolls). */
 export const WORKFLOW_ROWS_MAX = 8;
 
 /**

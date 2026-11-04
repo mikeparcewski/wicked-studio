@@ -51,13 +51,16 @@ const RIG_ROWS: Array<[string, string]> = [
 let catalog: unknown = rig;
 let catalogStatus = 200;
 let gets: string[] = [];
+/** Every non-GET the page sends: a pick must send none (codex r1). */
+let posts: string[] = [];
 function stubWire(): void {
   gets = [];
+  posts = [];
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
     const json = (body: unknown, status = 200): Promise<Response> =>
       Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
-    if (init?.method === 'POST') return json({ ok: true });
+    if (init?.method !== undefined && init.method !== 'GET') { posts.push(`${init.method} ${path}`); return json({ ok: true }); }
     gets.push(path);
     if (path === '/workflows/catalog') return catalogStatus === 200 ? json(catalog) : json({ error: 'down' }, catalogStatus);
     return json(path === '/workflows' ? { workflows: WF } : path === '/roster' ? { roster: [SEAT] } : path === '/repos' ? { repos: [REPO] }
@@ -104,6 +107,29 @@ async function newJobCards(): Promise<Array<[string, string]>> {
   return out;
 }
 
+/** New job's sections (their titles) and the entry ids each shows, in order, as New job renders them. */
+async function newJobSectionIds(): Promise<Record<string, string[]>> {
+  const view = render(<LaunchWizard navigate={() => {}} />);
+  act(() => openLaunchWizard({}));
+  await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).toBe('catalog'));
+  const out: Record<string, string[]> = {};
+  for (const sec of document.querySelectorAll<HTMLElement>('[data-testid="launch-catalog-results"] section')) {
+    const title = sec.querySelector('.wk-catalog-section-title')?.textContent ?? '';
+    out[title] = [...sec.querySelectorAll<HTMLElement>('[data-job]')].map((el) => el.dataset.job!);
+  }
+  act(() => resetLaunchWizard());
+  view.unmount();
+  return out;
+}
+const byGroup = (group: string): string[] => startRows()
+  .filter((r) => r.previousElementSibling !== null && groupOf(r) === group).map((r) => r.dataset.entry!);
+/** The group header a row sits under (the nearest header before it). */
+function groupOf(row: HTMLElement): string | null {
+  let el: Element | null = row.previousElementSibling;
+  while (el !== null && !(el instanceof HTMLElement && el.dataset.testid === 'composer-menu-group')) el = el.previousElementSibling;
+  return el instanceof HTMLElement ? el.dataset.category ?? null : null;
+}
+
 beforeEach(() => {
   // Your top is recency-weighted: the clock is the fixture's.
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -129,6 +155,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('the `/` menu lists New job’s catalog', () => {
   it('the same entries and titles, in New job’s order (Your top first, each entry once)', async () => {
+    const newJobSections = await newJobSectionIds();
     const cards = await newJobCards();
     expect(cards).toEqual(RIG_ROWS);
     render(<Harness navigate={() => {}} />);
@@ -137,6 +164,13 @@ describe('the `/` menu lists New job’s catalog', () => {
     // Grouped as New job groups them: its section titles, in its order.
     const groups = [...document.querySelectorAll<HTMLElement>('[data-testid="composer-menu-group"][data-group="start-work"]')];
     expect(groups.map((g) => g.textContent)).toEqual(['Your top', 'Create', 'Resolve', 'Analyze', 'Test', 'More']);
+    // Section by section: each menu group holds New job's section of that name, less what "Your top" already
+    // listed (New job repeats a top card under its category; the menu lists an entry once).
+    const top = new Set(byGroup('top'));
+    for (const [cat, title] of [['create', 'Create'], ['resolve', 'Resolve'], ['analyze', 'Analyze'], ['test', 'Test'], ['more', 'More']] as const) {
+      expect(byGroup(cat), title).toEqual(newJobSections[title]!.filter((id) => !top.has(id)));
+    }
+    expect(byGroup('top')).toEqual(newJobSections['Your top']);
     // What the catalog leaves out is never offered: not the machine-owned `distill-learnings`, not a system flow.
     expect(startRows().map((r) => r.dataset.workflow)).not.toContain('distill-learnings');
     expect(startRows().map((r) => r.dataset.workflow)).not.toContain('chat');
@@ -172,13 +206,40 @@ describe('the `/` menu lists New job’s catalog', () => {
     expect(startRows()).toHaveLength(0);
   });
 
-  it('a catalog that lists nothing shows what New job shows: studio’s own kinds only', async () => {
+  it('a catalog that lists nothing says so, in New job and in the menu (never a list of studio’s own)', async () => {
     catalog = { categories: [], entries: [] };
-    const cards = await newJobCards();
+    const wiz = render(<LaunchWizard navigate={() => {}} />);
+    act(() => openLaunchWizard({}));
+    await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).toBe('catalog'));
+    expect(screen.getByTestId('launch-catalog-empty')).toHaveTextContent('This daemon lists no workflows.');
+    act(() => resetLaunchWizard());
+    wiz.unmount();
     render(<Harness navigate={() => {}} />);
-    await openMenu();
-    expect(rowsOf()).toEqual(cards);
-    expect(rowsOf().map(([id]) => id)).toEqual(['demo-video', 'draft-epics']);
+    type('/');
+    await waitFor(() => expect(screen.getByTestId('composer-menu-empty').dataset.state).toBe('empty'));
+    expect(screen.getByTestId('composer-menu-empty').textContent).toBe('This daemon lists no workflows.');
+    expect(startRows()).toHaveLength(0);
+  });
+
+  it('the rows hold still while the menu is open: a refresh that reorders Your top never moves the active row', async () => {
+    render(<><Harness navigate={() => {}} /><LaunchWizard navigate={() => {}} /></>);
+    await waitFor(() => expect(peekWorkflowCatalog(null)?.state).toBe('ready'));
+    // Meanwhile Migration became the most used.
+    catalog = { ...rig, entries: (rig as { entries: Array<Record<string, unknown>> }).entries.map((e) => (e['id'] === 'migration'
+      ? { ...e, usage: { launches: 500, lastUsedAt: '2026-11-04T11:00:00.000Z', medianMinutes: null } } : e)) };
+    const before = gets.filter((p) => p === '/workflows/catalog').length;
+    type('/');
+    expect(rowsOf()[0]![0]).toBe('bug');
+    await waitFor(() => expect(gets.filter((p) => p === '/workflows/catalog').length).toBe(before + 1));
+    await waitFor(() => expect((peekWorkflowCatalog(null) as { view?: { entries: Array<{ id: string; launches: number }> } }).view?.entries.find((e) => e.id === 'migration')?.launches).toBe(500));
+    expect(rowsOf()[0]![0]).toBe('bug');
+    fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
+    expect(useLaunchWizard.getState().draft?.workflowId).toBe('bug');
+    // The next open shows the newest.
+    act(() => resetLaunchWizard());
+    type('');
+    type('/');
+    await waitFor(() => expect(rowsOf()[0]![0]).toBe('migration'));
   });
 
   it('a box reads its catalog once when it mounts, so its first `/` lists at once', async () => {
@@ -220,6 +281,8 @@ describe('a pick starts what New job’s card starts', () => {
     expect(nav.mock.calls[0]![0]).toBe('/everything?tab=made&kind=documents&new=document&format=doc');
     expect(peekNewDocumentBrief()).toBe('the offsite one-pager');
     expect(useLaunchWizard.getState().open).toBe(false);
+    await act(async () => { await new Promise((r) => setTimeout(r, 500)); });
+    expect(posts).toEqual([]);
   });
 
   it('Start a chat: a new chat on its own page, the words as its first message', async () => {
@@ -230,6 +293,8 @@ describe('a pick starts what New job’s card starts', () => {
     expect(chatId).not.toBe('');
     expect(useSessionDrafts.getState().drafts[chatId]).toBe('why is checkout slow');
     expect(useLaunchWizard.getState().open).toBe(false);
+    await act(async () => { await new Promise((r) => setTimeout(r, 500)); });
+    expect(posts).toEqual([]);
   });
 
   it.each(['bug', 'apps-turn', 'apps-publish', 'demo-video', 'draft-epics'])('%s: New job on that card, at the step its card goes to', async (id) => {
@@ -250,6 +315,9 @@ describe('a pick starts what New job’s card starts', () => {
     expect([got.workflowId, got.catalogEntryId]).toEqual([want.workflowId, want.catalogEntryId]);
     expect(got.catalogEntryId).toBe(id);
     expect((await screen.findByTestId('launch-wizard-step')).dataset.step).toBe(wantStep);
+    // Opening New job on the card sends nothing by itself.
+    await act(async () => { await new Promise((r) => setTimeout(r, 500)); });
+    expect(posts).toEqual([]);
   });
 });
 
@@ -260,6 +328,30 @@ describe('/workflow-<key> typed by hand (back-compat)', () => {
     type('/workflow-bug the charge never clears');
     fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
     expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'bug', catalogEntryId: 'bug', intent: 'the charge never clears' });
+  });
+
+  it('/workflow-<key> typed whole starts that workflow, not a more-used one whose id starts the same', async () => {
+    const entries = (rig as { entries: Array<Record<string, unknown>> }).entries;
+    const bug = entries.find((e) => e['id'] === 'bug')!;
+    catalog = { ...rig, entries: [...entries, { ...bug, id: 'bug-long', title: 'Fix a long bug', launch: { kind: 'run', workflow: 'bug-long' },
+      usage: { launches: 900, lastUsedAt: '2026-11-04T11:00:00.000Z', medianMinutes: null } }] };
+    render(<Harness navigate={() => {}} />);
+    await openMenu('/workflow-bug');
+    expect(rowsOf().map(([id]) => id)).toEqual(['bug', 'bug-long']);
+    fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
+    expect(useLaunchWizard.getState().draft?.workflowId).toBe('bug');
+  });
+
+  it('a resumed draft that names another card for its workflow starts that card’s own options (New job’s rule)', () => {
+    act(() => openLaunchWizard({ workflowId: 'bug', catalogEntryId: 'bug', composerKey: 's1' }));
+    act(() => useLaunchWizard.getState().update({ repoRef: 'repo-1', skipQe: true, skipQeReason: 'docs only', reduced: true }));
+    act(() => useLaunchWizard.getState().close());
+    act(() => openLaunchWizard({ workflowId: 'bug', catalogEntryId: 'run:bug-again', composerKey: 's1' }));
+    expect(useLaunchWizard.getState().draft).toMatchObject({ catalogEntryId: 'run:bug-again', repoRef: null, skipQe: false, skipQeReason: '', reduced: false });
+    // The same card resumes as it was.
+    act(() => useLaunchWizard.getState().update({ repoRef: 'repo-1' }));
+    act(() => openLaunchWizard({ workflowId: 'bug', catalogEntryId: 'run:bug-again', composerKey: 's1' }));
+    expect(useLaunchWizard.getState().draft?.repoRef).toBe('repo-1');
   });
 
   it('a workflow the catalog leaves out (distill-learnings) is not started', async () => {

@@ -24,6 +24,8 @@ export type CatalogLoad =
 
 const cache = new Map<string, CatalogLoad>();
 const asked = new Map<string, number>();
+/** Projects with a read out: a box's mount-time read does not ask again while one is (codex r1). */
+const pending = new Set<string>();
 let epoch = 0;
 /** This daemon has answered with its catalog at least once this session. */
 let served = false;
@@ -37,6 +39,7 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   const key = keyOf(projectId);
   const gen = (asked.get(key) ?? 0) + 1;
   asked.set(key, gen);
+  pending.add(key);
   const atEpoch = epoch;
   // A retry after a failure is a read in flight, not the failure still standing.
   if (cache.get(key)?.state === 'error') { cache.set(key, { state: 'loading' }); notify(); }
@@ -54,6 +57,7 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   }
   // A read that is no longer the newest for its project changes nothing shared (codex r7).
   if (atEpoch !== epoch || asked.get(key) !== gen) return null;
+  pending.delete(key);
   const prev = cache.get(key);
   const routeAbsent = failure instanceof ApiError && failure.status === 404;
   if (routeAbsent) {
@@ -95,7 +99,8 @@ export function useWorkflowCatalog(projectId: string | null, enabled = true): Ca
     return () => { listeners.delete(fn); };
   }, []);
   useEffect(() => {
-    if (enabled || !cache.has(keyOf(projectId))) void readWorkflowCatalog(projectId);
+    const key = keyOf(projectId);
+    if (enabled || (!cache.has(key) && !pending.has(key))) void readWorkflowCatalog(projectId);
   }, [projectId, enabled]);
   return cache.get(key) ?? LOADING;
 }
@@ -109,6 +114,7 @@ export function peekWorkflowCatalog(projectId: string | null): CatalogLoad | und
 export function resetWorkflowCatalog(): void {
   cache.clear();
   asked.clear();
+  pending.clear();
   served = false;
   epoch += 1;
 }

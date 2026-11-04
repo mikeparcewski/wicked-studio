@@ -162,12 +162,15 @@ npm publish dates. Every version listed here exists on
   today's): the same entries under the same titles and categories, "Your top" first, each entry once, so Document,
   Presentation, Interactive document, Start a chat, Demo video and Draft epics are offered there too, and a workflow the
   catalog leaves out (`distill-learnings`, which crew runs by itself after each run) is not. A row is the card's title
-  and outcome; one that is coming soon or not available is shown dimmed and never started. Picking a row starts what
+  and outcome; one that is coming soon or not available is shown dimmed with why, and never started. The rows hold
+  still while the menu is open, and `/workflow-<key>` typed whole leads with that workflow. Picking a row starts what
   New job's card starts, through one shared handler: a workflow, Demo video or Draft epics opens New job on that card
   with the rest of the line as its words; a document opens New document in the card's format with the words as its
   brief (New job's own Document cards now carry their words there too); Start a chat opens a new chat with them.
   `/workflow-<key>` typed by hand still names a workflow. A catalog that cannot be read says so ("Couldn't read the
-  workflows") and lists nothing in its place. The launch form's problem box lists the same catalog's workflows.
+  workflows") and lists nothing in its place; one that lists nothing says "This daemon lists no workflows." in New job
+  and the menu alike (studio's own Demo video and Draft epics no longer stand in for an empty catalog). The launch
+  form's problem box lists the same catalog's workflows.
 - **An Apps line chart draws lines, not filled shapes (studio#963).** In the wicked-apps runtime's stylesheet each
   `.wk-series-N` rule sets `fill` and `stroke`, and it came after `.wk-stroke { fill: none }` with the same specificity,
   so a line series filled the shape between its points and its first point in the series colour (the Escalations

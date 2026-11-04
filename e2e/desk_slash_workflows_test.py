@@ -112,7 +112,7 @@ with sync_playwright() as p:
     ordinary = ["workflow-feature", "workflow-bug", "workflow-migration", "workflow-domain-extraction",
                 "workflow-capture-learnings"]
     check("menu-lists-workflows",
-          "start-work" in groups and all(c in cmds for c in ordinary) and "workflow-chat" not in cmds
+          "start-work" in groups and sorted(cmds) == sorted(ordinary) and "workflow-chat" not in cmds
           and len(feature_line) == 1 and "Design, build, test and review a new feature" in feature_line[0],
           groups=groups, cmds=cmds, feature_line=feature_line)
 
@@ -123,9 +123,15 @@ with sync_playwright() as p:
         const box = menu.getBoundingClientRect();
         const items = [...document.querySelectorAll('[data-testid="composer-menu-item"]')];
         const rowHeights = items.map(e => Math.round(e.getBoundingClientRect().height));
-        // A row names its work once: a catalog row by its title (slash-catalog), a step by its command.
+        // A row names its work once: a catalog row by its one title, its line something else (slash-catalog);
+        // a step by its command, never repeated as a word.
         const keyOnce = items.every(e => {
-            const key = e.dataset.group === 'start-work' ? (e.querySelector('b')?.textContent || '') : (e.dataset.cmd || '');
+            if (e.dataset.group === 'start-work') {
+                const names = e.querySelectorAll('b'), line = e.querySelector('small');
+                const title = (names[0]?.textContent || '').trim();
+                return names.length === 1 && title !== '' && (line === null || line.textContent.trim() !== title);
+            }
+            const key = e.dataset.cmd || '';
             if (!key) return true;
             const cnt = (e.innerText.toLowerCase().split(key.toLowerCase())).length - 1;
             return cnt === 1;

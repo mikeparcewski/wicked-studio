@@ -9,6 +9,7 @@ import { entryOffered, jobCatalogView, type CatalogEntry } from '../../board/wor
 import { catalogProjectOf, useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { startCatalogEntry } from '../../store/startCatalogEntry.js';
 import { goToPath } from '../QeRefusalWarning.js';
+import { useHeldWhileOpen } from '../../hooks/useHeldWhileOpen.js';
 import {
   draftTarget, dropToken, menuToken, slashItems, wordOf, type DraftRunState, type DraftTarget, type SlashItem,
 } from '../../board/planDraft.js';
@@ -234,10 +235,12 @@ export function Composer({
   // An older daemon's list is today's workflows: still being read until they land.
   const wfCatalogState: 'loading' | 'error' | 'ready' = catalogLoad.state === 'error' ? 'error'
     : catalogLoad.state === 'loading' || (catalogLoad.state === 'unavailable' && defs === null) ? 'loading' : 'ready';
+  // The rows hold still while the menu is open: a refresh landing mid-pick never moves the active row.
+  const shownView = useHeldWhileOpen(catalogView, menuOpen && startCommands);
   const wf = useMemo(
-    () => (startCommands && token !== null ? catalogRows(catalogView, token.query, Date.now()) : []),
+    () => (startCommands && token !== null ? catalogRows(shownView, token.query, Date.now()) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startCommands, token?.query, catalogView],
+    [startCommands, token?.query, shownView],
   );
   const anyWorkflows = useMemo(() => catalogRows(catalogView, '', Date.now()).length > 0, [catalogView]);
 

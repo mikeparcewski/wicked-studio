@@ -256,6 +256,9 @@ export function entryOffered(e: Pick<CatalogEntry, 'status' | 'launchKind'>): bo
 
 /** Studio's own kinds, when the catalog does not list them (demo and draft epics are launched by studio). */
 export function withStudioKinds(view: CatalogView, extras: readonly CatalogEntry[]): CatalogView {
+  // slash-catalog (the brief's rule): a daemon whose catalog lists nothing says so; studio's own kinds
+  // bridge a catalog that predates them, never stand in for an empty one.
+  if (view.source === 'catalog' && view.entries.length === 0) return view;
   // A kind the catalog lists in ANY state (by its card id or its launch target) is the catalog's: a
   // coming-soon or unavailable Demo video is never shadowed by studio's own ready one.
   const have = new Set(view.entries.flatMap((e) => [e.id, e.launchId]));
