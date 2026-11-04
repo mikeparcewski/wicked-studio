@@ -34,7 +34,7 @@ export function RunDataUse({ runId, refresh = 0, testId = 'run-data-use' }: { ru
       {read.length > 0 && (
         <>
           <span className="wk-assurance-kind" data-testid={`${testId}-label`}>Agents read data:</span>{' '}
-          <span className="wk-assurance-line">{read.map(dataUseWords).join('; ')}. The work may hold values copied from it.</span>
+          <span className="wk-assurance-line">{read.map(dataUseWords).join('; ')}.{read.some((s) => s.rows > 0) ? ' The work may hold values copied from it.' : ''}</span>
         </>
       )}
       {tried.length > 0 && (

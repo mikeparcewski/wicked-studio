@@ -68,7 +68,7 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, servers, agentsUnverified, onReread, onSaved, onAllowWrites, onAgents, onDescribed, onClose }: {
+export function SourceSheet({ target, existing, servers, agentsUnverified: agentsUnverifiedSet, onReread, onSaved, onAllowWrites, onAgents, onDescribed, onClose }: {
   target: SheetTarget;
   /** Names already registered (a new source of the same name replaces it; the sheet says so). */
   existing: readonly string[];
@@ -270,9 +270,13 @@ export function SourceSheet({ target, existing, servers, agentsUnverified, onRer
   const isNew = saved === null && target.mode === 'new';
   /** The saved SQL source's agent switches, when crew sends them (`null`: no Agents box). GraphQL sources carry the
    *  field too, but crew's switches route refuses them (`not_a_source`), so they get no box. */
-  const agentAccess = saved !== null && saved.kind === 'sql' ? agentAccessOf(saved as { agents?: unknown }) : null;
+  /** A sheet opened as NEW whose saved source the page's latest read no longer holds: it is gone, so no switches. */
+  const gone = target.mode === 'new' && saved !== null && servers !== undefined && !servers.some((s) => s.name === saved.name);
+  const agentAccess = saved !== null && saved.kind === 'sql' && !gone ? agentAccessOf(saved as { agents?: unknown }) : null;
   /** crew sent the field but not as crew's shape: no box, and "What agents see" claims nothing either way. */
-  const agentsUnreadable = agentAccess === null && saved !== null && saved.kind === 'sql' && (saved as { agents?: unknown }).agents !== undefined;
+  const agentsUnreadable = agentAccess === null && !gone && saved !== null && saved.kind === 'sql' && (saved as { agents?: unknown }).agents !== undefined;
+  /** crew couldn't be asked again after a write: the box holds its switches, and the summary claims nothing either. */
+  const agentsUnverified = saved !== null && agentsUnverifiedSet?.has(saved.name) === true;
   const savedSheetKind = saved !== null ? sheetKindOf(saved) : null;
   const agentDialect = savedSheetKind === 'postgres' ? 'postgres' : savedSheetKind === 'mysql' ? 'mysql' : 'sqlite';
   const sql = saved?.sql ?? null;
@@ -566,7 +570,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified, onRer
               {kind !== 'upload' || upload !== null ? (
                 <div className="wk-src-box" data-testid="source-agents-see">
                   <p className="wk-src-okline wk-src-strong"><Eye size={16} aria-hidden className="wk-src-ico" />What agents see</p>
-                  <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog, agentAccess === null ? (agentsUnreadable ? 'unknown' : undefined) : !agentAccess.see ? 'hidden' : agentDialect !== 'postgres' ? 'never' : agentAccess.query ? 'on' : 'off')}</p>
+                  <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog, agentAccess === null ? (agentsUnreadable ? 'unknown' : undefined) : agentsUnverified ? 'unknown' : !agentAccess.see ? 'hidden' : agentDialect !== 'postgres' ? 'never' : agentAccess.query ? 'on' : 'off')}</p>
                 </div>
               ) : null}
               {/* (DES-KNOWLEDGE-DATA-001 §19 B5) Only when crew sends the switches (api-types 0.183.0): an older crew gets no box. */}
@@ -575,7 +579,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified, onRer
                   source={saved.name}
                   dialect={agentDialect}
                   agents={agentAccess}
-                  unverified={agentsUnverified?.has(saved.name) === true}
+                  unverified={agentsUnverified}
                   {...(onReread !== undefined ? { onReread } : {})}
                   data-testid="source-agent-controls"
                   onChanged={(agents) => {

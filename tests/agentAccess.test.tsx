@@ -223,6 +223,21 @@ describe('the Agents box on a saved source', () => {
     heard.stop();
   });
 
+  it('review r3 (pi r2 D-1): an open confirmation closes when see goes off, and comes back only from a click', async () => {
+    const { rerender } = render(<Box />);
+    fireEvent.click(screen.getByTestId('source-agent-controls-query'));
+    expect(screen.getByTestId('source-agent-controls-confirm')).toBeTruthy();
+    agents = { ...DEFAULTS, see: false };
+    rerender(<Box />);
+    await waitFor(() => expect(screen.queryByTestId('source-agent-controls-confirm')).toBeNull());
+    agents = { ...DEFAULTS };
+    rerender(<Box />);
+    expect(screen.queryByTestId('source-agent-controls-confirm')).toBeNull();
+    expect(puts()).toEqual([]);
+    fireEvent.click(screen.getByTestId('source-agent-controls-query'));
+    expect(screen.getByTestId('source-agent-controls-confirm')).toBeTruthy();
+  });
+
   it('at 64 projects no further one can be ticked; one can still be taken away', async () => {
     agents = { ...DEFAULTS, projects: Array.from({ length: 63 }, (_, i) => `proj_${i}`).concat('proj_support') };
     render(<Box />);
@@ -266,7 +281,7 @@ describe('the Agents box on a saved source', () => {
     // The right envelope holding another source's entry, or an entry that is not crew's: the record is unreadable,
     // never a shorter history (nor "none").
     const full = { callId: 'x', at: 'x', runId: 'r', unit: 1, attempt: 1, seat: 's', source: 'support-pg', sourceId: 'id', sqlHash: 'h', outcome: 'ok', rows: 1, truncated: false, ms: 1, released: true };
-    for (const bad of [{ ...full, source: 'other-source' }, { junk: true }, { ...full, truncated: undefined }, { ...full, rows: 1.5 }, { ...full, sourceId: undefined }]) {
+    for (const bad of [{ ...full, source: 'other-source' }, { junk: true }, { ...full, truncated: undefined }, { ...full, rows: 1.5 }, { ...full, sourceId: undefined }, { ...full, released: false, outcome: 'SELECT secret FROM t' }]) {
       recent = { name: 'support-pg', known: true, queries: [bad] };
       render(<Box />);
       await waitFor(() => expect(screen.getByTestId('source-agent-controls-recent-unknown')).toBeTruthy());
@@ -298,7 +313,7 @@ describe('NEGATIVE CONTROL: no Agents box without crew\'s `agents` field', () =>
       await screen.findByTestId('source-agents-see');
       expect(screen.queryByTestId('source-agent-controls')).toBeNull();
       // Present but unreadable is not an older crew: "What agents see" claims nothing either way (codex r2 F1).
-      expect(screen.getByTestId('source-agents-see').textContent).toMatch(/Not known here: crew sent agent switches/);
+      expect(screen.getByTestId('source-agents-see').textContent).toMatch(/Not known here: studio couldn’t read crew’s agent switches/);
       expect(screen.getByTestId('source-agents-see').textContent).not.toMatch(/No values from rows/);
       cleanup();
     }
@@ -563,12 +578,56 @@ describe('NEGATIVE CONTROL (review r1): crew\'s switches reach the box after a w
     expect(screen.getByTestId('source-agent-controls-query')).toBeDisabled();
     expect(screen.getByTestId('source-agent-controls-see')).toBeDisabled();
     expect(screen.getByTestId('source-agent-controls-projects')).toBeDisabled();
+    // ...and "What agents see" makes no claim from them either (codex r3).
+    expect(screen.getByTestId('source-agents-see').textContent).toMatch(/Not known here/);
+    expect(screen.getByTestId('source-agents-see').textContent).not.toMatch(/can’t query it/);
     // Read again, once crew answers: crew's switches, and the warning goes.
     listFails = false;
     fireEvent.click(screen.getByTestId('source-agent-controls-reread'));
     await waitFor(() => expect(screen.queryByTestId('source-agent-controls-unverified')).toBeNull());
     expect(shown()).toEqual(w.crew.state);
     expect(screen.getByTestId('source-agent-controls').getAttribute('data-query')).toBe('on');
+    expect(screen.getByTestId('source-agents-see').textContent).toMatch(/may also query it/);
+  });
+
+  it('review r3: a sheet saved from NEW whose source is gone at crew shows no switches', async () => {
+    useCapabilities.setState({ loaded: true, dataSources: true });
+    const w = crewWire(DEFAULTS);
+    render(<SourcesPage navigate={vi.fn()} search="" />);
+    fireEvent.click(await screen.findByTestId('sources-add'));
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'support-pg' } });
+    fireEvent.change(screen.getByTestId('source-host'), { target: { value: 'db.support.internal' } });
+    fireEvent.change(screen.getByTestId('source-database'), { target: { value: 'support' } });
+    fireEvent.change(screen.getByTestId('source-user'), { target: { value: 'reader' } });
+    fireEvent.click(screen.getByTestId('source-test-run'));
+    await screen.findByTestId('source-test-ok');
+    fireEvent.click(screen.getByTestId('source-save'));
+    await screen.findByTestId('source-agent-controls');
+    // Someone removes it at crew; the next switch is refused (404), and crew's list no longer holds it.
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (path === '/sources/support-pg/agents' && method === 'PUT') { calls.push({ path, method, body: undefined }); return Promise.reject(new ApiError(404, 'no source named support-pg', { error: 'x', code: 'unknown_server' })); }
+      if (path === '/mcp/servers' && method === 'GET') { calls.push({ path, method, body: undefined }); return Promise.resolve({ servers: [], discovered: [] }); }
+      return base(path, init);
+    });
+    w.setHold(false);
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls-see')).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId('source-agent-controls-see'));
+    await waitFor(() => expect(screen.queryByTestId('source-agent-controls')).toBeNull());
+  });
+
+  it('review r3: the page sentence keeps "never their rows" only when crew sends no switches at all', async () => {
+    useCapabilities.setState({ loaded: true, dataSources: true });
+    let servers = [pgServer({ agents: { see: true, query: true, projects: 'unreadable', everyProject: false } } as never)];
+    apiFetch.mockImplementation((path: string) => (path === '/mcp/servers' ? Promise.resolve({ servers, discovered: [] }) : path.endsWith('/catalog') ? Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: CATALOG, privileges: READ_ONLY, descriptorHash: 'd'.repeat(64) }) : Promise.reject(new Error(`unexpected ${path}`))));
+    render(<SourcesPage navigate={vi.fn()} search="" />);
+    await waitFor(() => expect(screen.getByTestId('sources-page').textContent).toMatch(/its rows only where you let them query it/));
+    expect(screen.getByTestId('sources-page').textContent).not.toMatch(/never their rows/);
+    cleanup();
+    servers = [pgServer()];
+    render(<SourcesPage navigate={vi.fn()} search="" />);
+    await waitFor(() => expect(screen.getByTestId('sources-page').textContent).toMatch(/agents see their structure, never their rows/));
   });
 });
 
@@ -633,6 +692,11 @@ describe('a job\'s data use on its gate card', () => {
       await waitFor(() => expect(screen.getByTestId('gate-data').getAttribute('data-known')).toBe('false'));
       cleanup();
     }
+    // Released but empty: it says so, without "may hold values" (pi r3).
+    dataUse = { runId: 'run-1', known: true, sources: [{ ...ok, rows: 0 }] };
+    render(<RunDataUse runId="run-1" testId="gate-data" />);
+    await waitFor(() => expect(screen.getByTestId('gate-data').textContent).toBe('Agents read data: support-pg · 2 queries · 0 rows.'));
+    cleanup();
     dataUse = { runId: 'run-1', known: true, sources: [{ ...ok, sql: 'SELECT SQL_SENTINEL', rowsData: [['VALUE_SENTINEL']] }] };
     const { container } = render(<RunDataUse runId="run-1" testId="gate-data" />);
     await waitFor(() => expect(screen.getByTestId('gate-data').textContent).toMatch(/support-pg · 2 queries · 3 rows\./));

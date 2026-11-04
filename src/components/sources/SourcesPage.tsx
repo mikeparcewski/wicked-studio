@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { agentAccessOf, agentSwitchWrites } from '../../api/sourceAgents.js';
+import { agentSwitchWrites } from '../../api/sourceAgents.js';
 import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -173,8 +173,9 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     return { ...a, granted: grantedFor !== null && src !== undefined && src.allowWrites === true && grantedFor === (src.descriptorHash ?? null) };
   });
   const count = sources.length;
-  /** A crew with the agent switches (api-types 0.183.0) sends them on its SQL sources. */
-  const anyAgentSwitches = sources.some((s) => s.kind === 'sql' && agentAccessOf(s as { agents?: unknown }) !== null);
+  /** A crew with the agent switches (api-types 0.183.0) sends them on its SQL sources; one studio can't read still
+   *  means rows may reach agents, so only a crew that sends none keeps "never their rows". */
+  const anyAgentSwitches = sources.some((s) => s.kind === 'sql' && (s as { agents?: unknown }).agents !== undefined);
   return (
     <CalmPage data-testid="sources-page" className="wk-src-page">
       <CalmHead

@@ -42,6 +42,8 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 const isText = (v: unknown): v is string => typeof v === 'string' && v !== '';
 /** A whole, non-negative count, as crew's record keeps them. */
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+/** crew's outcome codes (`ok`, `not_select`, `query_off`, `deadline`, …): a code, never free text. */
+const isCode = (v: unknown): v is string => typeof v === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(v);
 
 /** At most this many projects per source (crew's `AGENT_PROJECTS_MAX`). */
 export const AGENT_PROJECTS_MAX = 64;
@@ -77,7 +79,7 @@ export function agentQueriesOf(r: unknown, name: string): SourceAgentQuery[] | '
   for (const q of r.queries as unknown[]) {
     // Every field crew's record writes (B2 `knowledge/gate/record.ts`), each well typed, for THIS source.
     if (!isObj(q) || q.source !== name || !isText(q.callId) || !isText(q.at) || !isText(q.runId) || !isInt(q.unit) || !isInt(q.attempt)
-      || typeof q.seat !== 'string' || typeof q.sourceId !== 'string' || typeof q.sqlHash !== 'string' || !isText(q.outcome)
+      || typeof q.seat !== 'string' || typeof q.sourceId !== 'string' || typeof q.sqlHash !== 'string' || !isCode(q.outcome)
       || !isInt(q.rows) || typeof q.truncated !== 'boolean' || !isInt(q.ms) || typeof q.released !== 'boolean') return 'unknown';
     out.push({
       callId: q.callId, at: q.at, runId: q.runId, unit: q.unit, attempt: q.attempt, seat: q.seat, source: name, sourceId: q.sourceId,
