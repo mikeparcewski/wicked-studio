@@ -76,7 +76,8 @@ const ITEM_ICON: Partial<Record<NavItem['id'], LucideIcon>> = { learn: Graduatio
  *    open is this viewer's, from their last session (store/sidebar.ts; nothing saved: Work open, the rest
  *    shut). The heading that holds the page on screen is marked (its home link `aria-current="true"`),
  *    and when that page is listed under a shut heading, the heading opens for this view only (not saved),
- *    so the page you are on is always in sight; shutting it again holds while you stay on that page.
+ *    so the page you are on is always in sight; shutting it (open for the view or saved open) holds while you
+ *    stay on that page. A project folded inside Recent opens for the view the same way when it holds the session.
  *  - RECENT, under the groups, the last heading that folds: the sessions grouped by project (the board model's
  *    order), at most five between them (`railRecent`: every one that needs you, then live work, then
  *    the newest), then "All jobs" (the Jobs page). Each row has ONE status dot (four hues: waiting on
@@ -155,7 +156,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
     ro?.observe(el);
     return () => { el.removeEventListener('scroll', check); ro?.disconnect(); };
-  }, [groups, collapsed, open]);
+  }, [groups, collapsed, open, icons]);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   // DES-APPS-001: Data sources is in Work only when the connected crew serves them (an older crew: Build & settings).
   const dataSources = useCapabilities((s) => s.dataSources);
@@ -178,16 +179,22 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   };
   const groupsNav = navGroups({ sources: dataSources });
   // The heading that holds the page on screen: marked, and opened for this view when it is shut (not saved).
-  // A session's page is under Recent when its row is.
-  const recentHere = groups.some((g) => g.sessions.some((x) => x.path.split('#')[0] === pathname));
+  // A session's page is under Recent when its row is (and under its project's fold, which opens the same way).
+  const rowHere = (rows: readonly { path: string }[]): boolean => rows.some((x) => x.path.split('#')[0] === pathname);
+  const recentHere = groups.some((g) => rowHere(g.sessions));
   const holding: SidebarSectionId | null = groupHolding(groupsNav, on)?.id ?? (recentHere ? 'recent' : null);
-  // Shutting the heading that was opened for this view holds until the address changes.
-  const [peekShut, setPeekShut] = useState<string | null>(null);
-  useEffect(() => { setPeekShut(null); }, [pathname]);
-  const peek = holding !== null && !open.has(holding) && peekShut !== pathname ? holding : null;
+  // What the viewer shut while it held the page on screen: it stays shut on this address (whether it was open
+  // for the view or saved open), and the next address starts over. Keyed by the address, so nothing lingers.
+  const [shutHere, setShutHere] = useState<{ path: string; ids: ReadonlySet<string> }>({ path: '', ids: new Set() });
+  const shut = (id: string): boolean => shutHere.path === pathname && shutHere.ids.has(id);
+  const keepShut = (id: string): void => setShutHere((prev) => ({ path: pathname, ids: new Set([...(prev.path === pathname ? prev.ids : []), id]) }));
+  const peek = holding !== null && !open.has(holding) && !shut(holding) ? holding : null;
   const isOpen = (id: SidebarSectionId): boolean => open.has(id) || peek === id;
   const toggleSection = (id: SidebarSectionId): void => {
-    if (peek === id) setPeekShut(pathname); else useSidebar.getState().toggle(id);
+    // Shutting the heading that holds the page: it stays shut here. Only a saved state is ever written: a heading
+    // open for this view only is shut without touching what the viewer saved.
+    if (isOpen(id) && id === holding) keepShut(id);
+    if (peek !== id) useSidebar.getState().toggle(id);
   };
   const recentFolded = !isOpen('recent');
   // Folding and unfolding the rail swaps its layout, so focus goes to the same control in the new one.
@@ -386,7 +393,10 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
           <>
             {groups.map((g, gi) => {
               const key = g.projectId ?? '';
-              const folded = collapsed.has(key);
+              // A project fold holding the session on screen opens for this view too (the heading rule, one level down).
+              const foldId = `group:${key}`;
+              const groupPeek = collapsed.has(key) && rowHere(g.sessions) && !shut(foldId);
+              const folded = collapsed.has(key) && !groupPeek;
               const listId = `rail-group-list-${gi}`;
               const needs = g.sessions.reduce((n, s) => n + s.badge, 0);
               const rows = g.sessions;
@@ -400,7 +410,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
                     aria-expanded={!folded}
                     aria-controls={folded ? undefined : listId}
                     title={g.name}
-                    onClick={() => toggle(key)}
+                    onClick={() => { if (!folded && rowHere(g.sessions)) keepShut(foldId); if (!groupPeek) toggle(key); }}
                   >
                     <ChevronRight size={12} aria-hidden className="wk-rail-fold-chevron" />
                     <span className="wk-rail-group-name">{g.name}</span>

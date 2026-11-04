@@ -20,9 +20,9 @@ const RUNS: SessionView[] = Array.from({ length: 3 }, (_, i) => ({
   units: [],
 } as unknown as SessionView));
 
-vi.mock('../src/hooks/useBoardModel.js', () => ({
-  useBoardModel: () => ({ items: [], unfiled: RUNS, loading: false, error: null, failedAt: null }),
-}));
+// One stable model (a real board model keeps its arrays while nothing changes), so a re-render alone re-runs no effect.
+const MODEL = { items: [], unfiled: RUNS, loading: false, error: null, failedAt: null };
+vi.mock('../src/hooks/useBoardModel.js', () => ({ useBoardModel: () => MODEL }));
 vi.mock('../src/api/client.js', () => ({
   api: new Proxy({}, { get: () => () => Promise.resolve({}) }),
   apiFetch: () => Promise.resolve({}),
@@ -33,6 +33,7 @@ vi.mock('../src/hooks/useNerveState.js', () => ({ useNerveState: () => nerve }))
 const { SessionRail, railWidthPx, RAIL_ICONS_PX, SESSION_RAIL_PX } = await import('../src/components/desk/SessionRail.js');
 const { NAV_GROUPS, groupHome, navGroups, SIDEBAR_SECTIONS } = await import('../src/board/navModel.js');
 const { SIDEBAR_KEY, parseSidebar, resetSidebar, useSidebar } = await import('../src/store/sidebar.js');
+const { RAIL_COLLAPSED_KEY } = await import('../src/hooks/useRailCollapsed.js');
 
 const stored = (): unknown => JSON.parse(window.localStorage.getItem(SIDEBAR_KEY) ?? 'null');
 const save = (v: unknown): void => { window.localStorage.setItem(SIDEBAR_KEY, typeof v === 'string' ? v : JSON.stringify(v)); resetSidebar(); };
@@ -210,6 +211,43 @@ describe('the page on screen is always findable', () => {
     expect(screen.getByTestId('rail-recent')).toHaveAttribute('data-here', 'true');
   });
 
+  it('shutting a heading that is open and holds the page shuts it, on the first press (codex r1)', () => {
+    // Nothing saved: Work is open by default and holds /jobs.
+    const { rerender } = rail('/jobs');
+    fireEvent.click(screen.getByTestId('rail-sec-toggle-work'));
+    expect(screen.getByTestId('rail-sec-toggle-work')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('nav-jobs')).toBeNull();
+    expect(stored()).toEqual({ open: [], icons: false });
+    // Still marked, and a second press opens it again (and saves that).
+    expect(screen.getByTestId('rail-sec-home-work')).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(screen.getByTestId('rail-sec-toggle-work'));
+    expect(screen.getByTestId('rail-sec-toggle-work')).toHaveAttribute('aria-expanded', 'true');
+    expect(stored()).toEqual({ open: ['work'], icons: false });
+    // A restored heading holding the page: Govern on /memory.
+    save({ open: ['work', 'govern'], icons: false });
+    rerender(<SessionRail runs={RUNS} needRows={[]} navigate={() => {}} pathname="/memory" />);
+    fireEvent.click(screen.getByTestId('rail-sec-toggle-govern'));
+    expect(screen.getByTestId('rail-sec-toggle-govern')).toHaveAttribute('aria-expanded', 'false');
+    expect(stored()).toEqual({ open: ['work'], icons: false });
+  });
+
+  it('a project folded inside Recent opens for the view when it holds the session on screen; shutting it holds there, unsaved (codex r1)', () => {
+    window.localStorage.setItem(RAIL_COLLAPSED_KEY, JSON.stringify(['']));
+    const { rerender } = rail('/s/run%3Au1');
+    const toggle = screen.getByTestId('rail-group-toggle');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByTestId('rail-session').find((r) => r.getAttribute('href') === '/s/run%3Au1')).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('rail-group-toggle')).toHaveAttribute('aria-expanded', 'false');
+    expect(JSON.parse(window.localStorage.getItem(RAIL_COLLAPSED_KEY)!)).toEqual(['']);
+    // Another session in it opens it again for its view; a page outside Recent leaves the saved fold alone.
+    rerender(<SessionRail runs={RUNS} needRows={[]} navigate={() => {}} pathname="/s/run%3Au2" />);
+    expect(screen.getByTestId('rail-group-toggle')).toHaveAttribute('aria-expanded', 'true');
+    save({ open: ['work', 'recent'], icons: false });
+    rerender(<SessionRail runs={RUNS} needRows={[]} navigate={() => {}} pathname="/jobs" />);
+    expect(screen.getByTestId('rail-group-toggle')).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('a heading opened by you stays open when you leave its pages', () => {
     rail('/memory');
     fireEvent.click(screen.getByTestId('rail-sec-toggle-govern')); // shut the view's opening
@@ -301,6 +339,16 @@ describe('the icon rail', () => {
     fireEvent.click(screen.getByTestId('rail-fold'));
     fireEvent.click(screen.getByTestId('rail-fold'));
     expect(screen.getByTestId('session-rail')).toHaveAttribute('data-rail', 'full');
+  });
+
+  it('unfolding a rail that started folded still watches the list for more below (codex r1)', () => {
+    const sh = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('wk-rail-groups') ? 600 : 0; });
+    const ch = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('wk-rail-groups') ? 200 : 0; });
+    save({ open: ['work'], icons: true });
+    rail('/');
+    fireEvent.click(screen.getByTestId('rail-fold'));
+    expect(screen.getByTestId('session-rail').querySelector('.wk-rail-groups')).toHaveAttribute('data-more-below', 'true');
+    sh.mockRestore(); ch.mockRestore();
   });
 
   it('the heading holding the page on screen is marked', () => {
