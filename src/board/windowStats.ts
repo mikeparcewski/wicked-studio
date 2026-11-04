@@ -81,7 +81,7 @@ export interface StatusCounts {
   total: number;
   /** Moving under its own power (planning/distributing/executing). */
   active: number;
-  /** `awaiting_human` — waiting on a person. */
+  /** Waiting on a person: `awaiting_human`, and a live run marked held by a Needs-you row (crew#1042). */
   gates: number;
   /** `status === 'failed'` only (J5/A5: cancelled is not failed). */
   failed: number;
@@ -97,7 +97,7 @@ export function statusCounts(runs: SessionView[]): StatusCounts {
   for (const v of runs) {
     if (v.session.archived_at != null) continue;
     c.total += 1;
-    // (crew#1042) A live run a Needs-you row holds waits on you: it counts with the gates, not as working.
+    // (crew#1042) A live run marked held (a Needs-you row holds it) waits on you: it counts with the gates, not as working.
     const o = isHeldRun(v.session) ? 'gate' : outcomeOf(v.session.status);
     if (o === 'run') c.active += 1;
     else if (o === 'gate') c.gates += 1;

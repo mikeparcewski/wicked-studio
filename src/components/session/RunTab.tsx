@@ -45,7 +45,7 @@ import { FileViewer } from '../FileViewer.js';
 import { ActivityTail, EvidenceTab, GoalBrief, HelpersList, RunSection, SignIns, StepsList } from '../sheets/ObjectSheet.js';
 import { PANEL_SECTIONS, panelStateKind, quietSections, sectionOpen, type PanelSectionId } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
-import { useHeldRuns } from '../../store/heldRuns.js';
+import { useHeldMarkedView } from '../../hooks/useHeldMarked.js';
 import { isHeldRun } from '../../board/heldRuns.js';
 import { TeamRosterLines } from './TeamRosterLines.js';
 import { panelRows, pluginSections } from '../../board/runPluginPanels.js';
@@ -131,8 +131,10 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // The whole log (not only while executing): a finished run's delivery receipt reads it too.
   const { events } = useRunEvents(id);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
-  // (crew#1042) Held by a Needs-you row (an orphan, a stall): the status line and helpers read it. Subscribed.
-  const held = useHeldRuns((s) => s.held.has(id)) || isHeldRun(view.session);
+  // (crew#1042) Held by a Needs-you row (an orphan, a stall): the status line, the plan's marker and the helpers
+  // read the view marked from the shared held set (subscribed).
+  const shown = useHeldMarkedView(view);
+  const held = isHeldRun(shown.session);
   // (J4 0.16.6) The step silent past crew's quiet mark: the Now section says so, as the header does.
   const silent = useSilentStep(view);
   const floor = useRunningFloor(view);
@@ -245,7 +247,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
     now: (
       <Section id="now" {...fold} summary={silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word}>
         <div data-testid="run-tab-now" className="wk-run-tab-block">
-          <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(view, chain, gate, action, silent?.minutes ?? null)}</p>
+          <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(shown, chain, gate, action, silent?.minutes ?? null)}</p>
           {(started !== null || ended !== null) && (
             <p data-testid="run-tab-times" className="wk-run-tab-muted">
               {started !== null && `Started ${ago(started)} ago`}{started !== null && ended !== null && ' · '}{ended !== null && `ended ${ago(ended)} ago`}
@@ -299,7 +301,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
               {chain.steps.map((step) => (
                 <li key={step.id} data-testid="run-tab-phase" data-state={step.state} data-current={step === current ? 'true' : 'false'} className="wk-run-tab-phase">
                   {(step.state === 'done' || step.state === 'checked') && <span aria-label="Done">✓ </span>}
-                  {step.label}{step.state === 'checked' && <span className="wk-run-tab-pill">checked</span>}{step.state === 'failed' && <span className="wk-run-tab-pill">failed</span>}{step === current && <span className="wk-run-tab-pill">{view.session.status === 'awaiting_human' ? 'waiting on you' : 'now'}</span>}
+                  {step.label}{step.state === 'checked' && <span className="wk-run-tab-pill">checked</span>}{step.state === 'failed' && <span className="wk-run-tab-pill">failed</span>}{step === current && <span className="wk-run-tab-pill">{view.session.status === 'awaiting_human' || held ? 'waiting on you' : 'now'}</span>}
                 </li>
               ))}
             </ol>

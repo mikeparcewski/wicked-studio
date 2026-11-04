@@ -28,7 +28,7 @@ import { knowledgeMarks, type MarkTarget } from '../board/repoKnowledge.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { KnowMarks } from './RepoKnowledge.js';
 import { RepoGraphModal } from './RepoGraphModal.js';
-import { useHeldRuns } from '../store/heldRuns.js';
+import { useHeldMarked } from '../hooks/useHeldMarked.js';
 import { RequirementsModal } from './RequirementsModal.js';
 
 type SourceMode = 'local' | 'remote';
@@ -139,9 +139,10 @@ const CAPTURE_TONE: Record<string, 'quiet' | 'run' | 'fail'> = {
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
   usePageChatFor('repos', 'Knows Repositories: each registered repository, its code graph and its work.', 'repos-page');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
-  const [runs, setRuns] = useState<SessionView[]>([]);
-  // (crew#1042) The runs a Needs-you row holds: the fleet folds them as waiting, not working. Subscribed.
-  const heldIds = useHeldRuns((s) => s.held);
+  const [rawRuns, setRuns] = useState<SessionView[]>([]);
+  // (crew#1042) The runs, marked from the shared held set (subscribed): the fleet folds a run a Needs-you row
+  // holds as waiting, not working, and each card's words follow it.
+  const runs = useHeldMarked(rawRuns);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [search, setSearch] = useState('');
@@ -385,8 +386,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   // ── The fleet models — one fold per card, shared by grid, chips and tiles ──
   const fleet = useMemo(
     () => repoFleetModels(repos, repoRuns, attachedAt, windowIds),
-    // heldIds: repoFleetModels reads the shared held set (isHeldRun), so a change in it re-folds.
-    [repos, repoRuns, attachedAt, windowIds, heldIds],
+    [repos, repoRuns, attachedAt, windowIds],
   );
   const activeRepoN = fleet.filter((m) => m.activeNow).length;
   // F-2R2-003: READY means the onboard completed AND the engine names no live-graph gap; a
@@ -721,7 +721,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     const isRerunning = rerunning[repo.id] ?? false;
                     const isCapturing = capturing[repo.id] ?? false;
                     const runErr = rerunError[repo.id];
-                    const activeCount = m.windowed.filter((v) => !['completed', 'cancelled', 'failed', 'awaiting_human'].includes(v.session.status)).length;
+                    // The fold's own count (crew#1042): a held run waits on you, so it is not "working".
+                    const activeCount = counts.active;
                     const state = graphState(m);
                     const ready = readiness.get(repo.id) ?? 'never';
                     const last = lastActivity(repo.id, repoRuns);

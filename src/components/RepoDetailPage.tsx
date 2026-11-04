@@ -18,7 +18,7 @@ import { announceHistoryChange, keepEntryState, useHistoryEntryValue } from '../
 import { knowledgeMarks } from '../board/repoKnowledge.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { KnowMarks } from './RepoKnowledge.js';
-import { useHeldRuns } from '../store/heldRuns.js';
+import { useHeldMarked } from '../hooks/useHeldMarked.js';
 import { isHeldRun } from '../board/heldRuns.js';
 import { EmptyState, PageFrame, SectionTitle, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
 
@@ -66,11 +66,11 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const showText = useDisplayText();
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
-  const [runs, setRuns] = useState<SessionView[]>([]);
+  const [rawRuns, setRuns] = useState<SessionView[]>([]);
   const [runsFailed, setRunsFailed] = useState(false);
-  // (crew#1042) The runs a Needs-you row holds (the shared set): not "working now", and each row's word
-  // (statusWord) says it waits on you. Subscribed, so the page follows the set.
-  const heldIds = useHeldRuns((s) => s.held);
+  // (crew#1042) The runs, marked from the shared held set (subscribed): a run a Needs-you row holds is not
+  // "working now", and each row's word (statusWord) says it waits on you.
+  const runs = useHeldMarked(rawRuns);
   const [graph, setGraph] = useState<CodeGraphData | null>(null);
   // studio#461: a failed graph read is its own state, never "not indexed".
   const [graphFailed, setGraphFailed] = useState<string | null>(null);
@@ -176,7 +176,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
     );
   }
 
-  const active    = runs.filter(v => !TERMINAL_STATUSES.has(v.session.status) && !heldIds.has(v.session.id) && !isHeldRun(v.session));
+  const active    = runs.filter(v => !TERMINAL_STATUSES.has(v.session.status) && !isHeldRun(v.session));
   const completed = runs.filter(v => v.session.status === 'completed');
   const failed    = runs.filter(v => v.session.status === 'failed' || v.session.status === 'cancelled');
 

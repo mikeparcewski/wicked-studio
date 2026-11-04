@@ -12,7 +12,8 @@ its trail ends on the engine's `runOrphaned` report (crew#830): no worker, nothi
   3b. THE RUN PAGE AGREES (crew#1042): the run's status sentence reads "Waiting on you — see Needs you", never
      "… is running", and the chain marks its step "waiting on you", never "now" (the shared held set).
   4. RESUME WORKS: Resume → POST /runs/r-orphan/resume (GET /__fixture/resume-posts records it); the
-     re-read trail carries the dispatch after the report, and the row goes.
+     re-read trail carries the dispatch after the report, and the row goes, and with it the hold: the run
+     page's status sentence no longer waits on you (crew#1042).
   5. 0 page errors.
 
 Captures: e2e/shots/desk-orphaned-*.png. Env: FEEDBACK_PORT (default 4371).
@@ -121,14 +122,15 @@ with sync_playwright() as p:
     except Exception:
         fail("run-page-agrees", {"why": "the status sentence does not wait on you",
                                  "sentence": sentence.text_content() if sentence.count() else None})
-    marks = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"chain-step\"][data-now]')].map((e) => "
+    marks = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"chain\"][data-run-id=\"r-orphan\"] [data-testid=\"chain-step\"][data-now]')].map((e) => "
                           "({now: e.getAttribute('data-now'), word: e.querySelector('[data-testid=\"chain-step-now\"]')?.textContent, "
                           "label: e.getAttribute('aria-label')}))")
     page.locator('[data-testid="chat-run-details"] > summary').first.click()
     page.screenshot(path=str(SHOTS / "desk-orphaned-run-page.png"))
     check("run-page-agrees",
           (sentence.text_content() or "").startswith("Waiting on you — see Needs you")
-          and all(m["now"] == "wait" and m["word"] == "waiting on you" and "working" not in (m["label"] or "") for m in marks),
+          and len(marks) == 1 and marks[0]["now"] == "wait" and marks[0]["word"] == "waiting on you"
+          and "working" not in (marks[0]["label"] or ""),
           sentence=sentence.text_content(), marks=marks)
 
     # ── 4. Resume works ──────────────────────────────────────────────────────────
@@ -149,6 +151,21 @@ with sync_playwright() as p:
                                       "text": page.get_by_test_id("session-orphaned").inner_text()})
     page.screenshot(path=str(SHOTS / "desk-orphaned-resumed.png"))
     check("row-goes-after-resume", page.get_by_test_id("session-orphaned").count() == 0)
+    # crew#1042: the hold clears in-session: crew's live `unitDispatched` after the resume (here the
+    # fixture's /ws fan-out) closes the Watchtower's orphan row, the Needs-you fold drops it, and the run
+    # page, still open, no longer waits on you (no stale verdict behind a memo).
+    req = urllib.request.Request(f"{origin}/__fixture/broadcast", method="POST", headers={"content-type": "application/json"},
+                                 data=json.dumps({"frames": [{"type": "unitDispatched", "session": "r-orphan", "ord": 1, "attempt": 1,
+                                                              "cli": "claude", "ts": int(time.time() * 1000), "seq": 9}]}).encode())
+    urllib.request.urlopen(req, timeout=5).read()
+    try:
+        page.wait_for_function(
+            "() => !(document.querySelector('[data-testid=\"session-status-sentence\"]')?.textContent || 'Waiting').startsWith('Waiting on you')",
+            timeout=15000)
+    except Exception:
+        fail("hold-clears-after-resume", {"why": "the status sentence still waits on you after the hold cleared",
+                                          "sentence": page.get_by_test_id("session-status-sentence").first.text_content()})
+    check("hold-clears-after-resume", True, sentence=page.get_by_test_id("session-status-sentence").first.text_content())
 
     # ── 5. 0 page errors ─────────────────────────────────────────────────────────
     check("no-page-errors", len(errors) == 0, errors=errors[:5])
