@@ -122,6 +122,16 @@ describe('the wire, read defensively', () => {
     expect(knowledgePayload(p)).toMatchObject({ relation: 'support.assignments', source: 'support-pg', links: [{ rel: 'joins', text: 'joins support.tickets on ticket_id = id (matching name and type; every value matches)' }] });
   });
 
+  it('with more than one source, a connection says which source each table is in', () => {
+    const byKey = new Map([
+      ['a', { key: 'a', kind: 'table' as const, label: 'public.customers', source: 'eu-pg' }],
+      ['b', { key: 'b', kind: 'table' as const, label: 'public.addresses', source: 'eu-pg' }],
+    ]);
+    const e = { rel: 'joins', from: 'a', to: 'b', confidence: 1, evidence: null, owner: null };
+    expect(edgeWords(e, byKey, true)).toBe('public.customers in eu-pg joins public.addresses in eu-pg');
+    expect(edgeWords(e, byKey)).toBe('public.customers joins public.addresses');
+  });
+
   it('says an edge in words, with its evidence', () => {
     const m = readKnowledgeMap(MAP);
     const byKey = new Map(m.nodes.map((n) => [n.key, n]));

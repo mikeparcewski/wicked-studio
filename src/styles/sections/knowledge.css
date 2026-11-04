@@ -2,7 +2,7 @@
  * A data shape's card in the shared review; the source sheet's Profile box. Tokens only; each node kind has a shape
  * AND a colour, each typed edge a line style AND its name, so nothing is told by colour alone. */
 
-.wk-know { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.wk-know { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; overflow-wrap: anywhere; }
 .wk-know-map { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .wk-know-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); gap: var(--space-4); align-items: start; min-width: 0; }
 .wk-know-canvas { position: relative; min-width: 0; height: 460px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); overflow: hidden; }

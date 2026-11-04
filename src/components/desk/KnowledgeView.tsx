@@ -23,12 +23,17 @@ type MapRead = { phase: 'loading' } | { phase: 'ok'; map: KnowledgeMapResponse }
 
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
-/** One typed edge in words: "support.tickets joins support.regions on region_id = id (a foreign key)". Never throws. */
-export function edgeWords(e: KnowledgeMapEdge, byKey: ReadonlyMap<string, KnowledgeMapNode>): string {
+/**
+ * One typed edge in words: "support.tickets joins support.regions on region_id = id (a foreign key)". With more than
+ * one source on the map, a table says its source too ("public.customers in eu-pg"), as code says its repository.
+ * Never throws.
+ */
+export function edgeWords(e: KnowledgeMapEdge, byKey: ReadonlyMap<string, KnowledgeMapNode>, sourceOfTables = false): string {
   const name = (k: string): string => {
     const n = byKey.get(k);
     if (n === undefined) return k;
-    return n.kind === 'code' && n.repo !== undefined ? `${n.label} in ${n.repo}` : n.label;
+    if (n.kind === 'code' && n.repo !== undefined) return `${n.label} in ${n.repo}`;
+    return sourceOfTables && n.kind === 'table' && n.source !== undefined ? `${n.label} in ${n.source}` : n.label;
   };
   const ev = e.evidence ?? {};
   const basis = ev['basis'] === 'fk' ? 'a foreign key' : ev['basis'] === 'name_type' ? 'matching name and type' : ev['basis'] === 'name' ? 'named alike' : null;
@@ -183,7 +188,7 @@ export function KnowledgeView(): React.ReactElement {
                     {typed.map((e) => (
                       <li key={`${e.rel}:${e.from}:${e.to}:${e.owner ?? ''}`} data-rel={e.rel} data-testid="knowledge-connection">
                         <span className="wk-know-line" data-rel={e.rel} aria-hidden />
-                        <span>{edgeWords(e, byKey)}</span>
+                        <span>{edgeWords(e, byKey, map.sources.length > 1)}</span>
                       </li>
                     ))}
                   </ul>
