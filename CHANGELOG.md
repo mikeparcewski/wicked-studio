@@ -127,6 +127,13 @@ npm publish dates. Every version listed here exists on
     Project select that was hidden under Search and filter.
 
 ### Fixed
+- **An Apps line chart draws lines, not filled shapes (studio#963).** In the wicked-apps runtime's stylesheet each
+  `.wk-series-N` rule sets `fill` and `stroke`, and it came after `.wk-stroke { fill: none }` with the same specificity,
+  so a line series filled the shape between its points and its first point in the series colour (the Escalations
+  sample's "SLA breaches per week" and every real line chart), the line over an area filled the area in solid colour,
+  and an area gained an outline. The role rules are now scoped to the chart and placed after the palette. Checked in
+  the runtime test (computed `fill: none` / `stroke: none`) and in the apps runtime journey on every engine, which also
+  reads each chart's screenshot: the series colour covers about 0.6% of it (25-35% before the fix).
 - **Document, deck, page and video runs (round 12, from a rig pass over each).**
   - A gate never offers a reviewer the engine refuses: the choices read crew's refused set
     (`WorkUnit.reassign_refused`), so "Approve and retry with <seat>" is never a 409.

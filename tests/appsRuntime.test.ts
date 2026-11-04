@@ -21,15 +21,21 @@ const SPEC: AppSpec = {
     { id: 'chart', type: 'chart', chart: 'bar', data: { query: 'by' }, x: 'region', series: [{ column: 'n', color: '#ff0000;background:url(x)' }], box: { x: 0, y: 1, w: 6, h: 4 } },
     { id: 'tickets', type: 'table', data: { query: 't' }, rowActions: [{ label: 'Assign to me', action: 'assign' }], box: { x: 0, y: 5, w: 12, h: 4 } },
     { id: 'pic', type: 'image', src: 'https://evil.example/x.png', alt: 'nope', box: { x: 9, y: 0, w: 3, h: 2 } },
+    { id: 'trend', type: 'chart', chart: 'line', data: { query: 'per' }, x: 'day', series: [{ column: 'a' }, { column: 'b' }], box: { x: 0, y: 9, w: 6, h: 4 } },
+    { id: 'trend_area', type: 'chart', chart: 'area', data: { query: 'per' }, x: 'day', series: [{ column: 'a' }], box: { x: 6, y: 9, w: 6, h: 4 } },
   ] }],
   queries: [
     { id: 'k', source: 's', kind: 'sql', output: [{ name: 'n', type: 'integer' }] },
     { id: 'by', source: 's', kind: 'sql', output: [{ name: 'region', type: 'string' }, { name: 'n', type: 'integer' }] },
     { id: 't', source: 's', kind: 'sql', output: [{ name: 'id', type: 'integer' }, { name: 'subject', type: 'string' }] },
+    { id: 'per', source: 's', kind: 'sql', output: [{ name: 'day', type: 'string' }, { name: 'a', type: 'integer' }, { name: 'b', type: 'integer' }] },
   ],
   actions: [{ id: 'assign', kind: 'row-write', source: 'w', table: 's.t', op: 'update', set: { owner: { kind: 'viewer', claim: 'email' } }, key: { id: { kind: 'param', name: 'id' } } }],
 };
-const ROWS: Record<string, unknown[][]> = { k: [[HOSTILE[1]]], by: [[HOSTILE[0], 3], ['APAC', 1]], t: HOSTILE.map((h, i) => [i + 1, h]) };
+const ROWS: Record<string, unknown[][]> = {
+  k: [[HOSTILE[1]]], by: [[HOSTILE[0], 3], ['APAC', 1]], t: HOSTILE.map((h, i) => [i + 1, h]),
+  per: [['Mon', 3, 1], ['Tue', 5, 2], ['Wed', 2, 4], ['Thu', 6, 3]],
+};
 
 function mountTemplate(): void {
   const style = /<style id="wk-apps-sheet">([\s\S]*?)<\/style>/u.exec(TEMPLATE)![1]!;
@@ -107,6 +113,24 @@ describe('§7.1: CSSOM only', () => {
     mountTemplate();
     const s = new Sheet(document.getElementById('wk-apps-sheet') as HTMLStyleElement);
     expect(() => (s as unknown as { rule(x: string): unknown }).rule('body{}*')).toThrow(/vocabulary/u);
+  });
+});
+
+describe('studio#963: a line chart draws lines, not shapes', () => {
+  it('every line series and the line over an area resolve to fill none; an area has no outline; the colour still reaches the stroke', async () => {
+    await boot({ framed: false, mode: 'preview' });
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-component="trend"] polyline.wk-stroke')).toHaveLength(2));
+    const lines = [...document.querySelectorAll('[data-component="trend"] polyline.wk-stroke')];
+    const overArea = [...document.querySelectorAll('[data-component="trend_area"] polyline.wk-stroke')];
+    const areas = [...document.querySelectorAll('[data-component="trend_area"] path.wk-area')];
+    expect(overArea).toHaveLength(1);
+    expect(areas).toHaveLength(1);
+    // The series rules set fill and stroke; the role rules must win over them (they lost on order before the fix).
+    // jsdom resolves by source order only; e2e/apps_runtime_test.py step 6b checks the real cascade in every engine.
+    for (const l of [...lines, ...overArea]) expect(getComputedStyle(l).fill, l.getAttribute('class')!).toBe('none');
+    for (const a of areas) expect(getComputedStyle(a).stroke).toBe('none');
+    expect(getComputedStyle(lines[0]!).stroke).toMatch(/--c0|--s0/u);
+    expect(getComputedStyle(lines[1]!).strokeDasharray).toBe('5 4');
   });
 });
 
