@@ -14,7 +14,10 @@ described SQL source). Everything goes through the studio UI, at 1440x900:
   6. EDIT STILL WORKS: a component's title renamed in place in Edit lands one version (`you`).
   7. LIVE NUMBERS MOVE: --bump runs a command that changes the data (the test database's writer login, never the
      saved source); the card's number changes within one refresh; then --unbump puts it back.
-  8. 0 page errors overall. Shots: <shots>/k5-*.png.
+  8. THE PANEL (operator 2026-11-04): it opens on Chat; selecting a tile in Edit switches it to Properties for that
+     tile; back on Chat the draft is intact and the focus is in the composer; collapsed, it stays collapsed across a
+     reload (`--only panel` runs these alone, on `--resume-app`, sending nothing).
+  9. 0 page errors overall. Shots: <shots>/k5-*.png.
 
 LIVE (e2e/run_journeys.py lists it in LIVE: the ordinary runner never starts it). Run it by hand against a rig:
 usage: apps_chat_live_test.py --base http://127.0.0.1:7721 --shots DIR --source support-pg [--bump CMD --unbump CMD]
@@ -100,6 +103,51 @@ def wait_turn_end(slug, run_id, page=None, shot=None):
     return None, app_detail(slug), sorted(seen_steps)
 
 
+def panel_leg(page, slug):
+    """The side panel: Chat by default, a tile selection opens Properties, the draft survives, collapse survives a reload."""
+    page.goto(f"{BASE}/apps/{slug}", wait_until="domcontentloaded")
+    page.get_by_test_id("app-panel").wait_for(timeout=30000)
+    page.wait_for_timeout(3000)
+    panel = page.get_by_test_id("app-panel")
+    if panel.get_attribute("data-collapsed") == "true":
+        page.get_by_test_id("app-panel-toggle").click()
+        page.wait_for_timeout(500)
+    check("panel_default_chat", panel.get_attribute("data-tab") == "chat" and page.get_by_test_id("app-panel-tab-chat").get_attribute("aria-selected") == "true",
+          tab=panel.get_attribute("data-tab"))
+    box = page.locator('[data-testid="app-chat"] [data-testid="app-composer-input"]')
+    draft = "keep this draft: add a filter by region"
+    box.fill(draft)
+    page.get_by_test_id("apps-mode-edit").click()
+    page.wait_for_timeout(2500)
+    f = next((x for x in page.frames if "/editors/wicked-apps/" in x.url), None)
+    comp = None
+    if f is not None:
+        cell = f.locator("[data-component]").first
+        comp = cell.get_attribute("data-component")
+        cell.click(position={"x": 12, "y": 12})
+        page.wait_for_timeout(1500)
+    props_comp = page.get_by_test_id("app-properties").get_attribute("data-component") if page.get_by_test_id("app-properties").count() else None
+    page.screenshot(path=f"{args.shots}/k5-panel-props-journey.png")
+    check("tile_opens_properties", panel.get_attribute("data-tab") == "properties" and props_comp == comp and comp is not None, tab=panel.get_attribute("data-tab"), selected=comp, properties=props_comp)
+    page.get_by_test_id("app-panel-tab-chat").click()
+    page.wait_for_timeout(500)
+    focused = page.evaluate("() => document.activeElement && document.activeElement.getAttribute('data-testid')")
+    check("chat_keeps_draft", box.input_value() == draft and focused == "app-composer-input", value=box.input_value(), focused=focused)
+    box.fill("")
+    page.get_by_test_id("apps-mode-preview").click()
+    page.get_by_test_id("app-panel-toggle").click()
+    page.wait_for_timeout(500)
+    page.reload(wait_until="domcontentloaded")
+    page.get_by_test_id("app-panel").wait_for(timeout=30000)
+    page.wait_for_timeout(2500)
+    collapsed = page.get_by_test_id("app-panel").get_attribute("data-collapsed")
+    expanded = page.get_by_test_id("app-panel-toggle").get_attribute("aria-expanded")
+    page.screenshot(path=f"{args.shots}/k5-panel-collapsed-journey.png")
+    check("collapse_survives_reload", collapsed == "true" and expanded == "false", collapsed=collapsed, aria_expanded=expanded)
+    page.get_by_test_id("app-panel-toggle").click()
+    page.wait_for_timeout(500)
+
+
 def send(page, text):
     box = page.locator('[data-testid="app-chat"] [data-testid="app-composer-input"]')
     box.click()
@@ -142,6 +190,10 @@ with sync_playwright() as p:
         check("dashboard_moves", moved is not None, before=before, after=moved, secs=round(time.time() - t0))
 
     if args.only == "dash":
+        check("page_errors", len(report["errors"]) == 0, errors=report["errors"])
+        finish(0)
+    if args.only == "panel":
+        panel_leg(page, args.resume_app)
         check("page_errors", len(report["errors"]) == 0, errors=report["errors"])
         finish(0)
     if args.resume_app:
@@ -243,6 +295,9 @@ with sync_playwright() as p:
     page.screenshot(path=f"{args.shots}/k5-edit-rename.png")
     check("edit_rename", renamed is not None and renamed["receipt"] == "you", before=v0, head=renamed)
     page.get_by_test_id("apps-mode-preview").click()
+
+    # 8. the side panel
+    panel_leg(page, slug)
 
     check("page_errors", len(report["errors"]) == 0, errors=report["errors"])
     finish(0)
