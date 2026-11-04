@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 300,
-    "occurrences": 4283,
-    "static": 3624,
-    "dynamic": 121,
-    "computed": 48
+    "files": 302,
+    "occurrences": 4318,
+    "static": 3629,
+    "dynamic": 140,
+    "computed": 49
   },
   "static": [
     {
@@ -14795,6 +14795,12 @@
       ]
     },
     {
+      "testId": "run-data-use",
+      "files": [
+        "src/components/session/RunDataUse.tsx"
+      ]
+    },
+    {
       "testId": "run-degraded",
       "files": [
         "src/components/RunDegradedNote.tsx",
@@ -14857,6 +14863,12 @@
     },
     {
       "testId": "run-delivery-codebase-zip",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-delivery-data-use",
       "files": [
         "src/components/RunDelivery.tsx"
       ]
@@ -15930,6 +15942,12 @@
       ]
     },
     {
+      "testId": "session-gate-data-use",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-dead-seat",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -16465,6 +16483,12 @@
     },
     {
       "testId": "session-proposal-consequence",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-data-use",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -18199,6 +18223,13 @@
     {
       "testId": "source-address-tick",
       "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-agent-controls",
+      "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/SourceSheet.tsx"
       ]
     },
@@ -21894,6 +21925,12 @@
       ]
     },
     {
+      "pattern": "*-busy",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
       "pattern": "*-button",
       "files": [
         "src/components/ui/OverflowMenu.tsx"
@@ -21927,19 +21964,28 @@
     {
       "pattern": "*-confirm",
       "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx"
       ]
     },
     {
       "pattern": "*-confirm-off",
       "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx"
       ]
     },
     {
       "pattern": "*-confirm-on",
       "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
+      "pattern": "*-consequence",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -21971,8 +22017,15 @@
     {
       "pattern": "*-error",
       "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx",
         "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-every",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -22020,6 +22073,12 @@
         "src/components/ui/Combobox.tsx",
         "src/components/ui/FilePick.tsx",
         "src/components/voice/VoiceModal.tsx"
+      ]
+    },
+    {
+      "pattern": "*-label",
+      "files": [
+        "src/components/session/RunDataUse.tsx"
       ]
     },
     {
@@ -22091,6 +22150,30 @@
       ]
     },
     {
+      "pattern": "*-project-*",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-projects",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-projects-full",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-projects-state",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
       "pattern": "*-qe",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
@@ -22099,7 +22182,38 @@
     {
       "pattern": "*-query",
       "files": [
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-query-state",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-recent",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-recent-none",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-recent-row",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-recent-unknown",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -22112,6 +22226,12 @@
       "pattern": "*-request",
       "files": [
         "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "pattern": "*-reread",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -22136,6 +22256,24 @@
       "pattern": "*-search",
       "files": [
         "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
+      "pattern": "*-see",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-see-first",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-see-state",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -22188,6 +22326,12 @@
       ]
     },
     {
+      "pattern": "*-structure-only",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
       "pattern": "*-summary",
       "files": [
         "src/components/sources/TestCall.tsx"
@@ -22218,6 +22362,12 @@
       ]
     },
     {
+      "pattern": "*-tried",
+      "files": [
+        "src/components/session/RunDataUse.tsx"
+      ]
+    },
+    {
       "pattern": "*-unsaved",
       "files": [
         "src/components/sources/AllowWritesSwitch.tsx"
@@ -22226,7 +22376,8 @@
     {
       "pattern": "*-unverified",
       "files": [
-        "src/components/session/AssuranceReceipt.tsx"
+        "src/components/session/AssuranceReceipt.tsx",
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {
@@ -22733,6 +22884,8 @@
         "src/components/session/CodebaseDownload.tsx",
         "src/components/session/PowerMode.tsx",
         "src/components/session/RunConversation.tsx",
+        "src/components/session/RunDataUse.tsx",
+        "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx",
         "src/components/sources/DataPanel.tsx",
         "src/components/sources/SecretField.tsx",
@@ -22817,6 +22970,12 @@
       "expression": "testId = 'skeleton'",
       "files": [
         "src/components/ui/StateBanner.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'source-agent-controls'",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
       ]
     },
     {

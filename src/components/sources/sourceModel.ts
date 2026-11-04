@@ -260,9 +260,27 @@ export function relationName(r: Pick<SourceCatalogRelation, 'schema' | 'name'>):
   return r.schema === null ? r.name : `${r.schema}.${r.name}`;
 }
 
-/** "What agents see" (DES §5.2): the structure, the declared enums, never a value. */
-export function agentsSeeWords(kind: SheetKind | 'sqlite', catalog: SourceCatalog | null): string {
-  const tail = 'No values from rows, ever. Agents building an app can’t call this source.';
+/**
+ * What agents may have of a SQL source, from its Agents box (DES-KNOWLEDGE-DATA-001 §7.1): `hidden` (see off),
+ * `on` (query on), `off` (the person can turn query on below), `never` (a dialect crew reads no agent rows from yet),
+ * `unknown` (crew sent switches studio can't read, or couldn't be asked again after a write: no claim either way).
+ * `undefined` = crew sent no
+ * switches (an older crew): agents never get its rows.
+ */
+export type AgentRows = 'hidden' | 'on' | 'off' | 'never' | 'unknown';
+
+/** "What agents see" (DES §5.2): the structure, the declared enums, never a value (unless the person lets agents query it). */
+export function agentsSeeWords(kind: SheetKind | 'sqlite', catalog: SourceCatalog | null, agentRows?: AgentRows): string {
+  // With the Agents box, a SQL source's rows reach agents only once a person turns query on there.
+  const tail = agentRows === 'on'
+    ? 'Agents in the projects below may also query it, and the rows they read go to their model provider.'
+    : agentRows === 'off'
+      ? 'No values from rows: agents can’t query it unless you turn that on below.'
+      : agentRows === 'never'
+        ? 'No values from rows: agents can read its structure only.'
+        : 'No values from rows, ever. Agents building an app can’t call this source.';
+  if (agentRows === 'unknown') return 'Not known here: studio couldn’t read crew’s agent switches for this source. Agents may see its structure, and its rows if crew lets them query it.';
+  if (agentRows === 'hidden') return 'Nothing while “Agents can see this structure” is off below: no agent lists it, reads its structure or queries it.';
   if (kind === 'crew') return 'The allowlisted routes and the shape of what each answers. Reads run in crew as the person viewing. Agents building an app can’t call this source.';
   if (kind === 'rest' || kind === 'mcp') {
     return 'Each operation’s name, arguments and response schema, and the enums the schema declares. No values from responses, ever. Agents building an app can’t call this source.';
