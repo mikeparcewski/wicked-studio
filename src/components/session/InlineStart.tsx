@@ -74,6 +74,7 @@ export function InlineStart({
   const [pickedRepo, setPickedRepo] = useState<string | null>(null);
   const [pickedProject, setPickedProject] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [allChoices, setAllChoices] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const entryId = entry?.id ?? null;
   // Another card starts its own choices.
@@ -185,8 +186,8 @@ export function InlineStart({
       ? `Enter makes the app${projectName !== null ? ` in project ${projectName}` : ''}: your words are its first message, and its page opens on that turn.`
       : `Enter starts ${entry.title}${where !== '' ? ` ${where}` : ''} in this chat. It asks you to approve the plan before any step runs.`
         + (leftOut.length > 0 ? ` Left out until you turn them on: ${leftOut.join(', ')}.` : '');
-  const repoChoices = registered.slice(0, CHOICES_MAX);
-  const projectChoices = filed.slice(0, CHOICES_MAX);
+  const repoChoices = allChoices ? registered : registered.slice(0, CHOICES_MAX);
+  const projectChoices = allChoices ? filed : filed.slice(0, CHOICES_MAX);
   return (
     <div data-testid="composer-start" data-entry={entry?.id ?? ''} role="group" aria-label="What this start needs" className="wk-composer-chips wk-composer-start">
       {line !== null && <span data-testid="composer-start-line" className="wk-composer-note">{busy ? 'Starting…' : line}</span>}
@@ -197,13 +198,17 @@ export function InlineStart({
             <button key={r.id} type="button" data-testid="composer-start-repo" data-repo={r.id} disabled={busy}
               onClick={() => setPickedRepo(r.id)} className="wk-composer-chip wk-composer-suggestion">{r.name}</button>
           ))}
-          {registered.length > CHOICES_MAX && <span className="wk-composer-note">{registered.length - CHOICES_MAX} more on Repositories</span>}
-          <a href={registerRepoPath(project)} data-testid="composer-start-add-repo" className="wk-link"
+          {!allChoices && registered.length > CHOICES_MAX && (
+            <button type="button" data-testid="composer-start-more" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => setAllChoices(true)}>
+              {registered.length - CHOICES_MAX} more
+            </button>
+          )}
+          <a href={registerRepoPath(project)} data-testid="composer-start-add-repo" className="wk-link wk-composer-note"
             onClick={(e) => { e.preventDefault(); navigate(registerRepoPath(project)); }}>Add a repository</a>
         </span>
       )}
       {wantsRepo && repoRef !== null && pickedRepo !== null && (
-        <button type="button" data-testid="composer-start-repo-change" className="wk-btn wk-btn--link" onClick={() => setPickedRepo(null)}>Another repository</button>
+        <button type="button" data-testid="composer-start-repo-change" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => setPickedRepo(null)}>Another repository</button>
       )}
       {wantsProject && project === null && (
         <span data-testid="composer-start-projects" role="group" aria-label="Which project?" className="wk-composer-start-need">
@@ -212,6 +217,11 @@ export function InlineStart({
             <button key={p.id} type="button" data-testid="composer-start-project" data-project={p.id} disabled={busy}
               onClick={() => setPickedProject(p.id)} className="wk-composer-chip wk-composer-suggestion">{p.name}</button>
           ))}
+          {!allChoices && filed.length > CHOICES_MAX && (
+            <button type="button" data-testid="composer-start-more" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => setAllChoices(true)}>
+              {filed.length - CHOICES_MAX} more
+            </button>
+          )}
         </span>
       )}
       {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="composer-start-reduced" />}
