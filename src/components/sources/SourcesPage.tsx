@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { agentAccessOf } from '../../api/sourceAgents.js';
 import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -160,11 +161,13 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     return { ...a, granted: grantedFor !== null && src !== undefined && src.allowWrites === true && grantedFor === (src.descriptorHash ?? null) };
   });
   const count = sources.length;
+  /** A crew with the agent switches (api-types 0.183.0) sends them on its SQL sources. */
+  const anyAgentSwitches = sources.some((s) => s.kind === 'sql' && agentAccessOf(s as { agents?: unknown }) !== null);
   return (
     <CalmPage data-testid="sources-page" className="wk-src-page">
       <CalmHead
         title={PAGE_NAMES.sources}
-        sentence={loading ? 'Reading sources…' : `${count === 0 ? 'No sources yet' : `${count} source${count === 1 ? '' : 's'}`} plus crew’s own API. Apps read them through queries crew checks; agents see their structure, never their rows.`}
+        sentence={loading ? 'Reading sources…' : `${count === 0 ? 'No sources yet' : `${count} source${count === 1 ? '' : 's'}`} plus crew’s own API. Apps read them through queries crew checks; agents see ${anyAgentSwitches ? 'a source’s structure, and its rows only where you let them query it' : 'their structure, never their rows'}.`}
         action={<CalmAction label="Add a data source" onClick={openAdd} testId="sources-add" />}
       />
       <div className="wk-src-page-body">
@@ -194,6 +197,13 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
             void refresh();
           }}
           onAllowWrites={setWrites}
+          onAgents={(name, agents) => {
+            setSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)));
+            // A list read that was out before the switch changed is older than it: read again after it.
+            void refresh();
+          }}
+          // The shown switches may be older than crew's (an older write answered late): crew's state, read afresh.
+          onAgentsStale={() => void refresh()}
           onDescribed={(name) => setEpochs((m) => ({ ...m, [name]: (Object.hasOwn(m, name) ? (m[name] ?? 0) : 0) + 1 }))}
           onClose={close}
         />

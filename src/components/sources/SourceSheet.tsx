@@ -13,6 +13,8 @@ import {
   type SourceUploadResponse,
 } from '../../api/sources.js';
 import { useModalEscape } from '../Modal.js';
+import { agentAccessOf, type SourceAgentAccess } from '../../api/sourceAgents.js';
+import { AgentAccess } from './AgentAccess.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
 import {
@@ -66,12 +68,16 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescribed, onClose }: {
+export function SourceSheet({ target, existing, onSaved, onAllowWrites, onAgents, onAgentsStale, onDescribed, onClose }: {
   target: SheetTarget;
   /** Names already registered (a new source of the same name replaces it; the sheet says so). */
   existing: readonly string[];
   onSaved: (server: McpServer) => void;
   onAllowWrites: (name: string, allowed: boolean) => void;
+  /** (DES-KNOWLEDGE-DATA-001 §7.1) crew answered a change of the source's agent switches: the page keeps them. */
+  onAgents?: (name: string, agents: SourceAgentAccess) => void;
+  /** The shown agent switches may be older than crew's: the page reads the sources again. */
+  onAgentsStale?: (name: string) => void;
   /** The source was described again (its tables may have changed). */
   onDescribed?: (name: string) => void;
   onClose: () => void;
@@ -253,6 +259,11 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
 
   const kind = form.kind;
   const isNew = saved === null && target.mode === 'new';
+  /** The saved SQL source's agent switches, when crew sends them (`null`: no Agents box). GraphQL sources carry the
+   *  field too, but crew's switches route refuses them (`not_a_source`), so they get no box. */
+  const agentAccess = saved !== null && saved.kind === 'sql' ? agentAccessOf(saved as { agents?: unknown }) : null;
+  const savedSheetKind = saved !== null ? sheetKindOf(saved) : null;
+  const agentDialect = savedSheetKind === 'postgres' ? 'postgres' : savedSheetKind === 'mysql' ? 'mysql' : 'sqlite';
   const sql = saved?.sql ?? null;
   // What the right column shows: the held preview's describe (new), or the saved source's catalog.
   const shownCatalog: SourceCatalog | null = upload?.catalog ?? catalog?.catalog as SourceCatalog | undefined ?? preview?.source?.catalog ?? null;
@@ -417,7 +428,13 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
                   allowWrites={saved?.allowWrites === true}
                   saved={saved !== null}
                   privileges={shownPrivileges}
-                  onChanged={(allowed) => { if (saved !== null) { setSaved({ ...saved, allowWrites: allowed }); onAllowWrites(saved.name, allowed); } }}
+                  onChanged={(allowed) => {
+                    if (saved === null) return;
+                    // Merged into the CURRENT record: an agent-switch answer landing meanwhile is kept.
+                    const name = saved.name;
+                    setSaved((cur) => (cur !== null && cur.name === name ? { ...cur, allowWrites: allowed } : cur));
+                    onAllowWrites(name, allowed);
+                  }}
                 />
               )}
               {kind === 'mysql' && <div className="wk-src-box"><p className="wk-src-strong">Writes</p><p className="wk-src-note">MySQL sources get no writes in v1: reads only.</p></div>}
@@ -538,9 +555,24 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onDescri
               {kind !== 'upload' || upload !== null ? (
                 <div className="wk-src-box" data-testid="source-agents-see">
                   <p className="wk-src-okline wk-src-strong"><Eye size={16} aria-hidden className="wk-src-ico" />What agents see</p>
-                  <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog)}</p>
+                  <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog, agentAccess === null ? undefined : !agentAccess.see ? 'hidden' : agentDialect !== 'postgres' ? 'never' : agentAccess.query ? 'on' : 'off')}</p>
                 </div>
               ) : null}
+              {/* (DES-KNOWLEDGE-DATA-001 §19 B5) Only when crew sends the switches (api-types 0.183.0): an older crew gets no box. */}
+              {saved !== null && agentAccess !== null && (
+                <AgentAccess
+                  source={saved.name}
+                  dialect={agentDialect}
+                  agents={agentAccess}
+                  data-testid="source-agent-controls"
+                  onChanged={(agents) => {
+                    const name = saved.name;
+                    setSaved((cur) => (cur !== null && cur.name === name ? ({ ...cur, agents } as McpServer) : cur));
+                    onAgents?.(name, agents);
+                  }}
+                  onStale={() => onAgentsStale?.(saved.name)}
+                />
+              )}
             </div>
           </div>
         </div>

@@ -13,6 +13,19 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **The Agents box on a data source, and what a job's agents read (DES-KNOWLEDGE-DATA-001 §7.1, §7.9, §19 B5; crew
+  api-types 0.183.0/0.184.0).** A saved SQL source's sheet has an Agents box: **Agents can see this structure** (on),
+  **Agents can query this source** (off; Postgres only, the one dialect crew's data gate reads rows from; it says that
+  rows go to the agent's model provider, and turning it on takes a second click on a confirmation), and the projects
+  whose agents may use it (none until you tick one, or "Every project on this daemon"). Each change is a person's
+  click, sent to crew's human-only `PUT /sources/:name/agents`; the box shows crew's answer, and crew's refusals in
+  plain words (a 403 says only a person signed in as an operator can change it; a 409 says to turn "see" on first).
+  A late answer never undoes a newer switch: per source, only the newest write's answer is shown, and an older one
+  makes the page read crew again. Below the switches, the source's recent agent queries (time, job link, seat, rows
+  or the refusal; never the SQL). The box is hidden when crew sends no `agents` field (an older crew), and on GraphQL
+  sources, which crew's switches route doesn't take. A job's gate cards and its delivery say which sources its agents
+  read ("Agents read data: support-pg · 3 queries · 12 rows"), or that crew's record could not be read. The shapes are
+  mirrored in `src/api/sourceAgents-wire.ts` until studio pins api-types 0.184.0 or later.
 - **The sidebar folds (operator, 2026-11-04).** Every heading (Work, Insight, Govern, Recent) is a disclosure button
   with a turning chevron and an icon that opens its home page (Work: Projects, Insight: Report, Govern: Steering).
   What is open is this browser's, from the last session (`studio.sidebar.v1`); with nothing saved, or nothing
