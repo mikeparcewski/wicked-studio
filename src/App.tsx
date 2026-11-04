@@ -54,7 +54,8 @@ import { DeskHostedPage, DeskV2, deskTabPath, type HostedTab } from './component
 import { BuildPage } from './components/BuildPage.js';
 import { legacyDeskTarget } from './board/navModel.js';
 import { useDeskStream } from './store/deskStream.js';
-import { SESSION_RAIL_PX, SessionRail } from './components/desk/SessionRail.js';
+import { railWidthPx, SessionRail } from './components/desk/SessionRail.js';
+import { useSidebar } from './store/sidebar.js';
 import { RailDrawer } from './components/ui/RailDrawer.js';
 import { PhoneNeedsBadge } from './components/ui/PhoneNeedsBadge.js';
 import { SessionPage } from './components/session/SessionView.js';
@@ -154,6 +155,8 @@ export function App(): React.ReactElement {
   }, [refresh]);
   const navCollapsed = useHostChrome((s) => s.navCollapsed);
   const phone = usePhone();
+  // The rail folded to its icons is narrower: the full-size chat window starts at its edge.
+  const railIcons = useSidebar((s) => s.icons);
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
   const ingestAnnotation = useAnnotationStore((s) => s.ingest);
@@ -877,7 +880,7 @@ export function App(): React.ReactElement {
         // there), and stands down on a session, whose composer holds this corner.
         bubble={phone && panel !== 'session' && chatMode !== 'minimized'}
       />
-      <ChatWindow phone={phone} railPx={SESSION_RAIL_PX} onEnd={endSystemChat}>
+      <ChatWindow phone={phone} railPx={railWidthPx(railIcons, phone)} onEnd={endSystemChat}>
         {askOpen && (
           <AskDock
             key={askKey}

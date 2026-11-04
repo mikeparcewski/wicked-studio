@@ -30,7 +30,7 @@ import os
 import sys
 import time
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import OPEN_RAIL_SECTIONS, DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4531"))
 W, H = 1440, 700
@@ -99,6 +99,7 @@ def no_hscroll(page) -> bool:
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RAIL_SECTIONS)  # these checks read rows and pages under every heading
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
@@ -114,7 +115,7 @@ with sync_playwright() as p:
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-memory-missing.png"))
         fail("tab", f"no Memory page in the sidebar: {e}")
-    tabs = page.get_by_test_id("rail-nav-govern").locator("a").all_inner_texts()
+    tabs = page.get_by_test_id("rail-nav-govern").locator("a.wk-rail-nav-item").all_inner_texts()
     tab.click()
     page.wait_for_function("() => location.pathname === '/memory'", timeout=8000)
     settled(page)

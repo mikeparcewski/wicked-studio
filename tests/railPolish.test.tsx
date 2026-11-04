@@ -7,6 +7,7 @@ import { clearCachedRoster } from '../src/store/rosterCache.js';
 import { resetSystemStore } from '../src/store/systemSnapshot.js';
 import { ROSTER, WEEK } from './fixtures/seatWeek.js';
 import { makeView } from './factories.js';
+import { openEveryHeading } from './sidebarOpen.js';
 
 /**
  * THE SLICK-DESIGN RAIL POLISH (studio's left-nav redesign): (1) the "+ Start something" row is
@@ -98,6 +99,8 @@ function cleanModel(): void {
 
 beforeEach(() => {
   cleanModel();
+  // Every heading open: these cases read Recent's groups (the fold's default is sidebarSections.test.tsx's).
+  openEveryHeading();
   resetSystemStore();
   getHealth.mockClear();
   getRoster.mockClear();
@@ -191,14 +194,16 @@ describe('the rail redesign', () => {
     expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('aria-current', 'page');
   });
 
-  it("the separator above Build & settings is the foot's own top border — no spacer element", () => {
+  it("the separator above Learn and Build & settings is the foot's own top border — no spacer element", () => {
     render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     const rail = screen.getByTestId('session-rail');
     expect(rail.querySelector('.wk-rail-spacer')).toBeNull();
     const build = screen.getByTestId('desk-rail-build');
-    // It sits in the foot — the foot's border-top (components.css) is the separator; no Workspace label.
+    // They sit in the foot — the foot's border-top (components.css) is the separator; no Workspace label.
+    // Learn is first in it, above Build & settings (operator 2026-11-04).
     expect(build.closest('.wk-rail-foot')).not.toBeNull();
-    expect(build.previousElementSibling).toBeNull();
+    expect(build.previousElementSibling).toBe(screen.getByTestId('nav-learn'));
+    expect(screen.getByTestId('nav-learn').previousElementSibling).toBeNull();
     expect(screen.queryByTestId('rail-foot-label')).toBeNull();
     // Nerve Center is pinned last: its own dock, the rail's last child (sticky in the phone drawer).
     expect(rail.lastElementChild).toBe(screen.getByTestId('rail-nerve-dock'));

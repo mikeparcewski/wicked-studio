@@ -18,12 +18,16 @@ export const NERVE_CENTER_PATH = '/watch';
  * Green only over a fresh, successful read (`nerveState`): a failed or stale read is yellow; a read that
  * has not answered yet is neutral grey (no verdict). The words are a summary ("disk low · 1 needs you"),
  * never an item's title.
+ *
+ * `compact` (the rail folded to icons, operator 2026-11-04: "nerve center should have colored icon too"): the
+ * same tile at icon size, filled the same way by the same state, the words only in its name and tooltip.
  */
-export function NerveCenterTile({ navigate, pathname, waitingOnYou }: {
+export function NerveCenterTile({ navigate, pathname, waitingOnYou, compact = false }: {
   navigate: Navigate;
   pathname: string;
   /** The Desk's settled needs-you count (an older crew's "run waiting on you"). */
   waitingOnYou: number;
+  compact?: boolean;
 }): React.ReactElement {
   const state = useNerveState(waitingOnYou);
   const here = pathname === NERVE_CENTER_PATH || pathname === '/health';
@@ -44,16 +48,17 @@ export function NerveCenterTile({ navigate, pathname, waitingOnYou }: {
       aria-current={here ? 'page' : undefined}
       aria-label={label}
       title={label}
-      className="wk-nc-tile"
+      data-rail-heading={compact ? 'watch' : undefined}
+      className={`wk-nc-tile${compact ? ' wk-nc-tile--icon' : ''}`}
     >
       <span aria-hidden data-testid="nerve-center-light" data-tone={state.tone} className="wk-nc-light">
-        <Activity size={13} strokeWidth={2.5} />
+        <Activity size={compact ? 15 : 13} strokeWidth={2.5} />
       </span>
-      <span className="wk-nc-text">
+      {!compact && <span className="wk-nc-text">
         <span className="wk-nc-name">{PAGE_NAMES.watch}</span>
         <span className="sr-only"> · </span>
         <span data-testid="nerve-center-words" className="wk-nc-words">{state.words}</span>
-      </span>
+      </span>}
     </a>
   );
 }

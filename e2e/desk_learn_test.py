@@ -4,10 +4,11 @@ desk_learn_test.py — Learn (program DES-LEARN §3; the operator-approved mocku
 1440x900 and 390x844, on the in-process fixture. The routes crew 0.157 adds (persona, steering draft) and the
 learning jobs are answered in the page (page.route), every write recorded, so the journey proves what is SENT:
 
-  1. The rail: Learn is first in Work, above Projects, marked "Start here", while studio.firstRun says unused.
+  1. The rail: Learn sits at the foot, above Build & settings, unmarked, while studio.firstRun says unused
+     (operator 2026-11-04: Home does the first run, so Learn no longer leads Work).
   2. /learn has four tabs: Style, Rules, Personality, Brand.
-  3. Personality: a dial re-answers the preview; Save sends PUT /persona {scope:user}; Learn then sits below
-     Evaluate in the rail, unmarked (studio.firstRun.learnUsedAt was written through PUT /settings).
+  3. Personality: a dial re-answers the preview; Save sends PUT /persona {scope:user}; studio.firstRun.learnUsedAt
+     is written through PUT /settings, and Learn stays where it was, at the foot.
   4. Rules: picking a starter POSTs a real steering rule (ui provenance, learn:starter).
   5. Style: a link and a repository become sources; Learn my style starts a steering-author job and a
      capture-learnings job with the style lens; the four stations follow the jobs; the review is two
@@ -114,8 +115,10 @@ def handle(r):
 
 
 errors: list = []
-ADDR_RAIL = """(() => { const g = (id) => [...document.querySelectorAll(`[data-testid="rail-nav-${id}"] a`)].map((a) => a.dataset.testid);
-  return { work: g('work'), insight: g('insight'), mark: document.querySelector('[data-testid="nav-learn-mark"]')?.textContent ?? null }; })()"""
+ADDR_RAIL = """(() => ({ foot: [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-foot a')].map((a) => a.dataset.testid),
+  inGroup: !!document.querySelector('[data-testid="rail-nav"] [data-testid="nav-learn"]'),
+  text: document.querySelector('[data-testid="session-rail"]')?.textContent ?? '' }))()"""
+LEARN_USED = """() => fetch('/api/v1/settings').then((r) => r.json()).then((j) => typeof ((j.settings ?? j)['studio.firstRun'] ?? {}).learnUsedAt === 'number')"""
 NO_HSCROLL = "document.documentElement.scrollWidth <= window.innerWidth + 1"
 
 with sync_playwright() as pw:
@@ -137,7 +140,8 @@ with sync_playwright() as pw:
         if w > 1000:
             page.get_by_test_id("nav-learn").wait_for(timeout=15000)
             rail = page.evaluate(ADDR_RAIL)
-            check("1-rail-unused", rail["work"][:2] == ["nav-learn", "nav-projects"] and rail["mark"] == "Start here", rail=rail)
+            check("1-rail-unused", rail["foot"] == ["nav-learn", "desk-rail-build"] and not rail["inGroup"] and "Start here" not in rail["text"],
+                  foot=rail["foot"], inGroup=rail["inGroup"])
         tabs = page.get_by_test_id("learn-tab").all_inner_texts()
         check(f"2-tabs-{w}", tabs == ["Style", "Rules", "Personality", "Brand"], tabs=tabs)
 
@@ -156,9 +160,9 @@ with sync_playwright() as pw:
         put = [s for s in sent if s["m"] == "PUT" and s["path"] == "/persona"]
         check(f"3b-saved-{w}", len(put) == 1 and put[0]["body"]["scope"] == "user" and put[0]["body"]["persona"]["dials"]["pushback"] == 0)
         if w > 1000:
-            page.wait_for_function("() => [...document.querySelectorAll('[data-testid=\"rail-nav-insight\"] a')].some((a) => a.dataset.testid === 'nav-learn')", timeout=15000)
+            page.wait_for_function(LEARN_USED, timeout=15000, polling=500)
             rail = page.evaluate(ADDR_RAIL)
-            check("3c-rail-used", rail["insight"][-1] == "nav-learn" and "nav-learn" not in rail["work"] and rail["mark"] is None, rail=rail)
+            check("3c-rail-used", rail["foot"] == ["nav-learn", "desk-rail-build"] and not rail["inGroup"], foot=rail["foot"], inGroup=rail["inGroup"])
 
         # 4. Rules
         page.get_by_test_id("learn-tab").nth(1).click()

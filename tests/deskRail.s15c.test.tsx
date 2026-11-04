@@ -5,8 +5,9 @@ import { cleanup, render, screen } from '@testing-library/react';
  * THE DESK RAIL after the sidebar regroup (ui-v2, operator 2026-10-26; before it the IA change of
  * 2026-10-13 and S15c): top to bottom — the wordmark (the link Home, operator 2026-10-27) · New job ·
  * New project · Chat · Search · the pages in three groups (WORK: Projects, Jobs, Repositories · INSIGHT:
- * Report, Understand, Evaluate · GOVERN: Steering, Memory, Agents) · Recent · Build & settings · the Nerve
- * Center tile. The wordmark carries the needs-you badge; Projects is WORK's primary entry; Skills, MCP, Plugins, Workflows and Settings are on the Build & settings page. No
+ * Report, Understand, Evaluate · GOVERN: Steering, Memory, Agents) · Recent · Learn · Build & settings · the
+ * Nerve Center tile (Learn at the foot since 2026-11-04). The headings fold; these cases open them all
+ * (`openEveryHeading`): the fold itself is sidebarSections.test.tsx's. The wordmark carries the needs-you badge; Projects is WORK's primary entry; Skills, MCP, Plugins, Workflows and Settings are on the Build & settings page. No
  * Notifications entry (the Desk is the notification surface), no "General settings" overview, no More.
  */
 
@@ -20,10 +21,9 @@ vi.mock('../src/api/client.js', () => ({
 
 const { SessionRail } = await import('../src/components/desk/SessionRail.js');
 const { BUILD_ITEM, NAV_GROUPS, navGroups } = await import('../src/board/navModel.js');
-const { useFirstRun, resetFirstRun } = await import('../src/store/firstRun.js');
+const { openEveryHeading } = await import('./sidebarOpen.js');
 
-// DES-LEARN §3.0: Learn's place depends on studio.firstRun; these cases read it as used (below Evaluate).
-beforeEach(() => { resetFirstRun(); useFirstRun.setState({ read: 'ok', state: { learnUsedAt: 1 } }); });
+beforeEach(() => { window.localStorage.clear(); openEveryHeading(); });
 afterEach(cleanup);
 
 function rail(pathname = '/'): ReturnType<typeof render> {
@@ -31,21 +31,21 @@ function rail(pathname = '/'): ReturnType<typeof render> {
 }
 
 describe('the rail, top to bottom', () => {
-  it('wordmark · New job · New project · the ten pages in three groups · Build & settings · Nerve Center', () => {
+  it('wordmark · New job · New project · the ten pages in three groups · Learn · Build & settings · Nerve Center', () => {
     rail();
     const nav = screen.getByTestId('session-rail');
-    const pages = ['nav-projects', 'nav-jobs', 'nav-apps', 'nav-repos', 'nav-report', 'nav-understand', 'nav-evaluate', 'nav-learn', 'nav-steering', 'nav-memory', 'nav-agents'];
-    const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', ...pages, 'desk-rail-build', 'desk-rail-nerve'];
+    const pages = ['nav-projects', 'nav-jobs', 'nav-apps', 'nav-repos', 'nav-report', 'nav-understand', 'nav-evaluate', 'nav-steering', 'nav-memory', 'nav-agents'];
+    const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', ...pages, 'nav-learn', 'desk-rail-build', 'desk-rail-nerve'];
     const order = [...nav.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '').filter((id) => ids.includes(id));
     expect(order).toEqual(ids);
     // The groups, their small-caps labels and their pages, in the mockup's words.
     expect(NAV_GROUPS.map((g) => [g.label, g.items.map((i) => i.label)])).toEqual([
       ['Work', ['Projects', 'Jobs', 'Apps', 'Repositories']], ['Insight', ['Report', 'Understand', 'Evaluate']], ['Govern', ['Steering', 'Memory', 'Agents']],
     ]);
-    for (const g of navGroups('insight')) {
+    for (const g of navGroups()) {
       const group = screen.getByRole('group', { name: g.label });
       expect(group.querySelector('.wk-rail-sec')).toHaveTextContent(g.label);
-      expect([...group.querySelectorAll('a')].map((a) => a.textContent)).toEqual(g.items.map((i) => i.label));
+      expect([...group.querySelectorAll('.wk-rail-nav-item')].map((a) => a.textContent)).toEqual(g.items.map((i) => i.label));
     }
     expect(nav.querySelector('[data-nav-dest="notifications"]')).toBeNull();
     // The Workspace links moved to Build & settings; the More menu is gone.
@@ -72,7 +72,7 @@ describe('the rail, top to bottom', () => {
   it('the rail entries carry the skin contract\'s nav-dest marks', () => {
     rail();
     const dests = [...screen.getByTestId('session-rail').querySelectorAll('[data-nav-dest]')].map((e) => e.getAttribute('data-nav-dest'));
-    expect(dests).toEqual(['page:home', 'page:projects', 'page:jobs', 'page:apps', 'page:repos', 'page:report', 'page:understand', 'page:evaluate', 'page:learn', 'page:steering', 'page:memory', 'page:agents', 'page:build', 'watch']);
+    expect(dests).toEqual(['page:home', 'page:projects', 'page:jobs', 'page:apps', 'page:repos', 'page:report', 'page:understand', 'page:evaluate', 'page:steering', 'page:memory', 'page:agents', 'page:learn', 'page:build', 'watch']);
   });
 
   it.each([
@@ -98,20 +98,13 @@ describe('the rail, top to bottom', () => {
   });
 });
 
-describe('Learn in the rail (DES-LEARN §3.0)', () => {
-  it('never used: first in Work, above Projects, marked "Start here"', () => {
-    useFirstRun.setState({ read: 'ok', state: {} });
+describe('Learn in the rail (operator 2026-11-04: above Build & settings, for good)', () => {
+  it('sits in the foot above Build & settings, unmarked, whatever the first run says', () => {
     rail();
     const work = screen.getByRole('group', { name: 'Work' });
-    expect([...work.querySelectorAll('a')].map((a) => a.getAttribute('data-testid'))).toEqual(['nav-learn', 'nav-projects', 'nav-jobs', 'nav-apps', 'nav-repos']);
-    expect(screen.getByTestId('nav-learn-mark')).toHaveTextContent('Start here');
+    expect([...work.querySelectorAll('.wk-rail-nav-item')].map((a) => a.getAttribute('data-testid'))).toEqual(['nav-projects', 'nav-jobs', 'nav-apps', 'nav-repos']);
+    expect(screen.getByTestId('nav-learn').nextElementSibling).toBe(screen.getByTestId('desk-rail-build'));
     expect(screen.getByTestId('nav-learn')).toHaveAttribute('href', '/learn');
-  });
-
-  it('used: last in Insight, below Evaluate, with no mark', () => {
-    rail();
-    const insight = screen.getByRole('group', { name: 'Insight' });
-    expect([...insight.querySelectorAll('a')].map((a) => a.getAttribute('data-testid'))).toEqual(['nav-report', 'nav-understand', 'nav-evaluate', 'nav-learn']);
-    expect(screen.queryByTestId('nav-learn-mark')).toBeNull();
+    expect(screen.getByTestId('session-rail').textContent).not.toContain('Start here');
   });
 });

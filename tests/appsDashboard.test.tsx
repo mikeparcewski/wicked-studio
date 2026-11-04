@@ -23,9 +23,9 @@ import { EditorHost } from '../src/editors/host.js';
 afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ''; document.head.innerHTML = ''; localStorage.clear(); });
 
 describe('Apps under Work, and its routes', () => {
-  it('Work reads Learn, Projects, Jobs, Apps, Repositories; Apps is current on /apps and on one app', () => {
-    expect(navGroups('start').find((g) => g.id === 'work')!.items.map((i) => i.label)).toStrictEqual(['Learn', 'Projects', 'Jobs', 'Apps', 'Repositories']);
-    expect(navGroups('insight').find((g) => g.id === 'work')!.items.map((i) => i.id)).toStrictEqual(['projects', 'jobs', 'apps', 'repos']);
+  it('Work reads Projects, Jobs, Apps, Repositories (Learn sits at the foot since 2026-11-04); Apps is current on /apps and on one app', () => {
+    expect(navGroups().find((g) => g.id === 'work')!.items.map((i) => i.label)).toStrictEqual(['Projects', 'Jobs', 'Apps', 'Repositories']);
+    expect(navGroups({ sources: true }).find((g) => g.id === 'work')!.items.map((i) => i.id)).toStrictEqual(['projects', 'jobs', 'apps', 'repos', 'sources']);
     expect(navCurrent('/apps')).toBe('apps');
     expect(navCurrent('/apps/escalations')).toBe('apps');
     expect(navCurrent('/approvals')).not.toBe('apps');

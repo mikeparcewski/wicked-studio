@@ -218,3 +218,80 @@
 @media (max-width: 767px) {
   .wk-rail-drawer .wk-rail-sec-toggle { min-height: var(--tap-min); }
 }
+
+/* ── FOLDING HEADINGS AND THE ICON RAIL (operator 2026-11-04, studio-sidebar-1104). Tokens only. ──
+   A heading row is its icon (a link to the heading's home page) and its label (the disclosure button,
+   the Recent toggle's look: small type, muted, a chevron that turns). The heading that holds the page on
+   screen is marked: its icon in the accent and its words at full ink, with the accent bar the current page
+   has. A shut heading's list is `hidden`. */
+.wk-rail-top { display: flex; align-items: center; gap: 4px; margin: 10px 10px 6px; min-width: 0; }
+.wk-rail-top .wk-rail-wordmark { margin: 0; flex: 1 1 auto; }
+.wk-rail-fold { flex-shrink: 0; }
+.wk-rail-sec-row { display: flex; align-items: center; gap: 2px; margin-top: 10px; }
+.wk-rail-nav-group:first-child .wk-rail-sec-row { margin-top: 4px; }
+.wk-rail-sec-row .wk-rail-sec.wk-rail-sec-toggle { margin: 0; padding: 0 6px; flex: 1 1 auto; min-width: 0; }
+.wk-rail-sec-home {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 26px; height: 26px;
+  border-radius: var(--radius-sm); color: var(--ink-muted); text-decoration: none;
+}
+.wk-rail-sec-home--still { color: var(--ink-muted); }
+.wk-rail a.wk-rail-sec-home:hover { background: var(--rail-hover-bg); color: var(--ink-high); }
+.wk-rail a.wk-rail-sec-home:active { background: var(--rail-press-bg); color: var(--ink-high); }
+.wk-rail a.wk-rail-sec-home:focus-visible { outline: 2px solid transparent; outline-offset: -2px; box-shadow: inset 0 0 0 2px var(--accent); }
+.wk-rail a.wk-rail-sec-home[aria-current="true"] { color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
+.wk-rail [data-here="true"] > .wk-rail-sec-row .wk-rail-sec-toggle { color: var(--ink-high); }
+.wk-rail-sec-list { display: flex; flex-direction: column; gap: 1px; }
+/* A heading's pages sit under its label, not under its icon: the list reads as the heading's. Projects'
+   mark hangs in the gutter, so its words line up with the rest. */
+.wk-rail-sec-list .wk-rail-nav-item { padding-left: 34px; }
+.wk-rail-sec-list .wk-rail-nav-mark { margin-left: -14px; }
+.wk-rail-sec-list[hidden], #rail-recent-list[hidden] { display: none; }
+.wk-rail-sec-toggle .wk-rail-badge { margin-left: auto; }
+/* The phone drawer: a heading's home icon is a full tap target too (its row is already 44 px tall), and its pages
+   stay under its label. */
+@media (max-width: 767px) {
+  .wk-rail-drawer .wk-rail-sec-home { min-width: var(--tap-min); }
+  .wk-rail-drawer .wk-rail-sec-list .wk-rail-nav-item { padding-left: 52px; }
+}
+/* Learn and Build & settings carry their icon in the full sidebar too (the one the icon rail shows). */
+.wk-rail-nav-item.wk-rail-nav-item--icon { justify-content: flex-start; }
+.wk-rail-nav-icon { flex-shrink: 0; color: var(--ink-muted); }
+.wk-rail .wk-rail-nav-item:is(:hover, :active, [aria-current="page"]) .wk-rail-nav-icon { color: var(--ink-high); }
+
+/* The icon rail: 56 px, one column of 40 px targets, centred. The actions stack; each heading is its icon;
+   the current section takes the current page's wash and bar. */
+.wk-rail.wk-rail--icons { align-items: stretch; }
+.wk-rail--icons .wk-rail-top { flex-direction: column; gap: 6px; margin: 10px 8px 8px; }
+.wk-rail-brand-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 36px;
+  border: none; background: none; border-radius: var(--radius-md); color: var(--ink-high); cursor: pointer;
+}
+.wk-rail--icons .wk-rail-fold { width: 40px; height: 32px; }
+.wk-rail .wk-rail-fold:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-rail--icons .wk-rail-actions { flex-direction: column; margin: 0 8px 8px; gap: 6px; }
+.wk-rail--icons .wk-rail-actions--icons .wk-rail-action { flex: 0 0 auto; width: 40px; height: 36px; }
+.wk-rail-icons {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 8px; border-top: 1px solid color-mix(in oklab, var(--ink-dim) 50%, transparent);
+}
+.wk-rail-icon-link { position: relative; justify-content: center; width: 40px; height: 40px; padding: 0; color: var(--ink-muted); flex-shrink: 0; }
+.wk-rail .wk-rail-icon-link[aria-current="true"] { background: color-mix(in oklab, var(--accent) 22%, var(--surface-rail)); color: var(--ink-high); box-shadow: inset 3px 0 0 var(--accent); }
+.wk-rail .wk-rail-icon-link[aria-current="true"]:hover { background: var(--rail-hover-current-bg); }
+.wk-rail .wk-rail-icon-link:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+/* The brand keeps Home's needs-you count in the icon rail, a small spark at its corner. */
+.wk-rail-brand-btn { position: relative; }
+.wk-rail-brand-btn .wk-rail-badge {
+  position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; font-size: var(--text-2xs);
+}
+.wk-rail--icons .wk-rail-foot { align-items: center; padding: 8px 8px; }
+.wk-rail--icons .wk-rail-foot .wk-rail-nav-item { justify-content: center; width: 40px; height: 40px; min-height: 40px; padding: 0; }
+.wk-rail--icons .wk-rail-nav-icon { color: inherit; }
+.wk-rail--icons .wk-rail-foot .wk-rail-nav-item:not([aria-current="page"]) { color: var(--ink-muted); }
+.wk-rail--icons .wk-nc-dock { display: flex; justify-content: center; padding: 2px 8px 10px; }
+/* Nerve Center at icon size: the same state fill and edge as the full tile (`--nc-*`), its light centred. */
+.wk-nc-tile.wk-nc-tile--icon { justify-content: center; width: 40px; height: 40px; min-height: 40px; padding: 0; gap: 0; border-radius: var(--radius-md); }
+.wk-nc-tile--icon .wk-nc-light { width: 26px; height: 26px; }
+@media (prefers-reduced-motion: no-preference) {
+  .wk-rail :is(.wk-rail-icon-link, .wk-rail-brand-btn) { transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease; }
+}
+.wk-rail .wk-rail-brand-btn:hover { background: var(--rail-hover-bg); }

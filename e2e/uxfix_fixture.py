@@ -251,6 +251,16 @@ OPEN_RUN_DETAILS = (
     " new MutationObserver(open).observe(document, { childList: true, subtree: true }); })();"
 )
 
+# The sidebar's headings fold (operator 2026-11-04, studio-sidebar-1104): what is open is the viewer's own, kept in
+# localStorage `studio.sidebar.v1`, and with nothing saved only Work is open. Rigs that read Recent's rows or the pages
+# under Insight or Govern open every heading before the app boots — `page.add_init_script(OPEN_RAIL_SECTIONS)` — what
+# a viewer who left them all open last session sees. Set only when nothing is saved, so a reload keeps what the page
+# saved. The fold itself (its default, the view-only opening, the icon rail) is e2e/desk_sidebar_test.py's to prove.
+OPEN_RAIL_SECTIONS = (
+    "(() => { try { if (localStorage.getItem('studio.sidebar.v1') === null) localStorage.setItem('studio.sidebar.v1',"
+    " JSON.stringify({ open: ['work', 'insight', 'govern', 'recent'], icons: false })); } catch (e) {} })();"
+)
+
 # The run page's ONE right panel (src/board/runPanelModel.ts): what the ⋯ session sheet's tabs held is a fold
 # inside one of the panel's six sections. Item id = the old sheet tab id.
 RUN_PANEL_ITEMS = {

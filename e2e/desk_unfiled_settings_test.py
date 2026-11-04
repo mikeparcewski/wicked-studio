@@ -20,7 +20,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import OPEN_RAIL_SECTIONS, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4604"))
 SHOTS = REPO / "e2e" / "shots"
@@ -83,6 +83,7 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     ctx = browser.new_context(viewport={"width": 1440, "height": 700}, device_scale_factor=1)
     page = ctx.new_page()
+    page.add_init_script(OPEN_RAIL_SECTIONS)  # the unfiled group is under Recent
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
@@ -177,6 +178,7 @@ with sync_playwright() as p:
     # Phone: the unfiled dashboard and General.
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1, is_mobile=True, has_touch=True)
     page = ctx.new_page()
+    page.add_init_script(OPEN_RAIL_SECTIONS)  # the unfiled group is under Recent
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(f"{origin}/projects/default", wait_until="networkidle")
     page.get_by_test_id("project-desk").wait_for(state="visible", timeout=8000)

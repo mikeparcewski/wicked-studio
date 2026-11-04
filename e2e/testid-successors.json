@@ -999,6 +999,7 @@
     "requirements-corroboration-counts": "requirements-coverage",
     "session-gate-choice-default": "ask-option-meta",
     "launch-wizard-cards": "launch-catalog-results",
-    "launch-wizard-soon": "launch-catalog-soon-*"
+    "launch-wizard-soon": "launch-catalog-soon-*",
+    "*-mark": "nav-learn"
   }
 }

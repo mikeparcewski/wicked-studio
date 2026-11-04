@@ -32,7 +32,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import OPEN_RAIL_SECTIONS, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4346"))
 W, H = 1440, 700
@@ -108,6 +108,7 @@ errors: list[str] = []
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RAIL_SECTIONS)  # these checks read rows and pages under every heading
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
@@ -221,9 +222,9 @@ with sync_playwright() as p:
     #       Skills · MCP · Plugins · Workflows · General · Nerve Center (last); no Notifications entry.
     dests = page.evaluate("""() => [...document.querySelectorAll(
       '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)""")
-    # DES-LEARN §3.0: a fresh fixture has never used Learn, so it leads Work, above Projects.
-    expected = ["page:home", "page:learn", "page:projects", "page:jobs", "page:apps", "page:repos", "page:report", "page:understand", "page:evaluate",
-                "page:steering", "page:memory", "page:agents", "page:build", "watch"]
+    # Learn sits at the foot above Build & settings, always (operator 2026-11-04; it led Work before).
+    expected = ["page:home", "page:projects", "page:jobs", "page:apps", "page:repos", "page:report", "page:understand", "page:evaluate",
+                "page:steering", "page:memory", "page:agents", "page:learn", "page:build", "watch"]
     page.get_by_test_id("desk-rail-build").click()
     page.get_by_test_id("build-link-settings").click()
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)

@@ -16,10 +16,6 @@
 .wk-learn-iconbtn:hover { background: color-mix(in oklab, var(--ink-high) 8%, transparent); color: var(--ink-high); }
 .wk-learn-iconbtn:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 
-/* The rail's "Start here" mark on Learn (§3.0). */
-.wk-rail-nav-tag { margin-left: auto; padding: 1px 7px; border-radius: 999px; background: color-mix(in oklab, var(--accent) 20%, transparent); color: var(--ink-high);
-  font-size: var(--text-caption); font-weight: var(--weight-semi); white-space: nowrap; }
-
 /* Style: sources and the pipeline */
 .wk-learn-feed { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 .wk-learn-drop { padding: 16px; border-radius: var(--radius-lg); border: 2px dashed color-mix(in oklab, var(--accent) 45%, var(--border));

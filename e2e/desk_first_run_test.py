@@ -8,7 +8,7 @@ answered in the page; every write is recorded.
      nearby ones, agents, languages), then the first ask; "Your setup" lists the six rows.
   2. Each ask, answered, collapses to its record line and fills its row: repositories (a nearby one is
      registered over POST /repos), the second agent (Later), style (Later), rules (POST /governance/rules per
-     starter kept), personality (PUT /persona, then Learn sits below Evaluate), brand (Keep studio's).
+     starter kept), personality (PUT /persona, then studio.firstRun.learnUsedAt is written; Learn stays at the rail's foot), brand (Keep studio's).
   3. All six answered, Home is Home again (its ask box), and stays so on reload.
   4. Ignore setup (a fresh state): one line with Undo; Undo brings the flow back; ignored, a reload shows Home.
   5. On a phone the ask being answered is a bottom sheet (fixed to the foot of the screen).
@@ -148,7 +148,10 @@ with sync_playwright() as pw:
         put = [s["body"] for s in sent if s["path"] == "/persona"]
         check(f"2c-persona-{w}", len(put) == 1 and put[0]["persona"]["dials"]["warmth"] == 2)
         if w > 1000:
-            page.wait_for_function("() => [...document.querySelectorAll('[data-testid=\"rail-nav-insight\"] a')].some((a) => a.dataset.testid === 'nav-learn')", timeout=15000)
+            # Learn no longer moves once used (operator 2026-11-04: it sits above Build & settings for good); the
+            # use is still recorded.
+            page.wait_for_function("""() => fetch('/api/v1/settings').then((r) => r.json()).then((j) => typeof ((j.settings ?? j)['studio.firstRun'] ?? {}).learnUsedAt === 'number')""", timeout=15000, polling=500)
+            check(f"2d-learn-stays-{w}", page.evaluate("() => !!document.querySelector('.wk-rail-foot [data-testid=\"nav-learn\"]') && !document.querySelector('[data-testid=\"rail-nav\"] [data-testid=\"nav-learn\"]')"))
         # The last answer hands Home back at once: its ask box is the next step (§4.3).
         brand = page.get_by_test_id("first-run-ask-brand")
         brand.wait_for(timeout=20000)

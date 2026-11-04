@@ -22,7 +22,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import OPEN_RAIL_SECTIONS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4350"))
 W, H = 1440, 900
@@ -65,6 +65,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RAIL_SECTIONS)  # these checks read rows and pages under every heading
     page.on("pageerror", lambda e: errors.append(str(e)))
     set_fixture(origin, sessions=True, run_chat_id=True, ship_proposals=False,
                 extra_frames=[], reset_gate_posts=True)

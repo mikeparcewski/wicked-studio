@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { Project, ProjectMember, SessionView } from '../src/api/types.js';
 import { makeView } from './factories.js';
+import { openEveryHeading } from './sidebarOpen.js';
 
 const wire = vi.hoisted(() => ({
   listProjects: vi.fn(), listRepos: vi.fn(), getRunEvents: vi.fn(),
@@ -38,6 +39,8 @@ function member(projectId: string, kind: string, ref: string): ProjectMember {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  // Every heading open: these cases move Recent's rows (the fold's default is sidebarSections.test.tsx's).
+  openEveryHeading();
   calls = []; members = { alpha: [], beta: [] };
   useProjectMoves.setState({ projectsByRun: {}, announcement: '' });
   useProjectsStore.setState({ projects, error: null, loading: false });

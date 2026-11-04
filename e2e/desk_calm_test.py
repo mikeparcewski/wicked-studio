@@ -25,7 +25,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import OPEN_RAIL_SECTIONS, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4363"))
 W, H = 1440, 700
@@ -90,6 +90,7 @@ SHOTS.mkdir(parents=True, exist_ok=True)
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RAIL_SECTIONS)  # these checks read rows and pages under every heading
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
