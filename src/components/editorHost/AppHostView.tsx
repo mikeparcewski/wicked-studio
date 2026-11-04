@@ -185,6 +185,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const [kind, setKind] = useState<{ store: 'crew' | 'sample'; queries: 'crew' | 'sample'; actions: 'crew' | 'sample' } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewer, setViewer] = useState<string | null>(null);
+  /** (K5) crew runs chat turns for this app (health `capabilities.apps.turns`). */
+  const [turnsOn, setTurnsOn] = useState(false);
   const [mountKey, setMountKey] = useState(0);
   const frameBox = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<EditorHost | null>(null);
@@ -241,6 +243,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       if (cancelled || frameBox.current === null) { session.dispose(); return; }
       sessionRef.current = session;
       setKind({ store: store.kind, ...data.kind });
+      setTurnsOn(store.kind === 'crew' && caps?.turns === true);
       setDetail(loaded);
       off = session.on((e) => {
         if (e.kind === 'head') { setDetail(e.app); if (e.by === 'this-session') setStatus(`Saved as v${e.app.head.version}`); }
@@ -347,7 +350,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const history = detail?.history;
   const busy = detail?.turn != null;
   // (K5) Chat is how an app changes: open on every crew app's page, in Preview and in Edit alike.
-  const chatOn = kind?.store === 'crew' && slug !== null && detail !== null;
+  const chatOn = turnsOn && kind?.store === 'crew' && slug !== null && detail !== null;
   const idle = asking === null && link === null && outcome === null;
 
   return (
