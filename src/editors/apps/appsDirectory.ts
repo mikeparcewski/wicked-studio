@@ -233,10 +233,11 @@ export async function loadAppsDirectory(hasStore: boolean): Promise<AppsDirector
  * tile (honest or not) gets no edit (Preview, and its store changes nothing), no history, no action (never confirmed),
  * no link, and rows only from the sample's own data in this browser (crew's tiles: every query refused, no request).
  */
-export function tileHostPort(session: AppSession, tile: AppTileData): AppHostPort {
+export function tileHostPort(session: AppSession, tile: AppTileData, live: AppDataPort | null = null): AppHostPort {
   const sample = tile.sampleKey !== null ? SAMPLE_APPS[tile.sampleKey] ?? null : null;
   const spec = (): AppSpec => session.landedSpec ?? tile.detail!.spec;
-  const data: AppDataPort = sample !== null ? sampleAppData(spec, sample.data) : {
+  // (K5) A crew tile's live reads go through the dashboard's limiter, only while the card is seen (AppsPage).
+  const data: AppDataPort = sample !== null ? sampleAppData(spec, sample.data) : live !== null ? live : {
     kind: { queries: 'crew', actions: 'crew' },
     query: async () => ({ error: 'unavailable', message: 'a tile reads nothing' }),
     prepare: async () => ({ error: 'refused', message: 'a tile runs nothing' }),
@@ -245,7 +246,7 @@ export function tileHostPort(session: AppSession, tile: AppTileData): AppHostPor
   };
   return {
     session, data, framed: () => false, mode: () => 'preview', editing: () => false, viewer: () => 'you',
-    confirm: async () => false, openLink: async () => false, tile: { rows: sample !== null },
+    confirm: async () => false, openLink: async () => false, tile: { rows: sample !== null || live !== null },
   };
 }
 

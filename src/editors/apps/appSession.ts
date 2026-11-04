@@ -42,6 +42,14 @@ function words(r: StoreRefusal, what: 'saved' | 'undone' | 'redone' = 'saved'): 
   return `${not}: ${r.message}`;
 }
 
+/** What the chat shows of crew's turn log, as one comparable mark (how many, and the newest one's run and state). */
+function turnLogMark(app: AppDetail): string {
+  const t = (app as unknown as { turns?: unknown }).turns;
+  if (!Array.isArray(t)) return '';
+  const last = t[t.length - 1] as { runId?: unknown; state?: unknown } | undefined;
+  return `${t.length}:${String(last?.runId ?? '')}:${String(last?.state ?? '')}`;
+}
+
 export class AppSession {
   private app: AppDetail | null = null;
   /** The working spec: the head's spec with the burst applied (what the runtime is shown). */
@@ -109,7 +117,9 @@ export class AppSession {
     if (app.head.version < this.app.head.version) return;
     const moved = app.head.version > this.app.head.version;
     const turnChanged = (app.turn?.runId ?? null) !== (this.app.turn?.runId ?? null);
-    if (!moved && !turnChanged) return;
+    // (K5) The chat reads crew's turn log: a turn that started and ended between two reads changed nothing else.
+    const turnsChanged = turnLogMark(app) !== turnLogMark(this.app);
+    if (!moved && !turnChanged && !turnsChanged) return;
     if (moved) {
       const hadBurst = this.burst.length > 0;
       this.adopt(app);

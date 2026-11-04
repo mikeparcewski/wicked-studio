@@ -637,7 +637,7 @@ export function App(): React.ReactElement {
     if (panel === 'apps') {
       return artifactId === null
         ? <div className="flex-1 overflow-y-auto"><AppsPage navigate={navigate} /></div>
-        : <AppRoutePage slug={artifactId} search={search} navigate={navigate} />;
+        : <AppRoutePage slug={artifactId} search={search} navigate={navigate} runs={shownRuns} />;
     }
     // `/editors/{dev,conformance}` (EP-P1): one editor plugin in its sandboxed host, behind a dev route.
     if (panel === 'editors' && (artifactId === 'dev' || artifactId === 'conformance')) {

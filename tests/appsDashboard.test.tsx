@@ -20,7 +20,9 @@ import { EditorHost } from '../src/editors/host.js';
  * one app, Share (published or not, never a made-up link), and editing a component's words in place on the canvas.
  */
 
-afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ''; document.head.innerHTML = ''; localStorage.clear(); });
+// (K5) Cards read live numbers only while on screen: in these tests no card ever is (appsChat.test.tsx covers live).
+beforeEach(() => { vi.stubGlobal('IntersectionObserver', class { observe(): void {} disconnect(): void {} }); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.innerHTML = ''; document.head.innerHTML = ''; localStorage.clear(); });
 
 describe('Apps under Work, and its routes', () => {
   it('Work reads Projects, Jobs, Apps, Repositories (Learn sits at the foot since 2026-11-04); Apps is current on /apps and on one app', () => {
@@ -85,7 +87,9 @@ describe('/apps: a dashboard of the apps', () => {
     expect(document.querySelectorAll('[data-testid="apps-page"] [style]')).toHaveLength(0);
   });
 
-  it('with crew’s store: crew’s apps (hostile names as text), no numbers, and only store reads — never a query', async () => {
+  it('with crew’s store: crew’s apps (hostile names as text); a card that is not on screen reads no number and sends no query', async () => {
+    // (K5) Cards read live numbers only while seen: none of these is ever on screen.
+    vi.stubGlobal('IntersectionObserver', class { observe(): void {} disconnect(): void {} });
     const spec = (name: string, description: string): AppSpec => ({ ...structuredClone(SAMPLE_APPS['escalations']!.spec), name, description });
     const detail = (slug: string, name: string, description: string) => ({
       app: { slug, name, projectId: 'p', repoId: slug, createdAt: 1, head: { version: 3, tree: 't', receipt: 'you' }, turn: null, spec: spec(name, description),
@@ -110,7 +114,7 @@ describe('/apps: a dashboard of the apps', () => {
     expect(screen.queryAllByTestId('apps-card-sample')).toHaveLength(0);
     expect(screen.getAllByTestId('apps-card-nonumbers')).toHaveLength(2);
     expect(screen.getAllByTestId('apps-card-version')[0]!.textContent).toBe('v3 · you');
-    // Store reads only (the list, each app once); never /query.
+    // Store reads only (the list, each app once); never /query while no card is seen.
     const apps = urls.filter((u) => u.startsWith('/apps'));
     expect(apps.sort()).toStrictEqual(['/apps', '/apps/desk', '/apps/ops']);
     expect(document.querySelectorAll('[data-testid="apps-page"] [style]')).toHaveLength(0);
@@ -254,7 +258,8 @@ describe('/apps/<slug>: one store decision (codex r9)', () => {
     render(<AppRoutePage slug="desk" search="" navigate={vi.fn()} />);
     await waitFor(() => expect(urls).toContain('/apps/desk'));
     await waitFor(() => expect(screen.getByTestId('apps-route')).toBeTruthy());
-    expect(urls.filter((u) => u === '/health')).toHaveLength(1);
+    // The store decision is the route's one read; the chat's composer (K5) reads the daemon's capabilities on its own.
+    expect(urls.filter((u) => u === '/health').length).toBeLessThanOrEqual(2);
   });
 });
 

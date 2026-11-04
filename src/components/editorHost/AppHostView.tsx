@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiBase } from '../../api/client.js';
-import type { AppDetail, AppsCapabilities } from '../../api/types.js';
+import type { AppDetail, AppsCapabilities, SessionView } from '../../api/types.js';
 import { EditorHost, SPEC_EDIT_AFTER_FOCUS_MS } from '../../editors/host.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -11,6 +11,8 @@ import { CrewAppStore, SampleAppStore, type AppStorePort } from '../../editors/a
 import { sampleApp } from '../../editors/apps/samples.js';
 import { isAppSlug, publishedOf } from '../../editors/apps/appsDirectory.js';
 import { ShareSheet } from '../apps/ShareSheet.js';
+import { AppChat, appComposerKey } from '../apps/AppChat.js';
+import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 
 /**
  * THE APP HOST (DES-APPS-001 §6.1, §7.1, §7.3; slice K4): one app in the `wicked-apps` runtime's sandboxed frame, and
@@ -40,6 +42,20 @@ export interface AppHostProps {
   /** crew's apps capabilities, when the caller has already read health (the Apps route): ONE store decision, so a
    *  second read failing can't turn crew's app into a sample (codex r9). Absent: this view reads health itself. */
   caps?: { apps: AppsCapabilities | undefined };
+  /** (K5) The runs studio holds: a turn in the app's chat shows its run's live steps from here. */
+  runs?: readonly SessionView[];
+}
+
+const NO_RUNS: readonly SessionView[] = [];
+
+/** (K5) The composer mirrors the selection: the component chips on the app's chat are exactly the selected ones. */
+function mirrorSelection(slug: string, chips: readonly Chip[]): void {
+  const key = appComposerKey(slug);
+  for (const c of chipsOf(useComposerChips.getState(), key)) if (c.key.startsWith('cmp:')) removeAboutChip(key, c.key);
+  for (const c of chips) {
+    if (c.anchor.kind !== 'element') continue;
+    addAboutChip(key, { kind: 'about', key: `cmp:${c.anchor.id}`, label: c.label });
+  }
 }
 
 interface Asking { prepared: PreparedAction; resolve: (yes: boolean) => void; at: number }
@@ -131,7 +147,7 @@ export function ActionCardView({ asking, onAnswer }: { asking: Asking; onAnswer:
   );
 }
 
-export function AppHostView({ editor, version, sha, app: slug, sample, initialMode, navigate, caps: given }: AppHostProps): React.ReactElement {
+export function AppHostView({ editor, version, sha, app: slug, sample, initialMode, navigate, caps: given, runs = NO_RUNS }: AppHostProps): React.ReactElement {
   const narrowWindow = useNarrow();
   // The runtime lays itself out by ITS frame's width (its media queries), so Edit is offered only when the frame
   // itself is wide enough, whatever the window is (codex r1: a 1000 px window leaves the frame under 640 px).
@@ -262,7 +278,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         adapter: new AppAdapter(session, loaded.name),
         app: port,
         ui: {
-          chips: (c) => setChips(c), draft: () => {}, typed: () => {}, key: () => {}, morph: () => {},
+          chips: (c) => { setChips(c); if (store.kind === 'crew') mirrorSelection(store.slug, c); }, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {},
           status: (line) => setStatus(line), notes: () => {}, thread: () => {},
           writeFailed: (m) => setStatus(m),
           fullscreen: async () => false,
@@ -330,6 +346,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
 
   const history = detail?.history;
   const busy = detail?.turn != null;
+  // (K5) Chat is how an app changes: open on every crew app's page, in Preview and in Edit alike.
+  const chatOn = kind?.store === 'crew' && slug !== null && detail !== null;
+  const idle = asking === null && link === null && outcome === null;
 
   return (
     <div className="wk-apps-host" data-testid="apps-host" data-mode={shown} data-framed={framed}>
@@ -345,7 +364,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-undo" disabled={history?.canUndo !== true || busy || framed} onClick={() => void move('undo')} aria-label="Undo">Undo</button>
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-redo" disabled={history?.canRedo !== true || busy || framed} onClick={() => void move('redo')} aria-label="Redo">Redo</button>
         </span>
-        {shown === 'edit' && <span className="wk-apps-hint" data-testid="apps-edit-hint">Changes save as you make them · Undo to go back</span>}
+        {shown === 'edit' && <span className="wk-apps-hint" data-testid="apps-edit-hint">Fine-tune by hand: changes save as you make them · for anything bigger, ask in the chat</span>}
         <span className="wk-apps-spacer" />
         {shown === 'preview' && viewer !== null && <span className="wk-apps-pill" data-testid="apps-viewer">Viewing as {viewer}</span>}
         <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-share-open" disabled={detail === null} onClick={() => setSharing(true)}>Share</button>
@@ -375,17 +394,18 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         <p className="wk-apps-line wk-apps-chips" data-testid="apps-chips">
           {chips.length > 0
             ? chips.map((c, i) => <span key={i} className="wk-source-chip" data-testid="apps-chip">about: {c.label}</span>)
-            : <span className="wk-apps-line--note">Select a component to make it the subject of your next message.</span>}
+            : <span className="wk-apps-line--note">Select a component to ask the chat about just that one.</span>}
         </p>
       )}
-      <div className="wk-apps-body" data-mode={shown}>
+      <div className="wk-apps-body" data-mode={shown} data-chat={chatOn}>
         <div className="wk-apps-frame" ref={frameWrap}>
           {torn !== null && (
             <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-torn">{torn} · <button type="button" className="wk-btn wk-btn--link" onClick={() => setMountKey((k) => k + 1)}>Reload it</button></p>
           )}
           <div ref={frameBox} key={mountKey} className="wk-apps-frame-box" data-testid="apps-frame-box" />
         </div>
-        <aside className={`wk-apps-dock${narrow && asking === null && link === null ? ' wk-apps-dock--quiet' : ''}`} aria-label="Needs you" data-testid="apps-dock">
+        <div className="wk-apps-side">
+        <aside className={`wk-apps-dock${narrow && asking === null && link === null ? ' wk-apps-dock--quiet' : ''}${chatOn && idle ? ' wk-apps-dock--idle' : ''}`} aria-label="Needs you" data-testid="apps-dock">
           <h2 className="wk-apps-dock-title">Needs you <span className="wk-apps-dock-count">{asking !== null || link !== null ? '1 waiting' : 'nothing waiting'}</span></h2>
           {asking !== null && <ActionCardView asking={asking} onAnswer={answer} />}
           {link !== null && (
@@ -408,6 +428,11 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             </p>
           )}
         </aside>
+        {chatOn && (
+          <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
+            onSent={() => { void sessionRef.current?.refresh(); }} onUndo={() => void move('undo')} />
+        )}
+        </div>
       </div>
       {sharing && detail !== null && (
         <ShareSheet name={detail.name} slug={detail.slug} published={publishedOf(detail)} onClose={() => setSharing(false)} />

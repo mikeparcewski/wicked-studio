@@ -16,6 +16,42 @@
 /* Edit: the builder takes the whole width (actions run only in Preview, so the dock waits there). */
 .wk-apps-body[data-mode='edit'] { grid-template-columns: minmax(0, 1fr); }
 .wk-apps-body[data-mode='edit'] .wk-apps-dock { display: none; }
+/* K5: the chat is the app's main control, beside it in Preview AND in Edit (Edit is for fine-tuning). */
+.wk-apps-body[data-chat='true'], .wk-apps-body[data-chat='true'][data-mode='edit'] { grid-template-columns: minmax(0, 1fr) 400px; }
+.wk-apps-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--surface-base); }
+.wk-apps-side .wk-apps-dock { border-left: 0; flex: 0 0 auto; max-height: 60%; }
+.wk-apps-side .wk-apps-dock--idle { padding: var(--space-2) var(--space-4); gap: 0; border-bottom: 1px solid var(--border); }
+.wk-apps-side .wk-apps-dock--idle .wk-apps-dock-hint { display: none; }
+.wk-apps-side .wk-apps-dock--idle .wk-apps-dock-title { font-size: var(--text-caption); color: var(--ink-muted); font-weight: var(--weight-regular); }
+.wk-appchat { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.wk-appchat-head { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-2); }
+.wk-appchat-title { margin: 0; color: var(--ink-high); font-size: var(--text-lead); font-weight: var(--weight-strong); }
+.wk-appchat-sub { color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-appchat-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-2) var(--space-4) var(--space-3); }
+.wk-appchat-empty { margin: 0; color: var(--ink-body); font-size: var(--text-body); line-height: 1.55; }
+.wk-appchat-empty p { margin: 0 0 var(--space-2); }
+.wk-appchat-turn { display: flex; flex-direction: column; gap: var(--space-2); }
+.wk-appchat-you { align-self: flex-end; max-width: 88%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg); background: var(--accent-wash); color: var(--ink-high); }
+.wk-appchat-msg { margin: 0; font-size: var(--text-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-appchat-about { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--space-1) 0 0; }
+.wk-appchat-reply { align-self: stretch; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg); background: var(--surface-card); display: flex; flex-direction: column; gap: var(--space-2); }
+.wk-appchat-reply--ended { border-color: color-mix(in srgb, var(--status-fail) 45%, var(--border)); }
+.wk-appchat-busyline, .wk-appchat-change, .wk-appchat-why { margin: 0; color: var(--ink-high); font-size: var(--text-body); overflow-wrap: anywhere; }
+.wk-appchat-change { font-weight: var(--weight-strong); }
+.wk-appchat-why { color: var(--ink-body); }
+.wk-appchat-pulse { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--accent); vertical-align: middle; animation: wk-appchat-pulse 1.4s ease-in-out infinite; }
+@keyframes wk-appchat-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .wk-appchat-pulse { animation: none; } }
+.wk-appchat-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: var(--text-caption); }
+.wk-appchat-steps li { padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--ink-muted); }
+.wk-appchat-steps li[data-state='now'] { border-color: var(--accent); color: var(--ink-high); }
+.wk-appchat-steps li[data-state='done'] { color: var(--status-ok); border-color: color-mix(in srgb, var(--status-ok) 50%, var(--border)); }
+.wk-appchat-steps li[data-state='failed'] { color: var(--status-fail); border-color: color-mix(in srgb, var(--status-fail) 50%, var(--border)); }
+.wk-appchat-lines { margin: 0; padding-left: 1.1em; color: var(--ink-body); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.wk-appchat-meta { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.wk-appchat-code { padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-body); }
+.wk-appchat-note { margin: 0; padding: var(--space-2) var(--space-4); color: var(--status-warn); font-size: var(--text-caption); }
+.wk-appchat-composer { padding: var(--space-2) var(--space-3) var(--space-3); border-top: 1px solid var(--border); }
 .wk-apps-frame { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .wk-apps-frame-box { flex: 1 1 auto; min-height: 0; display: flex; }
 .wk-apps-frame-box .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 420px; border: 0; background: var(--surface-base); }
@@ -47,8 +83,12 @@
   .wk-apps-crumb, .wk-apps-history { display: none; }
   .wk-apps-title { font-size: var(--text-lead); }
   .wk-apps-line { padding: var(--space-2) var(--space-3); }
-  .wk-apps-body { grid-template-columns: minmax(0, 1fr); }
+  .wk-apps-body, .wk-apps-body[data-chat='true'], .wk-apps-body[data-chat='true'][data-mode='edit'] { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow-y: auto; }
   .wk-apps-frame-box .wk-editor-frame { min-height: 0; }
+  .wk-apps-body[data-chat='true'] .wk-apps-frame { height: 58vh; }
+  .wk-apps-side { border-left: 0; border-top: 1px solid var(--border); }
+  .wk-appchat-thread { overflow: visible; }
+  .wk-appchat-composer { position: sticky; bottom: 0; background: var(--surface-base); }
   .wk-apps-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 44; max-height: 72vh; border-left: 0; border-top: 1px solid var(--border-strong); box-shadow: var(--shadow-card); }
   .wk-apps-dock--quiet { display: none; }
 }
@@ -107,3 +147,13 @@
 .wk-share-note { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); }
 .wk-share-actions { display: flex; align-items: center; gap: var(--space-2); }
 @media (max-width: 639px) { .wk-apps-hint { display: none; } }
+
+/* K5: "Make a new app" by chat, at the top of the dashboard; live numbers on the cards. */
+.wk-newapp { display: flex; flex-direction: column; gap: var(--space-2); margin: 0 0 var(--space-5); padding: var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-card); }
+.wk-newapp-head { display: flex; flex-direction: column; gap: 2px; }
+.wk-newapp-title { margin: 0; color: var(--ink-high); font-size: var(--text-lead); font-weight: var(--weight-strong); }
+.wk-newapp-sub { color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-newapp-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin: 0; color: var(--ink-muted); font-size: var(--text-caption); }
+.wk-newapp-project select { margin-left: 4px; padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-base); color: var(--ink-high); font: inherit; }
+.wk-newapp-note { color: var(--ink-body); }
+.wk-appcard-fail { color: var(--status-fail); }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import { listEditors } from '../../api/editors.js';
-import type { AppsCapabilities } from '../../api/types.js';
+import type { AppsCapabilities, SessionView } from '../../api/types.js';
 import { isAppSlug, sampleKeyOf } from '../../editors/apps/appsDirectory.js';
 import type { AppMode } from '../../editors/apps/appAdapter.js';
 import { APPS_EDITOR } from '../../editors/protocol.js';
@@ -17,7 +17,7 @@ type RouteState =
  * Health is read once here and handed to the host, and a daemon that does not answer is an error to retry: it never
  * reads as "no app store" (codex r9).
  */
-export function AppRoutePage({ slug, search, navigate }: { slug: string; search: string; navigate: (path: string) => void }): React.ReactElement {
+export function AppRoutePage({ slug, search, navigate, runs }: { slug: string; search: string; navigate: (path: string) => void; runs?: readonly SessionView[] }): React.ReactElement {
   const [state, setState] = useState<RouteState | null>(null);
   const [attempt, setAttempt] = useState(0);
   const valid = isAppSlug(slug);
@@ -62,7 +62,7 @@ export function AppRoutePage({ slug, search, navigate }: { slug: string; search:
   return (
     <div className="wk-editor-page wk-editor-page--app wk-apps-route" data-testid="apps-route">
       <AppHostView key={`${slug}:${mode}`} editor={APPS_EDITOR} version={state.editor.version} sha={state.editor.sha}
-        app={store ? slug : null} sample={sample} initialMode={mode} navigate={navigate} caps={state.caps} />
+        app={store ? slug : null} sample={sample} initialMode={mode} navigate={navigate} caps={state.caps} {...(runs !== undefined ? { runs } : {})} />
     </div>
   );
 }
