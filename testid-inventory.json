@@ -12,9 +12,9 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 302,
-    "occurrences": 4315,
+    "occurrences": 4316,
     "static": 3629,
-    "dynamic": 138,
+    "dynamic": 139,
     "computed": 49
   },
   "static": [
@@ -22157,6 +22157,12 @@
     },
     {
       "pattern": "*-projects",
+      "files": [
+        "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-projects-full",
       "files": [
         "src/components/sources/AgentAccess.tsx"
       ]

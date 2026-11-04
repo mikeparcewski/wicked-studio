@@ -6,12 +6,12 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch
 
 import { AGENT_QUERY_CONSEQUENCE, AgentAccess } from '../src/components/sources/AgentAccess.js';
 import { RunDataUse } from '../src/components/session/RunDataUse.js';
-import { agentAccessOf, type SourceAgentAccess } from '../src/api/sourceAgents.js';
+import { agentSwitchWrites, type SourceAgentAccess } from '../src/api/sourceAgents.js';
 import { ApiError } from '../src/api/errors.js';
 import { SourceSheet } from '../src/components/sources/SourceSheet.js';
 import { SourcesPage } from '../src/components/sources/SourcesPage.js';
 import { useCapabilities } from '../src/store/capabilities.js';
-import { CATALOG, pgServer, READ_ONLY } from './sourcesFixtures.js';
+import { CATALOG, pgPreview, pgServer, READ_ONLY } from './sourcesFixtures.js';
 
 /**
  * The source sheet's Agents box and a job's data use (DES-KNOWLEDGE-DATA-001 §7.1, §7.9, §19 B5) over a mocked crew
@@ -25,6 +25,15 @@ import { CATALOG, pgServer, READ_ONLY } from './sourcesFixtures.js';
  */
 
 const DEFAULTS: SourceAgentAccess = { see: true, query: false, projects: [], everyProject: false };
+
+/** crew's own write (B2 `knowledge/gate/sources.ts` setAgentAccess), modelled here rather than with studio's reader. */
+function crewApply(state: SourceAgentAccess, patch: Record<string, unknown>): SourceAgentAccess | 'see_off' {
+  const see = typeof patch.see === 'boolean' ? patch.see : state.see;
+  if (patch.query === true && !see) return 'see_off';
+  const query = see ? (typeof patch.query === 'boolean' ? patch.query : state.query) : false;
+  const projects = Array.isArray(patch.projects) ? [...new Set(patch.projects as string[])].sort() : state.projects;
+  return { see, query, projects, everyProject: typeof patch.everyProject === 'boolean' ? patch.everyProject : state.everyProject };
+}
 let calls: Array<{ path: string; method: string; body: unknown }> = [];
 let agents: SourceAgentAccess;
 let recent: unknown;
@@ -46,7 +55,9 @@ beforeEach(() => {
     if (path === '/sources/support-pg/agent-queries') return Promise.resolve(recent);
     if (path === '/sources/support-pg/agents' && method === 'PUT') {
       if (putImpl !== null) return putImpl(body as Record<string, unknown>);
-      agents = agentAccessOf({ agents: { ...agents, ...(body as object) } })!;
+      const next = crewApply(agents, body as Record<string, unknown>);
+      if (next === 'see_off') return Promise.reject(new ApiError(409, 'turn "see" on first', { error: 'x', code: 'see_off' }));
+      agents = next;
       return Promise.resolve({ name: 'support-pg', agents });
     }
     if (path === '/sources/support-pg/catalog') return Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: CATALOG, privileges: READ_ONLY, descriptorHash: 'd'.repeat(64) });
@@ -58,8 +69,15 @@ afterEach(() => cleanup());
 
 const puts = (): unknown[] => calls.filter((c) => c.method === 'PUT').map((c) => c.body);
 
-function Box({ dialect = 'postgres' as 'postgres' | 'mysql' | 'sqlite', onStale = (): void => {} }) {
-  return <AgentAccess source="support-pg" dialect={dialect} agents={agents} onChanged={(a) => { agents = a; }} onStale={onStale} />;
+function Box({ dialect = 'postgres' as 'postgres' | 'mysql' | 'sqlite' }) {
+  return <AgentAccess source="support-pg" dialect={dialect} agents={agents} onChanged={(a) => { agents = a; }} />;
+}
+
+/** Every settled write, as the mounted Sources page hears it. */
+function hearSettled(): { settled: string[]; stop: () => void } {
+  const settled: string[] = [];
+  const stop = agentSwitchWrites.subscribe((src) => settled.push(src));
+  return { settled, stop };
 }
 
 describe('the Agents box on a saved source', () => {
@@ -145,16 +163,16 @@ describe('the Agents box on a saved source', () => {
     expect(screen.getByTestId('source-agent-controls-structure-only').textContent).toMatch(/uploaded file’s structure/);
   });
 
-  it('crew\'s 403 (human only) and 409 (see off) read as plain words; the 409 reads crew again', async () => {
+  it('crew\'s 403 (human only) and 409 (see off) read as plain words; every settled write has crew read again', async () => {
+    const heard = hearSettled();
     putImpl = () => Promise.reject(new ApiError(403, 'only a human operator can change what agents may do with a source; you are agent/operator', { error: 'x', code: 'agents_switch_human_only' }));
-    const onStale = vi.fn();
-    render(<Box onStale={onStale} />);
+    render(<Box />);
     fireEvent.click(screen.getByTestId('source-agent-controls-see'));
     const e403 = await screen.findByTestId('source-agent-controls-error');
     expect(e403.textContent).toBe('Only a person signed in as an operator can change what agents may do with a source. Nothing changed.');
     expect(e403.textContent).not.toMatch(/agent\/operator|daemon refused/);
-    expect(onStale).not.toHaveBeenCalled();
     expect(screen.getByTestId('source-agent-controls-see').getAttribute('aria-checked')).toBe('true');
+    await waitFor(() => expect(heard.settled).toEqual(['support-pg']));
 
     putImpl = () => Promise.reject(new ApiError(409, 'agents cannot query support-pg while they cannot see its structure: turn "see" on first', { error: 'x', code: 'see_off' }));
     await waitFor(() => expect(screen.getByTestId('source-agent-controls-query')).not.toBeDisabled());
@@ -164,8 +182,39 @@ describe('the Agents box on a saved source', () => {
       'Agents can query only a source whose structure they can see. Turn on “Agents can see this structure” first. Nothing changed.',
     ));
     // The shown "see on" was older than crew's: the page reads crew again.
-    expect(onStale).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(heard.settled).toEqual(['support-pg', 'support-pg']));
     expect(screen.queryByTestId('source-agent-controls-confirm')).toBeNull();
+    heard.stop();
+  });
+
+  it('an answer that may have landed (a gateway 504, no answer) never says "Nothing changed"; a 400 says why in plain words', async () => {
+    const heard = hearSettled();
+    putImpl = () => Promise.reject(new ApiError(504, 'Gateway Timeout'));
+    render(<Box />);
+    fireEvent.click(screen.getByTestId('source-agent-controls-see'));
+    const e = await screen.findByTestId('source-agent-controls-error');
+    expect(e.textContent).toBe('crew’s answer didn’t say whether the change was made, so the switches below are read again from crew.');
+    await waitFor(() => expect(heard.settled).toHaveLength(1));
+    putImpl = () => Promise.reject(new TypeError('Failed to fetch'));
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls-see')).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId('source-agent-controls-see'));
+    await waitFor(() => expect(heard.settled).toHaveLength(2));
+    expect(screen.getByTestId('source-agent-controls-error').textContent).toMatch(/didn’t say whether the change was made/);
+    putImpl = () => Promise.reject(new ApiError(400, 'projects: Array must contain at most 64 element(s)', { error: 'projects: Array must contain at most 64 element(s)', code: 'bad_request' }));
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls-every')).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId('source-agent-controls-every'));
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls-error').textContent).toBe('crew didn’t take that change: a source names at most 64 projects, by their ids. Nothing changed.'));
+    expect(screen.getByTestId('source-agent-controls-error').textContent).not.toMatch(/Array must contain/);
+    heard.stop();
+  });
+
+  it('at 64 projects no further one can be ticked; one can still be taken away', async () => {
+    agents = { ...DEFAULTS, projects: Array.from({ length: 63 }, (_, i) => `proj_${i}`).concat('proj_support') };
+    render(<Box />);
+    const other = await screen.findByTestId('source-agent-controls-project-proj_other');
+    expect(other).toBeDisabled();
+    expect(screen.getByTestId('source-agent-controls-projects-full')).toBeTruthy();
+    expect(screen.getByTestId('source-agent-controls-project-proj_support')).not.toBeDisabled();
   });
 
   it('recent agent queries link to their jobs and never show SQL; an unreadable record says so', async () => {
@@ -173,7 +222,6 @@ describe('the Agents box on a saved source', () => {
       { callId: 'c2', at: '2026-11-03T22:10:00.000Z', runId: 'run-abcdef123', unit: 1, attempt: 1, seat: 'claude', source: 'support-pg', sourceId: 'id', sqlHash: 'a'.repeat(64), outcome: 'ok', rows: 1, truncated: false, ms: 7, released: true },
       { callId: 'c1', at: '2026-11-03T22:09:00.000Z', runId: 'run-abcdef123', unit: 1, attempt: 1, seat: 'claude', source: 'support-pg', sourceId: 'id', sqlHash: 'b'.repeat(64), outcome: 'not_select', rows: 0, truncated: false, ms: 1, released: false },
       { callId: 'c0', at: '2026-11-03T22:08:00.000Z', runId: 'run-abcdef123', unit: 1, attempt: 1, seat: 'claude', source: 'support-pg', sourceId: 'id', sqlHash: 'c'.repeat(64), outcome: 'changed_while_running', rows: 3, truncated: false, ms: 1, released: false },
-      { junk: true },
     ] };
     render(<Box />);
     await waitFor(() => expect(screen.getAllByTestId('source-agent-controls-recent-row')).toHaveLength(3));
@@ -199,6 +247,16 @@ describe('the Agents box on a saved source', () => {
     recent = { name: 'other-source', known: true, queries: [{ callId: 'x', at: 'x', runId: 'r', unit: 1, attempt: 1, seat: 's', source: 'other-source', sqlHash: 'h', outcome: 'ok', rows: 1, truncated: false, ms: 1, released: true }] };
     render(<Box />);
     await waitFor(() => expect(screen.getByTestId('source-agent-controls-recent-unknown')).toBeTruthy());
+    cleanup();
+    // The right envelope holding another source's entry, or an entry that is not crew's: the record is unreadable,
+    // never a shorter history (nor "none").
+    for (const bad of [{ callId: 'x', at: 'x', runId: 'r', unit: 1, attempt: 1, seat: 's', source: 'other-source', outcome: 'ok', rows: 1, truncated: false, ms: 1, released: true }, { junk: true }]) {
+      recent = { name: 'support-pg', known: true, queries: [bad] };
+      render(<Box />);
+      await waitFor(() => expect(screen.getByTestId('source-agent-controls-recent-unknown')).toBeTruthy());
+      expect(screen.queryByTestId('source-agent-controls-recent-none')).toBeNull();
+      cleanup();
+    }
   });
 });
 
@@ -216,7 +274,10 @@ describe('NEGATIVE CONTROL: no Agents box without crew\'s `agents` field', () =>
   });
 
   it('nor when the field is not one crew could have sent (null, an empty object, a string)', async () => {
-    for (const bad of [null, {}, 'on', { see: 'yes', query: false }]) {
+    for (const bad of [null, {}, 'on', { see: 'yes', query: false }, { see: true, query: false }, { see: true, query: false, projects: 'proj_support', everyProject: false },
+      { see: true, query: false, projects: [3], everyProject: false }, { see: true, query: false, projects: [], everyProject: 'no' },
+      // crew never lets query outlive see: a record saying so is not crew's, and shows no switch that could mislead.
+      { see: false, query: true, projects: [], everyProject: false }]) {
       sheet(pgServer({ agents: bad } as never));
       await screen.findByTestId('source-agents-see');
       expect(screen.queryByTestId('source-agent-controls')).toBeNull();
@@ -245,10 +306,8 @@ describe('NEGATIVE CONTROL: no Agents box without crew\'s `agents` field', () =>
     await screen.findByTestId('source-agent-controls');
     expect(screen.getByTestId('source-agents-see').textContent).toMatch(/may also query it, and the rows they read go to their model provider/);
     cleanup();
-    sheet(pgServer({ agents: { ...DEFAULTS, see: false, query: true } } as never));
+    sheet(pgServer({ agents: { ...DEFAULTS, see: false } } as never));
     await screen.findByTestId('source-agent-controls');
-    // Query never outlives see, whatever the record says.
-    expect(screen.getByTestId('source-agent-controls').getAttribute('data-query')).toBe('off');
     expect(screen.getByTestId('source-agents-see').textContent).toMatch(/^What agents seeNothing while/);
   });
 });
@@ -328,7 +387,7 @@ describe('NEGATIVE CONTROL: a late answer never undoes a newer switch', () => {
       if (path === '/sources/support-pg/agent-queries') return Promise.resolve({ name: 'support-pg', known: true, queries: [] });
       if (path.endsWith('/catalog')) return Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: CATALOG, privileges: READ_ONLY, descriptorHash: 'd'.repeat(64) });
       if (path === '/sources/support-pg/agents' && method === 'PUT') {
-        now = agentAccessOf({ agents: { ...now, ...(body as object) } })!;
+        now = crewApply(now, body as Record<string, unknown>) as SourceAgentAccess;
         return Promise.resolve({ name: 'support-pg', agents: now });
       }
       return Promise.reject(new Error(`unexpected ${method} ${path}`));
@@ -350,6 +409,109 @@ describe('NEGATIVE CONTROL: a late answer never undoes a newer switch', () => {
     await act(async () => { listHeld[1]!(); });
     expect(screen.getByTestId('source-agent-controls').getAttribute('data-see')).toBe('off');
     expect((screen.getByTestId('source-agent-controls-every') as HTMLInputElement).checked).toBe(true);
+  });
+});
+
+describe('NEGATIVE CONTROL (review r1): crew\'s switches reach the box after a write, on every path', () => {
+  /** A crew whose list and PUT read one state; PUTs can be held and are applied when released, in any order. */
+  function crewWire(start: SourceAgentAccess) {
+    const crew = { state: { ...start } };
+    const held: Array<{ body: Record<string, unknown>; release: () => void }> = [];
+    let holdPuts = true;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+      calls.push({ path, method, body });
+      if (path === '/mcp/servers' && method === 'GET') return Promise.resolve({ servers: [pgServer({ agents: { ...crew.state } } as never)], discovered: [] });
+      if (path === '/mcp/servers' && method === 'POST') return Promise.resolve(pgServer({ agents: { ...crew.state } } as never));
+      if (path === '/mcp/servers/preview') return Promise.resolve(pgPreview('support-pg'));
+      if (path === '/projects?status=active') return Promise.resolve({ projects: [{ id: 'proj_a', name: 'A' }, { id: 'proj_b', name: 'B' }] });
+      if (path === '/sources/support-pg/agent-queries') return Promise.resolve({ name: 'support-pg', known: true, queries: [] });
+      if (path.endsWith('/catalog')) return Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: CATALOG, privileges: READ_ONLY, descriptorHash: 'd'.repeat(64) });
+      if (path === '/sources/support-pg/agents' && method === 'PUT') {
+        return new Promise((resolve, reject) => {
+          const apply = (): void => {
+            const next = crewApply(crew.state, body as Record<string, unknown>);
+            if (next === 'see_off') { reject(new ApiError(409, 'see off', { error: 'x', code: 'see_off' })); return; }
+            crew.state = next;
+            resolve({ name: 'support-pg', agents: { ...next } });
+          };
+          if (holdPuts) held.push({ body: body as Record<string, unknown>, release: apply }); else apply();
+        });
+      }
+      return Promise.reject(new Error(`unexpected ${method} ${path}`));
+    });
+    return { crew, held, setHold: (h: boolean) => { holdPuts = h; } };
+  }
+  const shown = (): SourceAgentAccess => {
+    const box = screen.getByTestId('source-agent-controls');
+    const ticked = (id: string): boolean => (screen.queryByTestId(`source-agent-controls-project-${id}`) as HTMLInputElement | null)?.checked === true;
+    return { see: box.getAttribute('data-see') === 'on', query: box.getAttribute('data-query') === 'on', projects: ['proj_a', 'proj_b'].filter(ticked), everyProject: (screen.getByTestId('source-agent-controls-every') as HTMLInputElement).checked };
+  };
+
+  it('the whole page closed and opened again while a write runs: the new page shows crew\'s switches once it settles', async () => {
+    useCapabilities.setState({ loaded: true, dataSources: true });
+    const w = crewWire(DEFAULTS);
+    const first = render(<SourcesPage navigate={vi.fn()} search="?source=support-pg" />);
+    fireEvent.click(await screen.findByTestId('source-agent-controls-see'));
+    await waitFor(() => expect(w.held).toHaveLength(1));
+    first.unmount();
+    // The new page reads crew before the write landed: see on.
+    render(<SourcesPage navigate={vi.fn()} search="?source=support-pg" />);
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls').getAttribute('data-see')).toBe('on'));
+    await act(async () => { w.held[0]!.release(); });
+    // The old page heard the answer; the page mounted NOW reads crew again.
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls').getAttribute('data-see')).toBe('off'));
+    expect(w.crew.state.see).toBe(false);
+  });
+
+  it('two overlapping writes on the same control that crew applies in the other order: the box ends on crew\'s', async () => {
+    useCapabilities.setState({ loaded: true, dataSources: true });
+    const w = crewWire(DEFAULTS);
+    const navigate = vi.fn();
+    const { rerender } = render(<SourcesPage navigate={navigate} search="?source=support-pg" />);
+    fireEvent.click(await screen.findByTestId('source-agent-controls-project-proj_a'));
+    await waitFor(() => expect(w.held).toHaveLength(1));
+    rerender(<SourcesPage navigate={navigate} search="" />);
+    await waitFor(() => expect(screen.queryByTestId('source-sheet')).toBeNull());
+    rerender(<SourcesPage navigate={navigate} search="?source=support-pg" />);
+    const b = await screen.findByTestId('source-agent-controls-project-proj_b');
+    await waitFor(() => expect(b).not.toBeDisabled());
+    fireEvent.click(b);
+    await waitFor(() => expect(w.held).toHaveLength(2));
+    expect(w.held.map((h) => h.body)).toEqual([{ projects: ['proj_a'] }, { projects: ['proj_b'] }]);
+    // crew applies the NEWER write first, then the older one: crew ends on [proj_a].
+    w.setHold(false);
+    await act(async () => { w.held[1]!.release(); });
+    await act(async () => { w.held[0]!.release(); });
+    expect(w.crew.state.projects).toEqual(['proj_a']);
+    await waitFor(() => expect(shown()).toEqual(w.crew.state));
+  });
+
+  it('a sheet opened as NEW and saved follows its source\'s record: crew\'s switches, read again, reach it', async () => {
+    useCapabilities.setState({ loaded: true, dataSources: true });
+    const w = crewWire(DEFAULTS);
+    render(<SourcesPage navigate={vi.fn()} search="" />);
+    fireEvent.click(await screen.findByTestId('sources-add'));
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'support-pg' } });
+    fireEvent.change(screen.getByTestId('source-host'), { target: { value: 'db.support.internal' } });
+    fireEvent.change(screen.getByTestId('source-database'), { target: { value: 'support' } });
+    fireEvent.change(screen.getByTestId('source-user'), { target: { value: 'reader' } });
+    fireEvent.click(screen.getByTestId('source-test-run'));
+    await screen.findByTestId('source-test-ok');
+    fireEvent.click(screen.getByTestId('source-save'));
+    await screen.findByTestId('source-agent-controls');
+    // A write whose answer is lost on the way back (crew made it): the page reads crew again, and the sheet follows.
+    w.setHold(false);
+    apiFetch.mockImplementationOnce((path: string, init?: RequestInit) => {
+      calls.push({ path, method: init?.method ?? 'GET', body: undefined });
+      w.crew.state = { ...w.crew.state, everyProject: true };
+      return Promise.reject(new TypeError('Failed to fetch'));
+    });
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls-every')).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId('source-agent-controls-every'));
+    await screen.findByTestId('source-agent-controls-error');
+    await waitFor(() => expect((screen.getByTestId('source-agent-controls-every') as HTMLInputElement).checked).toBe(true));
   });
 });
 
@@ -392,15 +554,33 @@ describe('a job\'s data use on its gate card', () => {
     await waitFor(() => expect(screen.getByTestId('gate-data').getAttribute('data-known')).toBe('false'));
   });
 
-  it('an answer for another run, or not crew\'s shape, shows nothing; malformed entries are dropped', async () => {
+  it('an answer for another run, or not crew\'s whole answer, is "not known": never "none", never a shorter list', async () => {
     dataUse = { runId: 'run-other', known: true, sources: [{ source: 'support-pg', queries: 1, released: 1, rows: 1, truncated: false, lastAt: 'x' }] };
-    const a = render(<RunDataUse runId="run-1" testId="gate-data" />);
-    await waitFor(() => expect(calls.some((c) => c.path === '/runs/run-1/data-use')).toBe(true));
-    await new Promise((r) => setTimeout(r, 10));
-    expect(a.container.textContent).toBe('');
+    render(<RunDataUse runId="run-1" testId="gate-data" />);
+    await waitFor(() => expect(screen.getByTestId('gate-data').getAttribute('data-known')).toBe('false'));
     cleanup();
     dataUse = { runId: 'run-1', known: true, sources: [{ source: 'support-pg', queries: 'many', released: 1, rows: 1 }, { source: 'crm-pg', queries: 1, released: 1, rows: 4, truncated: true, lastAt: 'x' }] };
     render(<RunDataUse runId="run-1" testId="gate-data" />);
-    await waitFor(() => expect(screen.getByTestId('gate-data').textContent).toBe('Agents read data: crm-pg · 1 query · 4 rows (cut at the cap). The work may hold values copied from it.'));
+    await waitFor(() => expect(screen.getByTestId('gate-data').getAttribute('data-known')).toBe('false'));
+  });
+
+  it('a late answer for the previous run never shows under the next one; a refresh\'s older answer never lands', async () => {
+    const answers = new Map<string, Array<(v: unknown) => void>>();
+    apiFetch.mockImplementation((path: string) => {
+      calls.push({ path, method: 'GET', body: undefined });
+      return new Promise((r) => { answers.set(path, [...(answers.get(path) ?? []), r]); });
+    });
+    const use = (runId: string, rows: number) => ({ runId, known: true, sources: [{ source: 'support-pg', queries: 1, released: 1, rows, truncated: false, lastAt: 'x' }] });
+    const { rerender } = render(<RunDataUse runId="run-1" refresh={0} testId="gate-data" />);
+    await waitFor(() => expect(answers.get('/runs/run-1/data-use')).toHaveLength(1));
+    rerender(<RunDataUse runId="run-2" refresh={0} testId="gate-data" />);
+    await waitFor(() => expect(answers.get('/runs/run-2/data-use')).toHaveLength(1));
+    await act(async () => { answers.get('/runs/run-1/data-use')![0]!(use('run-1', 99)); });
+    expect(screen.queryByTestId('gate-data')).toBeNull();
+    rerender(<RunDataUse runId="run-2" refresh={1} testId="gate-data" />);
+    await waitFor(() => expect(answers.get('/runs/run-2/data-use')).toHaveLength(2));
+    await act(async () => { answers.get('/runs/run-2/data-use')![1]!(use('run-2', 7)); });
+    await act(async () => { answers.get('/runs/run-2/data-use')![0]!(use('run-2', 1)); });
+    expect(screen.getByTestId('gate-data').textContent).toMatch(/support-pg · 1 query · 7 rows\./);
   });
 });

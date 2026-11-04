@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  AGENT_PROJECTS_MAX,
   agentAccessAnswer,
   agentQueriesOf,
   agentSwitchRefusal,
-  agentSwitchRereads,
   agentSwitchWrites,
   projectsOf,
   sourceAgentsApi,
@@ -35,24 +35,22 @@ export function projectsWords(a: SourceAgentAccess, names: ReadonlyMap<string, s
  * Below them, the source's recent agent reads, each linking to its job.
  *
  * Every switch shows crew's answer, never a guess: a change is sent, the box waits for crew, and shows what crew
- * says it now holds. One write runs at a time in a box; across boxes (a sheet closed and opened again while its
- * write ran) the newest write's answer wins (`agentSwitchWrites`), and an older one makes the page read crew
- * afresh rather than undo the newer switch.
+ * says it now holds. One write runs at a time in a box; across boxes (a sheet, or the whole page, closed and opened
+ * again while its write ran) only the newest write's answer is applied (`agentSwitchWrites`), and every write that
+ * settles makes the mounted Sources page read crew's switches again, so a late answer never undoes a newer switch.
  *
  * Human-only in the UI as at crew (403 `agents_switch_human_only` to anything but a human operator): this is the
  * ONLY caller of `sourceAgentsApi.setAgentAccess` (pinned by `tests/sourceAgentsHumanOnly.test.ts`), and it changes
  * a switch only on a click. No URL parameter, palette verb, plugin request or chat reply reaches it.
  */
-export function AgentAccess({ source, dialect, agents, onChanged, onStale, 'data-testid': testId = 'source-agent-controls' }: {
+export function AgentAccess({ source, dialect, agents, onChanged, 'data-testid': testId = 'source-agent-controls' }: {
   source: string;
   /** Only a Postgres source can be queried by agents in this release; MySQL and uploads are structure only. */
   dialect: 'postgres' | 'mysql' | 'sqlite';
   /** crew's switches for the source (the sheet shows no box when crew sent none). */
   agents: SourceAgentAccess;
-  /** crew answered a change: the switches it now holds. */
+  /** crew answered the newest change: the switches it now holds. */
   onChanged: (agents: SourceAgentAccess) => void;
-  /** The shown switches may be older than crew's (an older write answered late, or crew refused a stale change). */
-  onStale: () => void;
   'data-testid'?: string;
 }): React.ReactElement {
   const a = agents;
@@ -70,9 +68,11 @@ export function AgentAccess({ source, dialect, agents, onChanged, onStale, 'data
 
   useEffect(() => {
     let live = true;
-    // Another source's projects and reads never show under this one.
+    // Another source's projects, reads, refusal or open confirmation never show under this one.
     setProjects(null);
     setRecent(null);
+    setError(null);
+    setAsking(false);
     // Read-only calls; a crew without them (or a failed read) leaves an empty list and "not known".
     Promise.resolve().then(() => sourceAgentsApi.projects()).then(
       (r) => { if (live) setProjects(projectsOf(r)); },
@@ -92,23 +92,19 @@ export function AgentAccess({ source, dialect, agents, onChanged, onStale, 'data
     setError(null);
     try {
       const r = await sourceAgentsApi.setAgentAccess(source, body);
-      // A newer write was sent for this source since: its answer is the one to show, and crew is read afresh.
-      if (!agentSwitchWrites.isNewest(source, ticket)) { onStale(); return; }
-      const next = agentAccessAnswer(r, source);
-      if (next === null) {
-        setError('crew’s answer could not be read, so the switches are read again from crew.');
-        onStale();
-        return;
-      }
       setAsking(false);
+      // A newer write was sent for this source since: its answer is the one to show (and crew is read again below).
+      if (!agentSwitchWrites.isNewest(source, ticket)) return;
+      const next = agentAccessAnswer(r, source);
+      if (next === null) { setError('crew’s answer could not be read, so the switches below are read again from crew.'); return; }
       onChanged(next);
     } catch (e) {
-      if (!agentSwitchWrites.isNewest(source, ticket)) { onStale(); return; }
       setAsking(false);
-      setError(agentSwitchRefusal(e));
-      if (agentSwitchRereads(e)) onStale();
+      if (agentSwitchWrites.isNewest(source, ticket)) setError(agentSwitchRefusal(e));
     } finally {
       setBusy(false);
+      // Whatever came back (or didn't), crew's switches are read again by the page that is mounted now.
+      agentSwitchWrites.settled(source);
     }
   };
   const toggleProject = (id: string, on: boolean): void => {
@@ -118,6 +114,7 @@ export function AgentAccess({ source, dialect, agents, onChanged, onStale, 'data
   // A project the source names that is no longer active still shows, so a person can take it away.
   const listed = projects === null ? [] : [...projects, ...a.projects.filter((p) => !projects.some((x) => x.id === p)).map((p) => ({ id: p, name: `${p} (not an active project)` }))];
   const queryable = dialect === 'postgres';
+  const full = a.projects.length >= AGENT_PROJECTS_MAX;
 
   return (
     <div className="wk-src-box wk-src-writes" data-testid={testId} data-see={a.see ? 'on' : 'off'} data-query={a.query ? 'on' : 'off'} aria-busy={busy}>
@@ -191,10 +188,11 @@ export function AgentAccess({ source, dialect, agents, onChanged, onStale, 'data
         </label>
         {projects === null ? <p className="wk-src-cap">Reading the projects…</p> : listed.map((p) => (
           <label key={p.id} className="wk-src-check-row">
-            <input type="checkbox" data-testid={`${testId}-project-${p.id}`} checked={a.projects.includes(p.id)} disabled={a.everyProject} onChange={(e) => toggleProject(p.id, e.target.checked)} />
+            <input type="checkbox" data-testid={`${testId}-project-${p.id}`} checked={a.projects.includes(p.id)} disabled={a.everyProject || (full && !a.projects.includes(p.id))} onChange={(e) => toggleProject(p.id, e.target.checked)} />
             <span className="wk-src-note">{p.name}</span>
           </label>
         ))}
+        {full && <p className="wk-src-cap" data-testid={`${testId}-projects-full`}>A source names at most {AGENT_PROJECTS_MAX} projects: untick one, or choose every project.</p>}
       </fieldset>
       {busy && <p className="wk-src-cap" data-testid={`${testId}-busy`}>Asking crew…</p>}
 

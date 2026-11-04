@@ -68,7 +68,7 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, onSaved, onAllowWrites, onAgents, onAgentsStale, onDescribed, onClose }: {
+export function SourceSheet({ target, existing, servers, onSaved, onAllowWrites, onAgents, onDescribed, onClose }: {
   target: SheetTarget;
   /** Names already registered (a new source of the same name replaces it; the sheet says so). */
   existing: readonly string[];
@@ -76,8 +76,9 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onAgents
   onAllowWrites: (name: string, allowed: boolean) => void;
   /** (DES-KNOWLEDGE-DATA-001 §7.1) crew answered a change of the source's agent switches: the page keeps them. */
   onAgents?: (name: string, agents: SourceAgentAccess) => void;
-  /** The shown agent switches may be older than crew's: the page reads the sources again. */
-  onAgentsStale?: (name: string) => void;
+  /** The page's latest read of the registry: a sheet opened as NEW follows its saved source's record in it (its
+   *  agent switches, as crew reads them again after a write), as a saved sheet follows `target.server`. */
+  servers?: readonly McpServer[];
   /** The source was described again (its tables may have changed). */
   onDescribed?: (name: string) => void;
   onClose: () => void;
@@ -96,6 +97,10 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onAgents
   useEffect(() => {
     if (targetServer !== null) setSaved((s) => (s !== null && s.name === targetServer.name ? targetServer : s));
   }, [targetServer]);
+  const followed = target.mode === 'new' && saved !== null ? servers?.find((s) => s.name === saved.name) ?? null : null;
+  useEffect(() => {
+    if (followed !== null) setSaved((s) => (s !== null && s.name === followed.name ? followed : s));
+  }, [followed]);
   const secret = useRef<SecretHandle | null>(null);
   /** THAT the secret changed, and whether one is typed: never its value. */
   const [secretEdits, setSecretEdits] = useState(0);
@@ -570,7 +575,6 @@ export function SourceSheet({ target, existing, onSaved, onAllowWrites, onAgents
                     setSaved((cur) => (cur !== null && cur.name === name ? ({ ...cur, agents } as McpServer) : cur));
                     onAgents?.(name, agents);
                   }}
-                  onStale={() => onAgentsStale?.(saved.name)}
                 />
               )}
             </div>

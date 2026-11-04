@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { agentAccessOf } from '../../api/sourceAgents.js';
+import { agentAccessOf, agentSwitchWrites } from '../../api/sourceAgents.js';
 import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -86,6 +86,9 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  // (DES-KNOWLEDGE-DATA-001 §19 B5) Every agent-switch write that settles, from any sheet (or a page since unmounted),
+  // reads crew's switches again: whatever order crew applied overlapping writes in, this page shows crew's.
+  useEffect(() => agentSwitchWrites.subscribe(() => void refresh()), [refresh]);
 
   // `?source=<name>` opens that source's sheet: the address owns it, so Back (or a link to a source that
   // isn't there) closes it. A new source's sheet is the page's own, not the address's.
@@ -197,13 +200,9 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
             void refresh();
           }}
           onAllowWrites={setWrites}
-          onAgents={(name, agents) => {
-            setSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)));
-            // A list read that was out before the switch changed is older than it: read again after it.
-            void refresh();
-          }}
-          // The shown switches may be older than crew's (an older write answered late): crew's state, read afresh.
-          onAgentsStale={() => void refresh()}
+          servers={sources}
+          // crew's answer now; the read below (every settled write) supersedes any list read that was out before it.
+          onAgents={(name, agents) => setSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)))}
           onDescribed={(name) => setEpochs((m) => ({ ...m, [name]: (Object.hasOwn(m, name) ? (m[name] ?? 0) : 0) + 1 }))}
           onClose={close}
         />

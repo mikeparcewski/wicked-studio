@@ -5,8 +5,9 @@ import { dataUseWords, runDataUseOf, sourceAgentsApi, type RunDataUseResponse } 
 /**
  * (DES-KNOWLEDGE-DATA-001 §7.9) Which data sources a job's agents read, on its gate cards and its delivery, the way
  * assurance is shown: "Agents read data: support-pg · 3 queries · 12 rows". Nothing when they read none; "not
- * known" when crew's record could not be read (never "none"); nothing on a crew without the record (before api-types
- * 0.184.0). `refresh` re-reads it (a new event on the run). Only the newest read for the shown run lands.
+ * known" when crew's record could not be read, or crew's answer is not its whole answer for this run (never "none");
+ * nothing on a crew without the route (before api-types 0.184.0). `refresh` re-reads it (a new event on the run). Only
+ * the newest read for the shown run lands.
  */
 export function RunDataUse({ runId, refresh = 0, testId = 'run-data-use' }: { runId: string; refresh?: number | string; testId?: string }): React.ReactElement | null {
   const [use, setUse] = useState<RunDataUseResponse | null>(null);
@@ -19,7 +20,7 @@ export function RunDataUse({ runId, refresh = 0, testId = 'run-data-use' }: { ru
     );
     return () => { live = false; };
   }, [runId, refresh]);
-  // Anything but crew's answer for THIS run (an older crew, a stub, the previous run's answer) shows nothing.
+  // Nothing until crew answered for THIS run (the previous run's answer never shows under this one).
   if (use === null || use.runId !== runId) return null;
   if (!use.known) {
     return <p className="wk-assurance" data-testid={testId} data-known="false"><span className="wk-assurance-line">Data read by agents: not known (crew’s record could not be read).</span></p>;

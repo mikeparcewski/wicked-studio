@@ -29,7 +29,7 @@ export const sourceAgentsApi = {
   /** The agent switches and projects. Human operator only (crew answers 403 to anything else). */
   setAgentAccess: (name: string, body: SourceAgentAccessBody) =>
     apiFetch<unknown>(at(name, 'agents'), { method: 'PUT', body: JSON.stringify(body) }),
-  /** The source's last 20 agent reads, newest first. */
+  /** The source's recent agent reads (crew answers its last 20, newest first; studio shows them in crew's order). */
   agentQueries: (name: string) => apiFetch<unknown>(at(name, 'agent-queries')),
   /** The data sources a job's agents read. */
   runDataUse: (runId: string) => apiFetch<unknown>(`/runs/${encodeURIComponent(runId)}/data-use`),
@@ -39,21 +39,23 @@ export const sourceAgentsApi = {
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+const isText = (v: unknown): v is string => typeof v === 'string' && v !== '';
+
+/** At most this many projects per source (crew's `AGENT_PROJECTS_MAX`). */
+export const AGENT_PROJECTS_MAX = 64;
 
 /**
  * A data source's agent switches from its registry record (`McpServer.agents`), or `null` when the record carries
  * none, or none crew could have sent: then the sheet shows no Agents box at all (a crew before api-types 0.183.0
- * sends no field). crew fills every default in, so `see` and `query` must both be booleans. Query never outlives see.
+ * sends no field). crew fills every default in and never lets query outlive see, so anything short of four
+ * well-typed fields, or query on with see off, is not crew's answer and is never shown as a switch.
  */
 export function agentAccessOf(server: { agents?: unknown } | null | undefined): SourceAgentAccess | null {
   const a = server?.agents;
-  if (!isObj(a) || typeof a.see !== 'boolean' || typeof a.query !== 'boolean') return null;
-  return {
-    see: a.see,
-    query: a.see && a.query,
-    projects: Array.isArray(a.projects) ? [...new Set(a.projects.filter((p): p is string => typeof p === 'string' && p !== ''))] : [],
-    everyProject: a.everyProject === true,
-  };
+  if (!isObj(a) || typeof a.see !== 'boolean' || typeof a.query !== 'boolean' || typeof a.everyProject !== 'boolean') return null;
+  if (!Array.isArray(a.projects) || !a.projects.every(isText) || a.projects.length > AGENT_PROJECTS_MAX) return null;
+  if (a.query && !a.see) return null;
+  return { see: a.see, query: a.query, projects: [...new Set(a.projects as string[])], everyProject: a.everyProject };
 }
 
 /** The switches a `PUT /sources/:name/agents` answered for `name`, or `null` when the answer is not that. */
@@ -62,27 +64,47 @@ export function agentAccessAnswer(r: unknown, name: string): SourceAgentAccess |
   return agentAccessOf({ agents: r.agents });
 }
 
-/** A source's recent agent reads, or `'unknown'` when crew could not read its record (or answered for another source). */
+/**
+ * A source's recent agent reads (only the fields studio shows), or `'unknown'` when crew could not read its record,
+ * answered for another source, or sent any entry that is not crew's (an entry for another source included): a record
+ * studio can't read whole is never shown as a shorter history, nor as "none".
+ */
 export function agentQueriesOf(r: unknown, name: string): SourceAgentQuery[] | 'unknown' {
   if (!isObj(r) || r.name !== name || r.known !== true || !Array.isArray(r.queries)) return 'unknown';
-  return (r.queries as unknown[]).filter((q): q is SourceAgentQuery =>
-    isObj(q) && typeof q.callId === 'string' && typeof q.at === 'string' && typeof q.runId === 'string' && typeof q.seat === 'string'
-    && typeof q.outcome === 'string' && isCount(q.rows) && typeof q.released === 'boolean');
+  const out: SourceAgentQuery[] = [];
+  for (const q of r.queries as unknown[]) {
+    if (!isObj(q) || q.source !== name || !isText(q.callId) || !isText(q.at) || !isText(q.runId) || typeof q.seat !== 'string'
+      || !isText(q.outcome) || !isCount(q.rows) || typeof q.released !== 'boolean') return 'unknown';
+    out.push({
+      callId: q.callId, at: q.at, runId: q.runId, unit: isCount(q.unit) ? q.unit : 0, attempt: isCount(q.attempt) ? q.attempt : 0,
+      seat: q.seat, source: name, sourceId: typeof q.sourceId === 'string' ? q.sourceId : '', sqlHash: '', outcome: q.outcome,
+      rows: q.rows, truncated: q.truncated === true, ms: isCount(q.ms) ? q.ms : 0, released: q.released,
+    });
+  }
+  return out;
 }
 
-/** A job's data use for `runId`, or `null` when the answer is not crew's for that run (then nothing shows). */
-export function runDataUseOf(r: unknown, runId: string): RunDataUseResponse | null {
-  if (!isObj(r) || r.runId !== runId || typeof r.known !== 'boolean' || !Array.isArray(r.sources)) return null;
-  const sources = (r.sources as unknown[]).filter((s): s is SourceDataUse =>
-    isObj(s) && typeof s.source === 'string' && isCount(s.queries) && isCount(s.released) && isCount(s.rows));
-  return { runId, known: r.known, sources: sources.map((s) => ({ ...s, truncated: s.truncated === true })) };
+/**
+ * A job's data use for `runId` (only the fields studio shows). Anything that is not crew's whole answer for THIS run
+ * (another run's, a malformed entry) reads as UNKNOWN (`known: false`), never as "none" or as a shorter list.
+ */
+export function runDataUseOf(r: unknown, runId: string): RunDataUseResponse {
+  const unknown: RunDataUseResponse = { runId, known: false, sources: [] };
+  if (!isObj(r) || r.runId !== runId || typeof r.known !== 'boolean' || !Array.isArray(r.sources)) return unknown;
+  if (!r.known) return unknown;
+  const sources: SourceDataUse[] = [];
+  for (const s of r.sources as unknown[]) {
+    if (!isObj(s) || !isText(s.source) || !isCount(s.queries) || !isCount(s.released) || !isCount(s.rows)) return unknown;
+    sources.push({ source: s.source, queries: s.queries, released: s.released, rows: s.rows, truncated: s.truncated === true, lastAt: typeof s.lastAt === 'string' ? s.lastAt : '' });
+  }
+  return { runId, known: true, sources };
 }
 
 /** The active projects a source's agents may be given, without crew's synthesized "Unfiled" (`default`). */
 export function projectsOf(r: unknown): Array<{ id: string; name: string }> {
   if (!isObj(r) || !Array.isArray(r.projects)) return [];
   return (r.projects as unknown[])
-    .filter((p): p is { id: string; name: string } => isObj(p) && typeof p.id === 'string' && typeof p.name === 'string')
+    .filter((p): p is { id: string; name: string } => isObj(p) && isText(p.id) && typeof p.name === 'string')
     // "Unfiled" is no project a job is filed into: "Every project" covers jobs and chats in none.
     .filter((p) => p.id !== 'default')
     .map((p) => ({ id: p.id, name: p.name }));
@@ -100,40 +122,33 @@ export function refusalCode(e: unknown): string | null {
 }
 
 /**
- * What a refused switch change says, in plain words. Every refusal changed nothing at crew, so each says so; the
- * codes are crew's (`knowledge/gate/routes.ts`): 403 `agents_switch_human_only`, 409 `see_off`, 404
- * `unknown_server`, 400 `not_a_source`/`bad_request`, 503 `registry_unavailable`/`registry_corrupt`.
+ * What a refused switch change says, in plain words. Only crew's own named refusals (`knowledge/gate/routes.ts`:
+ * 403 `agents_switch_human_only`, 409 `see_off`, 404 `unknown_server`, 400 `not_a_source`/`bad_request`, 503
+ * `registry_unavailable`/`registry_corrupt`) say "Nothing changed": crew answers them before it writes. Anything else
+ * (a gateway's 502/504, a dropped connection, an unnamed status) may have landed, so it says so; the page reads
+ * crew's switches again after every write either way.
  */
 export function agentSwitchRefusal(e: unknown): string {
   const code = refusalCode(e);
-  const status = e instanceof ApiError ? e.status : null;
-  if (code === 'agents_switch_human_only' || (status === 403 && code === null)) {
-    return 'Only a person signed in as an operator can change what agents may do with a source. Nothing changed.';
-  }
+  if (code === 'agents_switch_human_only') return 'Only a person signed in as an operator can change what agents may do with a source. Nothing changed.';
   if (code === 'see_off') return 'Agents can query only a source whose structure they can see. Turn on “Agents can see this structure” first. Nothing changed.';
   if (code === 'unknown_server') return 'This source is no longer registered with crew. Nothing changed.';
   if (code === 'not_a_source') return 'crew doesn’t offer this source to agents, so it has no agent switches. Nothing changed.';
-  if (code === 'registry_unavailable' || code === 'registry_corrupt' || status === 503) {
-    return 'crew couldn’t read its source registry just now, so nothing changed. Try again in a moment.';
-  }
-  if (e instanceof ApiError) return `${e.message.charAt(0).toUpperCase()}${e.message.slice(1)}. Nothing changed.`;
-  return 'crew didn’t answer, so the change may or may not have been made: the switches are read again from crew.';
-}
-
-/** Whether a refused change means the shown switches are older than crew's (so the page reads them again). */
-export function agentSwitchRereads(e: unknown): boolean {
-  if (!(e instanceof ApiError)) return true; // no answer: crew may have made the change
-  const code = refusalCode(e);
-  return code === 'see_off' || code === 'unknown_server' || code === 'not_a_source';
+  if (code === 'bad_request') return `crew didn’t take that change: a source names at most ${AGENT_PROJECTS_MAX} projects, by their ids. Nothing changed.`;
+  if (code === 'registry_unavailable' || code === 'registry_corrupt') return 'crew couldn’t read its source registry just now, so nothing changed. Try again in a moment.';
+  return 'crew’s answer didn’t say whether the change was made, so the switches below are read again from crew.';
 }
 
 /**
  * THE SEQUENCE GUARD for the agent switches (DES-KNOWLEDGE-DATA-001 §19 B5: a late answer never undoes a newer
  * switch). Per source, the newest write this tab sent. A write's answer is applied only while it is still the newest
- * for its source; an older one (a sheet closed and opened again while its write ran, then switched again) is dropped,
- * and the page reads crew's state afresh instead. Module state, so every sheet instance shares it.
+ * for its source; an older one (a sheet closed and opened again while its write ran, then switched again) is dropped.
+ * Every write that settles, newest or not, answered or refused, tells every subscriber (the Sources page that is
+ * mounted NOW, not the one that sent it), which reads crew's switches again: so whatever order crew applied
+ * overlapping writes in, the shown switches are crew's after one re-read. Module state, shared by every instance.
  */
 const newestWrite = new Map<string, number>();
+const settledListeners = new Set<(source: string) => void>();
 let writeClock = 0;
 export const agentSwitchWrites = {
   /** The ticket of a write about to be sent for `source`: from now on, the newest. */
@@ -145,5 +160,14 @@ export const agentSwitchWrites = {
   /** Whether the write holding `ticket` is still the newest for `source`. */
   isNewest(source: string, ticket: number): boolean {
     return newestWrite.get(source) === ticket;
+  },
+  /** A write for `source` settled: crew's switches may differ from what any page shows. */
+  settled(source: string): void {
+    for (const fn of [...settledListeners]) fn(source);
+  },
+  /** Hear every settled write; returns the unsubscribe. */
+  subscribe(fn: (source: string) => void): () => void {
+    settledListeners.add(fn);
+    return () => { settledListeners.delete(fn); };
   },
 };
