@@ -128,9 +128,11 @@ export async function profileSource(name: string): Promise<SourceProfileResponse
 
 /**
  * What a `knowledge` proposal is (journey 2026-11-04: every one was labelled "Data shape"). A DATA SHAPE links what it
- * is about: crew's profiler and garden's shapes pass both file `relate`/`relate_code`, and crew's map draws exactly the
- * approved proposals that carry them (crew `knowledge/shapes/map.ts`). Anything else is a knowledge NOTE an agent
- * filed about a repository (`{content, class, source: "<repo>:<path>", source_rev}`): the map never draws it.
+ * is about: crew's profiler and garden's shapes pass both file `relate`/`relate_code` (one of them may be empty), and
+ * crew's map draws exactly the approved proposals that carry them (crew `knowledge/shapes/map.ts`). A crew shape record
+ * (`payload.shape`) is a data shape too, even without the arrays: what it IS, not whether the map can draw it. Anything
+ * else is a knowledge NOTE an agent filed about a repository (`{content, class, source: "<repo>:<path>", source_rev}`,
+ * no link keys at all, as the test rig holds them): the map never draws it.
  */
 export function knowledgeKind(p: Proposal): 'shape' | 'note' {
   const payload = (p as { payload?: unknown }).payload;

@@ -8,9 +8,10 @@ The operator's path through the rail's Chat icon, on the fixture's chat (replies
 `chatReply` frames). At 1440x700 and on a 390x844 phone, light and dark, it proves:
 
   1. ORDER: the thread reads q1, a1, q2, a2: each reply under its own question.
-  2. NOTHING OVER THE ANSWER: no seat-chip header is drawn, the chat block has no scroller of its own, and the first
+  2. FOLLOWS THE END: when an answer lands, the window's thread is scrolled to its end by itself.
+  3. NOTHING OVER THE ANSWER: no seat-chip header is drawn, the chat block has no scroller of its own, and the first
      line of each answer's code block is its own hit target when scrolled to (no header and no clip over it).
-  3. 0 page errors.
+  4. 0 page errors.
 
 Captures: e2e/shots/desk-chat-window-*.png. Env: FEEDBACK_PORT (default 4392).
 """
@@ -113,6 +114,9 @@ with sync_playwright() as p:
         set_fixture(origin, chat_frames=[{"type": "chatReply", "chat": chat_id, "cliKey": "claude", "ok": True, "text": answer(2)}])
         page.locator('[data-testid="system-chat"] [data-testid="assist-chat-msg"][data-agent="claude"][data-pending="false"]').nth(1).wait_for(timeout=15000)
         page.wait_for_timeout(600)
+        tail = page.evaluate("""() => { const t = document.querySelector('[data-testid="system-chat"] [data-testid="assist-thread"]');
+          return t ? { gap: Math.round(t.scrollHeight - t.scrollTop - t.clientHeight), overflow: t.scrollHeight > t.clientHeight } : null; }""")
+        check(f"follows-the-end-{w}x{h}", tail is not None and tail["overflow"] and tail["gap"] < 48, **(tail or {}))
         order = page.evaluate(ORDER)
         want = ["Q:" + Q1, "A:FIRSTLINE-1", "Q:" + Q2, "A:FIRSTLINE-2"]
         check(f"order-{w}x{h}", len(order) == 4 and all(o.startswith(x[:40]) for o, x in zip(order, want)), order=order)

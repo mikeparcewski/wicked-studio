@@ -9,9 +9,10 @@ said "Data shape". Proves, at 1440x900 (the journey's) and 1440x700:
   2. HIT TARGET: a far card's Approve is its own hit target once scrolled to (Playwright's actionability check,
      `trial`), for cards near the middle and the end of the list; a real click on one far card's Approve approves
      THAT card (the fixture sees its id, once).
-  3. NEGATIVE CONTROL: with the review cards made scroll anchors again (the rule this journey guards), the same
-     check fails: Chromium re-anchors and moves the list under the click. A control that passes is reported, not
-     hidden: the journey then fails, since it no longer tells the fix from its absence.
+  3. THE RULE: every review card computes `overflow-anchor: none` in the real browser (deterministic).
+  NEGATIVE CONTROL (reported, never fatal): with the cards made scroll anchors again, the same check is run and its
+     result is recorded. Locally it failed (card 12 -> card 15, card 20 -> card 25); it rides a Chromium timing, so a
+     run where it passes must not fail a correct build (review r1).
   4. 0 page errors.
 
 Captures: e2e/shots/desk-review-anchor*.png. Env: FEEDBACK_PORT (default 4391).
@@ -122,6 +123,8 @@ with sync_playwright() as p:
             check("labels", len(chips) == len(QUEUE) and all(c[1] == "Knowledge note" for c in notes) and all(c[1] == "Data shape" for c in shapes),
                   notes=len(notes), shapes=len(shapes), wrong=[c for c in chips if c[1] != ("Data shape" if c[0].startswith("k-shape-") else "Knowledge note")])
             page.screenshot(path=str(SHOTS / "desk-review-anchor-labels.png"))
+        anchors = page.locator('[data-testid="proposal-card"]').evaluate_all("cs => [...new Set(cs.map(c => getComputedStyle(c).overflowAnchor))]")
+        check(f"cards-never-anchor-{w}x{h}", anchors == ["none"], computed=anchors)
         res = far_checks(page)
         check(f"hit-target-{w}x{h}", all(ok for _, ok, _ in res), cards=res)
         if w == 1440 and h == 900:
@@ -143,8 +146,8 @@ with sync_playwright() as p:
     page.add_style_tag(content=".wk-gk-card { overflow-anchor: auto !important; }")
     page.wait_for_timeout(300)
     control = far_checks(page)
-    check("negative-control", not all(ok for _, ok, _ in control), cards=control,
-          note="with the cards as scroll anchors the far Approve must NOT be its own hit target, or this journey proves nothing")
+    report["negative_control"] = {"reproduced": not all(ok for _, ok, _ in control), "cards": control,
+                                  "note": "the cards as scroll anchors again (main before the fix); informational"}
     page.close()
     browser.close()
 

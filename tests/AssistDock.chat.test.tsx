@@ -150,6 +150,81 @@ describe('AssistDock — the chat block', () => {
     expect(order).toEqual(['Q:how many open tickets per region?', 'A:first answer', 'Q:and with query on?', 'A:second answer']);
   });
 
+  // Review r1 (codex): a reply's frames can arrive before its send is acknowledged; the question still sits above it.
+  it('a reply that streams in before its send is acknowledged still sits under its question', async () => {
+    const user = userEvent.setup();
+    let ack: ((v: { chatId: string }) => void) | null = null;
+    const send = vi.fn()
+      .mockResolvedValueOnce({ chatId: 'chat-1' })
+      .mockImplementationOnce(() => new Promise<{ chatId: string }>((res) => { ack = res; }));
+    dock({ send });
+    await user.type(screen.getByTestId('assist-input'), 'q1');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+    act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'a1', ok: true })));
+    await user.type(screen.getByTestId('assist-input'), 'q2');
+    await user.click(screen.getByTestId('assist-send'));
+    // The reply streams before POST /messages answers.
+    act(() => emit?.(frame({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', text: 'a' })));
+    await act(async () => { ack!({ chatId: 'chat-1' }); });
+    act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'a2', ok: true })));
+    await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(3));
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => `${m.getAttribute('data-agent')}:${(m.textContent ?? '').replace(/^(you|claude)/u, '')}`))
+      .toEqual(['claude:a1', 'you:q2', 'claude:a2']);
+  });
+
+  // Review r1 (codex): a failed follow-up was drawn after the block, so a retry that succeeded read above it.
+  it('a failed follow-up and its error stay where they were asked; the retry and its answer come after them', async () => {
+    const user = userEvent.setup();
+    const send = vi.fn()
+      .mockResolvedValueOnce({ chatId: 'chat-1' })
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({ chatId: 'chat-1' });
+    dock({ send });
+    await user.type(screen.getByTestId('assist-input'), 'q1');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+    act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'a1', ok: true })));
+    await user.type(screen.getByTestId('assist-input'), 'q2');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByText(/network down/);
+    // The failed draft stays in the box; the person rewrites it.
+    expect(screen.getByTestId('assist-input')).toHaveValue('q2');
+    await user.clear(screen.getByTestId('assist-input'));
+    await user.type(screen.getByTestId('assist-input'), 'q2 again');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(3));
+    act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'a2', ok: true })));
+    const thread = screen.getByTestId('assist-thread');
+    const order = [...thread.querySelectorAll('[data-testid="assist-user-msg"], [data-testid="assist-chat-msg"], [data-testid="assist-note"]')]
+      .map((el) => (el.textContent ?? '').replace(/^(you|claude)/u, '').replace(/^· /u, '').trim());
+    expect(order).toEqual(['q1', 'a1', 'q2', 'network down', 'q2 again', 'a2']);
+  });
+
+  // Review r1 (codex, pi): a follow-up sent while a past chat's history was loading made the replay drop the history.
+  it('a follow-up sent while a resumed chat replays its history comes after that history', async () => {
+    const user = userEvent.setup();
+    let release: ((v: { records: readonly unknown[]; closed: boolean }) => void) | null = null;
+    render(
+      <AssistDock
+        context={{ surface: 'ask', title: 'Chat', contextLabel: 'Seeing: the Desk', placeholder: 'Ask…' }}
+        verbs={{ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) }}
+        open
+        onOpenChange={() => undefined}
+        variant="window"
+        resumeChatId="chat-1"
+        loadHistory={() => new Promise((res) => { release = res; })}
+      />,
+    );
+    await screen.findByTestId('assist-chat');
+    await user.type(screen.getByTestId('assist-input'), 'one more thing');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(1));
+    await act(async () => { release!({ records: [{ kind: 'user', text: 'first question' }, { cliKey: 'claude', text: 'first answer', ok: true }], closed: false }); });
+    await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(3));
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, ''))).toEqual(['first question', 'first answer', 'one more thing']);
+  });
+
   it('the narrow dock keeps its boxed block: the seat header and the capped scroller', async () => {
     const user = userEvent.setup();
     dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
