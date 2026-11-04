@@ -49,6 +49,8 @@ export interface ToolReview {
   kind: 'issues' | 'reads' | 'writes';
   verdict: 'reviewed' | 'not_for_agents' | 'asks' | 'review_again' | 'unknown';
   note: string;
+  /** A saved write tool: whether the person granted it at the save (`McpTool.enabled`). */
+  granted?: boolean;
 }
 
 /** The binding notes the mockup names for the tools crew binds (DES-PM-001 §3.1); others get the general line. */
@@ -78,7 +80,8 @@ export function toolReview(tool: { name: string; class: string; binding?: unknow
   // A class this studio can't read claims nothing either way.
   if (!CLASSES.has(tool.class)) return { name: tool.name, kind: 'reads', verdict: 'unknown', note: 'crew named a kind of tool this studio can’t read, so it claims nothing about it.' };
   if (tool.class === 'write' || tool.class === 'destructive') {
-    return { name: tool.name, kind: 'writes', verdict: 'asks', note: 'A write: it happens only through an action the deliver gate asks you about.' };
+    const enabled = (tool as { enabled?: unknown }).enabled;
+    return { name: tool.name, kind: 'writes', verdict: 'asks', note: 'A write: it happens only through an action the deliver gate asks you about.', ...(saved && typeof enabled === 'boolean' ? { granted: enabled } : {}) };
   }
   const b = tool.binding;
   if (b === null) return { name: tool.name, kind: 'reads', verdict: 'not_for_agents', note: noteFor(UNBOUND_NOTES, tool.name) ?? 'crew can’t limit it to the trackers you link, so no agent gets it.' };
@@ -203,6 +206,8 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   const [secretEdits, setSecretEdits] = useState(0);
   /** The typed token went with a preview and the field let go of it: it is sent once per test, so a new test needs it typed again. */
   const [tokenSent, setTokenSent] = useState(false);
+  /** The write tools the person grants at the save (crew's G1 `enabledWrites`): only a granted write can be asked for at the deliver gate. */
+  const [grants, setGrants] = useState<{ key: string; names: ReadonlySet<string> }>({ key: '', names: new Set() });
   const [held, setHeld] = useState<{ key: string; preview: McpPreviewResponse } | null>(null);
   const [busy, setBusy] = useState<null | 'test' | 'save' | 'reach'>(null);
   const [error, setError] = useState<string | null>(null);
@@ -268,7 +273,8 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
     setBusy('save');
     setError(null);
     try {
-      const s = await sourcesApi.save(preview.previewHash).catch((e: unknown) => {
+      const granted = grants.key === key ? [...grants.names] : [];
+      const s = await sourcesApi.save(preview.previewHash, undefined, granted).catch((e: unknown) => {
         if (codeOf(e) === 'preview_stale' || codeOf(e) === 'preview_required') setHeld(null);
         throw e;
       });
@@ -280,7 +286,7 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
       // repositories the saved token reaches, a live read, no issue read.
       await readReach(s.name);
     } catch (e) {
-      setError(codeOf(e) === 'pm_source_human_only' ? 'Only a person signed in to studio can register a project-management tool. Nothing was saved.' : words(e));
+      setError(codeOf(e) === 'pm_source_human_only' || codeOf(e) === 'write_grant_human_only' ? 'Only a person signed in to studio can register a project-management tool or grant its writes. Nothing was saved.' : words(e));
       setBusy(null);
     } finally {
       inFlight.current = false;
@@ -397,6 +403,17 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                         <span className={`wk-tag wk-tag--${VERDICT_TONE[t.verdict]}`} data-testid="pm-tool-verdict">{VERDICT_WORDS[t.verdict]}</span>
                       </div>
                       <p className="wk-src-note">{t.note}</p>
+                      {t.verdict === 'asks' && isNew && preview !== null && (
+                        <label className="wk-src-check-row" data-testid="pm-tool-grant">
+                          <input type="checkbox" checked={grants.key === key && grants.names.has(t.name)} disabled={busy !== null}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              setGrants((g) => { const names = new Set(g.key === key ? g.names : []); if (on) names.add(t.name); else names.delete(t.name); return { key, names }; });
+                            }} />
+                          <span className="wk-src-note">Grant it: the deliver gate may then ask you to use it (a comment, a move). Not granted, no action can use it.</span>
+                        </label>
+                      )}
+                      {t.verdict === 'asks' && !isNew && <p className="wk-src-cap" data-testid="pm-tool-granted">{t.granted === true ? 'Granted at the save.' : t.granted === false ? 'Not granted: save the source again to grant it.' : ''}</p>}
                     </li>
                   ))}
                 </ul>

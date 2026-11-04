@@ -93,10 +93,14 @@ describe('the Jira sheet (mockup screen 1a)', () => {
       ['searchJiraIssuesUsingJql', 'reviewed'], ['getJiraIssue', 'reviewed'], ['getVisibleJiraProjects', 'not_for_agents'], ['addCommentToJiraIssue', 'asks'],
     ]);
     expect(screen.getAllByTestId('pm-tool-verdict').map((v) => v.textContent)).toEqual(['Reviewed', 'Reviewed', 'Not for agents', 'Asks you']);
+    // The write tool is granted only by its tick (crew's G1 `enabledWrites`): the person ticks the comment tool.
+    const grants = screen.getAllByTestId('pm-tool-grant');
+    expect(grants).toHaveLength(1);
+    fireEvent.click(within(grants[0]!).getByRole('checkbox'));
     // Save registers exactly the preview, lets go of the token, then reads what the token reaches (no issue read).
     fireEvent.click(screen.getByTestId('pm-save'));
     await screen.findByTestId('pm-test-reach-lines');
-    expect(calls.find((c) => c.path === '/mcp/servers' && c.method === 'POST')!.body).toEqual({ previewHash: 'ph-1' });
+    expect(calls.find((c) => c.path === '/mcp/servers' && c.method === 'POST')!.body).toEqual({ previewHash: 'ph-1', enabledWrites: ['addCommentToJiraIssue'] });
     expect(calls.filter((c) => JSON.stringify(c.body ?? '').includes(jiraBasic('crew-bot@acme.example', TOKEN)))).toHaveLength(1);
     expect(screen.getByTestId('pm-test-reach-lines')).toHaveTextContent('This token reaches at least 2 sites: acme.atlassian.net, acme-labs.atlassian.net. Each tracker you link names its site.');
     expect(screen.getByTestId('pm-test-reach-lines')).toHaveTextContent('At least 2 projects visible on acme.atlassian.net, 1 on acme-labs.atlassian.net.');
@@ -117,6 +121,9 @@ describe('the Jira sheet (mockup screen 1a)', () => {
     expect(toolReview({ name: 'x', class: 'read', binding: { policy: 'p' } }).verdict).toBe('reviewed');
     expect(toolReviewsOf([{ name: 'a', class: 'read', binding: null }, null], true)).toBeNull();
     expect(toolReviewsOf(undefined, true)).toBeNull();
+    // A saved write says whether it was granted at the save.
+    expect(toolReview({ name: 'w', class: 'write', binding: null, enabled: true } as never, true).granted).toBe(true);
+    expect(toolReview({ name: 'w', class: 'write', binding: null, enabled: false } as never, true).granted).toBe(false);
     expect(toolReview({ name: 'x', class: 'destructive', binding: { policy: 'p' } }).verdict).toBe('asks');
   });
 });

@@ -94,6 +94,8 @@ export interface McpToolBinding {
 export interface TrackerIssue {
   /** As the tracker names it: `BILL-142`, `owner/repo#212`. */
   key: string;
+  /** The reference a launch intent takes for it: crew's `<source>@<tenant>:KEY-N` when two trackers share the key. */
+  ref?: string;
   /** Vendor text: rendered as text. */
   title: string;
   /** The tracker's own state name (`In progress`, `open`). */

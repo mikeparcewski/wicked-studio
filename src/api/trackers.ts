@@ -161,7 +161,8 @@ export function trackerIssuesOf(raw: unknown): TrackerIssuesResponse | null {
   const trackers = allOf(raw.trackers, (x): TrackerIssuesResponse['trackers'][number] | null => {
     if (!isObj(x) || !isText(x.trackerId) || !isText(x.source) || typeof x.system !== 'string' || !SYSTEMS.has(x.system) || !isText(x.key) || typeof x.label !== 'string') return null;
     const via = isObj(x.via) && x.via.kind === 'project' ? { kind: 'project' as const } : isObj(x.via) && x.via.kind === 'repo' && isText(x.via.id) ? { kind: 'repo' as const, id: x.via.id } : null;
-    const issues = allOf(x.issues, (i): TrackerIssue | null => (isObj(i) && isText(i.key) && typeof i.title === 'string' ? { key: i.key, title: cut(i.title), state: typeof i.state === 'string' ? i.state : null } : null));
+    const issues = allOf(x.issues, (i): TrackerIssue | null => (isObj(i) && isText(i.key) && typeof i.title === 'string'
+      ? { key: i.key, ...(isText(i.ref) ? { ref: i.ref } : {}), title: cut(i.title), state: typeof i.state === 'string' ? i.state : null } : null));
     if (via === null || issues === null) return null;
     return {
       trackerId: x.trackerId, source: x.source, system: x.system as PmSystem, key: x.key, label: cut(x.label),
@@ -244,6 +245,8 @@ export function trackerRefusal(e: unknown, what: 'link' | 'remove' | 'read' = 'l
   if (code === 'project_archived') return `This project is archived: make it active again to link trackers.${nothing}`;
   if (code === 'tracker_unknown') return `The tool doesn’t list that project any more, so it wasn’t linked.${nothing}`;
   if (code === 'source_unavailable') return `The tool couldn’t be reached just now, so crew couldn’t check the project.${nothing} Try again in a moment.`;
+  if (code === 'source_changed') return `The tool’s registration changed while you were linking: open Link a tracker again.${nothing}`;
+  if (code === 'too_many_links') return `This tracker already has as many links as crew keeps for one tracker: remove one first.${nothing}`;
   if (code === 'not_found' || (e instanceof ApiError && e.status === 404 && what === 'remove')) return 'That link was already removed.';
   if (what === 'read') return 'crew couldn’t answer just now.';
   return 'crew’s answer didn’t say whether that was done, so the list below is read again from crew.';

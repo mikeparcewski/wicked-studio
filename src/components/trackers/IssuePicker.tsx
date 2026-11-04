@@ -12,6 +12,8 @@ type Tracker = TrackerIssuesResponse['trackers'][number];
  * another tracker of the set has the same key (two Jira sites), so crew resolves exactly that one (DES-PM-001 §3.2).
  */
 export function issueRef(t: Tracker, issue: TrackerIssue, all: readonly Tracker[]): string {
+  // crew names the reference itself when it sends one (it knows every tracker of the set): that is the one to write.
+  if (issue.ref !== undefined) return issue.ref;
   const clashes = all.filter((o) => o.trackerId !== t.trackerId && o.system === t.system && o.key === t.key);
   if (clashes.length === 0) return issue.key;
   // Two sites behind ONE source need the site too (`<source>@<cloudId>:KEY-N`); without it, the bare key goes in and

@@ -148,6 +148,8 @@ describe('the project desk’s Linked trackers (mockup screen 2)', () => {
     expect(failed.textContent).not.toContain('the daemon refused this');
     expect(failed.textContent).not.toContain('tracker_links_human_only');
     // The write's refusal, from the picker.
+    expect(trackerRefusal(new ApiError(409, 'changed', { code: 'source_changed' }), 'link')).toBe('The tool’s registration changed while you were linking: open Link a tracker again. Nothing changed.');
+    expect(trackerRefusal(new ApiError(409, 'full', { code: 'too_many_links' }), 'link')).toBe('This tracker already has as many links as crew keeps for one tracker: remove one first. Nothing changed.');
     expect(trackerRefusal(new ApiError(403, human.error, human), 'link')).toBe('Only a person signed in to studio can change which trackers are linked. A job’s or a plugin’s token can’t, so its request was refused. Nothing changed.');
   });
 
@@ -278,6 +280,8 @@ describe('From an issue (mockup screen 6)', () => {
     const b = { ...a, trackerId: 'trk_b', source: 'jira-two' };
     expect(issueRef(a, { key: 'BILL-1', title: 't', state: null }, [a, b])).toBe('jira-one:BILL-1');
     expect(issueRef(a, { key: 'BILL-1', title: 't', state: null }, [a])).toBe('BILL-1');
+    // crew's own reference, when it sends one, is the one written.
+    expect(issueRef(a, { key: 'BILL-1', ref: 'jira-one@cloud-9:BILL-1', title: 't', state: null }, [a])).toBe('jira-one@cloud-9:BILL-1');
     // Two sites behind ONE source: the site names it (crew's `<source>@<cloudId>:KEY-N`), or the bare key when crew sent no site.
     const s1 = { ...a, trackerId: 'trk_s1', source: 'jira-one', tenant: 'cloud-1' };
     const s2 = { ...a, trackerId: 'trk_s2', source: 'jira-one', tenant: 'cloud-2' };
