@@ -147,6 +147,7 @@ export function WorkflowCatalog({ view, failed = false, pickedId, pickedEntryId 
         key={key}
         type="button"
         data-catalog-card={place}
+        data-job={en.id}
         data-testid={place === 'fit' ? `launch-catalog-fit-${en.launchId}` : place === 'top' ? `launch-catalog-top-${en.launchId}` : `launch-wizard-workflow-${en.launchId}`}
         data-art={hasWorkflowArt(en.artKey) ? en.artKey : 'fallback'}
         data-autofocus={on && place === 'cat' ? 'true' : undefined}

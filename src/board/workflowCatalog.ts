@@ -1,5 +1,8 @@
 import type { WorkflowDef } from '../api/types.js';
 import type { Preset } from '../api/teamPlan.js';
+import type { CatalogLoad } from '../store/workflowCatalog.js';
+import { VIBE_SOON } from './comingSoon.js';
+import { DEMO_VIDEO_LINE } from './demoLaunch.js';
 import { isDocFormat } from './everythingModel.js';
 import { workflowItems } from './workflowCommand.js';
 import { workflowLabel } from './workflowNames.js';
@@ -245,6 +248,12 @@ export function catalogFromWire(body: unknown): CatalogView | null {
   return { source: 'catalog', categories, entries };
 }
 
+/** Whether a pick starts this entry: it is ready and studio knows how to launch it (New job's cards
+ *  and the `/` rows alike). */
+export function entryOffered(e: Pick<CatalogEntry, 'status' | 'launchKind'>): boolean {
+  return e.status === 'ready' && e.launchKind !== 'none';
+}
+
 /** Studio's own kinds, when the catalog does not list them (demo and draft epics are launched by studio). */
 export function withStudioKinds(view: CatalogView, extras: readonly CatalogEntry[]): CatalogView {
   // A kind the catalog lists in ANY state (by its card id or its launch target) is the catalog's: a
@@ -258,6 +267,37 @@ export function withStudioKinds(view: CatalogView, extras: readonly CatalogEntry
   if (add.length === 0) return view;
   const needMore = view.source === 'catalog' && add.some((e) => e.category === MORE_CATEGORY.id) && !view.categories.some((c) => c.id === MORE_CATEGORY.id);
   return { ...view, categories: needMore ? [...view.categories, MORE_CATEGORY] : view.categories, entries: [...view.entries, ...add] };
+}
+
+/** "Draft epics" (operator 2026-10-12): a project's requirements become epics, features and stories. */
+export const DRAFT_EPICS_LINE = 'Turn requirements into epics and stories';
+/** Studio's own kinds in the catalog (launched through their own routes), and the app builder that is coming. */
+const studioEntry = (e: Pick<CatalogEntry, 'id' | 'title' | 'category' | 'gets' | 'needs' | 'status' | 'tags' | 'launchKind' | 'delivers'>): CatalogEntry => ({
+  launchId: e.id, docStyle: null, subcategory: null, summary: '', inputs: [], form: false, time: null, cost: null, synonyms: [], statusNote: null,
+  order: 0, artKey: e.id, launches: 0, lastUsedAt: null, medianMinutes: null, ...e,
+});
+/** Studio's own kinds, added when the catalog does not list them (an older daemon never does). */
+export const STUDIO_KINDS: readonly CatalogEntry[] = [
+  studioEntry({ id: STUDIO_KIND_DEMO, launchKind: 'demo', title: 'Demo video', category: 'create', gets: DEMO_VIDEO_LINE, needs: ['running_app'], status: 'ready', delivers: 'video', tags: ['demo', 'video', 'recording', 'walkthrough'] }),
+  studioEntry({ id: STUDIO_KIND_DRAFT_EPICS, launchKind: 'compose', title: 'Draft epics', category: 'more', gets: DRAFT_EPICS_LINE, needs: ['project', 'requirements'], status: 'ready', delivers: null, tags: ['epics', 'stories', 'backlog', 'requirements', 'planning'] }),
+];
+/** Apps (the data builder) is coming: an older daemon's list shows it (crew's catalog lists its own `apps`). */
+export const VIBE_ENTRY: CatalogEntry = studioEntry({ id: 'apps', launchKind: 'none', title: VIBE_SOON.name, category: null, gets: VIBE_SOON.line, needs: [], status: 'soon', delivers: null, tags: ['app', 'apps', 'dashboard', 'data app', 'internal tool', 'vibe', 'builder'] });
+
+/**
+ * THE ONE LIST OF KINDS OF JOB (slash-catalog, operator 2026-11-04: "the slash commands in the chatbox
+ * don't match the list of workflows when I see the new job modal"). New job's catalog step and every
+ * box's `/` menu read this view, so they list the same entries under the same titles and categories:
+ * crew's catalog with studio's own kinds added; on an older daemon (no catalog route), today's list.
+ * null while the catalog is read, and when a daemon that serves one failed to answer: today's list
+ * never stands in for its catalog.
+ */
+export function jobCatalogView(load: CatalogLoad, defs: readonly WorkflowDef[] | null, presets: readonly Preset[] | null): CatalogView | null {
+  if (load.state === 'ready') return withStudioKinds(load.view, STUDIO_KINDS);
+  if (load.state === 'loading' || load.state === 'error') return null;
+  // An older daemon: today's list. Its defs may never come (no `/workflows`, or the read failed and the
+  // cache keeps "not known"), so studio's own kinds show at once and the daemon's join when they land.
+  return withStudioKinds(catalogFromDefs(defs ?? [], presets), [...STUDIO_KINDS, VIBE_ENTRY]);
 }
 
 /**

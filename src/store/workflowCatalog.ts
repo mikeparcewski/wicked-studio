@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client.js';
+import { UNFILED_MOUNT } from '../api/interactive.js';
 import { catalogFromWire, type CatalogView } from '../board/workflowCatalog.js';
 
 /**
@@ -72,16 +73,31 @@ export async function readWorkflowCatalog(projectId: string | null): Promise<Cat
   return load;
 }
 
-export function useWorkflowCatalog(projectId: string | null): CatalogLoad {
+/** The project a catalog read is scoped to: none for no project, '' or the unfiled mount (New job's rule). */
+export function catalogProjectOf(projectId: string | null | undefined): string | null {
+  return projectId === null || projectId === undefined || projectId === '' || projectId === UNFILED_MOUNT ? null : projectId;
+}
+
+const LOADING: CatalogLoad = { state: 'loading' };
+
+/**
+ * One project's catalog, read when `enabled` turns on (New job: every open; a box's `/` menu: every
+ * time a `/` line starts, so "Your top" is as of now and a failed read is retried) and shown from the
+ * cache meanwhile. A box with nothing cached for its project reads once when it mounts, so its first
+ * `/` lists at once instead of "Reading the workflows…".
+ */
+export function useWorkflowCatalog(projectId: string | null, enabled = true): CatalogLoad {
   const key = keyOf(projectId);
   const [, setTick] = useState(0);
   useEffect(() => {
     const fn = (): void => setTick((n) => n + 1);
     listeners.add(fn);
-    void readWorkflowCatalog(projectId);
     return () => { listeners.delete(fn); };
-  }, [projectId]);
-  return cache.get(key) ?? { state: 'loading' };
+  }, []);
+  useEffect(() => {
+    if (enabled || !cache.has(keyOf(projectId))) void readWorkflowCatalog(projectId);
+  }, [projectId, enabled]);
+  return cache.get(key) ?? LOADING;
 }
 
 /** What the cache holds for a project now (tests, and nothing else). */

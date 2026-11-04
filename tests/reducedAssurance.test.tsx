@@ -239,6 +239,8 @@ describe('the composer\'s /workflow row', () => {
   // The launch wizard (operator 2026-10-11): name the workflow, then walk to its options step.
   async function nameWorkflow(): Promise<void> {
     type('/workflow-mcp-server');
+    // slash-catalog: the row comes from the catalog read (an older daemon here: today's list).
+    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
     key('Enter');
     fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
     fireEvent.click(screen.getByTestId('launch-wizard-next'));

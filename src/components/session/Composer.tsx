@@ -3,9 +3,12 @@ import type { SessionView } from '../../api/types.js';
 import { artifactOfChips, chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
 import { inViewFor } from '../../store/artifactInView.js';
 import { composerSendRefusal } from '../../board/launchModel.js';
-import {
-  parseWorkflowCommand, workflowItems, WORKFLOWS_LOADING_LINE, type WorkflowRow,
-} from '../../board/workflowCommand.js';
+import { parseWorkflowCommand, WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
+import { catalogRows, notOfferedLine, workflowEntry, type CatalogRow } from '../../board/slashCatalog.js';
+import { entryOffered, jobCatalogView, type CatalogEntry } from '../../board/workflowCatalog.js';
+import { catalogProjectOf, useWorkflowCatalog } from '../../store/workflowCatalog.js';
+import { startCatalogEntry } from '../../store/startCatalogEntry.js';
+import { goToPath } from '../QeRefusalWarning.js';
 import {
   draftTarget, dropToken, menuToken, slashItems, wordOf, type DraftRunState, type DraftTarget, type SlashItem,
 } from '../../board/planDraft.js';
@@ -99,9 +102,10 @@ function useDraftTarget(runs: readonly SessionView[]): { target: DraftTarget; ga
  *  - `/`: adds a step to the session's chain — a plan draft (§5.7): on the plan gate's card while
  *    one is open (nothing is sent here), else queued 10 s with Undo and then one plan POST.
  *    A command the engine cannot take is refused in the menu with the reason.
- *  - `/workflow-<key>` as the FIRST token (S19a): names a workflow from the daemon's own catalog and
- *    Enter LAUNCHES it — the rest of the line is the intent. The row under the chip picks the
- *    repository (and the delivery); with none chosen the composer refuses and sends nothing.
+ *  - `/` as the FIRST token (S19a; slash-catalog): New job's catalog, the same entries, titles and
+ *    categories, "Your top" first. A pick starts what New job's card starts (`startCatalogEntry`):
+ *    New job opened on a workflow, New document, a new chat. `/workflow-<key>` typed whole still names
+ *    a workflow entry; the rest of the line is the intent.
  *  - studio#315: when the roster says no helper can take the message, Send is refused and says why.
  *
  * Typing never answers a question and never reshapes the chain: only a picked `/` command does.
@@ -138,7 +142,7 @@ export interface ComposerSuggestion { id: string; label: string; title?: string;
 
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null, suggestions = [],
+  inputRef, hint = false, footer = null, suggestions = [], navigate,
 }: {
   /** `desk`, or the session id. */
   composerKey: string;
@@ -224,12 +228,18 @@ export function Composer({
   // `/workflow-<key>` rows lead the `/` menu only as a FIRST token (a named work), and only while no
   // workflow is already named (a second pick replaces the chip).
   const startCommands = token?.trigger === '/' && token.start === 0 && wfChip === null;
+  // slash-catalog: the rows are New job's catalog for this box's project, read each time a `/` line starts.
+  const catalogLoad = useWorkflowCatalog(catalogProjectOf(project?.projectId ?? null), text.trimStart().startsWith('/'));
+  const catalogView = useMemo(() => jobCatalogView(catalogLoad, defs, presets), [catalogLoad, defs, presets]);
+  // An older daemon's list is today's workflows: still being read until they land.
+  const wfCatalogState: 'loading' | 'error' | 'ready' = catalogLoad.state === 'error' ? 'error'
+    : catalogLoad.state === 'loading' || (catalogLoad.state === 'unavailable' && defs === null) ? 'loading' : 'ready';
   const wf = useMemo(
-    () => (startCommands && token !== null ? workflowItems(token.query, defs, presets) : []),
+    () => (startCommands && token !== null ? catalogRows(catalogView, token.query, Date.now()) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startCommands, token?.query, defs, presets],
+    [startCommands, token?.query, catalogView],
   );
-  const anyWorkflows = useMemo(() => workflowItems('', defs, presets).length > 0, [defs, presets]);
+  const anyWorkflows = useMemo(() => catalogRows(catalogView, '', Date.now()).length > 0, [catalogView]);
 
   const slash: SlashItem[] = useMemo(
     () => (token?.trigger === '/' ? slashItems(token.query, target, catalog) : []),
@@ -352,17 +362,25 @@ export function Composer({
       ? (started ? `Your next message starts a new session in ${item.label}.` : null)
       : (!started && useCapabilities.getState().askPath ? `${item.label} will answer this conversation.` : null));
   };
-  // The launch wizard (operator 2026-10-11): naming a workflow opens the one modal, prefilled with
-  // what this composer knows — the words so far, its project chip, the session's repository — and
-  // the words move into the wizard's draft. Nothing is sent from here.
-  const startJob = (workflowId: string, words: string): void => {
-    openLaunchWizard({ workflowId, intent: words.trim(), projectId: project?.projectId ?? null, composerKey, contextRepo: sessionRepo });
+  // A pick starts what New job's card starts (slash-catalog): a workflow, Demo video or Draft epics opens
+  // the one modal on that card, prefilled with what this composer knows — the words so far, its project
+  // chip, the session's repository; a document opens New document with the words as its brief; chat
+  // opens a new chat with them. Nothing is sent from here.
+  const startEntry = (entry: CatalogEntry, words: string): void => {
+    const intent = words.trim();
+    const projectId = project?.projectId ?? null;
+    startCatalogEntry(entry, {
+      projectId, intent, navigate: navigate ?? goToPath,
+      shape: (e) => openLaunchWizard({ workflowId: e.launchId, catalogEntryId: e.id, intent, projectId, composerKey, contextRepo: sessionRepo }),
+    });
     setText('');
     setNote(null);
   };
-  const pickWorkflow = (item: WorkflowRow): void => {
+  const pickWorkflow = (item: CatalogRow): void => {
     if (token === null) return;
-    startJob(item.workflowId, dropToken(text, token.start, caret));
+    // Shown as New job shows it (coming soon, not available), never started.
+    if (!item.offered) { setNote(notOfferedLine(item.entry)); return; }
+    startEntry(item.entry, dropToken(text, token.start, caret));
   };
   const pick = (i: number): void => {
     if (token?.trigger === '/') {
@@ -377,13 +395,15 @@ export function Composer({
     // then asks for the repository. Nothing is sent until the next Enter.
     const typed = parseWorkflowCommand(text);
     if (typed !== null && refusal === null) {
-      // Only a key the daemon lists becomes a chip — studio keeps no list and never invents a name.
-      const known = workflowItems(typed.key, defs, presets).find((r) => r.key === typed.key);
-      if (known === undefined) {
-        setNote(defs === null ? WORKFLOWS_LOADING_LINE : `This daemon lists no workflow named ${typed.key} — nothing was sent.`);
+      // Only a workflow the catalog lists is started — studio keeps no list and never invents a name.
+      const known = workflowEntry(catalogView, typed.key);
+      if (known === null) {
+        setNote(wfCatalogState === 'loading' ? WORKFLOWS_LOADING_LINE : wfCatalogState === 'error' ? WORKFLOWS_FAILED_LINE
+          : `This daemon lists no workflow named ${typed.key} — nothing was sent.`);
         return;
       }
-      startJob(known.workflowId, typed.rest);
+      if (!entryOffered(known)) { setNote(notOfferedLine(known)); return; }
+      startEntry(known, typed.rest);
       return;
     }
     if (!canSend) return;
@@ -413,7 +433,7 @@ export function Composer({
           menuKey={composerKey}
           trigger={token.trigger}
           startCommands={startCommands}
-          defsLoading={defs === null}
+          catalogState={wfCatalogState}
           anyWorkflows={anyWorkflows}
           wf={wf}
           slash={slash}

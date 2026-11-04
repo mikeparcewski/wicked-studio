@@ -31,17 +31,16 @@ import { useWorkflowDefs } from '../../store/workflowCache.js';
 import { workflowLabel } from '../../board/workflowNames.js';
 import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, useLaunchWizard, withJobKind, type LaunchDraft } from '../../store/launchWizard.js';
 import { openChatFlow } from '../../store/chatFlow.js';
+import { startCatalogEntry } from '../../store/startCatalogEntry.js';
 import { useComposerPrefsStore } from '../../store/composerPrefs.js';
 import { launchDemo } from '../../api/demo.js';
-import { DEMO_AUDIENCES, DEMO_AUDIENCE_MAX, DEMO_SHOW_MAX, DEMO_URL_MAX, DEMO_VIDEO_LINE, demoBlocker } from '../../board/demoLaunch.js';
+import { DEMO_AUDIENCES, DEMO_AUDIENCE_MAX, DEMO_SHOW_MAX, DEMO_URL_MAX, demoBlocker } from '../../board/demoLaunch.js';
 import { UNFILED_MOUNT } from '../../api/interactive.js';
-import { VIBE_SOON } from '../../board/comingSoon.js';
 import { composeProduct } from '../../api/product.js';
 import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from '../product/RequirementsBrowser.js';
-import { aboutMinutes, catalogFromDefs, needsLine, needsRepo, withStudioKinds, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
+import { aboutMinutes, jobCatalogView, needsLine, needsRepo, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
 import { useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { WorkflowCatalog } from './WorkflowCatalog.js';
-import { everythingPath, isDocFormat, madeKindForFormat } from '../../board/everythingModel.js';
 
 type Step = 'workflow' | 'what' | 'where' | 'options' | 'requirements' | 'demo' | 'review';
 const STEP_TITLE: Record<Step, string> = {
@@ -53,21 +52,7 @@ const STEP_TITLE: Record<Step, string> = {
   demo: 'The video',
   review: 'Check and launch',
 };
-/** "Draft epics" (operator 2026-10-12): a project's requirements become epics, features and stories. */
-const DRAFT_EPICS_LINE = 'Turn requirements into epics and stories';
 const INSTRUCTIONS_MAX = 500;
-/** Studio's own kinds in the catalog (launched through their own routes), and the app builder that is coming. */
-const studioEntry = (e: Pick<CatalogEntry, 'id' | 'title' | 'category' | 'gets' | 'needs' | 'status' | 'tags' | 'launchKind' | 'delivers'>): CatalogEntry => ({
-  launchId: e.id, docStyle: null, subcategory: null, summary: '', inputs: [], form: false, time: null, cost: null, synonyms: [], statusNote: null,
-  order: 0, artKey: e.id, launches: 0, lastUsedAt: null, medianMinutes: null, ...e,
-});
-/** Studio's own kinds, added when the catalog does not list them (an older daemon never does). */
-const STUDIO_KINDS: readonly CatalogEntry[] = [
-  studioEntry({ id: DEMO_VIDEO_ID, launchKind: 'demo', title: 'Demo video', category: 'create', gets: DEMO_VIDEO_LINE, needs: ['running_app'], status: 'ready', delivers: 'video', tags: ['demo', 'video', 'recording', 'walkthrough'] }),
-  studioEntry({ id: DRAFT_EPICS_ID, launchKind: 'compose', title: 'Draft epics', category: 'more', gets: DRAFT_EPICS_LINE, needs: ['project', 'requirements'], status: 'ready', delivers: null, tags: ['epics', 'stories', 'backlog', 'requirements', 'planning'] }),
-];
-/** Apps (the data builder) is coming: an older daemon's list shows it (crew's catalog lists its own `apps`). */
-const VIBE_ENTRY = studioEntry({ id: 'apps', launchKind: 'none', title: VIBE_SOON.name, category: null, gets: VIBE_SOON.line, needs: [], status: 'soon', delivers: null, tags: ['app', 'apps', 'dashboard', 'data app', 'internal tool', 'vibe', 'builder'] });
 /**
  * THE LAUNCH WIZARD (operator 2026-10-11 15:15Z: "someone just starts a new job by selecting a
  * workflow and we do the wizard in a modal"). Mounted once by the app shell; opened through
@@ -123,14 +108,9 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const rows = useMemo(() => workflowItems('', defs, presets, Number.POSITIVE_INFINITY), [defs, presets]);
   // The catalog (crew's, or today's list on an older daemon), with studio's own kinds added.
   const catalogLoad = useWorkflowCatalog(draft.projectId === null || draft.projectId === '' || draft.projectId === UNFILED_MOUNT ? null : draft.projectId);
-  const read: CatalogView | null = useMemo(() => {
-    if (catalogLoad.state === 'ready') return withStudioKinds(catalogLoad.view, STUDIO_KINDS);
-    // Loading, or a failed read on a daemon that serves a catalog: no stand-in (today's list is not its catalog).
-    if (catalogLoad.state === 'loading' || catalogLoad.state === 'error') return null;
-    // An older daemon: today's list. Its defs may never come (no `/workflows`, or the read failed and the
-    // cache keeps "not known"), so studio's own kinds show at once and the daemon's join when they land.
-    return withStudioKinds(catalogFromDefs(defs ?? [], presets), [...STUDIO_KINDS, VIBE_ENTRY]);
-  }, [catalogLoad, defs, presets]);
+  // Loading, or a failed read on a daemon that serves a catalog: no stand-in (today's list is not its catalog).
+  // The same view every box's `/` menu reads (slash-catalog), so both list the same kinds of job.
+  const read: CatalogView | null = useMemo(() => jobCatalogView(catalogLoad, defs, presets), [catalogLoad, defs, presets]);
   // A project change mid-shaping re-reads the catalog (its usage and presets): the last one read stays
   // shown meanwhile, so the picked workflow's rules (repository, words) never flip while it loads.
   // Nor does a failed read for the new project swap crew's catalog for today's list (xreview r2): once
@@ -371,20 +351,16 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   };
 
-  // How each entry starts (wf-catalog WIRE `launch.kind`): a run, studio's Demo video or Draft
-  // epics walk the wizard; a document opens New document on its list; chat is the chat flow.
+  // How each entry starts (wf-catalog WIRE `launch.kind`), the one handler a box's `/` pick uses too:
+  // a run, studio's Demo video or Draft epics walk the wizard; a document opens New document on its
+  // list (the words as its brief); chat is the chat flow.
   const pickEntry = (e: CatalogEntry): void => {
-    if (e.status !== 'ready' || e.launchKind === 'none') return;
-    if (e.launchKind === 'chat') { startChat(); return; }
-    if (e.launchKind === 'document') {
-      if (launchingRef.current) return;
-      closeStore();
-      const project = filedProject;
-      const format = isDocFormat(e.docStyle) ? e.docStyle : '';
-      (navigate ?? goToPath)(everythingPath({ tab: 'made', kind: madeKindForFormat(format), ...(project !== null ? { project } : {}), new: 'document', ...(format !== '' ? { format } : {}) }));
-      return;
-    }
-    pickCard(e.launchId, e.id);
+    // codex r1: a launch in flight holds the dialog (nothing leaves it for another surface).
+    if (launchingRef.current && (e.launchKind === 'chat' || e.launchKind === 'document')) return;
+    startCatalogEntry(e, {
+      projectId: filedProject, intent: draft.intent, navigate: navigate ?? goToPath, leave: closeStore,
+      shape: (x) => pickCard(x.launchId, x.id),
+    });
   };
   const pickCard = (id: string, entryId: string | null = null): void => {
     // codex r1: another kind of job starts its own options; studio#767: and its own words.

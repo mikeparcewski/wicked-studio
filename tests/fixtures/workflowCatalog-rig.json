@@ -1,0 +1,1672 @@
+{
+ "$doc": "The catalog the test rig served on 2026-11-04 (GET /api/v1/workflows/catalog, crew 47c0d7a): 24 entries. slash-catalog: the composer's / menu and New job must list exactly these.",
+ "categories": [
+  {
+   "id": "create",
+   "title": "Create",
+   "summary": "Make something new: a feature, docs, a deck, a demo, a plugin or a tool.",
+   "subcategories": [
+    {
+     "id": "apps",
+     "title": "Apps"
+    },
+    {
+     "id": "feature",
+     "title": "Feature"
+    },
+    {
+     "id": "documentation",
+     "title": "Documentation"
+    },
+    {
+     "id": "presentation",
+     "title": "Presentation"
+    },
+    {
+     "id": "demo",
+     "title": "Demo (video)"
+    },
+    {
+     "id": "phase-plugin",
+     "title": "Studio phase plugin"
+    },
+    {
+     "id": "editor-plugin",
+     "title": "Studio editor plugin"
+    },
+    {
+     "id": "mcp",
+     "title": "MCP tools"
+    }
+   ]
+  },
+  {
+   "id": "resolve",
+   "title": "Resolve",
+   "summary": "Fix what is broken or move off what is old.",
+   "subcategories": [
+    {
+     "id": "issue",
+     "title": "Issue"
+    },
+    {
+     "id": "migrate",
+     "title": "Migrate"
+    }
+   ]
+  },
+  {
+   "id": "analyze",
+   "title": "Analyze",
+   "summary": "Understand a codebase, your runs or your docs, changing nothing in the code.",
+   "subcategories": [
+    {
+     "id": "domain",
+     "title": "Domain extraction"
+    },
+    {
+     "id": "run-review",
+     "title": "Run review"
+    },
+    {
+     "id": "validate-docs",
+     "title": "Validate documentation"
+    }
+   ]
+  },
+  {
+   "id": "test",
+   "title": "Test",
+   "summary": "Plan tests, find the gaps and write the tests.",
+   "subcategories": [
+    {
+     "id": "planning",
+     "title": "Planning"
+    },
+    {
+     "id": "analysis",
+     "title": "Analysis"
+    },
+    {
+     "id": "automation",
+     "title": "Automation"
+    }
+   ]
+  },
+  {
+   "id": "more",
+   "title": "More",
+   "summary": "Everything else you can start by hand.",
+   "subcategories": []
+  }
+ ],
+ "entries": [
+  {
+   "id": "apps",
+   "category": "create",
+   "subcategory": "apps",
+   "outcome": "Live apps and dashboards over your APIs and databases.",
+   "needs": [
+    "project"
+   ],
+   "inputs": [],
+   "typicalMinutes": null,
+   "cost": null,
+   "tags": [
+    "app",
+    "dashboard",
+    "no-code"
+   ],
+   "synonyms": [
+    "apps",
+    "app",
+    "dashboard",
+    "data app",
+    "internal tool",
+    "vibe",
+    "vibe code",
+    "ui builder",
+    "create",
+    "prototype",
+    "build an app"
+   ],
+   "launch": {
+    "kind": "none"
+   },
+   "delivers": "none",
+   "title": "Apps",
+   "summary": "Build a live app, dashboard or tool over your own data and APIs by describing it.",
+   "useWhen": [
+    "a dashboard over your data",
+    "an internal tool without a codebase"
+   ],
+   "status": "coming_soon",
+   "statusNote": "Design in progress.",
+   "requiresQe": false,
+   "source": "none",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "feature",
+   "category": "create",
+   "subcategory": "feature",
+   "outcome": "A pull request with the change, checked by tests and a review, after QE acceptance.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": [
+    60,
+    240
+   ],
+   "cost": "high",
+   "tags": [
+    "code",
+    "pull request",
+    "tests"
+   ],
+   "synonyms": [
+    "build",
+    "implement",
+    "add",
+    "new feature",
+    "enhancement",
+    "story",
+    "change"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "feature"
+   },
+   "delivers": "pr",
+   "title": "Build a feature",
+   "summary": "Clarify, design, build, review and test a change to your application.",
+   "useWhen": [
+    "add new behaviour to an app",
+    "a new screen, endpoint or option",
+    "a change that needs a design and tests"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": true,
+   "source": "builtin",
+   "usage": {
+    "launches": 4,
+    "lastUsedAt": "2026-10-21T18:08:02.000Z",
+    "medianMinutes": 283.1
+   }
+  },
+  {
+   "id": "docs",
+   "category": "create",
+   "subcategory": "documentation",
+   "outcome": "A pull request with Markdown docs whose every claim was checked against the code.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should the docs cover, and for whom?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "medium",
+   "tags": [
+    "markdown",
+    "readme",
+    "pull request"
+   ],
+   "synonyms": [
+    "documentation",
+    "readme",
+    "guide",
+    "api reference",
+    "docs",
+    "write docs",
+    "md"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "docs"
+   },
+   "delivers": "pr",
+   "title": "Write documentation",
+   "summary": "Write or update Markdown documentation in the repository from the code, with every claim checked against it.",
+   "useWhen": [
+    "write a README, guide or API reference",
+    "bring docs back in line with the code"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "builtin",
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-11-02T03:09:22.000Z",
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "document-interactive",
+   "category": "create",
+   "subcategory": "documentation",
+   "outcome": "A versioned HTML document in studio that you can edit in place and export as PDF.",
+   "needs": [
+    "project"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What is it about?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": [
+    10,
+    20
+   ],
+   "cost": "medium",
+   "tags": [
+    "html",
+    "document",
+    "interactive"
+   ],
+   "synonyms": [
+    "web page",
+    "html",
+    "spec",
+    "explainer",
+    "one pager"
+   ],
+   "launch": {
+    "kind": "document",
+    "style": "web"
+   },
+   "delivers": "document",
+   "title": "Interactive document",
+   "summary": "Draft a web page document from a brief, grounded in your repositories, then edit it in place in studio.",
+   "useWhen": [
+    "a living spec or explainer",
+    "a page people click through"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "studio",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "document-static",
+   "category": "create",
+   "subcategory": "documentation",
+   "outcome": "A document in studio you can edit in place and export as PDF.",
+   "needs": [
+    "project"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What is it about?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": [
+    10,
+    20
+   ],
+   "cost": "medium",
+   "tags": [
+    "pdf",
+    "document"
+   ],
+   "synonyms": [
+    "memo",
+    "white paper",
+    "proposal",
+    "report",
+    "pdf",
+    "word",
+    "docx",
+    "write up"
+   ],
+   "launch": {
+    "kind": "document",
+    "style": "doc"
+   },
+   "delivers": "document",
+   "title": "Document",
+   "summary": "Draft a prose document from a brief, grounded in your repositories, ready to export.",
+   "useWhen": [
+    "a memo, white paper or proposal",
+    "a document to print or send as PDF"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "studio",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "presentation",
+   "category": "create",
+   "subcategory": "presentation",
+   "outcome": "16:9 slides in studio you can edit in place and export as PDF.",
+   "needs": [
+    "project"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What is the deck about, and for whom?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": [
+    10,
+    20
+   ],
+   "cost": "medium",
+   "tags": [
+    "slides",
+    "deck"
+   ],
+   "synonyms": [
+    "slides",
+    "deck",
+    "slide deck",
+    "pitch",
+    "keynote",
+    "powerpoint",
+    "pptx"
+   ],
+   "launch": {
+    "kind": "document",
+    "style": "ppt"
+   },
+   "delivers": "document",
+   "title": "Presentation",
+   "summary": "Draft a slide deck from a brief, grounded in your repositories.",
+   "useWhen": [
+    "a deck for a review or a pitch",
+    "walk people through a change"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "studio",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "demo-video",
+   "category": "create",
+   "subcategory": "demo",
+   "outcome": "A captioned video of your app, recorded and reviewed.",
+   "needs": [
+    "project",
+    "running_app"
+   ],
+   "inputs": [
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "url",
+     "label": "Where the app runs",
+     "kind": "url",
+     "required": true
+    },
+    {
+     "id": "audience",
+     "label": "Who it is for",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "show",
+     "label": "What to show",
+     "kind": "text",
+     "required": true
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "medium",
+   "tags": [
+    "video",
+    "demo"
+   ],
+   "synonyms": [
+    "video",
+    "screencast",
+    "recording",
+    "walkthrough",
+    "demo"
+   ],
+   "launch": {
+    "kind": "demo"
+   },
+   "delivers": "video",
+   "title": "Demo video",
+   "summary": "Plan, record and review a captioned demo video of a running app (no voice-over).",
+   "useWhen": [
+    "show a feature working",
+    "a product walkthrough on video"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "studio",
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-11-01T23:23:52.000Z",
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "phase-plugin",
+   "category": "create",
+   "subcategory": "phase-plugin",
+   "outcome": "A new step you can add to any plan.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [],
+   "typicalMinutes": null,
+   "cost": null,
+   "tags": [
+    "plugin",
+    "phase",
+    "step"
+   ],
+   "synonyms": [
+    "phase",
+    "step",
+    "custom step",
+    "plugin"
+   ],
+   "launch": {
+    "kind": "none"
+   },
+   "delivers": "none",
+   "title": "Studio phase plugin",
+   "summary": "Build a new kind of step that workflows can use.",
+   "useWhen": [
+    "a step no workflow has yet",
+    "your own check or tool inside a run"
+   ],
+   "status": "coming_soon",
+   "statusNote": "A step is part of the engine today; plugging in your own is not built yet.",
+   "requiresQe": false,
+   "source": "none",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "editor-plugin",
+   "category": "create",
+   "subcategory": "editor-plugin",
+   "outcome": "An editor plugin designed, built, tested and installed in studio after your consent.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What kind of file should it edit, and how?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": [
+    30,
+    120
+   ],
+   "cost": "high",
+   "tags": [
+    "plugin",
+    "studio",
+    "editor"
+   ],
+   "synonyms": [
+    "editor",
+    "plugin",
+    "viewer",
+    "file type",
+    "studio plugin"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "editor-plugin"
+   },
+   "delivers": "pr",
+   "title": "Editor plugin",
+   "summary": "Design, build, test and install a studio editor plugin for a kind of file.",
+   "useWhen": [
+    "edit a new kind of file in studio",
+    "change how studio edits an artifact"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": true,
+   "source": "builtin",
+   "usage": {
+    "launches": 3,
+    "lastUsedAt": "2026-10-27T03:09:58.000Z",
+    "medianMinutes": 32.8
+   }
+  },
+  {
+   "id": "mcp-server",
+   "category": "create",
+   "subcategory": "mcp",
+   "outcome": "An MCP server with its tools, tested, reviewed for security and installed after your consent.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What tools should agents get?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "high",
+   "tags": [
+    "mcp",
+    "tools",
+    "agents"
+   ],
+   "synonyms": [
+    "mcp",
+    "tool",
+    "tools",
+    "server",
+    "integration",
+    "connector"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "mcp-server"
+   },
+   "delivers": "pr",
+   "title": "MCP server",
+   "summary": "Design, build, test, review and install an MCP server.",
+   "useWhen": [
+    "build a new MCP server",
+    "give agents a new tool"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": true,
+   "source": "builtin",
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-10-26T11:14:12.000Z",
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "bug",
+   "category": "resolve",
+   "subcategory": "issue",
+   "outcome": "A pull request with the fix and the checks that show it holds, after QE acceptance.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What is wrong? Paste the error or the issue.",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": [
+    10,
+    60
+   ],
+   "cost": "medium",
+   "tags": [
+    "bug",
+    "fix",
+    "pull request"
+   ],
+   "synonyms": [
+    "issue",
+    "defect",
+    "broken",
+    "error",
+    "crash",
+    "regression",
+    "fix"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "bug"
+   },
+   "delivers": "pr",
+   "title": "Fix a bug",
+   "summary": "Find the cause of a bug, reproduce it, fix it and check that the fix holds.",
+   "useWhen": [
+    "something is broken",
+    "an error or crash to fix",
+    "something that used to work no longer does"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": true,
+   "source": "builtin",
+   "usage": {
+    "launches": 44,
+    "lastUsedAt": "2026-11-01T12:21:32.000Z",
+    "medianMinutes": 54.5
+   }
+  },
+  {
+   "id": "migration",
+   "category": "resolve",
+   "subcategory": "migrate",
+   "outcome": "A planned move with a confirmed cutover and the old path removed, as a pull request.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What are you moving from, and to what?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "high",
+   "tags": [
+    "migration",
+    "upgrade"
+   ],
+   "synonyms": [
+    "migrate",
+    "upgrade",
+    "port",
+    "replace",
+    "move to",
+    "cutover",
+    "deprecate"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "migration"
+   },
+   "delivers": "pr",
+   "title": "Migration",
+   "summary": "Plan and carry out a move to something new, with a confirmed cutover, then remove the old path.",
+   "useWhen": [
+    "move to a new library, service or schema",
+    "replace an old system step by step",
+    "a change that needs a cutover"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": true,
+   "source": "builtin",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "domain-extraction",
+   "category": "analyze",
+   "subcategory": "domain",
+   "outcome": "A requirements map of what the code does, with how much of the code it covers.",
+   "needs": [
+    "repo",
+    "project"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "Anything to focus on?",
+     "kind": "text",
+     "required": false
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": [
+    10,
+    30
+   ],
+   "cost": "high",
+   "tags": [
+    "requirements",
+    "domain"
+   ],
+   "synonyms": [
+    "requirements",
+    "domain",
+    "reverse engineer",
+    "what does it do",
+    "business rules",
+    "map"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "domain-extraction"
+   },
+   "delivers": "report",
+   "title": "Map the domain",
+   "summary": "Work out what a codebase does as a set of requirements and check how much of the code they cover.",
+   "useWhen": [
+    "document what an existing system does",
+    "build a requirements map from code"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "builtin",
+   "usage": {
+    "launches": 14,
+    "lastUsedAt": "2026-11-01T19:58:02.000Z",
+    "medianMinutes": 24.2
+   }
+  },
+  {
+   "id": "review-recent-work",
+   "category": "analyze",
+   "subcategory": "run-review",
+   "outcome": "Recommendations across every run since the last review, with the numbers behind each.",
+   "needs": [
+    "runs"
+   ],
+   "inputs": [
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": [
+    1,
+    5
+   ],
+   "cost": "low",
+   "tags": [
+    "runs",
+    "insights"
+   ],
+   "synonyms": [
+    "retro",
+    "retrospective",
+    "run review",
+    "what went wrong",
+    "insights",
+    "cost",
+    "slow runs"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "review-recent-work"
+   },
+   "delivers": "report",
+   "title": "Review recent work",
+   "summary": "Looks across every run since the last review and recommends what to improve, with the numbers behind each recommendation.",
+   "useWhen": [
+    "You want to know what is slowing runs down, costing the most, or failing again and again",
+    "Every 2 days, on its schedule"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "crew",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "validate-docs",
+   "category": "analyze",
+   "subcategory": "validate-docs",
+   "outcome": "A report of every wrong or stale claim in your docs, with the code line that contradicts it.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "Which docs? (blank = the READMEs and docs/)",
+     "kind": "text",
+     "required": false
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "low",
+   "tags": [
+    "docs",
+    "report",
+    "read-only"
+   ],
+   "synonyms": [
+    "check docs",
+    "docs drift",
+    "stale docs",
+    "validate documentation",
+    "verify readme",
+    "fact check"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "validate-docs"
+   },
+   "delivers": "report",
+   "title": "Check documentation",
+   "summary": "Check every claim in your documentation against the code and report what is wrong or stale, changing nothing.",
+   "useWhen": [
+    "are the docs still true",
+    "find stale commands, flags or examples"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "builtin",
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-11-02T03:19:37.000Z",
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "test-plan",
+   "category": "test",
+   "subcategory": "planning",
+   "outcome": "A risk-ranked test plan file in a pull request, ready to automate.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should the plan cover?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "medium",
+   "tags": [
+    "tests",
+    "plan",
+    "qe"
+   ],
+   "synonyms": [
+    "test plan",
+    "test strategy",
+    "what to test",
+    "scenarios",
+    "qa plan"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "test-plan"
+   },
+   "delivers": "pr",
+   "title": "Plan tests",
+   "summary": "Write a risk-ranked test plan for a change or an area of the code, ready to automate.",
+   "useWhen": [
+    "decide what to test before building",
+    "a test strategy for a feature or release"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "builtin",
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-11-02T03:15:27.000Z",
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "test-analysis",
+   "category": "test",
+   "subcategory": "analysis",
+   "outcome": "A ranked report of untested risky code and weak or flaky tests, each with the test that closes it.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "Anything to focus on?",
+     "kind": "text",
+     "required": false
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "low",
+   "tags": [
+    "tests",
+    "coverage",
+    "read-only"
+   ],
+   "synonyms": [
+    "coverage",
+    "test gaps",
+    "flaky tests",
+    "test quality",
+    "audit tests",
+    "test debt"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "test-analysis"
+   },
+   "delivers": "report",
+   "title": "Analyze tests",
+   "summary": "Find the risky code with no tests, weak or flaky tests and what would close each gap, changing nothing.",
+   "useWhen": [
+    "where are we under-tested",
+    "audit the quality of a test suite",
+    "find flaky or empty tests"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "builtin",
+   "usage": {
+    "launches": 2,
+    "lastUsedAt": "2026-11-03T11:53:03.000Z",
+    "medianMinutes": 0.9
+   }
+  },
+  {
+   "id": "qe-author-tests",
+   "category": "test",
+   "subcategory": "automation",
+   "outcome": "A pull request with behaviour tests that ran green under your own test setup.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should the tests cover?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "medium",
+   "tags": [
+    "tests",
+    "automation",
+    "pull request"
+   ],
+   "synonyms": [
+    "write tests",
+    "automate tests",
+    "unit tests",
+    "e2e",
+    "test automation",
+    "add tests"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "qe-author-tests"
+   },
+   "delivers": "pr",
+   "title": "Write tests",
+   "summary": "Write tests for how existing code behaves and run them with the repository's own test setup.",
+   "useWhen": [
+    "add missing tests",
+    "cover existing behaviour with tests"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "builtin",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "start-chat",
+   "category": "more",
+   "subcategory": null,
+   "outcome": "Cited answers, and a job when you decide on one.",
+   "needs": [
+    "nothing"
+   ],
+   "inputs": [],
+   "typicalMinutes": null,
+   "cost": "low",
+   "tags": [
+    "chat",
+    "questions"
+   ],
+   "synonyms": [
+    "ask",
+    "question",
+    "chat",
+    "explain",
+    "how does"
+   ],
+   "launch": {
+    "kind": "chat"
+   },
+   "delivers": "answer",
+   "title": "Start a chat",
+   "summary": "Ask about your code and work, cited, on its own page; start a job from it when you are ready.",
+   "useWhen": [
+    "ask a question",
+    "think something through first"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "studio",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "learn",
+   "category": "more",
+   "subcategory": null,
+   "outcome": "What was learned, with its sources, saved to the repository as a pull request.",
+   "needs": [
+    "repo"
+   ],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What topic or event?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "medium",
+   "tags": [
+    "research",
+    "knowledge"
+   ],
+   "synonyms": [
+    "research",
+    "learn",
+    "catch up",
+    "read up",
+    "study"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "learn"
+   },
+   "delivers": "pr",
+   "title": "Learn a topic",
+   "summary": "Research a topic or event from outside sources and save what was learned to the repository.",
+   "useWhen": [
+    "learn about a library, tool or standard",
+    "catch up on a recent event",
+    "refresh knowledge saved earlier"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "builtin",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "draft-epics",
+   "category": "more",
+   "subcategory": null,
+   "outcome": "Epics and stories drafted from the requirements you pick.",
+   "needs": [
+    "project",
+    "requirements"
+   ],
+   "inputs": [
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "requirements",
+     "label": "Requirements",
+     "kind": "requirements",
+     "required": true
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": "low",
+   "tags": [
+    "backlog",
+    "requirements"
+   ],
+   "synonyms": [
+    "epics",
+    "stories",
+    "backlog",
+    "user stories",
+    "plan work"
+   ],
+   "launch": {
+    "kind": "compose"
+   },
+   "delivers": "document",
+   "title": "Draft epics",
+   "summary": "Turn a project's requirements into epics and stories.",
+   "useWhen": [
+    "plan work from requirements",
+    "a backlog from a requirements map"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "studio",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "run-evals",
+   "category": "more",
+   "subcategory": null,
+   "outcome": "How well the system's own judgments agree with what really happened in your runs.",
+   "needs": [
+    "runs"
+   ],
+   "inputs": [
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": [
+    1,
+    5
+   ],
+   "cost": "low",
+   "tags": [
+    "evals",
+    "quality"
+   ],
+   "synonyms": [
+    "evals",
+    "evaluation",
+    "accuracy",
+    "judge quality"
+   ],
+   "launch": {
+    "kind": "run",
+    "workflow": "run-evals"
+   },
+   "delivers": "report",
+   "title": "Run the default evals",
+   "summary": "Checks how well the system's own judgments agree with what really happened in your runs, per project and across projects.",
+   "useWhen": [
+    "You want to know whether what needs you, floor decisions, QE verdicts or who built the work are being judged right",
+    "Every 2 days, on its schedule, after the review of recent work"
+   ],
+   "status": "available",
+   "statusNote": null,
+   "requiresQe": false,
+   "source": "crew",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "apps-publish",
+   "category": "more",
+   "subcategory": null,
+   "title": "Publish an app",
+   "summary": "Check an app against its publish manifest, run QE on a seat that built none of it, then produce it after you consent.",
+   "outcome": "Check an app against its publish manifest, run QE on a seat that built none of it, then produce it after you consent.",
+   "useWhen": [
+    "publish an app from the Apps section",
+    "produce the app's site image or embed"
+   ],
+   "needs": [],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": null,
+   "tags": [],
+   "synonyms": [],
+   "status": "available",
+   "statusNote": null,
+   "launch": {
+    "kind": "run",
+    "workflow": "apps-publish"
+   },
+   "requiresQe": false,
+   "delivers": "report",
+   "source": "builtin",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  },
+  {
+   "id": "apps-turn",
+   "category": "more",
+   "subcategory": null,
+   "title": "Change an app",
+   "summary": "Make one change to an app's spec and queries, check it without touching any data, and have a second seat review it.",
+   "outcome": "Make one change to an app's spec and queries, check it without touching any data, and have a second seat review it.",
+   "useWhen": [
+    "a chat message in the Apps builder",
+    "change an app's pages, charts or queries"
+   ],
+   "needs": [],
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "typicalMinutes": null,
+   "cost": null,
+   "tags": [],
+   "synonyms": [],
+   "status": "available",
+   "statusNote": null,
+   "launch": {
+    "kind": "run",
+    "workflow": "apps-turn"
+   },
+   "requiresQe": false,
+   "delivers": "pr",
+   "source": "builtin",
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null
+   }
+  }
+ ],
+ "top": [
+  "bug",
+  "domain-extraction",
+  "feature",
+  "editor-plugin",
+  "test-analysis",
+  "validate-docs"
+ ],
+ "usage": {
+  "scope": "operator",
+  "projectId": null,
+  "actorId": "local",
+  "launches": 72
+ }
+}

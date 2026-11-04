@@ -4,7 +4,7 @@
  * menu and the helpers row, groups the `@` menu under one header per kind, and says a project pick
  * once (the chip), with a placeholder that names the next thing to type after a workflow pick.
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project, RepoEntry, RosterSeat, SessionView, WorkflowDef } from '../src/api/types.js';
@@ -105,16 +105,19 @@ describe('S3: one name per helper, the same list in @ and the helpers row', () =
     expect(screen.queryByTestId('composer-note')).toBeNull();
   });
 
-  it('row 24: a job started in a session hands the wizard the repository its work already names', () => {
+  it('row 24: a job started in a session hands the wizard the repository its work already names', async () => {
     render(<Harness runs={[RUN]} />);
     type('/workflow-feature');
+    // slash-catalog: the row comes from the catalog read (an older daemon here: today's list).
+    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-feature"]')).not.toBeNull());
     fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
     expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'feature', contextRepo: 'repo-b' });
   });
 
-  it('row 24: on the Desk there is no session repository to hand over', () => {
+  it('row 24: on the Desk there is no session repository to hand over', async () => {
     render(<Harness />);
     type('/workflow-feature');
+    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-feature"]')).not.toBeNull());
     fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
     expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'feature', contextRepo: null });
   });

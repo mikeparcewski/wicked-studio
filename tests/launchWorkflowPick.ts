@@ -1,5 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import type userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
+import * as client from '../src/api/client.js';
 
 /**
  * S19b: the launch form names its workflow the composer's way — a leading `/` in the problem box
@@ -7,6 +9,11 @@ import type userEvent from '@testing-library/user-event';
  * gone). Call before typing the problem: the `/` must be the box's first token.
  */
 export async function pickLaunchWorkflow(user: ReturnType<typeof userEvent.setup>, workflow: string): Promise<void> {
+  // slash-catalog: the menu lists New job's catalog. A test that has not said which daemon it runs on
+  // gets an older one (no catalog route: today's workflows); a test that mocked the catalog keeps it.
+  if (!vi.isMockFunction(client.api.getWorkflowCatalog)) {
+    vi.spyOn(client.api, 'getWorkflowCatalog').mockRejectedValue(new client.ApiError(404, 'Not found'));
+  }
   const box = screen.getByTestId('launch-problem');
   await user.click(box);
   await user.type(box, '/');

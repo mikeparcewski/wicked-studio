@@ -87,6 +87,7 @@ describe('launch wizard', () => {
   it('picking a workflow in the composer opens the wizard (a modal dialog), not the inline strip', async () => {
     render(<Harness />);
     type('/workflow-mcp-server');
+    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
     key('Enter');
     const dialog = await screen.findByTestId('launch-wizard');
     expect(dialog.getAttribute('role')).toBe('dialog');
@@ -99,6 +100,7 @@ describe('launch wizard', () => {
     render(<Harness />);
     act(() => { useLaunchSeats.getState().toggle('codex'); });
     type('/workflow-mcp-server');
+    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
     key('Enter');
     await screen.findByTestId('launch-wizard');
     fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });

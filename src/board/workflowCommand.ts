@@ -3,16 +3,19 @@ import type { WorkflowDef } from '../api/types.js';
 import type { Preset } from '../api/teamPlan.js';
 
 /**
- * THE WORKFLOW COMMAND (DES-STUDIO-REBUILD-001 §5.5/§5.7, slice S19a): a workflow is named with a
- * `/workflow-<key>` FIRST token in the composer, and Enter launches it. The rest of the line is the
- * intent the workflow runs on.
+ * THE `/` MENU'S "START WORK" ROWS (DES-STUDIO-REBUILD-001 §5.5/§5.7, slices S19a/S19b; slash-catalog,
+ * operator 2026-11-04: "the slash commands in the chatbox don't match the list of workflows when I see
+ * the new job modal"). The rows are New job's catalog (`jobCatalogView`: crew's `GET /workflows/catalog`
+ * with studio's own kinds; today's list on an older daemon) — the same entries, titles and categories,
+ * "Your top" first (`catalogRows`, ./slashCatalog.ts) — and a pick starts what New job's card starts
+ * (`startCatalogEntry`). Studio keeps
+ * no list of its own: what the catalog leaves out (the machine-owned flows, `distill-learnings`) is
+ * never offered here.
  *
- * The catalog is the daemon's OWN (`GET /workflows` + the scope's `GET /presets`), read through the
- * caches the surfaces already warm — studio keeps no list of its own. `is_system` entries are the
- * machine-owned flows (`chat`, `onboarding`, …): they have dedicated entry points and are never
- * offered here (the same classification the workflow menu and the delivery surfaces share).
+ * `/workflow-<key>` typed whole as the FIRST token still names a workflow entry (back-compat): the rest
+ * of the line is the intent it runs on.
  *
- * Pure: parsing, the menu's rows, and the one line each row shows, all read off the daemon's shapes.
+ * Pure: parsing, the menu's rows and what each row says, all read off the catalog view.
  */
 
 /** A parsed `/workflow-<key> [intent]` line. `rest` is the intent after the key (trimmed). */
@@ -70,10 +73,12 @@ export function presetCommandLine(preset: Preset): string {
   return `${ids.length} ${word}: ${headOf(ids.map(stepNoun))}`;
 }
 
-/** The line the menu shows while the daemon's workflow list is still being read. */
-export const WORKFLOWS_LOADING_LINE = "Reading the daemon's workflows…";
-/** The line the menu shows when the daemon answered with no workflows to start. */
+/** The line the menu shows while the catalog is still being read (New job's words). */
+export const WORKFLOWS_LOADING_LINE = 'Reading the workflows…';
+/** The line the menu shows when the daemon answered with nothing to start (New job's words). */
 export const WORKFLOWS_EMPTY_LINE = 'This daemon lists no workflows.';
+/** The line the menu shows when a daemon that serves a catalog failed to answer: never another list. */
+export const WORKFLOWS_FAILED_LINE = 'Couldn’t read the workflows. Type / again to try again.';
 
 /** How many rows the "Start work" group offers at once. */
 export const WORKFLOW_ROWS_MAX = 8;

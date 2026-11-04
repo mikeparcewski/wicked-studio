@@ -26,7 +26,9 @@ import { baseSkillRefusalOf, describeBaseSkill, detectWorkflow, gatePostureWord,
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { menuToken, dropToken } from '../board/planDraft.js';
-import { workflowItems, type WorkflowRow } from '../board/workflowCommand.js';
+import { catalogRows, workflowsOnly, type CatalogRow } from '../board/slashCatalog.js';
+import { jobCatalogView } from '../board/workflowCatalog.js';
+import { catalogProjectOf, useWorkflowCatalog } from '../store/workflowCatalog.js';
 import { SlashMenu } from './session/SlashMenu.js';
 import { ContextPopover } from './ContextPopover.js';
 import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
@@ -974,8 +976,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }
 
   // S19b: the `/` menu on the problem box (DES-STUDIO-REBUILD-001 §5.5) — the composer's "Start work"
-  // rows, read off the daemon's own catalog, as the box's FIRST token only. A forced workflow
-  // (`workflowOverride`) or a composed plan already names the work: no menu then.
+  // rows, read off New job's catalog (slash-catalog: the same titles, categories and order), as the
+  // box's FIRST token only. This form launches a workflow, so it lists the catalog's workflow entries;
+  // a document, a chat, a demo video or Draft epics start elsewhere (the composer's menu and New job
+  // offer them). A forced workflow (`workflowOverride`) or a composed plan already names the work: no menu then.
   const slashToken = runId || workflowOverride?.trim() || selection.composing ? null : menuToken(problem, problemCaret);
   const startToken = slashToken !== null && slashToken.trigger === '/' && slashToken.start === 0 ? slashToken : null;
   const launchMenuOpen = startToken !== null && menuClosedAt !== startToken.start;
@@ -983,22 +987,27 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const menuPresetsState = presets[menuProjectId ?? ''];
   const menuPresets = Array.isArray(menuPresetsState) ? menuPresetsState : null;
   const menuDefs = workflowsRead ? workflows : null;
+  const menuCatalogLoad = useWorkflowCatalog(catalogProjectOf(menuProjectId), launchMenuOpen);
+  const menuView = useMemo(() => jobCatalogView(menuCatalogLoad, menuDefs, menuPresets), [menuCatalogLoad, menuDefs, menuPresets]);
+  const menuCatalogState: 'loading' | 'error' | 'ready' = menuCatalogLoad.state === 'error' ? 'error'
+    : menuCatalogLoad.state === 'loading' || (menuCatalogLoad.state === 'unavailable' && menuDefs === null) ? 'loading' : 'ready';
   const menuRows = useMemo(
-    () => (startToken !== null ? workflowItems(startToken.query, menuDefs, menuPresets) : []),
+    () => (startToken !== null ? catalogRows(menuView, startToken.query, Date.now(), workflowsOnly) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startToken?.query, startToken !== null, menuDefs, menuPresets],
+    [startToken?.query, startToken !== null, menuView],
   );
-  const anyMenuWorkflows = useMemo(() => workflowItems('', menuDefs, menuPresets).length > 0, [menuDefs, menuPresets]);
+  const anyMenuWorkflows = useMemo(() => catalogRows(menuView, '', Date.now(), workflowsOnly).length > 0, [menuView]);
   const menuActive = menuRows.length === 0 ? 0 : Math.min(menuCursor, menuRows.length - 1);
   useEffect(() => {
     if (launchMenuOpen) loadPresets(menuProjectId ?? null);
   }, [launchMenuOpen, menuProjectId]);
   /** A pick names the form's workflow and takes the `/…` token out of the problem. */
-  const pickLaunchWorkflow = (row: WorkflowRow): void => {
-    if (startToken === null) return;
+  const pickLaunchWorkflow = (row: CatalogRow): void => {
+    // A workflow the catalog shows as coming soon or not available is never named (New job's rule).
+    if (startToken === null || !row.offered) return;
     const next = dropToken(problem, startToken.start, problemCaret).replace(/^\s+/, '');
     setProblem(next);
-    setWorkflow(row.workflowId);
+    setWorkflow(row.entry.launchId);
     setMenuCursor(0);
     requestAnimationFrame(() => {
       const el = textareaRef.current;
@@ -1918,7 +1927,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             menuKey="launch"
             trigger="/"
             startCommands
-            defsLoading={menuDefs === null}
+            catalogState={menuCatalogState}
             anyWorkflows={anyMenuWorkflows}
             wf={menuRows}
             active={menuActive}

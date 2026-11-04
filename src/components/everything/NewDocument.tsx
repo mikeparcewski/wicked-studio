@@ -11,6 +11,7 @@ import { newDocBody, newDocName } from '../../board/newDocument.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { docSlug } from '../../interactive/docSlug.js';
 import { useDocsCache } from '../../store/docsCache.js';
+import { clearNewDocumentBrief, peekNewDocumentBrief } from '../../store/newDocumentSeed.js';
 import { DocSubjectPicker, type DocFormat, type SubjectStatus } from '../DocSubjectPicker.js';
 
 /** studio#765: one helper writes the document and a different one checks it. */
@@ -66,7 +67,9 @@ function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose
   onOpen: (projectId: string, name: string) => void;
 }): React.ReactElement {
   const [projectId, setProjectId] = useState<string>(initialProject ?? UNFILED_MOUNT);
-  const [brief, setBrief] = useState('');
+  // slash-catalog: the words a catalog pick (New job's card, a `/` row) carried here are the brief.
+  const [brief, setBrief] = useState(() => peekNewDocumentBrief());
+  useEffect(() => { clearNewDocumentBrief(); }, []);
   const [name, setName] = useState('');
   const [nameEdited, setNameEdited] = useState(false);
   const [repoRefs, setRepoRefs] = useState<string[]>([]);
