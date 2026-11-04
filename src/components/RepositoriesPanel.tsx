@@ -29,6 +29,7 @@ import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { KnowMarks } from './RepoKnowledge.js';
 import { RepoGraphModal } from './RepoGraphModal.js';
 import { useHeldMarked } from '../hooks/useHeldMarked.js';
+import { isHeldRun } from '../board/heldRuns.js';
 import { RequirementsModal } from './RequirementsModal.js';
 
 type SourceMode = 'local' | 'remote';
@@ -100,7 +101,8 @@ function graphStateWord(m: RepoFleetModel, attachedAt: Record<string, number>, n
       : 'No code map yet';
   }
   if (state === 'ready') return `Code map ready${when === '' ? '' : ` · onboarded${when}`}`;
-  if (state === 'onboarding') return 'Onboarding now — mapping the code…';
+  // (crew#1042) A held onboarding (an orphan, a stall) is not mapping anything: it waits on you.
+  if (state === 'onboarding') return run !== null && isHeldRun(run.session) ? 'Onboarding waits on you — see Needs you' : 'Onboarding now — mapping the code…';
   if (state === 'failed') return `Onboarding failed${when}`;
   return 'Not onboarded yet';
 }
@@ -124,7 +126,7 @@ function captureStateWord(m: RepoFleetModel, attachedAt: Record<string, number>,
   const clock = run === null ? undefined : attachedAt[run.session.id];
   const when = clock === undefined ? '' : ` ${ago(clock, now)} ago`;
   if (state === 'captured') return `Learnings captured${when}`;
-  if (state === 'capturing') return 'Capturing learnings now…';
+  if (state === 'capturing') return run !== null && isHeldRun(run.session) ? 'Capturing learnings waits on you — see Needs you' : 'Capturing learnings now…';
   if (state === 'failed') return `Capturing learnings failed${when}`;
   return 'No learnings captured yet';
 }
@@ -466,7 +468,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     [fleet],
   ));
   const waitingN = fleet.reduce((a, m) => a + m.waiting.length, 0);
-  const sentence = reposSentence(loading ? 'loading' : error !== null ? 'failed' : 'known', fleet.map((m) => readiness.get(m.repo.id) ?? 'never'), waitingN);
+  const heldIndexing = fleet.filter((m) => m.onboard.state === 'onboarding' && m.onboard.run !== null && isHeldRun(m.onboard.run.session)).length;
+  const sentence = reposSentence(loading ? 'loading' : error !== null ? 'failed' : 'known', fleet.map((m) => readiness.get(m.repo.id) ?? 'never'), waitingN, heldIndexing);
   const [openId, setOpenId] = useState<string | null>(null);
   const [tools, setTools] = useState(false);
   const narrowed = chip !== 'all' || q !== '';
@@ -789,11 +792,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                         <div id={detailsId} className="wk-jr-details" data-testid="repo-details" hidden={!open}>
                           <ul className="wk-jr-facts">
                             {/* The graph state — the run history, corrected by the engine's findings (F-2R2-003). */}
-                            <li data-testid="repo-graph-state" data-state={state} data-tone={GRAPH_TONE[state] ?? 'quiet'} className="wk-jr-fact">
+                            <li data-testid="repo-graph-state" data-state={state} data-tone={state === 'onboarding' && m.onboard.run !== null && isHeldRun(m.onboard.run.session) ? 'gate' : GRAPH_TONE[state] ?? 'quiet'} className="wk-jr-fact">
                               <span aria-hidden className="wk-jr-fact-dot" />{graphStateWord(m, attachedAt, now)}
                             </li>
                             {/* The captured-learnings state (studio#294 b). */}
-                            <li data-testid="repo-capture-state" data-state={m.capture.state} data-tone={CAPTURE_TONE[m.capture.state] ?? 'quiet'} className="wk-jr-fact">
+                            <li data-testid="repo-capture-state" data-state={m.capture.state} data-tone={m.capture.state === 'capturing' && m.capture.run !== null && isHeldRun(m.capture.run.session) ? 'gate' : CAPTURE_TONE[m.capture.state] ?? 'quiet'} className="wk-jr-fact">
                               <span aria-hidden className="wk-jr-fact-dot" />{captureStateWord(m, attachedAt, now)}
                             </li>
                             <li className="wk-jr-fact">

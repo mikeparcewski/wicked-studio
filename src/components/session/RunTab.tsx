@@ -245,7 +245,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // manifest's `order`, a pinned plugin section at the top (DES-LEARN §1.2).
   const core: Record<PanelSectionId, React.ReactElement> = {
     now: (
-      <Section id="now" {...fold} summary={silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word}>
+      <Section id="now" {...fold} summary={/* (crew#1042) held: it waits on you, no "working for N min" or silence clock */ held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word}>
         <div data-testid="run-tab-now" className="wk-run-tab-block">
           <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(shown, chain, gate, action, silent?.minutes ?? null)}</p>
           {(started !== null || ended !== null) && (
@@ -259,7 +259,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         <div data-testid="run-tab-workflow" className="wk-run-tab-block">
           <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-            <span className="wk-run-tab-pill">{chatStatusWord([view]).word}</span>
+            <span className="wk-run-tab-pill">{chatStatusWord([shown]).word}</span>
           </p>
           {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
             <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>
@@ -514,10 +514,12 @@ export function RunRibbon({ runs }: { runs: SessionView[] }): React.ReactElement
 
 function RunRibbonLine({ view }: { view: SessionView }): React.ReactElement {
   const { chain } = useRunChain(view);
+  // (crew#1042) Its status word follows the shared held set, as the rest of the run page does.
+  const shown = useHeldMarkedView(view);
   const spend = spendWords(view);
   return (
     <span data-testid="run-ribbon-line" className="wk-run-tab-ribbon">
-      {workflowLabel(view.session.workflow_id)} · {currentStep(view, chain)?.label ?? chatStatusWord([view]).word} · {agentsWord(assignedClis(view).length)}{spend !== null && ` · ${spend}`}
+      {workflowLabel(view.session.workflow_id)} · {currentStep(view, chain)?.label ?? chatStatusWord([shown]).word} · {agentsWord(assignedClis(view).length)}{spend !== null && ` · ${spend}`}
     </span>
   );
 }

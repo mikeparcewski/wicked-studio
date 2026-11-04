@@ -4,7 +4,9 @@ import { useHeldRuns } from '../src/store/heldRuns.js';
 import { statusSentence } from '../src/board/proposalCard.js';
 import { chainFromUnits } from '../src/board/chainModel.js';
 import { nowStep } from '../src/components/session/ChainLine.js';
-import { repoFleetModels } from '../src/board/repoStats.js';
+import { ONBOARDING_WORKFLOW_ID, repoFleetModels } from '../src/board/repoStats.js';
+import { readinessWords, repoReadiness, reposSentence } from '../src/board/repoRows.js';
+import { knowledgeMarks } from '../src/board/repoKnowledge.js';
 import { statusCounts } from '../src/board/windowStats.js';
 import type { RepoEntry, SessionView } from '../src/api/types.js';
 import { act, renderHook } from '@testing-library/react';
@@ -122,5 +124,23 @@ describe('crew#1042: the shared held set reaches every surface', () => {
     expect(fold(heldOf(orphan)).waiting.map((v) => v.session.id)).toEqual([ORPHAN]);
     expect(statusCounts([heldOf(orphan)])).toMatchObject({ active: 0, gates: 1 });
     expect(statusWord(heldOf(orphan))).toEqual({ word: 'Waiting on you', tone: 'gate' });
+  });
+
+  it('a held onboarding is not "indexing now" anywhere: the readiness words, the page sentence and the Code graph mark (codex r2)', () => {
+    const acme: RepoEntry = { id: 'acme', name: 'acme', root_path: '/tmp/acme', default_branch: 'main', registered_at: 1_700_000_000 };
+    const onboarding = makeView({ id: 'o1', status: 'executing', repo_ref: 'acme', workflow_id: ONBOARDING_WORKFLOW_ID });
+    const fold = (v: SessionView) => repoFleetModels([acme], [v], {}, new Set(['o1']))[0]!;
+    const live = fold(onboarding);
+    expect(readinessWords(repoReadiness(live, 0), live, 0)).toBe('indexing now');
+    expect(reposSentence('known', [repoReadiness(live, 0)], 0)).toMatch(/indexing now/);
+    const code = (v: SessionView) => knowledgeMarks(acme, [v], { kinds: { state: 'loading' }, reqs: { state: 'loading' } }, 0).find((k) => k.id === 'code')!;
+    expect(code(onboarding)).toMatchObject({ value: 'indexing now', tone: 'run' });
+    const held = fold(heldOf(onboarding));
+    expect(readinessWords(repoReadiness(held, 0), held, 0)).toBe('indexing waits on you');
+    expect(held.waiting).toHaveLength(1);
+    const sentence = reposSentence('known', [repoReadiness(held, 0)], held.waiting.length, 1);
+    expect(sentence).not.toMatch(/indexing now/);
+    expect(sentence).toMatch(/One job waits on you\./);
+    expect(code(heldOf(onboarding))).toMatchObject({ value: 'indexing waits on you', tone: 'gate' });
   });
 });

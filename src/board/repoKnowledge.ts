@@ -5,6 +5,7 @@ import { ONBOARDING_WORKFLOW_ID, repoGraphGap, repoOnboard, runWorkflow, type Re
 export { runWorkflow };
 import { DOMAIN_EXTRACTION_ID, type GraphBuild, type RequirementsCoverage } from './requirementsState.js';
 import { statusWord } from './statusWords.js';
+import { isHeldRun } from './heldRuns.js';
 
 /**
  * WHAT WE KNOW about a repository (operator, round 10: "needs visuals to show what we know (e.g. has been run)
@@ -107,6 +108,10 @@ function codeMark(onboard: RepoOnboard, lastIndexed: SessionView | null, gap: Re
   const at = lastIndexed === null ? null : startedAt(lastIndexed);
   const when = at === null ? (runsKnown ? 'when is not on record' : 'when could not be read') : `indexed ${relTime(at, now)}`;
   if (onboard.state === 'onboarding' && onboard.run !== null) {
+    // (crew#1042) Held by a Needs-you row (an orphan, a stall): nothing is building it; the job waits on you.
+    if (isHeldRun(onboard.run.session)) {
+      return { ...base, value: 'indexing waits on you', title: 'Code graph: its indexing job waits on you (see Needs you)', tone: 'gate', target: { kind: 'run', runId: onboard.run.session.id } };
+    }
     return { ...base, value: 'indexing now', title: 'Code graph: an indexing job is building it now', tone: 'run', target: { kind: 'run', runId: onboard.run.session.id } };
   }
   if (gap !== null) {

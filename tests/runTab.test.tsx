@@ -15,6 +15,7 @@ import { setCachedRoster } from '../src/store/rosterCache.js';
 import * as sheets from '../src/store/sheets.js';
 import { makeUnit, makeView } from './factories.js';
 import { resetRunPanel } from '../src/store/runPanel.js';
+import { useHeldRuns } from '../src/store/heldRuns.js';
 import { RUN_PANEL_KEY } from '../src/board/runPanelModel.js';
 
 /** Open one of the panel's folding sections (only Now and the state's own section start open). */
@@ -110,6 +111,21 @@ describe('RunTab', () => {
     expect(rows[1]).toHaveAttribute('data-current', 'true');
     expect(rows[1]).toHaveTextContent('now');
     expect(rows.filter((row) => row.getAttribute('data-current') === 'true')).toHaveLength(1);
+  });
+
+  it('crew#1042: a run the shared held set holds waits on you: the status line, the plan and the workflow pill, and back when the hold clears', async () => {
+    const run = phases();
+    await tab([run]);
+    expect(screen.getAllByTestId('run-tab-phase')[1]).toHaveTextContent('now');
+    expect(screen.getByTestId('run-tab-status')).not.toHaveTextContent('Waiting on you');
+    act(() => useHeldRuns.getState().setHeld(new Set([run.session.id])));
+    expect(screen.getAllByTestId('run-tab-phase')[1]).toHaveTextContent('waiting on you');
+    expect(screen.getAllByTestId('run-tab-phase')[1]).not.toHaveTextContent('now');
+    expect(screen.getByTestId('run-tab-status')).toHaveTextContent('Waiting on you — see Needs you');
+    expect(screen.getByTestId('run-tab-workflow')).toHaveTextContent('Waiting on you');
+    act(() => useHeldRuns.getState().setHeld(new Set()));
+    expect(screen.getAllByTestId('run-tab-phase')[1]).toHaveTextContent('now');
+    expect(screen.getByTestId('run-tab-status')).not.toHaveTextContent('Waiting on you');
   });
 
   it('uses the first todo phase when a live run has no running phase', async () => {
