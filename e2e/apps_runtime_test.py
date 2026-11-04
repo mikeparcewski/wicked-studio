@@ -394,7 +394,7 @@ def main() -> None:
               outcome=stale_outcome, status=refused_run["status"])
 
         # 9a. /apps: a dashboard of crew's apps (the fixture serves the store): the grid, the names as text, no style
-        # attribute, and no query sent to draw a tile
+        # attribute, and (K5) no query but the cards' own KPI reads
         # The earlier tab is closed first: its own refresh (it adopts step 8b's version and re-reads its queries) is not
         # the dashboard's, and only the dashboard's requests are counted.
         page.close()
@@ -415,9 +415,13 @@ def main() -> None:
         tile_styled = sum(f.evaluate("() => document.querySelectorAll('[style]').length") for f in tile_frames)
         pwned = dash.evaluate("() => window.__pwned === undefined ? null : window.__pwned")
         shot(dash, "5-dashboard")
+        # K5: a card on screen reads its first page's KPI queries (live numbers), at most 3 per app, and nothing else:
+        # the previews read nothing (they draw the last render's snapshot, and this page has none).
+        kpi_reads = sum(min(3, len([c for c in spec_["pages"][0]["components"] if c["type"] == "kpi"])) for spec_ in apps_fixture.fixture_specs())
+        tile_reads = count(origin, "POST", "/query") - q0
         check("dashboard", sorted(names) == sorted(["Fixture desk", "<script>window.__pwned=5</script> Other app"]) and nav_current == "page"
               and 3 <= cols(dash) <= 4 and styled == 0 and len(tile_frames) == 2 and tile_styled == 0 and pwned is None
-              and count(origin, "POST", "/query") == q0, names=names, nav=nav_current, columns=cols(dash), styled=styled, tiles=len(tile_frames), queries=count(origin, "POST", "/query") - q0)
+              and tile_reads <= kpi_reads, names=names, nav=nav_current, columns=cols(dash), styled=styled, tiles=len(tile_frames), queries=tile_reads, kpi_reads=kpi_reads)
         for w, want in ((1024, 2), (390, 1)):
             narrow = browser.new_context(viewport={"width": w, "height": 800})
             np_ = narrow.new_page()

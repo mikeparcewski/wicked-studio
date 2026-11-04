@@ -13,6 +13,7 @@ import { isAppSlug, publishedOf } from '../../editors/apps/appsDirectory.js';
 import { ShareSheet } from '../apps/ShareSheet.js';
 import { AppChat, appComposerKey } from '../apps/AppChat.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
+import { recordingPort } from '../../editors/apps/previewSnapshots.js';
 
 /**
  * THE APP HOST (DES-APPS-001 §6.1, §7.1, §7.3; slice K4): one app in the `wicked-apps` runtime's sandboxed frame, and
@@ -238,7 +239,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       const session = new AppSession(store);
       let loaded: AppDetail;
       try { loaded = await session.load(); } catch (e) { if (!cancelled) setError(`This app could not be read: ${e instanceof Error ? e.message : String(e)}`); return; }
-      const data: AppDataPort = appDataFor(store.kind === 'crew' ? caps : undefined, store.kind === 'crew' ? store.slug : null, () => sampleAppData(() => session.landedSpec ?? loaded.spec, store.kind === 'sample' ? picked.data : null));
+      const live: AppDataPort = appDataFor(store.kind === 'crew' ? caps : undefined, store.kind === 'crew' ? store.slug : null, () => sampleAppData(() => session.landedSpec ?? loaded.spec, store.kind === 'sample' ? picked.data : null));
+      // (K5) What this page shows is kept, in memory, for the dashboard's preview of the app (it reads nothing itself).
+      const data: AppDataPort = store.kind === 'crew' && live.kind.queries === 'crew' ? recordingPort(store.slug, live) : live;
       const decided = await fetchGrants(editor, version, sha, null);
       if (cancelled || frameBox.current === null) { session.dispose(); return; }
       sessionRef.current = session;
@@ -347,6 +350,14 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
     setStatus(r.ok ? `${direction === 'undo' ? 'Undone' : 'Redone'}: now v${r.version}` : r.message);
   };
 
+  /** (K5) A chat message waits for the person's own edit burst to land, then names the head it made (null: not saved). */
+  const prepareSend = async (): Promise<number | null> => {
+    const s = sessionRef.current;
+    if (s === null) return null;
+    if (s.pending > 0 && !(await s.flush())) return null;
+    return s.head;
+  };
+
   const history = detail?.history;
   const busy = detail?.turn != null;
   // (K5) Chat is how an app changes: open on every crew app's page, in Preview and in Edit alike.
@@ -407,7 +418,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           )}
           <div ref={frameBox} key={mountKey} className="wk-apps-frame-box" data-testid="apps-frame-box" />
         </div>
-        <div className="wk-apps-side">
+        {(() => { const dock = (
         <aside className={`wk-apps-dock${narrow && asking === null && link === null ? ' wk-apps-dock--quiet' : ''}${chatOn && idle ? ' wk-apps-dock--idle' : ''}`} aria-label="Needs you" data-testid="apps-dock">
           <h2 className="wk-apps-dock-title">Needs you <span className="wk-apps-dock-count">{asking !== null || link !== null ? '1 waiting' : 'nothing waiting'}</span></h2>
           {asking !== null && <ActionCardView asking={asking} onAnswer={answer} />}
@@ -430,12 +441,17 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
                   : 'When the app asks to change something, studio shows exactly what here and waits for you.'}
             </p>
           )}
-        </aside>
-        {chatOn && (
-          <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
-            onSent={() => { void sessionRef.current?.refresh(); }} onUndo={() => void move('undo')} />
-        )}
-        </div>
+        </aside>);
+          // Without chat the dock is the body's second column, exactly as K4 drew it (xreview r1 on K5: a wrapper changed
+          // the canvas's size there); with chat the dock sits above the chat in one side column.
+          return chatOn ? (
+            <div className="wk-apps-side">
+              {dock}
+              <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
+                onSent={() => { void sessionRef.current?.refresh(); }} onUndo={() => void move('undo')} prepareSend={prepareSend} />
+            </div>
+          ) : dock;
+        })()}
       </div>
       {sharing && detail !== null && (
         <ShareSheet name={detail.name} slug={detail.slug} published={publishedOf(detail)} onClose={() => setSharing(false)} />

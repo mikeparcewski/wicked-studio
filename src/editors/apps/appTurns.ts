@@ -6,7 +6,7 @@ import { seatLabel } from '../../board/seatNames.js';
 /**
  * THE APP'S CHAT (DES-APPS-001 §6.1, §6.2, §9.2; slice K5): every message to an app is ONE `apps-turn` run on crew
  * (build by a seat → crew's check → review by a distinct seat), and the chat is crew's record of those turns
- * (`AppDetail.turns`, crew api-types 0.181.0): no thread store of studio's own, so a reload and a second tab read the
+ * (`AppDetail.turns`, crew api-types 0.185.0): no thread store of studio's own, so a reload and a second tab read the
  * same thread, version, pointer and turn state.
  *
  * Pure apart from the two calls ({@link sendTurn}, {@link createByChat}): the turn records as crew answers them (read
@@ -14,7 +14,7 @@ import { seatLabel } from '../../board/seatNames.js';
  * when it lands, the reason when it does not), and the suggestions the composer offers.
  */
 
-/** One turn as crew records it (crew api-types 0.181.0 `AppTurnRecord`; typed here until studio's pin carries it). */
+/** One turn as crew records it (crew api-types 0.185.0 `AppTurnRecord`; typed here until studio's pin carries it). */
 export interface AppTurnRecord {
   runId: string;
   at: number;

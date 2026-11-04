@@ -6,6 +6,7 @@ import { AppsPage } from '../src/components/apps/AppsPage.js';
 import { busyText, changeLine, endedLine, slugFrom, suggestionsFor, turnsOf } from '../src/editors/apps/appTurns.js';
 import { TileScheduler, tileEveryMs, tileKpis, type QueryOutcome } from '../src/editors/apps/liveTiles.js';
 import { SAMPLE_APPS } from '../src/editors/apps/samples.js';
+import { recordingPort, resetSnapshots, snapshotAt, snapshotPort } from '../src/editors/apps/previewSnapshots.js';
 import { useComposerChips } from '../src/store/composerChips.js';
 
 /**
@@ -70,7 +71,7 @@ describe('the app chat: crew\'s turn log, in words', () => {
     render(<AppChat slug="desk" detail={detail()} runs={[]} framed={false} navigate={vi.fn()} onSent={onSent} onUndo={vi.fn()} />);
     expect(screen.getByTestId('app-chat-change').textContent).toBe('v3 · Added 1 chart and 1 query · reviewed by Codex');
     act(() => aboutComponent('desk', 'open_kpi', 'KPI “Open” (Overview, v3)'));
-    const box = screen.getByTestId('session-composer-input') as HTMLTextAreaElement;
+    const box = screen.getByTestId('app-composer-input') as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: 'make this a line chart' } });
     fireEvent.keyDown(box, { key: 'Enter' });
     await waitFor(() => expect(onSent).toHaveBeenCalledTimes(1));
@@ -78,8 +79,41 @@ describe('the app chat: crew\'s turn log, in words', () => {
     fireEvent.change(box, { target: { value: 'and another' } });
     fireEvent.keyDown(box, { key: 'Enter' });
     await waitFor(() => expect(screen.getByTestId('app-chat-note').textContent).toMatch(/already running/));
-    expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('and another');
+    expect((screen.getByTestId('app-composer-input') as HTMLTextAreaElement).value).toBe('and another');
     expect(useComposerChips.getState().byComposer[appComposerKey('desk')] ?? []).toStrictEqual([]);
+  });
+
+  it('a message crew does not take keeps its words AND its components; a framed studio sends nothing and undoes nothing', async () => {
+    const { calls } = mockFetch((path) => (path === '/apps/desk/turns' ? { status: 409, body: { code: 'stale_base', error: 'made on v2' } } : path === '/mcp/servers' ? { body: { servers: [] } } : null));
+    const { unmount } = render(<AppChat slug="desk" detail={detail()} runs={[]} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    act(() => aboutComponent('desk', 'open_kpi', 'KPI “Open”'));
+    const box = screen.getByTestId('app-composer-input') as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: 'make it red' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByTestId('app-chat-note').textContent).toMatch(/changed meanwhile/));
+    expect((screen.getByTestId('app-composer-input') as HTMLTextAreaElement).value).toBe('make it red');
+    expect(screen.getAllByTestId('app-composer-chip').map((c) => c.textContent)).toStrictEqual(['about: KPI “Open”']);
+    unmount();
+    // Framed: the thread is shown, nothing can be sent or undone, and no question is answered from here.
+    const before = calls.length;
+    render(<AppChat slug="desk" detail={detail()} runs={[]} framed navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    expect(screen.getByTestId('app-composer-readonly').textContent).toMatch(/inside another page/);
+    expect((screen.getByTestId('app-composer-send') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(screen.getByTestId('app-composer-input'), { key: 'Enter' });
+    expect(screen.queryByTestId('app-chat-undo')).toBeNull();
+    expect(calls.slice(before).filter((c) => c.path.endsWith('/turns'))).toHaveLength(0);
+  });
+
+  it('an edit burst the person just made lands before the message, which is sent on the head it made', async () => {
+    const { calls } = mockFetch((path) => (path === '/apps/desk/turns' ? { status: 202, body: { runId: 'r', turn: {} } } : path === '/mcp/servers' ? { body: { servers: [] } } : null));
+    const prepareSend = vi.fn(async () => 4);
+    render(<AppChat slug="desk" detail={detail()} runs={[]} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} prepareSend={prepareSend} />);
+    const box = screen.getByTestId('app-composer-input') as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: 'go' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(calls.some((c) => c.path === '/apps/desk/turns')).toBe(true));
+    expect(prepareSend).toHaveBeenCalledTimes(1);
+    expect(calls.find((c) => c.path === '/apps/desk/turns')!.body).toMatchObject({ base: 4 });
   });
 
   it('a running turn shows its steps and is read-only for the next message; refused shows the code and the reason', () => {
@@ -101,7 +135,18 @@ describe('the dashboard\'s live numbers', () => {
   const s = spec();
 
   it('a card reads the first page\'s KPIs (up to 3) every 30 s, or its own faster refresh (never under 10 s)', () => {
-    expect(tileKpis(s).map((k) => k.query)).toStrictEqual(tileKpis(s).map((k) => k.query).slice(0, 3));
+    const two: AppSpec = { ...s, pages: [
+      { id: 'a', title: 'A', components: [
+        { id: 'f', type: 'filter', filter: 'select', box: { x: 0, y: 0, w: 2, h: 1 }, default: 'East' },
+        { id: 'k1', type: 'kpi', box: { x: 0, y: 1, w: 3, h: 2 }, data: { query: 'q1', params: { region: 'filter.f' } }, value: 'n' },
+        { id: 'k2', type: 'kpi', box: { x: 3, y: 1, w: 3, h: 2 }, data: { query: 'q1' }, value: 'n' },
+        { id: 'k3', type: 'kpi', box: { x: 6, y: 1, w: 3, h: 2 }, data: { query: 'q2' }, value: 'm' },
+        { id: 'k4', type: 'kpi', box: { x: 9, y: 1, w: 3, h: 2 }, data: { query: 'q3' }, value: 'o' },
+      ] as never },
+      { id: 'b', title: 'B', components: [{ id: 'k9', type: 'kpi', box: { x: 0, y: 0, w: 3, h: 2 }, data: { query: 'q9' }, value: 'z' }] as never },
+    ] };
+    // The first page's first three KPIs, with the parameters the app opens with (a filter's default).
+    expect(tileKpis(two).map((k) => [k.query, k.params])).toStrictEqual([['q1', { region: 'East' }], ['q1', {}], ['q2', {}]]);
     expect(tileEveryMs(s, tileKpis(s))).toBe(30_000);
     const fast = { ...s, queries: s.queries.map((q) => ({ ...q, refresh: { mode: 'every', seconds: 4 } })) } as AppSpec;
     expect(tileEveryMs(fast, tileKpis(fast))).toBe(10_000);
@@ -134,6 +179,44 @@ describe('the dashboard\'s live numbers', () => {
     t = 10_000;
     sch.tick();
     expect(q.mock.calls.length).toBe(before);
+  });
+
+  it('the preview reads nothing: it draws the app page\'s last render in this tab, bounded, or no rows at all', async () => {
+    resetSnapshots();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const rows = { columns: [{ name: 'open', type: 'integer' }], rows: Array.from({ length: 80 }, (_, i) => [i]), truncated: false, hasMore: false, ms: 1, cachedAt: null, sample: false };
+    const inner = { kind: { queries: 'crew', actions: 'crew' }, query: vi.fn(async () => rows), prepare: vi.fn(), run: vi.fn(), viewer: () => ({ email: null, sample: false }) } as never;
+    const page = recordingPort('desk', inner);
+    await page.query(3, 'open_count', {});
+    expect(snapshotAt('desk', 3)).not.toBeNull();
+    expect(snapshotAt('desk', 4)).toBeNull();
+    const tile = snapshotPort('desk', 3);
+    const got = await tile.query(3, 'open_count', {});
+    expect('error' in got ? null : got.rows.length).toBe(50);
+    expect('error' in got ? null : got.truncated).toBe(true);
+    expect(await tile.query(3, 'other', {})).toMatchObject({ error: 'unavailable' });
+    expect(await snapshotPort('desk', 4).query(4, 'open_count', {})).toMatchObject({ error: 'unavailable' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('a card that is gone sends nothing more and hears nothing back (its queued read is skipped)', async () => {
+    const pending: Array<() => void> = [];
+    const q = vi.fn(async (): Promise<QueryOutcome> => new Promise((res) => { pending.push(() => res({ ok: true, answer: { columns: [{ name: 'open' }], rows: [[1]] } })); }));
+    const sch = new TileScheduler({ query: q, staggerMs: 0, hidden: () => false, maxConcurrent: 1 });
+    const heard: string[] = [];
+    const a = sch.register('a', { slug: 'a', version: 1, spec: s }, () => heard.push('a'));
+    const b = sch.register('b', { slug: 'b', version: 1, spec: s }, () => heard.push('b'));
+    a.seen(true);
+    b.seen(true);
+    sch.tick();
+    await Promise.resolve();
+    const started = q.mock.calls.length;
+    b.dispose();
+    a.dispose();
+    while (pending.length > 0) { pending.shift()!(); await new Promise((r) => setTimeout(r, 0)); }
+    // Nothing queued for a disposed card ran, and no listener heard from a disposed card.
+    expect(q.mock.calls.length).toBe(started);
+    expect(heard).toStrictEqual([]);
   });
 
   it('a failed refresh shows no numbers and crew\'s code, never the last number as if live', async () => {

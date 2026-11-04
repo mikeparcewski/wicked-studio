@@ -29,19 +29,39 @@ export const TILE_MAX_CONCURRENT = 3;
 export const TILE_STAGGER_MS = 400;
 export const TILE_TICK_MS = 1_000;
 
-/** One headline number a card shows: the KPI's title, and the query and column it reads. */
-export interface TileKpiDef { title: string; query: string; column: string; format?: unknown }
+/** One headline number a card shows: the KPI's title, the query and column it reads, and the parameters it binds. */
+export interface TileKpiDef { title: string; query: string; column: string; params: Record<string, unknown>; format?: unknown }
+
+/**
+ * A KPI's parameters as the app opens (xreview r1 on K5: a card must read what the app reads): a `filter.<id>` binding
+ * takes that filter's default when it is a plain value, as the page starts; anything else (a date range, a form, a
+ * row, a URL value) is left unset, exactly as an app opened without it.
+ */
+function initialParams(spec: AppSpec, bindings: Record<string, string> | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const comps = spec.pages.flatMap((p) => p.components);
+  for (const [name, binding] of Object.entries(bindings ?? {})) {
+    const m = /^filter\.([A-Za-z][A-Za-z0-9_-]*)$/u.exec(binding);
+    if (m === null) continue;
+    const f = comps.find((c) => c.id === m[1] && c.type === 'filter') as { default?: unknown } | undefined;
+    if (typeof f?.default === 'string' && f.default !== '') out[name] = f.default;
+  }
+  return out;
+}
 
 /** The KPI components on the app's first page (up to three), in order. */
 export function tileKpis(spec: AppSpec): TileKpiDef[] {
   const out: TileKpiDef[] = [];
   for (const c of spec.pages[0]?.components ?? []) {
     if (c.type !== 'kpi' || out.length >= 3) continue;
-    const k = c as unknown as { title?: string; value: string; data: { query: string }; format?: unknown };
-    out.push({ title: (k.title ?? k.value).slice(0, 60), query: k.data.query, column: k.value, ...(k.format !== undefined ? { format: k.format } : {}) });
+    const k = c as unknown as { title?: string; value: string; data: { query: string; params?: Record<string, string> }; format?: unknown };
+    out.push({ title: (k.title ?? k.value).slice(0, 60), query: k.data.query, column: k.value, params: initialParams(spec, k.data.params), ...(k.format !== undefined ? { format: k.format } : {}) });
   }
   return out;
 }
+
+/** One read a card makes: a query with its parameters (two KPIs reading the same one share it). */
+const readKey = (k: TileKpiDef): string => `${k.query}\u0000${JSON.stringify(k.params, Object.keys(k.params).sort())}`;
 
 /** How often a card refreshes: 30 s, or faster when the app's own KPI queries say so (never under 10 s). */
 export function tileEveryMs(spec: AppSpec, kpis: readonly TileKpiDef[]): number {
@@ -57,9 +77,9 @@ export interface QueryAnswer { columns: Array<{ name: string }>; rows: unknown[]
 export type QueryOutcome = { ok: true; answer: QueryAnswer } | { ok: false; code: string };
 
 /** crew's query route, keeping crew's reason code on a refusal. */
-export async function crewQuery(slug: string, version: number, query: string): Promise<QueryOutcome> {
+export async function crewQuery(slug: string, version: number, query: string, params: Record<string, unknown> = {}): Promise<QueryOutcome> {
   try {
-    const answer = await apiFetch<QueryAnswer>(`/apps/${encodeURIComponent(slug)}/query`, { method: 'POST', body: JSON.stringify({ version, query, params: {} }) });
+    const answer = await apiFetch<QueryAnswer>(`/apps/${encodeURIComponent(slug)}/query`, { method: 'POST', body: JSON.stringify({ version, query, params }) });
     if (!Array.isArray(answer?.columns) || !Array.isArray(answer.rows)) return { ok: false, code: 'bad_answer' };
     return { ok: true, answer };
   } catch (e) {
@@ -84,6 +104,7 @@ export interface TileState {
 }
 
 interface Card {
+  disposed: boolean;
   slug: string;
   version: number;
   kpis: TileKpiDef[];
@@ -96,7 +117,7 @@ interface Card {
 }
 
 export interface TileSchedulerOptions {
-  query?: (slug: string, version: number, query: string) => Promise<QueryOutcome>;
+  query?: (slug: string, version: number, query: string, params: Record<string, unknown>) => Promise<QueryOutcome>;
   now?: () => number;
   hidden?: () => boolean;
   maxConcurrent?: number;
@@ -113,7 +134,7 @@ export class TileScheduler {
   private readonly queue: Array<() => Promise<void>> = [];
   private active = 0;
   private lastStart = Number.NEGATIVE_INFINITY;
-  private readonly q: (slug: string, version: number, query: string) => Promise<QueryOutcome>;
+  private readonly q: (slug: string, version: number, query: string, params: Record<string, unknown>) => Promise<QueryOutcome>;
   private readonly now: () => number;
   private readonly hidden: () => boolean;
   readonly max: number;
@@ -132,13 +153,15 @@ export class TileScheduler {
   register(key: string, input: { slug: string; version: number; spec: AppSpec }, listener: (s: TileState) => void): { seen: (on: boolean) => void; dispose: () => void } {
     const kpis = tileKpis(input.spec);
     const card: Card = {
+      disposed: false,
       slug: input.slug, version: input.version, kpis, every: tileEveryMs(input.spec, kpis), seen: false, next: 0, running: false,
       state: { values: kpis.map(() => ({ cell: null, ok: false })), at: null, code: null, changes: 0 }, listener,
     };
     this.cards.set(key, card);
     return {
       seen: (on) => { card.seen = on; if (on) this.tick(); },
-      dispose: () => { if (this.cards.get(key) === card) this.cards.delete(key); },
+      // A disposed card sends nothing more (its queued reads are skipped) and hears nothing back (xreview r1 on K5).
+      dispose: () => { card.disposed = true; card.seen = false; if (this.cards.get(key) === card) this.cards.delete(key); },
     };
   }
 
@@ -176,13 +199,15 @@ export class TileScheduler {
   private async refresh(card: Card): Promise<void> {
     card.running = true;
     try {
-      const queries = [...new Set(card.kpis.map((k) => k.query))];
+      const reads = new Map<string, TileKpiDef>();
+      for (const k of card.kpis) if (!reads.has(readKey(k))) reads.set(readKey(k), k);
       const got = new Map<string, QueryOutcome>();
-      await Promise.all(queries.map((q) => this.limit(async () => {
-        // A tab hidden or a card scrolled away while it waited for a slot sends nothing.
-        if (this.hidden() || !card.seen) { got.set(q, { ok: false, code: 'skipped' }); return; }
-        got.set(q, await this.q(card.slug, card.version, q));
+      await Promise.all([...reads].map(([key, k]) => this.limit(async () => {
+        // A tab hidden, a card scrolled away or a card gone while it waited for a slot sends nothing.
+        if (this.hidden() || !card.seen || card.disposed) { got.set(key, { ok: false, code: 'skipped' }); return; }
+        got.set(key, await this.q(card.slug, card.version, k.query, k.params));
       })));
+      if (card.disposed) return;
       if ([...got.values()].some((o) => !o.ok && o.code === 'skipped')) { card.next = 0; return; }
       const failed = [...got.values()].find((o): o is { ok: false; code: string } => !o.ok);
       const before = JSON.stringify(card.state.values);
@@ -191,7 +216,7 @@ export class TileScheduler {
         card.state = { values: card.kpis.map(() => ({ cell: null, ok: false })), at: this.now(), code: failed.code, changes: card.state.changes + (before === JSON.stringify(card.kpis.map(() => ({ cell: null, ok: false }))) ? 0 : 1) };
       } else {
         const values = card.kpis.map((k) => {
-          const o = got.get(k.query);
+          const o = got.get(readKey(k));
           if (o === undefined || !o.ok) return { cell: null, ok: false };
           const i = o.answer.columns.findIndex((c) => c.name === k.column);
           const row = o.answer.rows[0];

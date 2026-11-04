@@ -231,12 +231,13 @@ export async function loadAppsDirectory(hasStore: boolean): Promise<AppsDirector
 /**
  * A dashboard tile's host port: the app's first page, read-only. It is drawn in Preview and asks nothing: a frame in a
  * tile (honest or not) gets no edit (Preview, and its store changes nothing), no history, no action (never confirmed),
- * no link, and rows only from the sample's own data in this browser (crew's tiles: every query refused, no request).
+ * no link, and rows only from what is already in this browser: a sample's own data, or (K5) the snapshot of the crew
+ * app's last real render in this tab (`previewSnapshots.ts`). A crew tile never sends a query.
  */
 export function tileHostPort(session: AppSession, tile: AppTileData, live: AppDataPort | null = null): AppHostPort {
   const sample = tile.sampleKey !== null ? SAMPLE_APPS[tile.sampleKey] ?? null : null;
   const spec = (): AppSpec => session.landedSpec ?? tile.detail!.spec;
-  // (K5) A crew tile's live reads go through the dashboard's limiter, only while the card is seen (AppsPage).
+  // (K5) A crew tile's rows: the last real render's snapshot, when there is one (no request either way).
   const data: AppDataPort = sample !== null ? sampleAppData(spec, sample.data) : live !== null ? live : {
     kind: { queries: 'crew', actions: 'crew' },
     query: async () => ({ error: 'unavailable', message: 'a tile reads nothing' }),

@@ -3,8 +3,9 @@ import type { AppDetail, SessionView } from '../../api/types.js';
 import { sourcesApi } from '../../api/sources.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { busyText, changeLine, componentWords, endedLine, hasTurnLog, seatWord, sendTurn, suggestionsFor, turnsOf, type AppTurnRecord } from '../../editors/apps/appTurns.js';
-import { addAboutChip, chipsOf, useComposerChips } from '../../store/composerChips.js';
-import { Composer, type ComposerSuggestion } from '../session/Composer.js';
+import { addAboutChip } from '../../store/composerChips.js';
+import type { ComposerSuggestion } from '../session/Composer.js';
+import { AppComposer } from './AppComposer.js';
 import { LiveActivity } from '../session/LiveActivity.js';
 import { RunQuestions } from '../session/ThreadQuestions.js';
 
@@ -39,8 +40,19 @@ function ago(at: number, now: number): string {
   return h < 48 ? `${h} h ago` : new Date(at).toLocaleDateString();
 }
 
-function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded }: {
+/** A message that could not be sent from a new app's first turn waits here for that app's chat (one tab). */
+const DRAFT_KEY = (slug: string): string => `wicked.apps.draft.${slug}`;
+export function stashDraft(slug: string, text: string): void {
+  try { sessionStorage.setItem(DRAFT_KEY(slug), text.slice(0, 8000)); } catch { /* no storage: the note says what was not sent */ }
+}
+function takeDraft(slug: string): string {
+  try { const t = sessionStorage.getItem(DRAFT_KEY(slug)) ?? ''; sessionStorage.removeItem(DRAFT_KEY(slug)); return t; } catch { return ''; }
+}
+
+function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed }: {
   t: AppTurnRecord; view: SessionView | null; detail: AppDetail; onUndo: () => void; navigate: (p: string) => void; now: number; latestLanded: boolean;
+  /** A framed studio changes nothing: no Undo, and the run's questions are not answered here (xreview r1 on K5). */
+  framed: boolean;
 }): React.ReactElement {
   const job = (
     <a href={sessionPath(`run:${t.runId}`)} className="wk-link wk-appchat-job" data-testid="app-chat-job"
@@ -61,13 +73,13 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded }: {
           })}
         </ol>
         {view !== null && busy.ord !== null && <LiveActivity runId={t.runId} ord={busy.ord} seat={busy.seat} />}
-        {view !== null && <RunQuestions view={view} />}
+        {view !== null && !framed && <RunQuestions view={view} />}
         <p className="wk-appchat-meta">The app is read-only until this lands. Preview still works. · {job}</p>
       </div>
     );
   }
   if (t.state === 'landed') {
-    const undoable = latestLanded && detail.head.version === t.version && detail.history.canUndo && detail.turn == null;
+    const undoable = !framed && latestLanded && detail.head.version === t.version && detail.history.canUndo && detail.turn == null;
     return (
       <div className="wk-appchat-reply wk-appchat-reply--landed" data-testid="app-chat-landed">
         <p className="wk-appchat-change" data-testid="app-chat-change">{changeLine(t)}</p>
@@ -91,7 +103,7 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded }: {
   );
 }
 
-export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo }: {
+export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend }: {
   slug: string;
   detail: AppDetail | null;
   runs: readonly SessionView[];
@@ -100,12 +112,14 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo }
   /** A turn was launched (the host re-reads the app so the busy state shows at once). */
   onSent: () => void;
   onUndo: () => void;
+  /** Settle the host's pending edit burst first and answer the head to send on (null: it could not be saved). */
+  prepareSend?: () => Promise<number | null>;
 }): React.ReactElement {
   const key = appComposerKey(slug);
-  const [text, setTextState] = useState('');
-  const keep = useRef(false);
-  // The composer empties its box after a send; a message crew refused stays in it.
-  const setText = (t: string): void => { if (t === '' && keep.current) { keep.current = false; return; } setTextState(t); };
+  const [text, setTextState] = useState(() => takeDraft(slug));
+  const textRef = useRef(text);
+  textRef.current = text;
+  const setText = (t: string): void => setTextState(t);
   const [note, setNote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sources, setSources] = useState<string[]>([]);
@@ -134,27 +148,34 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo }
     id: `app-suggest-${i}`, label: s, title: 'Put this in the box', onPick: () => setTextState(s),
   }))), [busy, framed, detail, sources]);
 
-  const send = (message: string): void => {
-    const words = text.trim() !== '' ? text.trim() : message.trim();
-    if (words === '' || detail === null) return;
-    const chips = chipsOf(useComposerChips.getState(), key);
-    const about = chips.filter((c) => c.kind === 'about' && c.key.startsWith('cmp:')).map((c) => c.key.slice(4));
-    if (framed) { keep.current = true; setNote('Open studio on its own to change the app.'); return; }
-    if (busy) { keep.current = true; setNote('A turn is still running: your message waits in the box until it lands.'); return; }
-    if (sending) { keep.current = true; return; }
+  /** The composer's submit: true when the message was taken (the box and the chips then clear). */
+  const send = async (words: string, about: string[]): Promise<boolean> => {
+    if (words === '' || detail === null || framed || sending) return false;
+    if (busy) { setNote('A turn is still running: your message waits in the box until it lands.'); return false; }
     setSending(true);
     setNote(null);
-    void sendTurn(slug, detail.head.version, words, about).then((r) => {
+    // An edit burst the person just made lands first, and the turn is sent on the head it made (xreview r1 on K5).
+    const base = prepareSend !== undefined ? await prepareSend() : detail.head.version;
+    if (base === null) {
       setSending(false);
-      if (r.ok) { onSent(); return; }
-      // Nothing was sent: the words and the chips go back in the box.
-      setTextState(words);
-      for (const c of chips) addAboutChip(key, c);
-      setNote(r.code === 'stale_base' ? 'The app changed meanwhile: it was read again, so send it once more.'
-        : r.code === 'turn_in_flight' ? 'A turn is already running on this app: send this when it lands.'
-          : `Not sent (${r.code}): ${r.message}`);
-      if (r.code === 'stale_base') onSent();
-    });
+      setNote('Your last edit is still saving or was not saved: send this again in a moment.');
+      return false;
+    }
+    const r = await sendTurn(slug, base, words, about);
+    setSending(false);
+    if (r.ok) { onSent(); return true; }
+    const why = r.code === 'stale_base' ? 'the app changed meanwhile and was read again: send it once more'
+      : r.code === 'turn_in_flight' ? 'a turn is already running on this app: send it when that lands'
+        : `${r.code}: ${r.message}`;
+    if (r.code === 'stale_base') onSent();
+    // The box still holds this message (it was not taken), unless the person has typed another meanwhile: then the
+    // refused one is named in the note and the newer draft is left alone.
+    if (textRef.current.trim() !== words) {
+      setNote(`Not sent (${why}): “${words.slice(0, 120)}”`);
+    } else {
+      setNote(`Not sent: ${why}.`);
+    }
+    return false;
   };
 
   return (
@@ -179,13 +200,16 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo }
                 <p className="wk-appchat-about">{t.about.map((id) => <span key={id} className="wk-source-chip">about: {componentWords(detail.spec, id) ?? id}</span>)}</p>
               )}
             </div>
-            <TurnReply t={t} view={runs.find((v) => v.session.id === t.runId) ?? null} detail={detail} onUndo={onUndo} navigate={navigate} now={now} latestLanded={t.runId === latestLandedRun} />
+            <TurnReply t={t} view={runs.find((v) => v.session.id === t.runId) ?? null} detail={detail} onUndo={onUndo} navigate={navigate} now={now} latestLanded={t.runId === latestLandedRun} framed={framed} />
           </article>
         ))}
       </div>
       {note !== null && <p className="wk-appchat-note" data-testid="app-chat-note" role="status">{note}</p>}
-      <Composer composerKey={key} text={text} setText={setText} onSend={(m) => send(m)} placeholder={busy ? 'A change is being made… type the next one' : 'Ask for a change…'}
-        ariaLabel="Ask for a change to this app" variant="session" className="wk-appchat-composer" suggestions={suggestions} started={turns.length > 0} />
+      <div className="wk-appchat-composer">
+        <AppComposer composerKey={key} text={text} setText={setText} onSubmit={send} busy={sending}
+          placeholder={busy ? 'A change is being made… type the next one' : 'Ask for a change…'} ariaLabel="Ask for a change to this app"
+          suggestions={suggestions} readOnly={framed ? 'This page is inside another page, so the app cannot be changed here: open studio on its own.' : null} />
+      </div>
     </section>
   );
 }

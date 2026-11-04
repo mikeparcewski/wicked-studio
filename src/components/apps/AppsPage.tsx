@@ -13,14 +13,14 @@ import { readThemeTokens } from '../../editors/theme.js';
 import { PageFrame } from '../ui/index.js';
 import { ShareSheet } from './ShareSheet.js';
 import { cellText } from '../../plugins/wicked-apps/runtime/format.js';
-import { crewQuery, TileScheduler, TILE_TICK_MS, tileKpis, type TileState } from '../../editors/apps/liveTiles.js';
+import { TileScheduler, TILE_TICK_MS, tileKpis, type TileState } from '../../editors/apps/liveTiles.js';
 import type { AppDataPort } from '../../editors/apps/appData.js';
 import { createByChat } from '../../editors/apps/appTurns.js';
+import { snapshotAt, snapshotPort } from '../../editors/apps/previewSnapshots.js';
 import { useProjectsStore } from '../../store/projects.js';
-import { Composer, type ComposerSuggestion } from '../session/Composer.js';
-
-/** The preview of a crew app redraws on live data at most this often (when its numbers change). */
-export const PREVIEW_REDRAW_MS = 120_000;
+import type { ComposerSuggestion } from '../session/Composer.js';
+import { AppComposer } from './AppComposer.js';
+import { stashDraft } from './AppChat.js';
 
 /**
  * APPS (operator 2026-11-03: "a dashboard itself, just of the available apps"): one card per app — its name and line,
@@ -48,9 +48,9 @@ interface EditorEntry { version: string; sha: string; grants: PermissionId[] }
 
 /**
  * A card's preview: the app's first page in a read-only runtime frame, scaled down by this page's own stylesheet. For
- * crew's apps `live` is the card's read path (the dashboard's limiter, only while the card is seen): the preview is a
- * LIVE render, made when the card first comes on screen and again when its numbers change, at most every
- * {@link PREVIEW_REDRAW_MS}. Between redraws it is the last real render, never re-queried.
+ * crew's apps `live` is the SNAPSHOT of the app's last real render in this tab (`previewSnapshots.ts`): the preview
+ * reads nothing from a source; without a snapshot it is the app's shape with no rows. The card's headline numbers are
+ * the live part.
  */
 function TilePreview({ tile, editor, live }: { tile: AppTileData; editor: EditorEntry | null; live: AppDataPort | null }): React.ReactElement {
   const box = useRef<HTMLDivElement | null>(null);
@@ -105,8 +105,6 @@ function AppCard({ tile, editor, navigate, onShare, scheduler }: { tile: AppTile
   const el = useRef<HTMLElement | null>(null);
   const [live, setLive] = useState<TileState | null>(null);
   const [seen, setSeen] = useState(false);
-  const [redraw, setRedraw] = useState(0);
-  const lastDraw = useRef(0);
   const now = useNow(5_000);
   const crew = !tile.sample && tile.detail !== null && scheduler !== null;
   const spec: AppSpec | null = tile.detail?.spec ?? null;
@@ -127,28 +125,8 @@ function AppCard({ tile, editor, navigate, onShare, scheduler }: { tile: AppTile
     } else { handle.seen(true); setSeen(true); }
     return () => { io?.disconnect(); handle.dispose(); };
   }, [crew, tile, scheduler]);
-  // The preview redraws on live data when the numbers changed, at most every PREVIEW_REDRAW_MS.
-  const changes = live?.changes ?? 0;
-  useEffect(() => {
-    if (changes === 0) return;
-    const t = Date.now();
-    if (t - lastDraw.current < PREVIEW_REDRAW_MS) return;
-    lastDraw.current = t;
-    setRedraw((n) => n + 1);
-  }, [changes]);
-  const livePort = useMemo<AppDataPort | null>(() => {
-    if (!crew || scheduler === null) return null;
-    return {
-      kind: { queries: 'crew', actions: 'crew' },
-      query: async (version, query) => {
-        const o = await scheduler.limit(() => crewQuery(tile.slug, version, query));
-        return o.ok ? { columns: o.answer.columns as never, rows: o.answer.rows as never, truncated: false, hasMore: false, ms: 0, cachedAt: o.answer.cachedAt ?? null, sample: false } : { error: 'unavailable', message: o.code };
-      },
-      prepare: async () => ({ error: 'refused', message: 'a tile runs nothing' }),
-      run: async () => ({ state: 'failed', reason: 'a tile runs nothing', sample: false }),
-      viewer: () => ({ email: null, sample: false }),
-    };
-  }, [crew, scheduler, tile.slug]);
+  const snapAt = tile.detail === null ? null : snapshotAt(tile.slug, tile.detail.head.version);
+  const livePort = useMemo<AppDataPort | null>(() => (crew && tile.detail !== null && snapAt !== null ? snapshotPort(tile.slug, tile.detail.head.version) : null), [crew, tile, snapAt]);
   const locale = typeof navigator !== 'undefined' ? navigator.language : 'en';
   const shownKpis = crew
     ? kpiDefs.map((k, i) => ({ title: k.title, value: live !== null && live.code === null && live.values[i]?.ok === true ? cellText(live.values[i]!.cell as never, k.format as never, locale) : null }))
@@ -157,7 +135,7 @@ function AppCard({ tile, editor, navigate, onShare, scheduler }: { tile: AppTile
     <article ref={el} className="wk-appcard" data-testid="apps-card" data-slug={tile.slug} data-live={crew ? (live === null ? 'waiting' : live.code === null ? 'ok' : 'error') : 'none'}>
       {crew && !seen
         ? <div className="wk-appcard-prev" data-testid="apps-card-preview" aria-hidden="true"><p className="wk-appcard-noprev">Shown when it scrolls into view</p></div>
-        : <TilePreview key={redraw} tile={tile} editor={editor} live={livePort} />}
+        : <TilePreview tile={tile} editor={editor} live={livePort} />}
       <div className="wk-appcard-body">
         <div className="wk-appcard-titlerow">
           <a href={appPath(tile.slug)} className="wk-appcard-open" data-testid="apps-card-open" onClick={(e) => { e.preventDefault(); navigate(appPath(tile.slug)); }}>
@@ -181,6 +159,7 @@ function AppCard({ tile, editor, navigate, onShare, scheduler }: { tile: AppTile
           <span data-testid="apps-card-version">{tile.version}</span>{tile.changedAt !== null && <> · changed {agoWords(tile.changedAt)}</>}
           {crew && live?.at != null && live.code === null && <> · <span data-testid="apps-card-updated">updated {ago(live.at, now)}</span></>}
         </p>
+        {crew && <p className="wk-appcard-meta" data-testid="apps-card-preview-when">{snapAt !== null ? `Picture from when you last opened it, ${ago(snapAt, now)}` : 'Open it to see its charts here'}</p>}
         {tile.sources.length > 0 && <p className="wk-appcard-meta" data-testid="apps-card-sources">Reads {tile.sources.join(', ')}</p>}
         <div className="wk-appcard-actions">
           <a href={appPath(tile.slug, 'edit')} className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-card-edit" onClick={(e) => { e.preventDefault(); navigate(appPath(tile.slug, 'edit')); }}>Edit</a>
@@ -198,8 +177,10 @@ const NEW_APP_KEY = 'apps:new';
  * "Make a new app" by chat (DES-APPS-001 §6.2): the person says what they want; crew adds the app and the message is
  * its first turn. The app's page opens on that turn, busy, and the chat shows it land.
  */
-function NewAppChat({ navigate, sources, projectOfApps }: { navigate: (p: string) => void; sources: readonly string[]; projectOfApps: string | null }): React.ReactElement {
+function NewAppChat({ navigate, sources, projectOfApps, framed }: { navigate: (p: string) => void; sources: readonly string[]; projectOfApps: string | null; framed: boolean }): React.ReactElement {
   const projects = useProjectsStore((s) => s.projects);
+  const projectsLoading = useProjectsStore((s) => s.loading);
+  const projectsError = useProjectsStore((s) => s.error);
   useEffect(() => { if (useProjectsStore.getState().projects.length === 0) void useProjectsStore.getState().load(); }, []);
   const [text, setText] = useState('');
   const [project, setProject] = useState<string | null>(null);
@@ -212,18 +193,26 @@ function NewAppChat({ navigate, sources, projectOfApps }: { navigate: (p: string
     : ['A dashboard of my main numbers with a table of the latest rows'])
     .concat(sources.length > 1 ? [`Compare a number from ${sources[0]} with one from ${sources[1]} side by side`] : [])
     .slice(0, 3).map((label, i) => ({ id: `new-app-${i}`, label, onPick: () => setText(label) }));
-  const send = (): void => {
-    const words = text.trim();
-    if (words === '' || busy) return;
-    if (chosen === null) { setNote('Make a project first: an app belongs to a project.'); return; }
+  /** True when the message was taken (an app was made and its first turn started, or it waits in that app's chat). */
+  const send = async (words: string): Promise<boolean> => {
+    if (words === '' || busy || framed) return false;
+    if (chosen === null) {
+      setNote(projectsLoading ? 'Reading your projects: send it again in a moment.' : projectsError !== null ? `Your projects could not be read (${projectsError}): send it again in a moment.` : 'Make a project first: an app belongs to a project.');
+      return false;
+    }
     setBusy(true);
     setNote('Making the app and sending your message…');
-    void createByChat(words, chosen).then((r) => {
-      setBusy(false);
-      if (r.ok) { navigate(appPath(r.slug)); return; }
-      setText(words);
-      setNote(r.slug !== undefined ? `The app ${r.slug} was made, but the message was not sent (${r.code}): ${r.message}` : `Not made (${r.code}): ${r.message}`);
-    });
+    const r = await createByChat(words, chosen);
+    setBusy(false);
+    if (r.ok) { navigate(appPath(r.slug)); return true; }
+    if (r.slug !== undefined) {
+      // The app was made but its first message was not sent: it waits in that app's own chat, never a second app.
+      stashDraft(r.slug, words);
+      navigate(appPath(r.slug));
+      return true;
+    }
+    setNote(`Not made (${r.code}): ${r.message}`);
+    return false;
   };
   return (
     <section className="wk-newapp" data-testid="apps-new-chat" aria-label="Make a new app">
@@ -231,12 +220,13 @@ function NewAppChat({ navigate, sources, projectOfApps }: { navigate: (p: string
         <h2 className="wk-newapp-title">Make a new app</h2>
         <span className="wk-newapp-sub">Say what it should show. An agent builds it from your data sources' structure, another reviews it, and it opens here.</span>
       </div>
-      <Composer composerKey={NEW_APP_KEY} text={text} setText={(t) => { if (!busy) setText(t); }} onSend={() => send()} placeholder="Describe the app you want…" ariaLabel="Describe the app you want"
-        variant="desk" className="wk-newapp-composer" suggestions={busy ? [] : suggestions} />
+      <AppComposer composerKey={NEW_APP_KEY} text={text} setText={setText} onSubmit={(t) => send(t)} placeholder="Describe the app you want…" ariaLabel="Describe the app you want"
+        suggestions={busy ? [] : suggestions} busy={busy} testId="apps-new-composer"
+        readOnly={framed ? 'This page is inside another page, so no app can be made here: open studio on its own.' : null} />
       <p className="wk-newapp-foot">
         {projects.length > 1 && (
           <label className="wk-newapp-project">In project{' '}
-            <select data-testid="apps-new-project" value={chosen ?? ''} onChange={(e) => setProject(e.target.value)}>
+            <select data-testid="apps-new-project" value={chosen ?? ''} onChange={(e) => setProject(e.target.value)} disabled={framed}>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>
@@ -254,6 +244,9 @@ export function AppsPage({ navigate }: { navigate: (path: string) => void }): Re
   const [sharing, setSharing] = useState<AppTileData | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [turnsOn, setTurnsOn] = useState(false);
+  const [queriesOn, setQueriesOn] = useState(false);
+  // A framed studio changes nothing (§7.1, S8): no app is made from inside another page.
+  const framed = useMemo(() => { try { return window.top !== window.self; } catch { return true; } }, []);
   const [sources, setSources] = useState<string[]>([]);
   // ONE scheduler for the page: every card's live reads share its limit (at most 3 at once) and its stagger.
   const scheduler = useMemo(() => new TileScheduler(), []);
@@ -280,7 +273,7 @@ export function AppsPage({ navigate }: { navigate: (path: string) => void }): Re
       try {
         const caps = (await api.getHealth()).capabilities?.apps;
         hasStore = caps !== undefined;
-        if (!cancelled) setTurnsOn(caps?.turns === true);
+        if (!cancelled) { setTurnsOn(caps?.turns === true); setQueriesOn(caps?.query === true); }
       } catch (e) {
         if (!cancelled) setDir({ source: 'error', message: `the daemon did not answer (${e instanceof Error ? e.message : String(e)})` });
         return;
@@ -301,7 +294,7 @@ export function AppsPage({ navigate }: { navigate: (path: string) => void }): Re
     <PageFrame data-testid="apps-page" title={PAGE_NAMES.apps}
       intro="Dashboards and tools over your data, built by chat. Open one to use it and to ask for changes; Edit is for fine-tuning by hand.">
       {turnsOn && dir !== null && dir.source === 'crew' && (
-        <NewAppChat navigate={navigate} sources={sources} projectOfApps={dir.apps.find((a) => a.detail !== null)?.detail?.projectId ?? null} />
+        <NewAppChat navigate={navigate} sources={sources} projectOfApps={dir.apps.find((a) => a.detail !== null)?.detail?.projectId ?? null} framed={framed} />
       )}
       {dir === null && <div className="wk-apps-grid" data-testid="apps-loading">{[0, 1, 2].map((i) => <div key={i} className="wk-appcard wk-appcard--ghost" />)}</div>}
       {dir !== null && dir.source === 'error' && (
@@ -328,7 +321,7 @@ export function AppsPage({ navigate }: { navigate: (path: string) => void }): Re
       )}
       {apps.length > 0 && (
         <div className="wk-apps-grid" data-testid="apps-grid">
-          {apps.map((t) => <AppCard key={t.slug} tile={t} editor={editor} navigate={navigate} onShare={() => setSharing(t)} scheduler={dir?.source === 'crew' ? scheduler : null} />)}
+          {apps.map((t) => <AppCard key={t.slug} tile={t} editor={editor} navigate={navigate} onShare={() => setSharing(t)} scheduler={dir?.source === 'crew' && queriesOn ? scheduler : null} />)}
         </div>
       )}
       {sharing !== null && <ShareSheet name={sharing.name} slug={sharing.slug} published={sharing.published} onClose={() => setSharing(null)} />}

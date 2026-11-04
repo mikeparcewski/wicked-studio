@@ -258,8 +258,7 @@ describe('/apps/<slug>: one store decision (codex r9)', () => {
     render(<AppRoutePage slug="desk" search="" navigate={vi.fn()} />);
     await waitFor(() => expect(urls).toContain('/apps/desk'));
     await waitFor(() => expect(screen.getByTestId('apps-route')).toBeTruthy());
-    // The store decision is the route's one read; the chat's composer (K5) reads the daemon's capabilities on its own.
-    expect(urls.filter((u) => u === '/health').length).toBeLessThanOrEqual(2);
+    expect(urls.filter((u) => u === '/health')).toHaveLength(1);
   });
 });
 

@@ -83,7 +83,8 @@
   .wk-apps-crumb, .wk-apps-history { display: none; }
   .wk-apps-title { font-size: var(--text-lead); }
   .wk-apps-line { padding: var(--space-2) var(--space-3); }
-  .wk-apps-body, .wk-apps-body[data-chat='true'], .wk-apps-body[data-chat='true'][data-mode='edit'] { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow-y: auto; }
+  .wk-apps-body, .wk-apps-body[data-chat='true'], .wk-apps-body[data-chat='true'][data-mode='edit'] { grid-template-columns: minmax(0, 1fr); }
+  .wk-apps-body[data-chat='true'] { grid-auto-rows: max-content; overflow-y: auto; }
   .wk-apps-frame-box .wk-editor-frame { min-height: 0; }
   .wk-apps-body[data-chat='true'] .wk-apps-frame { height: 58vh; }
   .wk-apps-side { border-left: 0; border-top: 1px solid var(--border); }
