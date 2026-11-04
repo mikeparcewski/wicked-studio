@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   BriefcaseBusiness, ChartColumn, ChevronRight, FolderPlus, GraduationCap, History, LayoutGrid, MessageSquare, MessageSquarePlus,
@@ -150,18 +150,29 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   useEffect(() => { setShutHere((prev) => (prev.path === pathname || prev.ids.size === 0 ? prev : { path: '', ids: new Set() })); }, [pathname]);
   // A list that runs past the rail's fold fades out at its foot instead of slicing a row in half;
   // the fade lifts once the list is scrolled to its end.
-  const groupsRef = useRef<HTMLDivElement>(null);
+  // One ResizeObserver and one scroll listener per list element, made when it attaches and dropped when it
+  // detaches (the icon rail has no list, so unfolding attaches a new one). Re-creating the observer on every
+  // change gave it a fresh first observation each time, and one made while the browser was delivering
+  // observations was held to the next frame: WebKit reports that as "ResizeObserver loop completed with
+  // undelivered notifications" (studio#970).
   const [moreBelow, setMoreBelow] = useState(false);
-  useEffect(() => {
-    const el = groupsRef.current;
-    if (el === null) return undefined;
+  const measureGroups = useRef<(() => void) | null>(null);
+  const dropGroups = useRef<(() => void) | null>(null);
+  const groupsRef = useCallback((el: HTMLDivElement | null): void => {
+    dropGroups.current?.();
+    dropGroups.current = null;
+    measureGroups.current = null;
+    if (el === null) return;
     const check = (): void => setMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 2);
-    check();
     el.addEventListener('scroll', check, { passive: true });
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
     ro?.observe(el);
-    return () => { el.removeEventListener('scroll', check); ro?.disconnect(); };
-  }, [groups, collapsed, open, icons, shutHere, pathname]);
+    measureGroups.current = check;
+    dropGroups.current = () => { el.removeEventListener('scroll', check); ro?.disconnect(); };
+  }, []);
+  // What the list holds changed (its rows, its open headings, the page): its height may have moved while its
+  // box did not, so measure again, with the same observer.
+  useEffect(() => { measureGroups.current?.(); }, [groups, collapsed, open, icons, shutHere, pathname]);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   // DES-APPS-001: Data sources is in Work only when the connected crew serves them (an older crew: Build & settings).
   const dataSources = useCapabilities((s) => s.dataSources);
