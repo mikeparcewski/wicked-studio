@@ -16,12 +16,9 @@ vi.mock('../src/api/client.js', () => ({
 
 const { useCapabilities } = await import('../src/store/capabilities.js');
 const { SessionRail } = await import('../src/components/desk/SessionRail.js');
-const { useFirstRun, resetFirstRun } = await import('../src/store/firstRun.js');
 
 beforeEach(() => {
   useCapabilities.setState({ loaded: false, dataSources: false });
-  resetFirstRun();
-  useFirstRun.setState({ read: 'ok', state: { learnUsedAt: 1 } });
   getHealth.mockReset();
 });
 afterEach(() => cleanup());

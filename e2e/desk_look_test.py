@@ -26,7 +26,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture,
+from uxfix_fixture import (OPEN_RAIL_SECTIONS, DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture,
                            start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4347"))
@@ -140,6 +140,7 @@ errors: list[str] = []
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RAIL_SECTIONS)  # these checks read rows and pages under every heading
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
@@ -192,10 +193,10 @@ with sync_playwright() as p:
                links: links.map((e) => e.dataset.navDest), linksShown: links.every(shown) };
     }""", H)
     page.screenshot(path=str(SHOTS / "desk-look-everything.png"))
-    # The ui-v2 nav regroup: the foot is Build & settings then Nerve Center; Recent shows at most five
+    # The ui-v2 nav regroup: the foot is Learn (since 2026-11-04), Build & settings, then Nerve Center; Recent shows at most five
     # sessions (the rail scrolls under the page groups at 700 px, so they need not all be on screen).
     check("everything-else-fits", rail["healthShown"] and 1 <= rail["sessions"] <= 5
-          and rail["links"] == ["page:build", "watch"] and rail["linksShown"], rail=rail)
+          and rail["links"] == ["page:learn", "page:build", "watch"] and rail["linksShown"], rail=rail)
     page.get_by_test_id("desk-rail-build").click()
     page.get_by_test_id("build-link-settings").click()
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)

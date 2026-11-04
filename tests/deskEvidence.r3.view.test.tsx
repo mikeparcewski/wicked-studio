@@ -5,6 +5,7 @@ import type { WindowSpend } from '../src/hooks/useWindowSpend.js';
 import { DeskV2 } from '../src/components/desk/DeskV2.js';
 import { useProjectsStore } from '../src/store/projects.js';
 import { useAskDock } from '../src/store/askDock.js';
+import { resetFirstRun, useFirstRun } from '../src/store/firstRun.js';
 import { DAY, NOW, deskRun } from './fixtures/deskV2.js';
 import type { NeedRow } from '../src/board/needsYou.js';
 import { DeskInbox } from '../src/components/desk/DeskInbox.js';
@@ -38,6 +39,9 @@ beforeEach(() => {
   vi.stubGlobal('fetch', mocks.fetch);
   useProjectsStore.setState({ projects: [], load: vi.fn(async () => {}) });
   useAskDock.setState({ request: null });
+  // Home reads studio.firstRun itself: these cases are a viewer whose setup is done (the first run is its own suite).
+  resetFirstRun();
+  useFirstRun.setState({ read: 'ok', state: { completedAt: 1 } });
   mocks.handoverSince = null;
   mocks.spend = { phase: 'done', current: 12, previous: null, partial: false, truncated: false };
   mocks.record = {

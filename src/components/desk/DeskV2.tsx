@@ -398,6 +398,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   // because nothing can run. Ignored or finished, Home is Home.
   const firstRun = useFirstRun((st) => st.state);
   const firstRunRead = useFirstRun((st) => st.read);
+  // Home reads studio.firstRun itself (the sidebar read it for Learn's place until Learn settled at its foot).
+  useEffect(() => { if (firstRunRead === 'idle') void useFirstRun.getState().load(); }, [firstRunRead]);
   // A first run: decided once per visit, after the settings and the jobs are read. A new install (no jobs yet),
   // a setup already under way, or an explicit resume (`/?setup=1`, from Learn) opens it; an install with history
   // that never started setup is not a first run. Ignored or finished, it stays closed.

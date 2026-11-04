@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { SessionView } from '../src/api/types.js';
+import { openEveryHeading } from './sidebarOpen.js';
 
 /**
  * The calm rail (studio-rail-clean): one-line titles with the full words in the hover title, a fold
@@ -30,6 +31,7 @@ vi.mock('../src/api/client.js', () => ({
 
 const { SessionRail } = await import('../src/components/desk/SessionRail.js');
 const { RAIL_COLLAPSED_KEY, readRailCollapsed } = await import('../src/hooks/useRailCollapsed.js');
+const { SIDEBAR_KEY, resetSidebar } = await import('../src/store/sidebar.js');
 
 const NEED = [{ key: 'fail:u0', kind: 'failed-run', severity: 100, stakes: 1, subject: 'x', text: 'Run failed', tone: 'fail', at: 1, subjectPath: '/', action: { kind: 'open', path: '/', label: 'Open' } }];
 
@@ -42,7 +44,8 @@ const { useAskDock } = await import('../src/store/askDock.js');
 const { resetLaunchWizard, useLaunchWizard } = await import('../src/store/launchWizard.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 
-beforeEach(() => { window.localStorage.clear(); settledPhase = 'complete'; });
+// Every heading open: these cases are about what Recent holds (the fold's default is sidebarSections.test.tsx's).
+beforeEach(() => { window.localStorage.clear(); openEveryHeading(); settledPhase = 'complete'; });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('rows', () => {
@@ -85,7 +88,9 @@ describe('Recent: at most five, then All jobs', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('rail-group')).toBeNull();
     expect(screen.queryByTestId('rail-all-jobs')).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(SIDEBAR_KEY)!)).toEqual({ open: ['work', 'insight', 'govern'], icons: false });
     unmount();
+    resetSidebar();
     rail();
     expect(screen.getByTestId('rail-recent-toggle')).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(screen.getByTestId('rail-recent-toggle'));
@@ -169,7 +174,8 @@ describe('the top of the rail (operator IA 2026-10-13)', () => {
   it('the action row sits under the wordmark: four equal icons, New job · New project · Chat · Search (New job first, operator 2026-10-26) — each named (DES-SYSTEM-CHAT §1)', () => {
     rail();
     const row = screen.getByTestId('desk-rail-actions');
-    expect(row.previousElementSibling).toBe(screen.getByTestId('desk-rail-wordmark'));
+    // Right under the wordmark's row (the wordmark and the fold control).
+    expect(row.previousElementSibling).toContainElement(screen.getByTestId('desk-rail-wordmark'));
     const buttons = [...row.querySelectorAll('button')];
     expect(buttons.map((b) => b.dataset.testid)).toEqual(['desk-rail-new-job', 'desk-rail-new-project', 'desk-rail-chat', 'desk-rail-search']);
     // Icons only: no visible words, every one the same class (equal width), each with a tooltip.

@@ -13,6 +13,15 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **The sidebar folds (operator, 2026-11-04).** Every heading (Work, Insight, Govern, Recent) is a disclosure button
+  with a turning chevron and an icon that opens its home page (Work: Projects, Insight: Report, Govern: Steering).
+  What is open is this browser's, from the last session (`studio.sidebar.v1`); with nothing saved, or nothing
+  readable, Work is open and the rest shut. The heading that holds the page on screen is marked, and opens for that
+  view only (not saved) when it is shut. A control beside the wordmark folds the rail to 56 px of icons, remembered
+  the same way: each heading's icon opens its home page (Recent's unfolds the rail with Recent open), the brand and
+  the expand control unfold it, and Nerve Center keeps its state's fill and says its state in its name. Phones keep
+  the drawer. Learn moved to the foot, above Build & settings, for good, without its "Start here" mark: Home does
+  the first run.
 - **Understand reads like a chat (operator, round 10).** The page fills the Desk's height: the thread and its
   composer share one centred 760 px column, the composer pinned at the bottom (mic and Ask, as before), and the
   thread scrolls, not the document. A right sidebar holds Recent answers (crew's chat history merged with this

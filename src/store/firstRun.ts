@@ -3,8 +3,8 @@ import { apiFetch } from '../api/client.js';
 import { FIRST_RUN_KEY, readFirstRun, type FirstRunState, type SetupAnswer, type SetupAskKey } from '../board/learnHub.js';
 
 /**
- * `studio.firstRun` (program DES-LEARN §3.0, §4): when Learn was first used (it moves below Evaluate, for
- * good), whether setup was ignored or finished, and each setup answer. Kept in crew's settings (the
+ * `studio.firstRun` (program DES-LEARN §3.0, §4): when Learn was first used (a record only: Learn sits at the
+ * sidebar's foot for good since 2026-11-04), whether setup was ignored or finished, and each setup answer. Kept in crew's settings (the
  * `studio.setup` mechanism) so it holds across browsers. Writes are serialized and optimistic: a failed
  * write rolls back and says so (`saveFailed`).
  */

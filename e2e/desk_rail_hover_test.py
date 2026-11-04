@@ -36,7 +36,7 @@ import math
 import os
 import sys
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import OPEN_RAIL_SECTIONS, DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4391"))
 W, H = 1440, 700
@@ -180,6 +180,7 @@ with sync_playwright() as p:
     for case, want, appearance in CASES:
         ctx = browser.new_context(viewport={"width": W, "height": H}, device_scale_factor=1)
         page = ctx.new_page()
+        page.add_init_script(OPEN_RAIL_SECTIONS)  # every rail item is measured, Recent's rows among them
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.add_init_script(
             "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
@@ -293,6 +294,7 @@ with sync_playwright() as p:
     for motion in ("reduce", "no-preference"):
         ctx = browser.new_context(viewport={"width": W, "height": H}, reduced_motion=motion)
         page = ctx.new_page()
+        page.add_init_script(OPEN_RAIL_SECTIONS)  # every rail item is measured, Recent's rows among them
         page.on("pageerror", lambda e: errors.append(str(e)))
         set_fixture(origin, appearance=None)
         page.goto(f"{origin}/", wait_until="networkidle")

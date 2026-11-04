@@ -34,7 +34,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server, OPEN_RUN_DETAILS, close_details
+from uxfix_fixture import OPEN_RAIL_SECTIONS, HIDE_GATE_TOASTS, REPO, ensure_build, open_run_panel_item, set_fixture, start_server, OPEN_RUN_DETAILS, close_details
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4466"))
 W, H = 1440, 700
@@ -91,6 +91,7 @@ THREAD = """() => {
 
 def new_page(browser):
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RAIL_SECTIONS)  # these checks read rows and pages under every heading
     page.add_init_script(OPEN_RUN_DETAILS)  # the run's record is in its Details fold (DES-CHAT-NATIVE-RUN)
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(
@@ -232,6 +233,7 @@ with sync_playwright() as p:
     # Needs-you, and the rows are exactly the rows before the ask.
     fresh_ctx = browser.new_context(viewport={"width": W, "height": H}, device_scale_factor=1)
     page = fresh_ctx.new_page()
+    page.add_init_script(OPEN_RAIL_SECTIONS)
     page.add_init_script(OPEN_RUN_DETAILS)  # the run's record is in its Details fold (DES-CHAT-NATIVE-RUN)
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(f"{origin}/", wait_until="networkidle")

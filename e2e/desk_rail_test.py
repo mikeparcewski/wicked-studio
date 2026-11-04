@@ -32,7 +32,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import OPEN_RAIL_SECTIONS, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4366"))
 W, H = 1440, 700
@@ -62,7 +62,7 @@ RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
   const ids = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', 'nav-projects', 'nav-jobs', 'nav-apps', 'nav-repos',
                'nav-report', 'nav-understand', 'nav-evaluate', 'nav-steering', 'nav-memory', 'nav-agents', 'rail-recent-toggle',
-               'rail-group', 'rail-all-jobs', 'desk-rail-build', 'desk-rail-nerve',
+               'rail-group', 'rail-all-jobs', 'nav-learn', 'desk-rail-build', 'desk-rail-nerve',
                'desk-rail-skills', 'desk-rail-general', 'rail-foot-label', 'desk-tabs-more', 'desk-rail-more'];
   const seen = [];
   for (const el of rail.querySelectorAll('[data-testid]')) {
@@ -109,6 +109,7 @@ errors: list[str] = []
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.add_init_script(OPEN_RAIL_SECTIONS)  # these checks read rows and pages under every heading
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
@@ -126,13 +127,13 @@ with sync_playwright() as p:
     page.get_by_test_id("desk-rail-badge").wait_for(state="visible", timeout=15000)
     r = page.evaluate(RAIL)
     want = ['desk-rail-wordmark', 'desk-rail-new-job', 'desk-rail-new-project', *PAGES, 'rail-recent-toggle',
-            'rail-group', 'rail-all-jobs', 'desk-rail-build', 'desk-rail-nerve']
+            'rail-group', 'rail-all-jobs', 'nav-learn', 'desk-rail-build', 'desk-rail-nerve']
     badge = r["badge"]
     check("order",
           r["order"] == want
-          # DES-LEARN §3.0: a fresh fixture has never used Learn, so it leads Work, above Projects.
-          and r["dests"] == ["page:home", "page:learn", "page:projects", "page:jobs", "page:apps", "page:repos", "page:report", "page:understand", "page:evaluate",
-                             "page:steering", "page:memory", "page:agents", "page:build", "watch"]
+          # Learn sits at the foot above Build & settings, always (operator 2026-11-04; it led Work before).
+          and r["dests"] == ["page:home", "page:projects", "page:jobs", "page:apps", "page:repos", "page:report", "page:understand", "page:evaluate",
+                             "page:steering", "page:memory", "page:agents", "page:learn", "page:build", "watch"]
           and not r["bell"] and r["homeLinks"] == 1 and r["nerveLast"]
           # The wordmark is the link Home; its description says the badge (the fixture has gates waiting).
           and r["homeTag"] == "A" and r["homeName"] == "Home"
@@ -234,7 +235,7 @@ with sync_playwright() as p:
     for tid, path in (("nav-projects", "/projects"), ("nav-jobs", "/jobs"), ("nav-apps", "/apps"), ("nav-repos", "/repos"), ("nav-report", "/report"),
                       ("nav-understand", "/understand"),
                       ("nav-evaluate", "/testing/evals"), ("nav-steering", "/rules"), ("nav-memory", "/memory"),
-                      ("nav-agents", "/agents"), ("desk-rail-wordmark", "/"), ("desk-rail-build", "/build")):
+                      ("nav-agents", "/agents"), ("nav-learn", "/learn"), ("desk-rail-wordmark", "/"), ("desk-rail-build", "/build")):
         page.get_by_test_id(tid).click()
         page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
         page.wait_for_timeout(150)

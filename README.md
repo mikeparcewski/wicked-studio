@@ -40,7 +40,7 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   it, with your own memories applying across projects. Agents suggest both; you approve. A finished
   job says what it learned ("3 learnings proposed · 2 waiting for you"), and each proposal in
   Memory's queue names the job it came from.
-- **Teach it how you work.** **Learn** (marked "Start here" in the sidebar until you use it) reads
+- **Teach it how you work.** **Learn** (at the foot of the sidebar, above Build & settings) reads
   your team docs, showcase repos and writing into suggested rules and memories, offers starter
   rules, sets the orchestrator's **Personality** (tone only; never rigor, gates or checks; one for
   you, overridable per project) and learns your brand colours. Suggested rules and memories become active only when you accept

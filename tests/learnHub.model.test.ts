@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  firstNameOf, firstRunOpen, learnPlacement, nextSetupAsk, PERSONA_PRESETS, previewAnswer, readFirstRun, rulesYouCareAbout, siteOfEmail,
+  firstNameOf, firstRunOpen, nextSetupAsk, PERSONA_PRESETS, previewAnswer, readFirstRun, rulesYouCareAbout, siteOfEmail,
   STARTER_RULES, starterRule, styleStations, writingStyleNotes, jobLine, repoStyleProblem,
 } from '../src/board/learnHub.js';
 import { LEARN_ITEM, navCurrent, navGroups, NAV_GROUPS } from '../src/board/navModel.js';
@@ -8,18 +8,13 @@ import type { ConformanceRule, SessionView } from '../src/api/types.js';
 
 /** program DES-LEARN §3-§4, the pure half: where Learn sits, the first run's blob, the persona preview, starters, Style. */
 
-describe('Learn in the sidebar (§3.0)', () => {
-  it('sits first in Work, above Projects and marked, until used; then last in Insight, below Evaluate, unmarked', () => {
-    const start = navGroups('start');
-    expect(start.find((g) => g.id === 'work')!.items.map((i) => i.id)).toEqual(['learn', 'projects', 'jobs', 'apps', 'repos']);
-    expect(start.find((g) => g.id === 'work')!.items[0]!.mark).toBe('Start here');
-    expect(start.find((g) => g.id === 'insight')!.items.map((i) => i.id)).toEqual(['report', 'understand', 'evaluate']);
-    const used = navGroups('insight');
-    expect(used.find((g) => g.id === 'insight')!.items.map((i) => i.id)).toEqual(['report', 'understand', 'evaluate', 'learn']);
-    expect(used.find((g) => g.id === 'insight')!.items.at(-1)!.mark).toBeUndefined();
-    expect(used.find((g) => g.id === 'work')!.items.map((i) => i.id)).toEqual(['projects', 'jobs', 'apps', 'repos']);
-    // The constant groups are untouched (Learn is placed by navGroups only).
-    expect(NAV_GROUPS.flatMap((g) => g.items).some((i) => i.id === 'learn')).toBe(false);
+describe('Learn in the sidebar (§3.0; operator 2026-11-04: at the foot, above Build & settings, for good)', () => {
+  it('is in no group, whatever the first run says (the rail places it in its foot: sidebarSections.test.tsx)', () => {
+    for (const groups of [NAV_GROUPS, navGroups(), navGroups({ sources: true })]) {
+      expect(groups.flatMap((g) => g.items).some((i) => i.id === 'learn')).toBe(false);
+    }
+    expect(navGroups().find((g) => g.id === 'work')!.items.map((i) => i.id)).toEqual(['projects', 'jobs', 'apps', 'repos']);
+    expect(navGroups().find((g) => g.id === 'insight')!.items.map((i) => i.id)).toEqual(['report', 'understand', 'evaluate']);
   });
 
   it('is the current page under /learn', () => {
@@ -27,11 +22,6 @@ describe('Learn in the sidebar (§3.0)', () => {
     expect(LEARN_ITEM.path).toBe('/learn');
   });
 
-  it('moves once used, and never back (used = learnUsedAt set)', () => {
-    expect(learnPlacement({})).toBe('start');
-    expect(learnPlacement({ learnUsedAt: 1 })).toBe('insight');
-    expect(learnPlacement({ learnUsedAt: 1, ignoredAt: 2 })).toBe('insight');
-  });
 });
 
 describe('studio.firstRun', () => {

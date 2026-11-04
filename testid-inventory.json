@@ -12,9 +12,9 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 300,
-    "occurrences": 4272,
-    "static": 3619,
-    "dynamic": 120,
+    "occurrences": 4283,
+    "static": 3624,
+    "dynamic": 121,
     "computed": 48
   },
   "static": [
@@ -4407,6 +4407,12 @@
     },
     {
       "testId": "desk-rail-brand",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-brand-expand",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -13276,6 +13282,12 @@
       ]
     },
     {
+      "testId": "rail-fold",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "rail-governance",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -13360,6 +13372,12 @@
       ]
     },
     {
+      "testId": "rail-icons",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "rail-nav",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -13379,6 +13397,18 @@
     },
     {
       "testId": "rail-recent",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-recent-expand",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-recent-needs",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -22012,12 +22042,6 @@
       ]
     },
     {
-      "pattern": "*-mark",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
       "pattern": "*-more",
       "files": [
         "src/components/ui/Tabs.tsx"
@@ -22477,6 +22501,18 @@
     },
     {
       "pattern": "rail-nav-*",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "pattern": "rail-sec-home-*",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "pattern": "rail-sec-toggle-*",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]

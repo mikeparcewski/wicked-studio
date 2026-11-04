@@ -8,18 +8,20 @@ import { PAGE_NAMES } from './pageNames.js';
  * tabs (Work · Runs · Repositories · Report · More ▾) became three groups of pages in the rail, each
  * page at an address of its own:
  *
- *   WORK     Projects · Jobs · Repositories
+ *   WORK     Projects · Jobs · Repositories (· Data sources when crew serves them)
  *   INSIGHT  Report · Understand · Evaluate
  *   GOVERN   Steering · Memory · Agents
  *
  * Home is the wordmark at the rail's top (operator 2026-10-27: "remove Home from WORK, the wordmark
  * goes Home"); Projects is WORK's first item and its primary one (`primary`, a calm marker).
- * and, at the rail's foot above the Nerve Center tile, ONE "Build & settings" entry: a page listing
- * Skills, MCP, Plugins, Workflows and Settings (the rail's old Workspace links). A project's page keeps
- * its own tabs (`/projects/:id?tab=`): they scope a view to the project, which the sidebar does not.
- * The old global Desk addresses (`/?tab=…[&at=…]`) only redirect (`legacyDeskTarget`). Pure.
+ * At the rail's foot, above the Nerve Center tile: Learn, then ONE "Build & settings" entry (a page
+ * listing Skills, MCP, Plugins, Workflows and Settings, the rail's old Workspace links). Learn sits there
+ * always (operator 2026-11-04: "move learn above build & settings permanently (the home screen does the
+ * first time stuff well)"). Each heading folds, and the rail folds to its headings' icons (studio-sidebar-1104,
+ * `SIDEBAR_SECTIONS`, `RAIL_HEADINGS`). A project's page keeps its own tabs (`/projects/:id?tab=`): they
+ * scope a view to the project, which the sidebar does not. The old global Desk addresses
+ * (`/?tab=…[&at=…]`) only redirect (`legacyDeskTarget`). Pure.
  */
-
 /** A Desk view: the global ones are pages (`DESK_VIEW_PATH`), a project's are its tabs. */
 export type DeskView = 'work' | 'inbox' | 'runs' | 'repositories' | 'report' | 'understand' | 'steer' | 'memory' | 'agents' | 'evaluate';
 /** The views whose page another component owns (App renders it; the Desk only hosts it on a project). */
@@ -50,25 +52,30 @@ export interface NavItem {
   under: readonly string[];
   /** The group's primary entry (Projects): drawn a little stronger, never louder than the current page. */
   primary?: true;
-  /** A short mark after the label ("Start here"). */
-  mark?: string;
 }
 
-export interface NavGroup { id: 'work' | 'insight' | 'govern'; label: string; items: readonly NavItem[] }
+export type NavGroupId = 'work' | 'insight' | 'govern';
+
+/**
+ * A group of pages under a heading that folds. `home` is the page the heading's own link opens (its icon, in
+ * the full sidebar and in the icon rail): one of its items, its primary or first one (Work: Projects, Insight:
+ * Report, Govern: Steering). Home itself stays the wordmark's alone (operator 2026-10-27).
+ */
+export interface NavGroup { id: NavGroupId; label: string; home: NavId; items: readonly NavItem[] }
 
 export const NAV_GROUPS: readonly NavGroup[] = [
-  { id: 'work', label: 'Work', items: [
+  { id: 'work', label: 'Work', home: 'projects', items: [
     { id: 'projects', label: PAGE_NAMES.projects, path: PROJECTS_PATH, testId: 'nav-projects', under: [PROJECTS_PATH], primary: true },
     { id: 'jobs', label: PAGE_NAMES.jobs, path: DESK_VIEW_PATH.runs, testId: 'nav-jobs', under: ['/jobs'] },
     { id: 'apps', label: PAGE_NAMES.apps, path: '/apps', testId: 'nav-apps', under: ['/apps'] },
     { id: 'repos', label: PAGE_NAMES.repos, path: DESK_VIEW_PATH.repositories, testId: 'nav-repos', under: ['/repos', '/repo-detail'] },
   ] },
-  { id: 'insight', label: 'Insight', items: [
+  { id: 'insight', label: 'Insight', home: 'report', items: [
     { id: 'report', label: PAGE_NAMES.report, path: DESK_VIEW_PATH.report, testId: 'nav-report', under: ['/report'] },
     { id: 'understand', label: PAGE_NAMES.understand, path: DESK_VIEW_PATH.understand, testId: 'nav-understand', under: ['/understand'] },
     { id: 'evaluate', label: PAGE_NAMES.evals, path: DESK_VIEW_PATH.evaluate, testId: 'nav-evaluate', under: ['/testing'] },
   ] },
-  { id: 'govern', label: 'Govern', items: [
+  { id: 'govern', label: 'Govern', home: 'steering', items: [
     { id: 'steering', label: PAGE_NAMES.steering, path: DESK_VIEW_PATH.steer, testId: 'nav-steering', under: ['/rules', '/steering'] },
     { id: 'memory', label: PAGE_NAMES.memory, path: DESK_VIEW_PATH.memory, testId: 'nav-memory', under: ['/memory'] },
     { id: 'agents', label: PAGE_NAMES.agents, path: DESK_VIEW_PATH.agents, testId: 'nav-agents', under: ['/agents'] },
@@ -77,7 +84,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 
 /**
  * Data sources (DES-APPS-001 §5; operator 2026-11-03: "should go in sidebar"): last in Work, after Repositories — the
- * code and the data the work reads from (agreed Work order: Learn, Projects, Jobs, Apps, Repositories, Data sources). Placed by `navGroups` only when the connected crew serves data sources
+ * code and the data the work reads from (agreed Work order: Projects, Jobs, Apps, Repositories, Data sources). Placed by `navGroups` only when the connected crew serves data sources
  * (`HealthCapabilities.apps.uploads`); `/sources` stays reachable by address and from Build & settings either way.
  */
 export const SOURCES_ITEM: NavItem = { id: 'sources', label: PAGE_NAMES.sources, path: SOURCES_PATH, testId: 'nav-sources', under: [SOURCES_PATH] };
@@ -91,23 +98,38 @@ export interface NavOptions {
 /** Learn's address (program DES-LEARN §3): Style · Rules · Personality · Brand. */
 export const LEARN_PATH = '/learn';
 
-/** Learn's sidebar entry; where it sits depends on whether it has been used (`navGroups`). */
+/** Learn's sidebar entry: at the rail's foot, above Build & settings, always (operator 2026-11-04). */
 export const LEARN_ITEM: NavItem = { id: 'learn', label: PAGE_NAMES.learn, path: LEARN_PATH, testId: 'nav-learn', under: [LEARN_PATH] };
 
-/**
- * The sidebar's groups with Learn in its place (DES-LEARN §3.0): until it is used, first in Work, above
- * Projects, marked "Start here"; once used, in Insight below Evaluate, unmarked. It never moves back
- * (`studio.firstRun.learnUsedAt` is set once).
- */
-export function navGroups(placement: 'start' | 'insight', opts: NavOptions = {}): readonly NavGroup[] {
+/** The sidebar's groups for what the connected crew serves. */
+export function navGroups(opts: NavOptions = {}): readonly NavGroup[] {
   return NAV_GROUPS.map((g) => {
     let items = g.items;
-    // Last in Work (the agreed order: Learn, Projects, Jobs, Apps, Repositories, Data sources).
+    // Last in Work (the agreed order: Projects, Jobs, Apps, Repositories, Data sources).
     if (g.id === 'work' && opts.sources === true) items = [...items, SOURCES_ITEM];
-    if (placement === 'start' && g.id === 'work') items = [{ ...LEARN_ITEM, mark: 'Start here' }, ...items];
-    if (placement === 'insight' && g.id === 'insight') items = [...items, LEARN_ITEM];
     return items === g.items ? g : { ...g, items };
   });
+}
+
+/** A heading that folds: the page groups, then Recent (the sessions, under them). */
+export type SidebarSectionId = NavGroupId | 'recent';
+
+/** Every heading that folds, in the rail's order: the ids `studio.sidebar.v1` may name. */
+export const SIDEBAR_SECTIONS: readonly SidebarSectionId[] = [...NAV_GROUPS.map((g) => g.id), 'recent'];
+
+/** What is open when nothing is saved, nothing saved can be read, or nothing was open (operator 2026-11-04:
+ *  "If there was nothing or no 'cookie', work would be expanded by default"). */
+export const DEFAULT_OPEN_SECTIONS: readonly SidebarSectionId[] = ['work'];
+
+/** The group whose heading holds the page the address is on (one of its items is that page), or null. */
+export function groupHolding(groups: readonly NavGroup[], on: NavId | null): NavGroup | null {
+  if (on === null) return null;
+  return groups.find((g) => g.items.some((i) => i.id === on)) ?? null;
+}
+
+/** A heading's home page (every group's home is one of its items: tests/sidebarSections.test.tsx pins it). */
+export function groupHome(g: NavGroup): NavItem {
+  return g.items.find((i) => i.id === g.home) ?? g.items[0]!;
 }
 
 /** Build & settings' links, in order: the rail's old Workspace group. */

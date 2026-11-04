@@ -24,7 +24,8 @@ export interface SetupAnswer {
 }
 
 export interface FirstRunState {
-  /** Epoch ms of the first "use" of Learn (§3.0). Set once; Learn never moves back. */
+  /** Epoch ms of the first "use" of Learn (§3.0). Set once. (It once moved Learn in the sidebar; Learn sits at the
+   *  sidebar's foot for good since 2026-11-04, so nothing reads it there.) */
   learnUsedAt?: number;
   /** Epoch ms the person chose "Ignore setup". Ignored, it never returns to Home. */
   ignoredAt?: number;
@@ -60,11 +61,6 @@ export function readFirstRun(settings: Record<string, unknown> | null | undefine
     ...(completedAt !== undefined ? { completedAt } : {}),
     ...(Object.keys(answers).length > 0 ? { answers } : {}),
   };
-}
-
-/** §3.0: Learn sits first in Work, above Projects, until it has been used; then below Evaluate, for good. */
-export function learnPlacement(s: FirstRunState): 'start' | 'insight' {
-  return s.learnUsedAt !== undefined ? 'insight' : 'start';
 }
 
 /** §4: Home shows the first run while it is neither ignored nor complete. */
