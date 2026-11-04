@@ -14,14 +14,14 @@
  * files it touched (knowledge), its sandbox (agents). Each section is one frame on a desktop window
  * and carries one thing you can watch or drive. Frames: hook + demo → what it does for you → the
  * sidebar → a different agent checks → rules / memory / knowledge → agents + projects → what's new
- * in 0.14 → the platform map → get it.
+ * in 0.15 → the platform map → get it.
  *
  * MOTION: every scene plays only while it is on screen, pauses on hover or focus, has a visible
  * Pause button where it loops, and shows its final state under prefers-reduced-motion. Every state a
  * scene or a control can reach is laid out up front (one grid cell per stack, fixed heights), so no
  * hover, focus, tap or animation moves anything outside its own box (src/scripts/page.js).
  *
- * ACCURACY (studio 0.14 / crew 0.16.12, the ui-v3 line). Every label in the demo is a real studio label:
+ * ACCURACY (studio 0.15 / crew 0.17.0, the ui-v3 line). Every label in the demo is a real studio label:
  *  - A job's page is a chat: your messages right-aligned, each agent's turn under its name, the
  *    plan card's "Approve plan" / "Not now", one "Working on Build…" line, and the final message
  *    "Done. Tests pass (38), and codex reviewed and approved it. Pull request #12 is open." with
@@ -29,9 +29,20 @@
  *  - Gate choices: "Approve", "Approve with a note for the next step", "Send back"
  *    (src/components/session/GateRow.tsx, gateMoveModel.ts).
  *  - A question card names the agent that asked (0.9.3). "Needs you" is the inbox (0.10.0).
- *  - Sidebar pages = NAV_GROUPS (Work / Insight / Govern) + LEARN_ITEM ("Start here") in
- *    src/board/navModel.ts (names: src/board/pageNames.ts). Report has no line in the approved copy,
- *    so the explorer leaves it out; the demo strip keeps it.
+ *  - Sidebar pages = NAV_GROUPS (Work: Projects, Jobs, Apps, Repositories, then Data sources when crew
+ *    serves them; Insight: Report, Understand, Evaluate; Govern: Steering, Memory, Agents) + LEARN_ITEM at
+ *    the rail's foot, above Build & settings, with no "Start here" mark (src/board/navModel.ts; names:
+ *    src/board/pageNames.ts). The explorer and the demo strip list them in that order.
+ *  - What's new in 0.15 (CHANGELOG [Unreleased] plus the release scope): Apps chat-first (K5: a message is
+ *    one apps-turn job, reviewed by a distinct agent; Chat | Properties in one panel); Data sources (Postgres,
+ *    MySQL, REST, GraphQL, MCP, CSV/XLSX/SQLite uploads; Test connection; Ask runs only on Run, rows to you
+ *    only); the Agents box (see on, query off and Postgres only with a confirmation, projects none; "Agents
+ *    read data" on gate cards and deliveries); Linked trackers (PM-1: GitHub Issues + Jira on a project or a
+ *    repo; start a job from an issue); Show on Report (DES-REPORT-DASHBOARDS-001 slice 1: Properties or the
+ *    card's menu, at most 4, Build a dashboard on Report); Understand's Knowledge map (approved shapes only;
+ *    Profile reads counts, never a value); New job's catalog and the / menu (studio#972: one list, one
+ *    order); the sidebar folds (localStorage, the icon rail). Coming soon = PM-2 (GitLab, Azure DevOps) and
+ *    dashboards slice 2 (Report's own numbers as a source); never the verb-based catalog v2.
  *  - Themes: Wicked Light, Wicked Dark, Ambient (src/theming/appearance.ts, AppearanceSettings.tsx).
  *  - Voice: the mic beside Send when crew has voice, local transcription (src/components/voice/).
  *    Wherever voice appears, the N6 line sits beside it.
@@ -46,7 +57,7 @@
  *  - Studio grades nothing: the checks are crew's, the store is estate's. Studio is a pure client
  *    of crew's /api/v1 + /ws; the wire contract wicked-crew-api-types is the only shared code.
  * Never hardcode the installed version in prose: the install stamp is injected at build time (DT-7).
- * The one exception is the "What's new in 0.14" frame, which names the release it describes.
+ * The one exception is the "What's new in 0.15" frame, which names the release it describes.
  * Schematics in the sidebar explorer are labelled "illustration"; the search table is labelled an
  * example. No numbers appear apart from the demo's and the example table's.
  */
@@ -75,31 +86,38 @@ const title = 'wicked-studio — the ADE for running a team of coding agents';
 // What search results and social cards show. Same attribution boundary as the page: the crew
 // daemon runs the agents; studio is the screen you run them from.
 const description =
-  'The agentic development environment (ADE) for running a team of coding agents. Chat with Claude Code, Codex, GitHub Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. By default a different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
+  'The agentic development environment (ADE) for running a team of coding agents. Chat with Claude Code, Codex, GitHub Copilot, OpenCode and Pi, watch the work happen live, answer the gates that need you, and approve what changed. Build apps and dashboards over your data by chat, and decide what agents may read from each source. By default a different agent reviews every change, and the wicked-crew daemon on your machine runs each agent in a sandbox.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
-// Nine of the sidebar's real pages (NAV_GROUPS + LEARN_ITEM in src/board/navModel.ts; Report has no
-// approved line), one plain line each.
+// The sidebar's real pages (NAV_GROUPS + LEARN_ITEM in src/board/navModel.ts), one plain line each.
 const TABS = [
-  { name: 'Learn', line: 'Teach it how you work: docs, rules, personality, brand.' },
   { name: 'Projects', line: 'Group repos and jobs; one code graph over the repos.' },
   { name: 'Jobs', line: 'Every job as one chat, with the gates you answer.' },
+  { name: 'Apps', line: 'Dashboards and small tools over your data, built by chat.' },
   { name: 'Repositories', line: 'Code graphs, and how much is mapped to requirements.' },
+  { name: 'Data sources', line: 'Your databases, APIs, files and trackers, and what agents may read.' },
+  { name: 'Report', line: 'How the work went, and the dashboards you choose to show.' },
   { name: 'Understand', line: 'Ask how your code fits together. Answers cite the code.' },
   { name: 'Evaluate', line: 'Test your rules against examples first.' },
   { name: 'Steering', line: 'Your rules: everywhere or one project, by language, layer or framework.' },
   { name: 'Memory', line: 'What happened, what you said, what jobs learned.' },
   { name: 'Agents', line: 'Sign each agent in once. It runs in a sandbox.' },
+  { name: 'Learn', line: 'Teach it how you work: docs, rules, personality, brand.' },
 ];
 const line = (n: string) => TABS.find((t) => t.name === n)!.line;
-// The sidebar's own groups (navModel.ts NAV_GROUPS; Learn sits on top, marked "Start here").
+// The sidebar's own groups (navModel.ts NAV_GROUPS), then Learn at the rail's foot, above Build & settings.
 const GROUPS = [
-  { label: '', items: ['Learn'] },
-  { label: 'Work', items: ['Projects', 'Jobs', 'Repositories'] },
-  { label: 'Insight', items: ['Understand', 'Evaluate'] },
+  { label: 'Work', items: ['Projects', 'Jobs', 'Apps', 'Repositories', 'Data sources'] },
+  { label: 'Insight', items: ['Report', 'Understand', 'Evaluate'] },
   { label: 'Govern', items: ['Steering', 'Memory', 'Agents'] },
+  { label: '', items: ['Learn'] },
 ];
-const slug = (n: string) => n.toLowerCase();
+// The page the explorer opens on.
+const FIRST = 'Projects';
+// On a desktop window each group's heading sits beside its pages (one grid row per page), so the
+// twelve pages fit the frame: the grid row each group starts on.
+const ROW = GROUPS.map((_, i) => 1 + GROUPS.slice(0, i).reduce((a, x) => a + x.items.length, 0));
+const slug = (n: string) => n.toLowerCase().replace(/\s+/g, '-');
 
 const AGENTS = ['Claude Code', 'Codex', 'GitHub Copilot', 'OpenCode', 'Pi'];
 
@@ -115,27 +133,28 @@ const BEATS = [
   { id: 'reach', name: 'Agents' },
 ];
 
-// Three benefits, right under the demo (studio 0.14 / crew 0.16.12).
+// Three benefits, right under the demo (studio 0.15 / crew 0.17.0).
 const BENEFITS = [
   { h: 'Start with a chat, not a form.', p: 'Describe what you want; the chat proposes a plan, and nothing starts until you confirm it.' },
   { h: 'Gate decisions come to you as one card.', p: 'The card shows the choices, marks the recommended one when there is one, and, when given, what each would do. Confirm, then undo within 10 seconds if you change your mind.' },
   { h: 'It learns how you work.', p: 'Learn turns your team docs, your best repos and your writing into suggested rules and memories, and sets the tone the lead agent takes with you. You choose which suggestions become active.' },
 ];
 
-// What's new in 0.14, one line each. `tab` is the item's short name on its tab (the row stays one line at
+// What's new in 0.15, one line each. `tab` is the item's short name on its tab (the row stays one line at
 // every width); the panel's heading carries the full name and labels the panel.
 const NEW = [
-  { name: 'Voice', tab: 'Voice', line: 'A mic beside Send, Start and Ask. With whisper.cpp installed, speech becomes text on your machine (the model downloads only when you ask), and the audio is never stored.',
-    more: 'Press the mic and say “show me this job”, then “tell it to keep the old URL working”. Nothing is sent to a job until you confirm it on screen.' },
-  { name: 'Guided asks', tab: 'Guided asks', line: 'A job’s questions and decisions share one guided card.' },
-  { name: 'Learn', tab: 'Learn', line: 'Style, rules, personality and brand, in one place.' },
-  { name: 'Page chat', tab: 'Page chat', line: 'The main pages, including Understand, Report, Evaluate, Steering, Memory, Learn and Nerve Center, each have a chat over their own data.' },
-  { name: 'Requirements with real coverage', tab: 'Requirements', line: 'The real-requirements share against your minimum; placeholders never count, and an unconfirmed item shows its reason.' },
+  { name: 'Apps, built by chat', tab: 'Apps', line: 'Every app has its chat beside it. A message is one job: an agent builds the change, crew checks it, and a different agent reviews it before it lands.',
+    more: 'Make a new app by chat from the Apps page. In Edit, drag, resize and retitle in place; Undo and Redo step through its versions.' },
+  { name: 'Data sources', tab: 'Data sources', line: 'Postgres, MySQL, REST, GraphQL, MCP servers, or a CSV, XLSX or SQLite upload. Test connection checks a database or GraphQL source with its saved login.',
+    more: 'On a SQL source, Ask a question of this data hands one agent the structure alone; it drafts one read query, and nothing runs until you click Run. The rows are shown to you only.' },
   // DECISIONS N3: lead with the benefit, then the on-screen name once.
-  { name: 'Power mode on the job page', tab: 'Power mode', lead: 'When you launch a preset or a plan on a repository, the code-writing step runs as one agent’s checkpointed turns, and failed checks go back for rework or wait for your judgment (power mode, on by default for those launches).',
-    line: 'Rigor, checkpoints, and a pause (at a turn boundary) when the job detects a qualifying jump in complexity or signs that the agent is struggling.' },
-  { name: 'Wicked Dark, Wicked Light and Ambient', tab: 'Themes', line: 'Ambient adds a quiet line and tint that follow the state of your work; text never changes colour.' },
-  { name: 'Plugins as cards', tab: 'Plugins', line: 'See where each plugin appears, its preview when it has one, and, in its details, what it was granted.' },
+  { name: 'What agents can read', tab: 'Agents box', lead: 'Decide what agents may read from each database: its structure, its rows, and for which projects. Jobs and chats read it only in the projects you tick, or everywhere once you choose “Every project”.',
+    line: 'The Agents box on a SQL source: see the structure (on), query the rows (off; Postgres only; turning it on asks you to confirm, since rows go to the agent’s model provider), and the projects (none until you tick one). Gates and deliveries say which sources a job’s agents read.' },
+  { name: 'Linked trackers', tab: 'Trackers', line: 'Link GitHub Issues and Jira projects to a project or a repository. Jobs and chats there see those trackers, under the source’s Agents box, and you can start a job from an issue.' },
+  { name: 'Dashboards on Report', tab: 'Dashboards', line: 'Turn on Show on Report in an app’s Properties, and its live numbers show on Report, up to four at a time. Build a dashboard starts a new one by chat, right from Report.' },
+  { name: 'The Knowledge map', tab: 'Knowledge map', line: 'Understand draws your data sources and their tables beside your code, with the data shapes you approved and the tracker links. Profiling a source reads counts, never a value.' },
+  { name: 'New job, and the / menu', tab: 'New job', line: 'New job opens on a searchable catalog of what your agents can do, and a composer’s / menu lists the same entries, in the same order.' },
+  { name: 'A sidebar that folds', tab: 'Sidebar', line: 'Work, Insight, Govern and Recent each fold, and the rail folds to its icons; this browser remembers both. Learn sits at the foot, above Build & settings.' },
 ];
 
 // The example search in the projects card: one project, three repos.
@@ -206,7 +225,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <div class="ide-bar">
             <span class="ide-dots" aria-hidden="true"><i></i><i></i><i></i></span>
             <nav class="ide-tabs" aria-label="Sidebar pages (illustration)">
-              <span>Learn</span> <span>Projects</span> <span class="is-on">Jobs</span> <span>Repositories</span> <span>Report</span> <span>Understand</span> <span>Evaluate</span> <span>Steering</span> <span>Memory</span> <span>Agents</span>
+              <span>Projects</span> <span class="is-on">Jobs</span> <span>Apps</span> <span>Repositories</span> <span>Data sources</span> <span>Report</span> <span>Understand</span> <span>Evaluate</span> <span>Steering</span> <span>Memory</span> <span>Agents</span> <span>Learn</span>
             </nav>
             <span class="ide-url" data-demo-note>scripted demo · approve the plan, then make the calls</span>
             <button type="button" class="play-toggle play-toggle--sm" data-play-toggle data-demo-pause aria-pressed="false" aria-label="Pause the demo's motion"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
@@ -327,36 +346,20 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
       </div>
       <div class="explorer" data-tour data-tour-ms="4000">
         <div class="ex-side" role="tablist" aria-label="Sidebar pages" aria-orientation="vertical">
-          {GROUPS.map((g) => (
+          {GROUPS.map((g, gi) => (
             <>
-              {g.label && <span class="ex-group" aria-hidden="true">{g.label}</span>}
+              {g.label && <span class="ex-group" aria-hidden="true" style={`grid-row: ${ROW[gi]} / span ${g.items.length}`}>{g.label}</span>}
               {g.items.map((n, k) => (
-                <button type="button" role="tab" class={`ex-tab${n === 'Learn' ? ' is-on' : ''}`} id={`ex-tab-${slug(n)}`} aria-controls={`ex-panel-${slug(n)}`} aria-selected={n === 'Learn' ? 'true' : 'false'} tabindex={n === 'Learn' ? '0' : '-1'}>
-                  <span class="ex-tab-n" data-label={n}>{n}</span>{n === 'Learn' && <span class="ex-mark">{' '}Start here</span>}
+                <button type="button" role="tab" class={`ex-tab${n === FIRST ? ' is-on' : ''}${g.label === '' ? ' ex-tab--foot' : ''}`} style={`grid-row: ${ROW[gi] + k}`} id={`ex-tab-${slug(n)}`} aria-controls={`ex-panel-${slug(n)}`} aria-selected={n === FIRST ? 'true' : 'false'} tabindex={n === FIRST ? '0' : '-1'}>
+                  <span class="ex-tab-n" data-label={n}>{n}</span>
                 </button>
               ))}
             </>
           ))}
         </div>
         <div class="ex-stage">
-          {/* Learn */}
-          <div class="ex-panel is-on" role="tabpanel" id="ex-panel-learn" aria-labelledby="ex-tab-learn">
-            <div class="ex-copy"><h3>Learn</h3><p>{line('Learn')}</p></div>
-            <div class="ex-art" aria-hidden="true">
-              <div class="art art-learn">
-                <div class="al-src"><span>Team docs</span><span>Best repos</span><span>Your writing</span></div>
-                <div class="al-arrow"></div>
-                <div class="al-out">
-                  <div class="al-row"><b>Rule</b><span>Public routes carry a rate limit</span><i class="tog on"></i></div>
-                  <div class="al-row"><b>Memory</b><span>Limits are per API key</span><i class="tog on"></i></div>
-                  <div class="al-row"><b>Personality</b><span>Short answers, plain words</span><i class="tog"></i></div>
-                  <div class="al-row"><b>Brand</b><span>Colours from your site</span><i class="tog"></i></div>
-                </div>
-              </div>
-            </div>
-          </div>
           {/* Projects */}
-          <div class="ex-panel" role="tabpanel" id="ex-panel-projects" aria-labelledby="ex-tab-projects">
+          <div class="ex-panel is-on" role="tabpanel" id="ex-panel-projects" aria-labelledby="ex-tab-projects">
             <div class="ex-copy"><h3>Projects</h3><p>{line('Projects')}</p></div>
             <div class="ex-art" aria-hidden="true">
               <div class="art art-projects">
@@ -381,6 +384,21 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
             </div>
           </div>
+          {/* Apps */}
+          <div class="ex-panel" role="tabpanel" id="ex-panel-apps" aria-labelledby="ex-tab-apps">
+            <div class="ex-copy"><h3>Apps</h3><p>{line('Apps')}</p></div>
+            <div class="ex-art" aria-hidden="true">
+              <div class="art art-apps">
+                <div class="ax-app">
+                  <b>Support desk</b>
+                  <div class="ax-kpis"><span><em>Open tickets</em><i></i></span><span><em>First reply</em><i></i></span><span><em>Solved</em><i></i></span></div>
+                  <div class="ax-bars"><i style="--h:.45"></i><i style="--h:.7"></i><i style="--h:.55"></i><i style="--h:.9"></i><i style="--h:.65"></i><i style="--h:.8"></i></div>
+                </div>
+                <div class="au-q">Add a chart of tickets by week</div>
+                <div class="au-a">Added the chart and its query. Reviewed by Codex. <span class="au-cite">Undo</span></div>
+              </div>
+            </div>
+          </div>
           {/* Repositories */}
           <div class="ex-panel" role="tabpanel" id="ex-panel-repositories" aria-labelledby="ex-tab-repositories">
             <div class="ex-copy"><h3>Repositories</h3><p>{line('Repositories')}</p></div>
@@ -390,6 +408,32 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
                   <div class="ar-row"><b>{r}</b><span class="ar-graph"><i></i><i></i><i></i><i></i></span><span class="ar-bar"><i style={`--w:${[0.78, 0.62, 0.7][k]}`}></i></span></div>
                 ))}
                 <p class="ar-k">code graph · mapped to requirements</p>
+              </div>
+            </div>
+          </div>
+          {/* Data sources */}
+          <div class="ex-panel" role="tabpanel" id="ex-panel-data-sources" aria-labelledby="ex-tab-data-sources">
+            <div class="ex-copy"><h3>Data sources</h3><p>{line('Data sources')}</p></div>
+            <div class="ex-art" aria-hidden="true">
+              <div class="art art-sources">
+                <div class="al-row"><b>Postgres</b><span>support-pg</span><span class="as-chip">agents may query</span></div>
+                <div class="al-row"><b>Upload</b><span>orders.csv</span><span class="as-chip">structure only</span></div>
+                <div class="al-row"><b>REST</b><span>Billing API</span><span class="as-chip">apps only</span></div>
+                <div class="al-row"><b>Jira</b><span>Payments</span><span class="as-chip">linked to Public API</span></div>
+              </div>
+            </div>
+          </div>
+          {/* Report */}
+          <div class="ex-panel" role="tabpanel" id="ex-panel-report" aria-labelledby="ex-tab-report">
+            <div class="ex-copy"><h3>Report</h3><p>{line('Report')}</p></div>
+            <div class="ex-art" aria-hidden="true">
+              <div class="art art-report">
+                <div class="rp-head"><span><em>Throughput</em><i></i></span><span><em>Time to PR</em><i></i></span><span><em>First pass</em><i></i></span></div>
+                <span class="rp-k">Your dashboards</span>
+                <div class="rp-dash">
+                  <div class="rp-card"><b>Support desk</b><span class="ax-kpis"><span><i></i></span><span><i></i></span></span></div>
+                  <div class="rp-card"><b>Orders</b><span class="ax-kpis"><span><i></i></span><span><i></i></span></span></div>
+                </div>
               </div>
             </div>
           </div>
@@ -445,6 +489,22 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
                 {AGENTS.map((a, k) => (
                   <div class="ag-row"><span class={`dot ${k < 3 ? 'dot--done' : ''}`}></span><b>{a}</b><span class="ag-s">{k < 3 ? 'signed in' : 'sign in'}</span><span class="ag-box">sandbox</span></div>
                 ))}
+              </div>
+            </div>
+          </div>
+          {/* Learn */}
+          <div class="ex-panel" role="tabpanel" id="ex-panel-learn" aria-labelledby="ex-tab-learn">
+            <div class="ex-copy"><h3>Learn</h3><p>{line('Learn')}</p></div>
+            <div class="ex-art" aria-hidden="true">
+              <div class="art art-learn">
+                <div class="al-src"><span>Team docs</span><span>Best repos</span><span>Your writing</span></div>
+                <div class="al-arrow"></div>
+                <div class="al-out">
+                  <div class="al-row"><b>Rule</b><span>Public routes carry a rate limit</span><i class="tog on"></i></div>
+                  <div class="al-row"><b>Memory</b><span>Limits are per API key</span><i class="tog on"></i></div>
+                  <div class="al-row"><b>Personality</b><span>Short answers, plain words</span><i class="tog"></i></div>
+                  <div class="al-row"><b>Brand</b><span>Colours from your site</span><i class="tog"></i></div>
+                </div>
               </div>
             </div>
           </div>
@@ -582,7 +642,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         </div>
         <div class="trio-card drawer" data-drawer="know" data-state="in">
           <h3>Knowledge</h3>
-          <p>Learned from your code and docs, cited back to the source.</p>
+          <p>Learned from your code, your docs and your data sources’ structure, cited back to the source.</p>
           <div class="dr-box">
             <span class="dr-k">Cited answer · example</span>
             <div class="dr-slot dr-slot--know">
@@ -649,17 +709,17 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  {/* ── 7. What's new in 0.14 ─────────────────────────────────────────────── */}
+  {/* ── 7. What's new in 0.15 ─────────────────────────────────────────────── */}
   <section class="new frame snap-section" id="new" aria-labelledby="new-h" data-autoplay>
     <div class="wrap">
       <div class="sec-head sec-head--row">
         <div>
-          <h2 id="new-h">What’s new in 0.14</h2>
+          <h2 id="new-h">What’s new in 0.15</h2>
         </div>
         <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the tour of what is new"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
       </div>
       <div class="news" data-tour data-tour-ms="4500">
-        <div class="news-tabs" role="tablist" aria-label="What is new in 0.14" data-news-row>
+        <div class="news-tabs" role="tablist" aria-label="What is new in 0.15" data-news-row>
           {NEW.map((n, k) => (
             <button type="button" role="tab" class={`news-tab${k === 0 ? ' is-on' : ''}`} id={`new-tab-${k}`} aria-controls={`new-panel-${k}`} aria-selected={k === 0 ? 'true' : 'false'} tabindex={k === 0 ? '0' : '-1'}>{n.tab}</button>
           ))}
@@ -676,66 +736,77 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
               <div class="ex-art news-art" aria-hidden="true">
                 {k === 0 && (
-                  <div class="art art-voice">
-                    <div class="av-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-                    <div class="av-bar"><span class="av-text">Show me this job</span><span class="av-mic"><span class="mic"></span></span><span class="s-btn s-btn--yes">Send</span></div>
-                  </div>
-                )}
-                {k === 1 && (
-                  <div class="art art-guided">
-                    <div class="gd-card">
-                      <span class="s-who">Codex · is asking</span>
-                      <p>Freeze the clock in the test, or pass a clock into the checkout service?</p>
-                      <div class="sb-opts"><span class="sb-opt">Freeze it in the test</span><span class="sb-opt">Pass a clock in</span></div>
-                      <span class="s-who gd-next">Then: a review decision, on the same card</span>
+                  <div class="art art-appchat">
+                    <div class="ac-app"><b>Support desk</b><span class="ax-kpis"><span><i></i></span><span><i></i></span><span><i></i></span></span><span class="ax-bars"><i style="--h:.5"></i><i style="--h:.8"></i><i style="--h:.6"></i><i style="--h:.95"></i></span></div>
+                    <div class="ac-chat">
+                      <span class="ac-tabs"><b>Chat</b><span>Properties</span></span>
+                      <span class="au-q">Add a chart of tickets by week</span>
+                      <span class="au-a">Added the chart and its query. Reviewed by Codex. <span class="au-cite">Undo</span></span>
                     </div>
                   </div>
                 )}
+                {k === 1 && (
+                  <div class="art art-ask">
+                    <div class="al-row"><b>support-pg</b><span>Connected · TLS verified · read-only login</span></div>
+                    <div class="ak-q">Which ticket statuses are most common?</div>
+                    <pre class="ak-sql">SELECT status, count(*)
+FROM support.tickets
+GROUP BY status</pre>
+                    <div class="s-acts"><span class="s-btn s-btn--yes">Run</span><span class="ak-note">crew checked this text</span></div>
+                  </div>
+                )}
                 {k === 2 && (
-                  <div class="art art-learn2">
-                    {['Style', 'Rules', 'Personality', 'Brand'].map((x, j) => (
-                      <div class="al-row"><b>{x}</b><span class="l2-bar"><i style={`--w:${[0.8, 0.6, 0.45, 0.7][j]}`}></i></span></div>
-                    ))}
+                  <div class="art art-access">
+                    <div class="al-row"><span>Agents can see this structure</span><i class="tog on"></i></div>
+                    <div class="al-row"><span>Agents can query this source</span><i class="tog"></i></div>
+                    <div class="al-row"><span>Projects</span><span class="as-chip">Public API</span></div>
+                    <p class="aa-read">Agents read data: support-pg</p>
                   </div>
                 )}
                 {k === 3 && (
-                  <div class="art art-pagechat">
-                    <div class="pc-page"><b>Understand</b><i></i><i></i><i></i><i></i></div>
-                    <div class="pc-chat"><span class="au-q">What calls the rate limit?</span><span class="au-a">The router, for the public routes. <span class="au-cite">router.ts</span></span></div>
+                  <div class="art art-trackers">
+                    <span class="tk-k">Linked trackers · Public API</span>
+                    <div class="al-row"><b>Jira</b><span>PAY · Payments</span></div>
+                    <div class="al-row"><b>GitHub</b><span>acme/public-api issues</span></div>
+                    <div class="al-row tk-via"><b>From a repo</b><span>acme/web issues</span></div>
+                    <span class="tk-start">Start a job from an issue</span>
                   </div>
                 )}
                 {k === 4 && (
-                  <div class="art art-req">
-                    <div class="rq-bar"><i></i><span class="rq-min"><em>your minimum</em></span></div>
-                    <div class="al-row"><b>validated</b><span>Limits are per API key</span></div>
-                    <div class="al-row"><b>unconfirmed</b><span>No test covers a missing key yet</span></div>
-                    <div class="al-row rq-ph"><b>placeholder</b><span>never counted</span></div>
+                  <div class="art art-report">
+                    <div class="rp-head"><span><em>Throughput</em><i></i></span><span><em>Time to PR</em><i></i></span></div>
+                    <span class="rp-k">Your dashboards</span>
+                    <div class="rp-dash">
+                      <div class="rp-card"><b>Support desk</b><span class="ax-kpis"><span><i></i></span><span><i></i></span></span></div>
+                      <div class="rp-card rp-card--add"><b>Build a dashboard</b></div>
+                    </div>
+                    <div class="al-row"><span>Show on Report</span><i class="tog on"></i></div>
                   </div>
                 )}
                 {k === 5 && (
-                  <div class="art art-power">
-                    <div class="pw-top"><span class="pw-sw"><i class="tog on"></i> Power</span><span class="pw-k">Rigor: high</span></div>
-                    <div class="pw-line"><i class="on"></i><i class="on"></i><i class="on"></i><i class="pw-pause"></i><i></i></div>
-                    <p class="pw-msg">Paused at a turn boundary: a jump in complexity. Your call.</p>
+                  <div class="art art-kmap">
+                    <div class="km-row"><span class="km-n">support.tickets</span><em>joins</em><span class="km-n">support.customers</span></div>
+                    <div class="km-row"><span class="km-n km-n--code">src/tickets.ts</span><em>describes</em><span class="km-n">support.tickets</span></div>
+                    <div class="km-row"><span class="km-n">Jira · PAY</span><em>tracked in</em><span class="km-n">Public API</span></div>
+                    <div class="km-wait"><span>A data shape is waiting for you</span><span class="s-btn s-btn--yes">Approve</span><span class="s-btn">Reject</span></div>
                   </div>
                 )}
                 {k === 6 && (
-                  <div class="art art-themes">
-                    <span class="th th--dark"><b>Wicked Dark</b><i></i><i></i></span>
-                    <span class="th th--light"><b>Wicked Light</b><i></i><i></i></span>
-                    <span class="th th--amb"><b>Ambient</b><i></i><i></i><em></em></span>
+                  <div class="art art-catalog">
+                    <div class="av-bar"><span class="av-text">write docs for the auth service</span></div>
+                    <div class="al-row"><b>Best fit</b><span>Write documentation</span></div>
+                    <div class="al-row"><b>Your top</b><span>Fix a bug · Build a feature</span></div>
+                    <div class="ct-slash"><code>/</code><span>the same list, in the same order</span></div>
                   </div>
                 )}
                 {k === 7 && (
-                  <div class="art art-plugins">
-                    {['Run insights', 'Your plugin'].map((t) => (
-                      <div class="pl-card">
-                        <b>{t}</b>
-                        <span class="pl-k">Where it appears</span><span class="pl-line"></span>
-                        <span class="pl-k">Preview</span><span class="pl-prev"><i></i><i></i></span>
-                        <span class="pl-k">Details: what it was granted</span><span class="pl-line pl-line--short"></span>
-                      </div>
-                    ))}
+                  <div class="art art-rail">
+                    <div class="rl-full">
+                      <span class="rl-h">Work <i>▾</i></span><span>Projects</span><span>Jobs</span><span>Apps</span>
+                      <span class="rl-h">Insight <i>▸</i></span><span class="rl-h">Govern <i>▸</i></span>
+                      <span class="rl-foot rl-foot--top">Learn</span><span class="rl-foot">Build &amp; settings</span>
+                    </div>
+                    <div class="rl-icons"><i></i><i></i><i></i><i></i><i class="rl-gap"></i><i></i></div>
                   </div>
                 )}
               </div>
@@ -744,7 +815,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           <div class="ex-progress" aria-hidden="true"><i data-tour-bar></i></div>
         </div>
       </div>
-      <p class="soon"><b>Coming soon:</b> a catalog of job types in New job, and <b>Apps</b>: live apps and dashboards over your APIs and databases.</p>
+      <p class="soon"><b>Coming soon:</b> GitLab and Azure DevOps trackers, and Report’s own numbers as a source for your dashboards.</p>
     </div>
   </section>
 
@@ -761,9 +832,9 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
             URL it prints, sign in your agents, and start a job.
           </p>
           <ul class="needs" role="list">
-            <li>Node 22 or later</li>
+            <li>Node 22 or later (24.12, 25.1 or later to upload files as data sources)</li>
             <li>A container runtime: Docker, Podman, Rancher Desktop, Colima or OrbStack</li>
-            <li>wicked-garden 12.40.0 or later, for the skills every agent follows</li>
+            <li>wicked-garden 12.64.0 or later, for the skills every agent follows</li>
             <li>The whole family instead? <code>npx wicked-installer</code></li>
           </ul>
         </div>

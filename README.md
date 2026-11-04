@@ -14,6 +14,9 @@ sandboxes while you watch. With whisper.cpp installed, you can ask questions out
 already running, each instruction confirmed on screen first. Gate decisions come to you as one
 card, and each job's evidence is a click away. Learn suggests rules and memories from how your team
 works, for you to accept, and jobs can propose what they learned for your approval.
+**Apps** turns your databases, files and APIs into dashboards you build by chat, each **data source**
+says exactly what agents may read from it, and **Linked trackers** ties GitHub Issues and Jira
+projects to your projects and repositories.
 The [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon runs the jobs and bundles studio.
 
 ---
@@ -27,7 +30,9 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   own words ("write docs for the auth service"), filter by category or by whether it needs a
   repository, and your most-used ones are on top. Each workflow asks only for what it needs. Not sure
   yet? **Talk it through first**: describe what you want, the chat proposes a plan, and nothing starts
-  until you confirm it. (Tick "Don't show this again" to go straight to chat next time.)
+  until you confirm it. (Tick "Don't show this again" to go straight to chat next time.) A
+  composer's `/` menu lists the same catalog, with the same entries, names and order; a pick starts
+  what its New job card starts.
 - **Sign your agents in once.** The **Agents** page signs each agent in: Claude Code and GitHub
   Copilot through a login container; Codex, Pi and OpenCode with their host CLIs and a temporary
   home (wicked-core `src/seat_login.rs`). Jobs run every agent in a hardened sandbox (crew needs a
@@ -148,8 +153,57 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   mood on your chosen ground that follows the work: a tint while jobs run, warm when something needs
   you, red when something failed). Text is set in Wicked Sans; the plugins page shows every plugin
   as a card (job-detail sections and editors) with what it may do.
+- **Find your way** — the sidebar groups the pages under **Work** (Projects, Jobs, Apps,
+  Repositories, Data sources), **Insight** (Report, Understand, Evaluate) and **Govern** (Steering,
+  Memory, Agents), with Learn and **Build & settings** (Skills, MCP, Plugins, Workflows, Data
+  sources, Settings) at its foot. Each heading folds, and the rail folds to its icons; this browser
+  remembers both.
 - **Plus** governed terminals, a Cmd+K command palette, document & video creation modes, and
   desktop notifications when a run needs you.
+
+### Apps and data *(with wicked-crew 0.17.0)*
+
+- **Build apps by chat** — **Apps** (under Work) is a dashboard of your apps: each card shows its
+  first page's headline numbers live, read only while the card is on screen. An app's page has its
+  chat beside it, in one side panel with **Chat** and **Properties** tabs that folds to a rail. Each
+  message is one job: an agent builds the change, crew checks it, a different agent reviews it, and
+  the reply gives the change line ("v4 · Added 1 chart and 1 query · reviewed by Codex") with Undo,
+  or why nothing landed. **Make a new app by chat** starts one from `/apps`. In Edit you can also
+  drag, resize and retitle in place (double-click a title or label); changes save as versions as you
+  make them, with Undo and Redo.
+- **Dashboards on Report** — turn on **Show on Report** in an app's Properties or in its card's ⋯
+  menu, and its live numbers show on its project's Report and on Insight → Report, up to four at a
+  time. **Build a dashboard** on Report starts a new app by chat, switched on for Report.
+  Report's own chat never reads the dashboards' numbers.
+- **Connect your data** — **Data sources** adds Postgres, MySQL, REST (OpenAPI), GraphQL, MCP
+  servers and uploads (CSV, XLSX, SQLite; crew must run on Node.js 24.12, 25.1 or later to take an
+  upload). The secret you type is sent only with the preview and
+  clears after Save. **Test connection** (SQL and GraphQL sources; REST and MCP keep Test call) says
+  how long it took, the TLS state and, for Postgres, whether the login is read-only. On a SQL source,
+  **Ask a question of this data** has one agent draft one read query from the structure alone; crew
+  checks it, nothing runs until you click Run, and the rows (at most 50) are shown to you only. **Allow writes** (Postgres, off by default) lets an app's row write be granted,
+  after crew's table safety check.
+- **Decide what agents can read** — a SQL source's **Agents** box: **Agents can see this structure**
+  (on), **Agents can query this source** (off, Postgres only; the rows go to the agent's model
+  provider, so turning it on asks you to confirm), and the projects whose jobs and chats may use it
+  (none until you tick one). Ask, which you start yourself, gives its one agent the structure either way.
+  It lists the source's recent agent queries, never the SQL. A job's gate cards and its delivery say
+  which sources its agents read ("Agents read data: support-pg · 3 queries · 12 rows"), or "not
+  known", never "none".
+- **Link your trackers** — register GitHub Issues or Jira on Data sources, then link trackers on a
+  project's **Linked trackers** card or on a repository's page: one or several, from one tool or
+  more. A job or chat in a project sees its project's trackers and its repositories' trackers, under
+  the source's Agents box. Start a job from an issue, and its pull request names the issues it
+  closes.
+- **See your knowledge** — Understand's **Knowledge map** draws your data sources and their tables
+  beside your repositories and code, with the approved data shapes (what joins what, and which code
+  describes a table) and the tracker links. **Profile this source** on a Postgres source's sheet
+  finds shapes from counts alone, never a value, and each one waits on the map for your Approve or
+  Reject.
+
+These need wicked-crew 0.17.0 or later, which bundles this release. Against an older daemon studio
+hides most of them or says the daemon doesn't offer them; Apps shows two sample apps, marked as samples,
+and the Knowledge map says it couldn't load.
 
 ---
 
@@ -186,9 +240,13 @@ what changed, check the [releases](https://github.com/mikeparcewski/wicked-crew/
 
 ## Requirements
 
-- **Node.js ≥ 22**, npm ≥ 10
+- **Node.js ≥ 22**, npm ≥ 10 (uploading a file as a data source needs crew on Node.js 24.12, 25.1 or
+  later)
 - A running **wicked-crew daemon, v0.7.0+** (bundled and started for you by `npx wicked-crew serve`
-  — you only need this floor if you point a standalone studio at your own daemon)
+  — you only need this floor if you point a standalone studio at your own daemon). Apps, Data
+  sources, the Agents box, Linked trackers, the Knowledge map and dashboards on Report need
+  **wicked-crew 0.17.0** or later (see [Apps and data](#apps-and-data-with-wicked-crew-0170) for what an
+older daemon shows).
 - A modern browser — Chrome, Edge, or Firefox on macOS, Linux, or Windows (or Safari on macOS)
 
 ---

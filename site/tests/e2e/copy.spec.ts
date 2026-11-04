@@ -127,9 +127,12 @@ test.describe('the reviewed messaging', () => {
     const news = page.locator('.new');
     await expect(news.getByRole('tab')).toHaveCount(8);
     await expect(news.getByRole('tabpanel', { includeHidden: true })).toHaveCount(8);
+    await expect(news.getByRole('heading', { level: 2 })).toHaveText('What’s new in 0.15');
     const soon = news.locator('.soon');
     await expect(soon).toContainText('Coming soon:');
-    await expect(soon).toContainText('Apps');
+    await expect(soon).toContainText('GitLab and Azure DevOps trackers');
+    // what shipped in 0.15 (Apps, New job's catalog) is never "coming soon"; nor is a design that is not built
+    await expect(soon).not.toContainText(/\bApps\b|catalog/i);
     await expect(soon).not.toContainText(/20\d\d|Q[1-4]/);
   });
 
@@ -159,24 +162,40 @@ test.describe('the reviewed messaging', () => {
     expect(await page.locator('.review .receipt').innerText()).not.toMatch(/Skipped\s*review|stopped before review/i);
   });
 
-  test('rules are suggested by Learn, never by an agent; power mode is explained before it is named', async ({ page }) => {
+  test('rules are suggested by Learn, never by an agent; the Agents box is explained before it is named', async ({ page }) => {
     await page.goto('/');
     const from = page.locator('.steer [data-drawer="rule"] .dr-from');
     await expect(from).toHaveCount(3);
     for (const t of await from.allTextContents()) expect(t).toMatch(/^Suggested by Learn, from your /);
-    const power = page.getByRole('tabpanel', { name: 'Power mode on the job page', includeHidden: true });
-    await expect(power.locator('p').first()).toHaveText(
-      'When you launch a preset or a plan on a repository, the code-writing step runs as one agent’s checkpointed turns, and failed checks go back for rework or wait for your judgment (power mode, on by default for those launches).',
+    // DECISIONS N3: the benefit first, then the on-screen name
+    const access = page.getByRole('tabpanel', { name: 'What agents can read', includeHidden: true });
+    await expect(access.locator('p').first()).toHaveText(
+      'Decide what agents may read from each database: its structure, its rows, and for which projects. Jobs and chats read it only in the projects you tick, or everywhere once you choose “Every project”.',
     );
+    // the switches are a SQL source's (studio's Agents box), with their defaults; rows are Postgres-only in
+    // this release and go to the agent's model provider; Ask's rows are the person's only
+    const box = access.locator('p').nth(1);
+    await expect(box).toContainText('The Agents box on a SQL source');
+    await expect(box).toContainText('see the structure (on)');
+    await expect(box).toContainText('query the rows (off; Postgres only');
+    await expect(box).toContainText('rows go to the agent’s model provider');
+    await expect(box).toContainText('the projects (none until you tick one)');
+    const ask = page.locator('.new').getByRole('tabpanel', { name: 'Data sources', includeHidden: true });
+    // Ask is the person's own act, and it hands one agent the structure (whatever the Agents box says)
+    await expect(ask).toContainText('Ask a question of this data hands one agent the structure alone');
+    await expect(ask).toContainText('The rows are shown to you only.');
   });
 });
 
 test.describe('the reviewed messaging, details', () => {
-  test('the demo strip lists the 0.14 sidebar pages in order', async ({ page }) => {
+  test('the demo strip and the explorer list the 0.15 sidebar pages in order, Learn at the foot', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.ide-tabs span')).toHaveText([
-      'Learn', 'Projects', 'Jobs', 'Repositories', 'Report', 'Understand', 'Evaluate', 'Steering', 'Memory', 'Agents',
-    ]);
+    const PAGES = ['Projects', 'Jobs', 'Apps', 'Repositories', 'Data sources', 'Report', 'Understand', 'Evaluate', 'Steering', 'Memory', 'Agents', 'Learn'];
+    await expect(page.locator('.ide-tabs span')).toHaveText(PAGES);
+    await expect(page.locator('.explorer [role="tab"]')).toHaveText(PAGES);
+    // the "Start here" mark went with Learn's move to the foot (Home does the first run)
+    await expect(page.locator('.explorer')).not.toContainText('Start here');
+    await expect(page.locator('.explorer [role="tab"][aria-selected="true"]')).toHaveText('Projects');
     // the Desk and Steering trio name pages, never the old tabs
     await expect(page.locator('.trio-where').first()).toHaveText('Steering page');
     await expect(page.locator('body')).not.toContainText(/\b(Steer|Memory) tab\b/);
@@ -204,11 +223,6 @@ test.describe('the reviewed messaging, details', () => {
     await expect(page.locator('.desk .extras li')).toHaveText(['Voice mode', 'Wicked Light, Wicked Dark and Ambient themes']);
     await expect(page.locator('body')).not.toContainText(/command palette|batch triage|desktop alerts/i);
     await expect(page.locator('.desk .voice-note')).toContainText(N6);
-    // the Voice release item carries the privacy line in its own words (COPY rev 5), and says what you can say
-    const voice = page.getByRole('tabpanel', { name: 'Voice', includeHidden: true });
-    await expect(voice).toContainText('speech becomes text on your machine');
-    await expect(voice).toContainText('the audio is never stored');
-    await expect(voice).toContainText('Nothing is sent to a job until you confirm it on screen.');
   });
 });
 
