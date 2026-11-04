@@ -11,6 +11,7 @@ import { CrewAppStore, SampleAppStore, type AppStorePort } from '../../editors/a
 import { sampleApp } from '../../editors/apps/samples.js';
 import { isAppSlug, publishedOf } from '../../editors/apps/appsDirectory.js';
 import { ShareSheet } from '../apps/ShareSheet.js';
+import { PublishSheet } from '../apps/PublishSheet.js';
 
 /**
  * THE APP HOST (DES-APPS-001 §6.1, §7.1, §7.3; slice K4): one app in the `wicked-apps` runtime's sandboxed frame, and
@@ -150,6 +151,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const [mode, setMode] = useState<AppMode>(initialMode ?? 'preview');
   const modeRef = useRef<AppMode>(initialMode ?? 'preview');
   const [sharing, setSharing] = useState(false);
+  // (K6) Publish: offered when crew serves it for this app's store (`capabilities.apps.publish`).
+  const [publishable, setPublishable] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const shown = narrow ? 'preview' : mode;
   // When Edit was left: a field typed in Edit commits as the person clicks Preview, and that op is still Edit's.
   const editLeftRef = useRef(Number.NEGATIVE_INFINITY);
@@ -225,6 +229,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       if (cancelled || frameBox.current === null) { session.dispose(); return; }
       sessionRef.current = session;
       setKind({ store: store.kind, ...data.kind });
+      setPublishable(store.kind === 'crew' && caps?.publish === true);
       setDetail(loaded);
       off = session.on((e) => {
         if (e.kind === 'head') { setDetail(e.app); if (e.by === 'this-session') setStatus(`Saved as v${e.app.head.version}`); }
@@ -348,7 +353,11 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         {shown === 'edit' && <span className="wk-apps-hint" data-testid="apps-edit-hint">Changes save as you make them · Undo to go back</span>}
         <span className="wk-apps-spacer" />
         {shown === 'preview' && viewer !== null && <span className="wk-apps-pill" data-testid="apps-viewer">Viewing as {viewer}</span>}
+        {detail !== null && publishedOf(detail) !== null && (
+          <span className="wk-apps-shared" data-testid="apps-shared-at">Shared at <a className="wk-link" href={publishedOf(detail)!.shareUrl} target="_blank" rel="noopener noreferrer">{publishedOf(detail)!.shareUrl}</a></span>
+        )}
         <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-share-open" disabled={detail === null} onClick={() => setSharing(true)}>Share</button>
+        {publishable && <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="apps-publish-open" disabled={detail === null || framed} onClick={() => setPublishing(true)}>Publish</button>}
         <span className="wk-seg" role="group" aria-label="Mode">
           <button type="button" className={`wk-seg-btn${shown === 'edit' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-edit" aria-pressed={shown === 'edit'} disabled={narrow || framed} title={framed ? 'Open studio on its own to change the app' : narrow ? 'Edit on a larger screen' : undefined} onClick={() => setMode('edit')}>Edit</button>
           <button type="button" className={`wk-seg-btn${shown === 'preview' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-mode-preview" aria-pressed={shown === 'preview'} onClick={() => setMode('preview')}>Preview</button>
@@ -410,7 +419,12 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         </aside>
       </div>
       {sharing && detail !== null && (
-        <ShareSheet name={detail.name} slug={detail.slug} published={publishedOf(detail)} onClose={() => setSharing(false)} />
+        <ShareSheet name={detail.name} slug={detail.slug} published={publishedOf(detail)} detail={detail} onClose={() => setSharing(false)}
+          {...(publishable && !framed ? { onPublish: () => { setSharing(false); setPublishing(true); } } : {})} />
+      )}
+      {publishing && detail !== null && slug !== null && (
+        <PublishSheet detail={detail} reload={async () => { const d = await new CrewAppStore(slug).detail(); setDetail(d); return d; }}
+          onClose={() => setPublishing(false)} {...(navigate !== undefined ? { openRun: (id: string) => navigate(`/runs/${encodeURIComponent(id)}`) } : {})} />
       )}
     </div>
   );

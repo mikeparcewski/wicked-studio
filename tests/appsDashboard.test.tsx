@@ -271,7 +271,7 @@ describe('Share: a published link only when crew reports one', () => {
     render(<ShareSheet name="<b>Desk</b>" slug="desk" published={null} onClose={vi.fn()} />);
     expect(screen.getByTestId('apps-share-state').textContent).toMatch(/Not published yet/);
     expect((screen.getByTestId('apps-share-publish') as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText('Coming with Publish')).toBeTruthy();
+    expect(screen.getByText('This crew does not publish apps yet')).toBeTruthy();
     expect(screen.queryByTestId('apps-share-link-field')).toBeNull();
     fireEvent.click(screen.getByTestId('apps-share-studio-copy'));
     await waitFor(() => expect(writes).toStrictEqual([`${window.location.origin}/apps/desk`]));

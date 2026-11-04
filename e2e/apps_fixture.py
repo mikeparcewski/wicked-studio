@@ -9,7 +9,9 @@ apps_fixture.py — the in-process fixture's stand-in for crew's app store and a
     `AppQueryResponse`), `POST …/actions/:id/prepare {version, params}` → `{record, card, expiresAt}` and
     `POST …/actions/:id/run {record}` → `{state, reason}`. A row write applies to the fixture's rows.
   - Every request is recorded (GET /__fixture/apps-calls), so a journey can count edits, prepares and runs.
-    POST /__fixture/apps-reset puts both apps back; POST /__fixture/apps-caps {query, actions} flips the health flags.
+    POST /__fixture/apps-reset puts both apps back; POST /__fixture/apps-caps {query, actions, publish} flips the health flags.
+  - (K6) POST /api/v1/apps/:app/publish answers crew's 202 {runId, manifestDigest} (or 422 findings for a body without a
+    site address); POST /__fixture/apps-publish-done {app} finishes that run: the app gains crew's published record.
 
 Hostile values (S4/S12) live in the rows and the text on purpose: the runtime must show them as text.
 """
@@ -105,7 +107,7 @@ def reset() -> None:
         APPS["other-app"] = _make("other-app", SPEC_B, ROWS_B)
         CALLS.clear()
         RECORDS.clear()
-        CAPS.update({"query": True, "actions": True})
+        CAPS.update({"query": True, "actions": True, "publish": False})
         global RECORD_MS
         RECORD_MS = 120_000
 
@@ -116,6 +118,7 @@ reset()
 # The published record K6 will write (studio reads it from GET /apps/:app `published`; the proposed shape is in the
 # ledger): only fixture-app is published, so a journey sees both Share states.
 # K6's proposed `AppDetail.published` (ledger 2026-11-03T18:26Z), the fields the Share sheet reads plus a few it ignores.
+PUBLISHING: dict = {}
 PUBLISHED = {"fixture-app": {"shareUrl": "https://fixture-desk.apps.example.test/", "audience": "signed-in members of support-ops",
                              # K6's producer's shape (crew apps/publish/service.ts): the name entity-escaped, style border:0.
                              "snippet": '<iframe src="https://fixture-desk.apps.example.test/" title="Fixture desk &#38; co" width="100%" height="600" style="border:0" loading="lazy" referrerpolicy="no-referrer"></iframe>',
@@ -226,13 +229,28 @@ def _answer(method: str, path: str, body, locked: bool = False):
     if path == "/__fixture/apps-calls" and method == "GET":
         with lock:
             return 200, {"calls": copy.deepcopy(CALLS)}
+    if path == "/__fixture/apps-publish-done" and method == "POST":
+        with lock:
+            slug = (body or {}).get("app")
+            p = PUBLISHING.pop(slug, None)
+            if p is None:
+                return 404, {"error": "no publish runs"}
+            b = p["body"]
+            teams = "teams" in b.get("targets", [])
+            PUBLISHED[slug] = {"shareUrl": b["site"]["origin"].rstrip("/") + "/", "audience": "People in group support-ops who sign in at dex.apps.test",
+                               "snippet": None, "version": p["version"], "at": int(time.time() * 1000), "targets": ["studio", *b.get("targets", [])],
+                               "tree": "t", "runId": p["runId"], "actor": {"id": "local", "kind": "human", "trust": "operator"},
+                               "image": {"tag": f"wicked-apps/{slug}:v{p['version']}-{p['runId'][-12:]}", "id": "sha256:" + "a" * 64},
+                               "teamsPackage": {"url": f"/api/v1/apps/{slug}/published/teams.zip", "sha256": "b" * 64} if teams else None,
+                               "manifestDigest": "d" * 64, "run": {"env": ["APPS_SRC_SUPPORT_PG_PASSWORD", "APPS_SRC_SUPPORT_PG_WRITER_PASSWORD"], "volume": "/data", "port": 8080}}
+        return 200, {"ok": True}
     if path == "/__fixture/apps-reset" and method == "POST":
         reset()
         return 200, {"ok": True}
     if path == "/__fixture/apps-caps" and method == "POST":
         global RECORD_MS
         with lock:
-            for k in ("query", "actions"):
+            for k in ("query", "actions", "publish"):
                 if isinstance((body or {}).get(k), bool):
                     CAPS[k] = body[k]
             if isinstance((body or {}).get("recordMs"), int):
@@ -252,6 +270,15 @@ def _answer(method: str, path: str, body, locked: bool = False):
         if method != "POST":
             return _refuse(404, "bad_request", "no such route")
         body = body or {}
+        if rest == ["publish"]:
+            origin = ((body.get("site") or {}).get("origin") or "")
+            if body.get("base") != a["versions"][-1]["version"]:
+                return _refuse(409, "stale_base", "the app moved on", head=a["versions"][-1]["version"])
+            if not origin.startswith("https://") and not origin.startswith("http://localhost"):
+                return _refuse(422, "check_failed", "the site address is https://", findings=[{"stage": "publish", "code": "site_origin", "path": "$", "message": "the site address is https:// (http:// only for localhost)"}])
+            run = f"apps-publish-{slug}-{hashlib.sha256(origin.encode()).hexdigest()[:12]}"
+            PUBLISHING[slug] = {"runId": run, "body": copy.deepcopy(body), "version": a["versions"][-1]["version"]}
+            return 202, {"runId": run, "manifestDigest": hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()}
         if rest == ["edits"]:
             stale = _stale(a, body.get("base"), "this edit")
             if stale:

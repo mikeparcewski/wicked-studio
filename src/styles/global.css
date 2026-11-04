@@ -51,6 +51,7 @@
 @import './sections/projects.css';
 @import './sections/editor-host.css';
 @import './sections/apps-host.css';
+@import './sections/apps-publish.css';
 @import './sections/layout.css';
 @import './sections/jobs-repos.css';
 @import './sections/repo-know.css';

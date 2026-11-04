@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 300,
-    "occurrences": 4272,
-    "static": 3619,
+    "files": 301,
+    "occurrences": 4306,
+    "static": 3653,
     "dynamic": 120,
     "computed": 48
   },
@@ -822,6 +822,192 @@
       ]
     },
     {
+      "testId": "apps-publish",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-cancel",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-client",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-close",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-done",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-done-close",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-embed",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-embed-on",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-embed-origins",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-entra",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-finding",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-issuer",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-link",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-oidc",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-open",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-open-run",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-origin",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-problem",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-public",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-refusal",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-rule",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-run",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-running",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-scrim",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-signin",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-sources",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-start",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-teams",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-teams-on",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-tenant",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-publish-values",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
       "testId": "apps-redo",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
@@ -924,6 +1110,12 @@
       ]
     },
     {
+      "testId": "apps-share-republish",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
       "testId": "apps-share-scrim",
       "files": [
         "src/components/apps/ShareSheet.tsx"
@@ -942,9 +1134,21 @@
       ]
     },
     {
+      "testId": "apps-share-teams",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
       "testId": "apps-share-when",
       "files": [
         "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-shared-at",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
       ]
     },
     {

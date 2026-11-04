@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { apiBase } from '../../api/client.js';
+import { publishedExtrasOf } from '../../api/appsPublish.js';
 import type { AppPublished } from '../../editors/apps/appsDirectory.js';
 import { useModalEscape } from '../Modal.js';
 import { useDialogFocus } from '../steer/useDialogFocus.js';
@@ -20,6 +22,10 @@ export interface ShareSheetProps {
   slug: string;
   published: AppPublished | null;
   onClose: () => void;
+  /** (K6) crew serves Publish: the not-published state offers it. */
+  onPublish?: () => void;
+  /** (K6) The app as crew reported it: the Teams package, when the publish made one. */
+  detail?: unknown;
 }
 
 /** The studio address of an app (for people who use this studio, signed in to this daemon). */
@@ -28,7 +34,7 @@ export function studioLink(slug: string, origin = window.location.origin): strin
 }
 
 /** One value with Copy. The field shows exactly the string Copy copies (a snippet in a text area keeps its lines). */
-function CopyRow({ label, value, testId, note, multiline = false }: { label: string; value: string; testId: string; note?: string; multiline?: boolean }): React.ReactElement {
+export function CopyRow({ label, value, testId, note, multiline = false }: { label: string; value: string; testId: string; note?: string; multiline?: boolean }): React.ReactElement {
   const [state, setState] = useState<'idle' | 'copied' | 'manual'>('idle');
   const field = useRef<HTMLInputElement & HTMLTextAreaElement | null>(null);
   const copy = async (): Promise<void> => {
@@ -58,7 +64,8 @@ function CopyRow({ label, value, testId, note, multiline = false }: { label: str
   );
 }
 
-export function ShareSheet({ name, slug, published, onClose }: ShareSheetProps): React.ReactElement {
+export function ShareSheet({ name, slug, published, onClose, onPublish, detail }: ShareSheetProps): React.ReactElement {
+  const teamsUrl = published !== null ? (publishedExtrasOf(detail)?.teamsUrl ?? null) : null;
   const box = useRef<HTMLDivElement | null>(null);
   // The modal family's contract: one Escape closes the top layer only (the palette and later modals first), Tab
   // stays inside, and focus goes back where it was when the sheet closes.
@@ -77,6 +84,10 @@ export function ShareSheet({ name, slug, published, onClose }: ShareSheetProps):
             <CopyRow label="Share link" value={published.shareUrl} testId="apps-share-link" />
             <p className="wk-share-meta"><span className="wk-share-k">Who can open it</span> <span data-testid="apps-share-audience">{published.audience}</span></p>
             {published.snippet !== null && <CopyRow label="Embed in a page" value={published.snippet} testId="apps-share-embed" multiline />}
+            {teamsUrl !== null && (
+              <p className="wk-share-meta"><span className="wk-share-k">Teams</span> <a className="wk-link" data-testid="apps-share-teams" href={`${apiBase()}${teamsUrl.replace(/^\/api\/v1/, '')}`} download>Download the Teams app package</a></p>
+            )}
+            {onPublish !== undefined && <p className="wk-share-actions"><button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-share-republish" onClick={onPublish}>Publish again</button></p>}
             <p className="wk-share-meta" data-testid="apps-share-when">
               <span className="wk-share-k">Published</span> v{published.version} on {new Date(published.at).toLocaleString()}
             </p>
@@ -86,8 +97,8 @@ export function ShareSheet({ name, slug, published, onClose }: ShareSheetProps):
             <p className="wk-share-lead" data-testid="apps-share-state">Not published yet: other people need a published copy to open it.</p>
             <p className="wk-share-body">Publish builds a signed-in app server that your deployer runs. Its link is what you share.</p>
             <div className="wk-share-actions">
-              <button type="button" className="wk-btn wk-btn--primary" data-testid="apps-share-publish" disabled aria-describedby="wk-share-soon">Publish</button>
-              <span id="wk-share-soon" className="wk-share-note">Coming with Publish</span>
+              <button type="button" className="wk-btn wk-btn--primary" data-testid="apps-share-publish" disabled={onPublish === undefined} aria-describedby="wk-share-soon" onClick={onPublish}>Publish</button>
+              {onPublish === undefined && <span id="wk-share-soon" className="wk-share-note">This crew does not publish apps yet</span>}
             </div>
             <CopyRow label="Studio link" value={studioLink(slug)} testId="apps-share-studio"
               note="For people who use this studio: it opens the app here, signed in to this daemon. Anyone else can’t open it." />
