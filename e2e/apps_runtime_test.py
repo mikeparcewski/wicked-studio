@@ -8,9 +8,6 @@ with its CAS and one undo pointer, and the query / prepare / run routes), at 144
 
   1. S4 / S12: hostile row values and author text render as their characters (no element, no handler, nothing ran).
   2. CSSOM ONLY: the frame's DOM holds no `style` attribute (Preview, Edit, after a drag).
-  2b. LINES (studio#963): a line chart's series and the line over an area resolve to `fill: none` and an area has no
-     outline, in this engine's own cascade; and in a screenshot of each chart, the series colour covers a line's
-     pixels, not a filled shape's (decoded on a blank page's canvas).
   3. S6: `fetch` from the app frame is refused by its CSP (`connect-src 'none'`); the fixture saw no request from it.
   4. S7: through the runtime's own port, a query app A does not hold (app B's) is refused by the host, and a field
      naming another app is a bad request: the fixture saw no query for it. An action asked with no click is refused.
@@ -18,6 +15,9 @@ with its CAS and one undo pointer, and the query / prepare / run routes), at 144
   6. THE CARD: Assign to me in Preview → the host draws the card outside the frame (operation, key, statement) and the
      fixture saw ONE prepare and NO run; Run is armed after a moment; Run → exactly one run, and the table re-reads.
      Cancel runs nothing.
+  6b. LINES (studio#963): a line chart's series and the line over an area resolve to `fill: none` and an area has no
+     outline, in this engine's own cascade; and in a screenshot of each chart, the series colour covers a line's
+     pixels, not a filled shape's (decoded on a blank page's canvas).
   7. ONE VERSION PER BURST: in Edit, a drag (25 pointer moves, one op at its end) and a resize of the same component
      within the second land exactly one POST /edits (one version); the composer chip is the host's words for it.
   8. TWO TABS: undo in tab A, then undo in tab B from its stale version → B is told and re-reads; redo in B; A reads
@@ -178,50 +178,6 @@ def main() -> None:
         # 2. CSSOM only
         check("cssom_preview", no_style(frame) == 0, style_attrs=frame.evaluate("() => [...document.querySelectorAll('[style]')].map(e => e.outerHTML.slice(0, 200))"))
 
-        # 2b. studio#963: a line chart draws lines. The series rules set fill AND stroke; the role rules must win in
-        # this engine's cascade (the presentation attribute fill="none" loses to any rule).
-        marks = frame.evaluate("""() => {
-            const css = (sel, prop) => [...document.querySelectorAll(sel)].map((e) => getComputedStyle(e)[prop]);
-            return {
-                line_fill: css('[data-component="trend"] polyline.wk-stroke', 'fill'),
-                over_area_fill: css('[data-component="trend_area"] polyline.wk-stroke', 'fill'),
-                area_stroke: css('[data-component="trend_area"] path.wk-area', 'stroke'),
-                colour: css('[data-component="trend"] polyline.wk-series-0', 'stroke')[0] || '',
-            };
-        }""")
-        # The pixel side: the share of each chart's screenshot painted in the series colour. A 2.5px line is a few
-        # percent of the plot; the bug's filled shape (the line closed back to its first point) is a large part of it.
-        def painted(component: str) -> float:
-            png = frame.locator(f'[data-component="{component}"] svg').screenshot(caret="initial")
-            (SHOTS / f"apps-runtime-{BROWSER}-1b-{component}.png").write_bytes(png)
-            blank = ctx.new_page()
-            try:
-                return blank.evaluate("""async ([b64, colour]) => {
-                    const img = new Image();
-                    img.src = 'data:image/png;base64,' + b64;
-                    await img.decode();
-                    const c = document.createElement('canvas');
-                    c.width = img.naturalWidth;
-                    c.height = img.naturalHeight;
-                    const g = c.getContext('2d');
-                    g.drawImage(img, 0, 0);
-                    const d = g.getImageData(0, 0, c.width, c.height).data;
-                    const [r, gr, b] = (colour.match(/[0-9.]+/g) || []).map(Number);
-                    let hit = 0;
-                    for (let i = 0; i < d.length; i += 4) {
-                        if (Math.abs(d[i] - r) < 24 && Math.abs(d[i + 1] - gr) < 24 && Math.abs(d[i + 2] - b) < 24) hit += 1;
-                    }
-                    return hit / (c.width * c.height);
-                }""", [base64.b64encode(png).decode(), marks["colour"]])
-            finally:
-                blank.close()
-        line_share, area_share = painted("trend"), painted("trend_area")
-        # Back to the top: later steps drag by viewport coordinates.
-        frame.locator('[data-component="search"]').scroll_into_view_if_needed()
-        check("lines_draw_unfilled", marks["line_fill"] == ["none", "none"] and marks["over_area_fill"] == ["none"]
-              and marks["area_stroke"] == ["none"] and marks["colour"].startswith("rgb") and 0 < line_share < 0.08 and 0 < area_share < 0.08,
-              **marks, line_share=round(line_share, 4), area_share=round(area_share, 4))
-
         # 3. S6: the frame cannot reach crew
         before = len(calls(origin))
         fetched = frame.evaluate("""async () => { try { await fetch('/api/v1/apps/fixture-app'); return 'reached'; } catch (e) { return 'refused: ' + e.name; } }""")
@@ -297,6 +253,56 @@ def main() -> None:
         page.wait_for_selector('[data-testid="apps-card"]', state="detached", timeout=5_000)
         page.click('[data-testid="apps-mode-preview"]')
         check("card_expiry_and_edit_cancel", count(origin, "POST", "/run") == 1 and count(origin, "POST", "/prepare") == 5, runs=count(origin, "POST", "/run"), prepares=count(origin, "POST", "/prepare"))
+
+        # 6b. studio#963: a line chart draws lines. The series rules set fill AND stroke; the role rules must win in
+        # this engine's cascade (the presentation attribute fill="none" loses to any rule). After the card steps, not
+        # before S6: S6 counts every request, and the host re-reads the app on a 5 s timer (codex r1).
+        # The charts' query lands on its own: wait for every mark before reading a style (codex r1).
+        frame.wait_for_selector('[data-component="trend"] polyline.wk-stroke >> nth=1', timeout=10_000)
+        frame.wait_for_selector('[data-component="trend_area"] polyline.wk-stroke', timeout=10_000)
+        frame.wait_for_selector('[data-component="trend_area"] path.wk-area', timeout=10_000)
+        marks = frame.evaluate("""() => {
+            const css = (sel, prop) => [...document.querySelectorAll(sel)].map((e) => getComputedStyle(e)[prop]);
+            return {
+                line_fill: css('[data-component="trend"] polyline.wk-stroke', 'fill'),
+                over_area_fill: css('[data-component="trend_area"] polyline.wk-stroke', 'fill'),
+                area_stroke: css('[data-component="trend_area"] path.wk-area', 'stroke'),
+                colour: css('[data-component="trend"] polyline.wk-series-0', 'stroke')[0] || '',
+            };
+        }""")
+        # The pixel side: the share of each chart's screenshot painted in the series colour. A 2.5px line is under 1% of
+        # the plot; the bug's filled shape (the line closed back to its first point) is 25-35% of it. The area chart's
+        # own fill is not counted only because `.wk-area` paints it at opacity .25, far from the full colour.
+        def painted(component: str) -> float:
+            png = frame.locator(f'[data-component="{component}"] svg').screenshot(caret="initial")
+            (SHOTS / f"apps-runtime-{BROWSER}-1b-{component}.png").write_bytes(png)
+            blank = ctx.new_page()
+            try:
+                return blank.evaluate("""async ([b64, colour]) => {
+                    const img = new Image();
+                    img.src = 'data:image/png;base64,' + b64;
+                    await img.decode();
+                    const c = document.createElement('canvas');
+                    c.width = img.naturalWidth;
+                    c.height = img.naturalHeight;
+                    const g = c.getContext('2d');
+                    g.drawImage(img, 0, 0);
+                    const d = g.getImageData(0, 0, c.width, c.height).data;
+                    const [r, gr, b] = (colour.match(/[0-9.]+/g) || []).map(Number);
+                    let hit = 0;
+                    for (let i = 0; i < d.length; i += 4) {
+                        if (Math.abs(d[i] - r) < 24 && Math.abs(d[i + 1] - gr) < 24 && Math.abs(d[i + 2] - b) < 24) hit += 1;
+                    }
+                    return hit / (c.width * c.height);
+                }""", [base64.b64encode(png).decode(), marks["colour"]])
+            finally:
+                blank.close()
+        line_share, area_share = painted("trend"), painted("trend_area")
+        # Back to the top: later steps drag by viewport coordinates.
+        frame.locator('[data-component="search"]').scroll_into_view_if_needed()
+        check("lines_draw_unfilled", marks["line_fill"] == ["none", "none"] and marks["over_area_fill"] == ["none"]
+              and marks["area_stroke"] == ["none"] and marks["colour"].startswith("rgb") and 0.001 < line_share < 0.08 and 0.001 < area_share < 0.08,
+              **marks, line_share=round(line_share, 4), area_share=round(area_share, 4))
 
         # 7. one version per edit burst: a drag (one op at pointerup) and a Properties change within the second land ONE
         # version; the chip is the host's words for the selected component.
