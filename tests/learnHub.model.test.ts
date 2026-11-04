@@ -11,13 +11,13 @@ import type { ConformanceRule, SessionView } from '../src/api/types.js';
 describe('Learn in the sidebar (§3.0)', () => {
   it('sits first in Work, above Projects and marked, until used; then last in Insight, below Evaluate, unmarked', () => {
     const start = navGroups('start');
-    expect(start.find((g) => g.id === 'work')!.items.map((i) => i.id)).toEqual(['learn', 'projects', 'jobs', 'repos']);
+    expect(start.find((g) => g.id === 'work')!.items.map((i) => i.id)).toEqual(['learn', 'projects', 'jobs', 'apps', 'repos']);
     expect(start.find((g) => g.id === 'work')!.items[0]!.mark).toBe('Start here');
     expect(start.find((g) => g.id === 'insight')!.items.map((i) => i.id)).toEqual(['report', 'understand', 'evaluate']);
     const used = navGroups('insight');
     expect(used.find((g) => g.id === 'insight')!.items.map((i) => i.id)).toEqual(['report', 'understand', 'evaluate', 'learn']);
     expect(used.find((g) => g.id === 'insight')!.items.at(-1)!.mark).toBeUndefined();
-    expect(used.find((g) => g.id === 'work')!.items.map((i) => i.id)).toEqual(['projects', 'jobs', 'repos']);
+    expect(used.find((g) => g.id === 'work')!.items.map((i) => i.id)).toEqual(['projects', 'jobs', 'apps', 'repos']);
     // The constant groups are untouched (Learn is placed by navGroups only).
     expect(NAV_GROUPS.flatMap((g) => g.items).some((i) => i.id === 'learn')).toBe(false);
   });
