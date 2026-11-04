@@ -6,12 +6,15 @@ import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { AppAdapter, type AppHostPort, type AppMode } from '../../editors/apps/appAdapter.js';
 import { appDataFor, sampleAppData, type ActionCard, type ActionOutcome, type AppDataPort, type PreparedAction } from '../../editors/apps/appData.js';
-import { AppSession } from '../../editors/apps/appSession.js';
+import { AppSession, drainForSend } from '../../editors/apps/appSession.js';
 import { CrewAppStore, SampleAppStore, type AppStorePort } from '../../editors/apps/appStore.js';
 import { sampleApp } from '../../editors/apps/samples.js';
 import { isAppSlug, publishedOf } from '../../editors/apps/appsDirectory.js';
 import { ShareSheet } from '../apps/ShareSheet.js';
 import { AppChat, appComposerKey } from '../apps/AppChat.js';
+import { AppProperties } from '../apps/AppProperties.js';
+import { AppSidePanel, readCollapsed, readSeen, writeSeen, type PanelTab } from '../apps/AppSidePanel.js';
+import { turnsOf } from '../../editors/apps/appTurns.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 import { recordingPort } from '../../editors/apps/previewSnapshots.js';
 
@@ -188,6 +191,11 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const [viewer, setViewer] = useState<string | null>(null);
   /** (K5) crew runs chat turns for this app (health `capabilities.apps.turns`). */
   const [turnsOn, setTurnsOn] = useState(false);
+  /** (K5) The side panel: Chat (the default) or Properties; collapsed is remembered across sessions. */
+  const [panelTab, setPanelTab] = useState<PanelTab>('chat');
+  const [collapsed, setCollapsed] = useState<boolean>(() => readCollapsed());
+  // Bumped when the working spec changes (a Properties edit, a burst): the panel reads the session again.
+  const [, setSpecTick] = useState(0);
   const [mountKey, setMountKey] = useState(0);
   const frameBox = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<EditorHost | null>(null);
@@ -250,13 +258,14 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       setDetail(loaded);
       off = session.on((e) => {
         if (e.kind === 'head') { setDetail(e.app); if (e.by === 'this-session') setStatus(`Saved as v${e.app.head.version}`); }
-        if (e.kind === 'pending') setPending(e.count);
+        if (e.kind === 'pending') { setPending(e.count); setSpecTick((n) => n + 1); }
         if (e.kind === 'failed') setStatus(e.message);
       });
       const who = data.viewer().email ?? 'you';
       setViewer(who);
+      const hostProps = store.kind === 'crew' && caps?.turns === true;
       const port: AppHostPort = {
-        session, data,
+        session, data, ...(hostProps ? { propsHost: true } : {}),
         framed: () => framed,
         mode: () => modeRef.current,
         editing: () => modeRef.current === 'edit' || Date.now() - editLeftRef.current < SPEC_EDIT_AFTER_FOCUS_MS,
@@ -284,7 +293,12 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         adapter: new AppAdapter(session, loaded.name),
         app: port,
         ui: {
-          chips: (c) => { setChips(c); if (store.kind === 'crew') mirrorSelection(store.slug, c); }, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {},
+          chips: (c) => {
+            setChips(c);
+            if (store.kind === 'crew') mirrorSelection(store.slug, c);
+            // (K5) Selecting a component opens Properties for it in the side panel.
+            if (c.some((x) => x.anchor.kind === 'element')) { setPanelTab('properties'); setCollapsed(false); }
+          }, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {},
           status: (line) => setStatus(line), notes: () => {}, thread: () => {},
           writeFailed: (m) => setStatus(m),
           fullscreen: async () => false,
@@ -356,8 +370,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
     if (s === null) return null;
     // Every edit made before Send lands first, those made while one landed included (xreview r2: one flush left
     // them for a later burst that the turn would then refuse).
-    for (let i = 0; i < 6 && s.pending > 0; i += 1) if (!(await s.flush())) return null;
-    return s.pending > 0 ? null : s.head;
+    return drainForSend(s);
   };
 
   const history = detail?.history;
@@ -413,7 +426,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             : <span className="wk-apps-line--note">{chatOn ? 'Select a component to ask the chat about just that one.' : 'Select a component to make it the subject of your next message.'}</span>}
         </p>
       )}
-      <div className="wk-apps-body" data-mode={shown} data-chat={chatOn}>
+      <div className="wk-apps-body" data-mode={shown} data-chat={chatOn} data-panel={chatOn && collapsed && asking === null && link === null ? 'collapsed' : 'open'}>
         <div className="wk-apps-frame" ref={frameWrap}>
           {torn !== null && (
             <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-torn">{torn} · <button type="button" className="wk-btn wk-btn--link" onClick={() => setMountKey((k) => k + 1)}>Reload it</button></p>
@@ -446,14 +459,42 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         </aside>);
           // Without chat the dock is the body's second column, exactly as K4 drew it (xreview r1 on K5: a wrapper changed
           // the canvas's size there); with chat the dock sits above the chat in one side column.
-          return chatOn ? (
+          if (!chatOn) return dock;
+          const turns = turnsOf(detail);
+          const lastEnded = [...turns].reverse().find((t) => t.state !== 'running');
+          const mark = lastEnded === undefined ? '' : `${lastEnded.runId}:${lastEnded.state}`;
+          const chatSeen = !collapsed && panelTab === 'chat';
+          if (chatSeen && mark !== '' && readSeen(slug) !== mark) writeSeen(slug, mark);
+          const unread = !chatSeen && mark !== '' && readSeen(slug) !== mark;
+          const selectedId = chips.find((x) => x.anchor.kind === 'element')?.anchor;
+          const selId = selectedId !== undefined && selectedId.kind === 'element' ? selectedId.id : null;
+          // A card or a link question waiting opens the panel: it must never wait unseen.
+          const waiting = asking !== null || link !== null;
+          return (
             <div className="wk-apps-side">
-              {dock}
-              <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
-                onSent={() => { void sessionRef.current?.refresh(); }} prepareSend={prepareSend} pending={pending}
-                onUndo={() => { if ((sessionRef.current?.pending ?? 0) > 0) { setStatus('Your last edit is still saving: Undo after it lands.'); return; } void move('undo'); }} />
+              <AppSidePanel slug={slug} tab={panelTab} setTab={setPanelTab} collapsed={collapsed && !waiting} setCollapsed={setCollapsed}
+                busy={detail.turn != null} unread={unread} dock={dock} phone={narrowWindow}
+                chat={(
+                  <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
+                    onSent={() => { void sessionRef.current?.refresh(); }} prepareSend={prepareSend} pending={pending}
+                    onUndo={() => { if ((sessionRef.current?.pending ?? 0) > 0) { setStatus('Your last edit is still saving: Undo after it lands.'); return; } void move('undo'); }} />
+                )}
+                properties={(
+                  <AppProperties key={selId ?? ''} spec={sessionRef.current?.spec ?? detail.spec} selected={selId}
+                    editable={shown === 'edit' && !framed && !narrow && detail.turn == null}
+                    readOnlyWhy={framed ? 'This page is inside another page, so the app cannot be changed here.' : narrow ? 'Edit on a larger screen: properties change in Edit.' : detail.turn != null ? 'A turn is changing the app: properties wait until it lands.' : shown !== 'edit' ? 'Open Edit, then select a component to change it here.' : null}
+                    onOps={(ops) => {
+                      const s = sessionRef.current;
+                      if (s === null) return { ok: false, message: 'the app is not loaded yet' };
+                      const r = s.edit(s.head, ops);
+                      if (!r.ok) return { ok: false, message: r.message };
+                      hostRef.current?.appChangedByHost();
+                      setSpecTick((n) => n + 1);
+                      return { ok: true };
+                    }} />
+                )} />
             </div>
-          ) : dock;
+          );
         })()}
       </div>
       {sharing && detail !== null && (

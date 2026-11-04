@@ -466,7 +466,7 @@ export class EditorHost {
     const v3 = observes ? { observe: { runId: this.o.events!.runId, topics: [...this.o.events!.topics], ...(sc !== undefined ? { scope: { phase: sc.phase, label: sc.label, ords: [...sc.ords] } } : {}), ...(this.o.events?.panel !== undefined ? { panel: { slot: this.o.events.panel.slot, id: this.o.events.panel.id } } : {}) } } : {};
     this.frame.contentWindow?.postMessage(event('host.hello', {
       protocol: this.protocol, ...v2, ...v3,
-      ...(this.o.app !== undefined ? { app: { framed: this.o.app.framed(), mode: this.o.app.mode(), viewer: this.o.app.viewer(), url: { ...(this.o.app.url?.() ?? {}) }, ...(this.o.app.tile !== undefined ? { tile: true, rows: this.o.app.tile.rows } : {}) } } : {}),
+      ...(this.o.app !== undefined ? { app: { framed: this.o.app.framed(), mode: this.o.app.mode(), viewer: this.o.app.viewer(), url: { ...(this.o.app.url?.() ?? {}) }, ...(this.o.app.tile !== undefined ? { tile: true, rows: this.o.app.tile.rows } : {}), ...(this.o.app.propsHost === true ? { propsHost: true } : {}) } } : {}),
       artifact: a, size: this.o.size, grants: [...this.grants],
       theme: this.o.theme, artifactTheme: null, prefs: this.o.prefs,
       limits: { messageBytes: LIMITS.messageBytes, writeOps: LIMITS.writeOps, writeBytes: LIMITS.writeBytes },
@@ -1194,6 +1194,13 @@ export class EditorHost {
   /** A version the host's own chrome wrote for this artifact (Match a website, HOST-API §4 tab footers): this editor's
    *  session owns it, so the thread line's Undo (`undo`) may fork back from it. */
   adopt(version: number): void { if (!this.torn) this.ownVersions.add(version); }
+
+  /** (K5) The host changed the app itself (its Properties panel): the runtime reads the working spec again. */
+  appChangedByHost(): void {
+    if (this.torn || this.o.app === undefined) return;
+    const head = this.o.adapter.artifact().head;
+    this.post(event('artifact.changed', { version: head, head, by: 'this-editor', kind: 'deterministic' }));
+  }
 
   /** A new version landed (interactive `version.created`): the plugin hears who wrote it. */
   artifactChanged(version: number, kind: VersionKind): void {

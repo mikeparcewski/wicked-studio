@@ -244,3 +244,12 @@ export class AppSession {
     else this.clearTimer();
   }
 }
+
+/**
+ * (K5) Before a chat message is sent: land every pending edit, those made while one landed included, and answer the
+ * head they made; null when an edit could not be saved or edits keep arriving (the message then waits).
+ */
+export async function drainForSend(s: { readonly pending: number; readonly head: number; flush(): Promise<boolean> }, rounds = 6): Promise<number | null> {
+  for (let i = 0; i < rounds && s.pending > 0; i += 1) if (!(await s.flush())) return null;
+  return s.pending > 0 ? null : s.head;
+}

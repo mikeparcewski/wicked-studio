@@ -3,7 +3,7 @@ import type { AppDetail, SessionView } from '../../api/types.js';
 import { sourcesApi } from '../../api/sources.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { busyText, changeLine, componentWords, endedLine, hasTurnLog, seatWord, sendTurn, suggestionsFor, turnsOf, type AppTurnRecord } from '../../editors/apps/appTurns.js';
-import { addAboutChip } from '../../store/composerChips.js';
+import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 import type { ComposerSuggestion } from '../session/Composer.js';
 import { AppComposer } from './AppComposer.js';
 import { LiveActivity } from '../session/LiveActivity.js';
@@ -184,7 +184,7 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
     // refused one is named in the note and the newer draft is left alone.
     if (textRef.current.trim() !== words) {
       setRefused({ words, about });
-      setNote(`Not sent (${why}). It is kept: put it back when you are ready.`);
+      setNote(`Not sent (${why}). It is kept below: put it back when you are ready.`);
     } else {
       setNote(`Not sent: ${why}.`);
     }
@@ -217,19 +217,22 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
           </article>
         ))}
       </div>
-      {note !== null && (
-        <p className="wk-appchat-note" data-testid="app-chat-note" role="status">
-          {note}
-          {refused !== null && (
-            <> <button type="button" className="wk-btn wk-btn--link" data-testid="app-chat-putback" onClick={() => {
-              // Swap: the kept message goes back in the box (with its components); the draft there is kept in its place.
-              const now = textRef.current;
-              setTextState(refused.words);
-              for (const id of refused.about) addAboutChip(key, { kind: 'about', key: `cmp:${id}`, label: componentWords(detail?.spec ?? null, id) ?? id });
-              setRefused(now.trim() !== '' ? { words: now, about: [] } : null);
-              if (now.trim() === '') setNote(null);
-            }}>Put it back in the box</button></>
-          )}
+      {note !== null && <p className="wk-appchat-note" data-testid="app-chat-note" role="status">{note}</p>}
+      {refused !== null && (
+        // Kept until it is put back, whatever is sent meanwhile (xreview r3 on K5).
+        <p className="wk-appchat-note wk-appchat-kept" data-testid="app-chat-kept">
+          Kept, not sent: “{refused.words.length > 80 ? `${refused.words.slice(0, 79)}…` : refused.words}”{' '}
+          <button type="button" className="wk-btn wk-btn--link" data-testid="app-chat-putback" onClick={() => {
+            // Swap, with each message's own components: the kept one goes in the box with ITS chips; the draft there
+            // (with its chips) is kept in its place.
+            const nowWords = textRef.current;
+            const nowChips = chipsOf(useComposerChips.getState(), key).filter((c) => c.kind === 'about' && c.key.startsWith('cmp:'));
+            for (const c of nowChips) removeAboutChip(key, c.key);
+            setTextState(refused.words);
+            for (const id of refused.about) addAboutChip(key, { kind: 'about', key: `cmp:${id}`, label: componentWords(detail?.spec ?? null, id) ?? id });
+            setRefused(nowWords.trim() !== '' || nowChips.length > 0 ? { words: nowWords, about: nowChips.map((c) => c.key.slice(4)) } : null);
+            setNote(null);
+          }}>Put it back in the box</button>
         </p>
       )}
       <div className="wk-appchat-composer">

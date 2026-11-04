@@ -8,6 +8,7 @@ import { TileScheduler, tileEveryMs, tileKpis, type QueryOutcome } from '../src/
 import { SAMPLE_APPS } from '../src/editors/apps/samples.js';
 import { recordingPort, resetSnapshots, snapshotAt, snapshotPort } from '../src/editors/apps/previewSnapshots.js';
 import { useComposerChips } from '../src/store/composerChips.js';
+import { drainForSend } from '../src/editors/apps/appSession.js';
 
 /**
  * DES-APPS-001 K5 (operator 2026-11-04: "I should be driving the changes mostly via chat"; "dashboard should show real
@@ -126,8 +127,11 @@ describe('the app chat: crew\'s turn log, in words', () => {
     act(() => release!());
     await waitFor(() => expect(screen.getByTestId('app-chat-putback')).toBeTruthy());
     expect((screen.getByTestId('app-composer-input') as HTMLTextAreaElement).value).toBe('second');
+    expect(screen.getByTestId('app-chat-kept').textContent).toMatch(/^Kept, not sent: “first x/u);
     fireEvent.click(screen.getByTestId('app-chat-putback'));
     expect((screen.getByTestId('app-composer-input') as HTMLTextAreaElement).value).toBe(long);
+    // The draft it replaced is kept in its place, to put back in turn.
+    expect(screen.getByTestId('app-chat-kept').textContent).toMatch(/second/u);
   });
 
   it('framed, a running turn shows its steps but no live controls; a turn\'s Undo waits while an edit saves', () => {
@@ -140,6 +144,17 @@ describe('the app chat: crew\'s turn log, in words', () => {
     unmount();
     render(<AppChat slug="desk" detail={detail()} runs={[]} framed={false} pending={1} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
     expect(screen.queryByTestId('app-chat-undo')).toBeNull();
+  });
+
+  it('Send drains every pending edit, those made while one landed included; a failed save or a stream of edits waits', async () => {
+    // A session whose first save lands one edit while another arrives (it stays pending), then lands that one too.
+    const fake = { pending: 2, head: 3, saves: 0, async flush() { this.saves += 1; this.head += 1; this.pending -= 1; return true; } };
+    expect(await drainForSend(fake)).toBe(5);
+    expect(fake.saves).toBe(2);
+    expect(await drainForSend({ pending: 1, head: 3, flush: async () => false })).toBeNull();
+    const busy = { pending: 1, head: 3, flush: async () => true };
+    expect(await drainForSend(busy)).toBeNull();
+    expect(await drainForSend({ pending: 0, head: 7, flush: async () => true })).toBe(7);
   });
 
   it('an edit burst the person just made lands before the message, which is sent on the head it made', async () => {

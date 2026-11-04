@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 304,
-    "occurrences": 4357,
-    "static": 3658,
-    "dynamic": 144,
-    "computed": 49
+    "files": 308,
+    "occurrences": 4408,
+    "static": 3681,
+    "dynamic": 160,
+    "computed": 50
   },
   "static": [
     {
@@ -591,6 +591,12 @@
       ]
     },
     {
+      "testId": "app-chat-kept",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
       "testId": "app-chat-landed",
       "files": [
         "src/components/apps/AppChat.tsx"
@@ -666,6 +672,102 @@
       "testId": "app-composer",
       "files": [
         "src/components/apps/AppComposer.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-busy",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-chat",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-properties",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-toggle",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-unread",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-alt",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-caption",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-label",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-remove",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-text",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-title",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-properties",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-properties-empty",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-properties-note",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-properties-what",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
       ]
     },
     {
@@ -3195,6 +3297,12 @@
       ]
     },
     {
+      "testId": "data-panel-ask",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
       "testId": "data-panel-chip",
       "files": [
         "src/components/sources/DataPanel.tsx"
@@ -3225,6 +3333,12 @@
       ]
     },
     {
+      "testId": "data-panel-open-source",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
       "testId": "data-panel-source",
       "files": [
         "src/components/sources/DataPanel.tsx"
@@ -3238,6 +3352,12 @@
     },
     {
       "testId": "data-panel-tables",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-test",
       "files": [
         "src/components/sources/DataPanel.tsx"
       ]
@@ -18420,6 +18540,12 @@
       ]
     },
     {
+      "testId": "source-ask",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
       "testId": "source-auth-header",
       "files": [
         "src/components/sources/SourceSheet.tsx"
@@ -18438,6 +18564,12 @@
       ]
     },
     {
+      "testId": "source-connection-test",
+      "files": [
+        "src/components/sources/ConnectionTest.tsx"
+      ]
+    },
+    {
       "testId": "source-crew-routes",
       "files": [
         "src/components/sources/SourceSheet.tsx"
@@ -18445,12 +18577,6 @@
     },
     {
       "testId": "source-database",
-      "files": [
-        "src/components/sources/SourceSheet.tsx"
-      ]
-    },
-    {
-      "testId": "source-describe",
       "files": [
         "src/components/sources/SourceSheet.tsx"
       ]
@@ -18615,6 +18741,18 @@
       "testId": "source-test-call",
       "files": [
         "src/components/sources/TestCall.tsx"
+      ]
+    },
+    {
+      "testId": "source-test-connection",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-test-connection-note",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
       ]
     },
     {
@@ -22123,6 +22261,18 @@
       ]
     },
     {
+      "pattern": "*-check",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
+      "pattern": "*-check-run",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
       "pattern": "*-chip",
       "files": [
         "src/components/SteeringRuleForm.tsx",
@@ -22190,6 +22340,12 @@
       ]
     },
     {
+      "pattern": "*-draft",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
       "pattern": "*-editor",
       "files": [
         "src/components/SteeringGrid.tsx"
@@ -22200,6 +22356,7 @@
       "files": [
         "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx",
+        "src/components/sources/AskData.tsx",
         "src/components/sources/TestCall.tsx"
       ]
     },
@@ -22207,6 +22364,12 @@
       "pattern": "*-every",
       "files": [
         "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-explanation",
+      "files": [
+        "src/components/sources/AskData.tsx"
       ]
     },
     {
@@ -22375,6 +22538,12 @@
       ]
     },
     {
+      "pattern": "*-question",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
       "pattern": "*-readonly",
       "files": [
         "src/components/apps/AppComposer.tsx"
@@ -22425,6 +22594,7 @@
     {
       "pattern": "*-result",
       "files": [
+        "src/components/sources/AskData.tsx",
         "src/components/sources/TestCall.tsx"
       ]
     },
@@ -22438,6 +22608,30 @@
       "pattern": "*-row",
       "files": [
         "src/components/RepoFindings.tsx"
+      ]
+    },
+    {
+      "pattern": "*-rows",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
+      "pattern": "*-run",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
+      "pattern": "*-run-error",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
+      "pattern": "*-scroll",
+      "files": [
+        "src/components/sources/AskData.tsx"
       ]
     },
     {
@@ -22508,6 +22702,18 @@
       ]
     },
     {
+      "pattern": "*-sql",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
+      "pattern": "*-stale",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
       "pattern": "*-state",
       "files": [
         "src/components/sources/AllowWritesSwitch.tsx",
@@ -22535,6 +22741,7 @@
     {
       "pattern": "*-summary",
       "files": [
+        "src/components/sources/AskData.tsx",
         "src/components/sources/TestCall.tsx"
       ]
     },
@@ -22594,6 +22801,24 @@
       ]
     },
     {
+      "pattern": "*-write-own",
+      "files": [
+        "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
+      "pattern": "app-panel-rail-*",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "pattern": "app-panel-tab-*",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
       "pattern": "chat-narration-raw-*",
       "files": [
         "src/components/ChatThread.tsx"
@@ -22603,6 +22828,12 @@
       "pattern": "chat-narration-toggle-*",
       "files": [
         "src/components/ChatThread.tsx"
+      ]
+    },
+    {
+      "pattern": "data-panel-source-menu-*",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
       ]
     },
     {
@@ -22912,6 +23143,12 @@
       ]
     },
     {
+      "pattern": "source-connection-test-*",
+      "files": [
+        "src/components/sources/ConnectionTest.tsx"
+      ]
+    },
+    {
       "pattern": "source-kind-*",
       "files": [
         "src/components/sources/SourceSheet.tsx"
@@ -23067,6 +23304,7 @@
         "src/components/agents/AgentsPage.tsx",
         "src/components/agents/SetupPanel.tsx",
         "src/components/apps/AppComposer.tsx",
+        "src/components/apps/AppProperties.tsx",
         "src/components/ask/AskCard.tsx",
         "src/components/calm/Calm.tsx",
         "src/components/charts/CategoryBars.tsx",
@@ -23089,6 +23327,7 @@
         "src/components/session/RunDataUse.tsx",
         "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx",
+        "src/components/sources/AskData.tsx",
         "src/components/sources/DataPanel.tsx",
         "src/components/sources/SecretField.tsx",
         "src/components/sources/TestCall.tsx",
@@ -23184,6 +23423,12 @@
       "expression": "testId = 'source-allow-writes'",
       "files": [
         "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'source-ask'",
+      "files": [
+        "src/components/sources/AskData.tsx"
       ]
     },
     {
