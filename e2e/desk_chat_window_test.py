@@ -106,6 +106,9 @@ with sync_playwright() as p:
             page.screenshot(path=str(SHOTS / f"desk-chat-window-nochat-{w}.png"))
             fail(f"chat-opened-{w}", str(e))
         chat_id = page.evaluate("() => JSON.parse(sessionStorage.getItem('wicked.ask.session') || '{}').chatId || ''")
+        # The block mounts once the send is acknowledged; a frame broadcast before it would have no listener (review r2).
+        page.locator(f'[data-testid="system-chat"] [data-testid="assist-chat"][data-chat-id="{chat_id}"]').wait_for(timeout=15000)
+        page.wait_for_timeout(500)
         set_fixture(origin, chat_frames=[{"type": "chatReply", "chat": chat_id, "cliKey": "claude", "ok": True, "text": answer(1)}])
         page.locator('[data-testid="system-chat"] [data-testid="assist-chat-msg"][data-agent="claude"][data-pending="false"]').first.wait_for(timeout=15000)
         box.fill(Q2)

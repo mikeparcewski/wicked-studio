@@ -286,7 +286,8 @@ describe('Understand → Knowledge', () => {
     });
     const gardenShape: Proposal = {
       id: 'p-garden', kind_type: 'knowledge', facets: {}, provenance: { run_agent: 'claude', run_id: 'r-2' }, state: 'pending', created_at: 1_700_000_000,
-      payload: { content: 'support.tickets: one row per ticket.', source: 'garden:data-shapes/support-pg/support.tickets', class: 'concept', scope: `source:${SID}`, capture: 'shapes', relate: [], relate_code: [{ rel: 'describes', code_id: 'x', repo: 'escalations' }] },
+      // Only `relate_code` (review r2: each link key on its own makes a shape).
+      payload: { content: 'support.tickets: one row per ticket.', source: 'garden:data-shapes/support-pg/support.tickets', class: 'concept', scope: `source:${SID}`, capture: 'shapes', relate_code: [{ rel: 'describes', code_id: 'x', repo: 'escalations' }] },
     };
     const cards = [
       note('p-probe', '__PROBE__ test', 'wicked-core:src/actor.rs', 'probe', 'pi'),

@@ -201,6 +201,38 @@ describe('AssistDock — the chat block', () => {
     expect(order).toEqual(['q1', 'a1', 'q2', 'network down', 'q2 again', 'a2']);
   });
 
+  // Review r2 (codex): with a note after the chat's block (a probe error, a gate line), a failed follow-up still joins it.
+  it('a failed follow-up joins its chat even when a note follows the block', async () => {
+    const user = userEvent.setup();
+    const send = vi.fn()
+      .mockResolvedValueOnce({ chatId: 'chat-1' })
+      .mockResolvedValueOnce({ chatId: 'chat-1' })
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({ chatId: 'chat-1' });
+    dock({ send });
+    await user.type(screen.getByTestId('assist-input'), 'q1');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+    act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'a1', ok: true })));
+    // An attachment writes a thread note after the block ("Attached notes.txt for analysis …").
+    await user.upload(screen.getByTestId('assist-attach'), new File(['some notes'], 'notes.txt', { type: 'text/plain' }));
+    await waitFor(() => expect(screen.getByTestId('assist-thread').lastElementChild).toHaveAttribute('data-testid', 'assist-note'));
+    await user.type(screen.getByTestId('assist-input'), 'q2');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(2));
+    await user.clear(screen.getByTestId('assist-input'));
+    await user.type(screen.getByTestId('assist-input'), 'q3');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByText(/network down/);
+    await user.clear(screen.getByTestId('assist-input'));
+    await user.type(screen.getByTestId('assist-input'), 'q3 again');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(4));
+    const block = screen.getByTestId('assist-chat');
+    expect([...block.querySelectorAll('[data-testid="assist-chat-msg"], [data-testid="assist-note"]')].map((el) => (el.textContent ?? '').replace(/^(you|claude)/u, '').replace(/^· /u, '').trim()))
+      .toEqual(['a1', 'q2📎 notes.txt', 'q3', 'network down', 'q3 again']);
+  });
+
   // Review r1 (codex, pi): a follow-up sent while a past chat's history was loading made the replay drop the history.
   it('a follow-up sent while a resumed chat replays its history comes after that history', async () => {
     const user = userEvent.setup();

@@ -712,6 +712,8 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   /** A page chat's follow-ups, by chat: drawn inside that chat's block. */
   const [inlineTurns, setInlineTurns] = useState<Record<string, InlineTurn[]>>({});
   const turnSeq = useRef(0);
+  /** Chats shown from their kept history that have ended: a failed send never joins one (the next question starts anew). */
+  const endedChats = useRef(new Set<string>());
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   /** File mode: the files the next send uploads (removable chips above the input). Each has its own id:
    *  two different files may share a name and a size. */
@@ -884,11 +886,12 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         return;
       }
       const msg = e instanceof Error ? e.message : String(e);
-      // A failed follow-up stays where it was asked: when the thread ends in a chat's block, the question and its
-      // error join that block, so a retry that succeeds (it joins the same block) reads after them, not above.
-      const tail = itemsRef.current[itemsRef.current.length - 1];
-      if (tail !== undefined && tail.kind === 'chat') {
-        const into = tail.chatId;
+      // A failed follow-up stays where it was asked: when the newest launch on screen is a chat that has not ended
+      // (notes after it do not count), the question and its error join that chat's block, so a retry that succeeds
+      // (it joins the same block) reads after them, not above.
+      const launch = [...itemsRef.current].reverse().find((it) => it.kind === 'chat' || it.kind === 'run');
+      if (launch !== undefined && launch.kind === 'chat' && !endedChats.current.has(launch.chatId)) {
+        const into = launch.chatId;
         setInlineTurns((cur) => ({ ...cur, [into]: [...(cur[into] ?? []), { id: (turnSeq.current += 1), text: body, files: fileNames, at: sentAt, failed: msg }] }));
       } else {
         push({ kind: 'user', text: body, files: fileNames });
@@ -967,6 +970,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
    *  not tell → keep it and show the transient error. */
   const onResumeProbe = (chatId: string, outcome: ResumeProbe): void => {
     if (outcome.kind === 'ended') {
+      endedChats.current.add(chatId);
       // Closed with its history kept: the block stays (read-only), and the next question starts anew.
       setItems((cur) => [
         ...cur.filter((it) => !(it.kind === 'note' && it.text === RESUMED_NOTE)),
