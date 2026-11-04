@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ApiError } from '../../api/errors.js';
+import { isRouteAbsent } from '../../api/errors.js';
 import { dataUseWords, sourceAgentsApi, type RunDataUseResponse } from '../../api/sourceAgents.js';
 
 /**
@@ -14,8 +14,8 @@ export function RunDataUse({ runId, refresh = 0, testId = 'run-data-use' }: { ru
     let live = true;
     Promise.resolve().then(() => sourceAgentsApi.runDataUse(runId)).then(
       (r) => { if (live) setUse(r); },
-      // A crew without the route (404) shows nothing; any other failure is UNKNOWN, never "none" (codex r1).
-      (e: unknown) => { if (live) setUse(e instanceof ApiError && e.status === 404 ? null : { runId, known: false, sources: [] }); },
+      // A crew without the route shows nothing; any other failure (a named 404 included) is UNKNOWN, never "none".
+      (e: unknown) => { if (live) setUse(isRouteAbsent(e) ? null : { runId, known: false, sources: [] }); },
     );
     return () => { live = false; };
   }, [runId, refresh]);

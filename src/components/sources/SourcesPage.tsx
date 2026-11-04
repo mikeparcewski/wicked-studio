@@ -194,7 +194,11 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
             void refresh();
           }}
           onAllowWrites={setWrites}
-          onAgents={(name, agents) => setSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)))}
+          onAgents={(name, agents) => {
+            setSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)));
+            // A list read started before this change must not land over it: a fresh read supersedes it (codex r2).
+            void refresh();
+          }}
           onDescribed={(name) => setEpochs((m) => ({ ...m, [name]: (Object.hasOwn(m, name) ? (m[name] ?? 0) : 0) + 1 }))}
           onClose={close}
         />

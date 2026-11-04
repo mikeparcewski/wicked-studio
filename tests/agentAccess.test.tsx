@@ -149,6 +149,11 @@ describe('a job\'s data use on its gate card', () => {
     apiFetch.mockImplementationOnce(() => Promise.reject(new ApiError(500, 'boom')));
     render(<RunDataUse runId="run-1" testId="gate-data" />);
     await waitFor(() => expect(screen.getByTestId('gate-data').getAttribute('data-known')).toBe('false'));
+    cleanup();
+    // A NAMED 404 comes from a crew that has the route: not known, never hidden (codex r2).
+    apiFetch.mockImplementationOnce(() => Promise.reject(new ApiError(404, 'unknown run: run-1')));
+    render(<RunDataUse runId="run-1" testId="gate-data" />);
+    await waitFor(() => expect(screen.getByTestId('gate-data').getAttribute('data-known')).toBe('false'));
   });
 });
 
