@@ -63,7 +63,7 @@ LISTS = {"desk": JOURNEYS, "behaviour": JOURNEYS}
 # Journeys that need a live daemon or bridge: a real wicked-crew daemon (seed_surfaces,
 # studio_standalone, test_feature_live) or a sibling wicked-interactive checkout
 # (interactive_wire_contract). Operator-run only; never part of --all or CI.
-LIVE = ["seed_surfaces", "studio_standalone", "test_feature_live", "interactive_wire_contract", "live_walkthrough_deliver", "live_ask_path"]
+LIVE = ["seed_surfaces", "studio_standalone", "test_feature_live", "interactive_wire_contract", "live_walkthrough_deliver", "live_ask_path", "apps_chat_live"]
 
 TIMEOUT_S = 240
 # LIVE journeys wait for real model turns: their own budget (seconds) when run through this runner.

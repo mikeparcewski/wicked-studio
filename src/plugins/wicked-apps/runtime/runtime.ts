@@ -87,6 +87,8 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   /** A dashboard tile (the Apps page): read-only, nothing reacts, and with `rows` false no query is ever sent. */
   let tile = false;
   let tileRows = false;
+  /** (K5) The host draws Properties in its own panel (Chat | Properties): Edit draws no Properties column. */
+  let propsHost = false;
   let mode: Mode = 'preview';
   let surface: 'card' | 'full' = 'full';
   let locale = 'en';
@@ -181,6 +183,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     framed = app['framed'] !== false;
     tile = app['tile'] === true;
     tileRows = tile && app['rows'] === true;
+    propsHost = app['propsHost'] === true;
     mode = app['mode'] === 'edit' ? 'edit' : 'preview';
     surface = p['surface'] === 'card' || p['size'] === 'inline' ? 'card' : 'full';
     // The page's URL parameters, as the HOST read them for this app (`url.<name>` bindings).
@@ -629,8 +632,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
 
   const select = (id: string | null): void => {
+    const was = selected;
     selected = id;
     if (id !== null && grants.has('selection.chip')) say('selection.set', { anchors: [{ kind: 'element', id }] });
+    // (K5) A selection that ends is said too, so a host's Properties never keeps a component nothing selects.
+    else if (id === null && was !== null && grants.has('selection.chip')) say('selection.set', { anchors: [] });
   };
 
   /** A move or a resize: the box follows the pointer (CSSOM), and ONE op is sent when the pointer comes up. */
@@ -955,7 +961,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       const b = el('button', pg.id === pageId ? 'wk-page is-on' : 'wk-page', lineOf(pg.title, 80));
       b.type = 'button';
       b.setAttribute('aria-current', pg.id === pageId ? 'page' : 'false');
-      b.addEventListener('click', () => { if (pageId !== pg.id) { pageId = pg.id; selected = null; draw(); queryAll(); } });
+      b.addEventListener('click', () => { if (pageId !== pg.id) { pageId = pg.id; select(null); draw(); queryAll(); } });
       nav.append(b);
     }
     main.append(nav);
@@ -1016,7 +1022,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
       for (const part of parts) root.insertBefore(part, propsNode);
       return;
     }
-    propsNode = sel !== undefined ? drawProps(sel) : editing() ? drawPropsEmpty() : null;
+    propsNode = propsHost ? null : sel !== undefined ? drawProps(sel) : editing() ? drawPropsEmpty() : null;
     propsFor = sel?.id ?? null;
     root.replaceChildren(...parts, ...(propsNode !== null ? [propsNode] : []));
     if (had !== null) [...root.querySelectorAll<HTMLElement>('[data-prop]')].find((e) => e.getAttribute('data-prop') === had)?.focus({ preventScroll: true });
@@ -1027,7 +1033,7 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   const refreshSelection = (): void => {
     for (const cell of root.querySelectorAll('[data-component]')) cell.classList.toggle('is-selected', editing() && cell.getAttribute('data-component') === selected);
     const sel = editing() && selected !== null ? components().find((c) => c.id === selected) : undefined;
-    const next = sel !== undefined ? drawProps(sel) : editing() ? drawPropsEmpty() : null;
+    const next = propsHost ? null : sel !== undefined ? drawProps(sel) : editing() ? drawPropsEmpty() : null;
     if (propsNode !== null && next !== null && propsNode.parentNode === root) propsNode.replaceWith(next);
     else { propsNode?.remove(); if (next !== null) root.append(next); }
     propsNode = next;
@@ -1159,11 +1165,11 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && editing() && selected !== null) {
       e.preventDefault();
       const id = selected;
-      selected = null;
+      select(null);
       void edit([{ op: 'component-remove', id }]);
       return;
     }
-    if (e.key === 'Escape' && selected !== null && !inField) { selected = null; draw(); }
+    if (e.key === 'Escape' && selected !== null && !inField) { select(null); draw(); }
   }
   document.addEventListener('keydown', onKey);
 

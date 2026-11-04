@@ -192,7 +192,7 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
     // never sees (codex r1).
     titleRef.current = next?.session.initialize?.serverInfo?.name ?? 'MCP server';
     tell(statePayload(next));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- tell only writes refs
+  }, []); // tell only writes refs
 
   const stopPoll = useCallback(() => { pollAbort.current?.abort(); pollAbort.current = null; }, []);
 

@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 305,
-    "occurrences": 4352,
-    "static": 3662,
-    "dynamic": 140,
+    "files": 309,
+    "occurrences": 4417,
+    "static": 3709,
+    "dynamic": 146,
     "computed": 49
   },
   "static": [
@@ -555,6 +555,228 @@
       ]
     },
     {
+      "testId": "app-chat",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-busy",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-change",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-code",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-empty",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-job",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-kept",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-landed",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-lines",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-note",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-putback",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-reason",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-refused",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-step",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-thread",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-turn",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-undo",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-unsupported",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-you",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-composer",
+      "files": [
+        "src/components/apps/AppComposer.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-busy",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-chat",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-properties",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-selected",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-toggle",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-panel-unread",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-alt",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-caption",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-label",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-remove",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-text",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-prop-title",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-properties",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-properties-empty",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-properties-note",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
+      "testId": "app-properties-what",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
       "testId": "appearance-preview",
       "files": [
         "src/components/AppearanceSettings.tsx"
@@ -580,6 +802,12 @@
       ]
     },
     {
+      "testId": "apps-card-code",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
       "testId": "apps-card-desc",
       "files": [
         "src/components/apps/AppsPage.tsx"
@@ -595,6 +823,12 @@
       "testId": "apps-card-key",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-kpi-value",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
       ]
     },
     {
@@ -640,6 +874,12 @@
       ]
     },
     {
+      "testId": "apps-card-preview-when",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
       "testId": "apps-card-request",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
@@ -678,6 +918,18 @@
     },
     {
       "testId": "apps-card-sources",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-turn",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-updated",
       "files": [
         "src/components/apps/AppsPage.tsx"
       ]
@@ -795,6 +1047,36 @@
       "testId": "apps-mode-preview",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-new-chat",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-new-composer",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-new-note",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-new-project",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-new-project-one",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
       ]
     },
     {
@@ -22150,7 +22432,14 @@
       "pattern": "*-chip",
       "files": [
         "src/components/SteeringRuleForm.tsx",
+        "src/components/apps/AppComposer.tsx",
         "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
+      "pattern": "*-chips",
+      "files": [
+        "src/components/apps/AppComposer.tsx"
       ]
     },
     {
@@ -22268,6 +22557,7 @@
       "files": [
         "src/components/FacetAutocomplete.tsx",
         "src/components/SteeringGrid.tsx",
+        "src/components/apps/AppComposer.tsx",
         "src/components/ui/Combobox.tsx",
         "src/components/ui/FilePick.tsx",
         "src/components/voice/VoiceModal.tsx"
@@ -22391,6 +22681,12 @@
       ]
     },
     {
+      "pattern": "*-readonly",
+      "files": [
+        "src/components/apps/AppComposer.tsx"
+      ]
+    },
+    {
       "pattern": "*-recent",
       "files": [
         "src/components/sources/AgentAccess.tsx"
@@ -22477,6 +22773,7 @@
     {
       "pattern": "*-send",
       "files": [
+        "src/components/apps/AppComposer.tsx",
         "src/components/sources/TestCall.tsx"
       ]
     },
@@ -22527,6 +22824,18 @@
       "pattern": "*-structure-only",
       "files": [
         "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-suggestion",
+      "files": [
+        "src/components/apps/AppComposer.tsx"
+      ]
+    },
+    {
+      "pattern": "*-suggestions",
+      "files": [
+        "src/components/apps/AppComposer.tsx"
       ]
     },
     {
@@ -22588,6 +22897,18 @@
       "pattern": "*-withdrawn",
       "files": [
         "src/components/sources/AllowWritesSwitch.tsx"
+      ]
+    },
+    {
+      "pattern": "app-panel-rail-*",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
+      ]
+    },
+    {
+      "pattern": "app-panel-tab-*",
+      "files": [
+        "src/components/apps/AppSidePanel.tsx"
       ]
     },
     {
@@ -23063,6 +23384,8 @@
         "src/components/WhatWhere.tsx",
         "src/components/agents/AgentsPage.tsx",
         "src/components/agents/SetupPanel.tsx",
+        "src/components/apps/AppComposer.tsx",
+        "src/components/apps/AppProperties.tsx",
         "src/components/ask/AskCard.tsx",
         "src/components/calm/Calm.tsx",
         "src/components/charts/CategoryBars.tsx",

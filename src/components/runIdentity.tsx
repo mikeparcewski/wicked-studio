@@ -200,7 +200,7 @@ const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled
 
 // ── Cost from the run record (wicked-crew#496, 2026-09-18) ───────────────────
 
-// eslint-disable-next-line no-restricted-syntax -- '#496' is a GitHub issue reference, not a hex color
+// '#496' is a GitHub issue reference, not a hex color.
 const NO_COST_TITLE = 'cost is not in the run record — wicked-crew#496 (2026-09-18) has not landed on this daemon yet';
 
 function formatCostUsd(usd: number): string {

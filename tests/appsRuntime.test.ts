@@ -45,7 +45,7 @@ function mountTemplate(): void {
   document.head.append(el);
 }
 
-async function boot(app: { framed: boolean; mode: 'edit' | 'preview' }): Promise<{ host: MessagePort; seen: Array<{ type?: string; payload?: unknown }> }> {
+async function boot(app: { framed: boolean; mode: 'edit' | 'preview'; propsHost?: boolean }): Promise<{ host: MessagePort; seen: Array<{ type?: string; payload?: unknown }> }> {
   vi.resetModules();
   mountTemplate();
   const { startRuntime } = await import('../src/plugins/wicked-apps/runtime/runtime.js');
@@ -90,6 +90,27 @@ describe('S4 / S12: values are text', () => {
     expect(root.querySelector('[data-component="pic"]')!.textContent).toMatch(/not one the app can show/);
     expect((window as unknown as { __pwned?: unknown }).__pwned).toBeUndefined();
     for (const e of root.querySelectorAll('*')) for (const a of e.getAttributeNames()) expect(a.startsWith('on'), `${e.tagName} ${a}`).toBe(false);
+  });
+});
+
+describe('K5: the host draws Properties', () => {
+  it('with app.propsHost the runtime draws no Properties column in Edit, and a selection that ends is said to the host', async () => {
+    const { host, seen } = await boot({ framed: false, mode: 'preview', propsHost: true });
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'app.mode', payload: { mode: 'edit' } });
+    await vi.waitFor(() => expect(document.querySelector('.wk-palette')).not.toBeNull());
+    expect(document.querySelector('[data-testid="apps-properties"], [data-testid="apps-properties-empty"]')).toBeNull();
+    // Enter on a focused component selects it (no pointer), as a click does.
+    (document.querySelector('[data-component="chart"]') as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.waitFor(() => expect(seen.some((m) => m.type === 'selection.set' && JSON.stringify(m.payload).includes('"chart"'))).toBe(true));
+    expect(document.querySelector('[data-testid="apps-properties"]')).toBeNull();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await vi.waitFor(() => expect(seen.some((m) => m.type === 'selection.set' && JSON.stringify((m.payload as { anchors?: unknown }).anchors) === '[]')).toBe(true));
+  });
+
+  it('without it (K4 hosts) the runtime keeps its own Properties column', async () => {
+    const { host } = await boot({ framed: false, mode: 'preview' });
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'app.mode', payload: { mode: 'edit' } });
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="apps-properties-empty"]')).not.toBeNull());
   });
 });
 

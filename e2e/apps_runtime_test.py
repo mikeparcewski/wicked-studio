@@ -394,7 +394,7 @@ def main() -> None:
               outcome=stale_outcome, status=refused_run["status"])
 
         # 9a. /apps: a dashboard of crew's apps (the fixture serves the store): the grid, the names as text, no style
-        # attribute, and no query sent to draw a tile
+        # attribute, and (K5) no query but the cards' own KPI reads
         # The earlier tab is closed first: its own refresh (it adopts step 8b's version and re-reads its queries) is not
         # the dashboard's, and only the dashboard's requests are counted.
         page.close()
@@ -402,6 +402,7 @@ def main() -> None:
         dash_wait.wait_for_timeout(500)
         dash_wait.close()
         q0 = count(origin, "POST", "/query")
+        n0 = len(calls(origin))
         dash = ctx.new_page()
         dash.on("pageerror", lambda e: errors.append(str(e)))
         dash.goto(f"{origin}/apps")
@@ -415,9 +416,17 @@ def main() -> None:
         tile_styled = sum(f.evaluate("() => document.querySelectorAll('[style]').length") for f in tile_frames)
         pwned = dash.evaluate("() => window.__pwned === undefined ? null : window.__pwned")
         shot(dash, "5-dashboard")
+        # K5: a card on screen reads its first page's KPI queries (live numbers) and nothing else: the previews read
+        # nothing (they draw the last render's snapshot, and this page has none). Fixture desk's one KPI shows live.
+        dash.wait_for_selector('[data-testid="apps-card"][data-slug="fixture-app"] [data-testid="apps-card-kpi-value"]', timeout=20_000)
+        want = sorted(f"{slug_}:{c['data']['query']}" for slug_, spec_ in (("fixture-app", apps_fixture.SPEC_A), ("other-app", apps_fixture.SPEC_B))
+                      for c in [x for x in spec_["pages"][0]["components"] if x["type"] == "kpi"][:3])
+        got_reads = sorted(f"{c['path'].split('/')[4]}:{(c.get('body') or {}).get('query')}" for c in calls(origin)[n0:] if c["method"] == "POST" and c["path"].endswith("/query"))
+        kpi_reads = len(want)
+        tile_reads = len(got_reads)
         check("dashboard", sorted(names) == sorted(["Fixture desk", "<script>window.__pwned=5</script> Other app"]) and nav_current == "page"
               and 3 <= cols(dash) <= 4 and styled == 0 and len(tile_frames) == 2 and tile_styled == 0 and pwned is None
-              and count(origin, "POST", "/query") == q0, names=names, nav=nav_current, columns=cols(dash), styled=styled, tiles=len(tile_frames), queries=count(origin, "POST", "/query") - q0)
+              and got_reads == want, names=names, nav=nav_current, columns=cols(dash), styled=styled, tiles=len(tile_frames), queries=got_reads, want=want, kpi_reads=kpi_reads, tile_reads=tile_reads)
         for w, want in ((1024, 2), (390, 1)):
             narrow = browser.new_context(viewport={"width": w, "height": 800})
             np_ = narrow.new_page()

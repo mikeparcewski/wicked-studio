@@ -29,6 +29,8 @@ export interface AppHostPort {
   url?(): Record<string, string>;
   /** A dashboard tile (the Apps page): read-only; `rows` false = the runtime sends no query at all. */
   tile?: { rows: boolean };
+  /** (K5) The host draws Properties in its side panel: the runtime's Edit draws none of its own. */
+  propsHost?: boolean;
   /** The host draws the card OUTSIDE the frame; resolves true only on the person's own Run there. */
   confirm(prepared: PreparedAction): Promise<boolean>;
   /** The host shows the full URL and opens it only on the person's own click. */

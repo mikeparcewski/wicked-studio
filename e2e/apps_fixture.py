@@ -363,3 +363,8 @@ def framer_html(src: str) -> str:
     safe = src.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;")
     return ('<!doctype html><html><head><meta charset="utf-8"><title>Framer</title></head>'
             f'<body style="margin:0"><iframe id="studio" src="{safe}" width="1400" height="680"></iframe></body></html>')
+
+
+def fixture_specs():
+    """The two fixture apps' specs (K5: the dashboard journey counts their first pages' KPI reads)."""
+    return [SPEC_A, SPEC_B]
