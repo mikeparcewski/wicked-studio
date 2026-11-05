@@ -165,6 +165,10 @@
   .wk-gate2-choices { flex-direction: column; align-items: stretch; }
   .wk-gate2-choices .wk-gate2-btn { width: 100%; }
   .wk-gate2-menu { max-width: none; }
+  /* Unfolded, the sheet takes the thread's room: the thread's jump-to-latest button, placed at its foot, would float
+     over the job's title (rig shot gate-data-use-dark-390). The sheet is the page then; folding it brings both back. A
+     dock that drew nothing (hidden above) leaves the button alone. */
+  .wk-session:has(.wk-dock[data-collapsed="false"] .wk-dock-slot:not(:empty)) .wk-jump-latest { display: none; }
 }
 
 /* A way on that is not the question (the reduced-assurance relaunch), folded under its own name. */

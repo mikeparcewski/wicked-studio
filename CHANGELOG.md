@@ -180,6 +180,11 @@ npm publish dates. Every version listed here exists on
     Project select that was hidden under Search and filter.
 
 ### Fixed
+- **On a phone, the run page's jump-to-latest button no longer floats over the job's title.** With the decision
+  sheet unfolded, the thread keeps almost no room, and the round "↓" button at its foot sat over the title (rig shot
+  `gate-data-use-dark-390`). The unfolded sheet now hides the button. Folding the sheet brings it back, and the desk
+  is unchanged. Checked by `tests/jumpLatestUnderSheet.css.test.ts` and the `phone-unfolded-no-jump-over-title` step
+  of `e2e/desk_run_header_test.py`.
 - **The Jira and GitHub Issues sheets say what crew said when a saved source's test fails, and group the tools by
   why (pm-real-jira).** A saved source whose Test connection fails no longer reads "Not connected": the sheet says the
   source is saved with its token, that only the test failed, and quotes crew's own message with its code and cause
