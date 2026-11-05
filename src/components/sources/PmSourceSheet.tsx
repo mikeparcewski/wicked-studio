@@ -46,7 +46,7 @@ const SERVERS: Record<'jira' | 'github', string> = {
 /** What crew found for one tool, as the review list says it. */
 export interface ToolReview {
   name: string;
-  kind: 'issues' | 'reads' | 'writes';
+  kind: 'issues' | 'account' | 'reads' | 'writes';
   verdict: 'reviewed' | 'not_for_agents' | 'asks' | 'review_again' | 'unknown';
   note: string;
   /** A saved write tool: whether the person granted it at the save (`McpTool.enabled`). */
@@ -57,13 +57,15 @@ export interface ToolReview {
 const BOUND_NOTES: Record<string, string> = {
   searchJiraIssuesUsingJql: 'crew sets the site (cloudId) and adds your linked projects to the JQL; it keeps items whose key is linked, and recounts the totals.',
   getJiraIssue: 'The issue key’s project must be linked.',
+  listJiraIssueComments: 'The issue key’s project must be linked. Comments limited to a role or group, and internal notes, are left out.',
+  atlassianUserInfo: 'Account details: the token owner’s account id, nothing else.',
+  getAccessibleAtlassianResources: 'Account details: only the sites of the trackers you link.',
   list_issues: 'The repository (owner/repo) must be linked.',
   issue_read: 'The repository must be linked.',
   search_issues: 'crew adds repo: for the linked repositories; foreign items are dropped and the total recounted.',
 };
 const UNBOUND_NOTES: Record<string, string> = {
   getVisibleJiraProjects: 'No project argument: it lists the whole site.',
-  getAccessibleAtlassianResources: 'It lists every site the token reaches.',
   search_repositories: 'No repository argument: it lists everything the token sees.',
 };
 
@@ -94,7 +96,65 @@ export function toolReview(tool: { name: string; class: string; binding?: unknow
   }
   // A saved tool is reviewed only while its binding is in force.
   if (saved && inForce !== true) return unknown;
-  return { name: tool.name, kind: 'issues', verdict: 'reviewed', note: noteFor(BOUND_NOTES, tool.name) ?? 'Bound to the trackers you link: crew names the site and project, and drops anything else from an answer.' };
+  return { name: tool.name, kind: ACCOUNT_TOOLS.has(tool.name) ? 'account' : 'issues', verdict: 'reviewed', note: noteFor(BOUND_NOTES, tool.name) ?? 'Bound to the trackers you link: crew names the site and project, and drops anything else from an answer.' };
+}
+
+/** The account-metadata tools crew binds (no issue rows): labelled `account` rather than `issues`. */
+const ACCOUNT_TOOLS: ReadonlySet<string> = new Set(['atlassianUserInfo', 'getAccessibleAtlassianResources']);
+
+/** One group of the tool list: a one-line reason, then its tools (each with its own row, or as a list of names). */
+export interface ToolGroup {
+  key: 'agents' | 'writes' | 'again' | 'unscoped' | 'confluence' | 'graph' | 'product' | 'code';
+  title: string;
+  reason: string;
+  /** Each tool gets its own row (its note, a write's grant); otherwise the group lists the names only. */
+  rows: boolean;
+  tools: ToolReview[];
+}
+
+/** Atlassian's generic tools: they run any operation, on any project, so no binding can limit them. */
+const GENERIC: ReadonlySet<string> = new Set(['discover', 'search', 'fetch', 'execute', 'executeRead', 'executeWrite', 'executeDestructive']);
+
+/**
+ * The tool list in groups, each with the one line that says why (instead of one long "Not for agents" list). A tool
+ * crew binds is always the agents'; the rest are grouped by why no agent gets them. Tools of another product are
+ * "not part of trackers" whatever their kind (a Confluence write is not a tracker write the deliver gate offers).
+ */
+export function toolGroupsOf(system: 'jira' | 'github', reviews: readonly ToolReview[]): ToolGroup[] {
+  const where = system === 'jira' ? 'Jira projects' : 'repositories';
+  const groups: ToolGroup[] = [
+    { key: 'agents', title: 'Agents can use', reason: `Limited to the ${where} you link: crew names the ${system === 'jira' ? 'site and project' : 'repository'}, and drops anything else from an answer.`, rows: true, tools: [] },
+    { key: 'writes', title: 'Writes', reason: 'You confirm each one at delivery: an agent never sends one itself.', rows: true, tools: [] },
+    { key: 'again', title: 'Check again', reason: 'Its review changed or could not be read, so no agent gets it for now.', rows: true, tools: [] },
+    { key: 'unscoped', title: 'Not for agents', reason: `Can’t be limited to your linked ${where}.`, rows: false, tools: [] },
+    { key: 'confluence', title: 'Not for agents', reason: 'Not part of trackers (Confluence).', rows: false, tools: [] },
+    { key: 'graph', title: 'Not for agents', reason: 'Not part of trackers (Teamwork Graph, people and Loom).', rows: false, tools: [] },
+    { key: 'product', title: 'Not for agents', reason: 'Not part of trackers (other Atlassian products).', rows: false, tools: [] },
+    { key: 'code', title: 'Not for agents', reason: 'Not part of trackers (code, pull requests and the rest of GitHub).', rows: false, tools: [] },
+  ];
+  const put = (k: ToolGroup['key'], t: ToolReview): void => { groups.find((g) => g.key === k)!.tools.push(t); };
+  for (const t of reviews) {
+    if (t.verdict === 'reviewed') put('agents', t);
+    else if (system === 'jira' && /confluence/i.test(t.name)) put('confluence', t);
+    else if (system === 'jira' && /graph|loom|people|collaborators|workactivity|workportfolio/i.test(t.name)) put('graph', t);
+    else if (system === 'jira' && /compass|bitbucket/i.test(t.name)) put('product', t);
+    else if (system === 'jira' && GENERIC.has(t.name)) put('unscoped', t);
+    else if (t.verdict === 'asks') put('writes', t);
+    else if (t.verdict === 'review_again' || t.verdict === 'unknown') put('again', t);
+    else if (system === 'github' && !/issue/i.test(t.name) && t.name !== 'get_me' && t.name !== 'search_repositories') put('code', t);
+    else put('unscoped', t);
+  }
+  return groups.filter((g) => g.tools.length > 0);
+}
+
+/** crew's own words for a refused read of what a saved source reaches: its sentence, its code and the cause it names. */
+export function reachFailureOf(e: unknown): { said: string; code: string | null; cause: string | null } | null {
+  if (!(e instanceof ApiError)) return null;
+  const b = e.body as { error?: unknown; code?: unknown; cause?: unknown } | undefined;
+  const said = typeof b?.error === 'string' && b.error.trim() !== '' ? b.error.trim().slice(0, 1_200) : null;
+  if (said === null) return null;
+  const tok = (v: unknown): string | null => (typeof v === 'string' && /^[a-z][a-z0-9_]{1,63}$/.test(v) ? v : null);
+  return { said, code: tok(b?.code), cause: tok(b?.cause) };
 }
 
 /** Every tool crew listed, reviewed, or `null` when the list is not crew's whole list (one unreadable entry included). */
@@ -211,7 +271,7 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   const [held, setHeld] = useState<{ key: string; preview: McpPreviewResponse } | null>(null);
   const [busy, setBusy] = useState<null | 'test' | 'save' | 'reach'>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reach, setReach] = useState<{ ok: true; r: Reach; at: string } | { ok: false; words: string } | null>(null);
+  const [reach, setReach] = useState<{ ok: true; r: Reach; at: string } | { ok: false; words: string; crew?: { said: string; code: string | null; cause: string | null } | null } | null>(null);
   const seq = useRef(0);
   const reachGen = useRef(0);
   const inFlight = useRef(false);
@@ -261,7 +321,7 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
       if (mine !== reachGen.current) return;
       setReach(r === null ? { ok: false, words: 'crew’s answer could not be read: update studio or crew.' } : { ok: true, r: reachOf(r.trackers, r.next), at: new Date().toISOString() });
     } catch (e) {
-      if (mine === reachGen.current) setReach({ ok: false, words: trackerRefusal(e, 'read') });
+      if (mine === reachGen.current) setReach({ ok: false, words: trackerRefusal(e, 'read'), crew: reachFailureOf(e) });
     } finally {
       if (mine === reachGen.current) setBusy(null);
     }
@@ -364,7 +424,7 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                     </button>
                   )}
                   {((isNew && preview !== null) || (!isNew && reach?.ok === true)) && <span className="wk-tag wk-tag--ok" data-testid="pm-test-ok"><Check size={12} aria-hidden />Connected</span>}
-                  {!isNew && reach?.ok === false && <span className="wk-tag wk-tag--fail" data-testid="pm-test-fail">Not connected</span>}
+                  {!isNew && reach?.ok === false && <span className="wk-tag wk-tag--fail" data-testid="pm-test-fail">Test failed</span>}
                   <span className="wk-src-cap">reads no issues</span>
                 </div>
                 {isNew && preview === null && busy !== 'test' && <p className="wk-src-note">{blocker ?? 'Test connects to the server with your token and lists its tools. It reads no issues.'}</p>}
@@ -376,7 +436,16 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                 )}
                 {!isNew && reach === null && busy !== 'reach' && <p className="wk-src-note" data-testid="pm-test-note">Test connection reads which {system === 'jira' ? 'sites and projects' : 'repositories'} the saved token reaches. It reads no issues.</p>}
                 {!isNew && reach?.ok === true && <ul className="wk-pm-lines" data-testid="pm-test-reach-lines">{reachLines(system, reach.r).map((l) => <li key={l}>{l}</li>)}</ul>}
-                {!isNew && reach?.ok === false && <p className="wk-src-note wk-src-tone-fail" data-testid="pm-test-reach-error">{reach.words}</p>}
+                {!isNew && reach?.ok === false && (
+                  <div data-testid="pm-test-reach-error">
+                    <p className="wk-src-note" data-testid="pm-test-saved">The source is saved, with its token. Only this test, which reads what the token reaches, failed.</p>
+                    {reach.crew != null ? (
+                      <p className="wk-src-note wk-src-tone-fail" data-testid="pm-test-crew-said">
+                        crew said: “{reach.crew.said}”{reach.crew.code !== null && <> <code data-testid="pm-test-crew-code">{reach.crew.cause !== null && reach.crew.cause !== reach.crew.code ? `${reach.crew.code}: ${reach.crew.cause}` : reach.crew.code}</code></>}
+                      </p>
+                    ) : <p className="wk-src-note wk-src-tone-fail">{reach.words}</p>}
+                  </div>
+                )}
               </div>
               {links === null && <p className="wk-src-note wk-src-tone-fail" data-testid="pm-links-unreadable">crew’s list of this source’s linked trackers could not be read, so none is shown.</p>}
               {links !== null && links.length > 0 && (
@@ -395,28 +464,41 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                 <span className="wk-src-note">Each tool is bound to the trackers a project links: which argument names the {system === 'jira' ? 'site and project' : 'repository'}, and which field says where an answer came from.</span>
               </div>
               {tools === null ? <p className="wk-src-note wk-src-tone-fail" data-testid="pm-tools-unreadable">crew’s list of this source’s tools could not be read, so no review is shown.</p> : tools.length === 0 ? <p className="wk-src-note" data-testid="pm-tools-empty">{isNew ? 'Test the connection, and each tool crew finds is listed here with its review.' : 'crew listed no tools for this source.'}</p> : (
-                <ul className="wk-pm-tools" data-testid="pm-tools">
-                  {tools.map((t) => (
-                    <li key={t.name} className="wk-pm-tool" data-testid="pm-tool" data-tool={t.name} data-verdict={t.verdict}>
-                      <div className="wk-pm-tool-head">
-                        <code>{t.name}</code><span className="wk-tag wk-pm-kind">{t.kind}</span><span className="wk-src-sp" />
-                        <span className={`wk-tag wk-tag--${VERDICT_TONE[t.verdict]}`} data-testid="pm-tool-verdict">{VERDICT_WORDS[t.verdict]}</span>
-                      </div>
-                      <p className="wk-src-note">{t.note}</p>
-                      {t.verdict === 'asks' && isNew && preview !== null && (
-                        <label className="wk-src-check-row" data-testid="pm-tool-grant">
-                          <input type="checkbox" checked={grants.key === key && grants.names.has(t.name)} disabled={busy !== null}
-                            onChange={(e) => {
-                              const on = e.target.checked;
-                              setGrants((g) => { const names = new Set(g.key === key ? g.names : []); if (on) names.add(t.name); else names.delete(t.name); return { key, names }; });
-                            }} />
-                          <span className="wk-src-note">Grant it: the deliver gate may then ask you to use it (a comment, a move). Not granted, no action can use it.</span>
-                        </label>
+                <div className="wk-pm-groups" data-testid="pm-tools">
+                  {toolGroupsOf(system, tools).map((grp) => (
+                    <section key={grp.key} className="wk-pm-group" data-testid="pm-tool-group" data-group={grp.key}>
+                      <p className="wk-src-note" data-testid="pm-tool-group-head"><span className="wk-src-strong">{grp.title}</span>{grp.rows ? '' : ` (${grp.tools.length})`}: {grp.reason}</p>
+                      {grp.rows ? (
+                        <ul className="wk-pm-tools">
+                          {grp.tools.map((t) => (
+                              <li key={t.name} className="wk-pm-tool" data-testid="pm-tool" data-tool={t.name} data-verdict={t.verdict}>
+                                <div className="wk-pm-tool-head">
+                                  <code>{t.name}</code><span className="wk-tag wk-pm-kind">{t.kind}</span><span className="wk-src-sp" />
+                                  <span className={`wk-tag wk-tag--${VERDICT_TONE[t.verdict]}`} data-testid="pm-tool-verdict">{VERDICT_WORDS[t.verdict]}</span>
+                                </div>
+                                <p className="wk-src-note">{t.note}</p>
+                                {t.verdict === 'asks' && isNew && preview !== null && (
+                                  <label className="wk-src-check-row" data-testid="pm-tool-grant">
+                                    <input type="checkbox" checked={grants.key === key && grants.names.has(t.name)} disabled={busy !== null}
+                                      onChange={(e) => {
+                                        const on = e.target.checked;
+                                        setGrants((g) => { const names = new Set(g.key === key ? g.names : []); if (on) names.add(t.name); else names.delete(t.name); return { key, names }; });
+                                      }} />
+                                    <span className="wk-src-note">Grant it: the deliver gate may then ask you to use it (a comment, a move). Not granted, no action can use it.</span>
+                                  </label>
+                                )}
+                                {t.verdict === 'asks' && !isNew && <p className="wk-src-cap" data-testid="pm-tool-granted">{t.granted === true ? 'Granted at the save.' : t.granted === false ? 'Not granted: save the source again to grant it.' : ''}</p>}
+                              </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="wk-pm-tool-names" data-testid="pm-tool-names">
+                          {grp.tools.map((t) => <code key={t.name} className="wk-pm-tool-name" data-testid="pm-tool-chip" data-tool={t.name} data-verdict={t.verdict}>{t.name}</code>)}
+                        </p>
                       )}
-                      {t.verdict === 'asks' && !isNew && <p className="wk-src-cap" data-testid="pm-tool-granted">{t.granted === true ? 'Granted at the save.' : t.granted === false ? 'Not granted: save the source again to grant it.' : ''}</p>}
-                    </li>
+                    </section>
                   ))}
-                </ul>
+                </div>
               )}
               {!isNew && shownServer !== null && agentAccess !== null && (
                 <AgentAccess

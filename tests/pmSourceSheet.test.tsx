@@ -4,7 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
-import { jiraBasic, PmSourceSheet, reachLines, reachOf, toolReview, toolReviewsOf } from '../src/components/sources/PmSourceSheet.js';
+import { jiraBasic, PmSourceSheet, reachFailureOf, reachLines, reachOf, toolGroupsOf, toolReview, toolReviewsOf } from '../src/components/sources/PmSourceSheet.js';
+import { ApiError } from '../src/api/errors.js';
 import { SourcesPage } from '../src/components/sources/SourcesPage.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { pgServer } from './sourcesFixtures.js';
@@ -88,11 +89,14 @@ describe('the Jira sheet (mockup screen 1a)', () => {
       secret: jiraBasic('crew-bot@acme.example', TOKEN),
     });
     expect(atob(jiraBasic('crew-bot@acme.example', TOKEN))).toBe(`crew-bot@acme.example:${TOKEN}`);
-    // Each tool, reviewed: bound reads, an unbindable read, a write that asks.
+    // Each tool, reviewed and grouped with its reason: bound reads, a write that asks, an unbindable read by name only.
     expect(screen.getAllByTestId('pm-tool').map((t) => [t.dataset.tool, t.dataset.verdict])).toEqual([
-      ['searchJiraIssuesUsingJql', 'reviewed'], ['getJiraIssue', 'reviewed'], ['getVisibleJiraProjects', 'not_for_agents'], ['addCommentToJiraIssue', 'asks'],
+      ['searchJiraIssuesUsingJql', 'reviewed'], ['getJiraIssue', 'reviewed'], ['addCommentToJiraIssue', 'asks'],
     ]);
-    expect(screen.getAllByTestId('pm-tool-verdict').map((v) => v.textContent)).toEqual(['Reviewed', 'Reviewed', 'Not for agents', 'Asks you']);
+    expect(screen.getAllByTestId('pm-tool-verdict').map((v) => v.textContent)).toEqual(['Reviewed', 'Reviewed', 'Asks you']);
+    expect(screen.getAllByTestId('pm-tool-group').map((g) => g.dataset.group)).toEqual(['agents', 'writes', 'unscoped']);
+    expect(screen.getAllByTestId('pm-tool-chip').map((t) => [t.dataset.tool, t.dataset.verdict])).toEqual([['getVisibleJiraProjects', 'not_for_agents']]);
+    expect(screen.getAllByTestId('pm-tool-group-head')[2]).toHaveTextContent('Not for agents (1): Can’t be limited to your linked Jira projects.');
     // The write tool is granted only by its tick (crew's G1 `enabledWrites`): the person ticks the comment tool.
     const grants = screen.getAllByTestId('pm-tool-grant');
     expect(grants).toHaveLength(1);
@@ -223,5 +227,53 @@ describe('review r2 folds: crew answers studio can’t read whole', () => {
     expect(toolReview({ name: '__proto__', class: 'read', binding: null }).note).toBe('crew can’t limit it to the trackers you link, so no agent gets it.');
     expect(toolReview({ name: 'constructor', class: 'read', binding: { policy: 'p' } }).note).toBe('Bound to the trackers you link: crew names the site and project, and drops anything else from an answer.');
     expect(toolReview({ name: 'x', class: 'admin', binding: { policy: 'p', inForce: true } }, true).verdict).toBe('unknown');
+  });
+});
+
+describe('the real Atlassian v2 server (pm-real-jira)', () => {
+  const V2_TOOLS: Array<[string, string, boolean]> = [
+    ['getAccessibleAtlassianResources', 'read', true], ['atlassianUserInfo', 'read', true], ['getConfluenceContent', 'read', false], ['createConfluenceContent', 'write', false],
+    ['searchConfluence', 'read', false], ['getJiraIssue', 'read', true], ['listJiraIssueComments', 'read', true], ['searchJiraIssuesUsingJql', 'read', true],
+    ['createJiraIssue', 'write', false], ['editJiraIssue', 'write', false], ['transitionJiraIssue', 'write', false], ['addOrEditJiraIssueComment', 'write', false],
+    ['getLoomObjectsContent', 'read', false], ['getGraphContext', 'read', false], ['getGraphObject', 'read', false], ['addGraphContext', 'write', false],
+    ['getCollaborators', 'read', false], ['getPeopleInfo', 'read', false], ['getWorkActivity', 'read', false], ['getWorkPortfolio', 'read', false],
+    ['discover', 'read', false], ['executeRead', 'read', false], ['executeWrite', 'write', false], ['executeDestructive', 'destructive', false], ['search', 'read', false],
+  ];
+  it('groups its 25 tools by why, each group with one line, instead of one long "Not for agents" list', () => {
+    const reviews = toolReviewsOf(V2_TOOLS.map(([name, cls, bound]) => ({ name, class: cls, binding: bound ? { policy: `jira/${name}@1`, inForce: true } : null })), true)!;
+    const groups = toolGroupsOf('jira', reviews);
+    expect(groups.map((g) => [g.key, g.tools.map((t) => t.name)])).toEqual([
+      ['agents', ['getAccessibleAtlassianResources', 'atlassianUserInfo', 'getJiraIssue', 'listJiraIssueComments', 'searchJiraIssuesUsingJql']],
+      ['writes', ['createJiraIssue', 'editJiraIssue', 'transitionJiraIssue', 'addOrEditJiraIssueComment']],
+      ['unscoped', ['discover', 'executeRead', 'executeWrite', 'executeDestructive', 'search']],
+      ['confluence', ['getConfluenceContent', 'createConfluenceContent', 'searchConfluence']],
+      ['graph', ['getLoomObjectsContent', 'getGraphContext', 'getGraphObject', 'addGraphContext', 'getCollaborators', 'getPeopleInfo', 'getWorkActivity', 'getWorkPortfolio']],
+    ]);
+    expect(groups.find((g) => g.key === 'writes')!.reason).toBe('You confirm each one at delivery: an agent never sends one itself.');
+    expect(groups.find((g) => g.key === 'confluence')!.reason).toBe('Not part of trackers (Confluence).');
+    expect(groups.find((g) => g.key === 'agents')!.tools.filter((t) => t.kind === 'account').map((t) => t.name)).toEqual(['getAccessibleAtlassianResources', 'atlassianUserInfo']);
+  });
+  it('a saved source whose test fails shows crew’s own message and code, and says the source is saved', async () => {
+    const said = 'jira (getAccessibleAtlassianResources) answered an error (HTTP 403): it says the token needs the scopes read:me, read:account; its other words are not shown';
+    apiFetch.mockImplementation((path: string) => {
+      if (path === '/sources/jira/trackers') return Promise.reject(new ApiError(503, said, { error: said, code: 'source_unavailable', cause: 'vendor_error' }));
+      if (path === '/projects?status=active') return Promise.resolve({ projects: [] });
+      if (path === '/sources/jira/agent-queries') return Promise.resolve({ name: 'jira', known: true, queries: [] });
+      return Promise.reject(new Error(`unexpected ${path}`));
+    });
+    render(<PmSourceSheet target={{ mode: 'saved', server: jiraServer() as never }} existing={['jira']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('pm-test-reach'));
+    const box = await screen.findByTestId('pm-test-reach-error');
+    expect(screen.getByTestId('pm-test-fail')).toHaveTextContent('Test failed');
+    expect(screen.queryByText('Not connected')).toBeNull();
+    expect(within(box).getByTestId('pm-test-saved')).toHaveTextContent('The source is saved, with its token.');
+    expect(within(box).getByTestId('pm-test-crew-said')).toHaveTextContent(`crew said: “${said}”`);
+    expect(within(box).getByTestId('pm-test-crew-code')).toHaveTextContent('source_unavailable: vendor_error');
+    expect(box).not.toHaveTextContent('couldn’t be reached just now');
+  });
+  it('crew’s words are taken only from a refusal body; a code that is not a code word is not shown', () => {
+    expect(reachFailureOf(new Error('x'))).toBeNull();
+    expect(reachFailureOf(new ApiError(503, 'w', undefined))).toBeNull();
+    expect(reachFailureOf(new ApiError(503, 'w', { error: 'said', code: 'Bad Code <b>', cause: 'unknown_shape' }))).toEqual({ said: 'said', code: null, cause: 'unknown_shape' });
   });
 });
