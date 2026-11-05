@@ -234,19 +234,18 @@ describe('(s4-ui-fix) review findings', () => {
 });
 
 describe('(s4-ui-fix r2) partial histories and the skip as sent', () => {
-  it('an aggregate row the gates in hand never re-evaluated still joins deny-dominates', () => {
-    const RUN = 'r-partial';
+  it('the aggregate speaks for a rule no gate in hand names, and only for it', () => {
+    const RUN = 'r-agg';
     const units = [
       makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, role: 'evaluator', status: 'done' }),
       makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 4, role: 'neutral', status: 'done' }),
     ] as WorkUnit[];
-    // The log holds review's kept row and the lift (QE's broken row is only in the lift's aggregate).
     const events = [
-      { type: 'gateEvaluated', session: RUN, ord: 2, ts: 1, assurance: { ...base, rules: [row('R', 'kept'), row('S', 'kept')] } },
-      { type: 'deliverLiftEvaluated', session: RUN, ord: 4, ts: 2, assurance: { ...base, rules: [row('R', 'broken', 'qe found it'), row('S', 'skipped', 'skipped by you: covered')] } },
+      { type: 'gateEvaluated', session: RUN, ord: 2, ts: 1, assurance: { ...base, rules: [row('S', 'kept')] } },
+      { type: 'deliverLiftEvaluated', session: RUN, ord: 4, ts: 2, assurance: { ...base, rules: [row('R', 'broken', 'qe found it'), row('S', 'kept')] } },
     ] as unknown as CoreEvent[];
     const d = deliveryReceiptOf(makeView({ id: RUN, status: 'completed' } as never, units), events, null)!;
-    expect(d.rules?.map((x) => [x.ruleId, x.status, x.reason])).toEqual([['R', 'broken', 'qe found it'], ['S', 'skipped', 'skipped by you: covered']]);
+    expect(d.rules?.map((x) => [x.ruleId, x.status])).toEqual([['R', 'broken'], ['S', 'kept']]);
   });
 
   it('a unit the log never mentions joins with its persisted receipt', () => {
@@ -276,10 +275,24 @@ describe('(s4-ui-fix r2) partial histories and the skip as sent', () => {
       expect(all.some((c) => c.key === 'retry-rules')).toBe(true);
       expect(all.find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['U', 'W']);
     });
-    it('only the escalation frame: held from the wire, the rows from the unit record', () => {
-      const all = offered([{ type: 'gateEscalated', session: RUN, ord: 5, condition: 'rules_unchecked', denialSource: 'rules_unchecked', verdictSummary: 'x' }]);
+    it('only the escalation frame: held from the wire, the rows from the unit record of the same attempt', () => {
+      const esc = { type: 'gateEscalated', session: RUN, ord: 5, condition: 'rules_unchecked', denialSource: 'rules_unchecked', verdictSummary: 'x' };
+      const all = offered([{ ...esc, attempt: 1 }]);
       expect(all.some((c) => c.key === 'retry-rules')).toBe(true);
       expect(all.find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['U', 'W']);
+      // The unit record is an earlier attempt's: re-check still, never its rule ids to skip.
+      const later = offered([{ ...esc, attempt: 2 }]);
+      expect(later.some((c) => c.key === 'retry-rules')).toBe(true);
+      expect(later.some((c) => c.key === 'skip-rules')).toBe(false);
+    });
+    it('the gate card says the held rows', async () => {
+      const client = await import('../src/api/client.js');
+      vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '' } as never);
+      const { GateRow } = await import('../src/components/session/GateRow.js');
+      const { useRunEventStore } = await import('../src/store/events.js');
+      useRunEventStore.setState({ byRun: { [RUN]: [{ type: 'awaitingHuman', session: RUN, ord: 5, gateKind: 'escalation', prompt: 'x' }] as unknown as CoreEvent[] } });
+      render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, units)} gate={g} />);
+      expect(screen.getByTestId('session-gate-rules-line').textContent).toBe('3 rules checked: 1 kept, 0 broken, 0 not applicable, 1 waived by your instruction (to confirm), 1 unchecked');
     });
   });
 
@@ -363,4 +376,12 @@ it('(s4-ui-fix r2) a row with no reason says its cite', () => {
   const rows = receiptOf({ ...base, rules: [{ ...row('R', 'kept', ''), cite: 'src/math.test.js:12' }] })!.rules!;
   render(<RulesChecked rows={rows} />);
   expect(screen.getByTestId('assurance-rule').textContent).toContain(': src/math.test.js:12');
+});
+
+it('(s4-ui-fix r3) the undo notice says what a rule re-check and a rule skip do', async () => {
+  const { describeDecision } = await import('../src/board/undoQueue.js');
+  const retry = describeDecision({ approve: true, action: 'retry_rules' } as never);
+  expect(retry.preview).toMatch(/rule check runs again/);
+  expect(retry.preview).not.toMatch(/resumes/);
+  expect(describeDecision({ approve: true, action: 'skip_rules', skipRules: [{ id: 'U', reason: 'r' }] } as never).preview).toMatch(/skipped with your reason/);
 });

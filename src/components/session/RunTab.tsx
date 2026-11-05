@@ -30,7 +30,7 @@ import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorWords } from '../../board/floorRun.js';
-import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { deliveryAssuranceOf, deliveryReceiptOf, runRuleRows } from '../../board/assuranceModel.js';
 import { deliveryOf } from '../delivery.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
 import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
@@ -148,7 +148,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const receipt = view.session.status === 'completed' ? runReceipt : null;
   // (DES-RULE-CHECK-001) The run's rule verdicts whenever any gate carried them: a completed run says them on its
   // delivery receipt; any other run says them under Checks ("So far, …" while it is still going).
-  const rulesRows = receipt === null ? runReceipt?.rules ?? [] : [];
+  const rulesRows = receipt === null ? runRuleRows(view, events ?? null, recorded) : [];
   // rig 0.15.8: a failed floor the operator overrode is said as that — the deliver card's words — never "Passed".
   const overridden = overriddenFloorsOf(runReceipt, events ?? null, view);
   const started = startedMs(view);

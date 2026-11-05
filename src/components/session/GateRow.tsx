@@ -22,7 +22,7 @@ import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
-import { REDUCED_OPT_IN_LABEL, gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
+import { REDUCED_OPT_IN_LABEL, gatePassedFor, gateReceiptFor, rulesHoldAt, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
 import { retryPrefillOf } from '../../board/needsYou.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -229,6 +229,9 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
     : model.reason === 'def' ? model.reviewedOrd
       : model.reviewedOrd === gate.ord ? gate.ord : null;
   const receipt = gateReceiptFor(events, view.units, receiptOrd);
+  // (DES-RULE-CHECK-001) The rule line: the receipt's rows, else (a log holding no verdict for this unit) the rows
+  // the rules hold reads, the same ones its re-check and skip act on.
+  const ruleRows = receipt?.rules ?? (gate !== undefined && model?.reason === 'escalation' ? rulesHoldAt(events, view.units, gate.ord).rows : []);
   const reduced = isReduced(sessionAssurance(view, events));
   // QE-IN-APP-WORKFLOWS: the run's current QE decision on every gate (a plan gate has no receipt yet;
   // a receipt that carries its own decision says it there).
@@ -330,7 +333,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
       retryEvents={retryEvents} depth={depth} refusalLines={refusalLines} drift={drift}
       assurance={assurance}
-      rulesLine={receipt?.rules !== undefined && receipt.rules.length > 0 ? <RulesChecked rows={receipt.rules} testId="session-gate-rules" /> : null}
+      rulesLine={ruleRows.length > 0 ? <RulesChecked rows={ruleRows} testId="session-gate-rules" /> : null}
       explain={explain}
       headline={headline}
       derived={derived}
