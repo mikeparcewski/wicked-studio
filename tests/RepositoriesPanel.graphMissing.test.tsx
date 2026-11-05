@@ -73,38 +73,30 @@ describe('the /repos surface', () => {
     expect(line).toContain('2 without a code map');  // wicked-studio (no live graph) + orphan (no graph root)
   });
 
-  it('the card says "No code map yet" with Re-run onboarding, never "ready", for the in-tree repo', async () => {
+  it('the row says "No code map" with Re-index, never "ready", for the in-tree repo (its findings are on its page)', async () => {
     await panel();
     const cards = screen.getAllByTestId('repo-card');
     const studio = cards.find((c) => c.getAttribute('data-repo-id') === 'wicked-studio')!;
-    const state = within(studio).getByTestId('repo-graph-state');
-    expect(state).toHaveAttribute('data-state', 'missing');
-    expect(state.textContent).toContain('No code map yet');
-    expect(state.textContent).not.toContain('ready');
-    // The gap is said once: the finding row under it carries only its action.
-    expect(within(studio).getByTestId('repo-card-findings-row').querySelector('.wk-pg-repo-finding-text')).toBeNull();
-    // The finding row with its action still rides the card (studio#253).
-    expect(within(studio).getByTestId('repo-card-findings-reonboard')).toBeInTheDocument();
-
-    // The row's face says it too, and offers the next step: Re-index (a prefill of the recorded onboard).
-    expect(within(studio).getByTestId('repo-row-line')).toHaveTextContent('no code map');
-    expect(within(studio).getByTestId('repo-row-reindex')).toHaveTextContent('Re-index');
+    expect(studio).toHaveAttribute('data-graph', 'missing');
     expect(studio).toHaveAttribute('data-ready', 'missing');
+    expect(within(studio).getByTestId('repo-row-line')).toHaveTextContent('No code map');
+    expect(within(studio).getByTestId('repo-row-line').textContent).not.toContain('ready');
+    expect(within(studio).getByTestId('repo-row-map')).toHaveAttribute('data-tone', 'fail');
+    // The next step: Re-index (a prefill of the recorded onboard).
+    expect(within(studio).getByTestId('repo-row-reindex')).toHaveTextContent('Re-index');
+    // The findings themselves live on the repository's page (above its tabs), not under the row.
+    expect(within(studio).queryByTestId('repo-card-findings')).toBeNull();
 
     const orphan = cards.find((c) => c.getAttribute('data-repo-id') === 'orphan')!;
-    expect(within(orphan).getByTestId('repo-row-line')).toHaveTextContent('no place to keep a code map');
-    expect(within(orphan).getByTestId('repo-graph-state').textContent).toContain('No code map: Studio’s service has nowhere to keep one');
+    expect(within(orphan).getByTestId('repo-row-line')).toHaveTextContent('No place to keep a code map');
+    expect(orphan).toHaveAttribute('data-graph', 'missing');
 
     const billing = cards.find((c) => c.getAttribute('data-repo-id') === 'billing')!;
-    expect(within(billing).getByTestId('repo-graph-state')).toHaveAttribute('data-state', 'ready');
-    // The second half of the daemon's semantics: an in-tree graph beside a LIVE graph (the finding
-    // downgraded to a tidy-up warning after the re-onboard) reads READY — the warning chip stays,
-    // no re-onboard action, no gap.
+    expect(billing).toHaveAttribute('data-graph', 'ready');
+    // An in-tree graph beside a LIVE graph (the finding downgraded to a tidy-up warning) reads READY.
     const api = cards.find((c) => c.getAttribute('data-repo-id') === 'studio-api')!;
-    expect(within(api).getByTestId('repo-graph-state')).toHaveAttribute('data-state', 'ready');
-    expect(within(api).getByTestId('repo-graph-state').textContent).toContain('Code map ready');
-    expect(within(api).getByTestId('repo-card-findings')).toHaveAttribute('data-count', '1');
-    expect(within(api).queryByTestId('repo-card-findings-reonboard')).toBeNull();
+    expect(api).toHaveAttribute('data-graph', 'ready');
+    expect(within(api).getByTestId('repo-row-map')).toHaveAttribute('data-tone', 'ok');
   });
 
   it('the No code map chip filters to the graph-less repos', async () => {

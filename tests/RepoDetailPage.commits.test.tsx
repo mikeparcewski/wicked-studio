@@ -29,7 +29,7 @@ function commits(n: number): GitCommit[] {
 }
 
 function renderPage(): void {
-  render(<RepoDetailPage repoId="r1" onSelectRun={() => {}} navigate={() => {}} onOpenGraph={() => {}} />);
+  render(<RepoDetailPage repoId="r1" onSelectRun={() => {}} navigate={() => {}} onOpenGraph={() => {}} search="?tab=history" />);
 }
 
 describe('Recent commits on the repository page', () => {

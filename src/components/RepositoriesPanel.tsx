@@ -5,30 +5,29 @@ import type { Project, RepoEntry, SessionView } from '../api/types.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { gateOpenPath } from '../board/gateActions.js';
 import {
-  graphReady, matchesRepoChip, repoFleetModels, type OnboardState, type RepoChip, type RepoFleetModel,
+  graphReady, matchesRepoChip, repoFleetModels, type RepoChip, type RepoFleetModel,
 } from '../board/repoStats.js';
-import { healthOf, windowBuckets, windowDelta } from '../board/windowStats.js';
+import { windowBuckets, windowDelta } from '../board/windowStats.js';
 import { rangeWord, TIME_RANGE_OPTIONS, useTimeRange, type TimeRange } from '../hooks/useTimeRange.js';
 import { useMembershipStore } from '../store/membership.js';
-import { useProvenanceStore } from '../store/provenance.js';
-import { setRetryPrefill } from '../store/retryPrefill.js';
+import { useProjectsStore } from '../store/projects.js';
+import { onPlainClick, reindexAsPrefill } from './repoActions.js';
 import { readErrorKind } from '../api/errors.js';
 import { Segmented, StateBanner, StatLine, TechDetails } from './ui/index.js';
 import { QuietEmpty, QuietHead, QuietLoading } from './ui/QuietPage.js';
-import { indexedAt, lastActivity, readinessWords, repoReadiness, repoSide, repoTone, reposSentence } from '../board/repoRows.js';
+import { lastActivity, repoReadiness, repoSide, repoTone, reposSentence } from '../board/repoRows.js';
+import { graphState } from '../board/repoStateWords.js';
+import { repoDetailPath } from '../board/repoTabs.js';
+import { withApps, lastWords, mapCell, phoneLine, projectsByJobs, projectsWords, trackersWords } from '../board/repoListRow.js';
 import { useRepoLanguages } from '../hooks/useRepoLanguages.js';
 import { NewProjectModal } from './NewProjectModal.js';
-import { ago } from './AgeStamp.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
-import { RepoFindings } from './RepoFindings.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { PageAskButton, usePageChatFor } from './chat/PageChat.js';
-import { knowledgeMarks, type MarkTarget } from '../board/repoKnowledge.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
-import { KnowMarks } from './RepoKnowledge.js';
-import { RepoGraphModal } from './RepoGraphModal.js';
-import { RequirementsModal } from './RequirementsModal.js';
+import { linksOf, useRepoLinksFor } from '../store/repoLinks.js';
+import { useTrackerLinksSupported } from '../api/trackers.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -65,75 +64,10 @@ interface Props {
  * request; the old per-repo graph fan-out stays retired.
  */
 
-function relativeTime(tsSeconds: number): string {
-  const tsMs = tsSeconds * 1000;
-  const diffDays = Math.floor((Date.now() - tsMs) / (1000 * 60 * 60 * 24));
-  if (diffDays < 1) return 'registered today';
-  if (diffDays === 1) return 'registered yesterday';
-  if (diffDays < 30) return `registered ${diffDays} days ago`;
-  return `registered ${new Date(tsMs).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
-}
-
 /** A failure's raw text, for Technical details only. */
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
-
-/** The card's graph state — the engine's checkout findings OUTRANK the run verdict (F-2R2-003). */
-function graphState(m: RepoFleetModel): OnboardState | 'missing' {
-  // An onboard in flight is building the graph the finding says is missing — say so.
-  if (m.graphGap !== null && m.onboard.state !== 'onboarding') return 'missing';
-  return m.onboard.state;
-}
-
-/** The graph-state line's words — one plain sentence per state (no internals). */
-function graphStateWord(m: RepoFleetModel, attachedAt: Record<string, number>, now: number): string {
-  const { run } = m.onboard;
-  const state = graphState(m);
-  // The attach clock when the membership mirror has it, else the onboard run's own end.
-  const clock = run === null ? undefined : attachedAt[run.session.id] ?? indexedAt(m) ?? undefined;
-  const when = clock === undefined ? '' : ` ${ago(clock, now)} ago`;
-  if (state === 'missing') {
-    return m.graphGap?.kind === 'no-graph-root'
-      ? 'No code map: Studio’s service has nowhere to keep one'
-      : 'No code map yet';
-  }
-  if (state === 'ready') return `Code map ready${when === '' ? '' : ` · onboarded${when}`}`;
-  if (state === 'onboarding') return 'Onboarding now — mapping the code…';
-  if (state === 'failed') return `Onboarding failed${when}`;
-  return 'Not onboarded yet';
-}
-
-const GRAPH_TONE: Record<string, 'quiet' | 'run' | 'fail' | 'gate'> = {
-  ready: 'quiet',
-  onboarding: 'run',
-  failed: 'fail',
-  never: 'gate',
-  missing: 'fail',
-};
-
-/**
- * The card's captured-learnings line (studio#294 b) — one honest sentence per state, derived
- * from the repo's newest capture-learnings run exactly as the graph line is from its newest
- * onboard. Before this a captured repo was indistinguishable from a never-captured one (the
- * capture only bumped the run count), and nothing told a fresh operator the verb exists.
- */
-function captureStateWord(m: RepoFleetModel, attachedAt: Record<string, number>, now: number): string {
-  const { state, run } = m.capture;
-  const clock = run === null ? undefined : attachedAt[run.session.id];
-  const when = clock === undefined ? '' : ` ${ago(clock, now)} ago`;
-  if (state === 'captured') return `Learnings captured${when}`;
-  if (state === 'capturing') return 'Capturing learnings now…';
-  if (state === 'failed') return `Capturing learnings failed${when}`;
-  return 'No learnings captured yet';
-}
-
-const CAPTURE_TONE: Record<string, 'quiet' | 'run' | 'fail'> = {
-  captured: 'quiet',
-  capturing: 'run',
-  failed: 'fail',
-  never: 'quiet',
-};
 
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
   usePageChatFor('repos', 'Knows Repositories: each registered repository, its code graph and its work.', 'repos-page');
@@ -150,10 +84,6 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
 
   const [rerunning, setRerunning] = useState<Record<string, boolean>>({});
-  const [capturing, setCapturing] = useState<Record<string, boolean>>({});
-  // Synchronous in-flight guard: the button's `disabled` only applies after a
-  // re-render, so a fast double-click can fire captureLearnings twice before then.
-  const capturingRef = useRef<Set<string>>(new Set());
   const [rerunError, setRerunError] = useState<Record<string, string>>({});
   const [showRegister, setShowRegister] = useState(autoShowRegister ?? false);
   const [sourceMode, setSourceMode] = useState<SourceMode>('local');
@@ -214,6 +144,17 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   // One read on mount; Retry calls load().
   useEffect(load, []);
 
+  // The apps' own repositories (crew's apps store: `AppSummary.repoId`), marked App on the list with no Index nag. One
+  // read, beside the list's; a crew without the apps route (or a failed read) marks none.
+  const [appOf, setAppOf] = useState<ReadonlyMap<string, string>>(new Map());
+  useEffect(() => {
+    let live = true;
+    Promise.resolve().then(() => api.listApps())
+      .then((r) => { if (live && Array.isArray(r?.apps)) setAppOf(new Map(r.apps.filter((a) => typeof a.repoId === 'string').map((a) => [a.repoId, a.name || a.slug]))); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, []);
+
   function deriveName(value: string): void {
     if (nameEditedRef.current) return;
     const segment = value.replace(/\.git$/, '').split(/[/\\:]/).filter(Boolean).pop() ?? '';
@@ -237,72 +178,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     }
   }
 
-  /**
-   * Capture learnings (studio "Capture learnings" verb): launch the governed
-   * capture-learnings workflow over this repo — a REAL governed run (mine the
-   * repo's history/graph into durable memory + knowledge), so it lands on the
-   * run the operator can watch, never a hidden relaunch. Reuses the shared
-   * `launchRun` wire (`POST /runs {problem, repoRef, workflow}`) — no new type.
-   * Failures surface in the card's existing `rerunError` slot (only one card
-   * action runs at a time), the loading label rides its own `capturing` map.
-   *
-   * Filing (F-RC1-049 / F-E2E-015, FIX-IT-ALL L4-⑩): from a project page the
-   * ambient project rides the launch as `projectId` (crew accepts it,
-   * `LaunchRunBody.projectId`), so the run lands under `/p/<proj>/…` like every
-   * other launch from that page. From the flat `/repos` page there is no ambient
-   * project and NO `projectId` is sent — the run stays Unfiled honestly (the
-   * studio store holds run→project only; there is no repo→project map to guess).
-   */
-  async function captureLearnings(repoId: string, repoName: string): Promise<void> {
-    // Bail if a capture for this repo is already in flight (double-click before the
-    // disabled state re-renders) — the ref is updated synchronously, unlike state.
-    if (capturingRef.current.has(repoId)) return;
-    capturingRef.current.add(repoId);
-    setCapturing((prev) => ({ ...prev, [repoId]: true }));
-    setRerunError((prev) => ({ ...prev, [repoId]: '' }));
-    try {
-      const { runId } = await api.launchRun({
-        problem: `Capture learnings from ${repoName}`,
-        repoRef: repoId,
-        workflow: 'capture-learnings',
-        ...(ambientProject !== null ? { projectId: ambientProject } : {}),
-      });
-      // Studio witnessed this launch — record it so the run's provenance line
-      // reads 'via studio', not the API fallback (same as ChatInput's launch).
-      useProvenanceStore.getState().markLaunchedHere(runId);
-      onSelectRun?.(runId);
-    } catch (err) {
-      setRerunError((prev) => ({
-        ...prev,
-        [repoId]: err instanceof Error ? err.message : String(err),
-      }));
-    } finally {
-      capturingRef.current.delete(repoId);
-      setCapturing((prev) => ({ ...prev, [repoId]: false }));
-    }
-  }
-
-  /**
-   * Re-index as PREFILL (the Retry-as-prefill idiom, DES-UX-001 §4.3): the
-   * repo's recorded onboard run's setup is deposited for the composer and the
-   * operator lands on `/runs/new` to tweak-before-send — nothing auto-launches,
-   * no POST fires here.
-   */
-  function reindexAsPrefill(m: RepoFleetModel): void {
-    const run = m.onboard.run;
-    if (run === null) return; // never-onboarded repos keep the launch verb instead
-    const s = run.session;
-    setRetryPrefill({
-      retryOf: s.id,
-      problem: s.problem,
-      clis: s.clis,
-      workflowId: s.workflow_id || null,
-      repoRef: m.repo.id,
-      entityMode: s.entity_mode,
-      humanConfirm: s.human_confirm,
-      projectId: typeof s.project_id === 'string' ? s.project_id : null,
-    });
-    navigate('/runs/new');
+  /** Re-index as a prefill (components/repoActions.ts): nothing starts until the person sends it. */
+  function reindex(m: RepoFleetModel): void {
+    if (m.onboard.run !== null) reindexAsPrefill(m.onboard.run, m.repo.id, navigate);
   }
 
   async function registerRepo(): Promise<void> {
@@ -346,7 +224,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
       setSelectedProjectId(ambientProject);
       nameEditedRef.current = false;
 
-      const detailPath = '/repo-detail/' + encodeURIComponent(repo.id);
+      const detailPath = repoDetailPath(repo.id, { project: ambientProject });
       if (onboardError) {
         navigate(detailPath, { state: { onboardError } });
       } else {
@@ -403,16 +281,10 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     || m.repo.root_path.toLowerCase().includes(q));
   const visible = searched.filter((m) => matchesRepoChip(m, chip));
 
-  // ── What we know about each repository (round 10): its marks, read for the rows on screen ──
+  // ── The rows' reads: each repository's code-map size, and (on a crew with tracker links) its projects and trackers ──
   const knowledge = useRepoKnowledgeFor(visible.map((m) => m.repo.id));
-  const [graphOf, setGraphOf] = useState<{ repo: RepoEntry; view: 'code' | 'domain'; focus?: string } | null>(null);
-  const [requirementsOf, setRequirementsOf] = useState<RepoEntry | null>(null);
-  const openMark = (repo: RepoEntry, t: MarkTarget): void => {
-    if (t.kind === 'code-graph') setGraphOf({ repo, view: 'code' });
-    else if (t.kind === 'req-graph') setGraphOf({ repo, view: 'domain' });
-    else if (t.kind === 'requirements') setRequirementsOf(repo);
-    else if (t.kind === 'run') onSelectRun?.(t.runId);
-  };
+  const linksSupported = useTrackerLinksSupported();
+  const links = useRepoLinksFor(visible.map((m) => m.repo.id), linksSupported);
 
   const chipCounts = useMemo(() => {
     const counts: Record<RepoChip, number> = { all: 0, 'needs-you': 0, active: 0, failing: 0, ready: 0, never: 0, 'graph-missing': 0 };
@@ -462,15 +334,23 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     [fleet],
   ));
   const waitingN = fleet.reduce((a, m) => a + m.waiting.length, 0);
-  const sentence = reposSentence(loading ? 'loading' : error !== null ? 'failed' : 'known', fleet.map((m) => readiness.get(m.repo.id) ?? 'never'), waitingN);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // An app's own repository is not "not indexed yet" work for you: the sentence counts the others and names the apps'.
+  const appRepos = fleet.filter((m) => appOf.has(m.repo.id));
+  const ownReadiness = fleet.filter((m) => !appOf.has(m.repo.id)).map((m) => readiness.get(m.repo.id) ?? 'never');
+  const baseSentence = reposSentence(loading ? 'loading' : error !== null ? 'failed' : 'known', ownReadiness, waitingN);
+  const sentence = !loading && error === null && appRepos.length > 0 ? withApps(fleet.length, appRepos.length, baseSentence) : baseSentence;
+  // The projects whose jobs used each repository: names from the shared projects mirror and the membership join the
+  // board model keeps (store reads, never a new request).
+  const shared = useProjectsStore((st) => st.projects);
+  const nameByRun = useMembershipStore((st) => st.projectNameByRun);
+  const usedBy = useMemo(() => projectsByJobs(repoRuns, new Map([...shared, ...projects].map((p) => [p.id, p.name])), nameByRun), [repoRuns, shared, projects, nameByRun]);
   const [tools, setTools] = useState(false);
   const narrowed = chip !== 'all' || q !== '';
 
   return (
     <div className="h-full overflow-y-auto">
       <div data-testid="repos-page" className="wk-jr wk-jr--page">
-        <div className="wk-jr-col">
+        <div className="wk-jr-col wk-rl-col">
           <QuietHead
             title="Repositories"
             titleAside={<PageAskButton kind="repos" testId="repos-page-ask" />}
@@ -709,185 +589,120 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   </button>
                 </p>
               ) : (
-                /* ── One roomy row per repo; details open under it ── */
-                <ul data-testid="repos-list" className="wk-jr-list" aria-label="Your repositories">
-                  {visible.map((m) => {
-                    const { repo, counts, waiting } = m;
-                    const health = healthOf(counts.done, counts.terminal);
-                    const isRerunning = rerunning[repo.id] ?? false;
-                    const isCapturing = capturing[repo.id] ?? false;
-                    const runErr = rerunError[repo.id];
-                    const activeCount = m.windowed.filter((v) => !['completed', 'cancelled', 'failed', 'awaiting_human'].includes(v.session.status)).length;
-                    const state = graphState(m);
-                    const ready = readiness.get(repo.id) ?? 'never';
-                    const last = lastActivity(repo.id, repoRuns);
-                    const side = repoSide(m, ready, last, now);
-                    const lang = languages.get(repo.id) ?? null;
-                    const open = openId === repo.id;
-                    const detailsId = `repo-details-${repo.id}`;
-                    const openDetail = (): void => navigate('/repo-detail/' + encodeURIComponent(repo.id));
-                    const redo = (): void => { if (m.onboard.run !== null) reindexAsPrefill(m); else void rerunOnboarding(repo.id); };
-                    return (
-                      <li
-                        key={repo.id}
-                        data-testid="repo-card"
-                        data-repo-id={repo.id}
-                        data-state={m.onboard.state}
-                        data-ready={ready}
-                        data-captured={m.capture.state}
-                        data-gates={waiting.length}
-                        data-runs={counts.total}
-                        data-open={open ? 'true' : undefined}
-                        className="wk-jr-item"
-                      >
-                        <div className="wk-jr-row-wrap">
-                          <button
-                            type="button"
-                            className="wk-jr-row"
+                /* ── One row per repository, in columns (a phone stacks them); the row opens the repository's page ── */
+                <div className="wk-rl" data-links={linksSupported ? 'true' : 'false'}>
+                  <div className="wk-rl-head wk-rl-grid" aria-hidden="true" data-testid="repos-columns">
+                    <span>Repository</span>
+                    <span>Projects</span>
+                    <span>Code map</span>
+                    {linksSupported && <span>Trackers</span>}
+                    <span>Last activity</span>
+                    <span />
+                  </div>
+                  <ul data-testid="repos-list" className="wk-rl-list" aria-label="Your repositories">
+                    {visible.map((m) => {
+                      const { repo, counts, waiting } = m;
+                      const isRerunning = rerunning[repo.id] ?? false;
+                      const runErr = rerunError[repo.id];
+                      const ready = readiness.get(repo.id) ?? 'never';
+                      const last = lastActivity(repo.id, repoRuns);
+                      const side = repoSide(m, ready, last, now);
+                      const lang = languages.get(repo.id) ?? null;
+                      const app = appOf.get(repo.id) ?? null;
+                      // An app's own repository that was never indexed is the app's, not a chore: no "Not indexed yet", no Index.
+                      const appQuiet = app !== null && (ready === 'never' || ready === 'missing');
+                      const cell = mapCell(ready, m, knowledgeOf(knowledge, repo.id).kinds, now);
+                      const map = appQuiet ? { tone: 'none' as const, words: 'Not indexed (app)', size: null } : cell;
+                      const link = linksSupported ? linksOf(links, repo.id) : null;
+                      const jobsIn = usedBy.get(repo.id) ?? [];
+                      // Attached (crew's membership, with tracker links) and used by a project's jobs (the run list, always).
+                      const proj = projectsWords(link, jobsIn);
+                      const trk = link === null ? null : trackersWords(link);
+                      const when = lastWords(last, repo.registered_at, now);
+                      const detailPath = repoDetailPath(repo.id, { project: ambientProject });
+                      const redo = (): void => { if (m.onboard.run !== null) reindex(m); else void rerunOnboarding(repo.id); };
+                      // The last-activity word is its own column: the right side keeps only what asks for a move or says work is under way.
+                      const showWord = side.kind === 'word' && side.tone !== 'quiet';
+                      const nag = !appQuiet && (side.kind === 'index' || side.kind === 'reindex');
+                      return (
+                        <li
+                          key={repo.id}
+                          data-testid="repo-card"
+                          data-repo-id={repo.id}
+                          data-state={m.onboard.state}
+                          data-graph={graphState(m)}
+                          data-ready={ready}
+                          data-captured={m.capture.state}
+                          data-gates={waiting.length}
+                          data-runs={counts.total}
+                          data-app={app !== null ? 'true' : undefined}
+                          className="wk-rl-item"
+                        >
+                          <a
+                            href={detailPath}
+                            className="wk-rl-row wk-rl-grid"
                             data-testid="repo-row"
-                            aria-expanded={open}
-                            aria-controls={detailsId}
-                            onClick={() => setOpenId(open ? null : repo.id)}
+                            onClick={onPlainClick(navigate, detailPath)}
                           >
-                            <span aria-hidden className="wk-jr-dot" data-tone={repoTone(m, ready)} />
-                            <span className="wk-jr-text">
-                              <span className="wk-jr-row-title">{repo.name}</span>
-                              <span className="wk-jr-row-sub" data-testid="repo-row-line">{[lang, readinessWords(ready, m, now)].filter((x): x is string => x !== null).join(' · ')}</span>
-                            </span>
-                            {side.kind === 'word' && <span className="wk-jr-word" data-tone={side.tone} data-testid="repo-row-word">{side.label}</span>}
-                          </button>
-                          {side.kind === 'needs' && (
-                            <button type="button" data-testid="repo-needs-you" data-run-id={side.runId} className="wk-jr-link wk-jr-word" data-tone="gate"
-                              onClick={() => navigate(gateJump(side.runId))}>
-                              {side.label}
-                            </button>
-                          )}
-                          {side.kind === 'reindex' && (
-                            <button type="button" data-testid="repo-row-reindex" data-repo-id={repo.id} className="wk-jr-link wk-jr-link--step"
-                              disabled={isRerunning || isCapturing}
-                              title={m.onboard.run !== null ? 'Opens a new job with this repository’s indexing filled in; nothing starts until you send it' : 'Starts indexing this repository'}
-                              onClick={redo}>
-                              {isRerunning ? 'Starting…' : side.label}
-                            </button>
-                          )}
-                          {side.kind === 'index' && (
-                            <button type="button" data-testid="repo-row-index" data-repo-id={repo.id} className="wk-jr-link wk-jr-link--step"
-                              disabled={isRerunning || isCapturing} title="Starts indexing this repository, as a job you can watch"
-                              onClick={() => void rerunOnboarding(repo.id)}>
-                              {isRerunning ? 'Starting…' : side.label}
-                            </button>
-                          )}
-                        </div>
-
-                        <KnowMarks repoName={repo.name} marks={knowledgeMarks(repo, repoRuns, knowledgeOf(knowledge, repo.id), now)} onOpen={(t) => openMark(repo, t)} />
-
-                        <div id={detailsId} className="wk-jr-details" data-testid="repo-details" hidden={!open}>
-                          <ul className="wk-jr-facts">
-                            {/* The graph state — the run history, corrected by the engine's findings (F-2R2-003). */}
-                            <li data-testid="repo-graph-state" data-state={state} data-tone={GRAPH_TONE[state] ?? 'quiet'} className="wk-jr-fact">
-                              <span aria-hidden className="wk-jr-fact-dot" />{graphStateWord(m, attachedAt, now)}
-                            </li>
-                            {/* The captured-learnings state (studio#294 b). */}
-                            <li data-testid="repo-capture-state" data-state={m.capture.state} data-tone={CAPTURE_TONE[m.capture.state] ?? 'quiet'} className="wk-jr-fact">
-                              <span aria-hidden className="wk-jr-fact-dot" />{captureStateWord(m, attachedAt, now)}
-                            </li>
-                            <li className="wk-jr-fact">
-                              <span aria-hidden className="wk-jr-fact-dot" />
-                              <span>
-                                <span data-testid="repo-card-runs">{counts.total} {counts.total === 1 ? 'run' : 'runs'} ({rangeWord(range)})</span>
-                                {activeCount > 0 && <span> · {activeCount} working</span>}
-                                {counts.terminal > 0 && (
-                                  <span data-testid="repo-card-split" data-health={health}> · {counts.done} finished{counts.failed > 0 ? `, ${counts.failed} failed` : ''}</span>
-                                )}
-                                <span> · {m.lastAt !== null ? `active ${ago(m.lastAt, now)} ago` : relativeTime(repo.registered_at)}</span>
+                            <span className="wk-rl-name">
+                              <span aria-hidden className="wk-jr-dot" data-tone={appQuiet && m.waiting.length === 0 ? 'quiet' : repoTone(m, ready)} />
+                              <span className="wk-rl-words">
+                                <span className="wk-rl-title wk-jr-row-title">{repo.name}{app !== null && <span className="wk-tag wk-rl-app" data-testid="repo-row-app" title={`The repository of the app “${app}”`}>App</span>}</span>
+                                <span className="wk-rl-sub wk-rl-desk" data-testid="repo-row-sub">{[lang, repo.default_branch].filter((x): x is string => x !== null && x !== '').join(' · ')}</span>
                               </span>
-                            </li>
-                            <li className="wk-jr-fact"><span aria-hidden className="wk-jr-fact-dot" />Default branch {repo.default_branch}</li>
-                          </ul>
-
-                          {/* studio#251: the engine's checkout findings, compact; "Re-run onboarding" rides the
-                              EXISTING onboard wire. A gap the graph line already states is not said twice. */}
-                          <RepoFindings
-                            compact
-                            gapStated
-                            findings={repo.findings}
-                            onRerunOnboarding={() => void rerunOnboarding(repo.id)}
-                            rerunning={isRerunning}
-                            disabled={isCapturing}
-                            testId="repo-card-findings"
-                          />
-
-                          {/* Reel ch59 (studio 0.7.8): the row names the repo; where its checkout lives is detail. */}
-                          <TechDetails data-testid="repo-card-path" summary="Where it is" text={repo.root_path} />
-
+                            </span>
+                            <span className="wk-rl-cell wk-rl-desk" data-muted={proj.muted ? 'true' : undefined} title={proj.title} data-testid="repo-row-projects">{proj.words}</span>
+                            <span className="wk-rl-cell wk-rl-desk" data-testid="repo-row-map" data-tone={map.tone}>
+                              <span className="wk-rl-map" data-tone={map.tone}>
+                                <span aria-hidden className="wk-rl-map-dot" />
+                                <span><span data-testid="repo-row-line">{map.words}</span>{map.size !== null && <> · <b>{map.size}</b></>}</span>
+                              </span>
+                            </span>
+                            {trk !== null && <span className="wk-rl-cell wk-rl-desk" data-muted={trk.muted ? 'true' : undefined} data-testid="repo-row-trackers">{trk.words}</span>}
+                            <span className="wk-rl-cell wk-rl-desk" data-muted="true" data-testid="repo-row-last">{when}</span>
+                            <span className="wk-rl-cell wk-rl-desk" aria-hidden />
+                            <span className="wk-rl-phone" data-testid="repo-row-phone">{phoneLine(map, link, when, jobsIn)}</span>
+                          </a>
+                          <span className="wk-rl-act">
+                            {showWord && <span className="wk-jr-word" data-tone={side.tone} data-testid="repo-row-word">{side.label}</span>}
+                            {side.kind === 'needs' && (
+                              <button type="button" data-testid="repo-needs-you" data-run-id={side.runId} className="wk-jr-link wk-jr-word" data-tone="gate"
+                                onClick={() => navigate(gateJump(side.runId))}>
+                                {side.label}
+                              </button>
+                            )}
+                            {nag && side.kind === 'reindex' && (
+                              <button type="button" data-testid="repo-row-reindex" data-repo-id={repo.id} className="wk-jr-link wk-jr-link--step"
+                                disabled={isRerunning}
+                                title={m.onboard.run !== null ? 'Opens a new job with this repository’s indexing filled in; nothing starts until you send it' : 'Starts indexing this repository'}
+                                onClick={redo}>
+                                {isRerunning ? 'Starting…' : side.label}
+                              </button>
+                            )}
+                            {nag && side.kind === 'index' && (
+                              <button type="button" data-testid="repo-row-index" data-repo-id={repo.id} className="wk-jr-link wk-jr-link--step"
+                                disabled={isRerunning} title="Starts indexing this repository, as a job you can watch"
+                                onClick={() => void rerunOnboarding(repo.id)}>
+                                {isRerunning ? 'Starting…' : side.label}
+                              </button>
+                            )}
+                          </span>
                           {runErr && (
-                            <div data-testid="repo-card-error" className="wk-pg-repo-card-error">
+                            <div data-testid="repo-card-error" className="wk-rl-error">
                               <p className="wk-jr-note wk-jr-note--bad">Couldn’t start that. Try again in a moment.</p>
                               <TechDetails text={runErr} />
                             </div>
                           )}
-
-                          <div className="wk-jr-acts">
-                            <button type="button" data-testid="repo-open" className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm" onClick={openDetail}>
-                              Open {repo.name}
-                            </button>
-                            {/* Capture learnings — a REAL governed run (launchRun), not a prefill. */}
-                            <button
-                              type="button"
-                              data-testid="repo-capture-learnings"
-                              data-repo-id={repo.id}
-                              disabled={isCapturing || isRerunning}
-                              title={`Start a tracked run that saves what this repository’s history teaches${ambientProject !== null ? ', filed under this project' : ''}`}
-                              onClick={() => void captureLearnings(repo.id, repo.name)}
-                              className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm"
-                            >
-                              {isCapturing ? 'Starting…' : m.capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
-                            </button>
-                            {m.onboard.run !== null ? (
-                              <button
-                                type="button"
-                                data-testid="repo-reindex"
-                                data-repo-id={repo.id}
-                                title="Open the composer with this repository’s onboarding filled in; nothing starts until you send it"
-                                onClick={() => reindexAsPrefill(m)}
-                                className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm"
-                              >
-                                Re-index…
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                data-testid="repo-onboard"
-                                disabled={isRerunning || isCapturing}
-                                onClick={() => void rerunOnboarding(repo.id)}
-                                className="wk-jr-btn wk-jr-btn--secondary wk-jr-btn--sm"
-                              >
-                                {isRerunning ? 'Starting…' : 'Onboard'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               )}
             </section>
           )}
         </div>
       </div>
-      {graphOf !== null && (
-        <RepoGraphModal key={`${graphOf.repo.id}:${graphOf.view}`} repo={graphOf.repo} initialView={graphOf.view} initialFocus={graphOf.focus ?? null} onClose={() => setGraphOf(null)} {...(onSelectRun !== undefined ? { onSelectRun } : {})} />
-      )}
-      {requirementsOf !== null && (
-        <RequirementsModal
-          repoId={requirementsOf.id}
-          repoName={requirementsOf.name}
-          onClose={() => setRequirementsOf(null)}
-          onNavigateComponent={(symbol) => { const r = requirementsOf; setRequirementsOf(null); setGraphOf({ repo: r, view: 'code', focus: symbol }); }}
-          {...(onSelectRun !== undefined ? { onOpenRun: (runId: string) => { setRequirementsOf(null); onSelectRun(runId); } } : {})}
-        />
-      )}
     </div>
   );
 }

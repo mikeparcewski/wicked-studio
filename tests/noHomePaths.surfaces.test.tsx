@@ -2,7 +2,7 @@
 // renders in the DEFAULT layer of the repo and session surfaces. Paths and engine reasons may live
 // only inside Technical details (a <details>), sanitized. Fails if a surface puts one back.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { RepoEntry } from '../src/api/types.js';
 import { makeView } from './factories.js';
 
@@ -29,6 +29,7 @@ vi.mock('../src/api/client.js', async (orig) => {
 });
 
 const { RepositoriesPanel } = await import('../src/components/RepositoriesPanel.js');
+const { RepoDetailPage } = await import('../src/components/RepoDetailPage.js');
 const { WatchRunLines } = await import('../src/components/WatchLines.js');
 const { StrandedCard } = await import('../src/components/session/StrandedCard.js');
 
@@ -43,22 +44,26 @@ const PATHY = /\/Users\/|\/home\/|~\/|\$TMPDIR/;
 afterEach(() => cleanup());
 
 describe('no home path on the primary layer (repo + session surfaces)', () => {
-  it('the repo card names the repo; its checkout path is behind Technical details, as ~', async () => {
+  it('the repo row names the repo and shows no path; its page keeps the checkout path behind Technical details, as ~', async () => {
     const { container } = render(<RepositoriesPanel navigate={() => {}} />);
     await screen.findByText('billing');
     expect(defaultLayer(container)).not.toMatch(PATHY);
-    const where = await screen.findByTestId('repo-card-path');
+    cleanup();
+    const page = render(<RepoDetailPage repoId="billing" onSelectRun={() => {}} navigate={() => {}} onOpenGraph={() => {}} search="?tab=settings" />);
+    const where = await screen.findByTestId('repo-detail-path');
+    expect(defaultLayer(page.container)).not.toMatch(PATHY);
     expect(where.tagName).toBe('DETAILS');
     expect(where.textContent).toContain('~/wicked-rig/repos/billing');
     expect(where.textContent).not.toContain('/Users/');
   });
 
-  it('opening "Where it is" on a repo card reads it in place — it does not open the repo', async () => {
-    const navigate = vi.fn();
-    render(<RepositoriesPanel navigate={navigate} />);
-    const where = await screen.findByTestId('repo-card-path');
-    fireEvent.click(where.querySelector('summary')!);
-    expect(navigate).not.toHaveBeenCalled();
+  it('every tab of the repository’s page keeps paths off the default layer', async () => {
+    for (const tab of ['', '?tab=knowledge', '?tab=jobs', '?tab=history', '?tab=settings']) {
+      const page = render(<RepoDetailPage repoId="billing" onSelectRun={() => {}} navigate={() => {}} onOpenGraph={() => {}} search={tab} />);
+      await screen.findByRole('heading', { name: 'billing' });
+      expect(defaultLayer(page.container), tab).not.toMatch(PATHY);
+      cleanup();
+    }
   });
 
   it('a stranded run says where its work is in words; the worktree path is behind details', () => {

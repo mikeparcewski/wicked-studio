@@ -817,6 +817,9 @@ export const api = {
 
   // ── Projects (DES-PROJECT-001) ───────────────────────────────────────────────
 
+  /** The apps (`GET /apps`): each app's own repository is `repoId` in the repo registry (the Repositories list marks it). */
+  listApps: () => apiFetch<import('./types.js').AppsListResponse>('/apps'),
+
   /** All projects; `status=active` (default) or `archived` filters. Includes the synthesized "Unfiled" default. */
   listProjects: (status?: 'active' | 'archived') => {
     const qs = status ? `?status=${status}` : '';

@@ -144,57 +144,34 @@ describe('the finding rule (module functions)', () => {
   });
 });
 
-describe('the repo card (RepositoriesPanel)', () => {
-  async function fleet(): Promise<HTMLElement[]> {
+describe('the Repositories list (RepositoriesPanel)', () => {
+  it('says findings on the repository’s page, not under its row: the row reads the gap in words', async () => {
     render(<RepositoriesPanel navigate={() => undefined} />);
     await screen.findByTestId('repos-list');
-    return screen.getAllByTestId('repo-card');
-  }
-  const card = (cards: HTMLElement[], id: string): HTMLElement =>
-    cards.find((c) => c.getAttribute('data-repo-id') === id)!;
-
-  it('clean and predating records carry no findings block; the three finding records carry one each', async () => {
-    const cards = await fleet();
-    expect(within(card(cards, 'billing')).queryByTestId('repo-card-findings')).toBeNull();
-    expect(within(card(cards, 'legacy')).queryByTestId('repo-card-findings')).toBeNull();
-    for (const id of ['studio-api', 'wicked-studio', 'orphan']) {
-      expect(within(card(cards, id)).getByTestId('repo-card-findings')).toHaveAttribute('data-count', '1');
+    const cards = screen.getAllByTestId('repo-card');
+    const card = (id: string): HTMLElement => cards.find((c) => c.getAttribute('data-repo-id') === id)!;
+    for (const id of ['billing', 'legacy', 'studio-api', 'wicked-studio', 'orphan']) {
+      expect(within(card(id)).queryByTestId('repo-card-findings')).toBeNull();
     }
+    expect(within(card('wicked-studio')).getByTestId('repo-row-line')).toHaveTextContent('No code map');
+    expect(within(card('orphan')).getByTestId('repo-row-line')).toHaveTextContent('No place to keep a code map');
   });
 
-  it('each finding row wears its code + severity and the engine message; only the no-live-graph case offers Re-run onboarding', async () => {
-    const cards = await fleet();
-    const live = within(card(cards, 'studio-api')).getByTestId('repo-card-findings-row');
+  it('on the repository’s page, a tidy-up finding is a warning with no action; the no-live-graph one offers Re-run onboarding', async () => {
+    render(<RepoDetailPage repoId="studio-api" onSelectRun={() => undefined} navigate={() => undefined} onOpenGraph={() => undefined} />);
+    const live = within(await screen.findByTestId('repo-alerts')).getByTestId('repo-findings-row');
     expect(live).toHaveAttribute('data-code', 'in_tree_code_graph_ignored');
     expect(live).toHaveAttribute('data-severity', 'warning');
-    // Plain words on the card; the engine's message (with its paths) lives on the detail page's Technical details.
-    expect(live.textContent).toContain('An old code map saved inside this checkout is ignored');
-    expect(live.textContent).not.toContain('/w2/state');
-    expect(within(live).queryByTestId('repo-card-findings-reonboard')).toBeNull();
-
-    const noLive = within(card(cards, 'wicked-studio')).getByTestId('repo-card-findings-row');
-    expect(noLive).toHaveAttribute('data-severity', 'error');
-    expect(within(noLive).getByTestId('repo-card-findings-reonboard')).toHaveTextContent('Re-run onboarding');
-
-    const root = within(card(cards, 'orphan')).getByTestId('repo-card-findings-row');
+    expect(within(live).queryByTestId('repo-findings-reonboard')).toBeNull();
+    cleanup();
+    render(<RepoDetailPage repoId="orphan" onSelectRun={() => undefined} navigate={() => undefined} onOpenGraph={() => undefined} search="?tab=jobs" />);
+    const root = within(await screen.findByTestId('repo-alerts')).getByTestId('repo-findings-row');
     expect(root).toHaveAttribute('data-code', 'code_graph_root_unresolvable');
     expect(root).toHaveAttribute('data-severity', 'error');
-    expect(root.textContent).not.toContain('daemon'); // the card's graph line states this gap
-    expect(within(root).queryByTestId('repo-card-findings-reonboard')).toBeNull();
-  });
-
-  it('Re-run onboarding posts the EXISTING onboard wire for that repo and does not navigate the card', async () => {
-    const navigate = vi.fn();
-    render(<RepositoriesPanel navigate={navigate} onSelectRun={() => undefined} />);
-    await screen.findByTestId('repos-list');
-    const cards = screen.getAllByTestId('repo-card');
-    fireEvent.click(within(card(cards, 'wicked-studio')).getByTestId('repo-card-findings-reonboard'));
-    await waitFor(() => expect(rerunOnboarding).toHaveBeenCalledWith('wicked-studio'));
-    expect(rerunOnboarding).toHaveBeenCalledTimes(1);
-    // The finding's action sits in the row's details: it must not also open the repo detail.
-    expect(navigate).not.toHaveBeenCalled();
+    expect(within(root).queryByTestId('repo-findings-reonboard')).toBeNull();
   });
 });
+
 
 describe('the repo detail header (RepoDetailPage)', () => {
   it('renders the finding under the root path and wires Re-run onboarding to the page trigger', async () => {
@@ -308,7 +285,8 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
         attachedBy: 'studio',
       }),
     );
-    expect(navigate).toHaveBeenCalledWith('/repo-detail/billing', {
+    // Registered from a project: its page carries the project (a launch there files under it).
+    expect(navigate).toHaveBeenCalledWith('/repo-detail/billing?project=proj-1', {
       state: { onboardError: ONBOARD_REASON },
     });
     expect(screen.queryByTestId('repo-register-error')).toBeNull();
@@ -323,7 +301,7 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
     const onSelectRun = vi.fn();
     window.history.replaceState({ onboardError: ONBOARD_REASON }, '', '/repo-detail/billing');
 
-    render(<RepoDetailPage repoId="billing" onSelectRun={onSelectRun} navigate={() => undefined} onOpenGraph={() => undefined} />);
+    render(<RepoDetailPage repoId="billing" onSelectRun={onSelectRun} navigate={() => undefined} onOpenGraph={() => undefined} search="?tab=settings" />);
     const notice = await screen.findByTestId('repo-onboard-error');
     expect(notice.textContent).toContain('Registered. Onboarding couldn’t start:');
     expect(notice.textContent).toContain("unresolved tool dependencies: phase 'index' requires tool 'wicked-estate'");
@@ -343,7 +321,7 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
   it('dismissing the notice keeps it dismissed after remount and preserves other view state', async () => {
     window.history.replaceState({ onboardError: ONBOARD_REASON, 'wk.inApp': true }, '', '/repo-detail/billing');
     const props = { repoId: 'billing', onSelectRun: vi.fn(), navigate: vi.fn(), onOpenGraph: vi.fn() };
-    const page = render(<RepoDetailPage {...props} />);
+    const page = render(<RepoDetailPage {...props} search="?tab=settings" />);
     const notice = await screen.findByTestId('repo-onboard-error');
 
     fireEvent.click(within(notice).getByRole('button', { name: 'Dismiss' }));
@@ -352,7 +330,7 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
     expect(window.history.state).toEqual({ 'wk.inApp': true });
     expect(rerunOnboarding).not.toHaveBeenCalled();
     page.unmount();
-    render(<RepoDetailPage {...props} />);
+    render(<RepoDetailPage {...props} search="?tab=settings" />);
     await screen.findByRole('heading', { name: 'billing' });
     expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
   });
@@ -360,7 +338,7 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
   it('shows a rejected re-run as a re-run failure, with the reason', async () => {
     rerunOnboarding.mockRejectedValueOnce(new Error('the required indexing tool is unavailable'));
     const onSelectRun = vi.fn();
-    render(<RepoDetailPage repoId="billing" onSelectRun={onSelectRun} navigate={vi.fn()} onOpenGraph={vi.fn()} />);
+    render(<RepoDetailPage repoId="billing" onSelectRun={onSelectRun} navigate={vi.fn()} onOpenGraph={vi.fn()} search="?tab=settings" />);
     fireEvent.click(await screen.findByTestId('repo-run-onboarding'));
 
     expect(await screen.findByTestId('repo-onboard-error')).toHaveTextContent(
@@ -382,11 +360,11 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
       settleB = () => resolve({ runId: 'run-b' });
     }));
     const props = { onSelectRun: vi.fn(), navigate: vi.fn(), onOpenGraph: vi.fn() };
-    const page = render(<RepoDetailPage {...props} repoId="repo-a" />);
+    const page = render(<RepoDetailPage {...props} repoId="repo-a" search="?tab=settings" />);
     fireEvent.click(await screen.findByTestId('repo-run-onboarding'));
     expect(rerunOnboarding).toHaveBeenCalledWith('repo-a');
 
-    page.rerender(<RepoDetailPage {...props} repoId="repo-b" />);
+    page.rerender(<RepoDetailPage {...props} repoId="repo-b" search="?tab=settings" />);
     await screen.findByRole('heading', { name: 'repo-b' });
     expect(screen.getByTestId('repo-run-onboarding')).toBeEnabled();
     fireEvent.click(screen.getByTestId('repo-run-onboarding'));
@@ -405,7 +383,7 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
   it('reads the current entry on same-repo navigation and Back/Forward', async () => {
     window.history.replaceState({ onboardError: ONBOARD_REASON }, '', '/repo-detail/billing');
     const route = renderHook(() => useRoute());
-    render(<RepoDetailPage repoId="billing" onSelectRun={vi.fn()} navigate={route.result.current.navigate} onOpenGraph={vi.fn()} />);
+    render(<RepoDetailPage repoId="billing" onSelectRun={vi.fn()} navigate={route.result.current.navigate} onOpenGraph={vi.fn()} search="?tab=settings" />);
     expect(await screen.findByTestId('repo-onboard-error')).toHaveTextContent('unresolved tool dependencies');
 
     act(() => route.result.current.navigate('/repo-detail/billing', { state: { onboardError: 'Another registration failed' } }));
@@ -428,7 +406,7 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
     const route = renderHook(() => useRoute());
     act(() => route.result.current.navigate('/repo-detail/billing', { state: { onboardError: 'New registration failed' } }));
     rerunOnboarding.mockRejectedValueOnce(new Error('re-run refused'));
-    render(<RepoDetailPage repoId="billing" onSelectRun={vi.fn()} navigate={route.result.current.navigate} onOpenGraph={vi.fn()} />);
+    render(<RepoDetailPage repoId="billing" onSelectRun={vi.fn()} navigate={route.result.current.navigate} onOpenGraph={vi.fn()} search="?tab=settings" />);
     fireEvent.click(await screen.findByTestId('repo-run-onboarding'));
     expect(await screen.findByTestId('repo-onboard-error')).toHaveTextContent('Couldn’t start onboarding: re-run refused');
     expect(window.history.state).not.toHaveProperty('onboardError');
@@ -465,7 +443,7 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
         attachedBy: 'studio',
       }),
     );
-    expect(navigate).toHaveBeenCalledWith('/repo-detail/billing');
+    expect(navigate).toHaveBeenCalledWith('/repo-detail/billing?project=proj-1');
     expect(navigate).toHaveBeenCalledTimes(1);
 
     cleanup();

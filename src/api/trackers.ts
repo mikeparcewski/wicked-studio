@@ -59,8 +59,8 @@ const query = (q: Record<string, string | null | undefined>): string => {
 
 export const trackersApi = {
   /** The links of a project, a repo, or both (the tracker set a job in that project on that repo has). */
-  links: (target: { project?: string | null; repo?: string | null }) =>
-    apiFetch<unknown>(`/tracker-links${query({ project: target.project, repo: target.repo })}`),
+  links: (target: { project?: string | null; repo?: string | null }, signal?: AbortSignal) =>
+    apiFetch<unknown>(`/tracker-links${query({ project: target.project, repo: target.repo })}`, signal !== undefined ? { signal } : undefined),
   /** Link one tracker to a project or a repo. A person's only. `LinkTrackerPicker` is its only caller. */
   link: (body: CreateTrackerLinkBody) => apiFetch<unknown>('/tracker-links', { method: 'POST', body: JSON.stringify(body) }),
   /** Remove one link (crew answers 204). A person's only. `TrackerRows` is its only caller. */

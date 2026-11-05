@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from 'react';
+import { repoDetailPath } from '../../board/repoTabs.js';
 import { registerRepoPath } from '../../hooks/ambientProject.js';
 import type { Project, SessionView } from '../../api/types.js';
 import type { SystemAttention } from '../../api/system.js';
@@ -220,7 +221,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
           <CalmSection label="Repositories" data-testid="project-home-repos">
             <div className="wk-pj-chips wk-pj-chips--home">
               {shownRepos.map((u) => u.repo !== null
-                ? <a key={u.ref} href={`/repo-detail/${encodeURIComponent(u.repo.id)}`} onClick={go(navigate, `/repo-detail/${encodeURIComponent(u.repo.id)}`)} className="wk-pj-chip wk-pj-chip--link" data-testid="project-repo-chip" data-attached={u.attached}>{u.name}</a>
+                ? <a key={u.ref} href={repoDetailPath(u.repo.id, { project: projectId })} onClick={go(navigate, repoDetailPath(u.repo.id, { project: projectId }))} className="wk-pj-chip wk-pj-chip--link" data-testid="project-repo-chip" data-attached={u.attached}>{u.name}</a>
                 : <span key={u.ref} className="wk-pj-chip" data-testid="project-repo-chip" data-attached={u.attached}>{u.name}</span>)}
               {/* ux-tonight (operator 2026-11-04: "don't I see a way to onboard a repo anymore"): Add a repository
                   registers a new one in this project (registering onboards it); Attach takes one studio already has. */}

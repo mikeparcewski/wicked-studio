@@ -10,13 +10,11 @@ DiagnosticsResponse.governance, ChatOpenResponse.scope and crew#502's 404/501).
 
 The DOM ACs, verbatim mapping:
 
-  1. REPO FINDINGS (#251): on /repos the studio-api card carries ONE finding row —
-     code in_tree_code_graph_ignored, severity error (no live graph), the engine's
-     message, and a "Re-run onboarding" button; clicking it POSTs
-     /api/v1/repos/studio-api/onboard (tapped off the fixture) and follows the
-     started run — never falling through to the card's own link (repo detail).
-     The repo detail header renders the same finding.
-     With `repo_findings` off the card renders NO findings block (silent).
+  1. REPO FINDINGS (#251): on /repos the studio-api row says "No code map" (the gap, in words); its
+     page renders ONE finding row above the tabs — code in_tree_code_graph_ignored, severity error
+     (no live graph), the engine's message, and a "Re-run onboarding" button; clicking it POSTs
+     /api/v1/repos/studio-api/onboard (tapped off the fixture).
+     With `repo_findings` off the page renders NO findings block (silent).
   2. GOVERNANCE (#246): expanding the rail's Health section renders the governance
      group — store via flag + path, "0 records", dead letters 128+ with the by-type
      / by-reason tallies, and the governance.deadletter ERROR row whose text carries
@@ -97,52 +95,43 @@ with sync_playwright() as p:
     posts: list = []
     page.on("request", lambda r: posts.append((r.method, r.url)) if r.method == "POST" else None)
 
-    # ── 2. #251 — the repo card + detail render the finding; the action posts the remedy ──
+    # ── 2. #251 — the row says the gap; the repository's page renders the finding; its action posts the remedy ──
     page.goto(f"{ORIGIN}/repos")
-    card = page.locator(TID("repo-card")).filter(has=page.locator('[data-repo-id="studio-api"]')).or_(
-        page.locator('[data-testid="repo-card"][data-repo-id="studio-api"]'))
-    card.first.wait_for(timeout=15000)
-    # Calm v2: a repository is one row; its findings and actions open under it on click.
-    card.first.locator(TID("repo-row")).click()
-    row = card.first.locator(TID("repo-card-findings-row"))
-    row.wait_for(timeout=10000)
-    check("repo_card_finding_row",
-          row.get_attribute("data-code") == "in_tree_code_graph_ignored"
-          and row.get_attribute("data-severity") == "error"
-          and row.get_attribute("data-reonboard") == "true"
-          and "re-run onboarding" in (row.inner_text() or "").lower()
-          and card.first.locator(TID("repo-card-findings")).get_attribute("data-count") == "1",
-          code=row.get_attribute("data-code"), severity=row.get_attribute("data-severity"))
+    card = page.locator('[data-testid="repo-card"][data-repo-id="studio-api"]')
+    card.wait_for(timeout=15000)
+    # The 2026-11-05 redesign: a repository is one row in columns; its findings are on its page, above the tabs.
+    check("repo_row_says_the_gap",
+          card.get_attribute("data-graph") == "missing"
+          and "no code map" in (card.locator(TID("repo-row-line")).inner_text() or "").lower()
+          and card.locator(TID("repo-card-findings")).count() == 0,
+          graph=card.get_attribute("data-graph"), line=card.locator(TID("repo-row-line")).inner_text())
+    card.locator(TID("repo-row")).click()
+    page.wait_for_url("**/repo-detail/studio-api", timeout=10000)
+    detail_row = page.locator(f'{TID("repo-alerts")} {TID("repo-findings-row")}')
+    detail_row.wait_for(timeout=15000)
+    check("repo_detail_finding_row",
+          detail_row.get_attribute("data-code") == "in_tree_code_graph_ignored"
+          and detail_row.get_attribute("data-severity") == "error"
+          and detail_row.get_attribute("data-reonboard") == "true"
+          # Plain words in the default layer; the engine's own message sits in Technical details (UX-003).
+          and "no code map yet" in (detail_row.inner_text() or "").lower()
+          and REPO_FINDING_NO_LIVE["message"][:40] in (detail_row.locator(TID("repo-findings-detail")).text_content() or "")
+          and detail_row.locator(TID("repo-findings-reonboard")).count() == 1)
     page.screenshot(path=str(VSHOTS / "wave2-repo-findings.png"))
-    row.locator(TID("repo-card-findings-reonboard")).click()
+    detail_row.locator(TID("repo-findings-reonboard")).click()
     # Poll for the POST rather than a fixed sleep (a slow CI runner missed a 500 ms window).
     for _ in range(50):
         if onboard_posts:
             break
         page.wait_for_timeout(100)
-    # The host's EXISTING onboard trigger follows the started run (as the row's own
-    # Onboard button does); what must NOT happen is the click falling through to
-    # opening the repo detail instead.
-    check("repo_card_reonboard_posts_the_onboard_wire",
-          onboard_posts == ["studio-api"] and "/repo-detail/" not in page.url,
-          onboard_posts=list(onboard_posts), landed=page.url.replace(ORIGIN, ""))
-
-    page.goto(f"{ORIGIN}/repo-detail/studio-api")
-    detail_row = page.locator(TID("repo-findings-row"))
-    detail_row.wait_for(timeout=15000)
-    check("repo_detail_finding_row",
-          detail_row.get_attribute("data-code") == "in_tree_code_graph_ignored"
-          # Plain words in the default layer; the engine's own message sits in Technical details (UX-003).
-          and "no code map yet" in (detail_row.inner_text() or "").lower()
-          and REPO_FINDING_NO_LIVE["message"][:40] in (detail_row.locator(TID("repo-findings-detail")).text_content() or "")
-          and detail_row.locator(TID("repo-findings-reonboard")).count() == 1)
+    check("repo_finding_reonboard_posts_the_onboard_wire", onboard_posts == ["studio-api"], onboard_posts=list(onboard_posts))
 
     # Silent when the record carries no findings (the switch off = the standing shape).
     set_fixture(ORIGIN, repo_findings=False)
-    page.goto(f"{ORIGIN}/repos")
-    page.locator('[data-testid="repo-card"][data-repo-id="studio-api"]').wait_for(timeout=15000)
-    check("repo_card_silent_without_findings",
-          page.locator(TID("repo-card-findings")).count() == 0)
+    page.goto(f"{ORIGIN}/repo-detail/studio-api")
+    page.get_by_role("heading", name="studio-api").wait_for(timeout=15000)
+    check("repo_page_silent_without_findings",
+          page.locator(TID("repo-findings")).count() == 0 and page.locator(TID("repo-card-findings")).count() == 0)
     set_fixture(ORIGIN, repo_findings=True)
 
     # ── 3. #246 — Nerve Center's Governance panel renders diagnostics.governance ─────────

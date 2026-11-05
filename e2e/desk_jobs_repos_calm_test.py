@@ -8,8 +8,8 @@ shipped theme (wicked-dark, wicked-light, dark, light), on the in-process fixtur
      primary action (New job / Add repository); at most one filter on the face (Jobs: Active / Finished);
      rows at least 64 px tall, each with a status dot, a title, one muted line and (Jobs) one status word.
   2. NO IDS ON THE FACE: no run id, uuid or path in a row's visible words.
-  3. DETAILS ON CLICK: a job row is a link to its run; a repository row opens its details (aria-expanded)
-     with Open, Capture learnings and Re-index/Onboard in them.
+  3. DOORS: a job row is a link to its run; a repository row is a link to its page (2026-11-05: tabs, with
+     Capture learnings and Re-index / Re-run onboarding on Settings); the page's What-we-know tiles sit side by side.
   4. VISIBLE HOVER: every row, the primary action, the filter's other option and the Search-and-filter
      button move dE_OK >= 0.08 (OKLab) from rest when hovered, composited over the page by the browser.
   5. VISIBLE FOCUS: a row reached by keyboard wears the focus ring (a box-shadow).
@@ -35,6 +35,8 @@ W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 MIN_DE = 0.08
 MAX_COL = 860
+# The Repositories list is a table of columns (approved mockup design/mockups/repos-page.html, 2026-11-05): a wider measure.
+MAX_COL_REPOS = 1100
 MIN_ROW = 64
 # Each theme with the accent it writes (the rail hover journey's presets: HARBOR for the wicked themes, IRIS for
 # the others), then each theme again with the rig's own accent (HARBOR, a dark teal) to catch an accent-tinted
@@ -160,9 +162,9 @@ def shape(page, root: str, title: str) -> dict:
 
 def rows_of(page, sel: str) -> list:
     return page.evaluate("""sel => [...document.querySelectorAll(sel)].filter(r => r.offsetParent !== null).map(r => {
-      const row = r.querySelector('.wk-jr-row'); return { h: row ? row.getBoundingClientRect().height : 0,
+      const row = r.querySelector('.wk-jr-row, .wk-rl-row'); return { h: row ? row.getBoundingClientRect().height : 0,
         dot: !!r.querySelector('.wk-jr-dot'), title: (r.querySelector('.wk-jr-row-title') || {}).textContent || '',
-        sub: (r.querySelector('.wk-jr-row-sub') || {}).textContent || '', text: row ? row.innerText : '' }; })""", sel)
+        sub: [...r.querySelectorAll('.wk-jr-row-sub, .wk-rl-sub, .wk-rl-phone')].filter(x => x.offsetParent !== null).map(x => x.textContent).join(' '), text: row ? row.innerText : '' }; })""", sel)
 
 
 def focus_ring(page, sel: str) -> str:
@@ -178,15 +180,15 @@ def overflow(page) -> int:
 
 
 def marks_layout(page) -> dict | None:
-    """The first repository row's marks: their flex direction, how many, and on how many lines they sit."""
-    return page.evaluate("""() => { const u = document.querySelector('[data-testid="repo-card"] .wk-know--strip');
+    """A repository page's What-we-know band: its display, how many tiles, and on how many lines they sit."""
+    return page.evaluate("""() => { const u = document.querySelector('[data-testid="repo-know-band"] .wk-know--band');
       if (u === null) return null; const tops = [...u.querySelectorAll('[data-testid="repo-know-mark"]')].map((m) => Math.round(m.getBoundingClientRect().top));
-      return { dir: getComputedStyle(u).flexDirection, n: tops.length, lines: new Set(tops).size }; }""")
+      return { display: getComputedStyle(u).display, n: tops.length, lines: new Set(tops).size }; }""")
 
 
 def marks_in_a_row(marks) -> bool:
-    """A row of pills, not one box per line (knowledge.css once styled `.wk-know` as a column too)."""
-    return marks is not None and marks["dir"] == "row" and marks["n"] > 1 and marks["lines"] < marks["n"]
+    """Tiles side by side, not one box per line (knowledge.css once styled `.wk-know` as a column too)."""
+    return marks is not None and marks["display"] == "grid" and marks["n"] > 1 and marks["lines"] < marks["n"]
 
 
 with sync_playwright() as p:
@@ -245,12 +247,10 @@ with sync_playwright() as p:
         page.get_by_test_id("repo-card").first.wait_for(state="visible", timeout=15000)
         s = shape(page, '[data-testid="repos-page"]', "Repositories")
         rows = rows_of(page, '[data-testid="repo-card"]')
-        check(f"{theme}:repos-pattern", 600 <= s["col"] <= MAX_COL and s["title"] == "28px" and s["sentence"] != "" and s["primary"] == 1
+        check(f"{theme}:repos-pattern", 600 <= s["col"] <= MAX_COL_REPOS and s["title"] == "28px" and s["sentence"] != "" and s["primary"] == 1
               and s["visibleFilters"] == 0 and len(rows) > 0 and all(r["h"] >= MIN_ROW and r["dot"] and r["title"] and r["sub"] for r in rows),
               shape=s, rows=rows[:3])
         check(f"{theme}:repos-no-ids", not any(FACE_IDS.search(r["text"]) for r in rows), faces=[r["text"] for r in rows][:6])
-        marks = marks_layout(page)
-        check(f"{theme}:repos-marks-row", marks_in_a_row(marks), marks=marks)
         card = page.get_by_test_id("repo-card").first
         h_row = hover_de(page, card.get_by_test_id("repo-row"), card, card.locator(".wk-jr-row-title"))
         h_add = hover_de(page, page.get_by_test_id("repos-add"))
@@ -261,23 +261,36 @@ with sync_playwright() as p:
         if step.count() > 0:
             steps = {"rest": rest_contrast(page, step), "hover": hover_de(page, step)}
         page.mouse.move(*PARK)
-        card.get_by_test_id("repo-row").click()
-        details = card.get_by_test_id("repo-details")
-        details.wait_for(state="visible", timeout=3000)
-        acts = details.locator("button").all_inner_texts()
-        sec = details.get_by_test_id("repo-open")
-        h_sec = hover_de(page, sec)
-        check(f"{theme}:repos-hover-focus-details", h_row[0] >= MIN_DE and h_row[1] >= MIN_TEXT and (h_add[0] >= MIN_DE or not paired)
-              and h_add[1] >= MIN_TEXT and h_sec[0] >= MIN_DE and h_sec[1] >= MIN_TEXT
-              and (not steps or (steps["rest"] >= MIN_TEXT and steps["hover"][0] >= MIN_DE and steps["hover"][1] >= MIN_TEXT))
-              and ring not in ("none", "not focus-visible")
-              and card.get_by_test_id("repo-row").get_attribute("aria-expanded") == "true"
-              and any(a.startswith("Open ") for a in acts) and any("Capture learnings" in a for a in acts)
-              and any(a in ("Re-index…", "Onboard") for a in acts),
-              row=h_row, add=h_add, secondary=h_sec, next_step=steps, ring=ring, actions=acts)
-        card.get_by_test_id("repo-row").click()
         page.evaluate("() => document.activeElement && document.activeElement.blur()")
         page.screenshot(path=str(SHOTS / f"jobs-repos-repos-{theme}.png"))
+        # A row is a door to its repository's page (2026-11-05: no expander, no box of details under each row).
+        repo_id = card.get_attribute("data-repo-id")
+        href = card.get_by_test_id("repo-row").get_attribute("href")
+        # Still on the list: no expander, no details and no box of marks under the rows.
+        no_details = (page.get_by_test_id("repo-details").count() == 0 and page.locator('[data-testid="repo-card"] .wk-know').count() == 0
+                      and page.locator('[data-testid="repo-row"][aria-expanded]').count() == 0)
+        card.get_by_test_id("repo-row").click()
+        page.wait_for_url(f"**/repo-detail/{repo_id}", timeout=10000)
+        page.get_by_test_id("repo-know-band").wait_for(state="visible", timeout=15000)
+        marks = marks_layout(page)
+        tabs = page.get_by_role("tab").all_inner_texts()
+        page.get_by_test_id("repo-tab-settings").click()
+        page.wait_for_url(f"**/repo-detail/{repo_id}?tab=settings", timeout=10000)
+        page.get_by_test_id("repo-upkeep").wait_for(state="visible", timeout=10000)
+        acts = page.get_by_test_id("repo-upkeep").locator("button").all_inner_texts()
+        # The repository page's buttons are studio's shared ones (wk-btn), not the calm list's; their hover is not this page's.
+        check(f"{theme}:repos-hover-focus-door", h_row[0] >= MIN_DE and h_row[1] >= MIN_TEXT and (h_add[0] >= MIN_DE or not paired)
+              and h_add[1] >= MIN_TEXT
+              and (not steps or (steps["rest"] >= MIN_TEXT and steps["hover"][0] >= MIN_DE and steps["hover"][1] >= MIN_TEXT))
+              and ring not in ("none", "not focus-visible")
+              and href == f"/repo-detail/{repo_id}" and no_details
+              # Trackers is there only on a crew with tracker links.
+              and [re.sub(r"\d+$", "", t) for t in tabs] in (["Overview", "Knowledge", "Jobs", "History", "Trackers", "Settings"], ["Overview", "Knowledge", "Jobs", "History", "Settings"])
+              and any("Capture learnings" in a for a in acts) and any(a in ("Re-index…", "Re-run onboarding") for a in acts),
+              row=h_row, add=h_add, next_step=steps, ring=ring, href=href, no_details=no_details, tabs=tabs, actions=acts)
+        check(f"{theme}:repo-band-tiles-side-by-side", marks_in_a_row(marks), marks=marks)
+        page.screenshot(path=str(SHOTS / f"jobs-repos-repo-page-{theme}.png"))
+
         ctx.close()
 
     # ── By project (operator 2026-11-01): the project_dto corpus files most jobs in projects and leaves r-unfiled
@@ -336,9 +349,14 @@ with sync_playwright() as p:
     page.get_by_test_id("repo-card").first.wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(300)
     repos_over = overflow(page)
-    phone_marks = marks_layout(page)
-    check("phone-repos-marks-row", marks_in_a_row(phone_marks), marks=phone_marks)
     page.screenshot(path=str(SHOTS / "jobs-repos-repos-phone.png"))
+    page.get_by_test_id("repo-row").first.click()
+    page.get_by_test_id("repo-know-band").wait_for(state="visible", timeout=15000)
+    page.wait_for_timeout(300)
+    phone_marks = marks_layout(page)
+    page_over = overflow(page)
+    check("phone-repo-page-tiles-side-by-side", marks_in_a_row(phone_marks) and page_over <= 1, marks=phone_marks, over=page_over)
+    page.screenshot(path=str(SHOTS / "jobs-repos-repo-page-phone.png"))
     check("phone-no-sideways-scroll", jobs_over <= 1 and repos_over <= 1, jobs=jobs_over, repos=repos_over)
     ctx.close()
     browser.close()

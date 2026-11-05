@@ -1,0 +1,101 @@
+/* ── REPOSITORIES: the list in columns, and a repository's page with tabs (operator-approved mockup,
+ * design/mockups/repos-page.html, 2026-11-05: "just a giant list of boxes ... break into tabs").
+ * The list keeps the calm page (jobs-repos.css: header, sentence, tools, dots, words, hover tint and focus ring);
+ * the repository page wears the project page's header and tab bar (desk.css: wk-desk2-head / wk-desk2-tabbar).
+ * Tokens only; both Wicked themes. */
+
+/* ── The list: one row per repository, in columns on a desktop ── */
+.wk-jr-col.wk-rl-col { max-width: 1080px; }
+.wk-rl { display: flex; flex-direction: column; min-width: 0; container: repos-list / inline-size; }
+.wk-rl-grid { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.3fr) minmax(0, 1.6fr) 104px 132px; align-items: center; column-gap: 20px; }
+.wk-rl[data-links="true"] .wk-rl-grid { grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.3fr) minmax(0, 1.6fr) 76px 104px 132px; }
+.wk-rl-head { padding: 0 16px 10px; border-bottom: 1px solid var(--border); font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--ink-dim); }
+.wk-rl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wk-rl-item { position: relative; border-bottom: 1px solid var(--border-subtle); border-radius: var(--radius-md); min-width: 0; transition: background-color 0.14s; }
+/* The whole row tints on hover, its right-hand step included (the calm rows' 15%, jobs-repos.css). */
+.wk-rl-item:hover { background: color-mix(in oklab, var(--jr-tint) 15%, transparent); }
+.wk-rl-row {
+  width: 100%; min-height: 64px; padding: 10px 16px; border-radius: var(--radius-md); color: var(--ink-body); text-decoration: none;
+}
+.wk-rl-row:active { background: color-mix(in oklab, var(--jr-tint) 10%, transparent); }
+.wk-rl-row:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-rl-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.wk-rl-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wk-rl-app { margin-left: 8px; vertical-align: 1px; }
+.wk-rl-title { color: var(--ink-high); font-weight: var(--weight-semi); font-size: var(--text-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-rl-sub { color: var(--ink-muted); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-rl-cell { min-width: 0; font-size: var(--text-sm); color: var(--ink-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-rl-cell[data-muted="true"] { color: var(--ink-muted); }
+.wk-rl-map { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.wk-rl-map b { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-rl-map-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--ink-dim); }
+.wk-rl-map[data-tone="ok"] .wk-rl-map-dot { background: var(--status-ok); }
+.wk-rl-map[data-tone="run"] .wk-rl-map-dot { background: var(--status-run); }
+.wk-rl-map[data-tone="warn"] .wk-rl-map-dot { background: var(--status-warn); }
+.wk-rl-map[data-tone="fail"] .wk-rl-map-dot { background: var(--status-fail); }
+.wk-rl-map[data-tone="none"] .wk-rl-map-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
+/* The right-hand word or step: its own control, over the row's last column. */
+.wk-rl-act { position: absolute; right: 16px; top: 32px; transform: translateY(-50%); display: flex; align-items: center; }
+.wk-rl-act .wk-jr-word, .wk-rl-act .wk-jr-link { font-size: var(--text-sm); }
+.wk-rl-error { padding: 0 16px 12px 38px; }
+.wk-rl-phone { display: none; }
+
+/* ── A repository's page ── */
+.wk-rp { display: flex; flex-direction: column; gap: 20px; min-width: 0; max-width: 1180px; padding: 4px 0 64px; }
+.wk-rp .wk-desk2-head { align-items: start; }
+.wk-rp-title { margin: 0; font-size: var(--text-title); line-height: 1.15; font-weight: var(--weight-strong); color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-rp-meta { margin: 4px 0 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-rp-meta b { color: var(--ink-body); font-weight: var(--weight-semi); }
+.wk-rp-meta-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0; background: var(--ink-dim); }
+.wk-rp-meta-dot[data-tone="ok"] { background: var(--status-ok); }
+.wk-rp-meta-dot[data-tone="run"] { background: var(--status-run); }
+.wk-rp-meta-dot[data-tone="warn"] { background: var(--status-warn); }
+.wk-rp-meta-dot[data-tone="fail"] { background: var(--status-fail); }
+.wk-rp .wk-desk2-tabbar { margin-top: 0; }
+.wk-rp .wk-desk2-tab { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.wk-rp-count { font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted); padding: 0 6px; border-radius: 999px; line-height: 18px;
+  background: color-mix(in oklab, var(--ink-high) 10%, transparent); }
+.wk-rp-alerts { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.wk-rp-panel { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.wk-rp-two { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.wk-rp-two > div { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.wk-rp-cardhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: var(--space-2); }
+.wk-rp-cardhead .wk-section-title { margin: 0; }
+.wk-rp-more { margin-top: 12px; display: inline-block; }
+.wk-rp-note { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); line-height: 1.5; }
+.wk-rp-note b { color: var(--ink-high); }
+.wk-rp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.wk-rp-kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 24px; margin: 0; font-size: var(--text-sm); }
+.wk-rp-kv dt { color: var(--ink-muted); }
+.wk-rp-kv dd { margin: 0; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-rp-upkeep { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 24px; align-items: center; padding: 14px 0; border-top: 1px solid var(--border-subtle); }
+.wk-rp-upkeep:first-of-type { border-top: 0; padding-top: 0; }
+.wk-rp-upkeep > b { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-rp-upkeep > p { grid-column: 1; margin: 0; font-size: var(--text-sm); color: var(--ink-muted); line-height: 1.5; }
+.wk-rp-upkeep > .wk-btn { grid-column: 2; grid-row: 1 / span 2; }
+.wk-rp-state { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--ink-body); }
+
+@media (max-width: 1100px) { .wk-rp-two { grid-template-columns: minmax(0, 1fr); } }
+
+/* The list stacks by ITS width, not the window's: a phone, and a narrow window beside the open sidebar, where the
+   columns would squeeze the names away. Each row: the name and its step, then one line saying what the columns said. */
+@container repos-list (max-width: 860px) {
+  .wk-rl-head.wk-rl-grid { display: none; }
+  .wk-rl-grid { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+  .wk-rl-row { padding: 14px 12px; min-height: 0; }
+  .wk-rl-desk { display: none; }
+  .wk-rl-name { padding-right: 112px; }
+  .wk-rl-phone { display: block; padding-left: 22px; padding-right: 8px; font-size: var(--text-xs); color: var(--ink-muted); white-space: normal; }
+  .wk-rl-act { top: 14px; right: 12px; transform: none; }
+  .wk-rl-error { padding: 0 12px 12px 34px; }
+}
+
+@media (max-width: 767px) {
+  /* A repository's page: the header stacks; the tab row scrolls sideways (desk.css). */
+  .wk-rp { gap: 16px; }
+  .wk-rp .wk-desk2-head { grid-template-columns: minmax(0, 1fr); }
+  .wk-rp .wk-desk2-actions { justify-content: flex-start; }
+  .wk-rp-upkeep { grid-template-columns: minmax(0, 1fr); }
+  .wk-rp-upkeep > .wk-btn { grid-column: 1; grid-row: auto; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) { .wk-rl-item { transition: none; } }

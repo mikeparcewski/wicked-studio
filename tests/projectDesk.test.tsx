@@ -104,6 +104,10 @@ describe("a project's home (no ?tab=, the approved ui-v2-projects mockup)", () =
     // Repositories: the chip; Add a repository opens the register form in this project (registering onboards it,
     // ux-tonight), and Attach takes one already added on the Repositories tab.
     expect(await screen.findAllByTestId('project-repo-chip')).toHaveLength(1);
+    // A repository opened from here carries the project, so a launch on its page (Capture learnings) files under it.
+    const chip = screen.getByTestId('project-repo-chip');
+    expect(chip.tagName).toBe('A');
+    expect(chip.getAttribute('href')).toMatch(/^\/repo-detail\/[^?]+\?project=p1$/u);
     fireEvent.click(screen.getByTestId('project-add-repo'));
     expect(navigate).toHaveBeenLastCalledWith('/repos/new?project=p1');
     fireEvent.click(screen.getByTestId('project-attach-repo'));

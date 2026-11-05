@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RepositoriesPanel } from '../src/components/RepositoriesPanel.js';
+import { RepoDetailPage } from '../src/components/RepoDetailPage.js';
 import * as client from '../src/api/client.js';
 import type { Project, RepoEntry } from '../src/api/types.js';
 
@@ -94,15 +95,16 @@ describe('RepositoriesPanel register flow — project binding (slice B)', () => 
 });
 
 /**
- * FIX-IT-ALL L4-⑩ (F-RC1-049 / F-E2E-015): the "Capture learnings" card launch files the
- * run under the AMBIENT project when there is one — `projectId` rides the existing
- * `launchRun` wire (`LaunchRunBody.projectId`, api-types 0.38.0) — and sends NO
- * `projectId` from the flat /repos page, so an unfiled run is unfiled honestly (no
- * repo→project guess). Mutation: drop the spread in `captureLearnings` → the first case fails.
+ * FIX-IT-ALL L4-⑩ (F-RC1-049 / F-E2E-015): "Capture learnings" files the run under the AMBIENT project when there is
+ * one — `projectId` rides the existing `launchRun` wire (`LaunchRunBody.projectId`, api-types 0.38.0) — and sends NO
+ * `projectId` otherwise, so an unfiled run is unfiled honestly (no repo→project guess). The verb lives on the
+ * repository's page (Settings) since the 2026-11-05 redesign: a row opened from a project's Repositories tab carries
+ * the project to the page as `?project=`. Mutation: drop the spread in `launchCaptureLearnings` → the first case fails.
  */
-describe('RepositoriesPanel capture-learnings launch — ambient project filing (L4-⑩)', () => {
+describe('Capture learnings — ambient project filing (L4-⑩)', () => {
   beforeEach(() => {
     vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [REPO] });
+    vi.spyOn(client.api, 'getRepoGraph').mockResolvedValue({ graph: null });
     vi.spyOn(client.api, 'launchRun').mockResolvedValue({ runId: 'r-cap' });
   });
 
@@ -113,8 +115,16 @@ describe('RepositoriesPanel capture-learnings launch — ambient project filing 
     return vi.mocked(client.api.launchRun).mock.calls[0]![0] as unknown as Record<string, unknown>;
   }
 
-  it('inside a project the launch carries the ambient projectId, so the run files under /p/<proj>', async () => {
-    render(<RepositoriesPanel navigate={vi.fn()} ambientProject="q3-review-deck" />);
+  it('a row on a project’s Repositories tab opens the page with the project carried', async () => {
+    const navigate = vi.fn();
+    render(<RepositoriesPanel navigate={navigate} ambientProject="q3-review-deck" />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId('repo-row'));
+    expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1?project=q3-review-deck');
+  });
+
+  it('opened from a project, the launch carries that projectId, so the run files under /p/<proj>', async () => {
+    render(<RepoDetailPage repoId="repo-1" onSelectRun={vi.fn()} navigate={vi.fn()} onOpenGraph={vi.fn()} search="?tab=settings&project=q3-review-deck" />);
     const body = await clickCapture();
     expect(body).toEqual({
       problem: 'Capture learnings from my-repo',
@@ -125,8 +135,8 @@ describe('RepositoriesPanel capture-learnings launch — ambient project filing 
     expect(screen.getByTestId('repo-capture-learnings').getAttribute('title')).toContain('filed under this project');
   });
 
-  it('from the flat /repos page (no ambient project) the body carries NO projectId — Unfiled honestly, byte-identical to before', async () => {
-    render(<RepositoriesPanel navigate={vi.fn()} />);
+  it('opened from the flat /repos page (no project), the body carries NO projectId — Unfiled honestly', async () => {
+    render(<RepoDetailPage repoId="repo-1" onSelectRun={vi.fn()} navigate={vi.fn()} onOpenGraph={vi.fn()} search="?tab=settings" />);
     const body = await clickCapture();
     expect(body).toEqual({ problem: 'Capture learnings from my-repo', repoRef: 'repo-1', workflow: 'capture-learnings' });
     expect(body).not.toHaveProperty('projectId');

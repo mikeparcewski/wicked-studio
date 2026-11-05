@@ -15,7 +15,9 @@ the Desk at 1440x700 against the in-process fixture's registered repo:
   5. WHAT WE KNOW (round 10): the band's five marks say the code graph's size, the real share against the
      minimum (a meter), the requirements graph's build (behind) and the runs; Requirements opens the
      requirements, Requirements graph opens the graph on its domain view.
-  6. 0 page errors.
+  6. TABS (2026-11-05): ?tab=history opens History alone (one tabpanel); clicking Knowledge moves the address;
+     Back returns to History.
+  7. 0 page errors.
 
 Captures: e2e/shots/desk-repo-page-*.png. Env: FEEDBACK_PORT (default 4359).
 """
@@ -63,7 +65,7 @@ with sync_playwright() as p:
     def open_repo() -> str:
         """The page's graph sentences — hotspots, language mix, the Code graph card — not the header's
         own Run Onboarding action, which stays on every repo (codex on #461: scope the check)."""
-        page.goto(f"{origin}/repo-detail/studio-api", wait_until="networkidle")
+        page.goto(f"{origin}/repo-detail/studio-api?tab=knowledge", wait_until="networkidle")
         page.get_by_test_id("language-bar").wait_for(state="visible", timeout=15000)
         page.wait_for_timeout(400)
         return page.evaluate("""() => ['repo-hotspots-empty', 'language-bar', 'repo-graph-empty']
@@ -94,8 +96,8 @@ with sync_playwright() as p:
     except Exception:
         back = False
     check("try-again-reads-again", back)
-    # ── 3. recent commits: capped card + Show all ───────────────────────────────
-    page.goto(f"{origin}/repo-detail/studio-api", wait_until="networkidle")
+    # ── 3. recent commits (the History tab): capped card + Show all ─────────────
+    page.goto(f"{origin}/repo-detail/studio-api?tab=history", wait_until="networkidle")
     lst = page.get_by_test_id("repo-commits")
     lst.wait_for(state="visible", timeout=15000)
     box = lst.evaluate("el => ({h: el.clientHeight, sh: el.scrollHeight, rows: el.querySelectorAll('li').length,"
@@ -175,6 +177,25 @@ with sync_playwright() as p:
     page.get_by_role("button", name="Close graph").click()
     set_fixture(origin, requirements=None, requirements_header=None, graph_kinds=None)
     set_fixture(origin, repo=False, workflow_catalog=False)
+
+    # ── 6. tabs (2026-11-05): each its own address, one panel at a time, Back returns ──
+    set_fixture(origin, repo=True)
+    page.goto(f"{origin}/repo-detail/studio-api?tab=history", wait_until="networkidle")
+    page.get_by_test_id("repo-panel-history").wait_for(state="visible", timeout=15000)
+    first = {"selected": page.get_by_test_id("repo-tab-history").get_attribute("aria-selected"),
+             "panels": page.locator('[role="tabpanel"]').count(), "commits": page.get_by_test_id("repo-history-commits").count(),
+             "band": page.get_by_test_id("repo-know-band").count()}
+    page.get_by_test_id("repo-tab-knowledge").click()
+    page.wait_for_url("**/repo-detail/studio-api?tab=knowledge", timeout=10000)
+    page.get_by_test_id("repo-panel-knowledge").wait_for(state="visible", timeout=10000)
+    second = {"commits": page.get_by_test_id("repo-history-commits").count(), "map": page.get_by_test_id("repo-code-map").count()}
+    page.go_back()
+    page.get_by_test_id("repo-panel-history").wait_for(state="visible", timeout=10000)
+    check("tabs-deep-link-one-panel-back", first == {"selected": "true", "panels": 1, "commits": 1, "band": 0}
+          and second == {"commits": 0, "map": 1} and page.url.endswith("/repo-detail/studio-api?tab=history"),
+          first=first, second=second, url=page.url)
+    page.screenshot(path=str(SHOTS / "desk-repo-page-tabs.png"))
+    set_fixture(origin, repo=False)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()
