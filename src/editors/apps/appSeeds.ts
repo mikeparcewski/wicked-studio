@@ -53,18 +53,23 @@ const APP_QUERY_KINDS = new Set(['sql', 'graphql', 'rest', 'mcp-http', 'mcp-stdi
 
 /**
  * Whether `projectId` has ANY registry source an app query could read, from a `GET /mcp/servers` answer (`null`: not
- * one): enabled, of a kind crew's resolver reads, and, for a source that carries Agents switches (a data source or a
- * PM entry), seen by this project. A REST or MCP server carries none (crew's `isSourceRecord`), so it counts as it
- * is. This only decides whether a GENERIC data ask is on offer; it names nothing.
+ * one), by crew's rules: enabled and of a kind its resolver reads (`lookupSource`, `queryKindFits`; `mcp-stdio` too,
+ * which only publishing refuses); a data source with Agents switches seen by this project; a REST or MCP server (it
+ * carries no Agents switches, `isSourceRecord`) with a registered tool, never a PM entry (`appTool`: Apps gets
+ * none; a tool's own switch governs agent runs, not Apps). This only decides whether a GENERIC data ask is on offer;
+ * it names nothing.
  */
 export function anyAppReadable(answer: unknown, projectId: string): boolean | null {
   const servers = typeof answer === 'object' && answer !== null ? (answer as { servers?: unknown }).servers : undefined;
   if (!Array.isArray(servers)) return null;
   return servers.some((s: unknown) => {
     if (typeof s !== 'object' || s === null) return false;
-    const r = s as { name?: unknown; kind?: unknown; enabled?: unknown; agents?: unknown };
+    const r = s as { name?: unknown; kind?: unknown; enabled?: unknown; agents?: unknown; pm?: unknown; tools?: unknown };
     if (typeof r.name !== 'string' || r.name === CREW_SOURCE || r.enabled !== true || typeof r.kind !== 'string' || !APP_QUERY_KINDS.has(r.kind)) return false;
-    if (r.agents === undefined) return true;
+    if (r.kind !== 'sql' && r.kind !== 'graphql') {
+      return (r.pm === undefined || r.pm === null) && Array.isArray(r.tools)
+        && r.tools.some((t: unknown) => typeof t === 'object' && t !== null && (t as { status?: unknown }).status === 'registered');
+    }
     const a = agentAccessOf(r);
     return a !== null && a.see && (a.everyProject || a.projects.includes(projectId));
   });

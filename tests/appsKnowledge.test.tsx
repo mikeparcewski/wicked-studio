@@ -286,9 +286,16 @@ describe('(ak-fix, codex r1 and r2 on the fold) chat follow-ups never land on a 
 
 describe('(ak-fix, codex r3) no ask the project cannot build; a picked suggestion stays with its project', () => {
   it('anyAppReadable follows crew: a REST server has no Agents switches and counts; a Toolbox-runtime source does not', () => {
-    const rest = { name: 'billing-api', kind: 'rest', enabled: true };
+    const rest = { name: 'billing-api', kind: 'rest', enabled: true, tools: [{ name: 'list', status: 'registered', enabled: false }] };
     expect(anyAppReadable({ servers: [rest] }, 'p')).toBe(true);
     expect(anyAppReadable({ servers: [{ ...rest, enabled: false }] }, 'p')).toBe(false);
+    // (codex r4) crew's appTool: a server with no registered tool, or a PM entry, gives Apps nothing to read.
+    expect(anyAppReadable({ servers: [{ ...rest, tools: [] }] }, 'p')).toBe(false);
+    expect(anyAppReadable({ servers: [{ ...rest, tools: [{ name: 'list', status: 'gone' }, { name: 'get', status: 'unregistered' }] }] }, 'p')).toBe(false);
+    expect(anyAppReadable({ servers: [{ ...rest, kind: 'mcp-http', pm: { system: 'jira' }, agents: { see: true, query: true, projects: ['p'], everyProject: false } }] }, 'p')).toBe(false);
+    // (pi r4, rejected with crew's code) crew reads an mcp-stdio server for an app query (sources.ts queryKindFits,
+    // source-stage.ts); only publishing refuses it.
+    expect(anyAppReadable({ servers: [{ ...rest, kind: 'mcp-stdio' }] }, 'p')).toBe(true);
     expect(anyAppReadable({ servers: [server('tb-pg', 'toolbox-source')] }, 'p')).toBe(false);
     expect(anyAppReadable({ servers: [server('elsewhere-pg', 'sql', ['q'])] }, 'p')).toBe(false);
     expect(anyAppReadable({ servers: [] }, 'p')).toBe(false);
@@ -302,7 +309,7 @@ describe('(ak-fix, codex r3) no ask the project cannot build; a picked suggestio
     expect(screen.queryAllByTestId('apps-new-composer-suggestion')).toHaveLength(0);
     unmount();
     vi.restoreAllMocks();
-    const second = page({ ...EMPTY, memories: { project: 1, shared: 0 } }, false, [{ name: 'billing-api', kind: 'rest', enabled: true }]);
+    const second = page({ ...EMPTY, memories: { project: 1, shared: 0 } }, false, [{ name: 'billing-api', kind: 'rest', enabled: true, tools: [{ name: 'list', status: 'registered' }] }]);
     render(<AppsPage navigate={vi.fn()} />);
     await settled(second.calls);
     const chips = screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent ?? '');
