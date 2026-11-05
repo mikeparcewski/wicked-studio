@@ -12,7 +12,50 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-11-05
+
+A feature release for crew 0.17.0: Apps by chat (K5) on the data sources sheet and panel (K3), Ask a question of a
+source, the Agents box and the Knowledge map, project-management trackers (PM-1), dashboards on the Report, the plan
+gate's note, the `/` menu matching New job, and the redesigned Repositories pages. Pins wicked-crew-api-types
+0.186.0.
+
 ### Added
+- **Every steering rule a job is checked against shows on the run, the gate and the delivery (DES-RULE-CHECK-001
+  S4; crew api-types 0.190.0, core-ts 0.15.28).** The receipt says "N rules checked: K kept, B broken, X not
+  applicable", with each rule's verdict and its evidence. A gate card held because a rule was not checked says so
+  under its question and offers Re-check the rules or Skip with a reason (crew's `retry_rules` / `skip_rules`, sent
+  only on your click). A rule about the delivery (the pull request text) shows as deferred to the deliver step until
+  that step's verdict replaces it. The starter rules carry their engine checks.
+- **New-app and Report suggestions built on the project's knowledge (DES-KNOWLEDGE-DATA-001 §9.1; crew
+  api-types 0.189.0).** Make a new app and Report's Build a dashboard read the chosen project's knowledge summary
+  (crew's `GET /knowledge/summary`) and offer apps built on what it knows: its described sources' tables, shapes and
+  joins, its steering rules by type, what it remembers, a knowledge search. Each suggestion is a fixed sentence used
+  only for its own project and filled only with names crew listed; on a crew without the summary the data
+  suggestions stay as they were. The app chat offers one knowledge addition, and an app card's line reads "this
+  project's knowledge" for an app built on it.
+
+- **Repositories: a table of columns, and a repository's page with a header and six tabs (#998, operator
+  2026-11-05).** `/repos` lists one row per repository (language · branch, Projects, Code map, Trackers, Last
+  activity, and the next step), each a link to its page; Projects and Trackers come from crew's tracker links and are
+  hidden on a crew without them. A repository's page has the project page's header and tabs: Overview, Knowledge,
+  Jobs, History, Trackers (with tracker links only) and Settings, each its own address (`?tab=`). What blocks the code
+  map is said above the tabs. On a phone each row stacks into one line.
+- **Data sources: Test connection, and "Ask a question of this data" (#960; crew wicked-crew#1305, api-types
+  0.179.0).** Every saved SQL or GraphQL source's sheet has Test connection (connected and described in N ms, TLS,
+  read only or what the login can change, the read check), and the data panel's source rows get a menu: Test
+  connection, Ask a question (SQL), Open the source. Ask: one agent drafts one read query from the structure only,
+  crew checks it, and nothing runs until you click Run, which is live only for the exact text crew checked. Results
+  (at most 50 rows, 1 MB) are shown to you only.
+- **Apps are chat-first (DES-APPS-001 K5, #968; crew api-types 0.185.0).** Every app page has its chat beside the app
+  (Preview and Edit), in one side panel with two tabs, Chat (the default) and Properties: selecting a tile in Edit
+  opens Properties for it, switching back keeps the thread and the draft, and the panel folds to a rail with busy and
+  unread dots (remembered; a bottom sheet on a phone). The thread is crew's turn log, so a reload and a second tab
+  read the same thing. A message is one `apps-turn` run on the app's head; the reply shows the run's steps, its live
+  activity and any question it asks, then the change line (`v4 · Added 1 chart and 1 query · reviewed by Codex`)
+  with Undo and the job, or why nothing landed in crew's words. On `/apps`, Make a new app by chat: crew adds the app
+  and the message is its first turn. Each dashboard card shows its first page's headline numbers live, only while
+  the card is on screen and the tab visible (every 30 s, or the app's faster refresh, never under 10 s; at most 3
+  reads at once). A framed studio changes nothing from the chat or the dashboard.
 - **The plan gate takes a note (studio#992; crew#1139, wire core#1270 + crew#1350).** On a daemon whose
   `GET /health.capabilities.planGateNote` is true, a reply typed in the reply box under an open plan card is the
   approval's note: the box reads "Type a note to approve the plan with…", the switch says "Replies to this decision
@@ -54,7 +97,7 @@ npm publish dates. Every version listed here exists on
   ("Report /", with the origin checked against stored, active projects). Report's chat never reads the dashboards
   (`data-page-chat-skip`).
 - **Understand's Knowledge map, the data-shape review, and Profile on a source sheet (DES-KNOWLEDGE-DATA-001 §10, §19
-  B4; crew api-types 0.186.0, mirrored until it is published).** Understand gains a **Knowledge map** beside the
+  B4; crew api-types 0.186.0, mirrored locally with PM-1's 0.187.0 fields).** Understand gains a **Knowledge map** beside the
   repositories' code and requirements graphs (`/understand?view=knowledge`): the data shapes waiting for review on top
   (the one proposal review, kind `knowledge`: the table, its value-free summary, what it joins and which code describes
   it, Approve or Reject), and below it the map crew answers (`GET /knowledge/map`): data sources and their tables,
@@ -167,8 +210,17 @@ npm publish dates. Every version listed here exists on
     labelled as such.
   - **Edits from the frame:** the 1.5 s after focus leaves an app's frame counts only from the last moment the frame
     held both focus and the person's activation, so a click on studio's chrome after an idle frame grants it nothing.
+- **Data sources: the source sheet, the data panel and row-write grants (DES-APPS-001 K3, #956; crew api-types
+  0.175.0).** Add a data source: kind, connection, a secret field whose value never reaches React state or the DOM
+  (only the preview request carries it, and it clears after Save), TLS, address confirmation, Test (crew's
+  describe, named before it is sent, sent once), the privilege report, what agents see, and Allow writes (off by
+  default, human only, confirmed both ways). The data panel lists sources and their tables; a row write is declared
+  from a table's menu and is granted only after Allow writes, crew's table safety check and the missing GRANTs.
+  `/sources` (Data sources) is in the sidebar's Work group when crew advertises it, in Build & settings and in the
+  command palette; an older crew's page says it doesn't support data sources yet.
 
 ### Changed
+
 - **The type and the marks (fonts-v3, the operator's pick 2026-11-02).** The text face is Wicked Sans A, an OFL cut
   of Inter (same family name and weights; its licence ships as `dist/fonts/LICENSE-WickedSans.txt`). The rail's
   wordmark and the phone top bar show the Wicked Studio lockup, the Shoreline mark beside the Wave W lettering, in
@@ -196,6 +248,10 @@ npm publish dates. Every version listed here exists on
     Project select that was hidden under Search and filter.
 
 ### Fixed
+
+- **The rail's list fade keeps one ResizeObserver per list (studio#970, #971).** It made a new observer on every
+  change of its rows, headings, fold or page, and WebKit now and then reported "ResizeObserver loop completed with
+  undelivered notifications" on the desk app page. The list now gets one observer when it attaches.
 - **Nerve Center keeps yellow for a fix you can make (operator, 2026-11-05).** A CLI nobody set up no longer makes
   anything yellow. The CLIs chip still counts it ("4/5 signed in") but turns yellow only for crew's seat items, or
   when fewer than two agents are signed in. It stays grey while a sign-in check has not answered. A signed-out
@@ -3041,7 +3097,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.3...v0.13.0

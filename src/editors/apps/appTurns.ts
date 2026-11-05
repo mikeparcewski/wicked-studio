@@ -1,6 +1,6 @@
 import { apiFetch } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
-import type { AppDetail, AppDetailResponse, AppSpec, SessionView } from '../../api/types.js';
+import type { AppDetail, AppDetailResponse, AppSpec, AppTurnRecord, SessionView } from '../../api/types.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { KNOWLEDGE_SOURCE } from './knowledgeSeeds.js';
 
@@ -15,24 +15,8 @@ import { KNOWLEDGE_SOURCE } from './knowledgeSeeds.js';
  * when it lands, the reason when it does not), and the suggestions the composer offers.
  */
 
-/** One turn as crew records it (crew api-types 0.185.0 `AppTurnRecord`; typed here until studio's pin carries it). */
-export interface AppTurnRecord {
-  runId: string;
-  at: number;
-  actor: string;
-  message: string;
-  about: string[];
-  base: number;
-  state: 'running' | 'landed' | 'refused' | 'failed' | 'cancelled';
-  endedAt: number | null;
-  version: number | null;
-  change: string | null;
-  summary: string | null;
-  builder: string | null;
-  reviewer: string | null;
-  code: string | null;
-  reason: string | null;
-}
+/** One turn as crew records it: crew api-types 0.185.0 `AppTurnRecord`, from the package (pin 0.186.0). */
+export type { AppTurnRecord };
 
 const STATES = new Set(['running', 'landed', 'refused', 'failed', 'cancelled']);
 const str = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.slice(0, max) : null);

@@ -1,13 +1,13 @@
 /**
  * A live source's agent switches and its agent-read record (DES-KNOWLEDGE-DATA-001 §7.1, §7.9; crew api-types
- * 0.183.0/0.184.0, mirrored in `sourceAgents-wire.ts`): the calls the source sheet's Agents box and a job's gate
+ * 0.183.0/0.184.0, re-exported by `sourceAgents-wire.ts`): the calls the source sheet's Agents box and a job's gate
  * cards make, and the defensive readers for their answers.
  *
  * - `setAgentAccess` is the switches' own call: `AgentAccess` is its only caller (`tests/sourceAgentsHumanOnly.test.ts`
  *   pins that), so no URL, palette verb, plugin request or chat path can reach it. crew refuses it to anything but a
  *   human operator, too (403 `agents_switch_human_only`).
  * - `agentQueries` and `runDataUse` only read crew's agent-read record: never the SQL, never a value.
- * - The shapes are not published yet, so every answer goes through a reader here rather than trusting the type: the
+ * - Every answer goes through a reader here rather than trusting the type (an older crew answers differently): the
  *   switches read as `null` (no box) unless they are crew's whole shape; a recent-query or data-use record that is
  *   not crew's whole answer reads as UNKNOWN, never as a shorter list or "none". Only the project picker drops entries.
  */

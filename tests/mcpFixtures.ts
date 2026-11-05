@@ -41,6 +41,7 @@ function tool(name: string, cls: McpToolClass, annotations: McpTool['annotations
     status: 'registered',
     schemaHash: `h-${name}`,
     observedSchemaHash: `h-${name}`,
+    disclosure: null,
   };
 }
 
@@ -52,6 +53,7 @@ export const TOOLS: McpTool[] = [
 
 export function server(over: Partial<McpServer> = {}): McpServer {
   return {
+    id: `id-${over.name ?? 'fx'}`,
     name: 'fx',
     kind: 'mcp-stdio',
     command: 'node',
@@ -133,7 +135,7 @@ export function approvals(approved: ReadonlySet<string> = new Set()): McpApprova
 export function preview(name = 'jira'): McpPreviewResponse {
   const tools = TOOLS.map((t) => ({ name: t.name, subject: `mcp:${name}/${t.name}`, description: t.description, annotations: t.annotations, inputSchema: t.inputSchema, class: t.class, schemaHash: t.schemaHash ?? '',
     // api-types 0.111.0+ (crew's wire): no override kept on a fresh preview; a read tool saves on.
-    classOverride: null, enabledOnSave: t.class === 'read' }));
+    classOverride: null, enabledOnSave: t.class === 'read', disclosure: null }));
   return {
     previewHash: 'ph-1',
     expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
