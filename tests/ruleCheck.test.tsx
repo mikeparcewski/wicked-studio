@@ -111,3 +111,21 @@ describe('the gate card says the rule line under its question', () => {
     expect(screen.queryByTestId('assurance-rules-line')).toBeNull();
   });
 });
+
+describe('(SWAP 6) a rule deferred to delivery', () => {
+  it('parses, is said on the line, and the delivery verdict replaces it', () => {
+    const r = receiptOf({ ...base, rules: [row('A', 'kept'), row('learn-linked-issue', 'deferred', 'its subject is the delivery (evidence:delivery): checked at the deliver step')] })!;
+    expect(r.rules?.[1]?.status).toBe('deferred');
+    expect(rulesSummary(r.rules!).line).toBe('2 rules checked: 1 kept, 0 broken, 0 not applicable, 1 deferred to delivery');
+    const d = receiptOf({ ...base, rules: [row('learn-linked-issue', 'kept')] })!.rules!;
+    expect(worstRules([r.rules!, d]).find((x) => x.ruleId === 'learn-linked-issue')?.status).toBe('kept');
+  });
+
+  it('the linked-issue starter carries its delivery fact, the tests starter its machine check', async () => {
+    const { STARTER_RULES, starterRule } = await import('../src/board/learnHub.js');
+    const by = (id: string) => starterRule(STARTER_RULES.find((s) => s.id === id)!) as unknown as { obligations?: string[] };
+    expect(by('learn-linked-issue').obligations).toEqual(['evidence:delivery']);
+    expect(by('learn-tests-with-fixes').obligations).toEqual(['check:test-fails-on-base']);
+    expect(by('learn-small-prs').obligations).toBeUndefined();
+  });
+});

@@ -177,13 +177,17 @@ export interface StarterRule {
   line: string;
   type: NonNullable<ConformanceRule['steering_type']>;
   statement: string;
+  /** (DES-RULE-CHECK-001) The engine checks a starter carrying these: `check:test-fails-on-base` (its
+   *  machine check) or `evidence:delivery` (its subject is the pull request: deferred at review and
+   *  QE, checked at the deliver step). */
+  obligations?: readonly string[];
 }
 
 export const STARTER_RULES: readonly StarterRule[] = [
   { id: 'learn-small-prs', title: 'Small pull requests', line: 'One concern; under 400 changed lines', type: 'development', statement: 'A pull request carries one concern and stays under 400 changed lines; split anything larger.' },
-  { id: 'learn-tests-with-fixes', title: 'Tests with every fix', line: 'A failing test first, then the fix', type: 'testing', statement: 'A bug fix includes a test that fails without the fix.' },
+  { id: 'learn-tests-with-fixes', title: 'Tests with every fix', line: 'A failing test first, then the fix', type: 'testing', statement: 'A bug fix includes a test that fails without the fix.', obligations: ['check:test-fails-on-base'] },
   { id: 'learn-no-secrets', title: 'No secrets in code', line: 'Keys and tokens come from the environment', type: 'security', statement: 'No key, token or password is written in code, config or tests; secrets come from the environment.' },
-  { id: 'learn-linked-issue', title: 'Linked issue', line: 'Every PR names the issue it closes', type: 'development', statement: 'Every pull request names the issue it closes in its description.' },
+  { id: 'learn-linked-issue', title: 'Linked issue', line: 'Every PR names the issue it closes', type: 'development', statement: 'Every pull request names the issue it closes in its description.', obligations: ['evidence:delivery'] },
   { id: 'learn-accessible', title: 'Accessible by default', line: 'Labels, focus and contrast on every screen', type: 'design-ux', statement: 'Every new screen has labelled controls, a visible focus and text contrast of at least 4.5:1.' },
   { id: 'learn-reversible-migrations', title: 'Migrations are reversible', line: 'Every schema change has a down step', type: 'operations', statement: 'Every schema migration has a tested down step.' },
 ];
@@ -202,6 +206,7 @@ export function starterRule(s: StarterRule): ConformanceRule {
     applies_to: [],
     excludes: [],
     weight: 1.0,
+    ...(s.obligations !== undefined && s.obligations.length > 0 ? { obligations: [...s.obligations] } : {}),
   } as ConformanceRule;
 }
 

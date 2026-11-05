@@ -113,7 +113,7 @@ export function AssuranceReceiptTech({ receipt, passed = null, testId }: { recei
   );
 }
 
-const RULE_WORD: Record<string, string> = { kept: 'kept', broken: 'broken', n_a: 'not applicable', unchecked: 'unchecked', skipped: 'skipped', waived: 'waived by your instruction' };
+const RULE_WORD: Record<string, string> = { kept: 'kept', broken: 'broken', n_a: 'not applicable', unchecked: 'unchecked', skipped: 'skipped', waived: 'waived by your instruction', deferred: 'deferred to delivery' };
 const HOW_WORD: Record<string, string> = { fact: 'by fact', judge: 'by a judge', machine: 'by the engine', cache: 'unchanged since last check', operator: 'by the operator', none: 'nobody could rule' };
 
 /** (DES-RULE-CHECK-001) "N rules checked: K kept, B broken, X not applicable", expandable to every rule's

@@ -180,8 +180,8 @@ export interface RuleRow {
   judge: string | null;
 }
 
-const RULE_STATUSES = ['kept', 'broken', 'n_a', 'unchecked', 'skipped', 'waived'] as const;
-const RULE_RANK: Record<string, number> = { broken: 4, unchecked: 3, waived: 3, skipped: 2, kept: 1, n_a: 0 };
+const RULE_STATUSES = ['kept', 'broken', 'n_a', 'unchecked', 'skipped', 'waived', 'deferred'] as const;
+const RULE_RANK: Record<string, number> = { broken: 5, unchecked: 4, waived: 4, skipped: 3, kept: 2, n_a: 1, deferred: 0 };
 
 function rulesOf(v: unknown): RuleRow[] {
   return Array.isArray(v)
@@ -221,6 +221,7 @@ export function rulesSummary(rows: readonly RuleRow[]): { line: string; broken: 
   if (n('waived') > 0) line += `, ${n('waived')} waived by your instruction (to confirm)`;
   if (n('unchecked') > 0) line += `, ${n('unchecked')} unchecked`;
   if (n('skipped') > 0) line += `, ${n('skipped')} skipped by the operator`;
+  if (n('deferred') > 0) line += `, ${n('deferred')} deferred to delivery`;
   return { line, broken: n('broken'), unchecked: n('unchecked'), skipped: n('skipped'), waived: n('waived') };
 }
 
