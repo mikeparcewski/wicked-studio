@@ -54,6 +54,10 @@ function deliveredRun(id: string, workflow_id: string): SessionView {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // The delivery's data-use line (RunDataUse, GET /runs/:id/data-use) is not this file's subject: answered as a crew
+  // without the route, so it renders nothing, rather than racing an unanswered fetch into "not known" (main's CI flake).
+  const realFetch = globalThis.fetch;
+  vi.spyOn(globalThis, 'fetch').mockImplementation((u, init) => (String(u).includes('/data-use') ? Promise.resolve(new Response(JSON.stringify({ error: 'not found' }), { status: 404 })) : realFetch(u, init)));
   clearCachedWorkflows();
   useRunEventStore.setState({ byRun: {} });
   useDeliveryStore.setState({ byRun: {} });
