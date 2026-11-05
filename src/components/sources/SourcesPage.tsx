@@ -234,6 +234,8 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
             setSources((list) => (list.some((s) => s.name === saved.name) ? list.map((s) => (s.name === saved.name ? saved : s)) : appReadable(saved) ? [...list, saved] : list));
             void refresh();
           }}
+          // Only the secret's state changed: merged into the latest record, then crew's list read confirms it.
+          onRekeyed={(name) => { setSources((list) => list.map((s) => (s.name === name ? ({ ...s, authState: 'set' } as McpServer) : s))); void refresh(); }}
           onAllowWrites={setWrites}
           servers={sources}
           agentsUnverified={unverified}
@@ -257,6 +259,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
             setPmSources((list) => (list.some((s) => s.name === saved.name) ? list.map((s) => (s.name === saved.name ? saved : s)) : [...list, saved]));
             void refresh();
           }}
+          onRekeyed={(name) => { setPmSources((list) => list.map((s) => (s.name === name ? ({ ...s, authState: 'set' } as McpServer) : s))); void refresh(); }}
           onAgents={(name, agents) => setPmSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)))}
           onClose={() => { setPmSheet(null); if (deep !== null) navigate(sourcesPath()); }}
         />

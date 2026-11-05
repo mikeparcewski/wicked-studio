@@ -20,6 +20,7 @@ import { ProfileBox } from './ProfileBox.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { AskData } from './AskData.js';
 import { ConnectionTestLines } from './ConnectionTest.js';
+import { ownsKeychainEntry, rekeyFailure, rekeyPending, rekeySource, SECRET_MIN } from './rekey.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
 import {
   agentsSeeWords,
@@ -73,7 +74,7 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, servers, agentsUnverified: agentsUnverifiedSet, onReread, onSaved, onAllowWrites, onAgents, onDescribed, onClose, focus = null, onFocusUsed, onPickPm }: {
+export function SourceSheet({ target, existing, servers, agentsUnverified: agentsUnverifiedSet, onReread, onSaved, onRekeyed, onAllowWrites, onAgents, onDescribed, onClose, focus = null, onFocusUsed, onPickPm }: {
   target: SheetTarget;
   /** (DES-PM-001) On a crew with tracker links: the kinds rail offers Jira and GitHub Issues, whose own sheet opens. */
   onPickPm?: (system: 'jira' | 'github') => void;
@@ -84,6 +85,8 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   /** Names already registered (a new source of the same name replaces it; the sheet says so). */
   existing: readonly string[];
   onSaved: (server: McpServer) => void;
+  /** crew wrote the source's secret again (its `authState` is `set`): nothing else about the source changed. */
+  onRekeyed?: (name: string) => void;
   onAllowWrites: (name: string, allowed: boolean) => void;
   /** (DES-KNOWLEDGE-DATA-001 §7.1) crew answered a change of the source's agent switches: the page keeps them. */
   onAgents?: (name: string, agents: SourceAgentAccess) => void;
@@ -328,28 +331,52 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
    * to crew's keychain write (`PUT /mcp/servers/:name/secret`), the one request that carries it; the registry row (its
    * descriptor, Allow writes, agent access) is not touched. Then the field lets go of it, and a database is tested.
    */
+  const rekeyName = saved?.name ?? null;
+  // A write the sheet sent before it closed is still out: this one waits for it, then reads crew's state again.
+  useEffect(() => {
+    if (rekeyName === null) return;
+    const out = rekeyPending(rekeyName);
+    if (out === null) return;
+    let live = true;
+    setBusy('rekey');
+    const settle = (): void => { if (live) { setBusy((b) => (b === 'rekey' ? null : b)); onReread?.(); } };
+    out.then(settle, settle);
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the source the sheet opened on
+  }, [rekeyName]);
   const rekey = async (): Promise<void> => {
-    if (saved === null || inFlight.current) return;
+    if (saved === null || inFlight.current || !ownsKeychainEntry(saved) || rekeyPending(saved.name) !== null) return;
     const token = secret.current?.read() ?? '';
     if (token === '') return;
     const current = saved;
+    const what = isSqlKind(sheetKindOf(current)) ? 'password' : 'secret';
+    // crew's own rule, said at the field rather than as a refused request.
+    if (token.length < SECRET_MIN) { setError(`A ${what} is at least ${SECRET_MIN} characters. Nothing was written.`); return; }
     inFlight.current = true;
     setBusy('rekey');
     setError(null);
+    const letGo = (): void => { secret.current?.clear(); setHasSecret(false); };
     try {
-      await sourcesApi.setSecret(current.name, token);
-      secret.current?.clear();
-      setHasSecret(false);
+      await rekeySource(current.name, token);
+      letGo();
       setReplacing(false);
-      // crew answered `set: true`; the page's next read of the registry confirms it.
-      const next = { ...current, authState: 'set' } as McpServer;
-      setSaved(next);
-      onSaved(next);
+      // Only the secret's state changed: the latest record of THIS source takes it (crew's next list read confirms it).
+      setSaved((cur) => (cur !== null && cur.name === current.name ? ({ ...cur, authState: 'set' } as McpServer) : cur));
+      onRekeyed?.(current.name);
       inFlight.current = false;
-      setBusy(null);
+      // A database is tested at once (Test connection takes the busy state over in this same tick).
       if (current.kind === 'sql' || current.kind === 'graphql') await testSaved();
+      else setBusy(null);
     } catch (e) {
-      setError(`The ${isSqlKind(sheetKindOf(current)) ? 'password' : 'secret'} was not saved: ${words(e)}`);
+      const f = rekeyFailure(e);
+      if (f.kind === 'unknown') {
+        // No answer studio can read: crew may have written it. The field lets go of it either way.
+        letGo();
+        onReread?.();
+        setError(`studio could not confirm the ${what} was saved (${f.said}). crew may have written it: Test connection shows whether it works; type it again if not.`);
+      } else {
+        setError(`The ${what} was not saved: ${f.said}`);
+      }
       setBusy(null);
     } finally {
       inFlight.current = false;
@@ -514,19 +541,20 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                 <SecretField
                   ref={secret}
                   label={isSqlKind(kind) ? 'Password' : 'Secret (token or key)'}
-                  note="Kept in your keychain; never in the app, an export or an agent."
+                  note={!isNew && saved !== null && saved.authState !== 'none' && !ownsKeychainEntry(saved) ? 'crew reads this secret from somewhere other than its own keychain entry (a daemon variable), so it can’t be typed again here.' : 'Kept in your keychain; never in the app, an export or an agent.'}
                   savedState={isNew ? null : (saved?.authState ?? 'none')}
                   disabled={busy !== null}
-                  rekey={isNew ? null : {
+                  rekey={isNew || !ownsKeychainEntry(saved) ? null : {
                     open: replacing,
                     onOpen: (open) => { setReplacing(open); setError(null); },
+                    submit: () => void rekey(),
                     replace: isSqlKind(kind) ? 'Replace password' : 'Replace secret',
                     note: 'Type it again. Only the secret changes: the source, its Allow writes and agent access stay as they are.',
                   }}
                   onEdit={(has) => { setHasSecret(has); setSecretEdits((n) => n + 1); setError(null); }}
                 />
               )}
-              {!isNew && saved !== null && (saved.authState === 'missing' || (saved.authState === 'set' && replacing)) && (isSqlKind(kind) || isApiKind(kind)) && (
+              {!isNew && saved !== null && ownsKeychainEntry(saved) && (saved.authState === 'missing' || (saved.authState === 'set' && replacing)) && (isSqlKind(kind) || isApiKind(kind)) && (
                 <div className="wk-src-rekey" data-testid="source-rekey">
                   <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="source-rekey-save" disabled={!hasSecret || busy !== null} onClick={() => void rekey()}>
                     {busy === 'rekey' ? 'Saving…' : isSqlKind(kind) ? 'Save password' : 'Save secret'}

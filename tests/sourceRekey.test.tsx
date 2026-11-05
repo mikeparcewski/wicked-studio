@@ -9,6 +9,7 @@ import { ApiError } from '../src/api/errors.js';
 import { jiraBasic, PmSourceSheet } from '../src/components/sources/PmSourceSheet.js';
 import { SourceSheet } from '../src/components/sources/SourceSheet.js';
 import { SourcesPage } from '../src/components/sources/SourcesPage.js';
+import { resetRekeysForTests } from '../src/components/sources/rekey.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { CATALOG, pgServer, WRITER } from './sourcesFixtures.js';
 
@@ -41,6 +42,9 @@ beforeEach(() => {
   calls = [];
   servers = [];
   secretAnswer = () => Promise.resolve({ ref: 'keychain:wicked-mcp/x', set: true });
+  resetRekeysForTests();
+  localStorage.clear();
+  sessionStorage.clear();
   useCapabilities.setState({ loaded: true, dataSources: true, trackerLinks: true });
   apiFetch.mockReset();
   apiFetch.mockImplementation((path: string, init?: RequestInit) => {
@@ -64,6 +68,34 @@ afterEach(() => { cleanup(); useCapabilities.setState({ trackerLinks: false }); 
 const configWrites = () => calls.filter((c) => c.method !== 'GET' && !c.path.endsWith('/secret') && !c.path.endsWith('/test'));
 const secretPuts = () => calls.filter((c) => c.method === 'PUT' && c.path.endsWith('/secret'));
 
+/** Every place outside the input node a value could land: the DOM, React's state and props, storage, the console. */
+function leaksOf(values: readonly string[], spies: ReadonlyArray<{ mock: { calls: unknown[][] } }>): string[] {
+  const where: string[] = [];
+  const html = document.documentElement.outerHTML;
+  // Every root rendered into the page (each test render's container).
+  const held = [...document.body.children].filter((c) => Object.keys(c).some((k) => k.startsWith('__reactContainer$'))).map((c) => reactHeld(c)).join('\n');
+  expect(held.length, 'at least one React root was read').toBeGreaterThan(0);
+  const stored = JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage });
+  const logged = JSON.stringify(spies.map((x) => x.mock.calls));
+  for (const v of values) {
+    if (html.includes(v)) where.push(`dom:${v}`);
+    if (held.includes(v)) where.push(`react:${v}`);
+    if (stored.includes(v)) where.push(`storage:${v}`);
+    if (logged.includes(v)) where.push(`console:${v}`);
+  }
+  return where;
+}
+function consoleSpies() {
+  return [vi.spyOn(console, 'log').mockImplementation(() => {}), vi.spyOn(console, 'error').mockImplementation(() => {}), vi.spyOn(console, 'warn').mockImplementation(() => {}), vi.spyOn(console, 'info').mockImplementation(() => {}), vi.spyOn(console, 'debug').mockImplementation(() => {})];
+}
+/** A promise the test settles itself. */
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((a, b) => { resolve = a; reject = b; });
+  return { promise, resolve, reject };
+}
+
 function type(el: HTMLElement, value: string): void {
   // Uncontrolled: the node's own value, then the input event the field listens to.
   (el as HTMLInputElement).value = value;
@@ -75,7 +107,8 @@ function type(el: HTMLElement, value: string): void {
  * DOM nodes and functions are left out (a ref's `current` input node holds the typed value by design: the browser's).
  */
 function reactHeld(from: Element): string {
-  const fiberKey = Object.keys(from).find((k) => k.startsWith('__reactFiber$'));
+  // A node React rendered carries its fiber; the container a root renders into carries the root's.
+  const fiberKey = Object.keys(from).find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactContainer$'));
   expect(fiberKey, 'a React fiber on the node').toBeDefined();
   type Fiber = { return: Fiber | null; child: Fiber | null; sibling: Fiber | null; alternate: Fiber | null; memoizedProps: unknown; memoizedState: unknown; stateNode: unknown };
   let top = (from as unknown as Record<string, Fiber>)[fiberKey!]!;
@@ -130,15 +163,23 @@ describe('the React-state probe', () => {
     // …and a controlled field puts it in the DOM attribute too: the reason SecretField is uncontrolled.
     expect(el.getAttribute('value')).toBe(TOKEN);
   });
+  it('the leak check finds the raw and the encoded value in the console and in storage', () => {
+    const spies = consoleSpies();
+    render(<p>nothing here</p>);
+    expect(leaksOf([TOKEN, jiraBasic(EMAIL, TOKEN)], spies)).toEqual([]);
+    console.log({ body: JSON.stringify({ value: jiraBasic(EMAIL, TOKEN) }) });
+    sessionStorage.setItem('x', TOKEN);
+    expect(leaksOf([TOKEN, jiraBasic(EMAIL, TOKEN)], spies)).toEqual([`storage:${TOKEN}`, `console:${jiraBasic(EMAIL, TOKEN)}`]);
+    for (const x of spies) x.mockRestore();
+  });
 });
 
 describe('a saved Jira source whose token is missing (the operator’s dead end)', () => {
   it('offers the email and token fields; one PUT to the secret route, none to the config routes; then it reads Set and Connected', async () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const spies = consoleSpies();
     const onSaved = vi.fn();
-    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('jira') as never }} existing={['jira']} onSaved={onSaved} onClose={vi.fn()} />);
+    const onRekeyed = vi.fn();
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('jira') as never }} existing={['jira']} onSaved={onSaved} onRekeyed={onRekeyed} onClose={vi.fn()} />);
     expect(screen.getByTestId('pm-secret-state')).toHaveAttribute('data-state', 'missing');
     const field = screen.getByTestId('pm-secret') as HTMLInputElement;
     expect(field.type).toBe('password');
@@ -176,18 +217,14 @@ describe('a saved Jira source whose token is missing (the operator’s dead end)
     fireEvent.click(screen.getByTestId('pm-secret-replace-cancel'));
 
     // The saved source keeps its links, agent access and tools: the page gets the same record, its token now set.
-    expect(onSaved).toHaveBeenCalledTimes(1);
-    const next = onSaved.mock.calls[0]![0] as Record<string, unknown>;
-    expect(next).toEqual({ ...pmServer('jira'), authState: 'set' });
+    // Only the token's state changed: the page hears that (no whole record), and nothing is saved.
+    expect(onRekeyed.mock.calls).toEqual([['jira']]);
+    expect(onSaved).not.toHaveBeenCalled();
     expect(screen.getByTestId('pm-links')).toHaveTextContent('BILL · Billing: linked to project');
     expect(screen.getByTestId('pm-agent-controls')).toBeInTheDocument();
 
-    expect(document.body.innerHTML).not.toContain(TOKEN);
-    expect(document.body.innerHTML).not.toContain(jiraBasic(EMAIL, TOKEN));
-    expect(reactHeld(screen.getByTestId('pm-sheet'))).not.toContain(TOKEN);
-    expect(reactHeld(screen.getByTestId('pm-sheet'))).not.toContain(jiraBasic(EMAIL, TOKEN));
-    for (const spy of [log, err, warn]) expect(JSON.stringify(spy.mock.calls)).not.toContain(TOKEN);
-    log.mockRestore(); err.mockRestore(); warn.mockRestore();
+    expect(leaksOf([TOKEN, jiraBasic(EMAIL, TOKEN)], spies)).toEqual([]);
+    for (const x of spies) x.mockRestore();
   });
 
   it('a refused write keeps the field (the token still only in it), says so, and the state stays Missing', async () => {
@@ -261,9 +298,19 @@ describe('a saved GitHub source whose token is set: Replace token', () => {
 });
 
 describe('on the Data sources page', () => {
-  it('the re-keyed source reads Set from crew’s next list, and keeps its link', async () => {
+  it('the re-keyed source reads Set, and then crew’s next list is what the sheet shows', async () => {
     servers = [pmServer('jira')];
-    secretAnswer = () => { servers = [pmServer('jira', { authState: 'set' })]; return Promise.resolve({ ref: 'keychain:wicked-mcp/jira', set: true }); };
+    const reread = deferred<unknown>();
+    let afterWrite = false;
+    secretAnswer = () => { afterWrite = true; return Promise.resolve({ ref: 'keychain:wicked-mcp/jira', set: true }); };
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/mcp/servers' && (init?.method ?? 'GET') === 'GET' && afterWrite) {
+        calls.push({ path, method: 'GET', body: undefined, raw: undefined });
+        return reread.promise;
+      }
+      return base(path, init);
+    });
     render(<SourcesPage navigate={vi.fn()} search="?source=jira" />);
     const sheet = await screen.findByTestId('pm-sheet');
     expect(sheet).toHaveAttribute('data-mode', 'saved');
@@ -272,9 +319,13 @@ describe('on the Data sources page', () => {
     type(screen.getByTestId('pm-secret'), TOKEN);
     fireEvent.click(screen.getByTestId('pm-rekey-save'));
     await screen.findByTestId('pm-test-ok');
-    await waitFor(() => expect(calls.filter((c) => c.path === '/mcp/servers' && c.method === 'GET').length).toBeGreaterThanOrEqual(2));
+    // crew's list read is still out: the page merged the token's state into its own record, and kept the link.
     expect(screen.getByTestId('pm-secret-state')).toHaveAttribute('data-state', 'set');
-    expect(screen.getByTestId('pm-links')).toHaveTextContent('Billing');
+    expect(screen.getByTestId('pm-links')).toHaveTextContent('BILL · Billing');
+    // crew's answer lands, with a field only it could carry (a link added elsewhere): the sheet shows crew's record.
+    reread.resolve({ servers: [pmServer('jira', { authState: 'set', trackers: [{ ...LINK }, { ...LINK, id: 'tl_2', trackerId: 'trk_2', key: 'PAY', label: 'Payments' }] })], discovered: [] });
+    await waitFor(() => expect(screen.getByTestId('pm-links')).toHaveTextContent('PAY · Payments'));
+    expect(screen.getByTestId('pm-secret-state')).toHaveAttribute('data-state', 'set');
     expect(secretPuts()).toHaveLength(1);
     expect(configWrites()).toEqual([]);
   });
@@ -282,9 +333,11 @@ describe('on the Data sources page', () => {
 
 describe('the database sheet: the same re-key (support-pg)', () => {
   it('a missing password offers the field; one PUT, then Test connection; the source is otherwise untouched', async () => {
+    const spies = consoleSpies();
     const onSaved = vi.fn();
+    const onRekeyed = vi.fn();
     const server = pgServer({ name: 'support-pg', authState: 'missing', allowWrites: true });
-    render(<SourceSheet target={{ mode: 'saved', server }} existing={['support-pg']} onSaved={onSaved} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    render(<SourceSheet target={{ mode: 'saved', server }} existing={['support-pg']} onSaved={onSaved} onRekeyed={onRekeyed} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByTestId('source-secret-state')).toHaveAttribute('data-state', 'missing');
     const field = screen.getByTestId('source-secret') as HTMLInputElement;
     expect(screen.getByTestId('source-rekey-save')).toBeDisabled();
@@ -300,8 +353,10 @@ describe('the database sheet: the same re-key (support-pg)', () => {
     expect(screen.getByTestId('source-secret-state')).toHaveAttribute('data-state', 'set');
     expect(screen.queryByTestId('source-secret')).toBeNull();
     expect(field.value).toBe('');
-    expect(onSaved).toHaveBeenCalledWith({ ...server, authState: 'set' });
-    expect(document.body.innerHTML).not.toContain(TOKEN);
+    expect(onRekeyed.mock.calls).toEqual([['support-pg']]);
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(leaksOf([TOKEN], spies)).toEqual([]);
+    for (const x of spies) x.mockRestore();
   });
 
   it('a set password offers Replace password, and the existing saved-sheet words stay as they were', () => {
@@ -313,5 +368,128 @@ describe('the database sheet: the same re-key (support-pg)', () => {
     expect(screen.getByTestId('source-secret-replace-cancel')).toHaveTextContent('Keep the saved one');
     expect(screen.getByTestId('source-secret')).toBeInTheDocument();
     expect(screen.getByTestId('source-rekey-save')).toHaveTextContent('Save password');
+  });
+});
+
+describe('review r1 folds (codex + pi)', () => {
+  it('closing the sheet while the write is out lets go of the typed token (the detached field is empty)', async () => {
+    const out = deferred<unknown>();
+    secretAnswer = () => out.promise;
+    const onRekeyed = vi.fn();
+    const view = render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onRekeyed={onRekeyed} onClose={vi.fn()} />);
+    const field = screen.getByTestId('pm-secret') as HTMLInputElement;
+    type(field, TOKEN);
+    fireEvent.click(screen.getByTestId('pm-rekey-save'));
+    expect(secretPuts()).toHaveLength(1);
+    view.unmount();
+    expect(field.value).toBe('');
+    out.resolve({ ref: 'keychain:wicked-mcp/github', set: true });
+    await waitFor(() => expect(onRekeyed).toHaveBeenCalledWith('github'));
+  });
+
+  it('a sheet opened again while that write is out waits for it: no second write until it settles, then crew is read again', async () => {
+    const out = deferred<unknown>();
+    secretAnswer = () => out.promise;
+    const first = render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    type(screen.getByTestId('pm-secret'), TOKEN);
+    fireEvent.click(screen.getByTestId('pm-rekey-save'));
+    first.unmount();
+    const onReread = vi.fn();
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onReread={onReread} onClose={vi.fn()} />);
+    type(screen.getByTestId('pm-secret'), `${TOKEN}-2`);
+    expect(screen.getByTestId('pm-rekey-save')).toBeDisabled();
+    expect(screen.getByTestId('pm-rekey-save')).toHaveTextContent('Saving…');
+    fireEvent.keyDown(screen.getByTestId('pm-secret'), { key: 'Enter' });
+    expect(secretPuts()).toHaveLength(1);
+    out.resolve({ ref: 'keychain:wicked-mcp/github', set: true });
+    await waitFor(() => expect(onReread).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId('pm-rekey-save')).toBeEnabled());
+  });
+
+  it('a write the sheet hears no answer to: the field lets go, the sheet says it could not confirm, and crew is read again', async () => {
+    secretAnswer = () => Promise.reject(new TypeError('Failed to fetch'));
+    const onReread = vi.fn();
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onReread={onReread} onClose={vi.fn()} />);
+    const field = screen.getByTestId('pm-secret') as HTMLInputElement;
+    type(field, TOKEN);
+    fireEvent.click(screen.getByTestId('pm-rekey-save'));
+    expect(await screen.findByTestId('pm-sheet-error')).toHaveTextContent('studio could not confirm the token was saved (Failed to fetch). crew may have written it: Test connection shows whether it works');
+    expect(field.value).toBe('');
+    expect(onReread).toHaveBeenCalled();
+  });
+
+  it('a newer record of the source that lands during the write is kept: only the token’s state is merged in', async () => {
+    const out = deferred<unknown>();
+    secretAnswer = () => out.promise;
+    const props = { target: { mode: 'saved' as const, server: pmServer('github') as never }, existing: ['github'], onSaved: vi.fn(), onClose: vi.fn() };
+    const view = render(<PmSourceSheet {...props} servers={[pmServer('github') as never]} />);
+    type(screen.getByTestId('pm-secret'), TOKEN);
+    fireEvent.click(screen.getByTestId('pm-rekey-save'));
+    // The page's list read lands first, with a link added elsewhere.
+    const newer = pmServer('github', { trackers: [{ ...LINK, source: 'github', system: 'github' }, { ...LINK, id: 'tl_9', trackerId: 'trk_9', source: 'github', system: 'github', key: 'acme/web', label: 'web' }] });
+    view.rerender(<PmSourceSheet {...props} servers={[newer as never]} />);
+    out.resolve({ ref: 'keychain:wicked-mcp/github', set: true });
+    await screen.findByTestId('pm-test-ok');
+    expect(screen.getByTestId('pm-links')).toHaveTextContent('acme/web');
+    expect(props.onSaved).not.toHaveBeenCalled();
+  });
+
+  it('a token crew reads from a daemon variable (not its own keychain entry) is not offered for re-key, and the sheet says why', () => {
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github', { auth: { ref: 'env:GITHUB_TOKEN', header: 'Authorization', prefix: 'Bearer ' } }) as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByTestId('pm-secret-state')).toHaveAttribute('data-state', 'missing');
+    expect(screen.queryByTestId('pm-secret')).toBeNull();
+    expect(screen.queryByTestId('pm-rekey-save')).toBeNull();
+    expect(screen.getByTestId('pm-sheet-form')).toHaveTextContent('crew reads this token from somewhere other than its own keychain entry');
+  });
+
+  it('the database sheet: the same for a password in a daemon variable', () => {
+    render(<SourceSheet target={{ mode: 'saved', server: pgServer({ name: 'support-pg', auth: { ref: 'env:PGPASSWORD' }, authState: 'set' }) }} existing={['support-pg']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.queryByTestId('source-secret-replace')).toBeNull();
+    expect(screen.queryByTestId('source-rekey-save')).toBeNull();
+  });
+
+  it('a token shorter than crew accepts is said at the field, and nothing is sent', () => {
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    type(screen.getByTestId('pm-secret'), 'short');
+    fireEvent.click(screen.getByTestId('pm-rekey-save'));
+    expect(screen.getByTestId('pm-sheet-error')).toHaveTextContent('A token is at least 8 characters. Nothing was written.');
+    expect(secretPuts()).toEqual([]);
+  });
+
+  it('Enter in the field saves it, as the button does', async () => {
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    type(screen.getByTestId('pm-secret'), TOKEN);
+    fireEvent.keyDown(screen.getByTestId('pm-secret'), { key: 'Enter' });
+    await screen.findByTestId('pm-test-ok');
+    expect(secretPuts().map((c) => c.body)).toEqual([{ value: TOKEN }]);
+  });
+
+  it('the focus: Replace moves it to the field (Jira: the account email), Keep moves it back to Replace', () => {
+    const gh = render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github', { authState: 'set' }) as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('pm-secret-replace'));
+    expect(document.activeElement).toBe(screen.getByTestId('pm-secret'));
+    fireEvent.click(screen.getByTestId('pm-secret-replace-cancel'));
+    expect(document.activeElement).toBe(screen.getByTestId('pm-secret-replace'));
+    gh.unmount();
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('jira', { authState: 'set' }) as never }} existing={['jira']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('pm-secret-replace'));
+    expect(document.activeElement).toBe(screen.getByTestId('pm-email'));
+  });
+
+  it('a set token that crew finds missing at Test connection opens the field to type it again', async () => {
+    apiFetch.mockImplementation((path: string) => {
+      if (path === '/sources/jira/trackers') return Promise.reject(new ApiError(503, 'crew can’t read the token', { error: 'crew can’t read the token', code: 'source_unavailable', cause: 'secret_missing' }));
+      if (path === '/projects?status=active') return Promise.resolve({ projects: [] });
+      if (path === '/sources/jira/agent-queries') return Promise.resolve({ name: 'jira', known: true, queries: [] });
+      return Promise.reject(new Error(`unexpected ${path}`));
+    });
+    const onReread = vi.fn();
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('jira', { authState: 'set' }) as never }} existing={['jira']} onSaved={vi.fn()} onReread={onReread} onClose={vi.fn()} />);
+    expect(screen.queryByTestId('pm-secret')).toBeNull();
+    fireEvent.click(screen.getByTestId('pm-test-reach'));
+    await screen.findByTestId('pm-test-reach-error');
+    expect(screen.getByTestId('pm-secret')).toBeInTheDocument();
+    expect(screen.getByTestId('pm-email')).toBeInTheDocument();
+    expect(onReread).toHaveBeenCalled();
   });
 });

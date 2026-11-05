@@ -59,6 +59,7 @@
 .wk-src-rekey-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .wk-src-rekey-row > .wk-src-input--static { flex: 1 1 12rem; min-width: 0; }
 .wk-src-rekey-row + .wk-src-secret { margin-top: var(--space-1); }
+.wk-src-stack { display: flex; flex-direction: column; gap: var(--space-2); }
 .wk-src-rekey { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .wk-src-textarea { width: 100%; font-family: var(--font-mono); font-size: var(--text-code); resize: vertical; }
 .wk-src-file { font-size: var(--text-caption); color: var(--ink-body); }
