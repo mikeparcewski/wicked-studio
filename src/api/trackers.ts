@@ -299,7 +299,8 @@ export function trackerActionCardOf(v: unknown, runId: string): TrackerActionCar
   }
   return {
     runId, source: v.source, system: v.system as PmSystem, tenant: v.tenant, ...(isText(v.tenantLabel) ? { tenantLabel: cut(v.tenantLabel) } : {}),
-    issue: v.issue, title: typeof v.title === 'string' ? cut(v.title) : null, identity: typeof v.identity === 'string' ? cut(v.identity) : null,
+    // The account is shown whole (two accounts may share a long prefix): it is rendered as wrapping text.
+    issue: v.issue, title: typeof v.title === 'string' ? cut(v.title) : null, identity: typeof v.identity === 'string' ? v.identity : null,
     ...(typeof v.comment === 'string' ? { comment: v.comment } : {}), ...(transition !== undefined ? { transition } : {}), admittedBy,
   };
 }
@@ -309,7 +310,7 @@ export function trackerActionOf(raw: unknown, runId: string): TrackerActionRespo
   if (!isObj(raw)) return null;
   const card = trackerActionCardOf(raw.card, runId);
   if (card === null) return null;
-  if (raw.done === false) return /^[0-9a-f]{64}$/.test(String(raw.actionHash)) ? { done: false, card, actionHash: String(raw.actionHash) } : null;
+  if (raw.done === false) return typeof raw.actionHash === 'string' && /^[0-9a-f]{64}$/.test(raw.actionHash) ? { done: false, card, actionHash: raw.actionHash } : null;
   if (raw.done !== true || typeof raw.at !== 'string') return null;
   const results = allOf(raw.results, (r): { part: 'comment' | 'transition'; ok: boolean; error?: string } | null =>
     (isObj(r) && (r.part === 'comment' || r.part === 'transition') && typeof r.ok === 'boolean' ? { part: r.part, ok: r.ok, ...(typeof r.error === 'string' ? { error: cut(r.error) } : {}) } : null));
@@ -330,5 +331,5 @@ export function trackerActionRefusal(e: unknown): string {
   if (code === 'source_unavailable') return 'The tool couldn’t be read just now (the issue, or the account it posts as), so no card is offered. Nothing was sent.';
   if (code === 'record_unavailable') return 'crew couldn’t record the approval, so nothing was sent.';
   if (code === 'run_not_found') return 'crew no longer has this job. Nothing was sent.';
-  return 'crew’s answer didn’t say whether that was done, so the card is read again from crew.';
+  return 'crew’s answer didn’t say whether that was done. Look at the issue before trying again.';
 }
