@@ -14,6 +14,7 @@ import { deliverAcceptance, ownEvidenceOf } from '../../board/checkState.js';
 import { overriddenFloorsOf } from '../../board/failingChecks.js';
 import type { RunAcceptanceSummary } from '../../api/types.js';
 import { useGateStore } from '../../store/gates.js';
+import { restoreNote, takeRestoredNote } from '../../board/undoQueue.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useOfferReply } from './DecisionDock.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
@@ -59,6 +60,14 @@ function goTo(path: string): void {
  *  back) still knows an accepted hand-over was one (Copilot). A reload starts empty: the run's own
  *  deliver unit then says so (`proposalCard`'s late-join evidence). */
 const lastKinds = new Map<string, ProposalKind>();
+/** studio#992 (xreview r2): the note a plan approval was sent with, per `<run>:<gate instance>`, so Try again carries it
+ *  even after the card remounts (the refusal itself lives in the shared gate-action store). */
+const sentPlanNotes = new Map<string, string>();
+/** studio#992: where an undone plan note waits for the reply box (never the run's shared `restoreNote` slot, which other
+ *  gate choices use). */
+export function planNoteKey(runId: string): string {
+  return `plan-note:${runId}`;
+}
 
 /** A plan gate's reject arm, as its card says it. */
 export const PLAN_STOP = 'Don’t start';
@@ -174,10 +183,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const noteChoice = planGateNote && card !== null && card.kind === 'plan' && ask === null && gate !== undefined
     && (card.state === 'ask' || (card.state === 'fail' && card.canRetry))
     && (picked === null || picked === 'go');
-  // The note sent on this gate instance: Try again after a refused send carries it again (xreview r1), never drops it.
-  const sentNote = useRef<{ instance: string | null; note: string } | null>(null);
   useOfferReply(runId, noteChoice
-    ? { label: PLAN_NOTE_REPLY, placeholder: PLAN_NOTE_PLACEHOLDER, raw: true, restoreKey: runId, send: (t) => answerRef.current(t) }
+    ? { label: PLAN_NOTE_REPLY, placeholder: PLAN_NOTE_PLACEHOLDER, raw: true, restoreKey: planNoteKey(runId), ...(gate !== undefined ? { instance: gateInstance(gate)! } : {}), send: (t) => answerRef.current(t) }
     : null);
   if (card === null) return null;
   const chat = variant === 'chat';
@@ -212,14 +219,24 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     // studio#992: the note rides only a plan approval on an engine that lands it (a blank one is no note). A retry of a
     // refused send on the same gate carries the note that send had (xreview r1).
     const typed = noteChoice ? (note ?? '').trim() : '';
-    const kept = noteChoice && note === undefined && card.state === 'fail' && sentNote.current?.instance === instance ? sentNote.current.note : '';
+    const noteKey = `${runId}:${instance ?? '-'}`;
+    const kept = noteChoice && note === undefined && card.state === 'fail' ? sentPlanNotes.get(noteKey) ?? '' : '';
     const amend = typed !== '' ? typed : kept;
-    if (amend !== '') sentNote.current = { instance, note: amend };
+    if (amend !== '') sentPlanNotes.set(noteKey, amend);
     const answer: GateAnswer = amend !== '' ? { ...base, amend } : base;
     // A note answers the gate it was typed at (xreview r1 P1): if the gate moved on, nothing is sent.
     const expect = amend !== '' ? { expect: { ord: gate.ord, receivedAt: gate.receivedAt } } : {};
     commitGateDecision(runId, answer, { ...deliver, ...expect, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.act ?? 'Approve' } })
-      .then((outcome) => { if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey); })
+      .then((outcome) => {
+        if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey);
+        if (outcome === 'sent') sentPlanNotes.delete(noteKey);
+        // An Undo hands a plan note back to the reply box under its own key (xreview r2: never the run's shared slot,
+        // which another surface reads); a cancel (the gate moved on) never refills the box for the next plan.
+        if (outcome === 'undone' && amend !== '') {
+          if (takeRestoredNote(runId) !== amend) { /* the shared slot held no copy of this note */ }
+          restoreNote(planNoteKey(runId), amend);
+        }
+      })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });
   };

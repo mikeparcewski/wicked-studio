@@ -41,6 +41,9 @@ export interface DockReply {
   /** studio#992 (xreview r1): an Undo hands the note back under this key (`restoreNote`); the reply box takes it back
    *  while it is empty. */
   restoreKey?: string;
+  /** studio#992 (xreview r2): the decision instance this choice answers. A draft begun under another instance (the
+   *  plan was replaced while it was typed) is not sent to this one without a fresh Send. */
+  instance?: string;
 }
 
 interface DockCtx {
@@ -269,6 +272,7 @@ export function useOfferReply(key: string, reply: DockReply | null): void {
   const placeholder = reply?.placeholder;
   const raw = reply?.raw === true;
   const restoreKey = reply?.restoreKey;
+  const instance = reply?.instance;
   const sendRef = useRef(reply?.send);
   sendRef.current = reply?.send;
   useEffect(() => {
@@ -277,7 +281,8 @@ export function useOfferReply(key: string, reply: DockReply | null): void {
     setReply(key, {
       label, send: (t) => sendRef.current?.(t),
       ...(placeholder !== undefined ? { placeholder } : {}), ...(raw ? { raw } : {}), ...(restoreKey !== undefined ? { restoreKey } : {}),
+      ...(instance !== undefined ? { instance } : {}),
     });
     return () => setReply(key, null);
-  }, [setReply, docked, key, label, placeholder, raw, restoreKey]);
+  }, [setReply, docked, key, label, placeholder, raw, restoreKey, instance]);
 }

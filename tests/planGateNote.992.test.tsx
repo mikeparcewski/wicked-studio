@@ -15,8 +15,9 @@ import { useGateActionStore } from '../src/board/gateActions.js';
 import { useElicitationStore } from '../src/store/elicitations.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
 import { useSheets } from '../src/store/sheets.js';
+import { useSessionDrafts } from '../src/store/sessionDrafts.js';
 import { useHostPanel } from '../src/editors/hostApi.js';
-import { flushDecisionsForTest, resetDecisionsForTest, undoDecision, useUndoQueue } from '../src/board/undoQueue.js';
+import { flushDecisionsForTest, resetDecisionsForTest, restoreNote, undoDecision, useUndoQueue } from '../src/board/undoQueue.js';
 import { addAboutChip, clearAboutChips } from '../src/store/composerChips.js';
 import { provideDraftRouter } from '../src/hooks/useDraftRouter.js';
 import { resetRunPanel } from '../src/store/runPanel.js';
@@ -49,6 +50,8 @@ beforeEach(() => {
   resetDecisionsForTest();
   setCachedRoster(ROSTER as never);
   useSheets.setState({ open: null, stopping: {} } as never);
+  useSessionDrafts.setState({ drafts: {} } as never);
+  useUndoQueue.setState({ restoredNotes: {} } as never);
   useRunEventStore.setState({ byRun: { r1: [{ type: 'awaitingHuman', session: 'r1', ord: 1, gateKind: 'plan_approval', prompt: PLAN_PROMPT, ts: 1 }] as unknown as CoreEvent[] } });
   useGateStore.setState({ gates: { r1: GATE }, approaching: {} });
   useGateActionStore.setState({ byGate: {} });
@@ -201,6 +204,56 @@ describe('studio#992: the plan gate takes a note, as a reply at the plan', () =>
     await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe(NOTE));
     expect(input).toBeDefined();
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  // ── xreview r2 (codex) ────────────────────────────────────────────────────────────────────────────────────────
+  it('P1 r2: a note typed at one plan gate is not sent to the plan that replaced it (after a rerender) by one Send', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true, planGateNote: true } as never);
+    page();
+    await screen.findByTestId('session-proposal');
+    const input = screen.getByTestId('session-composer-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: NOTE } });
+    await waitFor(() => expect(screen.getByTestId('session-reply-dest').textContent).toBe(`Replies to this decision (${PLAN_NOTE_REPLY})`));
+    act(() => { useGateStore.setState({ gates: { r1: { ...GATE, ord: 2, receivedAt: GATE.receivedAt + 5_000, prompt: 'Approve plan rev 2 before unit 2 runs' } } }); });
+    await waitFor(() => expect(screen.getByTestId('session-proposal')).toBeDefined());
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(useUndoQueue.getState().pending).toHaveLength(0);
+    await waitFor(() => expect(screen.getByTestId('session-reply-moved').textContent).toMatch(/^Not sent: this decision changed/));
+    await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe(NOTE));
+    // The person's own second Send answers the plan they now see.
+    fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
+    await act(async () => { await flushDecisionsForTest(); });
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(confirm.mock.calls[0]![1]).toEqual({ approve: true, amend: NOTE, ord: 2 });
+  });
+
+  it('P2 r2: Try again carries the note even after the card remounts', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true, planGateNote: true } as never);
+    confirm.mockRejectedValueOnce(new Error('engine busy'));
+    const first = page();
+    await typeAndSend(NOTE);
+    await act(async () => { await flushDecisionsForTest(); });
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    first.unmount();
+    page();
+    const retry = await screen.findByTestId('session-proposal-go');
+    await waitFor(() => expect(retry.textContent).toMatch(/Try again/));
+    fireEvent.click(retry);
+    await act(async () => { await flushDecisionsForTest(); });
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2));
+    expect(confirm.mock.calls[1]![1]).toEqual({ approve: true, amend: NOTE, ord: 1 });
+  });
+
+  it('P2 r2: a note another gate choice handed back (a Send back undone) is never put in the plan\'s box', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true, planGateNote: true } as never);
+    restoreNote('r1', 'GateRow send-back note');
+    page();
+    await screen.findByTestId('session-proposal');
+    await new Promise((r) => setTimeout(r, 50));
+    expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('');
+    expect(useUndoQueue.getState().restoredNotes['r1']).toBe('GateRow send-back note');
   });
 });
 
