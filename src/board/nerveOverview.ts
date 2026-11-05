@@ -1,5 +1,5 @@
 import type { SystemAttention, SystemCli, SystemGovernanceCard, SystemInfra, SystemSnapshot } from '../api/system.js';
-import { toResolveWords, type NerveState } from './nerveCenter.js';
+import { cliInUse, notSetUp, toResolveWords, type NerveState } from './nerveCenter.js';
 import type { NerveTab } from './nerveTabs.js';
 import { countWord } from './deskHome.js';
 import { rowLead } from './rowHeadline.js';
@@ -71,6 +71,22 @@ export function cliTile(c: SystemCli): Tile {
   }
   if (c.state === 'signed_out') return { ...base, state: 'Not signed in', tone: 'quiet', line: null, ...(c.canSignIn ? { signIn: c.key } : {}) };
   return { ...base, state: 'Not known', tone: 'quiet', line: null };
+}
+
+/**
+ * The helper tiles, with what crew's attention says about each seat: a signed-out seat a job needs is
+ * amber ("Signed out", a job needs it); one nobody set up is quiet ("Not set up", optional).
+ */
+export function helperTiles(clis: readonly SystemCli[], attention: readonly SystemAttention[]): Tile[] {
+  const used = new Set(attention.map(cliInUse).filter((k): k is string => k !== null));
+  const optional = new Set(notSetUp(clis, attention).map((c) => c.key));
+  return clis.map((c) => {
+    const t = cliTile(c);
+    if (c.state !== 'signed_out') return t;
+    if (used.has(c.key)) return { ...t, state: 'Signed out', tone: 'warn', line: 'A job needs it' };
+    if (optional.has(c.key)) return { ...t, state: 'Not set up', tone: 'quiet', line: 'Optional' };
+    return t;
+  });
 }
 
 /** The machine's own rows (they get a tile of their own); every other infra row is a service. */
@@ -197,9 +213,10 @@ export function overviewSentence(state: Pick<NerveState, 'read'>, slowing: reado
   return { lead: `Work is ${red ? 'stopped' : 'slowed'} by ${what}.`, rest, tone: red ? 'fail' : 'warn' };
 }
 
-/** Tiles that need a look but are not in attention: they count in the sentence's second part. */
+/** Tiles that need a look but are not in attention: they count in the sentence's second part. A quiet
+ *  tile (a helper nobody set up, with its Sign in link) is not one (operator 2026-11-05). */
 export function tilesNeedingALook(tiles: readonly Tile[]): number {
-  return tiles.filter((t) => t.tone === 'warn' || t.tone === 'fail' || t.signIn !== undefined).length;
+  return tiles.filter((t) => t.tone === 'warn' || t.tone === 'fail').length;
 }
 
 /** "One job needs you." / "Three jobs need you." (the waiting line), or null with none. */

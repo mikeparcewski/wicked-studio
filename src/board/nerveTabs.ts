@@ -127,21 +127,23 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
   const n = state.attention.length;
   const attention = checking ? done('attention', 'checking', 'unknown') : done('attention', String(n), attentionTone(state.attention), n);
 
-  // CLIs: how many are signed in. A signed-out, benched or unknown CLI needs a look; only crew's own
-  // attention (a red item) says one blocks work.
+  // CLIs: how many are signed in, said as a count. The colour is crew's attention only (operator
+  // 2026-11-05): a CLI nobody set up is optional and never yellow; a seat a job needs, or too few
+  // seats to review, is crew's item and colours the chip.
   let clis: AreaSummary;
   const cliItems = of('clis');
   if (snapshot !== null) {
     const total = snapshot.clis.length;
     const signed = snapshot.clis.filter((c) => c.state === 'signed_in').length;
-    const base: AreaTone = total === 0 ? 'unknown' : signed < total ? 'warn' : 'ok';
+    const base: AreaTone = total === 0 ? 'unknown' : 'ok';
     clis = done('clis', total === 0 ? 'none reported' : `${signed}/${total} signed in`, worse(base, attentionTone(cliItems)));
   } else if (fallback.roster !== null) {
     const seats = fallback.roster;
     const total = seats.length;
     const signed = seats.filter((s) => s.ready === true).length;
-    // A seat known to be out or failing needs a look, even when another seat's state is not known.
-    const bad = seats.some((s) => s.ready === false || s.failing);
+    // A seat the roster reports failing needs a look, even when another seat's state is not known. A
+    // seat that is only not signed in is optional (an older crew says no more about it).
+    const bad = seats.some((s) => s.failing);
     const known = seats.every((s) => s.ready !== null);
     const base: AreaTone = total === 0 ? 'unknown' : bad ? 'warn' : known ? 'ok' : 'unknown';
     const read = fallback.rosterRead ?? 'fresh';

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { diskReading, normalizeSnapshot, type SystemAttention } from '../src/api/system.js';
+import { notSetUpWords, systemSummary } from '../src/board/nerveCenter.js';
 import {
+  helperTiles, tilesNeedingALook,
   bytesWords, cliTile, governanceTile, machineTile, overviewSentence, qePassPct, servicesTile, slowingItems, slowingLine, waitingItems, waitingWords,
 } from '../src/board/nerveOverview.js';
 
@@ -123,5 +125,23 @@ describe('free disk, free now and available (operator 2026-10-29: Finder said 70
     expect(checkedWords(1_000_000, 1_000_000 + 20_000)).toBe('Checked just now');
     expect(checkedWords(1_000_000, 1_000_000 + 3 * 60_000)).toBe('Checked 3 min ago');
     expect(checkedWords(null, 1)).toBeNull();
+  });
+});
+
+describe('a CLI nobody set up (operator 2026-11-05)', () => {
+  it('is a quiet "Not set up · Optional" tile that never counts as needing a look; one a job needs is amber', () => {
+    const quietTiles = helperTiles(LIVE.clis, []);
+    const opencode = quietTiles.find((t) => t.id === 'opencode')!;
+    expect(opencode).toMatchObject({ state: 'Not set up', tone: 'quiet', line: 'Optional', signIn: 'opencode' });
+    expect(tilesNeedingALook([opencode])).toBe(0);
+    const used = helperTiles(LIVE.clis, [att('cli:out:opencode', 'clis')]).find((t) => t.id === 'opencode')!;
+    expect(used).toMatchObject({ state: 'Signed out', tone: 'warn', line: 'A job needs it' });
+    expect(tilesNeedingALook([used])).toBe(1);
+  });
+
+  it('the info line names the optional ones, and none while too few agents are signed in to review', () => {
+    expect(notSetUpWords(LIVE.clis, [])).toMatch(/^Not set up: .*— optional$/);
+    expect(notSetUpWords(LIVE.clis, [att('cli:one-reviewer', 'clis')])).toBeNull();
+    expect(systemSummary(att('cli:one-reviewer', 'clis', 'yellow', { text: 'Sign in a second agent so a different one can review' }))).toBe('sign in a second agent');
   });
 });

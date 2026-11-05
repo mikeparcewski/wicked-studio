@@ -1,4 +1,4 @@
-import type { RunLiveness, SystemAttention, SystemRun } from '../api/system.js';
+import type { RunLiveness, SystemAttention, SystemCli, SystemRun } from '../api/system.js';
 import type { SystemStore } from '../store/systemSnapshot.js';
 
 /**
@@ -30,6 +30,8 @@ export interface NerveState {
   words: string;
   /** Every item, worst first (the dashboard's Needs attention strip). */
   attention: SystemAttention[];
+  /** A quiet note that never changes the tone ("Not set up: OpenCode — optional"), or absent. */
+  info?: string | null;
 }
 
 export const CANT_REACH = "can't reach crew";
@@ -53,6 +55,31 @@ function socketItems(ws: 'connecting' | 'connected' | 'disconnected'): SystemAtt
   return ws === 'disconnected'
     ? [item('studio-socket', 'yellow', 'infra', 'live updates paused', 'Studio lost its live connection to crew, so pages stop updating on their own.', 'It reconnects by itself. Reload the page if it does not.')]
     : [];
+}
+
+/** The id crew gives "fewer than two agents signed in, so none can review another's work". */
+export const ONE_REVIEWER_ID = 'cli:one-reviewer';
+
+/** The CLI a "signed out while a job needs it" item names (`cli:out:<key>`), or null. */
+export function cliInUse(a: SystemAttention): string | null {
+  return a.panel === 'clis' && a.id.startsWith('cli:out:') ? a.id.slice('cli:out:'.length) : null;
+}
+
+/**
+ * The CLIs nobody set up (operator 2026-11-05: "people aren't going to have all the cli's"): signed out,
+ * and no job needs them. They are OPTIONAL, said quietly, never a reason for yellow. None is optional
+ * while crew says too few agents are signed in to review: then any one of them is the fix.
+ */
+export function notSetUp(clis: readonly SystemCli[], attention: readonly SystemAttention[]): SystemCli[] {
+  if (attention.some((a) => a.id === ONE_REVIEWER_ID)) return [];
+  const used = new Set(attention.map(cliInUse).filter((k): k is string => k !== null));
+  return clis.filter((c) => c.state === 'signed_out' && !used.has(c.key));
+}
+
+/** "Not set up: OpenCode — optional" / "Not set up: OpenCode, Copilot — optional", or null with none. */
+export function notSetUpWords(clis: readonly SystemCli[], attention: readonly SystemAttention[]): string | null {
+  const out = notSetUp(clis, attention);
+  return out.length === 0 ? null : `Not set up: ${out.map((c) => c.name).join(', ')} — optional`;
 }
 
 /** An older crew's attention, folded from what it can say (the old Health dot's signals, plus the
@@ -101,8 +128,9 @@ export function nerveState(s: Signals, ws: 'connecting' | 'connected' | 'disconn
     if (s.snapshotAt === null || s.snapshot === null) return checking();
     if (now - s.snapshotAt > STALE_MS) return unreachable('stale', "Crew's system snapshot is too old to trust.");
     // A ranked crew's list is kept in crew's order; an older snapshot's is worst first.
-    if (s.snapshot.ranked === true) return systemVerdict([...s.snapshot.attention, ...socketItems(ws)], s.snapshot.unresolved?.length ?? 0);
-    return systemVerdict(worstFirst([...s.snapshot.attention, ...socketItems(ws)]), 0);
+    const info = notSetUpWords(s.snapshot.clis, s.snapshot.attention);
+    if (s.snapshot.ranked === true) return { ...systemVerdict([...s.snapshot.attention, ...socketItems(ws)], s.snapshot.unresolved?.length ?? 0), info };
+    return { ...systemVerdict(worstFirst([...s.snapshot.attention, ...socketItems(ws)]), 0), info };
   } else if (s.mode === 'fallback') {
     if (s.governance.kind === 'unread') return checking();
     // The governance answer must be as fresh as the health one (a read that failed keeps no clock).
@@ -148,6 +176,7 @@ export function systemSummary(a: SystemAttention): string {
     return a.level === 'red' || /\bdown\b/.test(said) ? 'a service is down' : 'a service needs a look';
   }
   if (a.panel === 'clis') {
+    if (a.id === ONE_REVIEWER_ID) return 'sign in a second agent';
     if (/bench|quota|429|rate.?limit/.test(said)) return 'a helper is resting';
     if (/sign/.test(said)) return 'a helper is signed out';
     return 'a helper needs a look';
