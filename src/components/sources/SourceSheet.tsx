@@ -20,7 +20,7 @@ import { ProfileBox } from './ProfileBox.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { AskData } from './AskData.js';
 import { ConnectionTestLines } from './ConnectionTest.js';
-import { ownsKeychainEntry, rekeyFailure, rekeyPending, rekeySource, SECRET_MIN } from './rekey.js';
+import { ownsKeychainEntry, rekeyFailure, rekeyPending, rekeySource, secretShapeProblem } from './rekey.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
 import {
   agentsSeeWords,
@@ -129,6 +129,11 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   const [busy, setBusy] = useState<null | 'test' | 'save' | 'retest' | 'upload' | 'rekey'>(null);
   /** A saved source whose secret is set: the person opened "Replace" (a missing secret's field is always open). */
   const [replacing, setReplacing] = useState(false);
+  /** What the last re-key did, for the status line (a rotation is Set before and after: this is what changes). */
+  const [rekeyStatus, setRekeyStatus] = useState('');
+  /** The sheet is on the page: a write that settles after it closed runs no test here (a reopened sheet reads crew). */
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   /** The saved source's latest Test connection (its lines replace the stored describe's). */
   const [tested, setTested] = useState<SourceConnectionTestResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -274,6 +279,10 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
     // The lines are this test's or none: an older result never stands beside a newer failure.
     setTested(null);
     try {
+      // A password write still out goes first: the test connects with what crew ends up with.
+      // (Only then: with none out, the test starts in this same tick.)
+      const out = rekeyPending(saved.name);
+      if (out !== null) { await out.catch(() => undefined); if (mine !== testGen.current) return; }
       const t = await sourcesApi.testConnection(saved.name);
       // Only the latest test's answer is shown.
       if (mine !== testGen.current) return;
@@ -332,29 +341,42 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
    * descriptor, Allow writes, agent access) is not touched. Then the field lets go of it, and a database is tested.
    */
   const rekeyName = saved?.name ?? null;
-  // A write the sheet sent before it closed is still out: this one waits for it, then reads crew's state again.
+  const testable = saved?.kind === 'sql' || saved?.kind === 'graphql';
+  // A write the sheet sent before it closed is still out: this one waits for it, says how it ended, reads crew again.
   useEffect(() => {
     if (rekeyName === null) return;
     const out = rekeyPending(rekeyName);
     if (out === null) return;
     let live = true;
     setBusy('rekey');
-    const settle = (): void => { if (live) { setBusy((b) => (b === 'rekey' ? null : b)); onReread?.(); } };
-    out.then(settle, settle);
+    const settle = (e?: unknown): void => {
+      if (!live) return;
+      setBusy((b) => (b === 'rekey' ? null : b));
+      onReread?.();
+      if (e === undefined) { setRekeyStatus('The secret typed before this sheet was opened again was saved to your keychain.'); return; }
+      setError(rekeyFailure(e, []).kind === 'refused' ? 'The secret typed before this sheet was opened again was not saved: type it again.'
+        : `studio could not confirm the secret typed before this sheet was opened again was saved${testable ? ': Test connection shows whether it works.' : '.'}`);
+    };
+    out.then(() => settle(), (e: unknown) => settle(e ?? new Error('failed')));
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the source the sheet opened on
   }, [rekeyName]);
   const rekey = async (): Promise<void> => {
-    if (saved === null || inFlight.current || !ownsKeychainEntry(saved) || rekeyPending(saved.name) !== null) return;
+    if (saved === null || busy !== null || inFlight.current || !ownsKeychainEntry(saved) || rekeyPending(saved.name) !== null) return;
     const token = secret.current?.read() ?? '';
     if (token === '') return;
     const current = saved;
     const what = isSqlKind(sheetKindOf(current)) ? 'password' : 'secret';
-    // crew's own rule, said at the field rather than as a refused request.
-    if (token.length < SECRET_MIN) { setError(`A ${what} is at least ${SECRET_MIN} characters. Nothing was written.`); return; }
+    // crew's own rule for the value it is sent, said at the field rather than as a refused request.
+    const shape = secretShapeProblem(token, what);
+    if (shape !== null) { setError(shape); return; }
     inFlight.current = true;
     setBusy('rekey');
     setError(null);
+    setRekeyStatus('');
+    // Any test still out is older than this write: its answer lands nowhere, and its lines go.
+    testGen.current++;
+    setTested(null);
     const letGo = (): void => { secret.current?.clear(); setHasSecret(false); };
     try {
       await rekeySource(current.name, token);
@@ -364,18 +386,20 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
       setSaved((cur) => (cur !== null && cur.name === current.name ? ({ ...cur, authState: 'set' } as McpServer) : cur));
       onRekeyed?.(current.name);
       inFlight.current = false;
+      if (!alive.current) return;
+      setRekeyStatus(`${what === 'password' ? 'Password' : 'Secret'} saved to your keychain.`);
       // A database is tested at once (Test connection takes the busy state over in this same tick).
       if (current.kind === 'sql' || current.kind === 'graphql') await testSaved();
       else setBusy(null);
     } catch (e) {
-      const f = rekeyFailure(e);
+      const f = rekeyFailure(e, [token]);
       if (f.kind === 'unknown') {
-        // No answer studio can read: crew may have written it. The field lets go of it either way.
+        // No answer that proves nothing was written: crew may have written it. The field lets go of it either way.
         letGo();
         onReread?.();
-        setError(`studio could not confirm the ${what} was saved (${f.said}). crew may have written it: Test connection shows whether it works; type it again if not.`);
+        setError(`studio could not confirm the ${what} was saved (${f.said}). crew may have written it: ${current.kind === 'sql' || current.kind === 'graphql' ? 'Test connection shows whether it works; type it again if not.' : 'type it again to be sure.'}`);
       } else {
-        setError(`The ${what} was not saved: ${f.said}`);
+        setError(`The ${what} was not saved: ${f.said}. Nothing was written.`);
       }
       setBusy(null);
     } finally {
@@ -546,7 +570,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   disabled={busy !== null}
                   rekey={isNew || !ownsKeychainEntry(saved) ? null : {
                     open: replacing,
-                    onOpen: (open) => { setReplacing(open); setError(null); },
+                    onOpen: (open) => { setReplacing(open); setError(null); setRekeyStatus(''); },
                     submit: () => void rekey(),
                     replace: isSqlKind(kind) ? 'Replace password' : 'Replace secret',
                     note: 'Type it again. Only the secret changes: the source, its Allow writes and agent access stay as they are.',
@@ -562,6 +586,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   <span className="wk-src-note" data-testid="source-rekey-note">{!hasSecret ? `Type the ${isSqlKind(kind) ? 'password' : 'secret'}` : saved.kind === 'sql' || saved.kind === 'graphql' ? 'Writes it to your keychain, then tests the connection.' : 'Writes it to your keychain.'}</span>
                 </div>
               )}
+              {!isNew && saved !== null && ownsKeychainEntry(saved) && saved.authState !== 'none' && <span role="status" className="wk-src-note wk-src-tone-ok" data-testid="source-rekey-status">{rekeyStatus}</span>}
               {isSqlKind(kind) && isNew && (
                 <label className="wk-src-field"><span className="wk-src-label">TLS</span>
                   <select data-testid="source-tls" className="wk-field wk-src-input" disabled={frozen} value={form.tls} onChange={(e) => edit({ tls: e.target.value as SourceForm['tls'] })}>

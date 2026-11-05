@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4717,
-    "static": 3946,
+    "occurrences": 4719,
+    "static": 3948,
     "dynamic": 176,
     "computed": 53
   },
@@ -12652,6 +12652,12 @@
       ]
     },
     {
+      "testId": "pm-rekey-status",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "pm-replaces",
       "files": [
         "src/components/sources/PmSourceSheet.tsx"
@@ -20119,6 +20125,12 @@
     },
     {
       "testId": "source-rekey-save",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rekey-status",
       "files": [
         "src/components/sources/SourceSheet.tsx"
       ]

@@ -40,8 +40,12 @@ export const SecretField = forwardRef<SecretHandle, {
 }>(function SecretField({ label, note, onEdit, disabled = false, savedState = null, rekey = null, 'data-testid': testId = 'source-secret' }, ref) {
   const input = useRef<HTMLInputElement | null>(null);
   const replaceBtn = useRef<HTMLButtonElement | null>(null);
-  /** Which control takes the focus after the next render: the field Replace opened, or Replace again after Keep. */
-  const focusNext = useRef<null | 'field' | 'replace'>(null);
+  /** The field Replace opened takes the focus after the next render. */
+  const focusField = useRef(false);
+  /** The field closed (Keep, or the write landed): Replace takes the focus back once it can (it waits while disabled),
+   *  unless the person has put the focus somewhere else meanwhile. */
+  const restoreFocus = useRef(false);
+  const wasOpen = useRef(false);
   const id = useId();
   // The node lets go of the value whenever it leaves the page (the field closed, the sheet closed mid-write): a
   // detached input that still held it would outlive the write that read it.
@@ -50,10 +54,12 @@ export const SecretField = forwardRef<SecretHandle, {
     input.current = node;
   }, []);
   useEffect(() => {
-    const f = focusNext.current;
-    focusNext.current = null;
-    if (f === 'field') input.current?.focus();
-    else if (f === 'replace') replaceBtn.current?.focus();
+    if (focusField.current) { focusField.current = false; input.current?.focus(); }
+    if (!restoreFocus.current) return;
+    const at = document.activeElement;
+    if (at !== null && at !== document.body) { restoreFocus.current = false; return; }
+    const b = replaceBtn.current;
+    if (b !== null && !b.disabled) { restoreFocus.current = false; b.focus(); }
   });
   useImperativeHandle(ref, () => ({
     read: () => input.current?.value ?? '',
@@ -83,11 +89,13 @@ export const SecretField = forwardRef<SecretHandle, {
     // Only a secret crew references can be written again: `none` has no keychain entry to re-key.
     const canRekey = rekey !== null && savedState !== 'none';
     const open = canRekey && (savedState === 'missing' || rekey.open);
+    // Open to closed (Keep, or the write landed and the state reads Set): Replace takes the focus back.
+    if (wasOpen.current && !open) restoreFocus.current = true;
+    wasOpen.current = open;
     const close = (): void => {
       // The node goes with the field; the parent learns that nothing is typed any more.
       if (input.current !== null) input.current.value = '';
       onEdit(false);
-      focusNext.current = 'replace';
       rekey?.onOpen(false);
     };
     return (
@@ -96,7 +104,7 @@ export const SecretField = forwardRef<SecretHandle, {
         <span className="wk-src-rekey-row">
           <span data-testid={`${testId}-state`} data-state={savedState} aria-live="polite" className={`wk-src-input wk-src-input--static${savedState === 'missing' ? ' wk-src-tone-warn' : ''}`}>{words}</span>
           {canRekey && savedState === 'set' && !open && (
-            <button ref={replaceBtn} type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid={`${testId}-replace`} disabled={disabled} onClick={() => { if (rekey.focusOnOpen !== false) focusNext.current = 'field'; rekey.onOpen(true); }}>{rekey.replace}</button>
+            <button ref={replaceBtn} type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid={`${testId}-replace`} disabled={disabled} onClick={() => { if (rekey.focusOnOpen !== false) focusField.current = true; rekey.onOpen(true); }}>{rekey.replace}</button>
           )}
           {canRekey && savedState === 'set' && open && (
             <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid={`${testId}-replace-cancel`} disabled={disabled} onClick={close}>Keep the saved one</button>
