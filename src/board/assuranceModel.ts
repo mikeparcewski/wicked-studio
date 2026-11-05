@@ -822,7 +822,7 @@ export const RULES_UNCHECKED_SOURCE = 'rules_unchecked';
  * `gateEscalated` (`denialSource`, else `condition`), else its newest `gateEvaluated.denial.source`; the rows from
  * that `gateEvaluated`. A log that never mentions the unit (empty, or filled by live events alone) leaves both to
  * the unit record (`denial.source`, its persisted receipt); an escalation frame alone takes the unit record's rows
- * only when they are the same attempt's; a dispatch after the hold voids it.
+ * unless both name an attempt and they differ (never an earlier attempt's ids); a dispatch after the hold voids it.
  */
 export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): { held: boolean; rows: RuleRow[] } {
   if (typeof ord !== 'number') return { held: false, rows: [] };
