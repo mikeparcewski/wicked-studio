@@ -4,8 +4,8 @@ import { sessionPath } from '../../board/sessionModel.js';
 import { busyText, changeLine, componentWords, endedLine, hasTurnLog, seatWord, sendTurn, suggestionsFor, turnsOf, type AppTurnRecord } from '../../editors/apps/appTurns.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 import type { ComposerSuggestion } from '../session/Composer.js';
-import { fetchKnowledgeSummary, type KnowledgeSummary } from '../../api/knowledgeSummary.js';
 import { knowledgeAddition } from '../../editors/apps/knowledgeSeeds.js';
+import { readSuggestionGrounds, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
 import { AppComposer } from './AppComposer.js';
 import { LiveActivity } from '../session/LiveActivity.js';
 import { RunQuestions } from '../session/ThreadQuestions.js';
@@ -151,18 +151,19 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   const supported = detail === null || hasTurnLog(detail);
   // (DES-KNOWLEDGE-DATA-001 §9.1) What the app's project knows: one chip offers to add it when the app reads none yet.
   const projectId = detail?.projectId ?? null;
-  const [summary, setSummary] = useState<KnowledgeSummary | null>(null);
+  const [grounds, setGrounds] = useState<SuggestionGrounds | null>(null);
   useEffect(() => {
-    setSummary(null);
+    setGrounds(null);
     if (projectId === null || framed) return;
     let live = true;
-    void fetchKnowledgeSummary(projectId).then((s) => { if (live) setSummary(s); });
+    void readSuggestionGrounds(projectId).then((g) => { if (live) setGrounds(g); });
     return () => { live = false; };
   }, [projectId, framed]);
-  const current = summary !== null && summary.projectId === projectId ? summary : null;
-  const addKnowledge = useMemo(() => knowledgeAddition(current), [current]);
-  // A suggestion names only a source the current project's summary lists as built on (none without a summary).
-  const buildable = useMemo(() => (current?.sources ?? []).filter((x) => x.described).map((x) => x.name), [current]);
+  const current = grounds !== null && grounds.projectId === projectId ? grounds : null;
+  const addKnowledge = useMemo(() => knowledgeAddition(current?.summary ?? null), [current]);
+  // A suggestion names only a source the current project's summary lists as built on AND an app query can read
+  // (`dataSourcesFor`: a Toolbox-runtime source is not one); none without a summary.
+  const buildable = useMemo(() => current?.data ?? [], [current]);
   const suggestions: ComposerSuggestion[] = useMemo(() => (busy || framed ? [] : suggestionsFor(detail?.spec ?? null, buildable, addKnowledge).map((s, i) => ({
     id: `app-suggest-${i}`, label: s, title: 'Put this in the box', onPick: () => setTextState(s),
   }))), [busy, framed, detail, buildable, addKnowledge]);

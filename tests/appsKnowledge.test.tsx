@@ -6,6 +6,7 @@ import type { AppSpec } from '../src/api/types.js';
 import { readKnowledgeSummary, type KnowledgeSummary } from '../src/api/knowledgeSummary.js';
 import { AppChat } from '../src/components/apps/AppChat.js';
 import { AppsPage } from '../src/components/apps/AppsPage.js';
+import { dataSourcesFor } from '../src/editors/apps/appSeeds.js';
 import { suggestionsFor } from '../src/editors/apps/appTurns.js';
 import { knowledgeAddition, knowledgeSeeds } from '../src/editors/apps/knowledgeSeeds.js';
 import { SAMPLE_APPS } from '../src/editors/apps/samples.js';
@@ -96,12 +97,17 @@ function mockFetch(handler: (path: string, search: string) => { status?: number;
   return { calls };
 }
 
+/** A `GET /mcp/servers` entry as crew lists it: `kind` is its read-path projection (`configOf`). */
+const server = (name: string, kind = 'sql', projects = ['p']): unknown => ({ name, kind, enabled: true, agents: { see: true, query: true, projects, everyProject: false } });
+/** crew's registry for these tests: support-pg is a native database source (it reads `sql`). */
+const SERVERS = [server('support-pg'), server('new-pg')];
+
 const health = { body: { status: 'ok', capabilities: { apps: { query: true, actions: true, turns: true, publish: false, uploads: false, sourceCheck: true } } } };
 /** An app of ANOTHER project that reads `other-project-pg`: its source must never name a suggestion here (codex r1). */
 const OTHER_APP = { slug: 'elsewhere', name: 'Elsewhere', projectId: 'q', repoId: 'elsewhere', createdAt: 1, head: { version: 1, tree: 't', receipt: 'reviewed' }, turn: null,
   spec: { ...structuredClone(SAMPLE_APPS['escalations']!.spec), queries: structuredClone(SAMPLE_APPS['escalations']!.spec.queries).map((x) => ({ ...x, source: 'other-project-pg' })) },
   lock: { schema: 'wicked.apps.lock/v1', sources: {}, queries: {}, actions: {}, uploads: {} }, queryText: {}, versions: [], history: { states: [1], pointer: 0, canUndo: false, canRedo: false }, turns: [] };
-function page(summary: unknown, withOther = false): { calls: string[] } {
+function page(summary: unknown, withOther = false, servers: unknown[] = SERVERS): { calls: string[] } {
   return mockFetch((path) => {
     if (path === '/health') return health;
     if (path === '/apps') return { body: { apps: withOther ? [{ slug: 'elsewhere', name: 'Elsewhere', projectId: 'q' }] : [] } };
@@ -109,7 +115,7 @@ function page(summary: unknown, withOther = false): { calls: string[] } {
     if (path === '/apps/elsewhere/query') return { status: 409, body: { code: 'not_accepted' } };
     if (path === '/editors') return { body: { editors: [] } };
     if (path === '/projects') return { body: { projects: [{ id: 'p', name: 'Billing' }] } };
-    if (path === '/mcp/servers') return { body: { servers: [], discovered: [] } };
+    if (path === '/mcp/servers') return { body: { servers, discovered: [] } };
     if (path === '/knowledge/summary') return summary === null ? { status: 403, body: { code: 'knowledge_summary_human_only' } } : { body: summary };
     return null;
   });
@@ -190,10 +196,52 @@ describe('review r2 folds (codex)', () => {
     const d = { slug: 'desk', name: 'Desk', projectId: 'p', repoId: 'desk', createdAt: 1, head: { version: 3, tree: 't', receipt: 'reviewed' }, turn: null,
       spec: { ...structuredClone(SAMPLE_APPS['escalations']!.spec), pages: [{ id: 'p1', title: 'P', components: [] }], queries: [{ id: 'q', source: 'withdrawn-pg', kind: 'sql', output: [{ name: 'n', type: 'integer' }] }] },
       lock: { schema: 'wicked.apps.lock/v1', sources: {}, queries: {}, actions: {}, uploads: {} }, queryText: {}, versions: [], history: { states: [1], pointer: 0, canUndo: false, canRedo: false }, turns: [] };
-    mockFetch((path) => (path === '/knowledge/summary' ? { body: { ...EMPTY, sources: [{ name: 'support-pg', described: true, query: false, shapes: 0 }] } } : null));
+    mockFetch((path) => (path === '/knowledge/summary' ? { body: { ...EMPTY, sources: [{ name: 'support-pg', described: true, query: false, shapes: 0 }] } }
+      : path === '/mcp/servers' ? { body: { servers: [server('support-pg'), server('withdrawn-pg')], discovered: [] } } : null));
     render(<AppChat slug="desk" detail={d as never} runs={[]} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
     await waitFor(() => expect(screen.getAllByTestId('app-composer-suggestion').map((b) => b.textContent).join(' ')).toContain('support-pg'), { timeout: 4000 });
     expect(screen.getAllByTestId('app-composer-suggestion').map((b) => b.textContent).join(' ')).not.toContain('withdrawn-pg');
+  });
+});
+
+// ── ak-fix review folds: a suggestion never fails or misleads, and names only data the project can read ─────────
+
+/** A Toolbox-runtime database source: crew lists it with kind `toolbox-source`, and its app query resolver
+ * (`apps/exec/sources.ts` `lookupSource`) resolves it to no source, so an app's data query on it is refused. */
+const TOOLBOX: KnowledgeSummary = { ...EMPTY, sources: [{ name: 'tb-pg', described: true, query: true, shapes: 2 }] };
+
+describe('(ak-fix P2) a data suggestion names only a source an app query can read', () => {
+  it('dataSourcesFor: described in the summary AND an app-readable kind in the registry; no summary, none', () => {
+    const servers = { servers: [server('tb-pg', 'toolbox-source'), server('support-pg'), server('elsewhere-pg', 'sql', ['q']), server('outside-db', 'graphql')] };
+    const summary: KnowledgeSummary = { ...EMPTY, sources: [{ name: 'tb-pg', described: true, query: true, shapes: 0 }, { name: 'support-pg', described: true, query: false, shapes: 0 }, { name: 'elsewhere-pg', described: true, query: false, shapes: 0 }] };
+    expect(dataSourcesFor(summary, servers, 'p')).toEqual(['support-pg']);
+    // outside-db is app-readable but the summary does not list it: never named.
+    expect(dataSourcesFor(EMPTY, servers, 'p')).toEqual([]);
+    expect(dataSourcesFor(null, servers, 'p')).toEqual([]);
+    // An answer for another project counts for nothing.
+    expect(dataSourcesFor({ ...summary, projectId: 'q' }, servers, 'p')).toEqual([]);
+  });
+
+  it('Make a new app: a Toolbox-runtime source gets a knowledge suggestion, never a data one', async () => {
+    page(TOOLBOX, false, [server('tb-pg', 'toolbox-source')]);
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent)[0]).toBe('What we know about tb-pg: its tables, their data shapes and joins'), { timeout: 4000 });
+    const chips = screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent ?? '');
+    expect(chips).toContain("Search this project's knowledge: documents, data shapes and source structure, with citations");
+    expect(chips).toContain('A dashboard of my main numbers with a table of the latest rows');
+    expect(chips.filter((c) => c.includes('tb-pg'))).toEqual(['What we know about tb-pg: its tables, their data shapes and joins']);
+  });
+
+  it("an app's chat: no KPI ask names a Toolbox-runtime source; the knowledge addition still can", async () => {
+    const d = { slug: 'desk', name: 'Desk', projectId: 'p', repoId: 'desk', createdAt: 1, head: { version: 3, tree: 't', receipt: 'reviewed' }, turn: null,
+      spec: { ...structuredClone(SAMPLE_APPS['escalations']!.spec), pages: [{ id: 'p1', title: 'P', components: [] }], queries: [] },
+      lock: { schema: 'wicked.apps.lock/v1', sources: {}, queries: {}, actions: {}, uploads: {} }, queryText: {}, versions: [], history: { states: [1], pointer: 0, canUndo: false, canRedo: false }, turns: [] };
+    mockFetch((path) => (path === '/knowledge/summary' ? { body: TOOLBOX } : path === '/mcp/servers' ? { body: { servers: [server('tb-pg', 'toolbox-source')], discovered: [] } } : null));
+    render(<AppChat slug="desk" detail={d as never} runs={[]} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('app-composer-suggestion').map((b) => b.textContent)).toContain("Add a table of what we know about tb-pg's tables"), { timeout: 4000 });
+    const chips = screen.getAllByTestId('app-composer-suggestion').map((b) => b.textContent ?? '');
+    expect(chips).toContain('Show my main numbers as KPIs');
+    expect(chips.join(' ')).not.toMatch(/from tb-pg/u);
   });
 });
 

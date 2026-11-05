@@ -1,3 +1,4 @@
+import type { KnowledgeSummary } from '../../api/knowledgeSummary.js';
 import { agentAccessOf } from '../../api/sourceAgents.js';
 
 /**
@@ -25,8 +26,12 @@ export function periodSeed(words: string): string {
   return /^Last \d+ days?$/u.test(words) ? `the ${words.charAt(0).toLowerCase()}${words.slice(1)}` : words;
 }
 
-/** The source names `projectId` can see, in crew's order, from a `GET /mcp/servers` answer (anything else: none). */
-export function sourcesForProject(answer: unknown, projectId: string): string[] {
+/**
+ * The source names `projectId` can see, in crew's order, from a `GET /mcp/servers` answer (anything else: none). The
+ * kind there is crew's read-path projection (`configOf`), the same one an app query's source is resolved by: a native
+ * database source reads `sql`, and a Toolbox-runtime one stays `toolbox-source`, which no app query can read in v1.
+ */
+export function sourcesForProject(answer: unknown, projectId: string, max: number = SEED_SOURCES_MAX): string[] {
   const servers = typeof answer === 'object' && answer !== null ? (answer as { servers?: unknown }).servers : undefined;
   if (!Array.isArray(servers)) return [];
   const out: string[] = [];
@@ -38,9 +43,22 @@ export function sourcesForProject(answer: unknown, projectId: string): string[] 
     const a = agentAccessOf(r);
     if (a === null || !a.see || !(a.everyProject || a.projects.includes(projectId))) continue;
     out.push(r.name);
-    if (out.length >= SEED_SOURCES_MAX) break;
+    if (out.length >= max) break;
   }
   return out;
+}
+
+/**
+ * (DES-KNOWLEDGE-DATA-001 §9.1) The sources a DATA suggestion may name (Apps page, an app's chat, Report's Build
+ * sheet): the ones the project's knowledge summary lists as described (what the builder is given), and that an app
+ * query can read: crew's `lookupSource` (`apps/exec/sources.ts`) resolves no Toolbox-runtime source, so one is named
+ * by knowledge suggestions only (a `recall` through estate), never in a data ask. No summary: none, never a guess
+ * from the registry alone. In the summary's order, at most {@link SEED_SOURCES_MAX}.
+ */
+export function dataSourcesFor(summary: KnowledgeSummary | null, servers: unknown, projectId: string): string[] {
+  if (summary === null || summary.projectId !== projectId) return [];
+  const readable = new Set(sourcesForProject(servers, projectId, Number.POSITIVE_INFINITY));
+  return summary.sources.filter((x) => x.described && readable.has(x.name)).map((x) => x.name).slice(0, SEED_SOURCES_MAX);
 }
 
 /** Up to three suggestions: fixed sentences, filled only with the period and source names. */
