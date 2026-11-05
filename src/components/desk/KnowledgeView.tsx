@@ -131,7 +131,7 @@ export function KnowledgeView(): React.ReactElement {
   );
 
   return (
-    <div className="wk-know" data-testid="knowledge-view">
+    <div className="wk-knowview" data-testid="knowledge-view">
       <p className="wk-ue-sentence">
         Your data sources, your repositories and the data shapes you approved, in one map. A shape says what a table is: what it joins, which code describes it, which rule governs it. Agents propose shapes; nothing is added until you approve it here.
       </p>
