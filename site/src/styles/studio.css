@@ -731,8 +731,6 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .news-panel p { margin: 0; font-size: var(--text-section); line-height: 1.45; color: color-mix(in oklab, var(--ink) 84%, transparent); max-width: 62ch; }
 .news-panel .voice-note { font-size: var(--text-body); color: var(--muted); }
 .news-stage .ex-progress { left: 30px; bottom: 16px; }
-.soon { margin: 16px 0 0; font-size: var(--text-body); line-height: 1.5; color: var(--muted); }
-.soon b { color: var(--ink); }
 
 /* ── 9. Get it ──────────────────────────────────────────────────────────────────────────────── */
 .needs { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }

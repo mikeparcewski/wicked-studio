@@ -128,12 +128,9 @@ test.describe('the reviewed messaging', () => {
     await expect(news.getByRole('tab')).toHaveCount(8);
     await expect(news.getByRole('tabpanel', { includeHidden: true })).toHaveCount(8);
     await expect(news.getByRole('heading', { level: 2 })).toHaveText('What’s new in 0.15');
-    const soon = news.locator('.soon');
-    await expect(soon).toContainText('Coming soon:');
-    await expect(soon).toContainText('GitLab and Azure DevOps trackers');
-    // what shipped in 0.15 (Apps, New job's catalog) is never "coming soon"; nor is a design that is not built
-    await expect(soon).not.toContainText(/\bApps\b|catalog/i);
-    await expect(soon).not.toContainText(/20\d\d|Q[1-4]/);
+    // nothing is labelled by a future release (operator rule, 2026-11-05)
+    await expect(news.locator('.soon')).toHaveCount(0);
+    expect((await page.content()).toLowerCase()).not.toContain('coming soon');
   });
 
   test('acceptance testing names its five kinds of job', async ({ page }) => {
