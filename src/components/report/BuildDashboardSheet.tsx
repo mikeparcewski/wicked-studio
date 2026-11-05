@@ -5,7 +5,7 @@ import { reportOrigin, type AppOrigin } from '../../editors/apps/appOrigin.js';
 import { dashboardSeeds } from '../../editors/apps/appSeeds.js';
 import type { KnowledgeSummary } from '../../api/knowledgeSummary.js';
 import { readSuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
-import { knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
+import { dataSeedsBeside, knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
 import { nameFrom } from '../../editors/apps/appTurns.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useProjectsStore } from '../../store/projects.js';
@@ -32,7 +32,7 @@ import { useDialogFocus } from '../steer/useDialogFocus.js';
 /** `summary`: the project's knowledge summary, `null` when crew has none (then no source is named). */
 type Sources = { state: 'none' } | { state: 'reading'; project: string }
   | { state: 'failed'; project: string; why: string; summary: KnowledgeSummary | null }
-  | { state: 'ok'; project: string; names: string[]; summary: KnowledgeSummary | null };
+  | { state: 'ok'; project: string; names: string[]; readable: boolean; summary: KnowledgeSummary | null };
 
 interface Made { slug: string; name: string; verdict: ShownVerdict; busy: boolean }
 
@@ -114,13 +114,14 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
     setSources({ state: 'reading', project: id });
     void readSuggestionGrounds(id).then((r) => {
       if (g !== gen.current) return;
-      setSources(r.servers !== null ? { state: 'failed', project: id, why: r.servers.failed, summary: r.summary } : { state: 'ok', project: id, names: r.data, summary: r.summary });
+      setSources(r.servers !== null ? { state: 'failed', project: id, why: r.servers.failed, summary: r.summary } : { state: 'ok', project: id, names: r.data, readable: r.readable ?? true, summary: r.summary });
     });
   }, []);
   const names = sources.state === 'ok' ? sources.names : [];
   const summary = sources.state === 'ok' || sources.state === 'failed' ? sources.summary : null;
   const known = summary !== null && sources.state !== 'none' && summary.projectId === sources.project ? knowledgeSeeds(summary) : [];
-  const seeds = sources.state === 'reading' || sources.state === 'none' ? [] : mixSeeds(known, dashboardSeeds(period, names));
+  const seeds = sources.state === 'reading' || sources.state === 'none' ? []
+    : mixSeeds(known, dataSeedsBeside(known, dashboardSeeds(period, names), sources.state === 'ok' ? sources.readable : null));
   const chosenName = sources.state === 'none' ? null : projects.find((p) => p.id === sources.project)?.name ?? sources.project;
 
   const run = useBuildRun();
@@ -199,7 +200,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
               <span>Suggested for</span> <span className="wk-rep-chip" data-testid="report-build-period">{period}</span>
               {sources.state === 'reading' && <span data-testid="report-build-sources-reading">Reading the sources {chosenName} can use…</span>}
               {sources.state === 'failed' && <span data-testid="report-build-sources-failed">The sources {chosenName} can use couldn’t be read: {sources.why}</span>}
-              {sources.state === 'ok' && sources.summary !== null && names.length === 0 && <span data-testid="report-build-sources-none">No data source {chosenName}’s dashboards can read yet.</span>}
+              {sources.state === 'ok' && sources.summary !== null && names.length === 0 && <span data-testid="report-build-sources-none">No data source to suggest for {chosenName} yet.</span>}
               {sources.state === 'ok' && names.length > 0 && (
                 <span className="wk-rep-build-sources">from the sources {chosenName} can use: {names.map((n) => <span key={n} className="wk-rep-chip" data-testid="report-build-source">{n}</span>)}</span>
               )}

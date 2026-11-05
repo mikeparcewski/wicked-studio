@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppSpec } from '../src/api/types.js';
 import { readKnowledgeSummary, type KnowledgeSummary } from '../src/api/knowledgeSummary.js';
@@ -121,6 +121,12 @@ function page(summary: unknown, withOther = false, servers: unknown[] = SERVERS)
   });
 }
 
+/** Both suggestion reads were made and their answers are in (no chip is judged before they land). */
+async function settled(calls: string[]): Promise<void> {
+  await waitFor(() => expect(calls.some((c) => c.startsWith('/knowledge/summary')) && calls.includes('/mcp/servers')).toBe(true), { timeout: 4000 });
+  await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+}
+
 describe('Make a new app: knowledge and data, side by side', () => {
   it('reads the chosen project\'s summary and offers apps built on its knowledge first', async () => {
     const { calls } = page(SUMMARY);
@@ -138,16 +144,16 @@ describe('Make a new app: knowledge and data, side by side', () => {
   });
 
   it('NEGATIVE CONTROL: a project with no knowledge (or a crew without the summary) gets no knowledge chip', async () => {
-    page(EMPTY);
-    render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-new-composer-suggestion').length).toBeGreaterThan(0), { timeout: 4000 });
+    const first = page(EMPTY);
+    const { unmount } = render(<AppsPage navigate={vi.fn()} />);
+    await settled(first.calls);
     const chips = screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent ?? '');
     expect(chips).toEqual(['A dashboard of my main numbers with a table of the latest rows']);
-    document.body.innerHTML = '';
+    unmount();
     vi.restoreAllMocks();
-    page(null, true);
+    const second = page(null, true);
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-new-composer-suggestion').length).toBeGreaterThan(0), { timeout: 4000 });
+    await settled(second.calls);
     const none = screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent ?? '').join(' ');
     expect(none).not.toMatch(/know|steering|remembers/iu);
     // No summary for the chosen project: no source is named, not even one another project's app reads.
@@ -166,7 +172,7 @@ describe('review r2 folds (codex)', () => {
       if (path === '/apps') return json({ apps: [] });
       if (path === '/editors') return json({ editors: [] });
       if (path === '/projects') return json({ projects: [{ id: 'p', name: 'Billing' }, { id: 'q', name: 'Ops' }] });
-      if (path === '/mcp/servers') return json({ servers: [], discovered: [] });
+      if (path === '/mcp/servers') return json({ servers: SERVERS, discovered: [] });
       if (path === '/knowledge/summary') {
         if (url.searchParams.get('project') === 'p') return json(SUMMARY);
         return new Promise<Response>((r) => { resolveQ = r; });
@@ -228,7 +234,8 @@ describe('(ak-fix P2) a data suggestion names only a source an app query can rea
     await waitFor(() => expect(screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent)[0]).toBe('What we know about tb-pg: its tables, their data shapes and joins'), { timeout: 4000 });
     const chips = screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent ?? '');
     expect(chips).toContain("Search this project's knowledge: documents, data shapes and source structure, with citations");
-    expect(chips).toContain('A dashboard of my main numbers with a table of the latest rows');
+    // No source an app query can read: no data ask at all, not even the generic one (codex r1 on the fold).
+    expect(chips.join(' ')).not.toMatch(/main numbers|open tickets|KPIs/u);
     expect(chips.filter((c) => c.includes('tb-pg'))).toEqual(['What we know about tb-pg: its tables, their data shapes and joins']);
   });
 
@@ -242,6 +249,22 @@ describe('(ak-fix P2) a data suggestion names only a source an app query can rea
     const chips = screen.getAllByTestId('app-composer-suggestion').map((b) => b.textContent ?? '');
     expect(chips).toContain('Show my main numbers as KPIs');
     expect(chips.join(' ')).not.toMatch(/from tb-pg/u);
+  });
+});
+
+describe('(ak-fix, codex r1 on the fold) chat follow-ups fit the tile they are about', () => {
+  it('a knowledge tile (a recall) gets no by-day, region-filter or search-box ask; a data tile still does', () => {
+    const base = structuredClone(SAMPLE_APPS['escalations']!.spec);
+    const tile = (id: string, type: string, query: string): never => ({ id, type, title: 'T', box: { x: 0, y: 0, w: 3, h: 2 }, data: { query }, value: 'n', x: 'key', series: [], columns: [] } as never);
+    const recall = (id: string): AppSpec['queries'][number] => ({ id, source: 'estate', kind: 'recall' as never, output: [{ name: 'key', type: 'string' }] });
+    const knowledgeOnly: AppSpec = { ...base, pages: [{ id: 'k', title: 'K', components: [tile('a', 'kpi', 'r1'), tile('b', 'chart', 'r2'), tile('c', 'table', 'r3')] }], queries: [recall('r1'), recall('r2'), recall('r3')] };
+    const asks = suggestionsFor(knowledgeOnly, ['support-pg']);
+    expect(asks.join(' ')).not.toMatch(/by day|filter by region|search box|by category/u);
+    expect(asks).toContain('Add a KPI from support-pg beside these');
+    const dataQ = base.queries[0]!;
+    const mixed: AppSpec = { ...knowledgeOnly, pages: [{ id: 'k', title: 'K', components: [tile('a', 'kpi', 'r1'), tile('d', 'kpi', dataQ.id), tile('c', 'table', 'r3')] }], queries: [dataQ, recall('r1'), recall('r3')] };
+    expect(suggestionsFor(mixed, [])).toContain('Show the first KPI by day as a line chart');
+    expect(suggestionsFor(mixed, []).join(' ')).not.toMatch(/search box/u);
   });
 });
 

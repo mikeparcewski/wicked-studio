@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Project } from '../../api/types.js';
 import { createByChat } from '../../editors/apps/appTurns.js';
-import { knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
+import { dataSeedsBeside, knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
 import { readSuggestionGrounds, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
 import { useProjectsStore } from '../../store/projects.js';
 import type { ComposerSuggestion } from '../session/Composer.js';
@@ -91,7 +91,7 @@ export function NewAppChat({
     : ['A dashboard of my main numbers with a table of the latest rows'])
     .concat(dataSources.length > 1 ? [`Compare a number from ${dataSources[0]} with one from ${dataSources[1]} side by side`] : []);
   const knowledge = knowledgeSeeds(current?.summary ?? null);
-  const labels = given ?? mixSeeds(knowledge, data);
+  const labels = given ?? mixSeeds(knowledge, dataSeedsBeside(knowledge, data, current?.readable ?? null));
   const suggestions: ComposerSuggestion[] = labels.slice(0, given === undefined && knowledge.length > 0 ? 4 : 3).map((label, i) => ({ id: `new-app-${i}`, label, onPick: () => setText(label) }));
   /** True when the message was taken (an app was made and its first turn started, or it waits in that app's chat). */
   const send = async (words: string): Promise<boolean> => {

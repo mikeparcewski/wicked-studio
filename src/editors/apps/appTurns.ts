@@ -2,6 +2,7 @@ import { apiFetch } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
 import type { AppDetail, AppDetailResponse, AppSpec, SessionView } from '../../api/types.js';
 import { seatLabel } from '../../board/seatNames.js';
+import { KNOWLEDGE_SOURCE } from './knowledgeSeeds.js';
 
 /**
  * THE APP'S CHAT (DES-APPS-001 §6.1, §6.2, §9.2; slice K5): every message to an app is ONE `apps-turn` run on crew
@@ -146,9 +147,16 @@ export function suggestionsFor(spec: AppSpec | null, sources: readonly string[],
   // (DES-KNOWLEDGE-DATA-001 §9.1) An app that reads none of its project's knowledge yet is offered one knowledge
   // addition (`knowledgeAddition`, from the project's summary), early, so a person learns it can.
   if (knowledge !== null && !used.has('estate')) out.push(knowledge);
-  const kpis = comps.filter((c) => c.type === 'kpi');
-  const charts = comps.filter((c) => c.type === 'chart');
-  const tables = comps.filter((c) => c.type === 'table');
+  // A knowledge tile (a `recall` on estate: rules, memories, a source's tables) has no date, region or search
+  // parameter, so the data follow-ups below are offered on data tiles only (ak-fix review: codex).
+  const recalls = new Set((spec?.queries ?? []).filter((q) => q.source === KNOWLEDGE_SOURCE).map((q) => q.id));
+  const onData = comps.filter((c) => {
+    const q = (c as { data?: { query?: unknown } }).data?.query;
+    return typeof q !== 'string' || !recalls.has(q);
+  });
+  const kpis = onData.filter((c) => c.type === 'kpi');
+  const charts = onData.filter((c) => c.type === 'chart');
+  const tables = onData.filter((c) => c.type === 'table');
   if (comps.length === 0) {
     const s = sources[0];
     out.push(s !== undefined && s !== 'estate' ? `Show the main numbers from ${s} as KPIs` : 'Show my main numbers as KPIs');
@@ -161,7 +169,7 @@ export function suggestionsFor(spec: AppSpec | null, sources: readonly string[],
   const other = sources.find((s) => !used.has(s) && s !== 'estate' && s !== 'crew');
   if (other !== undefined && comps.length > 0) out.push(`Add a KPI from ${other} beside these`);
   if ((spec?.pages.length ?? 0) === 1 && comps.length >= 4) out.push('Make it two pages: an overview and a detail page');
-  if (charts.length === 0 && comps.length > 0) out.push('Add a bar chart that breaks this down by category');
+  if (charts.length === 0 && onData.length > 0) out.push('Add a bar chart that breaks this down by category');
   return [...new Set(out)].slice(0, 3);
 }
 

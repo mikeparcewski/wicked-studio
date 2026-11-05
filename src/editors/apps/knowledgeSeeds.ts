@@ -50,6 +50,15 @@ export function knowledgeAddition(summary: KnowledgeSummary | null): string | nu
   return null;
 }
 
+/**
+ * The data suggestions to offer beside `knowledge`: none when the project is known to have no source an app query
+ * can read (`readable === false`) and knowledge suggestions are on offer, since a data ask could not be built (ak-fix
+ * review: codex). Unknown (`null`, an older crew or an unread registry) keeps them, as before.
+ */
+export function dataSeedsBeside(knowledge: readonly string[], data: readonly string[], readable: boolean | null): readonly string[] {
+  return readable === false && knowledge.length > 0 ? [] : data;
+}
+
 /** Knowledge first, then data, alternating: both kinds of app are on offer (the Apps page and Report's Build sheet). */
 export function mixSeeds(knowledge: readonly string[], data: readonly string[]): string[] {
   const out: string[] = [];
