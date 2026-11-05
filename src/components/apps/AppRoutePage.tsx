@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import { listEditors } from '../../api/editors.js';
 import type { AppsCapabilities, SessionView } from '../../api/types.js';
+import { useOriginTarget } from '../../editors/apps/appOrigin.js';
 import { isAppSlug, sampleKeyOf } from '../../editors/apps/appsDirectory.js';
 import type { AppMode } from '../../editors/apps/appAdapter.js';
 import { APPS_EDITOR } from '../../editors/protocol.js';
@@ -38,7 +39,10 @@ export function AppRoutePage({ slug, search, navigate, runs }: { slug: string; s
     return () => { cancelled = true; };
   }, [slug, valid, attempt]);
   const mode: AppMode = new URLSearchParams(search).get('mode') === 'edit' ? 'edit' : 'preview';
-  const back = <a href="/apps" className="wk-link" onClick={(ev) => { ev.preventDefault(); navigate('/apps'); }}>Back to Apps</a>;
+  // Opened from a Report (`from=`, appOrigin.ts): every way back leads there.
+  const origin = useOriginTarget(search);
+  const backTo = origin?.path ?? '/apps';
+  const back = <a href={backTo} className="wk-link" data-testid="apps-route-back" onClick={(ev) => { ev.preventDefault(); navigate(backTo); }}>{origin !== null ? `Back to ${origin.label}` : 'Back to Apps'}</a>;
   if (!valid) {
     return <div className="wk-apps-route wk-apps-route--msg" data-testid="apps-route-unknown"><p>“{slug.slice(0, 80)}” is not an app’s address.</p>{back}</div>;
   }
@@ -62,7 +66,7 @@ export function AppRoutePage({ slug, search, navigate, runs }: { slug: string; s
   return (
     <div className="wk-editor-page wk-editor-page--app wk-apps-route" data-testid="apps-route">
       <AppHostView key={`${slug}:${mode}`} editor={APPS_EDITOR} version={state.editor.version} sha={state.editor.sha}
-        app={store ? slug : null} sample={sample} initialMode={mode} navigate={navigate} caps={state.caps} {...(runs !== undefined ? { runs } : {})} />
+        app={store ? slug : null} sample={sample} initialMode={mode} navigate={navigate} caps={state.caps} back={origin} {...(runs !== undefined ? { runs } : {})} />
     </div>
   );
 }

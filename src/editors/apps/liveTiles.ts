@@ -2,6 +2,7 @@ import { apiFetch } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
 import type { AppSpec } from '../../api/types.js';
 import { coerceParam } from '../../plugins/wicked-apps/runtime/runtime.js';
+import { isRefusal } from './previewSnapshots.js';
 
 /**
  * LIVE NUMBERS ON THE APPS DASHBOARD (operator 2026-11-04: "dashboard should show real time information").
@@ -114,6 +115,8 @@ export interface TileState {
   code: string | null;
   /** Bumped every time a value changed (the preview redraws on it). */
   changes: number;
+  /** Crew refused at least one of the last refresh's reads (whatever `code` shows): the card drops its picture. */
+  refused?: boolean;
 }
 
 interface Card {
@@ -221,12 +224,16 @@ export class TileScheduler {
         got.set(key, await this.q(card.slug, card.version, k.query, k.params));
       })));
       if (card.disposed) return;
-      if ([...got.values()].some((o) => !o.ok && o.code === 'skipped')) { card.next = 0; return; }
-      const failed = [...got.values()].find((o): o is { ok: false; code: string } => !o.ok);
+      const failures = [...got.values()].filter((o): o is { ok: false; code: string } => !o.ok);
+      // The code shown is crew's refusal when there is one, so a fast network error never hides it (xreview r1), and a
+      // refusal is said even when sibling reads were skipped (xreview r2: it must still drop the picture).
+      const refused = failures.some((o) => isRefusal(o.code));
+      if (!refused && failures.some((o) => o.code === 'skipped')) { card.next = 0; return; }
+      const failed = failures.find((o) => isRefusal(o.code)) ?? failures[0];
       const before = JSON.stringify(card.state.values);
       if (failed !== undefined) {
         // Never a stale number dressed as live: a failed refresh shows no numbers, and says why.
-        card.state = { values: card.kpis.map(() => ({ cell: null, ok: false })), at: this.now(), code: failed.code, changes: card.state.changes + (before === JSON.stringify(card.kpis.map(() => ({ cell: null, ok: false }))) ? 0 : 1) };
+        card.state = { values: card.kpis.map(() => ({ cell: null, ok: false })), at: this.now(), code: failed.code, changes: card.state.changes + (before === JSON.stringify(card.kpis.map(() => ({ cell: null, ok: false }))) ? 0 : 1), ...(refused ? { refused: true } : {}) };
       } else {
         const values = card.kpis.map((k) => {
           const o = got.get(readKey(k));

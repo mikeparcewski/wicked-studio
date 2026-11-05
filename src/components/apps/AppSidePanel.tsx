@@ -45,7 +45,8 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
   busy: boolean;
   /** A turn ended since the chat was last seen. */
   unread: boolean;
-  chat: React.ReactNode;
+  /** The Chat pane, or null where crew runs no app turns: then the panel is Properties alone (no Chat tab). */
+  chat: React.ReactNode | null;
   properties: React.ReactNode;
   /** The "Needs you" dock (an action card, a link question): above the tabs. */
   dock: React.ReactNode;
@@ -55,6 +56,7 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
   selectedWhileCollapsed?: boolean;
 }): React.ReactElement {
   const tabRefs = useRef<Record<PanelTab, HTMLButtonElement | null>>({ chat: null, properties: null });
+  const tabs = chat === null ? TABS.filter((t) => t.id !== 'chat') : TABS;
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [focusNext, setFocusNext] = useState<PanelTab | null>(null);
   // After a switch to Chat the focus goes to its composer (the person came to type), else to the tab.
@@ -74,11 +76,11 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
     : t === 'chat' && unread ? <span className="wk-apppanel-dot wk-apppanel-dot--unread" data-testid="app-panel-unread" aria-label="new in the chat" />
       : t === 'properties' && selectedWhileCollapsed ? <span className="wk-apppanel-dot wk-apppanel-dot--sel" data-testid="app-panel-selected" aria-label="a component is selected" /> : null);
   const onKey = (e: React.KeyboardEvent, i: number): void => {
-    const n = TABS.length;
+    const n = tabs.length;
     const to = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? (i + 1) % n : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? (i - 1 + n) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
     if (to < 0) return;
     e.preventDefault();
-    const t = TABS[to]!.id;
+    const t = tabs[to]!.id;
     setTab(t);
     tabRefs.current[t]?.focus();
   };
@@ -92,7 +94,7 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
             title="Open the panel" aria-label="Open the panel" onClick={() => open(tab, false)}>
             <ChevronsLeft size={16} aria-hidden className={phone ? 'wk-apppanel-rot' : undefined} />
           </button>
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button key={t.id} type="button" className={`wk-apppanel-rail-btn${tab === t.id ? ' is-on' : ''}`} data-testid={`app-panel-rail-${t.id}`} aria-label={`Open ${t.label}`} title={t.label} onClick={() => open(t.id)}>
               {t.id === 'chat' ? <MessageCircle size={18} aria-hidden /> : <SlidersHorizontal size={18} aria-hidden />}
               {phone && <span className="wk-apppanel-rail-label">{t.label}</span>}
@@ -104,7 +106,7 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
       {!collapsed && dock}
       <div className="wk-apppanel-head" hidden={collapsed}>
         <div className="wk-apppanel-tabs" role="tablist" aria-label="Chat and properties">
-          {TABS.map((t, i) => (
+          {tabs.map((t, i) => (
             <button key={t.id} ref={(el) => { tabRefs.current[t.id] = el; }} type="button" role="tab" id={`app-tab-${slug}-${t.id}`} aria-selected={tab === t.id}
               aria-controls={`app-tabpanel-${slug}-${t.id}`} tabIndex={tab === t.id ? 0 : -1} data-testid={`app-panel-tab-${t.id}`}
               className={`wk-apppanel-tab${tab === t.id ? ' is-on' : ''}`} onClick={() => { setTab(t.id); setFocusNext(t.id); }} onKeyDown={(e) => onKey(e, i)}>
@@ -120,7 +122,7 @@ export function AppSidePanel({ slug, tab, setTab, collapsed, setCollapsed, busy,
         )}
       </div>
       <div className="wk-apppanel-body" id={`app-panel-body-${slug}`} ref={panelRef} hidden={collapsed}>
-        <div role="tabpanel" id={`app-tabpanel-${slug}-chat`} aria-labelledby={`app-tab-${slug}-chat`} hidden={tab !== 'chat'} className="wk-apppanel-pane" data-testid="app-panel-chat">{chat}</div>
+        {chat !== null && <div role="tabpanel" id={`app-tabpanel-${slug}-chat`} aria-labelledby={`app-tab-${slug}-chat`} hidden={tab !== 'chat'} className="wk-apppanel-pane" data-testid="app-panel-chat">{chat}</div>}
         <div role="tabpanel" id={`app-tabpanel-${slug}-properties`} aria-labelledby={`app-tab-${slug}-properties`} hidden={tab !== 'properties'} className="wk-apppanel-pane wk-apppanel-pane--props" data-testid="app-panel-properties">{properties}</div>
       </div>
     </aside>

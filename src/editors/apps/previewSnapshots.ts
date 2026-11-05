@@ -78,5 +78,24 @@ export function recordingPort(slug: string, inner: AppDataPort): AppDataPort {
   };
 }
 
+/**
+ * Codes a card's live read gets that are NOT crew refusing it: the network, a malformed answer, a KPI with no value, a
+ * read skipped while off screen. Anything else is crew's refusal (a read policy, a receipt, a 403).
+ */
+// An allowlist of what is NOT a refusal, rather than a list of refusals: crew's read-policy and receipt codes are an
+// open set, and treating an unknown code as a refusal only drops a picture (never shows rows it should not).
+const NOT_REFUSED = new Set(['unreachable', 'bad_answer', 'no_value', 'skipped', 'timeout', 'aborted', 'deadline', 'busy', 'http_502', 'http_503', 'http_504']);
+
+/** Whether a card's live-read code is crew refusing the read. */
+export function isRefusal(code: string | null): boolean {
+  return code !== null && !NOT_REFUSED.has(code);
+}
+
+/**
+ * Drop the app's picture (DES-REPORT-DASHBOARDS-001 §2, "Pictures"): when crew now refuses a live read of the app, the
+ * rows its page showed before are not shown on a card either.
+ */
+export function dropSnapshot(slug: string): void { snaps.delete(slug); }
+
 /** TESTS. */
 export function resetSnapshots(): void { snaps.clear(); }

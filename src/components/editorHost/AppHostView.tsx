@@ -17,6 +17,7 @@ import { AppSidePanel, readCollapsed, readSeen, writeSeen, type PanelTab } from 
 import { turnsOf } from '../../editors/apps/appTurns.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 import { recordingPort } from '../../editors/apps/previewSnapshots.js';
+import { ShowOnReport } from '../apps/ShowOnReport.js';
 
 /**
  * THE APP HOST (DES-APPS-001 §6.1, §7.1, §7.3; slice K4): one app in the `wicked-apps` runtime's sandboxed frame, and
@@ -48,6 +49,8 @@ export interface AppHostProps {
   caps?: { apps: AppsCapabilities | undefined };
   /** (K5) The runs studio holds: a turn in the app's chat shows its run's live steps from here. */
   runs?: readonly SessionView[];
+  /** (DES-REPORT-DASHBOARDS-001 §2) Opened from a Report (`appOrigin.ts`): the crumb leads back there ("Report /"). */
+  back?: { path: string; label: string } | null;
 }
 
 const NO_RUNS: readonly SessionView[] = [];
@@ -151,7 +154,7 @@ export function ActionCardView({ asking, onAnswer }: { asking: Asking; onAnswer:
   );
 }
 
-export function AppHostView({ editor, version, sha, app: slug, sample, initialMode, navigate, caps: given, runs = NO_RUNS }: AppHostProps): React.ReactElement {
+export function AppHostView({ editor, version, sha, app: slug, sample, initialMode, navigate, caps: given, runs = NO_RUNS, back = null }: AppHostProps): React.ReactElement {
   const narrowWindow = useNarrow();
   // The runtime lays itself out by ITS frame's width (its media queries), so Edit is offered only when the frame
   // itself is wide enough, whatever the window is (codex r1: a 1000 px window leaves the frame under 640 px).
@@ -263,7 +266,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       });
       const who = data.viewer().email ?? 'you';
       setViewer(who);
-      const hostProps = store.kind === 'crew' && caps?.turns === true;
+      // The host draws Properties for every crew app (DES-REPORT-DASHBOARDS-001 §2: its App group holds Show on Report,
+      // which is not a spec op), with the Chat tab only where crew runs turns.
+      const hostProps = store.kind === 'crew';
       const port: AppHostPort = {
         session, data, ...(hostProps ? { propsHost: true } : {}),
         framed: () => framed,
@@ -379,13 +384,18 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const busy = detail?.turn != null;
   // (K5) Chat is how an app changes: open on every crew app's page, in Preview and in Edit alike.
   const chatOn = turnsOn && kind?.store === 'crew' && slug !== null && detail !== null;
+  // The side panel (Properties, and Chat when crew runs turns) is on every crew app's page: its Properties tab holds
+  // the app's own settings (Show on Report), which need no chat (DES-REPORT-DASHBOARDS-001 §2).
+  const sideOn = kind?.store === 'crew' && slug !== null && detail !== null;
+  const tab: PanelTab = chatOn ? panelTab : 'properties';
+  const crumb = back ?? { path: '/apps', label: 'Apps' };
   const idle = asking === null && link === null && outcome === null;
 
   return (
     <div className="wk-apps-host" data-testid="apps-host" data-mode={shown} data-framed={framed}>
       <header className="wk-apps-head">
         {navigate !== undefined
-          ? <a href="/apps" className="wk-apps-crumb wk-link" data-testid="apps-crumb" onClick={(ev) => { ev.preventDefault(); navigate('/apps'); }}>Apps /</a>
+          ? <a href={crumb.path} className="wk-apps-crumb wk-link" data-testid="apps-crumb" onClick={(ev) => { ev.preventDefault(); navigate(crumb.path); }}>{crumb.label} /</a>
           : <span className="wk-apps-crumb">Apps /</span>}
         <span className="wk-apps-title" data-testid="apps-title">{detail?.name ?? 'App'}</span>
         {detail !== null && (
@@ -428,7 +438,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             : <span className="wk-apps-line--note">{chatOn ? 'Select a component to ask the chat about just that one.' : 'Select a component to make it the subject of your next message.'}</span>}
         </p>
       )}
-      <div className="wk-apps-body" data-mode={shown} data-chat={chatOn} data-panel={chatOn && collapsed && asking === null && link === null ? 'collapsed' : 'open'}>
+      <div className="wk-apps-body" data-mode={shown} data-chat={sideOn} data-panel={sideOn && collapsed && asking === null && link === null ? 'collapsed' : 'open'}>
         <div className="wk-apps-frame" ref={frameWrap}>
           {torn !== null && (
             <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-torn">{torn} · <button type="button" className="wk-btn wk-btn--link" onClick={() => setMountKey((k) => k + 1)}>Reload it</button></p>
@@ -436,7 +446,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           <div ref={frameBox} key={mountKey} className="wk-apps-frame-box" data-testid="apps-frame-box" />
         </div>
         {(() => { const dock = (
-        <aside className={`wk-apps-dock${narrow && asking === null && link === null ? ' wk-apps-dock--quiet' : ''}${chatOn && idle ? ' wk-apps-dock--idle' : ''}`} aria-label="Needs you" data-testid="apps-dock">
+        <aside className={`wk-apps-dock${narrow && asking === null && link === null ? ' wk-apps-dock--quiet' : ''}${sideOn && idle ? ' wk-apps-dock--idle' : ''}`} aria-label="Needs you" data-testid="apps-dock">
           <h2 className="wk-apps-dock-title">Needs you <span className="wk-apps-dock-count">{asking !== null || link !== null ? '1 waiting' : 'nothing waiting'}</span></h2>
           {asking !== null && <ActionCardView asking={asking} onAnswer={answer} />}
           {link !== null && (
@@ -459,30 +469,31 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             </p>
           )}
         </aside>);
-          // Without chat the dock is the body's second column, exactly as K4 drew it (xreview r1 on K5: a wrapper changed
-          // the canvas's size there); with chat the dock sits above the chat in one side column.
-          if (!chatOn) return dock;
+          // A sample app has no side panel: the dock is the body's second column, exactly as K4 drew it (xreview r1 on
+          // K5: a wrapper changed the canvas's size there); a crew app's dock sits above the panel in one side column.
+          if (!sideOn) return dock;
           const turns = turnsOf(detail);
           const lastEnded = [...turns].reverse().find((t) => t.state !== 'running');
           const mark = lastEnded === undefined ? '' : `${lastEnded.runId}:${lastEnded.state}`;
-          const chatSeen = !collapsed && panelTab === 'chat';
+          const chatSeen = chatOn && !collapsed && tab === 'chat';
           if (chatSeen && mark !== '' && readSeen(slug) !== mark) writeSeen(slug, mark);
-          const unread = !chatSeen && mark !== '' && readSeen(slug) !== mark;
+          const unread = chatOn && !chatSeen && mark !== '' && readSeen(slug) !== mark;
           const selectedId = chips.find((x) => x.anchor.kind === 'element')?.anchor;
           const selId = selectedId !== undefined && selectedId.kind === 'element' ? selectedId.id : null;
           // A card or a link question waiting opens the panel: it must never wait unseen.
           const waiting = asking !== null || link !== null;
           return (
             <div className="wk-apps-side">
-              <AppSidePanel slug={slug} tab={panelTab} setTab={setPanelTab} collapsed={collapsed && !waiting} setCollapsed={setCollapsed}
-                busy={detail.turn != null} unread={unread} dock={dock} phone={narrowWindow} selectedWhileCollapsed={collapsed && selId !== null}
-                chat={(
+              <AppSidePanel slug={slug} tab={tab} setTab={setPanelTab} collapsed={collapsed && !waiting} setCollapsed={setCollapsed}
+                busy={chatOn && detail.turn != null} unread={unread} dock={dock} phone={narrowWindow} selectedWhileCollapsed={collapsed && selId !== null}
+                chat={!chatOn ? null : (
                   <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
                     onSent={() => { void sessionRef.current?.refresh(); }} prepareSend={prepareSend} pending={pending}
                     onUndo={() => { if ((sessionRef.current?.pending ?? 0) > 0) { setStatus('Your last edit is still saving: Undo after it lands.'); return; } void move('undo'); }} />
                 )}
                 properties={(
                   <AppProperties key={selId ?? ''} spec={sessionRef.current?.spec ?? detail.spec} selected={selId}
+                    app={<ShowOnReport slug={slug} name={detail.name} projectId={detail.projectId} variant="properties" framed={framed} {...(navigate !== undefined ? { navigate } : {})} />}
                     editable={shown === 'edit' && !framed && !narrow && detail.turn == null}
                     readOnlyWhy={framed ? 'This page is inside another page, so the app cannot be changed here.' : narrow ? 'Edit on a larger screen: properties change in Edit.' : detail.turn != null ? 'A turn is changing the app: properties wait until it lands.' : shown !== 'edit' ? 'Open Edit, then select a component to change it here.' : null}
                     onOps={(ops) => {

@@ -41,7 +41,7 @@ export const PAGE_CHAT_SPECS: Record<PageChatKind, PageChatSpec> = {
   },
   report: {
     title: 'Report', placeholder: 'Ask about the Report…',
-    hint: 'Ask about any number or chart on this page. Click one to ask about it; the chat sees the figures behind it.',
+    hint: 'Ask about any number or chart on this page. Click one to ask about it; the chat sees the figures behind it, but not the dashboards shown here.',
   },
   nerve: {
     title: 'Nerve Center', placeholder: 'Ask about system state…',

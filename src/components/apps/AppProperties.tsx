@@ -61,7 +61,21 @@ function SelectField({ label, value, options, prop, onPick }: { label: string; v
 
 const TYPE_WORD: Record<string, string> = { kpi: 'KPI', table: 'table', chart: 'chart', text: 'text', filter: 'filter', form: 'form', button: 'button', image: 'image', link: 'link' };
 
-export function AppProperties({ spec, selected, editable, readOnlyWhy, onOps }: {
+/**
+ * The App group (DES-REPORT-DASHBOARDS-001 §2, rev 4): the app's own settings, at the top of Properties whenever no
+ * component is selected, in Preview and in Edit alike. Its controls are not spec ops, so it has its own permission:
+ * component editing (`editable`) never gates it.
+ */
+function AppGroup({ children }: { children: React.ReactNode }): React.ReactElement {
+  return (
+    <section className="wk-appprops-app" data-testid="app-properties-app" aria-label="App">
+      <h3 className="wk-appprops-app-title">App</h3>
+      {children}
+    </section>
+  );
+}
+
+export function AppProperties({ spec, selected, editable, readOnlyWhy, onOps, app = null }: {
   spec: AppSpec | null;
   /** The component selected in Edit (its id), or null. */
   selected: string | null;
@@ -71,13 +85,17 @@ export function AppProperties({ spec, selected, editable, readOnlyWhy, onOps }: 
   readOnlyWhy: string | null;
   /** Apply ops to the app's session; the answer says whether they were taken. */
   onOps: (ops: Op[]) => { ok: boolean; message?: string };
+  /** The App group's controls (Show on Report), shown with no component selected; null for none. */
+  app?: React.ReactNode;
 }): React.ReactElement {
   const [note, setNote] = useState<string | null>(null);
   const c: Comp | undefined = selected === null ? undefined : spec?.pages.flatMap((p) => p.components).find((x) => x.id === selected);
   useEffect(() => { setNote(null); }, [selected]);
+  const group = app !== null && c === undefined ? <AppGroup>{app}</AppGroup> : null;
   if (!editable) {
     return (
       <div className="wk-appprops" data-testid="app-properties">
+        {group}
         <p className="wk-appprops-empty" data-testid="app-properties-empty">{readOnlyWhy ?? 'Open Edit to change a component here: select it on the canvas.'}</p>
       </div>
     );
@@ -85,6 +103,7 @@ export function AppProperties({ spec, selected, editable, readOnlyWhy, onOps }: 
   if (c === undefined) {
     return (
       <div className="wk-appprops" data-testid="app-properties">
+        {group}
         <p className="wk-appprops-empty" data-testid="app-properties-empty">Select a component on the canvas to change it here. Double-click its words to edit them in place.</p>
       </div>
     );

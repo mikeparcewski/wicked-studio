@@ -1,4 +1,5 @@
 import { apiFetch } from '../../api/client.js';
+import { ApiError } from '../../api/errors.js';
 import type { AppDetail, AppDetailResponse, AppSpec, AppsListResponse } from '../../api/types.js';
 import { cellText } from '../../plugins/wicked-apps/runtime/format.js';
 import type { AppHostPort } from './appAdapter.js';
@@ -108,6 +109,8 @@ export interface AppTileData {
   sources: string[];
   kpis: TileKpi[];
   published: AppPublished | null;
+  /** The app's project, as crew records it (crew's apps only). */
+  projectId?: string;
 }
 
 export type AppsDirectory =
@@ -174,6 +177,7 @@ async function tileOf(detail: AppDetail, sample: { key: string; data: SampleData
     sources: sourcesOf(detail.spec),
     kpis: await kpisOf(detail.spec, sample?.data ?? null),
     published: publishedOf(detail),
+    ...(sample === null && typeof detail.projectId === 'string' ? { projectId: detail.projectId } : {}),
   };
 }
 
@@ -185,17 +189,47 @@ function summaryTile(a: Record<string, unknown>, slug: string, note: string | nu
   return {
     slug, name: line(a['name'], 120) ?? slug, description: '', sample: false, sampleKey: null, detail: null, note,
     version: `${v} · ${receipt}`, changedAt: isTime(a['createdAt']) ? a['createdAt'] : null, sources: [], kpis: [], published: null,
+    ...(typeof a['projectId'] === 'string' ? { projectId: a['projectId'] } : {}),
   };
 }
 
 const why = (e: unknown): string => (e instanceof Error ? e.message : String(e)).slice(0, 200);
 
 /**
+ * One crew app's card from its list entry: its detail read for the preview, or the list alone saying why not.
+ * `missing`: crew answered 404 for the detail (the app went between the list and its read).
+ */
+async function crewTile(a: Record<string, unknown>, slug: string): Promise<{ tile: AppTileData; missing: boolean }> {
+  try {
+    const d = (await apiFetch<AppDetailResponse>(`/apps/${slug}`))?.app;
+    if (!detailOk(d, slug)) return { tile: summaryTile(a, slug, 'Its details could not be read.'), missing: false };
+    return { tile: await tileOf(d, null), missing: false };
+  } catch (e) {
+    return { tile: summaryTile(a, slug, `Its details could not be read: ${why(e)}`), missing: e instanceof ApiError && e.status === 404 };
+  }
+}
+
+/** crew's list of apps (`GET /apps`, or one project's: `?project=`), its entries with an app slug, and how many were not. */
+async function crewList(project: string | null): Promise<{ listed: Array<Record<string, unknown>>; skipped: number } | { error: string }> {
+  let list: AppsListResponse;
+  try {
+    list = await apiFetch<AppsListResponse>(project === null ? '/apps' : `/apps?project=${encodeURIComponent(project)}`);
+  } catch (e) {
+    return { error: why(e) };
+  }
+  // crew's answer is data too: a list that is not a list is an error to retry, never an empty store.
+  if (typeof list !== 'object' || list === null || !Array.isArray((list as { apps?: unknown }).apps)) return { error: 'crew’s list of apps was not a list' };
+  const entries = list.apps as unknown[];
+  const listed = entries.filter((a): a is Record<string, unknown> => typeof a === 'object' && a !== null && isAppSlug((a as Record<string, unknown>)['slug']));
+  return { listed, skipped: entries.length - listed.length };
+}
+
+/**
  * Load the dashboard. `hasStore`: crew's health advertises `capabilities.apps`. Every app crew lists gets a card: the
  * first {@link PREVIEW_LIMIT} read their detail for a preview, and a detail that fails or is malformed leaves that card
- * drawn from the list alone, saying so. Only a failed LIST is an error.
+ * drawn from the list alone, saying so. Only a failed LIST is an error. `project` lists one project's apps only.
  */
-export async function loadAppsDirectory(hasStore: boolean): Promise<AppsDirectory> {
+export async function loadAppsDirectory(hasStore: boolean, project: string | null = null): Promise<AppsDirectory> {
   if (!hasStore) {
     const apps: AppTileData[] = [];
     for (const [key, s] of Object.entries(SAMPLE_APPS)) {
@@ -204,28 +238,38 @@ export async function loadAppsDirectory(hasStore: boolean): Promise<AppsDirector
     }
     return { source: 'sample', apps, skipped: 0 };
   }
-  let list: AppsListResponse;
-  try {
-    list = await apiFetch<AppsListResponse>('/apps');
-  } catch (e) {
-    return { source: 'error', message: why(e) };
-  }
-  // crew's answer is data too: a list that is not a list is an error to retry, never an empty store.
-  if (typeof list !== 'object' || list === null || !Array.isArray((list as { apps?: unknown }).apps)) return { source: 'error', message: 'crew’s list of apps was not a list' };
-  const entries = list.apps as unknown[];
-  const listed = entries.filter((a): a is Record<string, unknown> => typeof a === 'object' && a !== null && isAppSlug((a as Record<string, unknown>)['slug']));
-  const apps = await Promise.all(listed.map(async (a, i): Promise<AppTileData> => {
+  const l = await crewList(project);
+  if ('error' in l) return { source: 'error', message: l.error };
+  const apps = await Promise.all(l.listed.map(async (a, i): Promise<AppTileData> => {
     const slug = a['slug'] as string;
     if (i >= PREVIEW_LIMIT) return summaryTile(a, slug, null);
-    try {
-      const d = (await apiFetch<AppDetailResponse>(`/apps/${slug}`))?.app;
-      if (!detailOk(d, slug)) return summaryTile(a, slug, 'Its details could not be read.');
-      return await tileOf(d, null);
-    } catch (e) {
-      return summaryTile(a, slug, `Its details could not be read: ${why(e)}`);
-    }
+    return (await crewTile(a, slug)).tile;
   }));
-  return { source: 'crew', apps, skipped: entries.length - listed.length };
+  return { source: 'crew', apps, skipped: l.skipped };
+}
+
+/** One app Report shows: its card, or `null` when crew no longer has it (gone); its project from crew's record. */
+export interface ShownTile { slug: string; tile: AppTileData | null; projectId: string | null }
+
+/**
+ * (DES-REPORT-DASHBOARDS-001 §2, "Loading") The cards for the apps named in `slugs`, in that order, through the same
+ * shaping as the dashboard's: crew's list (for each app's project, and whether it is gone), then each named app's
+ * detail. No preview limit applies (an app far down crew's list is read like the first), and nothing else is read.
+ */
+export async function loadAppTiles(slugs: readonly string[]): Promise<{ ok: true; tiles: ShownTile[] } | { ok: false; message: string }> {
+  if (slugs.length === 0) return { ok: true, tiles: [] };
+  const l = await crewList(null);
+  if ('error' in l) return { ok: false, message: l.error };
+  const bySlug = new Map(l.listed.map((a) => [a['slug'] as string, a]));
+  const tiles = await Promise.all(slugs.map(async (slug): Promise<ShownTile> => {
+    const a = bySlug.get(slug);
+    if (a === undefined) return { slug, tile: null, projectId: null };
+    const projectId = typeof a['projectId'] === 'string' ? a['projectId'] : null;
+    const { tile, missing } = await crewTile(a, slug);
+    // Removed between the list and its read: gone, as if it was never listed.
+    return missing ? { slug, tile: null, projectId: null } : { slug, tile, projectId };
+  }));
+  return { ok: true, tiles };
 }
 
 /**

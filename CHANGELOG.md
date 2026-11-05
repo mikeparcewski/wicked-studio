@@ -37,6 +37,22 @@ npm publish dates. Every version listed here exists on
   where it came from, and what is linked but not included. The launch composer gains **From an issue** (the set's issues
   grouped by tracker), sends the project with the linked-issues preview, and asks which tracker an ambiguous key means.
   The Knowledge map draws trackers, projects and the trail (`tracked_in`, `addresses`, `closes`).
+- **Dashboards on the Report, and Show on Report (DES-REPORT-DASHBOARDS-001 rev 4, slice 1; no crew change).** Each
+  app has a **Show on Report** switch, in its Properties (an **App** group whenever no component is selected, in Preview
+  and Edit, and now on every crew app's page even where crew runs no app chat) and in its Apps card's new **⋯** menu.
+  Report shows only the switched-on apps, as their Apps cards with live headline numbers (**Your dashboards**, right
+  after the headline numbers): on the app's own project's Report and on Insight → Report, at most 4 across the daemon,
+  with Open and **Unpin**, a gone app with Remove, and **Choose what shows here** (the Apps page, filtered to the project
+  with `?project=`). One scheduler serves every card there (reads only while a card is on screen and the tab visible,
+  at most 3 at once, cards 400 ms apart), and a read crew refuses also drops the card's picture. The list is the
+  studio-owned settings key `studio.report` (`{shown: [slug…]}`), changed only by one serialized writer that computes
+  each change when its turn comes, re-checks the cap there, judges crew's echoed value, writes nothing before a good
+  read or from a framed studio, and goes read-only after a 403 ("Only an admin can change what shows on Report on
+  this crew"). Report's header gains **Build a dashboard** (shown only when crew runs app turns and queries and the
+  App editor is installed): the K5 composer in a sheet, seeded with Report's period and the names of the data sources
+  the project's agents can see; the new app starts on Report, opens once that is confirmed, and its crumb leads back
+  ("Report /", with the origin checked against stored, active projects). Report's chat never reads the dashboards
+  (`data-page-chat-skip`).
 - **Understand's Knowledge map, the data-shape review, and Profile on a source sheet (DES-KNOWLEDGE-DATA-001 §10, §19
   B4; crew api-types 0.186.0, mirrored until it is published).** Understand gains a **Knowledge map** beside the
   repositories' code and requirements graphs (`/understand?view=knowledge`): the data shapes waiting for review on top

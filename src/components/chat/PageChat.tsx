@@ -56,9 +56,57 @@ export function usePageChatFor(kind: PageChatKind, knows: string, rootTestId: st
   usePageChatHostPage(kind, { knows, data: () => pageTextLines(document.querySelector<HTMLElement>(`[data-testid="${rootTestId}"]`)) });
 }
 
+/** The mark that keeps a subtree out of the page chat's reading (Report's dashboards: DES-REPORT-DASHBOARDS-001 §2). */
+export const PAGE_CHAT_SKIP = 'data-page-chat-skip';
+
+/** One node's words as the page chat reads them: its rendered text (`innerText`), or `textContent` with no layout. */
+function wordsOf(el: Element): string {
+  return (el as HTMLElement).innerText ?? el.textContent ?? '';
+}
+
+/** With a layout (`innerText` mode): the element is not drawn (`display: none`, or a closed `<details>`' body). */
+function notDrawn(e: Element): boolean {
+  const h = e as HTMLElement;
+  if (h.innerText === undefined || typeof getComputedStyle !== 'function') return false;
+  const display = getComputedStyle(h).display;
+  if (display === 'none') return true;
+  return display !== 'contents' && typeof h.checkVisibility === 'function' && !h.checkVisibility();
+}
+
+/**
+ * A page's words with every `data-page-chat-skip` subtree left out. With no mark under the root it is exactly the root's
+ * own reading (as before the mark existed); otherwise each unmarked subtree is read the same way, in document order,
+ * and a marked one is dropped whole.
+ */
+export function pageText(el: HTMLElement): string {
+  if (el.querySelector(`[${PAGE_CHAT_SKIP}]`) === null) return wordsOf(el);
+  const parts: string[] = [];
+  const walk = (node: Element): void => {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const s = child.textContent ?? '';
+        if (s.trim() !== '') parts.push(s);
+        continue;
+      }
+      if (child.nodeType !== Node.ELEMENT_NODE) continue;
+      const e = child as Element;
+      if (e.hasAttribute(PAGE_CHAT_SKIP)) continue;
+      // A subtree that is not drawn reads as nothing, as the root's own `innerText` would read it (an element's own
+      // `innerText` is its `textContent` when it is not drawn). `display: contents` draws its children, so it is read.
+      if (notDrawn(e)) continue;
+      if (e.querySelector(`[${PAGE_CHAT_SKIP}]`) === null) {
+        const s = wordsOf(e);
+        if (s.trim() !== '') parts.push(s);
+      } else walk(e);
+    }
+  };
+  walk(el);
+  return parts.join('\n');
+}
+
 /** A whole page's visible words as pack lines (the header Ask: "a chat over all the page's data"). */
 export function pageTextLines(el: HTMLElement | null): string[] {
-  return el === null ? [] : textLines(el.innerText ?? el.textContent ?? '', PAGE_TEXT_CAP);
+  return el === null ? [] : textLines(pageText(el), PAGE_TEXT_CAP);
 }
 
 /**
