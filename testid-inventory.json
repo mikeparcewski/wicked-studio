@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 325,
-    "occurrences": 4702,
-    "static": 3935,
+    "occurrences": 4707,
+    "static": 3938,
     "dynamic": 173,
     "computed": 53
   },
@@ -2169,6 +2169,18 @@
     },
     {
       "testId": "assurance-reduced",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rule",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rules",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
       ]
@@ -17766,6 +17778,12 @@
       ]
     },
     {
+      "testId": "session-gate-rules",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-send",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -23984,7 +24002,8 @@
     {
       "pattern": "*-line",
       "files": [
-        "src/components/CaptureDrop.tsx"
+        "src/components/CaptureDrop.tsx",
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {
