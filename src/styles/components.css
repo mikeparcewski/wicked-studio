@@ -1219,7 +1219,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-assurance-rule { margin: 2px 0; color: var(--ink-muted); overflow-wrap: anywhere; }
 .wk-assurance-rule-status { font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-assurance-rule-status--broken, .wk-assurance-rule-status--unchecked, .wk-assurance-rule-status--waived { color: var(--status-warn); }
-.wk-assurance-rule-status--n_a { color: var(--ink-muted); font-weight: var(--weight-normal, 400); }
+.wk-assurance-rule-status--n_a { color: var(--ink-muted); font-weight: var(--weight-regular); }
 .wk-assurance-rule-id { font-size: var(--text-2xs); color: var(--ink-body); }
 .wk-assurance-optin { margin: 6px 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: var(--text-xs); color: var(--ink-body); }
 .wk-assurance-optin-label { display: inline-flex; align-items: center; gap: 6px; font-weight: var(--weight-semi); cursor: pointer; }
