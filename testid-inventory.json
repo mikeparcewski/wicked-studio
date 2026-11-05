@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 325,
-    "occurrences": 4707,
-    "static": 3938,
+    "occurrences": 4708,
+    "static": 3939,
     "dynamic": 173,
     "computed": 53
   },
@@ -16961,6 +16961,12 @@
     },
     {
       "testId": "run-tab-repo",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-rules",
       "files": [
         "src/components/session/RunTab.tsx"
       ]

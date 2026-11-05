@@ -213,6 +213,19 @@ export function worstRules(lists: ReadonlyArray<readonly RuleRow[] | undefined>)
   return out;
 }
 
+/**
+ * A delivery's rule rows: every gate's CURRENT receipt (its newest evaluation, so a skip after a hold,
+ * or a kept after a broken, replaces that gate's earlier row), the worst row per rule across distinct
+ * gates; the engine's aggregate (`lifted`, a lift or a recorded delivery) only for a rule no current
+ * gate names (its history is not in hand), in the aggregate's order.
+ */
+export function currentRules(lifted: readonly RuleRow[] | undefined, gates: readonly AssuranceReceipt[]): RuleRow[] {
+  const fromGates = worstRules(gates.map((g) => g.rules));
+  const out = (lifted ?? []).map((l) => fromGates.find((g) => g.ruleId === l.ruleId) ?? l);
+  for (const g of fromGates) if (!out.some((o) => o.ruleId === g.ruleId)) out.push(g);
+  return out;
+}
+
 /** The counts and the one line the run page, the gate card and the delivery say:
  *  "N rules checked: K kept, B broken, X not applicable" (+ unchecked, skipped by the operator). */
 export function rulesSummary(rows: readonly RuleRow[]): { line: string; broken: number; unchecked: number; skipped: number; waived: number } {
@@ -412,9 +425,10 @@ export function deliveryReceiptOf(
     const r = lifted !== null ? lifted.r : recorded!;
     const fb = fallbacksOf([r, ...gates]);
     const oj = judgmentsOf([r, ...gates], durableFloorOverrides(view));
-    // The lift's receipt is cut BEFORE the deliver step judged the rules deferred to it: every gate's
-    // rows join it, and the worst row per rule wins (a delivery verdict replaces a deferral).
-    const rules = worstRules([r.rules, ...gates.map((g) => g.rules)]);
+    // The lift's receipt is cut BEFORE the deliver step judged the rules deferred to it, and a delivery
+    // retry's lift carries the deliver unit's PREVIOUS verdict: each gate's current rows win over it
+    // (deny-dominates across the gates), and a rule no current gate names keeps the lift's row.
+    const rules = currentRules(r.rules, gates);
     return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
@@ -756,6 +770,37 @@ export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number |
   const esc = escalationSinceDispatch(events, ord);
   if (esc !== null) return esc.condition === 'judge_unavailable' || esc.denialSource === 'judge_unavailable';
   return /could not be judged\b.*no eligible judge seat/i.test(prompt ?? '');
+}
+
+/** (DES-RULE-CHECK-001 S2) The engine's denial source of a gate held on steering rules no judge ruled on. */
+export const RULES_UNCHECKED_SOURCE = 'rules_unchecked';
+
+/**
+ * Whether the gate at `ord` is held `rules_unchecked`: the one gate where the engine takes `retry_rules` /
+ * `skip_rules` (crew refuses them, 409, at any other). Read off structured wire fields only, never the
+ * prompt's prose (an evaluator finding may quote it): THIS attempt's newest `gateEscalated`
+ * (`denialSource`, else `condition`) or `gateEvaluated.denial.source`, whichever is newer; with no log in
+ * hand, the unit record's `denial.source`.
+ */
+export function heldOnUncheckedRules(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): boolean {
+  if (typeof ord !== 'number') return false;
+  const log = events ?? [];
+  for (let i = log.length - 1; i >= 0; i--) {
+    const e = log[i]! as Record<string, unknown>;
+    if (e['ord'] !== ord) continue;
+    if (e['type'] === 'unitDispatched') return false;
+    if (e['type'] === 'gateEscalated') {
+      const source = typeof e['denialSource'] === 'string' ? e['denialSource'] : '';
+      return source !== '' ? source === RULES_UNCHECKED_SOURCE : e['condition'] === RULES_UNCHECKED_SOURCE;
+    }
+    if (e['type'] === 'gateEvaluated') {
+      const d = e['denial'];
+      return isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE;
+    }
+  }
+  if (log.length > 0) return false;
+  const d = ((units ?? []).find((u) => u.ord === ord) as unknown as { denial?: unknown } | undefined)?.denial;
+  return isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE;
 }
 
 /** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */

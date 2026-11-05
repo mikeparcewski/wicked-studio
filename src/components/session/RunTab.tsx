@@ -18,7 +18,7 @@ import { overriddenFloorsOf, overriddenLine } from '../../board/failingChecks.js
 import { useGateStore } from '../../store/gates.js';
 import { openSheet, stopRun, useSheets } from '../../store/sheets.js';
 import { useRunChain } from './ChainLine.js';
-import { RunAssuranceLabel } from './AssuranceReceipt.js';
+import { RulesChecked, RunAssuranceLabel } from './AssuranceReceipt.js';
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
 import { RunRecordLines, RunStory } from './RunRecord.js';
@@ -146,6 +146,9 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const recorded = deliveryAssuranceOf(view);
   const runReceipt = deliveryReceiptOf(view, events ?? null, recorded);
   const receipt = view.session.status === 'completed' ? runReceipt : null;
+  // (DES-RULE-CHECK-001) The run's rule verdicts whenever any gate carried them: a completed run says them on its
+  // delivery receipt; any other run says them under Checks ("So far, …" while it is still going).
+  const rulesRows = receipt === null ? runReceipt?.rules ?? [] : [];
   // rig 0.15.8: a failed floor the operator overrode is said as that — the deliver card's words — never "Passed".
   const overridden = overriddenFloorsOf(runReceipt, events ?? null, view);
   const started = startedMs(view);
@@ -345,6 +348,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
       <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === false ? 'Not passed' : overridden !== null ? 'Overridden by you' : acceptancePassed === true ? 'Passed' : ''}>
         <div data-testid="run-tab-checks" className="wk-run-tab-block">
           <RunAssuranceLabel view={view} />
+          {rulesRows.length > 0 && <RulesChecked rows={rulesRows} testId="run-tab-rules" soFar={!isTerminal(view)} />}
           {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read). An acceptance not passed leads;
               a passed one under an override is QE acceptance's word only, so it goes behind Technical details. */}
           {acceptanceLine !== null && (overridden === null || acceptancePassed === false) && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
@@ -352,7 +356,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
           {acceptanceLine !== null && overridden !== null && acceptancePassed !== false && <TechDetails data-testid="run-tab-acceptance-detail" summary="What QE acceptance recorded" text={acceptanceLine} />}
           {coverage !== null && <p data-testid="run-tab-coverage" className="wk-run-tab-line">{coverage.line}</p>}
           {coverage !== null && coverage.reasons.length > 0 && <TechDetails data-testid="run-tab-coverage-why" text={coverage.reasons} />}
-          {acceptanceLine === null && coverage === null && overridden === null && <p className="wk-run-tab-muted">{quiet.has('checks') ? 'Nothing has been checked yet.' : 'No acceptance check recorded.'}</p>}
+          {acceptanceLine === null && coverage === null && overridden === null && rulesRows.length === 0 && <p className="wk-run-tab-muted">{quiet.has('checks') ? 'Nothing has been checked yet.' : 'No acceptance check recorded.'}</p>}
         </div>
         <Item section="checks" id="evidence">{() => <EvidenceTab runId={id} />}</Item>
         <Item section="checks" id="governance">{() => <RunSection id="governance" view={view} runs={allRuns} navigate={go} />}</Item>

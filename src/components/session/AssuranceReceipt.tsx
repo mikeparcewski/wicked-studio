@@ -117,20 +117,23 @@ const RULE_WORD: Record<string, string> = { kept: 'kept', broken: 'broken', n_a:
 const HOW_WORD: Record<string, string> = { fact: 'by fact', judge: 'by a judge', machine: 'by the engine', cache: 'unchanged since last check', operator: 'by the operator', none: 'nobody could rule' };
 
 /** (DES-RULE-CHECK-001) "N rules checked: K kept, B broken, X not applicable", expandable to every rule's
- *  row: its verdict, how it was reached, and why (the cite, the fact, or the operator's skip reason). */
-export function RulesChecked({ rows, testId = 'assurance-rules' }: { rows: readonly RuleRow[]; testId?: string }): React.ReactElement {
+ *  row: its verdict, how it was reached, and why (the cite, the fact, or the operator's skip reason).
+ *  `soFar`: a run still going says "So far, …" (its later gates may still rule). A reason's home paths
+ *  are redacted unless technical details are on, as every other free text studio shows. */
+export function RulesChecked({ rows, testId = 'assurance-rules', soFar = false }: { rows: readonly RuleRow[]; testId?: string; soFar?: boolean }): React.ReactElement {
+  const showText = useDisplayText();
   const s = rulesSummary(rows);
   const tone = s.broken > 0 ? 'broken' : s.unchecked + s.waived > 0 ? 'unchecked' : 'ok';
   return (
     <details data-testid={testId} data-tone={tone} className="wk-assurance-rules">
-      <summary data-testid={`${testId}-line`} className="wk-assurance-line wk-assurance-rules-summary">{s.line}</summary>
+      <summary data-testid={`${testId}-line`} className="wk-assurance-line wk-assurance-rules-summary">{soFar ? `So far, ${s.line}` : s.line}</summary>
       <ul className="wk-assurance-list wk-assurance-rules-list">
         {rows.map((r) => (
           <li key={r.ruleId} data-testid="assurance-rule" data-status={r.status} className="wk-assurance-rule">
             <span className={`wk-assurance-rule-status wk-assurance-rule-status--${r.status}`}>{RULE_WORD[r.status] ?? r.status}</span>
             {' '}<code className="wk-assurance-rule-id">{r.ruleId}</code>
             <span className="wk-assurance-rule-how"> {HOW_WORD[r.how] ?? r.how}{r.judge !== null ? ` (${r.judge})` : ''}</span>
-            {r.reason !== '' && <span className="wk-assurance-rule-why">: {r.reason}</span>}
+            {r.reason !== '' && <span className="wk-assurance-rule-why">: {showText(r.reason)}</span>}
           </li>
         ))}
       </ul>

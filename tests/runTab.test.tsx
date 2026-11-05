@@ -324,3 +324,29 @@ describe('RunRibbon', () => {
     expect(screen.getByTestId('run-ribbon-line')).toHaveTextContent('No run in this session yet.');
   });
 });
+
+describe('(s4-ui-fix) the run\'s rule verdicts under Checks', () => {
+  const rules = [
+    { ruleId: 'A', status: 'kept', how: 'judge', reason: 'cited', ruleKey: 'k' },
+    { ruleId: 'B', status: 'skipped', how: 'operator', reason: 'skipped by you: covered elsewhere', ruleKey: 'k' },
+  ];
+  const assurance = { mode: 'full', required: ['judge'], ran: ['judge', 'rule_check'], skipped: [], creator: 'pi', evaluator: 'claude', judge: 'codex', tree: 't', attempt: 1, rules };
+
+  it('a live run whose rules hold was answered says them, "So far"', async () => {
+    const view = makeView({ status: 'executing' }, [makeUnit({ ord: 2, stage: 'review', status: 'done', assigned_cli: 'claude' }), makeUnit({ ord: 3, stage: 'test', status: 'distributed', assigned_cli: 'codex' })]);
+    useRunEventStore.setState({ byRun: { 'run-1': [{ type: 'gateEvaluated', session: 'run-1', ord: 2, ts: 1, combined: true, denial: null, assurance }] as never } });
+    await tab([view]);
+    openSection('checks');
+    const checks = screen.getAllByTestId('run-panel-section').find((s) => s.dataset['section'] === 'checks')!;
+    expect(within(checks).getByTestId('run-tab-rules-line')).toHaveTextContent('So far, 2 rules checked: 1 kept, 0 broken, 0 not applicable, 1 skipped by the operator');
+  });
+
+  it('a failed run says them without "So far"', async () => {
+    const view = makeView({ status: 'failed' }, [makeUnit({ ord: 2, stage: 'review', status: 'done', assigned_cli: 'claude' })]);
+    useRunEventStore.setState({ byRun: { 'run-1': [{ type: 'gateEvaluated', session: 'run-1', ord: 2, ts: 1, combined: true, denial: null, assurance }] as never } });
+    await tab([view]);
+    openSection('checks');
+    const checks = screen.getAllByTestId('run-panel-section').find((s) => s.dataset['section'] === 'checks')!;
+    expect(within(checks).getByTestId('run-tab-rules-line').textContent).toBe('2 rules checked: 1 kept, 0 broken, 0 not applicable, 1 skipped by the operator');
+  });
+});
