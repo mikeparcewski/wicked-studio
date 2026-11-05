@@ -163,6 +163,128 @@ export interface AssuranceReceipt extends RunAssurance {
   /** Studio's mark on a DELIVERY receipt (every gate's instruments, unioned): its kind, decided per
    *  gate before the union. Its seat names are the gates' names joined for display only. */
   aggregateKind?: AssuranceKind;
+  /** (crew api-types 0.190.0, DES-RULE-CHECK-001) Every steering rule in force and its verdict at this
+   *  gate (a delivery: the worst row per rule across the run's gates); absent when no rule check ran. */
+  rules?: RuleRow[];
+}
+
+/** One steering rule's verdict (`AssuranceReceipt.rules[]`). */
+export interface RuleRow {
+  ruleId: string;
+  /** `kept` | `broken` | `n_a` | `unchecked` | `skipped` | `waived` (the person's instruction conflicts; to confirm)
+   *  | `deferred` (api-types 0.191.0: its subject is the delivery, checked at the deliver step). */
+  status: string;
+  /** `fact` | `judge` | `machine` | `cache` | `operator` | `none`. */
+  how: string;
+  reason: string;
+  cite: string | null;
+  judge: string | null;
+}
+
+const RULE_STATUSES = ['kept', 'broken', 'n_a', 'unchecked', 'skipped', 'waived', 'deferred'] as const;
+const RULE_RANK: Record<string, number> = { broken: 5, unchecked: 4, waived: 4, skipped: 3, kept: 2, n_a: 1, deferred: 0 };
+
+function rulesOf(v: unknown): RuleRow[] {
+  return Array.isArray(v)
+    ? v.flatMap((r) => {
+      if (!isRecord(r) || typeof r['ruleId'] !== 'string' || r['ruleId'] === '') return [];
+      const status = typeof r['status'] === 'string' && (RULE_STATUSES as readonly string[]).includes(r['status']) ? r['status'] : 'unchecked';
+      return [{
+        ruleId: r['ruleId'],
+        status,
+        how: typeof r['how'] === 'string' ? r['how'] : 'none',
+        reason: typeof r['reason'] === 'string' ? r['reason'] : '',
+        cite: str(r['cite']),
+        judge: str(r['judge']),
+      }];
+    })
+    : [];
+}
+
+/** One row per rule across receipts, the worst status winning (deny-dominates), in first-seen order. */
+export function worstRules(lists: ReadonlyArray<readonly RuleRow[] | undefined>): RuleRow[] {
+  const out: RuleRow[] = [];
+  for (const rows of lists) {
+    for (const r of rows ?? []) {
+      const i = out.findIndex((o) => o.ruleId === r.ruleId);
+      if (i < 0) out.push(r);
+      else if ((RULE_RANK[r.status] ?? 0) > (RULE_RANK[out[i]!.status] ?? 0)) out[i] = r;
+    }
+  }
+  return out;
+}
+
+/**
+ * A delivery's rule rows: each gate's CURRENT rows (`gates`, by {@link gateRuleRows}: its newest evaluation, so a
+ * skip after a hold, or a kept after a broken, replaces that gate's earlier row), the worst row per rule across
+ * distinct gates. The engine's aggregate (`aggregate`: a lift or a recorded delivery) is cut from the gates as they
+ * stood then (a retry's lift even carries the deliver unit's PREVIOUS row), so it speaks only for a rule no gate in
+ * hand names.
+ */
+export function currentRules(aggregate: readonly RuleRow[] | undefined, gates: ReadonlyArray<readonly RuleRow[]>): RuleRow[] {
+  const fromGates = worstRules(gates);
+  const out = (aggregate ?? []).map((l) => fromGates.find((g) => g.ruleId === l.ruleId) ?? l);
+  for (const g of fromGates) if (!out.some((o) => o.ruleId === g.ruleId)) out.push(g);
+  return out;
+}
+
+/** The CURRENT deliver attempt's lift: a re-dispatch of the deliver unit after it voids it (the retry has not
+ *  lifted yet). */
+function currentLift(log: readonly CoreEvent[]): { ord: unknown; r: AssuranceReceipt } | null {
+  let lifted: { ord: unknown; r: AssuranceReceipt } | null = null;
+  for (const e of log) {
+    if (e.type === 'deliverLiftEvaluated') {
+      const r = receiptOf((e as Record<string, unknown>)['assurance']);
+      lifted = r === null ? null : { ord: e.ord, r };
+    } else if (e.type === 'unitDispatched' && lifted !== null && e.ord === lifted.ord) {
+      lifted = null;
+    }
+  }
+  return lifted;
+}
+
+/** The run's rule rows as they stand ({@link currentRules}), with or without a delivery receipt to carry them:
+ *  the run page says them while the run is still going, or after it stopped short of delivery. */
+export function runRuleRows(view: SessionView | null | undefined, events: readonly CoreEvent[] | null, recordedDelivery: DeliveryAssuranceView | null = deliveryAssuranceOf(view)): RuleRow[] {
+  const log = events ?? [];
+  const lifted = recordedDelivery?.via === 'post_hoc' ? null : currentLift(log);
+  const aggregate = lifted !== null ? lifted.r.rules : recordedDelivery?.receipt?.rules;
+  return currentRules(aggregate, gateRuleRows(view, log));
+}
+
+/**
+ * Each gate's current rule rows, by ord: the log's newest evaluation since the unit's newest dispatch, and for a
+ * unit the log never mentions (a store filled by live events alone), its persisted receipt.
+ */
+function gateRuleRows(view: SessionView | null | undefined, log: readonly CoreEvent[]): RuleRow[][] {
+  const byOrd = new Map<number, RuleRow[]>();
+  const mentioned = new Set<number>();
+  for (const e of log) {
+    if (typeof e.ord !== 'number') continue;
+    if (e.type === 'unitDispatched') { mentioned.add(e.ord); byOrd.delete(e.ord); }
+    if (e.type !== 'gateEvaluated') continue;
+    mentioned.add(e.ord);
+    const rows = receiptOf((e as Record<string, unknown>)['assurance'])?.rules;
+    if (rows !== undefined) byOrd.set(e.ord, rows); else byOrd.delete(e.ord);
+  }
+  for (const u of view?.units ?? []) {
+    if (mentioned.has(u.ord)) continue;
+    const rows = receiptOf((u as unknown as { assurance?: unknown }).assurance)?.rules;
+    if (rows !== undefined) byOrd.set(u.ord, rows);
+  }
+  return [...byOrd.entries()].sort((x, y) => x[0] - y[0]).map(([, r]) => r);
+}
+
+/** The counts and the one line the run page, the gate card and the delivery say:
+ *  "N rules checked: K kept, B broken, X not applicable" (+ unchecked, skipped by the operator). */
+export function rulesSummary(rows: readonly RuleRow[]): { line: string; broken: number; unchecked: number; skipped: number; waived: number } {
+  const n = (s: string) => rows.filter((r) => r.status === s).length;
+  let line = `${rows.length} ${rows.length === 1 ? 'rule' : 'rules'} checked: ${n('kept')} kept, ${n('broken')} broken, ${n('n_a')} not applicable`;
+  if (n('waived') > 0) line += `, ${n('waived')} waived by your instruction (to confirm)`;
+  if (n('unchecked') > 0) line += `, ${n('unchecked')} unchecked`;
+  if (n('skipped') > 0) line += `, ${n('skipped')} skipped by the operator`;
+  if (n('deferred') > 0) line += `, ${n('deferred')} deferred to delivery`;
+  return { line, broken: n('broken'), unchecked: n('unchecked'), skipped: n('skipped'), waived: n('waived') };
 }
 
 /** One "judged by operator" record (`AssuranceReceipt.operatorJudges[]`). */
@@ -212,10 +334,12 @@ export function receiptOf(raw: unknown): AssuranceReceipt | null {
     })
     : [];
   const judged = operatorJudgesOf(raw['operatorJudges']);
+  const rules = rulesOf(raw['rules']);
   return {
     ...run,
     ...(fallbacks.length > 0 ? { judgeFallbacks: fallbacks } : {}),
     ...(judged.length > 0 ? { operatorJudges: judged } : {}),
+    ...(rules.length > 0 ? { rules } : {}),
     ran: strings(raw['ran']),
     skipped,
     creator: str(raw['creator']),
@@ -331,15 +455,7 @@ export function deliveryReceiptOf(
   const log = events ?? [];
   // The CURRENT deliver attempt's lift: a re-dispatch of the deliver unit after it voids it (the
   // retry has not lifted yet), and the receipt falls back to the gates' aggregate.
-  let lifted: { ord: unknown; r: AssuranceReceipt } | null = null;
-  for (const e of log) {
-    if (e.type === 'deliverLiftEvaluated') {
-      const r = receiptOf((e as Record<string, unknown>)['assurance']);
-      lifted = r === null ? null : { ord: e.ord, r };
-    } else if (e.type === 'unitDispatched' && lifted !== null && e.ord === lifted.ord) {
-      lifted = null;
-    }
-  }
+  let lifted = currentLift(log);
   const gates = gateReceipts(view, log);
   const who = whoOf(gates);
   // EX-04: a post-hoc hand-over is the delivery that happened — an earlier attempt's engine lift
@@ -350,7 +466,10 @@ export function deliveryReceiptOf(
     const r = lifted !== null ? lifted.r : recorded!;
     const fb = fallbacksOf([r, ...gates]);
     const oj = judgmentsOf([r, ...gates], durableFloorOverrides(view));
-    return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
+    // The lift's receipt is cut BEFORE the deliver step judged the rules deferred to it: each gate's current
+    // rows speak for the rules they name (a delivery verdict replaces a deferral, a retry's skip its hold).
+    const rules = currentRules(r.rules, gateRuleRows(view, log));
+    return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
   const run = sessionAssurance(view, log) ?? { mode: gates[0]!.mode, required: gates[0]!.required };
@@ -361,7 +480,8 @@ export function deliveryReceiptOf(
   }
   const fb = fallbacksOf(gates);
   const oj = judgmentsOf(gates, durableFloorOverrides(view));
-  return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), aggregateKind: deliveryKind(out, gates) };
+  const rules = worstRules(gateRuleRows(view, log));
+  return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), aggregateKind: deliveryKind(out, gates) };
 }
 
 /** Every "judged by operator" record the receipts carry, once each (by who and when), in first-seen
@@ -690,6 +810,54 @@ export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number |
   const esc = escalationSinceDispatch(events, ord);
   if (esc !== null) return esc.condition === 'judge_unavailable' || esc.denialSource === 'judge_unavailable';
   return /could not be judged\b.*no eligible judge seat/i.test(prompt ?? '');
+}
+
+/** (DES-RULE-CHECK-001 S2) The engine's denial source of a gate held on steering rules no judge ruled on. */
+export const RULES_UNCHECKED_SOURCE = 'rules_unchecked';
+
+/**
+ * Whether the gate at `ord` is held `rules_unchecked` — the one gate where the engine takes `retry_rules` /
+ * `skip_rules` (crew refuses them, 409, at any other) — and the rows it holds, both from THIS attempt. Read off
+ * structured wire fields only, never the prompt's prose (an evaluator finding may quote it): the attempt's newest
+ * `gateEscalated` (`denialSource`, else `condition`), else its newest `gateEvaluated.denial.source`; the rows from
+ * that `gateEvaluated`. A log that never mentions the unit (empty, or filled by live events alone) leaves both to
+ * the unit record (`denial.source`, its persisted receipt); an escalation frame alone takes the unit record's rows
+ * unless both name an attempt and they differ (never an earlier attempt's ids); a dispatch after the hold voids it.
+ */
+export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): { held: boolean; rows: RuleRow[] } {
+  if (typeof ord !== 'number') return { held: false, rows: [] };
+  const unit = (units ?? []).find((u) => u.ord === ord) as unknown as { denial?: unknown; assurance?: unknown } | undefined;
+  const persisted = (): RuleRow[] => receiptOf(unit?.assurance)?.rules ?? [];
+  const log = events ?? [];
+  let held: boolean | null = null;
+  let rows: RuleRow[] | null = null;
+  let attempt: unknown;
+  let mentioned = false;
+  for (let i = log.length - 1; i >= 0 && (held === null || rows === null); i--) {
+    const e = log[i]! as Record<string, unknown>;
+    if (e['ord'] !== ord) continue;
+    if (e['type'] === 'unitDispatched') { mentioned = true; break; }
+    if (e['type'] === 'gateEscalated' && held === null) {
+      mentioned = true;
+      attempt = e['attempt'];
+      const source = typeof e['denialSource'] === 'string' ? e['denialSource'] : '';
+      held = source !== '' ? source === RULES_UNCHECKED_SOURCE : e['condition'] === RULES_UNCHECKED_SOURCE;
+    } else if (e['type'] === 'gateEvaluated' && rows === null) {
+      mentioned = true;
+      rows = receiptOf(e['assurance'])?.rules ?? [];
+      if (held === null) { const d = e['denial']; held = isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE; }
+    }
+  }
+  if (!mentioned) {
+    const d = unit?.denial;
+    return { held: isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE, rows: persisted() };
+  }
+  if (held !== true) return { held: false, rows: rows ?? [] };
+  if (rows !== null) return { held, rows };
+  // Only the escalation frame: the unit record's rows, when they are this attempt's (never an earlier one's ids).
+  const own = receiptOf(unit?.assurance);
+  const same = typeof attempt !== 'number' || own === null || own.attempt === attempt;
+  return { held, rows: same ? own?.rules ?? [] : [] };
 }
 
 /** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */

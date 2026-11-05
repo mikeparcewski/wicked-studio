@@ -22,13 +22,13 @@ import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
-import { REDUCED_OPT_IN_LABEL, gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
+import { REDUCED_OPT_IN_LABEL, gatePassedFor, gateReceiptFor, rulesHoldAt, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
 import { retryPrefillOf } from '../../board/needsYou.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
-import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
+import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel, RulesChecked } from './AssuranceReceipt.js';
 import { RunDataUse } from './RunDataUse.js';
 import { actionJobTitle, TrackerActions } from '../trackers/TrackerActions.js';
 
@@ -229,6 +229,9 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
     : model.reason === 'def' ? model.reviewedOrd
       : model.reviewedOrd === gate.ord ? gate.ord : null;
   const receipt = gateReceiptFor(events, view.units, receiptOrd);
+  // (DES-RULE-CHECK-001) The rule line: the receipt's rows, else (a log holding no verdict for this unit) the rows
+  // the rules hold reads, the same ones its re-check and skip act on.
+  const ruleRows = receipt?.rules ?? (gate !== undefined && model?.reason === 'escalation' ? rulesHoldAt(events, view.units, gate.ord).rows : []);
   const reduced = isReduced(sessionAssurance(view, events));
   // QE-IN-APP-WORKFLOWS: the run's current QE decision on every gate (a plan gate has no receipt yet;
   // a receipt that carries its own decision says it there).
@@ -316,7 +319,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const assurance = model === null ? null : (
     <>
       {receipt !== null
-        ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" tech="host" />
+        ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" tech="host" showRules={false} />
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
       {qe !== null && receipt?.qe === undefined && <p className="wk-assurance"><QeAcceptanceLabel qe={qe} testId="session-gate-qe" /></p>}
       <RunDataUse runId={runId} refresh={events?.length ?? 0} testId="session-gate-data-use" />
@@ -330,6 +333,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
       retryEvents={retryEvents} depth={depth} refusalLines={refusalLines} drift={drift}
       assurance={assurance}
+      rulesLine={ruleRows.length > 0 ? <RulesChecked rows={ruleRows} testId="session-gate-rules" /> : null}
       explain={explain}
       headline={headline}
       derived={derived}
@@ -611,7 +615,7 @@ export function allOnBaseWords(n: number): string {
 
 type DerivedLead = { choice: GateRowChoice; act?: undefined; prefill?: string } | { act: { key: string; label: string; title: string; onClick: () => void }; choice?: undefined; prefill?: undefined };
 
-function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, explain = null, unavailable = null, signInModal = null, headline = null, derived = null, extraItems = null, builders = [], builderName = (c) => c }: {
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, rulesLine = null, explain = null, unavailable = null, signInModal = null, headline = null, derived = null, extraItems = null, builders = [], builderName = (c) => c }: {
   /** The cause, in plain words, when it reads better than the engine's question. */
   headline?: string | null;
   /** The seats that built the judged work: a choice that seats one as the judge is never the lead, and says so. */
@@ -646,6 +650,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   assurance?: React.ReactNode;
   /** The receipt's technical lines: they go in the row's ONE Technical details (operator: the card showed two). */
   assuranceTech?: React.ReactNode;
+  /** (DES-RULE-CHECK-001) The steering-rule line on the face of the card, under the question; null when none. */
+  rulesLine?: React.ReactNode;
 }): React.ReactElement | null {
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   const showPath = useDisplayPath();
@@ -756,6 +762,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     return (
       <div data-testid="session-gate-row" data-reason="events-unavailable" ref={rowRef} tabIndex={-1} className="wk-session-gate-row" role="alert">
         <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
+        {rulesLine}
         <p data-testid="session-gate-events-error" className="wk-session-gate-error">
           The run's events could not be read, so this gate's choices are held back — nothing is offered on missing evidence.
         </p>
@@ -794,6 +801,14 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     if (choice.decision === null) { setChosen(null); return; }
     // All note-bearing choices carry their base decision in the model (gateRowModel decides scope); the row only
     // merges the person's words as `amend` (a Stop's reason rides the reject into the Decisions ledger).
+    // (DES-RULE-CHECK-001) A rule skip's words are each skipped rule's reason, never an amend; no words, no skip.
+    if (choice.skipRuleIds !== undefined) {
+      const reason = (words ?? '').trim();
+      if (reason === '') { setChosen(null); return; }
+      const skip = { ...choice.decision, skipRules: choice.skipRuleIds.map((id) => ({ id, reason })) } as unknown as GateAnswer;
+      void commitGateDecision(runId, skip, { receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
+      return;
+    }
     const decision: GateAnswer = words !== undefined && words.trim() !== '' ? { ...choice.decision, amend: words.trim() } : choice.decision;
     void commitGateDecision(runId, decision, { receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
   };
@@ -834,6 +849,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     if (o.id === 'steer') return { label: 'Your note', placeholder: 'Steer the next step…', prefill: model.noteDefault, send: o.label };
     // The derived move's note names what to fix (the new failure); still the person's to edit before it is sent.
     if (o.id === 'send-back') return { label: 'What to fix', placeholder: 'Explain what to fix…', prefill: leadChoice?.key === 'send-back' && lead?.prefill !== undefined ? lead.prefill : model.noteDefault, send: o.label };
+    // (DES-RULE-CHECK-001) A rule skip's words are the skipped rules' recorded reason: asked for, never prefilled.
+    if (c?.skipRuleIds !== undefined) return { label: 'Your reason (required, labelled on the run, the gate and the delivery)', labelTestId: /* testid */ 'session-gate-skip-rules-label', placeholder: 'Why this can go without a check…', send: o.label };
     return { label: 'Your answer', placeholder: 'Add a note…', prefill: model.noteDefault, send: 'Send' };
   };
   const split = model.failingTests?.split;
@@ -862,6 +879,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     >
       {/* The question, in plain words: the dock's headline. */}
       <h2 data-testid="session-gate-question" className="wk-session-gate-question wk-gate2-q">{question}</h2>
+      {rulesLine}
       {sentence !== null && <p data-testid={refusalLines !== null && sentence === refusalLines.lead ? 'session-gate-refusal' : model.qe !== undefined && sentence === model.qe.why ? 'session-gate-qe-why' : 'session-gate-sentence'} {...(model.qe !== undefined && sentence === model.qe.why ? { 'data-qe-outcome': model.qe.outcome } : {})} className="wk-session-gate-detail-item wk-gate2-p">{sentence}</p>}
       {/* rig 0.15.8: what failed, on the face — never only under Technical details. The new failure is highlighted;
           the ones that fail on the base too are under More about this (mockup ui-v2-gate). */}

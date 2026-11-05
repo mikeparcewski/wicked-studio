@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 325,
-    "occurrences": 4702,
-    "static": 3935,
+    "occurrences": 4709,
+    "static": 3940,
     "dynamic": 173,
     "computed": 53
   },
@@ -2169,6 +2169,18 @@
     },
     {
       "testId": "assurance-reduced",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rule",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rules",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
       ]
@@ -16954,6 +16966,12 @@
       ]
     },
     {
+      "testId": "run-tab-rules",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-run-pick",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -17766,6 +17784,12 @@
       ]
     },
     {
+      "testId": "session-gate-rules",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-send",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -17773,6 +17797,12 @@
     },
     {
       "testId": "session-gate-sentence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-skip-rules-label",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -23984,7 +24014,8 @@
     {
       "pattern": "*-line",
       "files": [
-        "src/components/CaptureDrop.tsx"
+        "src/components/CaptureDrop.tsx",
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {

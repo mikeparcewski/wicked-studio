@@ -287,6 +287,10 @@ export function commitGateDecision(
   const preview = opts.notice?.preview ?? described.preview;
   const label = gateLabel(runId);
   const amend = decision.amend ?? null;
+  // Undo gives the person's words back: the note, or (DES-RULE-CHECK-001) a rule skip's reason, which rides
+  // `skipRules` and never `amend`.
+  const skips = (decision as { skipRules?: Array<{ reason?: unknown }> }).skipRules;
+  const words = amend ?? (typeof skips?.[0]?.reason === 'string' ? skips[0].reason : null);
   // The gate this decision was made on — watched while queued, and sent so the daemon can refuse
   // a decision that outlived its gate (409 gate_changed).
   const gateNow = useGateStore.getState().gates[runId];
@@ -320,13 +324,13 @@ export function commitGateDecision(
       onUndo: () => {
         watched.delete(runId);
         patch(runId, { queued: false });
-        if (amend !== null) restoreNote(runId, amend);
+        if (words !== null) restoreNote(runId, words);
         resolve('undone');
       },
       onCancel: () => {
         watched.delete(runId);
         patch(runId, { queued: false });
-        if (amend !== null) restoreNote(runId, amend);
+        if (words !== null) restoreNote(runId, words);
         resolve('cancelled');
       },
     });
