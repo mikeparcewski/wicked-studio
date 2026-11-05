@@ -758,6 +758,7 @@ export function App(): React.ReactElement {
             onSelectRun={selectRun}
             navigate={navigate}
             onOpenGraph={openGraphModal}
+            search={search}
           />
         </div>
       );

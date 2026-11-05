@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
+import { repoDetailPath } from '../board/repoTabs.js';
+import { onPlainClick } from './repoActions.js';
 import { Plus } from 'lucide-react';
 import { useTrackerLinksSupported, type TrackerLinksResponse } from '../api/trackers.js';
 import { LinkTrackerPicker } from './trackers/LinkTrackerPicker.js';
 import { AgentsOffWarning, FromTag, ProjectionPill, RemoveLink, TrackerRow } from './trackers/TrackerParts.js';
 import { useTrackerLinks, type TrackerLinksRead } from './trackers/useTrackerLinks.js';
 
-export const repoDetailPath = (id: string): string => `/repo-detail/${encodeURIComponent(id)}`;
 
 /**
  * LINKED TRACKERS on a project's Repositories tab (DES-PM-001 §3.3, mockup screen 2): the trackers linked to the
@@ -60,7 +61,7 @@ export function ProjectTrackers({ projectId, projectName, repoNames = [], naviga
             })}
           </div>
           <div className="wk-trk-col">
-            <ViaRepos links={links} repoNames={repoNames} projectName={projectName} navigate={navigate} />
+            <ViaRepos projectId={projectId} links={links} repoNames={repoNames} projectName={projectName} navigate={navigate} />
           </div>
         </div>
       )}
@@ -72,7 +73,7 @@ export function ProjectTrackers({ projectId, projectName, repoNames = [], naviga
   );
 }
 
-function ViaRepos({ links, repoNames, projectName, navigate }: { links: TrackerLinksResponse; repoNames: readonly string[]; projectName: string; navigate: (path: string) => void }): React.ReactElement {
+function ViaRepos({ links, repoNames, projectId, projectName, navigate }: { links: TrackerLinksResponse; repoNames: readonly string[]; projectId: string; projectName: string; navigate: (path: string) => void }): React.ReactElement {
   const repos = useMemo(() => [...new Set([...repoNames, ...links.viaRepos.map((l) => l.viaRepo)])], [repoNames, links.viaRepos]);
   return (
     <>
@@ -80,7 +81,7 @@ function ViaRepos({ links, repoNames, projectName, navigate }: { links: TrackerL
       {repos.length === 0 ? <p className="wk-src-note">No repository attached yet.</p> : (
         <div className="wk-trk-chips" data-testid="project-trackers-repos">
           {repos.map((r) => (
-            <a key={r} className="wk-trk-chip" href={repoDetailPath(r)} onClick={(e) => { e.preventDefault(); navigate(repoDetailPath(r)); }}>{r}</a>
+            <a key={r} className="wk-trk-chip" href={repoDetailPath(r, { project: projectId })} onClick={onPlainClick(navigate, repoDetailPath(r, { project: projectId }))}>{r}</a>
           ))}
         </div>
       )}

@@ -12,6 +12,7 @@ Captures: e2e/shots/desk-product-*.png. Env: FEEDBACK_PORT (default 4471).
 """
 
 import json
+import re
 import os
 import sys
 
@@ -104,10 +105,10 @@ with sync_playwright() as p:
     check("domain", merged == ["billing", "auth"] and [r["state"] for r in drows] == ["ok", "absent"]
           and "billing · auth" in drows[0]["text"] and "No requirements map yet for shop-web" in drows[1]["text"], merged=merged, rows=drows)
 
-    # ── 3. a repo row is a door to the repo ─────────────────────────────────────────────────────
+    # ── 3. a repo row is a door to the repo, carrying the project (a launch there files under it) ──
     page.locator('[data-testid="project-coverage-row"][data-repo="r-api"] a').click()
-    page.wait_for_url("**/repo-detail/r-api", timeout=8000)
-    check("repo-door", page.url.endswith("/repo-detail/r-api"), url=page.url)
+    page.wait_for_url(re.compile(r".*/repo-detail/r-api\?project=[^&]+$"), timeout=8000)
+    check("repo-door", re.search(r"/repo-detail/r-api\?project=[^&]+$", page.url) is not None, url=page.url)
 
     # ── 4. the synthesized default project draws neither section ────────────────────────────────
     # Served in full (detail, activity AND both folds), so the page renders and only the exclusion

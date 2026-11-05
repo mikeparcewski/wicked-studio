@@ -55,7 +55,8 @@ describe('Coverage (studio#158)', () => {
     expect(within(rows[2]!).getByTestId('tech-details')).toHaveTextContent('timed out after 15 s');
     expect(rows[3]).toHaveTextContent('no longer registered — repo r4 is not registered');
     await userEvent.click(within(rows[0]!).getByRole('link', { name: 'api' }));
-    expect(navigate).toHaveBeenCalledWith('/repo-detail/r1');
+    // The project rides to the repository's page, so a launch there files under it.
+    expect(navigate).toHaveBeenCalledWith('/repo-detail/r1?project=shop');
   });
 
   it('0/0 is undefined, not complete — and "nothing read" is not "nothing behavior-bearing"', () => {

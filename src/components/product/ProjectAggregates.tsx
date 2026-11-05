@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { repoDetailPath } from '../../board/repoTabs.js';
+import { onPlainClick } from '../repoActions.js';
 import {
   getProjectCoverage, getProjectDomain, rowWhy,
   type AggregateRead, type ProjectCoverageResponse,
@@ -25,9 +27,10 @@ function useAggregate<T>(projectId: string, load: (id: string) => Promise<Aggreg
   return { read: got !== null && got.id === projectId ? got.read : null, retry };
 }
 
-function RepoLink({ repo, navigate }: { repo: { id: string; name: string | null }; navigate: (p: string) => void }): React.ReactElement {
-  const href = `/repo-detail/${encodeURIComponent(repo.id)}`;
-  return <a href={href} onClick={(e) => { e.preventDefault(); navigate(href); }} className="wk-link wk-list-row-title">{repo.name ?? 'Unnamed repository'}</a>;
+function RepoLink({ repo, projectId, navigate }: { repo: { id: string; name: string | null }; projectId: string; navigate: (p: string) => void }): React.ReactElement {
+  // The project rides to the repository's page, so a launch there (Capture learnings) files under it.
+  const href = repoDetailPath(repo.id, { project: projectId === 'default' ? null : projectId });
+  return <a href={href} onClick={onPlainClick(navigate, href)} className="wk-link wk-list-row-title">{repo.name ?? 'Unnamed repository'}</a>;
 }
 
 export function coverageTotalsLine(t: ProjectCoverageResponse['totals']): string {
@@ -85,7 +88,7 @@ function CoverageSection({ projectId, navigate, onIssue }: SectionProps): React.
               return (
                 <li key={r.repo.id} data-testid="project-coverage-row" data-repo={r.repo.id} data-state={r.state} className="wk-list-row wk-pg-proj-row">
                   <div>
-                    <RepoLink repo={r.repo} navigate={navigate} />
+                    <RepoLink repo={r.repo} projectId={projectId} navigate={navigate} />
                     {facts !== '' && <p className="wk-list-row-meta">{facts}</p>}
                     {r.state !== 'ok' && <><p className="wk-list-row-meta">{requirementReadWords(r)}</p><TechDetails text={rowWhy(r)} /></>}
                   </div>
@@ -131,7 +134,7 @@ function DomainSection({ projectId, navigate, onIssue }: SectionProps): React.Re
           <ul aria-label="Domains per repository" className="wk-pg-proj-list">
             {read.body.rows.map((r) => (
               <li key={r.repo.id} data-testid="project-domain-row" data-repo={r.repo.id} data-state={r.state} className="wk-list-row wk-pg-proj-row">
-                <div><RepoLink repo={r.repo} navigate={navigate} /><p className="wk-list-row-meta">{r.state === 'ok' ? r.domains.length === 0 ? 'No domains yet' : r.domains.map((d) => d.name).join(' · ') : requirementReadWords(r)}</p>
+                <div><RepoLink repo={r.repo} projectId={projectId} navigate={navigate} /><p className="wk-list-row-meta">{r.state === 'ok' ? r.domains.length === 0 ? 'No domains yet' : r.domains.map((d) => d.name).join(' · ') : requirementReadWords(r)}</p>
                   {r.state !== 'ok' && <TechDetails text={rowWhy(r)} />}
                 </div>
               </li>

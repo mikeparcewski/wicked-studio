@@ -1,4 +1,5 @@
 import { scrollBehavior } from '../ui/motion.js';
+import { repoDetailPath } from '../../board/repoTabs.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { api } from '../../api/client.js';
@@ -349,7 +350,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
         </span>
         {project.description && <span data-testid="project-desc" className="wk-project-desk-desc" title={project.description}>{project.description}</span>}
       </>, actions: <div className="wk-proj-actions" data-testid="project-actions">
-        {attachedRepos.length > 0 && <OverflowMenu label="Open a repository this project uses" text="Open repository" tone="secondary" items={attachedRepos.map((u) => ({ id: u.ref, label: u.name, onSelect: () => navigate(`/repo-detail/${encodeURIComponent(u.repo!.id)}`) }))} data-testid="project-open-repo" />}
+        {attachedRepos.length > 0 && <OverflowMenu label="Open a repository this project uses" text="Open repository" tone="secondary" items={attachedRepos.map((u) => ({ id: u.ref, label: u.name, onSelect: () => navigate(repoDetailPath(u.repo!.id, { project: isDefault ? null : projectId })) }))} data-testid="project-open-repo" />}
         <button type="button" data-testid="project-documents" className="wk-btn wk-btn--secondary" onClick={() => scrollTo('project-documents')}><FileText size={14} aria-hidden />Documents</button>
         {!isDefault && <OverflowMenu label={`More actions for ${title}`} items={[
           { id: 'edit', label: 'Edit name and description', onSelect: startEdit },

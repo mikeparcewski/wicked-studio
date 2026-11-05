@@ -36,6 +36,7 @@ vi.mock('../src/components/RequirementsModal.js', () => ({
 
 const { useRepoKnowledge, useRepoKnowledgeFor, resetRepoKnowledge, MAX_IN_FLIGHT, FRESH_MS, READ_TIMEOUT_MS } = await import('../src/store/repoKnowledge.js');
 const { RepositoriesPanel } = await import('../src/components/RepositoriesPanel.js');
+const { RepoDetailPage } = await import('../src/components/RepoDetailPage.js');
 const { resetRepoLanguages } = await import('../src/hooks/useRepoLanguages.js');
 
 const NOW = Date.UTC(2026, 10, 1, 12, 0, 0);
@@ -267,7 +268,7 @@ describe('the knowledge store: bounded reads and the minute', () => {
   });
 });
 
-describe('Repositories: the marks on each row', () => {
+describe('Repositories and a repository’s page: what we know', () => {
   beforeEach(() => {
     resetRepoKnowledge();
     resetRepoLanguages();
@@ -281,28 +282,36 @@ describe('Repositories: the marks on each row', () => {
   });
   afterEach(() => cleanup());
 
-  it('each row says what we know, and each mark opens the thing itself', async () => {
-    const onSelectRun = vi.fn();
-    render(<RepositoriesPanel navigate={vi.fn()} onSelectRun={onSelectRun} />);
+  it('each row’s Code map column carries the graph’s size from the same read', async () => {
+    render(<RepositoriesPanel navigate={vi.fn()} />);
     await screen.findByTestId('repos-list');
     const crew = screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === 'crew')!;
-    const strip = within(crew).getByTestId('repo-know');
-    expect(strip).toHaveAccessibleName('What we know about crew');
-    await vi.waitFor(() => expect(within(strip).getAllByTestId('repo-know-value').map((v) => v.textContent)).toEqual(['46k symbols', '80% real', 'build 3 · 38 domains', '2', '2']));
-    const mark = (id: string) => within(strip).getAllByTestId('repo-know-mark').find((m) => m.getAttribute('data-mark') === id)!;
+    await vi.waitFor(() => expect(within(crew).getByTestId('repo-row-map')).toHaveTextContent('Indexed · 46k symbols'));
+    expect(within(crew).queryByTestId('repo-know')).toBeNull(); // the marks are the page's Overview now
+  });
+
+  it('a repository’s Overview says what we know, and each mark opens the thing itself', async () => {
+    const onSelectRun = vi.fn();
+    const onOpenGraph = vi.fn();
+    render(<RepoDetailPage repoId="crew" navigate={vi.fn()} onSelectRun={onSelectRun} onOpenGraph={onOpenGraph} />);
+    const band = await screen.findByTestId('repo-know');
+    expect(band).toHaveAccessibleName('What we know');
+    await vi.waitFor(() => expect(within(band).getAllByTestId('repo-know-value').map((v) => v.textContent)).toEqual(['46k symbols', '80% real', 'build 3 · 38 domains', '2', '2']));
+    const mark = (id: string) => within(band).getAllByTestId('repo-know-mark').find((m) => m.getAttribute('data-mark') === id)!;
     fireEvent.click(mark('code'));
-    expect(screen.getByTestId('repo-graph-stub')).toHaveAttribute('data-view', 'code');
+    expect(onOpenGraph).toHaveBeenLastCalledWith();
     fireEvent.click(mark('reqgraph'));
-    expect(screen.getByTestId('repo-graph-stub')).toHaveAttribute('data-view', 'domain');
+    expect(onOpenGraph).toHaveBeenLastCalledWith(undefined, 'domain');
     fireEvent.click(mark('reqs'));
     expect(screen.getByTestId('requirements-stub')).toHaveTextContent('crew');
     fireEvent.click(mark('domain-runs'));
     expect(onSelectRun).toHaveBeenLastCalledWith('d-new');
+    cleanup();
     // A repository with nothing extracted: plain words, and a mark with nothing behind it is not a button.
-    const pi = screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === 'pi')!;
-    const piStrip = within(pi).getByTestId('repo-know');
-    await vi.waitFor(() => expect(within(piStrip).getAllByTestId('repo-know-value')[1]).toHaveTextContent('none yet'));
-    const piDomain = within(piStrip).getAllByTestId('repo-know-mark').find((m) => m.getAttribute('data-mark') === 'domain-runs')!;
+    render(<RepoDetailPage repoId="pi" navigate={vi.fn()} onSelectRun={vi.fn()} onOpenGraph={vi.fn()} />);
+    const piBand = await screen.findByTestId('repo-know');
+    await vi.waitFor(() => expect(within(piBand).getAllByTestId('repo-know-value')[1]).toHaveTextContent('none yet'));
+    const piDomain = within(piBand).getAllByTestId('repo-know-mark').find((m) => m.getAttribute('data-mark') === 'domain-runs')!;
     expect(piDomain.tagName).toBe('SPAN');
     expect(piDomain).toHaveAttribute('data-link', 'false');
   });

@@ -1001,6 +1001,13 @@
     "launch-wizard-cards": "launch-catalog-results",
     "launch-wizard-soon": "launch-catalog-soon-*",
     "*-mark": "nav-learn",
-    "source-describe": "source-test-connection"
+    "source-describe": "source-test-connection",
+    "repo-card-findings": "repo-findings",
+    "repo-card-path": "repo-detail-path",
+    "repo-card-runs": "repo-detail-stats",
+    "repo-card-split": "repo-detail-stats",
+    "repo-details": "repo-upkeep",
+    "repo-onboard": "repo-row-index",
+    "repo-open": "repo-row"
   }
 }

@@ -19,9 +19,14 @@ function andList(names: readonly string[]): string {
  * the card says so. Everything shown is crew's answer (`GET /tracker-links?repo=`). Hidden on a crew without tracker
  * links.
  */
-export function RepoTrackers({ repoId, repoName, navigate }: { repoId: string; repoName: string; navigate: (path: string) => void }): React.ReactElement | null {
+export function RepoTrackers({ repoId, repoName, navigate, onChanged }: {
+  repoId: string; repoName: string; navigate: (path: string) => void;
+  /** After a link or a removal settles (the page's tracker count reads again). */
+  onChanged?: () => void;
+}): React.ReactElement | null {
   const supported = useTrackerLinksSupported();
-  const { read, reload } = useTrackerLinks({ repo: repoId }, supported);
+  const { read, reload: readAgain } = useTrackerLinks({ repo: repoId }, supported);
+  const reload = async (): Promise<void> => { await readAgain(); onChanged?.(); };
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!supported) return null;

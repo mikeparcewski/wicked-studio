@@ -113,6 +113,7 @@ describe('the project desk’s Linked trackers (mockup screen 2)', () => {
     expect(via[0]).toHaveTextContent('through billing-api');
     expect(within(via[0]!).queryByTestId('tracker-remove')).toBeNull();
     expect(within(screen.getByTestId('project-trackers-repos')).getAllByRole('link').map((a) => a.textContent)).toEqual(['billing-api', 'billing-web']);
+    expect(within(screen.getByTestId('project-trackers-repos')).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/repo-detail/billing-api?project=proj_billing', '/repo-detail/billing-web?project=proj_billing']);
   });
 
   it('NC2: Remove sends DELETE and keeps the row until crew’s links say it is gone (never optimistic)', async () => {
