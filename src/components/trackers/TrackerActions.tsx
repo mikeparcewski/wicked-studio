@@ -196,8 +196,8 @@ export function TrackerActions({ runId, stage, title, prUrl = null, 'data-testid
               {card !== undefined && <TrackerBadge system={card.system} small />}
               {/* The issue as crew's card names it (the one it would act on), else as the job named it. */}
               <b>{p.part === 'comment' ? `Comment on ${card?.issue ?? p.issue}` : card?.transition !== undefined ? `Move ${card.issue} from ${stateLine(card.transition.from, card.transition.mapped.from)} to ${stateLine(card.transition.to, card.transition.mapped.to)}` : `Move ${p.issue} to ${p.body.transition ?? ''}`}</b>
-              {card?.title !== null && card?.title !== undefined && <span className="wk-src-cap"> · {card.title}</span>}
             </p>
+            {card?.title !== null && card?.title !== undefined && <p className="wk-src-cap wk-trk-action-title">{card.title}</p>}
             {p.part === 'comment' && card?.comment !== undefined && <blockquote className="wk-trk-action-text" data-testid={`${testId}-comment`}>{card.comment}</blockquote>}
             {card !== undefined && <p className="wk-src-cap wk-trk-action-who" data-testid={`${testId}-who`}>As {card.identity ?? 'the registered account'} on {card.source} · {card.tenantLabel ?? card.tenant} · {admitted(card)}</p>}
             {row.phase === 'loading' && <p className="wk-src-cap">Asking crew for the card…</p>}
