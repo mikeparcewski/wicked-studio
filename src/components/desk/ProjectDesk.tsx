@@ -274,7 +274,7 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     if (tab !== 'repositories') return hosted?.(tab, at, projectId);
     return <div className="wk-desk2-repos wk-project-desk-repos">
       {isDefault ? <p>Work not in a project has no repositories of its own. <a className="wk-link" href={deskTabPath('repositories')} onClick={go(deskTabPath('repositories'))}>Go to the Repositories page</a></p> : <>
-        <div id="project-repos"><ProjectRepositories projectId={projectId} members={members} used={used} onIssue={onIssue} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} /></div>
+        <div id="project-repos"><ProjectRepositories projectId={projectId} members={members} used={used} onIssue={onIssue} navigate={navigate} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} /></div>
         {members.some((m) => m.member_kind === REPO_KIND) && <><ProjectCoverage projectId={projectId} navigate={navigate} onIssue={onIssue} /><ProjectDomain projectId={projectId} navigate={navigate} onIssue={onIssue} /></>}
       </>}
     </div>;

@@ -18,8 +18,9 @@ export type AboutChip =
   | { kind: 'artifact'; key: string; label: string; ref: string }
   /** A destination: the project the message goes to. */
   | { kind: 'project'; key: string; label: string; projectId: string }
-  /** S19a: the workflow this message STARTS (`/workflow-<id>` is `label`). One at a time. */
-  | { kind: 'workflow'; key: string; label: string; workflowId: string };
+  /** S19a: the workflow this message STARTS (`label` is the card's title). One at a time. `entryId` (ux-tonight): the
+   *  catalog card picked, so two cards that launch one workflow keep their own needs. */
+  | { kind: 'workflow'; key: string; label: string; workflowId: string; entryId?: string };
 
 /** The longest quote a selection becomes before it is cut with "…". */
 export const QUOTE_MAX = 42;

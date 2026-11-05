@@ -22,7 +22,6 @@ import { useSignInHere } from '../agents/useSignInHere.js';
 import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { isOptInKey, OPT_IN_NOTE, seatOff, useLaunchSeats } from '../../store/composerSeats.js';
-import { clearAboutChips } from '../../store/composerChips.js';
 import { loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { useProvenanceStore } from '../../store/provenance.js';
@@ -38,7 +37,10 @@ import { DEMO_AUDIENCES, DEMO_AUDIENCE_MAX, DEMO_SHOW_MAX, DEMO_URL_MAX, demoBlo
 import { UNFILED_MOUNT } from '../../api/interactive.js';
 import { composeProduct } from '../../api/product.js';
 import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from '../product/RequirementsBrowser.js';
-import { aboutMinutes, jobCatalogView, needsLine, needsRepo, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
+import { aboutMinutes, jobCatalogView, needsLine, needsRepo, startsInline, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
+import { startInNewChat, workflowChipFor } from '../../store/inlineStart.js';
+import { addAboutChip, clearAboutChips } from '../../store/composerChips.js';
+import { pageComposerKey, seedComposer } from '../../store/composerSeed.js';
 import { useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { WorkflowCatalog } from './WorkflowCatalog.js';
 
@@ -62,14 +64,19 @@ const INSTRUCTIONS_MAX = 500;
  * on a phone it is a full-height sheet. Launch sends `workflowLaunchBody` — the same body the
  * composer's inline strip sent.
  */
-export function LaunchWizard({ navigate }: { navigate?: (path: string) => void }): React.ReactElement | null {
+export function LaunchWizard({ navigate, cardsStartInChat = true }: {
+  navigate?: (path: string) => void;
+  /** ux-tonight: a workflow card picked in the catalog step starts in a chat (the default, what the app mounts). False
+   *  hands the pick to the shaping steps below, which named openers walk; their tests pin them that way. */
+  cardsStartInChat?: boolean;
+}): React.ReactElement | null {
   const open = useLaunchWizard((s) => s.open);
   const draft = useLaunchWizard((s) => s.draft);
   if (!open || draft === null) return null;
-  return <WizardDialog draft={draft} navigate={navigate} />;
+  return <WizardDialog draft={draft} navigate={navigate} cardsStartInChat={cardsStartInChat} />;
 }
 
-function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((path: string) => void) | undefined }): React.ReactElement {
+function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraft; navigate?: ((path: string) => void) | undefined; cardsStartInChat: boolean }): React.ReactElement {
   const { close: closeStore, update, finish } = useLaunchWizard.getState();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -356,10 +363,29 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   // list (the words as its brief); chat is the chat flow.
   const pickEntry = (e: CatalogEntry): void => {
     // codex r1: a launch in flight holds the dialog (nothing leaves it for another surface).
-    if (launchingRef.current && (e.launchKind === 'chat' || e.launchKind === 'document')) return;
+    if (launchingRef.current) return;
     startCatalogEntry(e, {
       projectId: filedProject, intent: draft.intent, navigate: navigate ?? goToPath, leave: closeStore,
-      shape: (x) => pickCard(x.launchId, x.id),
+      // ux-tonight (operator 2026-11-04: "clicking on a workflow opens a modal rather than starting an inline chat,
+      // needs to be removed and chat done inline"): a workflow or a new app starts in a chat. The chat New job was
+      // opened from (its composer on screen), else a new chat on its own page; the card goes on its composer with
+      // the words typed so far, and the composer asks for the rest. Demo video and Draft epics keep their steps here.
+      shape: (x) => {
+        if (!cardsStartInChat || !startsInline(x)) { pickCard(x.launchId, x.id); return; }
+        const key = draft.composerKey;
+        // Only a composer that IS a chat (never the desk, a run's page or a repository's) takes it (codex r1).
+        const here = key !== null && launchChatId(key, true) !== null && pageComposerKey() === key ? key : null;
+        // Each kind keeps its own words (studio#767's rule, `withJobKind`): a Demo video's brief is not a bug's.
+        const words = withJobKind(draft, x.launchId).intent;
+        finish();
+        if (here !== null) {
+          addAboutChip(here, workflowChipFor(x));
+          // A draft the chat already holds stays unless New job brings words of its own (codex r2).
+          if (words.trim() !== '') seedComposer(here, words);
+        } else {
+          startInNewChat(x, { projectId: filedProject, intent: words });
+        }
+      },
     });
   };
   const pickCard = (id: string, entryId: string | null = null): void => {

@@ -88,6 +88,12 @@ import { headlineProgress } from '../../board/repeatProgress.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { needTone } from '../../board/needTone.js';
 
+/** The project a chat's scope (`GET /chats/:id` `scope.projectId`) files it in, or null. */
+function chatScopeProject(scope: unknown): string | null {
+  const p = scope !== null && typeof scope === 'object' ? (scope as { projectId?: unknown }).projectId : undefined;
+  return typeof p === 'string' && p !== '' && p !== 'default' ? p : null;
+}
+
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
 
@@ -1009,6 +1015,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     runs: mine,
     started: entries.length > 0,
     navigate,
+    // ux-tonight: a card started on this chat's composer files its job in the chat's project: the fresh mark before
+    // the daemon knows the chat, then the scope crew answered with (codex r1 on #982).
+    contextProjectId: fresh?.projectId ?? chatScopeProject(chatDetail?.scope) ?? null,
     ariaLabel: 'Ask or tell studio what to do next',
     placeholder: "Ask about this, or say what's next — / adds a step, @ a helper",
     variant: 'session' as const,

@@ -486,7 +486,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                 title={!showRegister && offline ? 'Studio can’t reach its service right now. Retry first.' : undefined}
                 className={showRegister ? 'wk-jr-btn wk-jr-btn--secondary' : 'wk-jr-btn wk-jr-btn--primary'}
               >
-                {showRegister ? 'Cancel' : 'Add repository'}
+                {showRegister ? 'Cancel' : 'Add a repository'}
               </button>
             )}
           />
@@ -632,7 +632,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
               title="No repositories yet"
               body="Add one from a folder on this computer or from a URL. Indexing it takes a few minutes, as a job you can watch."
               actions={!showRegister ? (
-                <button type="button" className="wk-jr-btn wk-jr-btn--primary wk-jr-btn--sm" onClick={toggleRegister}>Add repository</button>
+                <button type="button" className="wk-jr-btn wk-jr-btn--primary wk-jr-btn--sm" onClick={toggleRegister}>Add a repository</button>
               ) : undefined}
             />
           ) : (

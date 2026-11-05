@@ -30,7 +30,7 @@ interface PlanCatalogStore {
   entries: CatalogEntry[];
   catalogError: string | null;
   /** Presets by project scope key (`''` = global). */
-  presets: Record<string, Preset[] | 'unsupported' | 'loading'>;
+  presets: Record<string, Preset[] | 'unsupported' | 'failed' | 'loading'>;
   /** Previews by request key ({@link previewKey}). */
   previews: Record<string, PreviewState>;
 }
@@ -75,12 +75,19 @@ export function loadPresets(projectId: string | null): void {
   const born = epoch;
   teamPlanApi.presets(projectId).then(
     (r) => { if (born === epoch) setPresets(key, Array.isArray(r.presets) ? r.presets : []); },
-    // Any failure: no preset is known, so no preset launch gets a preview. Never a guess.
-    () => { if (born === epoch) setPresets(key, 'unsupported'); },
+    // No preset is known, so no preset launch gets a preview. Never a guess. A list the daemon does not serve (404,
+    // 501) is `unsupported` (none exist to launch); any other failure (a 5xx, no answer) is `failed`, which a start that places a gate off
+    // the preview refuses rather than reading as "none" (ux-tonight, codex r3 on studio#982).
+    (e: unknown) => { if (born === epoch) setPresets(key, presetsAbsent(e) ? 'unsupported' : 'failed'); },
   );
 }
 
-function setPresets(key: string, v: Preset[] | 'unsupported' | 'loading'): void {
+/** A presets read the daemon answered "no such list" (404, or 501: not served here): there are none to launch. */
+function presetsAbsent(e: unknown): boolean {
+  return isRouteUnsupported(e) || (e instanceof ApiError && e.status === 404);
+}
+
+function setPresets(key: string, v: Preset[] | 'unsupported' | 'failed' | 'loading'): void {
   usePlanCatalog.setState((s) => ({ presets: { ...s.presets, [key]: v } }));
 }
 

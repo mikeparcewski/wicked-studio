@@ -111,7 +111,9 @@ describe('S3: one name per helper, the same list in @ and the helpers row', () =
     // slash-catalog: the row comes from the catalog read (an older daemon here: today's list).
     await waitFor(() => expect(document.querySelector('[data-cmd="workflow-feature"]')).not.toBeNull());
     fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
-    expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'feature', contextRepo: 'repo-b' });
+    // ux-tonight: the job starts on this composer, in the repository the session's work names.
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent(/^Enter starts .+ in beta /));
+    expect(useLaunchWizard.getState().open).toBe(false);
   });
 
   it('row 24: on the Desk there is no session repository to hand over', async () => {
@@ -119,7 +121,9 @@ describe('S3: one name per helper, the same list in @ and the helpers row', () =
     type('/workflow-feature');
     await waitFor(() => expect(document.querySelector('[data-cmd="workflow-feature"]')).not.toBeNull());
     fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
-    expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'feature', contextRepo: null });
+    // ux-tonight: with no session repository (and more than one registered) the start asks which one.
+    await waitFor(() => expect(screen.getByTestId('composer-start-repos')).toBeInTheDocument());
+    expect(useLaunchWizard.getState().open).toBe(false);
   });
 
   it('a placeholder wider than its one-row box is not shown whole: it would wrap and lose its second line', () => {

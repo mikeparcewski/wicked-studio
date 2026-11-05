@@ -156,6 +156,18 @@ npm publish dates. Every version listed here exists on
     Project select that was hidden under Search and filter.
 
 ### Fixed
+- **A workflow starts in the chat, not in a modal; Apps is a new app by chat; Add a repository on the project page
+  (operator 2026-11-04 on the test rig: "clicking on a workflow opens a modal rather than starting an inline chat",
+  "are apps showing as coming soon (in chat)", "don't I see a way to onboard a repo anymore").** A `/` pick of a
+  workflow (or `/workflow-<key>` typed whole) puts its card on the chat's composer: the box asks the card's question,
+  a row under it says what Enter starts and asks inline for what it still needs (a repository, a project, the
+  reduced-assurance opt-in with one helper) as one-click choices, and Enter launches into this chat, where the plan,
+  gates and progress follow. Every job started this way stops at its plan (`humanConfirm` before step 1 and, on a
+  daemon with power mode, `power: false`). New job's card click does the same in the chat it was opened from, else in
+  a new chat; Demo video and Draft epics keep their steps in New job. Crew's two new launch kinds (crew#1349,
+  api-types 0.187.0): `app` (Apps: a new app by chat, the Apps page's own path) and `repo` (Add a repository: the
+  register form, which onboards). A project's Repositories tab and its home page gain **Add a repository** (the
+  register form in that project); the Repositories page's button says "Add a repository".
 - **The `/` menu in a chat box lists what New job lists (operator 2026-11-04: "the slash commands in the chatbox
   don't match the list of workflows when I see the new job modal").** A composer's `/` menu now reads New job's catalog
   (crew's `GET /workflows/catalog`, with studio's own Demo video and Draft epics; an older daemon's list is still

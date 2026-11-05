@@ -11,7 +11,7 @@ import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { Composer } from '../src/components/session/Composer.js';
 import { resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
-import { useComposerChips } from '../src/store/composerChips.js';
+import { chipsOf, useComposerChips } from '../src/store/composerChips.js';
 import { resetComposerSeats } from '../src/store/composerSeats.js';
 import { openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { clearNewDocumentBrief, peekNewDocumentBrief } from '../src/store/newDocumentSeed.js';
@@ -235,7 +235,9 @@ describe('the `/` menu lists New job’s catalog', () => {
     await waitFor(() => expect(rowsOf()[0]![0]).toBe('migration'));
     expect(document.querySelector('[aria-selected="true"]')).toHaveAttribute('data-entry', 'domain-extraction');
     fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
-    expect(useLaunchWizard.getState().draft?.workflowId).toBe('domain-extraction');
+    // ux-tonight: the pick starts in this chat (the card on the composer), not in New job.
+    expect(chipsOf(useComposerChips.getState(), 's1').find((c) => c.kind === 'workflow')).toMatchObject({ workflowId: 'domain-extraction' });
+    expect(useLaunchWizard.getState().open).toBe(false);
   });
 
   it('opening `/` while the mount-time read is still out asks once, and its answer stands', async () => {
@@ -311,7 +313,19 @@ describe('a pick starts what New job’s card starts', () => {
     expect(posts).toEqual([]);
   });
 
-  it.each(['bug', 'apps-turn', 'apps-publish', 'demo-video', 'draft-epics'])('%s: New job on that card, at the step its card goes to', async (id) => {
+  // ux-tonight: a workflow pick starts in the chat (tests/inlineStart.test.tsx); Demo video and Draft epics keep their
+  // own steps in New job tonight, the same from a box as from New job's card.
+  it.each(['bug', 'apps-turn'])('%s: a pick puts the card on this composer, never New job', async (id) => {
+    render(<><Harness navigate={() => {}} /><LaunchWizard navigate={() => {}} /></>);
+    await openMenu(`/${id.split('-')[0]}`);
+    fireEvent.mouseDown(row(id));
+    expect(chipsOf(useComposerChips.getState(), 's1').find((c) => c.kind === 'workflow')).toMatchObject({ entryId: id });
+    expect(useLaunchWizard.getState().open).toBe(false);
+    await act(async () => { await new Promise((r) => setTimeout(r, 500)); });
+    expect(posts).toEqual([]);
+  });
+
+  it.each(['demo-video', 'draft-epics'])('%s: New job on that card, at the step its card goes to', async (id) => {
     // New job's own card click, for the draft and step it leads to.
     const wiz = render(<LaunchWizard navigate={() => {}} />);
     act(() => openLaunchWizard({}));
@@ -341,7 +355,9 @@ describe('/workflow-<key> typed by hand (back-compat)', () => {
     await openMenu('/workflow-bug');
     type('/workflow-bug the charge never clears');
     fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
-    expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'bug', catalogEntryId: 'bug', intent: 'the charge never clears' });
+    expect(chipsOf(useComposerChips.getState(), 's1').find((c) => c.kind === 'workflow')).toMatchObject({ workflowId: 'bug', entryId: 'bug' });
+    expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('the charge never clears');
+    expect(useLaunchWizard.getState().open).toBe(false);
   });
 
   it('/workflow-<key> typed whole starts that workflow, not a more-used one whose id starts the same', async () => {
@@ -356,7 +372,7 @@ describe('/workflow-<key> typed by hand (back-compat)', () => {
     expect([...document.querySelectorAll<HTMLElement>('[data-testid="composer-menu-group"]')].map((g) => g.dataset.category))
       .toEqual(['match', 'top']);
     fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
-    expect(useLaunchWizard.getState().draft?.workflowId).toBe('bug');
+    expect(chipsOf(useComposerChips.getState(), 's1').find((c) => c.kind === 'workflow')).toMatchObject({ workflowId: 'bug' });
   });
 
   it('a resumed draft that names another card for its workflow starts that card’s own options (New job’s rule)', () => {

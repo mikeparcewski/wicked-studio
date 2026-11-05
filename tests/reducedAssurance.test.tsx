@@ -236,21 +236,16 @@ describe('the composer\'s /workflow row', () => {
     fireEvent.select(box);
   }
   const key = (k: string): void => { fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: k }); };
-  // The launch wizard (operator 2026-10-11): name the workflow, then walk to its options step.
+  // ux-tonight: the pick puts the card on the composer; the words go in the box and the start row says where.
   async function nameWorkflow(): Promise<void> {
     type('/workflow-mcp-server');
     // slash-catalog: the row comes from the catalog read (an older daemon here: today's list).
     await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
     key('Enter');
-    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
-    fireEvent.click(screen.getByTestId('launch-wizard-next'));
-    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
-    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    type('build an MCP server for the ledger');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
   }
-  const launch = (): void => {
-    fireEvent.click(screen.getByTestId('launch-wizard-next'));
-    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
-  };
+  const launch = (): void => { key('Enter'); };
   beforeEach(() => {
     vi.restoreAllMocks();
     resetComposerSeats();
@@ -268,21 +263,21 @@ describe('the composer\'s /workflow row', () => {
     stub([seat('claude')]);
     render(<Harness />);
     await nameWorkflow();
-    expect(screen.getByTestId('launch-wizard-reduced-disclosure').textContent).toMatch(/creator's seat reviews its own work/);
-    fireEvent.click(screen.getByTestId('launch-wizard-reduced-toggle'));
+    expect(screen.getByTestId('composer-start-reduced-disclosure').textContent).toMatch(/creator's seat reviews its own work/);
+    fireEvent.click(screen.getByTestId('composer-start-reduced-toggle'));
     launch();
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     expect(posts.find((p) => p.path === '/runs')!.body.reducedAssurance).toBe(true);
     // codex r1: the opt-in was THAT launch's — the next one starts unticked.
     await nameWorkflow();
-    expect((screen.getByTestId('launch-wizard-reduced-toggle') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('composer-start-reduced-toggle') as HTMLInputElement).checked).toBe(false);
   });
 
   it('two seats: not offered, not sent', async () => {
     stub([seat('claude'), seat('codex')]);
     render(<Harness />);
     await nameWorkflow();
-    expect(screen.queryByTestId('launch-wizard-reduced')).toBeNull();
+    expect(screen.queryByTestId('composer-start-reduced')).toBeNull();
     launch();
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     expect('reducedAssurance' in posts.find((p) => p.path === '/runs')!.body).toBe(false);
