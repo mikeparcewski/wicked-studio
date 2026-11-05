@@ -150,6 +150,11 @@ describe('a CLI nobody set up (operator 2026-11-05)', () => {
     expect(notSetUp(LIVE.clis, [dead]).map((c) => c.key)).not.toContain('opencode');
   });
 
+  it('a system row that only mentions a CLI (seat images not needed until signed in) is no need', () => {
+    const images = att('infra:seat_images', 'infra', 'yellow', { reason: 'seat images missing: codex (the next unit on each builds it first, minutes); not needed until signed in: opencode' });
+    expect(helperTiles(LIVE.clis, [images]).find((t) => t.id === 'opencode')).toMatchObject({ tone: 'quiet', line: 'Optional' });
+  });
+
   it('from a crew with no one-reviewer item, one agent signed in still makes none of the others optional', () => {
     const one = LIVE.clis.map((c, i) => (i === 0 ? c : { ...c, state: 'signed_out' as const }));
     expect(notSetUpWords(one, [])).toBeNull();

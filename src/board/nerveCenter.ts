@@ -84,10 +84,11 @@ export function tooFewToReview(clis: readonly SystemCli[], attention: readonly S
   return new Set(clis.filter((c) => c.state === 'signed_in' || c.state === 'benched').map((c, i) => (c.key ?? `#${i}`).split('#', 1)[0] || `#${i}`)).size < 2;
 }
 
-/** A signed-out seat that work needs: a job's step is on it (`cli:out:<key>`), or a job's own item names it
- *  (the reviewer or failover a held job waits on). */
+/** A signed-out seat that work needs: a job's step is on it (`cli:out:<key>`), or a JOB's own item names it
+ *  (the reviewer or failover a held job waits on). A system row that merely mentions a CLI (the seat
+ *  images' "not needed until signed in: pi") is no need. */
 export function seatNeeded(c: SystemCli, attention: readonly SystemAttention[]): boolean {
-  return attention.some((a) => cliInUse(a) === c.key || (a.id !== ONE_REVIEWER_ID && names(a, c)));
+  return attention.some((a) => cliInUse(a) === c.key || (a.panel === 'runs' && names(a, c)));
 }
 
 /**
