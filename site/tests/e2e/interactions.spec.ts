@@ -28,9 +28,9 @@ test('the sidebar explorer: click, arrows and End pick a page; the box never cha
   await expect(ex.getByRole('tab', { name: 'Agents' })).toBeFocused();
   await expect(ex.getByRole('tab', { name: 'Agents' })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Home');
-  await expect(ex.getByRole('tab', { name: /Learn/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(ex.getByRole('tab', { name: 'Projects' })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('End');
-  await expect(ex.getByRole('tab', { name: 'Agents' })).toHaveAttribute('aria-selected', 'true');
+  await expect(ex.getByRole('tab', { name: 'Learn' })).toHaveAttribute('aria-selected', 'true');
   // one visible panel at a time, every panel stacked in one cell
   await expect(ex.locator('.ex-panel.is-on')).toHaveCount(1);
   expect(await box(ex)).toEqual(before);
@@ -41,7 +41,7 @@ test('the explorer tours on its own and Pause stops it', async ({ page }) => {
   const ex = page.locator('.explorer');
   await bringIntoView(ex);
   await page.mouse.move(5, 690);
-  await expect(ex.getByRole('tab', { name: 'Projects' })).toHaveAttribute('aria-selected', 'true', { timeout: 7000 });
+  await expect(ex.getByRole('tab', { name: 'Jobs' })).toHaveAttribute('aria-selected', 'true', { timeout: 7000 });
   const btn = page.locator('.desk [data-play-toggle]');
   await btn.click();
   await expect(btn).toHaveAttribute('aria-pressed', 'true');
@@ -262,12 +262,12 @@ test('what is new: eight items, arrows move, one stacked panel', async ({ page }
   await frozen(page, '.new');
   const stage = news.locator('.news-stage');
   const h0 = await box(stage);
-  await news.getByRole('tab', { name: 'Voice' }).click();
+  await news.getByRole('tab', { name: 'Apps' }).click();
   await page.keyboard.press('ArrowRight');
-  await expect(news.getByRole('tab', { name: 'Guided asks' })).toBeFocused();
-  await expect(page.getByRole('tabpanel', { name: 'Guided asks' })).toContainText('share one guided card');
+  await expect(news.getByRole('tab', { name: 'Data sources' })).toBeFocused();
+  await expect(news.getByRole('tabpanel', { name: 'Data sources' })).toContainText('Test connection checks a database or GraphQL source');
   await page.keyboard.press('End');
-  await expect(page.getByRole('tabpanel', { name: 'Plugins as cards' })).toBeVisible();
+  await expect(page.getByRole('tabpanel', { name: 'A sidebar that folds' })).toBeVisible();
   expect(await box(stage)).toEqual(h0);
 });
 
@@ -721,7 +721,7 @@ test('stacked states never draw over each other: the scenes, the relay, the rece
   expect(seen, 'two stacked states drawn at once').toEqual([]);
 });
 
-test('a paused search stops its caret, and a paused tour stops its waveform', async ({ page }) => {
+test('a paused search stops its caret, and a paused tour stops its chart', async ({ page }) => {
   await stoppedClock(page);
   await page.goto('/');
   const reach = page.locator('.reach');
@@ -735,13 +735,13 @@ test('a paused search stops its caret, and a paused tour stops its waveform', as
   await news.evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await page.mouse.move(5, 690);
   await news.getByRole('button', { name: 'Pause the tour of what is new' }).click();
-  // pick Voice again while paused: its waveform starts over, and it must be held, not running
-  await news.getByRole('tab', { name: 'Guided asks' }).click();
-  await news.getByRole('tab', { name: 'Voice' }).click();
+  // pick Apps again while paused: its chart grows in again, and it must be held, not running
+  await news.getByRole('tab', { name: 'Data sources' }).click();
+  await news.getByRole('tab', { name: 'Apps' }).click();
   await page.mouse.move(5, 690);
-  const wave = news.locator('.av-wave i').first();
-  const states = await wave.evaluate((el) => el.getAnimations().map((a) => a.playState));
-  expect(states.length, 'the waveform has an animation to hold').toBeGreaterThan(0);
+  const bar = news.locator('.art-appchat .ax-bars i').first();
+  const states = await bar.evaluate((el) => el.getAnimations().map((a) => a.playState));
+  expect(states.length, 'the chart has an animation to hold').toBeGreaterThan(0);
   expect(states.every((st) => st === 'paused'), states.join(',')).toBe(true);
 });
 

@@ -138,7 +138,7 @@ export const BUILD_LINKS: readonly { id: string; label: string; path: string; te
   { id: 'mcp', label: PAGE_NAMES.mcp, path: mcpPath(), testId: 'build-link-mcp', hint: 'The tools agents can call, and when they need your approval' },
   { id: 'plugins', label: PAGE_NAMES.plugins, path: '/plugins', testId: 'build-link-plugins', hint: 'Editor plugins, and making one' },
   { id: 'workflows', label: PAGE_NAMES.workflows, path: '/workflows', testId: 'build-link-workflows', hint: 'The steps a job goes through' },
-  { id: 'sources', label: PAGE_NAMES.sources, path: SOURCES_PATH, testId: 'build-link-sources', hint: 'The databases, APIs and files apps read from, and whether a source allows writes' },
+  { id: 'sources', label: PAGE_NAMES.sources, path: SOURCES_PATH, testId: 'build-link-sources', hint: 'The databases, APIs, files and trackers your work reads from, and what agents may see or query' },
   { id: 'settings', label: PAGE_NAMES.system, path: '/system', testId: 'build-link-settings', hint: 'Agents, notifications and the theme for this computer' },
 ];
 

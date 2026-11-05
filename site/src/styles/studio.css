@@ -731,8 +731,6 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .news-panel p { margin: 0; font-size: var(--text-section); line-height: 1.45; color: color-mix(in oklab, var(--ink) 84%, transparent); max-width: 62ch; }
 .news-panel .voice-note { font-size: var(--text-body); color: var(--muted); }
 .news-stage .ex-progress { left: 30px; bottom: 16px; }
-.soon { margin: 16px 0 0; font-size: var(--text-body); line-height: 1.5; color: var(--muted); }
-.soon b { color: var(--ink); }
 
 /* ── 9. Get it ──────────────────────────────────────────────────────────────────────────────── */
 .needs { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -1297,3 +1295,93 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { transit
 .beats a:hover .beats-dot, .beats a:focus-visible .beats-dot, .beats a:active .beats-dot { border-color: var(--beat-c); }
 .beats a:focus-visible { outline: 2px solid var(--focus, var(--ink)); outline-offset: 2px; border-radius: 4px; }
 :root { --beat-c: var(--plane-experience); }
+
+/* ── 0.15: the explorer's twelve pages, and Learn at the foot (above Build & settings) ──────── */
+/* desktop: each group's heading beside its pages, so the list is one row per page */
+@media (min-width: 941px) {
+  .explorer { grid-template-columns: 214px minmax(0, 1fr); }
+  .ex-side { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 6px; row-gap: 1px; align-content: start; }
+  .ex-group { grid-column: 1; align-self: start; margin: 4px 0 0 4px; }
+  .ex-tab { grid-column: 2; }
+  .ex-tab--foot { margin-top: 7px; position: relative; }
+  .ex-tab--foot::before { content: ''; position: absolute; left: 0; right: 0; top: -4px; height: 1px; background: var(--hairline); }
+}
+@media (min-width: 941px) and (max-width: 1100px) { .explorer { grid-template-columns: 200px minmax(0, 1fr); } }
+/* an app: a title, its headline numbers as bars (no figures), a small chart */
+.ax-app, .ac-app { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--hairline-strong); border-radius: 10px; background: var(--surface); }
+.ax-kpis { display: flex; gap: 6px; }
+.ax-kpis > span { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--hairline); min-width: 0; }
+.ax-kpis em { font-style: normal; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ax-kpis i { display: block; height: 8px; width: 60%; border-radius: 4px; background: color-mix(in oklab, var(--ink) 28%, transparent); }
+.ax-kpis > span + span i { width: 44%; } .ax-kpis > span + span + span i { width: 70%; }
+.ax-bars { display: flex; align-items: flex-end; gap: 6px; height: 46px; padding: 0 2px; border-bottom: 1px solid var(--hairline-strong); }
+.ax-bars i { flex: 1; height: calc(var(--h) * 100%); border-radius: 4px 4px 0 0; background: color-mix(in oklab, var(--ok) 70%, transparent); transform-origin: bottom; }
+.ex-panel.is-on .ax-bars i { animation: rise .8s var(--ease) .15s backwards; }
+@keyframes rise { from { transform: scaleY(0); } }
+/* a stopped tour stops its chart too (after the rule above, whose shorthand would set it running) */
+.news.is-still .ax-bars i, .explorer.is-still .ax-bars i { animation-play-state: paused; }
+.art-apps .au-q, .art-apps .au-a { font-size: var(--text-caption); }
+.art-sources .al-row b, .art-trackers .al-row b, .art-catalog .al-row b { width: 70px; flex-shrink: 0; color: var(--muted); }
+.art-sources .al-row { flex-wrap: wrap; row-gap: 4px; }
+.art-sources .al-row span:not(.as-chip) { flex: 1 1 6em; }
+.art-sources .as-chip { flex: 0 0 auto; white-space: nowrap; }
+/* Report: its own figures on top, the dashboards you chose under them */
+.rp-head { display: flex; gap: 6px; }
+.rp-head > span { flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--hairline-strong); background: var(--surface); min-width: 0; }
+.rp-head em { font-style: normal; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-head i { display: block; height: 9px; width: 54%; border-radius: 4px; background: color-mix(in oklab, var(--ink) 30%, transparent); }
+.rp-k { color: var(--muted); font-weight: var(--weight-strong); margin-top: 2px; }
+.rp-dash { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rp-card { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--hairline-strong); background: var(--surface); min-width: 0; }
+.rp-card--add { align-items: center; justify-content: center; border-style: dashed; color: var(--muted); }
+.rp-card--add b { font-weight: var(--weight-regular); }
+.art-report .al-row span, .art-access .al-row span:first-child { flex: 1; min-width: 0; }
+/* an app's page: the app, and its chat beside it */
+.art-appchat { flex-direction: row; align-items: stretch; gap: 10px; }
+.art-appchat .ac-app { flex: 1; min-width: 0; justify-content: center; }
+.ac-chat { flex: 1.15; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--hairline-strong); border-radius: 10px; background: color-mix(in oklab, var(--canvas) 50%, transparent); }
+.ac-tabs { display: flex; gap: 10px; padding-bottom: 4px; border-bottom: 1px solid var(--hairline); color: var(--muted); }
+.ac-tabs b { color: var(--ink); }
+/* Ask a question of this data */
+.ak-q { align-self: flex-end; max-width: 92%; padding: 6px 10px; border-radius: 12px 12px 4px 12px; background: color-mix(in oklab, var(--accent) 14%, var(--surface)); border: 1px solid color-mix(in oklab, var(--accent) 26%, transparent); }
+.ak-sql { margin: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--hairline-strong); background: var(--surface); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.45; white-space: pre; overflow: hidden; }
+.art-ask .s-acts { display: flex; align-items: center; gap: 10px; }
+.ak-note { color: var(--muted); }
+.art-ask .al-row b { flex-shrink: 0; }
+.art-ask .al-row span { color: var(--muted); }
+/* the Agents box */
+.art-access .al-row { justify-content: space-between; }
+.aa-read { margin: 2px 0 0; align-self: flex-start; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--hairline-strong); color: var(--muted); }
+/* Linked trackers */
+.tk-k { color: var(--muted); font-weight: var(--weight-strong); }
+.tk-via { opacity: .8; border-style: dashed; }
+.tk-start { align-self: flex-start; padding: 3px 10px; border-radius: 999px; color: var(--accent-ink); background: var(--accent); }
+/* the Knowledge map, in words beside the drawing (as in studio) */
+.km-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.km-row em { font-style: normal; color: var(--muted); white-space: nowrap; }
+.km-row em::before, .km-row em::after { content: ''; display: inline-block; width: 14px; height: 1.5px; vertical-align: middle; margin: 0 4px; background: var(--hairline-strong); }
+.km-n { padding: 3px 9px; border-radius: 8px; border: 1px solid var(--hairline-strong); background: var(--surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.km-n--code { font-family: var(--font-mono); font-size: 11.5px; }
+.km-wait { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; padding: 7px 10px; border-radius: 8px; border: 1px solid color-mix(in oklab, var(--you) 55%, transparent); background: var(--surface); }
+.km-wait > span:first-child { flex: 1 1 auto; }
+/* narrow: a relation wraps, its two ends whole, rather than cutting the names short (large text too) */
+@media (max-width: 600px) {
+  .km-row { flex-wrap: wrap; row-gap: 3px; }
+  .km-n { min-width: auto; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  .km-row em::before, .km-row em::after { width: 8px; }
+  .art-sources .as-chip { white-space: normal; max-width: 100%; overflow-wrap: anywhere; }
+}
+/* New job's catalog, and the / menu */
+.ct-slash { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.ct-slash code { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--hairline-strong); background: var(--surface); color: var(--ink); font-family: var(--font-mono); }
+/* the sidebar that folds, and its icon rail */
+.art-rail { flex-direction: row; align-items: stretch; gap: 12px; }
+.rl-full { flex: 1; display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px solid var(--hairline-strong); border-radius: 10px; background: var(--surface); }
+.rl-full > span { padding: 1px 8px; color: var(--muted); }
+.rl-full .rl-h { padding-left: 0; color: var(--ink); font-weight: var(--weight-strong); display: flex; justify-content: space-between; }
+.rl-full .rl-h i { font-style: normal; color: var(--faint); }
+.rl-full .rl-foot { padding-left: 0; }
+.rl-full .rl-foot--top { margin-top: auto; padding-top: 6px; border-top: 1px solid var(--hairline); }
+.rl-icons { width: 44px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0; border: 1px solid var(--hairline-strong); border-radius: 10px; background: var(--surface); }
+.rl-icons i { width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid color-mix(in oklab, var(--ink) 45%, transparent); }
+.rl-icons i.rl-gap { margin-top: auto; }
