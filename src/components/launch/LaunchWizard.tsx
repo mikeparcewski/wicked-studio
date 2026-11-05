@@ -380,7 +380,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
         finish();
         if (here !== null) {
           addAboutChip(here, workflowChipFor(x));
-          seedComposer(here, words);
+          // A draft the chat already holds stays unless New job brings words of its own (codex r2).
+          if (words.trim() !== '') seedComposer(here, words);
         } else {
           startInNewChat(x, { projectId: filedProject, intent: words });
         }

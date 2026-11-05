@@ -70,7 +70,6 @@ export function InlineStart({
   const defs = useWorkflowDefs();
   const projects = useProjectsStore((s) => s.projects) ?? [];
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
-  const capsLoaded = useCapabilities((s) => s.loaded);
   const reducedCap = useCapabilities((s) => s.reducedAssurance);
   const [reduced, setReduced] = useState(false);
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
@@ -114,7 +113,9 @@ export function InlineStart({
     && (def === null || def.phases.some((p) => p.executes_code)) ? 'pr' : null;
   // The gate is placed off the launch preview, which needs this project's presets read first (codex r1 P1): until then
   // a scoped preset's "before step 1" would land on its scope step and the first work step would run unconfirmed.
-  const presetsRead = Array.isArray(usePlanCatalog((s) => s.presets[project ?? '']));
+  // (An older daemon's or a failed read's `unsupported` has no presets to shift by, as in New job: codex r2.)
+  const presetsState = usePlanCatalog((s) => s.presets[project ?? '']);
+  const presetsRead = presetsState !== undefined && presetsState !== 'loading';
   const preview = useLaunchPreview({
     plan: null, workflow: entry !== null && entry.launchKind === 'run' ? entry.launchId : '', projectId: project, repoRef, deliver,
     mode: undefined, confirm: COMPOSER_DEFAULT_GATE_POSTURE.mode, beforeOrd: COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd,
@@ -133,12 +134,14 @@ export function InlineStart({
         : wantsRepo && repoRef === null ? 'Which repository? Pick one below.'
           : wantsProject && project === null ? 'Which project? Pick one below.'
             // What the daemon can do (power mode, the chat link) and this project's presets are read before a start.
-            : entry.launchKind === 'run' && (!capsLoaded || !presetsRead) ? 'Checking this workflow…'
+            : entry.launchKind === 'run' && !presetsRead ? 'Checking this workflow…'
               : entry.launchKind === 'run' && seats.length === 0 ? 'Turn on at least one helper.'
                 : null;
   useEffect(() => { onBlocker(blocker); }, [blocker, onBlocker]);
   // The request as checked: a launch whose request changed while its gate was placed stops for a fresh look (New
   // job's rule, codex r1), and one whose card was removed meanwhile sends nothing.
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const requestNow = useRef('');
   requestNow.current = JSON.stringify([entry?.id ?? null, entry?.launchId ?? null, repoRef, project, words.trim(), seats, deliver, offerReduced && reduced]);
   const blockerNow = useRef<string | null>(null);
@@ -163,9 +166,17 @@ export function InlineStart({
           navigate(r.path);
           return true;
         }
-        const caps = useCapabilities.getState();
-        const chatId = launchChatId(composerKey, caps.chatIdOnLaunch);
+        // What the daemon can do, read NOW (codex r2 P1): a failed or missing read must never let a power run (which has
+        // no plan gate) start because `power: false` was left out. No answer, no start.
+        let caps: Record<string, unknown>;
+        try {
+          caps = ((await api.getHealth()) as unknown as { capabilities?: Record<string, unknown> }).capabilities ?? {};
+        } catch (e) {
+          throw new Error(`the daemon did not say what it can do (${e instanceof Error ? e.message : String(e)}); try again`);
+        }
+        const chatId = launchChatId(composerKey, caps['chatIdOnLaunch'] === true);
         const humanConfirm = await preview.resolveHumanConfirm();
+        if (!mounted.current) return false;
         if (blockerNow.current !== null) throw new Error(blockerNow.current);
         if (requestNow.current !== asked) throw new Error('This job changed while it was being checked. Look it over and press Enter again.');
         const stillOn = chipsOf(useComposerChips.getState(), composerKey).some((c) => c.kind === 'workflow' && c.key === chip?.key && c.workflowId === entry.launchId);
@@ -185,8 +196,8 @@ export function InlineStart({
           skipQeReason: null,
           chatId,
           primary: null,
-          // The plan gate holds: a power run has none (read now, not when the row first drew).
-          power: useCapabilities.getState().powerMode ? false : null,
+          // The plan gate holds: a power run has none.
+          power: caps['powerMode'] === true ? false : null,
         });
         const { runId } = await api.launchRun(body);
         useProvenanceStore.getState().markLaunchedHere(runId);

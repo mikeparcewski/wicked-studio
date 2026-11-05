@@ -54,6 +54,9 @@ let presets: unknown[] = [];
 let preview: unknown = { steps: [] };
 /** A health read that never answers (the capabilities stay unread). */
 let holdHealth = false;
+/** What `GET /health` answers: power mode on the daemon, or a failed read. */
+let healthPower = true;
+let healthFails = false;
 let read: string[] = [];
 const gets = (): string[] => read;
 let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
@@ -75,6 +78,7 @@ function stubWire(): void {
     }
     read.push(path);
     if (path === '/health' && holdHealth) return new Promise<Response>(() => {});
+    if (path === '/health') return healthFails ? json({ error: 'down' }, 503) : json({ capabilities: { powerMode: healthPower, chatIdOnLaunch: true } });
     if (path === '/workflows/catalog') return json(CATALOG);
     return json(path === '/workflows' ? { workflows: ['bug', 'feature', 'domain-extraction', 'review-recent-work'].map(def) }
       : path === '/roster' ? { roster: SEATS } : path === '/repos' ? { repos }
@@ -108,6 +112,8 @@ beforeEach(() => {
   presets = [];
   preview = { steps: [] };
   holdHealth = false;
+  healthPower = true;
+  healthFails = false;
   stubWire();
   resetWorkflowCatalog();
   resetPlanCatalog();
@@ -170,7 +176,7 @@ describe('a / pick starts the work in this chat', () => {
   });
 
   it('without power mode on the daemon, the launch says nothing of power (an older schema) and still asks before step 1', async () => {
-    useCapabilities.setState({ powerMode: false });
+    healthPower = false;
     render(<Harness navigate={() => {}} />);
     await pick('bug', 'bug');
     type('x');
@@ -238,21 +244,58 @@ describe('a / pick starts the work in this chat', () => {
 });
 
 describe('codex r1 on #982: the plan gate and the request are exactly what the row shows', () => {
-  it('P1: while the daemon\'s capabilities are still being read, Enter starts nothing (power could not be turned off)', async () => {
-    holdHealth = true;
-    useCapabilities.setState({ loaded: false });
+  it('P1: a start reads what the daemon can do first; a failed read starts nothing (power could not be turned off)', async () => {
+    healthFails = true;
     render(<Harness navigate={() => {}} />);
     await pick('bug', 'bug');
     type('the charge never clears');
-    await waitFor(() => expect(screen.getByTestId('session-composer-send')).toBeDisabled());
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
     enter();
-    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+    await waitFor(() => expect(screen.getByTestId('composer-start-error')).toHaveTextContent('did not say what it can do'));
     expect(launches()).toEqual([]);
-    act(() => useCapabilities.setState({ loaded: true }));
-    await waitFor(() => expect(screen.getByTestId('session-composer-send')).not.toBeDisabled());
+    healthFails = false;
     enter();
     await waitFor(() => expect(launches()).toHaveLength(1));
     expect(launches()[0]!['power']).toBe(false);
+  });
+
+  it('a card re-picked while the first start places its gate: the first start sends nothing, the new words stay', async () => {
+    presets = [{ name: 'bug', scope: 'global', steps: [{ id: 'build', catalog: 'build' }], created_by: 'builtin', updated_at: 1 }];
+    let release: (v: Response) => void = () => {};
+    const slow = new Promise<Response>((r) => { release = r; });
+    const base = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (String(url).includes('/plans/preview') && launches().length === 0 && !released ? slow : base(url, init))));
+    let released = false;
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('old words');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    try {
+      // Remove the card, re-pick it and say something else before the first start's preview answers.
+      fireEvent.click(screen.getByTestId('composer-chip-remove'));
+      await pick('bug', 'bug');
+      type('new words');
+    } finally {
+      await act(async () => { released = true; release(new Response(JSON.stringify({ steps: [] }), { status: 200, headers: { 'content-type': 'application/json' } })); await new Promise((r) => setTimeout(r, 150)); });
+    }
+    expect(launches().map((b) => b['problem'])).not.toContain('old words');
+    expect(box().value).toBe('new words');
+    expect(wfChip('chat-1')).toMatchObject({ workflowId: 'bug' });
+  });
+
+  it('a New job card click into a chat that already holds a draft keeps that draft', async () => {
+    useSessionDrafts.setState({ drafts: { 'chat-1': 'my unsent question' } });
+    function Page(): React.ReactElement {
+      const text = useSessionDrafts((st) => st.drafts['chat-1'] ?? '');
+      return <><Composer composerKey="chat-1" text={text} setText={(t) => useSessionDrafts.getState().setDraft('chat-1', t)} onSend={() => {}} placeholder="p" ariaLabel="a" variant="session" navigate={() => {}} /><LaunchWizard navigate={() => {}} /></>;
+    }
+    render(<Page />);
+    act(() => openLaunchWizard({ composerKey: 'chat-1' }));
+    await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).toBe('catalog'));
+    fireEvent.click(document.querySelector<HTMLElement>('[data-testid="launch-catalog-results"] [data-job="bug"]')!);
+    await waitFor(() => expect(wfChip('chat-1')).toMatchObject({ workflowId: 'bug' }));
+    expect(useSessionDrafts.getState().drafts['chat-1']).toBe('my unsent question');
   });
 
   it('P1: a scoped preset holds before its first WORK step (before:2 past the scope step), off the preview', async () => {

@@ -258,6 +258,8 @@ export function Composer({
     return found !== null && found.launchId === wfChip.workflowId && startsInline(found) ? found : null;
   }, [wfChip, catalogView]);
   const inline = useRef<InlineStartHandle | null>(null);
+  const textNow = useRef(text);
+  textNow.current = text;
   const [startBlocker, setStartBlocker] = useState<string | null>(null);
   const wordsOptional = chipEntry !== null && entryWords(chipEntry).optional;
 
@@ -463,7 +465,8 @@ export function Composer({
     if (wfChip !== null) {
       if (refusal !== null || seatRefusal !== null) return;
       const words = text;
-      void inline.current?.start(words).then((ok) => { if (ok) { setText(''); setNote(null); } });
+      // Only the words that were started leave the box: anything typed since stays (codex r2).
+      void inline.current?.start(words).then((ok) => { if (ok && textNow.current === words) { setText(''); setNote(null); } });
       return;
     }
     if (!canSend) return;
