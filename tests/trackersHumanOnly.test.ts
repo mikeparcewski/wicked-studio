@@ -39,4 +39,17 @@ describe('tracker links are made and removed only by a person’s click', () => 
     const parts = all.find((f) => f.path === 'src/components/trackers/TrackerParts.tsx')!.text;
     expect(parts).toMatch(/onClick=\{\(\) => void remove\(\)\}/);
   });
+
+  it('a tracker action is confirmed only from its Confirm click; the cards an effect asks for carry no confirm', () => {
+    expect(all.filter((f) => /trackersApi\.action\s*\(/.test(f.text)).map((f) => f.path)).toEqual(['src/components/trackers/TrackerActions.tsx']);
+    const c = all.find((f) => f.path === 'src/components/trackers/TrackerActions.tsx')!.text;
+    for (const banned of ['location', 'URLSearchParams', 'localStorage', 'sessionStorage', 'postMessage', 'addEventListener', 'setTimeout']) expect(c, banned).not.toContain(banned);
+    // One place adds the hash, inside `confirm`; `confirm` runs from the button's click only.
+    expect([...c.matchAll(/confirm: row\.hash/g)]).toHaveLength(1);
+    expect([...c.matchAll(/void confirm\(p\)/g)]).toHaveLength(1);
+    expect(c).toMatch(/onClick=\{\(\) => void confirm\(p\)\}/);
+    const effects = c.split('useEffect(').slice(1).map((chunk) => chunk.slice(0, chunk.search(/\}, \[[^\]]*\]\);/)));
+    for (const e of effects) expect(e).not.toMatch(/confirm/);
+  });
 });
+

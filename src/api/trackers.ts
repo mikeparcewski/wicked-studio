@@ -19,6 +19,10 @@ import { useCapabilities } from '../store/capabilities.js';
 import type {
   CreateTrackerLinkBody,
   PmSystem,
+  RunTrackerIssuesResponse,
+  TrackerActionBody,
+  TrackerActionCard,
+  TrackerActionResponse,
   SourceTracker,
   SourceTrackersResponse,
   TrackerIssue,
@@ -31,6 +35,10 @@ import type {
 export type {
   CreateTrackerLinkBody,
   PmSystem,
+  RunTrackerIssuesResponse,
+  TrackerActionBody,
+  TrackerActionCard,
+  TrackerActionResponse,
   SourceTracker,
   SourceTrackersResponse,
   TrackerIssue,
@@ -62,6 +70,13 @@ export const trackersApi = {
     apiFetch<unknown>(`/sources/${enc(name)}/trackers${query({ q: q.q, cursor: q.cursor, tenant: q.tenant })}`),
   /** The registered servers, for the PM sources a picker offers (a read: never the sources API's writes). */
   pmSources: () => apiFetch<unknown>('/mcp/servers'),
+  /** The issues a run addresses, for its tracker actions (a read). */
+  runIssues: (runId: string) => apiFetch<unknown>(`/runs/${enc(runId)}/tracker-actions`),
+  /**
+   * A tracker action: without `confirm`, crew answers the card and sends nothing; with `confirm` = the card's hash, crew
+   * does exactly that. A person's only. `TrackerActions` is its only caller, and it confirms only on a click.
+   */
+  action: (runId: string, body: TrackerActionBody) => apiFetch<unknown>(`/runs/${enc(runId)}/tracker-actions`, { method: 'POST', body: JSON.stringify(body) }),
   /** The open issues of the tracker set of a project and repo, by tracker (the composer's "From an issue"). */
   issues: (target: { project?: string | null; repo?: string | null; q?: string }) =>
     apiFetch<unknown>(`/tracker-links/issues${query({ project: target.project, repo: target.repo, q: target.q })}`),
@@ -250,4 +265,70 @@ export function trackerRefusal(e: unknown, what: 'link' | 'remove' | 'read' = 'l
   if (code === 'not_found' || (e instanceof ApiError && e.status === 404 && what === 'remove')) return 'That link was already removed.';
   if (what === 'read') return 'crew couldn’t answer just now.';
   return 'crew’s answer didn’t say whether that was done, so the list below is read again from crew.';
+}
+
+// ── tracker actions ────────────────────────────────────────────────────────────────────────────────────
+
+const MAPPED: ReadonlySet<string> = new Set(['todo', 'doing', 'done']);
+const mappedOf = (v: unknown): 'todo' | 'doing' | 'done' | null => (typeof v === 'string' && MAPPED.has(v) ? (v as 'todo' | 'doing' | 'done') : null);
+
+/** The issues a run addresses, or `null` when it is not crew's whole answer for `runId`. */
+export function runTrackerIssuesOf(raw: unknown, runId: string): RunTrackerIssuesResponse | null {
+  if (!isObj(raw) || raw.runId !== runId) return null;
+  const issues = allOf(raw.issues, (x): RunTrackerIssuesResponse['issues'][number] | null => {
+    if (!isObj(x) || !isText(x.issue) || !isText(x.ref) || !isText(x.source) || typeof x.system !== 'string' || !SYSTEMS.has(x.system) || !isText(x.trackerId)) return null;
+    const admittedBy = x.admittedBy === null ? null : targetOf(x.admittedBy);
+    if (x.admittedBy !== null && admittedBy === null) return null;
+    return { issue: x.issue, ref: x.ref, source: x.source, system: x.system as PmSystem, trackerId: x.trackerId, admittedBy };
+  });
+  return issues === null ? null : { runId, issues };
+}
+
+/** A card crew answered, or `null` when it is not one (every field the card shows, whole). */
+export function trackerActionCardOf(v: unknown, runId: string): TrackerActionCard | null {
+  if (!isObj(v) || v.runId !== runId || !isText(v.source) || typeof v.system !== 'string' || !SYSTEMS.has(v.system) || !isText(v.tenant) || !isText(v.issue)) return null;
+  if ((v.title !== null && typeof v.title !== 'string') || (v.identity !== null && typeof v.identity !== 'string')) return null;
+  const admittedBy = targetOf(v.admittedBy);
+  if (admittedBy === null) return null;
+  if (v.comment !== undefined && typeof v.comment !== 'string') return null;
+  let transition: TrackerActionCard['transition'];
+  if (v.transition !== undefined) {
+    const t = v.transition;
+    if (!isObj(t) || !isText(t.to) || (t.from !== null && typeof t.from !== 'string') || !isObj(t.mapped)) return null;
+    transition = { from: (t.from as string | null), to: t.to, mapped: { from: mappedOf(t.mapped.from), to: mappedOf(t.mapped.to) } };
+  }
+  return {
+    runId, source: v.source, system: v.system as PmSystem, tenant: v.tenant, ...(isText(v.tenantLabel) ? { tenantLabel: cut(v.tenantLabel) } : {}),
+    issue: v.issue, title: typeof v.title === 'string' ? cut(v.title) : null, identity: typeof v.identity === 'string' ? cut(v.identity) : null,
+    ...(typeof v.comment === 'string' ? { comment: v.comment } : {}), ...(transition !== undefined ? { transition } : {}), admittedBy,
+  };
+}
+
+/** crew's answer to an action call, or `null` when it is not one. */
+export function trackerActionOf(raw: unknown, runId: string): TrackerActionResponse | null {
+  if (!isObj(raw)) return null;
+  const card = trackerActionCardOf(raw.card, runId);
+  if (card === null) return null;
+  if (raw.done === false) return /^[0-9a-f]{64}$/.test(String(raw.actionHash)) ? { done: false, card, actionHash: String(raw.actionHash) } : null;
+  if (raw.done !== true || typeof raw.at !== 'string') return null;
+  const results = allOf(raw.results, (r): { part: 'comment' | 'transition'; ok: boolean; error?: string } | null =>
+    (isObj(r) && (r.part === 'comment' || r.part === 'transition') && typeof r.ok === 'boolean' ? { part: r.part, ok: r.ok, ...(typeof r.error === 'string' ? { error: cut(r.error) } : {}) } : null));
+  return results === null ? null : { done: true, card, at: raw.at, results };
+}
+
+/** What a refused tracker action says, in plain words (crew's named refusals in `knowledge/trackers/actions.ts`). */
+export function trackerActionRefusal(e: unknown): string {
+  if (isRouteAbsent(e)) return 'This crew can’t act on trackers yet: update crew. Nothing was sent.';
+  const code = trackerRefusalCode(e);
+  const said = e instanceof ApiError && e.wire !== '' ? ` (${cut(e.wire)})` : '';
+  if (code === 'tracker_actions_human_only') return 'Only a person signed in to studio as an operator can approve an action on a tracker. A job’s or a plugin’s token can’t, so nothing was sent.';
+  if (code === 'issue_not_in_tracker_set') return 'That issue is no longer in this job’s trackers, so it has no card. Nothing was sent.';
+  if (code === 'card_changed') return 'The card changed since it was shown (the issue, its state, the account or the link). Nothing was sent: look at it again.';
+  if (code === 'already_done') return 'That card was already confirmed; nothing was sent again.';
+  if (code === 'transition_unavailable') return `The issue can’t move there now${said}. Nothing was sent.`;
+  if (code === 'ambiguous') return `Two linked trackers have that key${said}. Nothing was sent.`;
+  if (code === 'source_unavailable') return 'The tool couldn’t be read just now (the issue, or the account it posts as), so no card is offered. Nothing was sent.';
+  if (code === 'record_unavailable') return 'crew couldn’t record the approval, so nothing was sent.';
+  if (code === 'run_not_found') return 'crew no longer has this job. Nothing was sent.';
+  return 'crew’s answer didn’t say whether that was done, so the card is read again from crew.';
 }

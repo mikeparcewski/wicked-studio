@@ -120,3 +120,40 @@ export interface TrackerIssuesResponse {
     error?: string;
   }>;
 }
+
+// ── Governed actions on a run's issues (DES-PM-001 §5; api-types 0.187.0) ────────────────────────────────
+
+/** (0.187.0) `GET /runs/:id/tracker-actions` (human-only): the issues the run addresses, each with the link that still
+ *  admits it (`null`: no longer in the run's tracker set, so no card). `ref` is what `POST` takes for it. */
+export interface RunTrackerIssuesResponse {
+  runId: string;
+  issues: Array<{ issue: string; ref: string; source: string; system: PmSystem; trackerId: string; admittedBy: { kind: 'project'; id: string } | { kind: 'repo'; id: string } | null }>;
+}
+
+/** (0.187.0) `POST /runs/:id/tracker-actions` (human-only). Without `confirm`: the card, nothing sent. */
+export interface TrackerActionBody {
+  issue: string;
+  comment?: string;
+  transition?: string;
+  confirm?: string;
+}
+
+/** (0.187.0) Exactly what a confirm would do, as whom, and the link that admits the issue. Vendor text: render as text. */
+export interface TrackerActionCard {
+  runId: string;
+  source: string;
+  system: PmSystem;
+  tenant: string;
+  tenantLabel?: string;
+  issue: string;
+  title: string | null;
+  identity: string | null;
+  comment?: string;
+  transition?: { from: string | null; to: string; mapped: { from: 'todo' | 'doing' | 'done' | null; to: 'todo' | 'doing' | 'done' | null } };
+  admittedBy: { kind: 'project'; id: string } | { kind: 'repo'; id: string };
+}
+
+/** (0.187.0) The card (nothing sent), or what was done, part by part (a transition after a failed comment is not tried). */
+export type TrackerActionResponse =
+  | { done: false; card: TrackerActionCard; actionHash: string }
+  | { done: true; card: TrackerActionCard; at: string; results: Array<{ part: 'comment' | 'transition'; ok: boolean; error?: string }> };

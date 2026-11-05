@@ -72,6 +72,12 @@
 .wk-trk-chat > summary { cursor: pointer; font-size: var(--text-caption); color: var(--ink-muted); padding: var(--space-1) 0; }
 .wk-trk-chat[open] > summary { margin-bottom: var(--space-2); }
 
+/* ── Tracker actions (the deliver gate, the delivery) ── */
+.wk-trk-actions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); min-width: 0; }
+.wk-trk-action { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); min-width: 0; }
+.wk-trk-action-what { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: 0; color: var(--ink-high); }
+.wk-trk-action-text { margin: 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--border-strong); background: var(--surface-raised); border-radius: var(--radius-sm); font-size: var(--text-body); color: var(--ink-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+
 /* ── From an issue (the composer) ── */
 .wk-trk-issues { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); }
 .wk-trk-ig { display: flex; flex-direction: column; gap: 2px; }
