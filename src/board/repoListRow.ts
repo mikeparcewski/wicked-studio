@@ -2,6 +2,7 @@ import type { KindsRead } from './repoKnowledge.js';
 import { compactCount } from './repoKnowledge.js';
 import { relTime } from './relTime.js';
 import { readinessWords, type RepoReadiness } from './repoRows.js';
+import { isHeldRun } from './heldRuns.js';
 import type { RepoFleetModel } from './repoStats.js';
 import type { RepoLinksRead } from '../store/repoLinks.js';
 
@@ -10,14 +11,16 @@ import type { RepoLinksRead } from '../store/repoLinks.js';
  * Repository · Projects · Code map · Trackers · Last activity, and on a phone one line that says the same. Pure.
  */
 
-export type MapTone = 'ok' | 'run' | 'warn' | 'fail' | 'none';
+export type MapTone = 'ok' | 'run' | 'gate' | 'warn' | 'fail' | 'none';
 
 /** The Code map cell: where the index stands, with the graph's size once it is read. */
 export function mapCell(r: RepoReadiness, m: Pick<RepoFleetModel, 'onboard' | 'graphGap'>, kinds: KindsRead, now: number): { tone: MapTone; words: string; size: string | null } {
   const w = readinessWords(r, m, now);
   const words = w.charAt(0).toUpperCase() + w.slice(1);
   const size = (r === 'ready' || r === 'stale') && kinds.state === 'ok' && kinds.nodes > 0 ? `${compactCount(kinds.nodes)} symbols` : null;
-  const tone: MapTone = r === 'ready' ? 'ok' : r === 'onboarding' ? 'run' : r === 'stale' ? 'warn' : r === 'never' ? 'none' : 'fail';
+  // (crew#1042) A held onboarding is not indexing: it waits on you (the gate tint).
+  const held = r === 'onboarding' && m.onboard.run !== null && isHeldRun(m.onboard.run.session);
+  const tone: MapTone = r === 'ready' ? 'ok' : held ? 'gate' : r === 'onboarding' ? 'run' : r === 'stale' ? 'warn' : r === 'never' ? 'none' : 'fail';
   return { tone, words, size };
 }
 

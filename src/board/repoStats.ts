@@ -1,4 +1,5 @@
 import { isAskTurnRun } from './askTurn.js';
+import { isHeldRun } from './heldRuns.js';
 import type { RepoEntry, RepoFinding, SessionView } from '../api/types.js';
 import { findingNeedsReonboard, REPO_FINDING_ROOT_UNRESOLVABLE } from '../components/RepoFindings.js';
 import { outcomeOf } from './metrics.js';
@@ -197,8 +198,9 @@ export function repoFleetModels(
       repo,
       windowed,
       counts,
-      waiting: mine.filter((v) => v.session.status === 'awaiting_human' && !isAskTurnRun(v.session)), // studio#588
-      activeNow: mine.some((v) => outcomeOf(v.session.status) === 'run'),
+      // (crew#1042) A live run a Needs-you row holds (an orphan, a stall) waits on you, and is not "working now".
+      waiting: mine.filter((v) => (v.session.status === 'awaiting_human' || isHeldRun(v.session)) && !isAskTurnRun(v.session)), // studio#588
+      activeNow: mine.some((v) => outcomeOf(v.session.status) === 'run' && !isHeldRun(v.session)),
       failing: counts.failed > 0 || onboard.state === 'failed',
       onboard,
       graphGap: repoGraphGap(repo),

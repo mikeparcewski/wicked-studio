@@ -27,6 +27,8 @@ import { useRunCoverage } from '../../hooks/useRunCoverage.js';
 import { useGateStore } from '../../store/gates.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { useRunEventStore } from '../../store/events.js';
+import { useHeldMarkedView } from '../../hooks/useHeldMarked.js';
+import { isHeldRun } from '../../board/heldRuns.js';
 import { usePlanDrafts } from '../../store/planDrafts.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
 import { openSheet } from '../../store/sheets.js';
@@ -236,8 +238,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   const runEvents = useRunEvents(id).events;
   const noEvidenceSummary = useRunCoverage(view);
   const trail = useRunEventStore((s) => s.byRun[id]) ?? NO_EVENTS;
+  // (crew#1042) A run a Needs-you row holds marks no step "now", and its status line waits on you: the view
+  // marked from the shared held set (subscribed), so the page follows an orphan or a stall the Desk folds.
+  const shown = useHeldMarkedView(view);
+  const held = isHeldRun(shown.session);
   const phase: RunPhase = status === 'executing'
-    ? (orphanedOf(status, trail) === null ? 'working' : 'other')
+    ? (held ? 'held' : orphanedOf(status, trail) === null ? 'working' : 'other')
     : status === 'failed' || status === 'cancelled' ? 'stopped' : 'other';
   const gate = useGateStore((s) => s.gates[id]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
@@ -523,7 +529,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
             "Details" read as that marker's: it says whose record it opens. */}
         <summary className="wk-chat-details-summary">{powerBuild ? 'The job’s record: steps, checks and helpers' : 'Details'}</summary>
         <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">
-          {statusSentence(view, chain, gate, action)}
+          {statusSentence(shown, chain, gate, action)}
           {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
         </p>
         <p className="wk-session-run-labels"><RunAssuranceLabel view={view} /></p>

@@ -1,6 +1,7 @@
 import type { CodeGraphData, SessionView } from '../api/types.js';
 import { relTime } from './relTime.js';
 import type { RepoFleetModel } from './repoStats.js';
+import { isHeldRun } from './heldRuns.js';
 
 /**
  * THE REPOSITORIES PAGE, calm v2 (operator-approved pages mockup, 2026-10-26). One row per repository:
@@ -46,7 +47,8 @@ export function readinessWords(r: RepoReadiness, m: Pick<RepoFleetModel, 'onboar
     const days = at === null ? STALE_INDEX_DAYS : Math.floor((now - at) / DAY_MS);
     return `index is ${days} days old`;
   }
-  if (r === 'onboarding') return 'indexing now';
+  // (crew#1042) An onboarding run a Needs-you row holds (an orphan, a stall) is not indexing: it waits on you.
+  if (r === 'onboarding') return m.onboard.run !== null && isHeldRun(m.onboard.run.session) ? 'indexing waits on you' : 'indexing now';
   if (r === 'failed') return 'indexing failed';
   if (r === 'missing') return m.graphGap?.kind === 'no-graph-root' ? 'no place to keep a code map' : 'no code map';
   return 'not indexed yet';
@@ -109,7 +111,7 @@ const said = (n: number): string => WORDS[n] ?? String(n);
  * The one sentence under "Repositories".
  *  "Five repositories, all indexed and ready." / "Six repositories. Four are indexed; two need re-indexing."
  */
-export function reposSentence(read: 'loading' | 'failed' | 'known', readiness: readonly RepoReadiness[], waiting: number): string {
+export function reposSentence(read: 'loading' | 'failed' | 'known', readiness: readonly RepoReadiness[], waiting: number, heldIndexing = 0): string {
   if (read === 'loading') return 'Reading your repositories…';
   if (read === 'failed') return 'Your repositories could not be read just now.';
   const n = readiness.length;
@@ -119,7 +121,8 @@ export function reposSentence(read: 'loading' | 'failed' | 'known', readiness: r
   const ready = of('ready');
   const redo = of('stale') + of('failed') + of('missing');
   const never = of('never');
-  const building = of('onboarding');
+  // (crew#1042) `heldIndexing`: onboardings a Needs-you row holds; they are among `waiting`, not "indexing now".
+  const building = Math.max(0, of('onboarding') - heldIndexing);
   const wait = waiting > 0 ? ` ${said(waiting)} ${waiting === 1 ? 'job waits' : 'jobs wait'} on you.` : '';
   if (ready === n) return n === 1 ? `${repos}, indexed and ready.${wait}` : `${repos}, all indexed and ready.${wait}`;
   const parts = [

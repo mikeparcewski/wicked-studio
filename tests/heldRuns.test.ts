@@ -1,8 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { isHeldRun, markHeld } from '../src/board/heldRuns.js';
+import { useHeldRuns } from '../src/store/heldRuns.js';
+import { statusSentence } from '../src/board/proposalCard.js';
+import { chainFromUnits } from '../src/board/chainModel.js';
+import { nowStep } from '../src/components/session/ChainLine.js';
+import { ONBOARDING_WORKFLOW_ID, repoFleetModels } from '../src/board/repoStats.js';
+import { readinessWords, repoReadiness, reposSentence } from '../src/board/repoRows.js';
+import { knowledgeMarks } from '../src/board/repoKnowledge.js';
+import { statusCounts } from '../src/board/windowStats.js';
+import type { RepoEntry, SessionView } from '../src/api/types.js';
+import { act, renderHook } from '@testing-library/react';
+import { useHeldMarked, useHeldMarkedView } from '../src/hooks/useHeldMarked.js';
 import { deskLiveCounts, statusWord } from '../src/board/statusWords.js';
 import { liveRows, outcomeOf } from '../src/board/deskInsights.js';
-import { makeView } from './factories.js';
+import { makeUnit, makeView } from './factories.js';
 import { runState, sessionState } from '../src/board/sessionModel.js';
 import { railGroups } from '../src/board/deskModel.js';
 
@@ -52,5 +63,84 @@ describe('held runs: one mark, read by statusWord', () => {
   it('an archived run still reads Archived', () => {
     const [held] = markHeld([makeView({ id: 'a1', status: 'executing', archived_at: 1 } as Parameters<typeof makeView>[0])], new Set(['a1']));
     expect(statusWord(held!).word).toBe('Archived');
+  });
+});
+
+/**
+ * crew#1042 (operator ruling 2026-10-18, option 2): the held set is a shared store, and every surface that
+ * fetches its own runs — the run page, the repositories list, a repository's page — marks them from it
+ * (useHeldMarked, subscribed), so it reads the same verdict as the Desk. Before it, the run page said "Build
+ * is running" with a "now" badge, and the repositories said "1 working" / "Working now".
+ */
+describe('crew#1042: the shared held set reaches every surface', () => {
+  const ORPHAN = 'r-orphan';
+  const unit = makeUnit({ id: `${ORPHAN}:build`, session_id: ORPHAN, ord: 1, status: 'distributed', phase_ref: 'build' });
+  const orphan = makeView({ id: ORPHAN, status: 'executing', repo_ref: 'acme', workflow_id: 'feature', unit_ix: 0 }, [unit]);
+  const heldOf = (v: SessionView) => markHeld([v], new Set([v.session.id]))[0]!;
+  afterEach(() => { act(() => useHeldRuns.getState().setHeld(new Set())); });
+
+  it('isHeldRun reads only the mark: the store alone changes no verdict (no hidden global read)', () => {
+    useHeldRuns.getState().setHeld(new Set([ORPHAN]));
+    expect(isHeldRun(orphan.session)).toBe(false);
+    expect(isHeldRun(heldOf(orphan).session)).toBe(true);
+  });
+
+  it('a set with the same members keeps the old one (no re-render for nothing)', () => {
+    useHeldRuns.getState().setHeld(new Set([ORPHAN]));
+    const first = useHeldRuns.getState().held;
+    useHeldRuns.getState().setHeld(new Set([ORPHAN]));
+    expect(useHeldRuns.getState().held).toBe(first);
+  });
+
+  it('useHeldMarked follows the store both ways: a hold appearing marks the run, a hold clearing unmarks it', () => {
+    const runs = [orphan, makeView({ id: 'g1', status: 'awaiting_human' })];
+    const list = renderHook(() => useHeldMarked(runs));
+    const one = renderHook(() => useHeldMarkedView(orphan));
+    expect(list.result.current).toBe(runs);
+    expect(isHeldRun(one.result.current.session)).toBe(false);
+    act(() => useHeldRuns.getState().setHeld(new Set([ORPHAN, 'g1'])));
+    expect(list.result.current.map((v) => isHeldRun(v.session))).toEqual([true, false]);
+    expect(isHeldRun(one.result.current.session)).toBe(true);
+    act(() => useHeldRuns.getState().setHeld(new Set()));
+    expect(list.result.current.map((v) => isHeldRun(v.session))).toEqual([false, false]);
+    expect(isHeldRun(one.result.current.session)).toBe(false);
+    expect(one.result.current).toBe(orphan);
+  });
+
+  it('the run page: the status sentence waits on you, and the chain marks the step "waiting on you", not "now"', () => {
+    const chain = chainFromUnits(orphan);
+    expect(statusSentence(orphan, chain, undefined)).toBe('Build is running · 0 of 1 done');
+    expect(nowStep(chain, orphan.units, null, 'working')).toMatchObject({ kind: 'run', word: 'now' });
+    expect(statusSentence(heldOf(orphan), chain, undefined)).toBe('Waiting on you — see Needs you · 0 of 1 done');
+    expect(nowStep(chain, orphan.units, null, 'held')).toMatchObject({ index: 0, kind: 'wait', word: 'waiting on you' });
+  });
+
+  it('the repositories: a held run is waiting, not working now, and counts with the gates', () => {
+    const acme: RepoEntry = { id: 'acme', name: 'acme', root_path: '/tmp/acme', default_branch: 'main', registered_at: 1_700_000_000 };
+    const fold = (v: SessionView) => repoFleetModels([acme], [v], {}, new Set([ORPHAN]))[0]!;
+    expect(fold(orphan)).toMatchObject({ activeNow: true, counts: { active: 1, gates: 0 } });
+    expect(fold(orphan).waiting).toHaveLength(0);
+    expect(fold(heldOf(orphan))).toMatchObject({ activeNow: false, counts: { active: 0, gates: 1 } });
+    expect(fold(heldOf(orphan)).waiting.map((v) => v.session.id)).toEqual([ORPHAN]);
+    expect(statusCounts([heldOf(orphan)])).toMatchObject({ active: 0, gates: 1 });
+    expect(statusWord(heldOf(orphan))).toEqual({ word: 'Waiting on you', tone: 'gate' });
+  });
+
+  it('a held onboarding is not "indexing now" anywhere: the readiness words, the page sentence and the Code graph mark (codex r2)', () => {
+    const acme: RepoEntry = { id: 'acme', name: 'acme', root_path: '/tmp/acme', default_branch: 'main', registered_at: 1_700_000_000 };
+    const onboarding = makeView({ id: 'o1', status: 'executing', repo_ref: 'acme', workflow_id: ONBOARDING_WORKFLOW_ID });
+    const fold = (v: SessionView) => repoFleetModels([acme], [v], {}, new Set(['o1']))[0]!;
+    const live = fold(onboarding);
+    expect(readinessWords(repoReadiness(live, 0), live, 0)).toBe('indexing now');
+    expect(reposSentence('known', [repoReadiness(live, 0)], 0)).toMatch(/indexing now/);
+    const code = (v: SessionView) => knowledgeMarks(acme, [v], { kinds: { state: 'loading' }, reqs: { state: 'loading' } }, 0).find((k) => k.id === 'code')!;
+    expect(code(onboarding)).toMatchObject({ value: 'indexing now', tone: 'run' });
+    const held = fold(heldOf(onboarding));
+    expect(readinessWords(repoReadiness(held, 0), held, 0)).toBe('indexing waits on you');
+    expect(held.waiting).toHaveLength(1);
+    const sentence = reposSentence('known', [repoReadiness(held, 0)], held.waiting.length, 1);
+    expect(sentence).not.toMatch(/indexing now/);
+    expect(sentence).toMatch(/One job waits on you\./);
+    expect(code(heldOf(onboarding))).toMatchObject({ value: 'indexing waits on you', tone: 'gate' });
   });
 });
