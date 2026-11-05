@@ -58,13 +58,6 @@ function Harness(): React.ReactElement {
     </>
   );
 }
-function type(text: string): void {
-  const box = screen.getByTestId('desk-composer-input') as HTMLTextAreaElement;
-  fireEvent.change(box, { target: { value: text, selectionStart: text.length } });
-  box.setSelectionRange(text.length, text.length);
-  fireEvent.select(box);
-}
-const key = (k: string): void => { fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: k }); };
 const next = (): void => { fireEvent.click(screen.getByTestId('launch-wizard-next')); };
 
 beforeEach(() => {

@@ -17,6 +17,7 @@ import {
 import { gateInstance } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
+import { seatStanding } from '../gateVerdictModel.js';
 import { defaultSelection } from '../../board/chatOpen.js';
 import { chosenSeats, NO_SEAT_PICKED, seatOff, useComposerSeats, useLaunchSeats } from '../../store/composerSeats.js';
 import { loadCatalog, loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
@@ -252,7 +253,9 @@ export function Composer({
   const chipEntry = useMemo(() => {
     if (wfChip === null || catalogView === null) return null;
     const byCard = wfChip.entryId === undefined ? undefined : catalogView.entries.find((e) => e.id === wfChip.entryId);
-    return byCard ?? (wfChip.entryId === undefined ? workflowEntry(catalogView, wfChip.workflowId) : null);
+    const found = byCard ?? (wfChip.entryId === undefined ? workflowEntry(catalogView, wfChip.workflowId) : null);
+    // A card a refresh retargeted (another workflow, another kind) is not the card picked: pick it again (codex r1).
+    return found !== null && found.launchId === wfChip.workflowId && startsInline(found) ? found : null;
   }, [wfChip, catalogView]);
   const inline = useRef<InlineStartHandle | null>(null);
   const [startBlocker, setStartBlocker] = useState<string | null>(null);
@@ -321,7 +324,14 @@ export function Composer({
   // A new app is made by crew's own helpers (the app's turn): no helpers row for it.
   const seatsApply = eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
   const showSeats = seatsApply && !atMenuOpen;
-  const sendSeats = chosenSeats(eligibleSeats, dropped, picked);
+  // A job's helpers (New job's J4 rule, codex r1 on #982): one that cannot take work now (signed out, benched) is off
+  // unless turned on by hand, and the row shows exactly what the launch sends.
+  const unusable = useMemo(() => new Set(wfChip === null ? [] : (roster ?? []).flatMap((s) => {
+    const st = seatStanding(s);
+    return st.state === 'ready' || st.state === 'unknown' ? [] : [s.key];
+  })), [wfChip, roster]);
+  const isOffSeat = (key: string): boolean => (unusable.has(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
+  const sendSeats = wfChip === null ? chosenSeats(eligibleSeats, dropped, picked) : eligibleSeats.filter((k) => !isOffSeat(k));
   // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
   // chat's primary — refused instead, by name (codex r1 on #631).
   const namedHelper = wfChip === null && opensChat && askPathOn
@@ -512,7 +522,7 @@ export function Composer({
         <div data-testid="composer-seats" role="group" aria-label="Helpers this send uses" className="wk-composer-chips">
           <span className="wk-composer-note">Helpers</span>
           {eligibleSeats.map((key) => {
-            const on = !seatOff(key, dropped, picked);
+            const on = !isOffSeat(key);
             const seat = (roster ?? []).find((s) => s.key === key);
             const name = seat === undefined ? seatLabel({ key }) : seatLabel(seat);
             return (
@@ -523,7 +533,7 @@ export function Composer({
                 data-key={key}
                 aria-pressed={on}
                 title={on ? `${name} takes part — click to leave it out` : `${name} is left out — click to include it`}
-                onClick={() => toggleSeat(key)}
+                onClick={() => toggleSeat(key, unusable.has(key))}
                 className={`wk-composer-chip wk-composer-seat${on ? '' : ' wk-composer-seat--off'}`}
               >
                 {name}
@@ -541,7 +551,6 @@ export function Composer({
           sessionRepo={sessionRepo}
           projectId={project?.projectId ?? contextProjectId}
           seatKeys={sendSeats}
-          picked={picked}
           words={text}
           navigate={navigate ?? goToPath}
           handle={inline}

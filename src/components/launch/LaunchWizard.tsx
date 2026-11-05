@@ -373,13 +373,16 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       shape: (x) => {
         if (!cardsStartInChat || !startsInline(x)) { pickCard(x.launchId, x.id); return; }
         const key = draft.composerKey;
-        const here = key !== null && key !== 'desk' && pageComposerKey() === key ? key : null;
+        // Only a composer that IS a chat (never the desk, a run's page or a repository's) takes it (codex r1).
+        const here = key !== null && launchChatId(key, true) !== null && pageComposerKey() === key ? key : null;
+        // Each kind keeps its own words (studio#767's rule, `withJobKind`): a Demo video's brief is not a bug's.
+        const words = withJobKind(draft, x.launchId).intent;
         finish();
         if (here !== null) {
           addAboutChip(here, workflowChipFor(x));
-          seedComposer(here, draft.intent);
+          seedComposer(here, words);
         } else {
-          startInNewChat(x, { projectId: filedProject, intent: draft.intent });
+          startInNewChat(x, { projectId: filedProject, intent: words });
         }
       },
     });

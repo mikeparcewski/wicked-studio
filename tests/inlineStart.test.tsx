@@ -49,6 +49,11 @@ const CATALOG = { ...rig, entries: [...entries, {
 }] };
 
 let repos: RepoEntry[] = [];
+/** The presets the scope serves (a built-in `bug` preset makes the launch preview run), and what the preview says. */
+let presets: unknown[] = [];
+let preview: unknown = { steps: [] };
+/** A health read that never answers (the capabilities stay unread). */
+let holdHealth = false;
 let read: string[] = [];
 const gets = (): string[] => read;
 let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
@@ -63,15 +68,17 @@ function stubWire(): void {
       const body = typeof init.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
       posts.push({ path, body });
       if (path === '/runs') return json({ runId: 'run-new' }, 201);
+      if (path === '/plans/preview') return json(preview);
       if (path === '/apps') return json({ app: { slug: String(body['slug']), name: 'x', projectId: body['projectId'], head: { version: 1 } } }, 201);
       if (/^\/apps\/[^/]+\/turns$/.test(path)) return json({ runId: 'turn-run', turnId: 't1' }, 202);
       return json({ ok: true });
     }
     read.push(path);
+    if (path === '/health' && holdHealth) return new Promise<Response>(() => {});
     if (path === '/workflows/catalog') return json(CATALOG);
     return json(path === '/workflows' ? { workflows: ['bug', 'feature', 'domain-extraction', 'review-recent-work'].map(def) }
       : path === '/roster' ? { roster: SEATS } : path === '/repos' ? { repos }
-        : path === '/presets' ? { presets: [] } : path === '/projects' ? { projects: [PROJECT] } : path === '/settings' ? { settings: {} } : {});
+        : path === '/presets' ? { presets } : path === '/projects' ? { projects: [PROJECT] } : path === '/settings' ? { settings: {} } : {});
   }));
 }
 
@@ -98,6 +105,9 @@ const launches = (): Array<Record<string, unknown>> => posts.filter((p) => p.pat
 
 beforeEach(() => {
   repos = [repo('svc')];
+  presets = [];
+  preview = { steps: [] };
+  holdHealth = false;
   stubWire();
   resetWorkflowCatalog();
   resetPlanCatalog();
@@ -209,6 +219,8 @@ describe('a / pick starts the work in this chat', () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
     expect(launches()).toEqual([]);
     fireEvent.click(screen.getAllByTestId('composer-start-project')[1]!);
+    // That project's presets are read before the gate is placed (codex r1 P1).
+    await waitFor(() => expect(screen.getByTestId('session-composer-send')).not.toBeDisabled());
     enter();
     await waitFor(() => expect(launches()).toHaveLength(1));
     expect(launches()[0]!['projectId']).toBe('p2');
@@ -222,6 +234,118 @@ describe('a / pick starts the work in this chat', () => {
     await waitFor(() => expect(wfChip('chat-1')).toMatchObject({ workflowId: 'bug' }));
     expect(box().value).toBe('the charge never clears');
     expect(useLaunchWizard.getState().open).toBe(false);
+  });
+});
+
+describe('codex r1 on #982: the plan gate and the request are exactly what the row shows', () => {
+  it('P1: while the daemon\'s capabilities are still being read, Enter starts nothing (power could not be turned off)', async () => {
+    holdHealth = true;
+    useCapabilities.setState({ loaded: false });
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('session-composer-send')).toBeDisabled());
+    enter();
+    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+    expect(launches()).toEqual([]);
+    act(() => useCapabilities.setState({ loaded: true }));
+    await waitFor(() => expect(screen.getByTestId('session-composer-send')).not.toBeDisabled());
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]!['power']).toBe(false);
+  });
+
+  it('P1: a scoped preset holds before its first WORK step (before:2 past the scope step), off the preview', async () => {
+    presets = [{ name: 'bug', scope: 'global', steps: [{ id: 'build', catalog: 'build' }], created_by: 'builtin', updated_at: 1 }];
+    preview = { steps: [{ id: 'pa-scope', catalog: 'pa-scope' }, { id: 'build', catalog: 'build' }] };
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]!['humanConfirm']).toBe('before:2');
+    expect(posts.some((p) => p.path === '/plans/preview')).toBe(true);
+  });
+
+  it('a signed-out helper is off on the row and not sent; turned on by hand, it is', async () => {
+    setCachedRoster([...SEATS, { key: 'pi', display_name: 'Pi', binary: 'pi', enabled_for_council: true, signed_in: false } as RosterSeat]);
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    const pi = (): HTMLElement => screen.getAllByTestId('composer-seat').find((b) => b.dataset.key === 'pi')!;
+    await waitFor(() => expect(pi().getAttribute('aria-pressed')).toBe('false'));
+    type('x');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(JSON.parse(String(launches()[0]!['clisJson'])).map((x: RosterSeat) => x.key)).toEqual(['claude', 'codex']);
+  });
+
+  it('a default repository (the only one, or the session\'s) can be changed inline', async () => {
+    repos = [repo('svc'), repo('web')];
+    function WithRun(): React.ReactElement {
+      const [text, setText] = useState('');
+      const run = { session: { id: 'r-1', status: 'completed', problem: 'p', repo_ref: 'svc' }, units: [] } as never;
+      return <Composer composerKey="chat-1" text={text} setText={setText} onSend={() => {}} placeholder="p" ariaLabel="a" variant="session" navigate={() => {}} runs={[run]} />;
+    }
+    render(<WithRun />);
+    await pick('bug', 'bug');
+    type('x');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    fireEvent.click(screen.getByTestId('composer-start-repo-change'));
+    fireEvent.click(screen.getAllByTestId('composer-start-repo').find((b) => b.dataset.repo === 'web')!);
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]!['repoRef']).toBe('web');
+  });
+
+  it('Unfiled is not a project: Apps still asks which one', async () => {
+    useProjectsStore.setState({ projects: [PROJECT, { ...PROJECT, id: 'p2', name: 'Web' }] as never });
+    useComposerChips.setState({ byComposer: { 'chat-1': [{ kind: 'project', key: 'p:default', label: 'Unfiled', projectId: 'default' }] } });
+    render(<Harness navigate={() => {}} />);
+    await pick('apps', 'apps');
+    type('Open tickets');
+    await waitFor(() => expect(screen.getAllByTestId('composer-start-project')).toHaveLength(2));
+    expect(screen.getByTestId('session-composer-send')).toBeDisabled();
+  });
+
+  it('a card a catalog refresh retargets to another workflow is not started under the old chip', async () => {
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('x');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    // The same card id now launches another workflow: the composer holds, naming no card.
+    act(() => useComposerChips.setState({ byComposer: { 'chat-1': [{ kind: 'workflow', key: 'wf', label: 'Fix a bug', workflowId: 'bug-v2', entryId: 'bug' }] } }));
+    await waitFor(() => expect(screen.getByTestId('composer-start').dataset.entry).toBe(''));
+    enter();
+    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+    expect(launches()).toEqual([]);
+  });
+
+  it('a card removed while its gate is being placed sends nothing', async () => {
+    presets = [{ name: 'bug', scope: 'global', steps: [{ id: 'build', catalog: 'build' }], created_by: 'builtin', updated_at: 1 }];
+    let release: (v: Response) => void = () => {};
+    const slow = new Promise<Response>((r) => { release = r; });
+    const base = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (String(url).includes('/plans/preview') ? slow : base(url, init))));
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('x');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    act(() => useComposerChips.setState({ byComposer: { 'chat-1': [] } }));
+    await act(async () => { release(new Response(JSON.stringify({ steps: [] }), { status: 200, headers: { 'content-type': 'application/json' } })); await new Promise((r) => setTimeout(r, 100)); });
+    expect(launches()).toEqual([]);
+  });
+
+  it('on a run\'s page the start is its own job (no chat id), and says so', async () => {
+    render(<Harness navigate={() => {}} composerKey="run:r-9" />);
+    await pick('bug', 'bug');
+    type('x');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('as its own job'));
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]!['chatId']).toBeUndefined();
   });
 });
 

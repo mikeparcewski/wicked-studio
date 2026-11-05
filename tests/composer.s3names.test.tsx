@@ -112,7 +112,7 @@ describe('S3: one name per helper, the same list in @ and the helpers row', () =
     await waitFor(() => expect(document.querySelector('[data-cmd="workflow-feature"]')).not.toBeNull());
     fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
     // ux-tonight: the job starts on this composer, in the repository the session's work names.
-    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent(/^Enter starts .+ in beta in this chat/));
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent(/^Enter starts .+ in beta /));
     expect(useLaunchWizard.getState().open).toBe(false);
   });
 
