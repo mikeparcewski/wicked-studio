@@ -32,6 +32,9 @@
 .wk-src-head-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .wk-src-sheet-main { flex: 1; min-height: 0; display: flex; }
 .wk-src-kinds { width: 196px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: var(--space-2); border-right: 1px solid var(--border-subtle); background: var(--surface-card); overflow-y: auto; }
+.wk-src-kinds-list { display: flex; flex-direction: column; gap: 2px; }
+.wk-src-kinds-list + .wk-src-kinds-list { margin-top: var(--space-3); }
+.wk-src-kinds-label { padding: var(--space-1) var(--space-2) 0; font-size: var(--text-caption); font-weight: var(--weight-strong); color: var(--ink-muted); }
 .wk-src-kind { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink-body); font: inherit; font-size: var(--text-body); text-align: left; cursor: pointer; }
 .wk-src-kind:hover { background: var(--accent-wash); }
 .wk-src-kind--on { background: var(--accent-subtle); color: var(--ink-high); font-weight: var(--weight-strong); }
@@ -144,7 +147,10 @@
   .wk-src-scrim { padding: 0; align-items: stretch; }
   .wk-src-sheet, .wk-src-dialog { width: 100%; height: 100%; max-height: none; border-radius: 0; }
   .wk-src-sheet-main { flex-direction: column; overflow-y: auto; }
-  .wk-src-kinds { flex: none; width: auto; flex-direction: row; flex-wrap: wrap; gap: var(--space-1); border-right: 0; border-bottom: 1px solid var(--border-subtle); overflow: visible; }
+  .wk-src-kinds { flex: none; width: auto; flex-direction: column; gap: var(--space-2); border-right: 0; border-bottom: 1px solid var(--border-subtle); overflow: visible; }
+  .wk-src-kinds-list { flex-direction: row; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+  .wk-src-kinds-list + .wk-src-kinds-list { margin-top: 0; }
+  .wk-src-kinds-label { flex-basis: 100%; padding: 0; }
   .wk-src-kind { padding: var(--space-1) var(--space-2); border: 1px solid var(--border); }
   .wk-src-kind .wk-src-meta { margin-left: var(--space-1); }
   .wk-src-grid { flex: 0 0 auto; min-height: auto; grid-template-columns: 1fr; overflow: visible; padding: var(--space-3); }

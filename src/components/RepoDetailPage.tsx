@@ -1,3 +1,4 @@
+import { RepoTrackers } from './RepoTrackers.js';
 import { repoGraphState, repoGraphWords } from '../board/repoGraphState.js';
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../api/client.js';
@@ -336,6 +337,9 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
             }}
           />
         </section>
+
+        {/* (DES-PM-001 §3.3) The trackers linked to this repository, and the projects a link here reaches. */}
+        <RepoTrackers repoId={repo.id} repoName={repo.name} navigate={navigate} />
 
         <StatLine
           data-testid="repo-detail-stats"

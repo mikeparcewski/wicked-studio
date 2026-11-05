@@ -10,6 +10,16 @@
 
 [data-theme="light"],
 [data-theme="wicked-light"] {
+  /* Project-management tools' marks (tokens.css), dark enough for a light ground. */
+  --pm-jira:   #1f5fc7;
+  --pm-github: #24292f;
+  --pm-ado:    #0a6cb8;
+  --pm-gitlab: #b34a1d;
+  --kn-project: hsl(268 52% 46%);
+  --kn-issue:   hsl(186 70% 30%);
+  --kn-run:     hsl(330 55% 44%);
+  --kn-pr:      hsl(48 80% 32%);
+
   /* Cool paper: the page sits a shade below white cards, the rail a shade below the page. */
   --_surface-0: #f4f6fa;
   --_surface-1: #eceff5;

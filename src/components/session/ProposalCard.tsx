@@ -29,6 +29,7 @@ import { useDiffDrift } from '../../store/gateDiffSeen.js';
 import { deliveryAssuranceOf, deliveryReceiptOf, sessionQe } from '../../board/assuranceModel.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
+import { actionJobTitle, TrackerActions } from '../trackers/TrackerActions.js';
 import { RunDataUse } from './RunDataUse.js';
 import { QeDeliveryFixLine, QeRefusalWarning } from '../QeRefusalWarning.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
@@ -362,6 +363,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
               {deliverRefused && <p id={`${runId}-go-why`} data-testid="session-proposal-go-why" className="wk-visually-hidden">Delivery is refused until QE acceptance passes.</p>}
             </>
           )}
+          {/* (DES-PM-001 §5) The deliver gate: what crew would post to the issues this job addresses, each confirmed or skipped. */}
+          {card.kind === 'deliver' && card.state === 'ask' && <TrackerActions runId={runId} stage="gate" title={actionJobTitle(view.session.problem)} data-testid="session-proposal-tracker-actions" />}
           {/* (review of the dock) Compact by default: the why of the plan, what QE recorded, the receipt and the
               delivery's own details are behind one "More about this". */}
           <details data-testid="session-proposal-more-about" className="wk-gate2-about">

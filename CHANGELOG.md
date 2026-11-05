@@ -13,6 +13,22 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **Project-management trackers linked to projects and repositories (DES-PM-001 PM-1; crew api-types 0.187.0, mirrored
+  until it is published).** Shown only on a crew that says it serves tracker links (`capabilities.trackerLinks`).
+  Data sources gains **Jira** and **GitHub Issues**: the vendor's own MCP server and a token typed once (sent with the
+  test only, then kept in the keychain by the save), the advice on restricting the token, each tool crew found reviewed
+  for agents (**Reviewed**: bound to the linked trackers; **Not for agents**: crew can't bind it; **Asks you**: a write,
+  only through an action the deliver gate asks about), Test connection's reach (the sites or repositories the token
+  reaches, no issue read) and the Agents switches in PM words. These two sheets are hand-built until the generated
+  connection surface replaces them. A project's Repositories tab gains **Linked trackers**: the trackers linked to it,
+  each with Remove (a removal shows once crew's links say so); those that reach it through its repositories,
+  read-only; the scope rule; and, where a tool's Agents switches keep the project out, a line that opens its Agents
+  box. **Link a tracker** picks the tool and site and searches the projects it lists live. A repository's page gains
+  the same card, with the projects a link there reaches; a project's own links never travel through a repository. A
+  job's Run tab and a project chat show **Trackers this job (chat) can read**: crew's tracker set, each labelled with
+  where it came from, and what is linked but not included. The launch composer gains **From an issue** (the set's issues
+  grouped by tracker), sends the project with the linked-issues preview, and asks which tracker an ambiguous key means.
+  The Knowledge map draws trackers, projects and the trail (`tracked_in`, `addresses`, `closes`).
 - **Understand's Knowledge map, the data-shape review, and Profile on a source sheet (DES-KNOWLEDGE-DATA-001 §10, §19
   B4; crew api-types 0.186.0, mirrored until it is published).** Understand gains a **Knowledge map** beside the
   repositories' code and requirements graphs (`/understand?view=knowledge`): the data shapes waiting for review on top

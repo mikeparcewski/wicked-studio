@@ -43,6 +43,8 @@ import { qeAcceptanceSetting, workflowRequiresQe } from '../board/assuranceModel
 import { QeOffNote } from './QeOffNote.js';
 import { LaunchPreview } from './LaunchPreview.js';
 import { LinkedIssuesLine, useLinkedIssuesPreview } from './LinkedIssuesLine.js';
+import { IssuePicker, qualifyRef, withIssue } from './trackers/IssuePicker.js';
+import { useTrackerLinksSupported } from '../api/trackers.js';
 import { PhasePicker } from './PhasePicker.js';
 import { isPlanGateNow, usePlanGate } from '../store/planGates.js';
 import { DELIVER_STEP } from '../board/planModel.js';
@@ -320,6 +322,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [baseSkill, setBaseSkill] = useState<BaseSkillPosture | null | undefined>(undefined);
   /** The linked-issue refs the operator left out of THIS launch, as the preview spelled them. */
   const [linkedExclude, setLinkedExclude] = useState<string[]>([]);
+  // (DES-PM-001 §6.1) A crew with tracker links: "From an issue" lists the tracker set's issues, and the linked-issues
+  // preview resolves through the project's tracker set (`projectId` rides the preview only then).
+  const trackerLinks = useTrackerLinksSupported();
+  const [issuesOpen, setIssuesOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     Promise.resolve()
@@ -449,10 +455,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // the preview is read for exactly that launch — the one this form is about to send.
   // The SAME problem the launch sends — the steer field rides it as "Operator guidance" (codex r1).
   const launchProblem = launchSteer.trim().length > 0 ? `${problem.trim()}\n\nOperator guidance: ${launchSteer.trim()}` : problem.trim();
-  const linkedPreview = useLinkedIssuesPreview({
-    enabled: daemonLinkedIssues && runId == null && selection.plan === null && Boolean(launchWorkflow),
-    problem: launchProblem, repoRef: targetRepoRef, exclude: linkedExclude,
-  });
   const targetLabel =
     targetRepoRef === null ? null : repoSlugOf(repos.find((r) => r.id === targetRepoRef) ?? { name: targetRepoRef });
   const targetRequired = launchKind === 'build' && target.kind === 'ambiguous';
@@ -508,6 +510,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // S16a-4f (codex r1): the flat launch form is pre-bound by whichever seed carried a project — the
   // retry prefill, else the steer prefill (the pre-bound `/p/:id/build/new` route moved to the Desk).
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(prefill?.projectId ?? steerSeed?.projectId ?? null);
+  // The project a launch's tracker set is computed for: none for Unfiled (crew's synthesised `default`).
+  const issueProject = (lockedProjectId ?? selectedProjectId ?? null) === 'default' ? null : (lockedProjectId ?? selectedProjectId ?? null);
+  const linkedPreview = useLinkedIssuesPreview({
+    enabled: daemonLinkedIssues && runId == null && selection.plan === null && Boolean(launchWorkflow),
+    problem: launchProblem, repoRef: targetRepoRef, exclude: linkedExclude,
+    projectId: trackerLinks ? (lockedProjectId ?? selectedProjectId ?? null) : null,
+  });
   const [showNewProject, setShowNewProject] = useState(false);
   const projectsRequested = useRef(false);
 
@@ -1551,6 +1560,19 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         )}
         </span>
 
+        {/* ── (DES-PM-001 §6.1) Start from an issue of this job's trackers: a workflow launch, on a crew with tracker links. ── */}
+        {trackerLinks && runId == null && Boolean(launchWorkflow) && (issueProject !== null || targetRepoRef !== null) && (
+          <button
+            type="button"
+            data-testid="launch-from-issue"
+            aria-expanded={issuesOpen}
+            onClick={() => setIssuesOpen((v) => !v)}
+            className="wk-btn wk-btn--secondary wk-btn--sm"
+          >
+            From an issue
+          </button>
+        )}
+
         {/* ── The phase picker's toggle (DES-TEAMING-002 T9). ── */}
         <button
           type="button"
@@ -1593,8 +1615,20 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {/* D4: a launch that delivers (a repo attached, "Open a PR" on) adds its own deliver step,
           so the picker does not offer a second one the preview would refuse. */}
       {pickerOpen && <PhasePicker model={selection} {...(launchDelivers ? { hide: [DELIVER_STEP] } : {})} />}
+      {issuesOpen && trackerLinks && (
+        <IssuePicker
+          projectId={issueProject}
+          repoId={targetRepoRef}
+          projectName={currentProject?.name ?? null}
+          repoName={targetLabel}
+          onPick={(ref, issue) => { setProblem((p) => withIssue(p, ref, issue.title)); setIssuesOpen(false); }}
+          onClose={() => setIssuesOpen(false)}
+        />
+      )}
       <LaunchPreview model={launchPreview} />
-      <LinkedIssuesLine preview={linkedPreview} exclude={linkedExclude} onToggle={(ref, out) => setLinkedExclude((xs) => out ? [...xs.filter((x) => x !== ref), ref] : xs.filter((x) => x !== ref))} />
+      <LinkedIssuesLine preview={linkedPreview} exclude={linkedExclude} onToggle={(ref, out) => setLinkedExclude((xs) => out ? [...xs.filter((x) => x !== ref), ref] : xs.filter((x) => x !== ref))}
+        // The preview reads the problem AND the operator guidance (launchProblem): a pick qualifies the ref in both.
+        {...(trackerLinks ? { onQualify: (ref: string, qualified: string) => { setProblem((p) => qualifyRef(p, ref, qualified)); setLaunchSteer((g) => qualifyRef(g, ref, qualified)); } } : {})} />
 
       {showNewProject && (
         <NewProjectModal

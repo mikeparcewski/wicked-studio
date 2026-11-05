@@ -18,6 +18,11 @@ const NODE_TOKENS: Record<KnowledgeMapNode['kind'], string> = {
   code: '--status-run',
   repo: '--ink-muted',
   knowledge: '--ink-muted',
+  tracker: '--ink-high',
+  project: '--kn-project',
+  issue: '--kn-issue',
+  run: '--kn-run',
+  pr: '--kn-pr',
 };
 const NODE_SHAPES: Record<KnowledgeMapNode['kind'], cytoscape.Css.NodeShape> = {
   source: 'round-rectangle',
@@ -26,8 +31,13 @@ const NODE_SHAPES: Record<KnowledgeMapNode['kind'], cytoscape.Css.NodeShape> = {
   code: 'ellipse',
   repo: 'hexagon',
   knowledge: 'triangle',
+  tracker: 'tag',
+  project: 'barrel',
+  issue: 'round-pentagon',
+  run: 'cut-rectangle',
+  pr: 'rhomboid',
 };
-const NODE_SIZE: Record<KnowledgeMapNode['kind'], number> = { source: 34, table: 24, shape: 26, code: 22, repo: 30, knowledge: 18 };
+const NODE_SIZE: Record<KnowledgeMapNode['kind'], number> = { source: 34, table: 24, shape: 26, code: 22, repo: 30, knowledge: 18, tracker: 30, project: 36, issue: 22, run: 24, pr: 24 };
 
 /** The typed relations drawn with their name; `contains` and `derived_from` are drawn faint and unnamed. */
 export const NAMED_RELS: ReadonlySet<string> = new Set(['describes', 'joins', 'governed_by', 'measures', 'tracked_in', 'addresses', 'closes']);
@@ -105,6 +115,9 @@ export function KnowledgeGraph({ nodes, edges, onSelect }: {
         { selector: 'edge.rel-joins', style: { 'line-color': resolveToken('--accent'), 'target-arrow-color': resolveToken('--accent'), 'line-style': 'solid' } },
         { selector: 'edge.rel-describes', style: { 'line-color': resolveToken('--status-run'), 'target-arrow-color': resolveToken('--status-run'), 'line-style': 'dashed' } },
         { selector: 'edge.rel-governed_by', style: { 'line-color': resolveToken('--status-gate'), 'target-arrow-color': resolveToken('--status-gate'), 'line-style': 'dotted', width: 3 } },
+        // (DES-PM-001 §3.4) A tracker `tracked_in` a project or a repo: solid and named; the trail (addresses, closes) dashed.
+        { selector: 'edge.rel-tracked_in', style: { 'line-color': resolveToken('--ink-muted'), 'target-arrow-color': resolveToken('--ink-muted'), 'line-style': 'solid' } },
+        { selector: 'edge.rel-addresses, edge.rel-closes', style: { 'line-color': resolveToken('--status-warn'), 'target-arrow-color': resolveToken('--status-warn'), 'line-style': 'dashed' } },
       ],
       layout: { name: 'fcose', animate: false, randomize: true, quality: 'default', idealEdgeLength: 140, nodeRepulsion: 20000, numIter: 2500, nodeSeparation: 100 } as cytoscape.LayoutOptions,
       wheelSensitivity: 0.3,
@@ -121,5 +134,5 @@ export function KnowledgeGraph({ nodes, edges, onSelect }: {
     return () => cy.destroy();
   }, [nodes, edges]);
 
-  return <div ref={ref} className="wk-know-graph" data-testid="knowledge-graph-canvas" role="img" aria-label="The knowledge map: sources, tables, repositories, code and data shapes" />;
+  return <div ref={ref} className="wk-know-graph" data-testid="knowledge-graph-canvas" role="img" aria-label="The knowledge map: sources, tables, repositories, code, data shapes, and trackers with the projects and repositories they are tracked in" />;
 }

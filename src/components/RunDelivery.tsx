@@ -10,6 +10,7 @@ import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { DeliverLift } from './DeliverLift.js';
 import { deliveryAssuranceOf, deliveryReceiptOf } from '../board/assuranceModel.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './session/AssuranceReceipt.js';
+import { actionJobTitle, TrackerActions } from './trackers/TrackerActions.js';
 import { RunDataUse } from './session/RunDataUse.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { QeRefusalWarning } from './QeRefusalWarning.js';
@@ -549,6 +550,8 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
       {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && !unverified ? true : null} testId="run-delivery-assurance" units={view.units} />}
       <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-delivery" />
       <RunDataUse runId={view.session.id} refresh={`${view.session.status}:${view.units.map((u) => u.status).join(',')}`} testId="run-delivery-data-use" />
+      {/* (DES-PM-001 §5) Once delivered: the comment and move crew would post to this job's issues, each confirmed or skipped. */}
+      {href !== null && <TrackerActions runId={view.session.id} stage="delivery" title={actionJobTitle(view.session.problem)} prUrl={href} data-testid="run-delivery-tracker-actions" />}
       {/* crew#720: the credentials-missing state, and the final-codebase zip in every outcome. */}
       <DeliverCredentialsNotice view={view} />
       <CodebaseDownload view={view} testId="run-delivery-codebase-zip" />

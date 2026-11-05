@@ -119,6 +119,18 @@
   --status-done:      var(--_ink-faint);
   --status-done-dim:  transparent;
 
+  /* ── Project-management tools' marks (DES-PM-001): each tool's own colour on its J / GH / ADO / GL badge, always
+   * beside its name (never told by colour alone). Light grounds re-set them in themes/light.css. */
+  --pm-jira:   #7fa8f0;
+  --pm-github: #d6d6d1;
+  --pm-ado:    #6fb3ea;
+  --pm-gitlab: #f0a37f;
+  /* A studio project on the Knowledge map (DES-PM-001 §3.4): its own hue, apart from the status colours. */
+  --kn-project: hsl(268 62% 70%);
+  --kn-issue:   hsl(186 62% 52%);
+  --kn-run:     hsl(330 62% 68%);
+  --kn-pr:      hsl(52 70% 60%);
+
   /* ── Nerve Center fills (DES-SYSTEM-VIEW) — the rail tile's WHOLE background takes its state:
      a soft green when all clear, solid amber when something needs a look, solid red when work is
      blocked. Each -fg clears WCAG AA on its own fill (tests/nerveCenterContrast.test.ts pins it):

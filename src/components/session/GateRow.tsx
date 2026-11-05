@@ -30,6 +30,8 @@ import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 import { RunDataUse } from './RunDataUse.js';
+import { actionJobTitle, TrackerActions } from '../trackers/TrackerActions.js';
+
 import { missingSeatsLine, OPERATOR_JUDGMENT_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
 import { baseCountOf, failureName, groupByFile, testPlace, testWords } from '../../board/failingChecks.js';
 import { useOfferReply } from './DecisionDock.js';
@@ -318,6 +320,8 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
       {qe !== null && receipt?.qe === undefined && <p className="wk-assurance"><QeAcceptanceLabel qe={qe} testId="session-gate-qe" /></p>}
       <RunDataUse runId={runId} refresh={events?.length ?? 0} testId="session-gate-data-use" />
+      {/* (DES-PM-001 §5) At the deliver gate: what crew would post to the issues this job addresses, each confirmed or skipped. */}
+      {gate?.gateKind === 'deliver' && <TrackerActions runId={runId} stage="gate" title={actionJobTitle(view?.session.problem)} data-testid="session-gate-tracker-actions" />}
     </>
   );
   return (
@@ -1055,4 +1059,3 @@ export function FailingGroups({ ids }: { ids: readonly string[] }): React.ReactE
     </div>
   );
 }
-
