@@ -181,3 +181,85 @@
 .wk-rep .wk-segmented-option[aria-checked="true"] { background: color-mix(in oklab, var(--ink-high) 12%, transparent); color: var(--ink-high); box-shadow: none; }
 .wk-rep .wk-segmented-option[aria-checked="true"]:hover { background: color-mix(in oklab, var(--ink-high) 22%, transparent); }
 @media (prefers-reduced-motion: reduce) { .wk-rep .wk-segmented-option { transition: none; } }
+
+/* ── DASHBOARDS ON THE REPORT (DES-REPORT-DASHBOARDS-001; design/mockups/report-dashboards) ──
+ *  - the header's Build a dashboard sits above the period;
+ *  - Your dashboards: the shown apps as their Apps cards, 2 across (1 on a phone), the head's meta and link;
+ *  - nothing shown yet: one dashed box with the two ways in;
+ *  - the Build sheet: a drawer over the right edge, the page dimmed beside it;
+ *  - Show on Report: the one switch (Properties' App group, the Apps card's ⋯ menu). */
+.wk-rep-period { display: flex; flex-direction: column; align-items: flex-end; gap: 16px; }
+.wk-rep-build-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 18px; border-radius: 10px; font-size: var(--text-body); font-weight: var(--weight-strong); }
+
+.wk-rep-dash-meta { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; }
+.wk-rep-dash-choose { color: var(--ink-high); font-weight: var(--weight-strong); text-decoration: underline; text-underline-offset: 3px; }
+.wk-rep-dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.wk-rep-dash-grid .wk-appcard { border-radius: 18px; }
+.wk-rep-dash-why { flex: 1 1 100%; color: var(--status-warn); font-size: var(--text-caption); line-height: 1.45; }
+.wk-rep-dash-gonelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.wk-rep-dash-gone { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; border: 1px dashed var(--border-strong); border-radius: 14px; color: var(--ink-body); font-size: var(--text-body); }
+.wk-rep-dash-empty { display: flex; flex-direction: column; gap: 20px; padding: 24px; border: 1px dashed var(--border-strong); border-radius: 18px; }
+.wk-rep-dash-empty-text { margin: 0; max-width: 560px; font-size: var(--text-lead); line-height: 1.5; color: var(--ink-body); }
+.wk-rep-dash-empty-text b { color: var(--ink-high); }
+.wk-rep-dash-empty-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.wk-rep-dash-empty-actions .wk-btn--primary { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 18px; border-radius: 10px; }
+
+.wk-rep-build-scrim { position: fixed; inset: 0; z-index: 46; display: flex; justify-content: flex-end; background: color-mix(in srgb, var(--ink-high) 28%, transparent); }
+.wk-rep-build { width: min(540px, 100%); height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px 24px 24px; background: var(--surface-base); box-shadow: var(--shadow-overlay); }
+.wk-rep-build:focus-visible { outline: none; }
+.wk-rep-build-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wk-rep-build-title { margin: 0; font-size: var(--text-section); font-weight: var(--weight-strong); color: var(--ink-high); }
+.wk-rep-build-x { min-width: 34px; min-height: 34px; font-size: var(--text-lead); line-height: 1; }
+.wk-rep-build-sub { margin: 0; font-size: var(--text-body); line-height: 1.5; color: var(--ink-body); }
+.wk-rep-build-for { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--text-caption); color: var(--ink-body); }
+.wk-rep-build-sources { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wk-rep-chip { display: inline-flex; align-items: center; padding: 2px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-full); color: var(--ink-high); font-size: var(--text-caption); }
+.wk-rep-build .wk-newapp { margin: 0; padding: 0; border: 0; background: transparent; }
+.wk-rep-build .wk-composer-chips[aria-label="Suggestions"] { flex-direction: column; align-items: stretch; }
+.wk-rep-build .wk-composer-suggestion { text-align: left; white-space: normal; padding: 10px 14px; border-radius: 12px; font-size: var(--text-body); line-height: 1.45; }
+.wk-rep-build-line { margin: 0; font-size: var(--text-body); line-height: 1.5; color: var(--ink-body); }
+.wk-rep-build-line[data-tone="warn"] { color: var(--status-warn); }
+.wk-rep-build-foot { margin: 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: var(--text-caption); line-height: 1.55; color: var(--ink-muted); }
+.wk-rep-build-foot b { color: var(--ink-high); }
+.wk-rep-build-made { display: flex; flex-direction: column; gap: 12px; }
+.wk-rep-build-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Show on Report: the label, the switch at the end of its row, and one line under it. */
+.wk-sor { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wk-sor-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wk-sor-label { color: var(--ink-high); font-size: var(--text-body); font-weight: var(--weight-strong); }
+.wk-sor-switch { position: relative; flex: 0 0 auto; width: 40px; height: 24px; padding: 0; border: 0; border-radius: var(--radius-full); background: color-mix(in oklab, var(--ink-high) 22%, var(--surface-card)); cursor: pointer; transition: background-color 0.14s; }
+.wk-sor-switch[aria-checked="true"] { background: var(--status-ok); }
+.wk-sor-switch:disabled { cursor: not-allowed; opacity: 0.55; }
+.wk-sor-switch[aria-busy="true"] { opacity: 0.7; cursor: progress; }
+.wk-sor-switch:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-sor-thumb { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface-card); box-shadow: 0 1px 2px color-mix(in srgb, var(--ink-high) 30%, transparent); transition: transform 0.14s; }
+.wk-sor-switch[aria-checked="true"] .wk-sor-thumb { transform: translateX(16px); background: var(--surface-card); }
+.wk-sor-help { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); line-height: 1.45; }
+.wk-sor-why { margin: 0; color: var(--ink-body); font-size: var(--text-caption); line-height: 1.45; }
+.wk-sor-why[data-tone="warn"] { color: var(--status-warn); }
+.wk-sor-manage { align-self: flex-start; font-size: var(--text-caption); font-weight: var(--weight-strong); color: var(--ink-high); }
+@media (prefers-reduced-motion: reduce) { .wk-sor-switch, .wk-sor-thumb { transition: none; } }
+
+/* The App group at the top of Properties (nothing selected). */
+.wk-appprops-app { display: flex; flex-direction: column; gap: 10px; margin: 0 0 var(--space-3); padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-card); }
+.wk-appprops-app-title { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); font-weight: var(--weight-strong); }
+
+/* The Apps card's ⋯ menu, above the card's whole-card link; the Apps page's filter line. */
+.wk-appcard-menu { position: relative; z-index: 2; margin-left: auto; }
+.wk-appcard-menu-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; padding: 0 6px; }
+/* While the menu is open the card lets it out (the card clips its picture's corners itself then), above the next card. */
+.wk-appcard:has(.wk-appcard-pop) { overflow: visible; z-index: 5; }
+.wk-appcard:has(.wk-appcard-pop) > .wk-appcard-prev { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.wk-appcard-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 3; width: min(300px, 80vw); padding: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-overlay); }
+.wk-apps-filterline { margin: 0 0 var(--space-4); color: var(--ink-body); font-size: var(--text-body); }
+.wk-apps-filterline b { color: var(--ink-high); }
+.wk-apps-filterline a { color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
+
+@media (max-width: 767px) {
+  .wk-rep-head { flex-direction: column; align-items: stretch; }
+  .wk-rep-period { align-items: flex-start; }
+  .wk-rep-dash-grid { grid-template-columns: minmax(0, 1fr); }
+  .wk-rep-build { width: 100%; padding: 16px; }
+  .wk-rep-dash-empty { padding: 18px; }
+}

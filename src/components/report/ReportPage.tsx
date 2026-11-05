@@ -1,6 +1,6 @@
 import { InsightsLine } from '../insights/InsightsLine.js';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ExternalLink, Minus } from 'lucide-react';
+import { ArrowDown, ArrowUp, ExternalLink, Minus, Plus } from 'lucide-react';
 import type { SessionView } from '../../api/types.js';
 import {
   agentReportRows, beforeWords, changeOf, customLimits, customProblem, endedIn, firstPassOf, isoDate,
@@ -19,12 +19,18 @@ import { agentColor, StackedBars } from '../charts/Chart.js';
 import { Segmented, Skeleton } from '../ui/index.js';
 import { ago } from '../AgeStamp.js';
 import { PageAskButton, pageTextLines, useAskableItems, usePageChatHostPage } from '../chat/PageChat.js';
+import { framing } from '../../store/reportShown.js';
+import { BuildDashboardSheet } from './BuildDashboardSheet.js';
+import { canBuild, ReportDashboards, useAppsGates } from './ReportDashboards.js';
 
 /**
  * THE REPORT (ui-v2; the `report` entry of design/mockups/desk-pages-redesign + the operator's
  * "more detailed, as they usually are … more whitespace, easy to scan"): one centred column, a title
  * and one sentence, the period as the one control, then one section after another: headline numbers
  * with their change, throughput, quality, cost, by repository, by agent, shipped.
+ *
+ * Right after the headline sit "Your dashboards" (DES-REPORT-DASHBOARDS-001): the apps whose Show on Report switch is
+ * on, live, kept out of the page chat's reading; the header's Build a dashboard opens the K5 composer in a sheet.
  *
  * Every number is read off crew (board/reportModel says which field). A figure crew does not serve
  * says "Not tracked yet" with what it would need ({@link NotTracked}); nothing is ever invented.
@@ -114,6 +120,13 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
     data: () => [`period: ${pw}`, ...pageTextLines(rootRef.current)],
   });
   const askable = useAskableItems('report', rootRef, () => [`period: ${pw}`]);
+
+  // Your dashboards, and Build a dashboard (shown only when crew runs app turns and queries, the App editor is
+  // installed, and studio is not framed).
+  const gates = useAppsGates();
+  const framed = useMemo(() => framing.framed(), []);
+  const buildOn = canBuild(gates, framed);
+  const [building, setBuilding] = useState(false);
   const ask = (label: string): { 'data-askable': string; tabIndex: number } => ({ 'data-askable': `${label} · ${pw}`, tabIndex: 0 });
 
   return (
@@ -126,6 +139,11 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
             <InsightsLine navigate={navigate} testId="report-insights-line" />
           </div>
           <div className="wk-rep-period">
+            {buildOn && (
+              <button type="button" className="wk-btn wk-btn--secondary wk-rep-build-btn" data-testid="report-build" onClick={() => setBuilding(true)}>
+                <Plus size={16} aria-hidden /> Build a dashboard
+              </button>
+            )}
             <Segmented label="Period" data-testid="report-period" value={kind}
               options={[{ value: '7', label: '7 days', testId: 'report-period-7' }, { value: '30', label: '30 days', testId: 'report-period-30' }, { value: 'custom', label: 'Custom', testId: 'report-period-custom' }]}
               onChange={setKind} />
@@ -167,6 +185,9 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
 />
           </ul>
         </section>
+
+        {/* Your dashboards: the apps switched on for Report (never every app), kept out of the page chat. */}
+        <ReportDashboards projectId={projectId} navigate={navigate} gates={gates} onBuild={buildOn ? () => setBuilding(true) : null} />
 
         {/* 2. Throughput */}
         <section className="wk-rep-sec" aria-labelledby="report-h-flow" data-testid="report-throughput" {...ask('Throughput')} data-ask-key="throughput">
@@ -341,6 +362,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
           )}
         </section>
       </div>
+      {building && <BuildDashboardSheet projectId={projectId} period={pw} navigate={navigate} framed={framed} onClose={() => setBuilding(false)} />}
     </div>
   );
 }

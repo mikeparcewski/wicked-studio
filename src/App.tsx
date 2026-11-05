@@ -636,7 +636,7 @@ export function App(): React.ReactElement {
     // `/apps` (DES-APPS-001): the apps dashboard; `/apps/<slug>` one app in the runtime.
     if (panel === 'apps') {
       return artifactId === null
-        ? <div className="flex-1 overflow-y-auto"><AppsPage navigate={navigate} /></div>
+        ? <div className="flex-1 overflow-y-auto"><AppsPage navigate={navigate} search={search} /></div>
         : <AppRoutePage slug={artifactId} search={search} navigate={navigate} runs={shownRuns} />;
     }
     // `/editors/{dev,conformance}` (EP-P1): one editor plugin in its sandboxed host, behind a dev route.

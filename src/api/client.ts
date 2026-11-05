@@ -807,6 +807,14 @@ export const api = {
       body: JSON.stringify({ 'studio.view': prefs }),
     }),
 
+  /** DES-REPORT-DASHBOARDS-001 §2: `studio.report` (`{shown: [slug…]}`, the apps Report shows) rides the SAME settings
+   *  store. Only `store/reportShown.ts`'s one writer calls it; the merged blob it returns is the read-back it judges. */
+  putReportShown: (shown: readonly string[]) =>
+    apiFetch<{ settings: Record<string, unknown> }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ 'studio.report': { shown } }),
+    }),
+
   // ── Projects (DES-PROJECT-001) ───────────────────────────────────────────────
 
   /** All projects; `status=active` (default) or `archived` filters. Includes the synthesized "Unfiled" default. */

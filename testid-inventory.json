@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 320,
-    "occurrences": 4600,
-    "static": 3845,
+    "files": 325,
+    "occurrences": 4660,
+    "static": 3900,
     "dynamic": 170,
     "computed": 53
   },
@@ -759,6 +759,12 @@
       ]
     },
     {
+      "testId": "app-properties-app",
+      "files": [
+        "src/components/apps/AppProperties.tsx"
+      ]
+    },
+    {
       "testId": "app-properties-empty",
       "files": [
         "src/components/apps/AppProperties.tsx"
@@ -789,9 +795,15 @@
       ]
     },
     {
+      "testId": "apps-back-report",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
       "testId": "apps-card",
       "files": [
-        "src/components/apps/AppsPage.tsx",
+        "src/components/apps/AppCard.tsx",
         "src/components/editorHost/AppHostView.tsx"
       ]
     },
@@ -804,13 +816,13 @@
     {
       "testId": "apps-card-code",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
       "testId": "apps-card-desc",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
@@ -828,29 +840,47 @@
     {
       "testId": "apps-card-kpi-value",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
       "testId": "apps-card-kpis",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-menu",
+      "files": [
+        "src/components/apps/AppCard.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-menu-pop",
+      "files": [
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
       "testId": "apps-card-name",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
       "testId": "apps-card-nonumbers",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
       "testId": "apps-card-note",
+      "files": [
+        "src/components/apps/AppCard.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-onreport",
       "files": [
         "src/components/apps/AppsPage.tsx"
       ]
@@ -858,7 +888,7 @@
     {
       "testId": "apps-card-open",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
@@ -870,13 +900,13 @@
     {
       "testId": "apps-card-preview",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
       "testId": "apps-card-preview-when",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
@@ -900,7 +930,7 @@
     {
       "testId": "apps-card-sample",
       "files": [
-        "src/components/apps/AppsPage.tsx",
+        "src/components/apps/AppCard.tsx",
         "src/components/editorHost/AppHostView.tsx"
       ]
     },
@@ -919,25 +949,25 @@
     {
       "testId": "apps-card-sources",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
       "testId": "apps-card-turn",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
       "testId": "apps-card-updated",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
       "testId": "apps-card-version",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {
@@ -987,6 +1017,24 @@
       "testId": "apps-error-retry",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-filter",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-filter-all",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-filter-project",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
       ]
     },
     {
@@ -1052,31 +1100,49 @@
     {
       "testId": "apps-new-chat",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/NewAppChat.tsx"
       ]
     },
     {
       "testId": "apps-new-composer",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/NewAppChat.tsx"
+      ]
+    },
+    {
+      "testId": "apps-new-noproject",
+      "files": [
+        "src/components/apps/NewAppChat.tsx"
       ]
     },
     {
       "testId": "apps-new-note",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/NewAppChat.tsx"
       ]
     },
     {
       "testId": "apps-new-project",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/NewAppChat.tsx"
+      ]
+    },
+    {
+      "testId": "apps-new-project-locked",
+      "files": [
+        "src/components/apps/NewAppChat.tsx"
       ]
     },
     {
       "testId": "apps-new-project-one",
       "files": [
-        "src/components/apps/AppsPage.tsx"
+        "src/components/apps/NewAppChat.tsx"
+      ]
+    },
+    {
+      "testId": "apps-new-projects-link",
+      "files": [
+        "src/components/apps/NewAppChat.tsx"
       ]
     },
     {
@@ -1117,6 +1183,12 @@
     },
     {
       "testId": "apps-route",
+      "files": [
+        "src/components/apps/AppRoutePage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-route-back",
       "files": [
         "src/components/apps/AppRoutePage.tsx"
       ]
@@ -14963,6 +15035,114 @@
       ]
     },
     {
+      "testId": "report-build",
+      "files": [
+        "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-chat",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-close",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-failnote",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-foot",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-for",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-full",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-made",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-made-why",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-open",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-period",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-retry",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-scrim",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-sheet",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-source",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-sources-failed",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-sources-none",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
+      "testId": "report-build-sources-reading",
+      "files": [
+        "src/components/report/BuildDashboardSheet.tsx"
+      ]
+    },
+    {
       "testId": "report-cost",
       "files": [
         "src/components/report/ReportPage.tsx"
@@ -14990,6 +15170,108 @@
       "testId": "report-custom-to",
       "files": [
         "src/components/report/ReportPage.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-build",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-choose",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-count",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-empty",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-failed",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-gone",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-grid",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-loading",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-malformed",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-open",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-readonly",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-reload",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-remove",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-retry",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-unpin",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dash-verdict",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
+      ]
+    },
+    {
+      "testId": "report-dashboards",
+      "files": [
+        "src/components/report/ReportDashboards.tsx"
       ]
     },
     {
@@ -18493,6 +18775,54 @@
       "testId": "show-new-job-unsaved",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "show-on-report",
+      "files": [
+        "src/components/apps/ShowOnReport.tsx"
+      ]
+    },
+    {
+      "testId": "show-on-report-help",
+      "files": [
+        "src/components/apps/ShowOnReport.tsx"
+      ]
+    },
+    {
+      "testId": "show-on-report-manage",
+      "files": [
+        "src/components/apps/ShowOnReport.tsx"
+      ]
+    },
+    {
+      "testId": "show-on-report-reload",
+      "files": [
+        "src/components/apps/ShowOnReport.tsx"
+      ]
+    },
+    {
+      "testId": "show-on-report-retry",
+      "files": [
+        "src/components/apps/ShowOnReport.tsx"
+      ]
+    },
+    {
+      "testId": "show-on-report-switch",
+      "files": [
+        "src/components/apps/ShowOnReport.tsx"
+      ]
+    },
+    {
+      "testId": "show-on-report-verdict",
+      "files": [
+        "src/components/apps/ShowOnReport.tsx"
+      ]
+    },
+    {
+      "testId": "show-on-report-why",
+      "files": [
+        "src/components/apps/ShowOnReport.tsx"
       ]
     },
     {
@@ -24355,6 +24685,7 @@
         "src/components/agents/SetupPanel.tsx",
         "src/components/apps/AppComposer.tsx",
         "src/components/apps/AppProperties.tsx",
+        "src/components/apps/NewAppChat.tsx",
         "src/components/ask/AskCard.tsx",
         "src/components/calm/Calm.tsx",
         "src/components/charts/CategoryBars.tsx",
