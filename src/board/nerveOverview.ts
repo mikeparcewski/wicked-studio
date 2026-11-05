@@ -1,5 +1,5 @@
 import type { SystemAttention, SystemCli, SystemGovernanceCard, SystemInfra, SystemSnapshot } from '../api/system.js';
-import { cliInUse, notSetUp, toResolveWords, workedBefore, type NerveState } from './nerveCenter.js';
+import { neverWorked, notSetUp, seatNeeded, toResolveWords, type NerveState } from './nerveCenter.js';
 import type { NerveTab } from './nerveTabs.js';
 import { countWord } from './deskHome.js';
 import { rowLead } from './rowHeadline.js';
@@ -74,17 +74,17 @@ export function cliTile(c: SystemCli): Tile {
 }
 
 /**
- * The helper tiles, with what crew's attention says about each seat: a signed-out seat a job needs is
- * amber ("Signed out", a job needs it); one nobody set up is quiet ("Not set up", optional).
+ * The helper tiles, with what crew's attention says about each seat: a signed-out seat a job needs (its
+ * step is on it, or a job's item names it) is amber ("Signed out", a job needs it); one nothing needs is
+ * quiet ("Not set up" or "Signed out", optional).
  */
 export function helperTiles(clis: readonly SystemCli[], attention: readonly SystemAttention[]): Tile[] {
-  const used = new Set(attention.map(cliInUse).filter((k): k is string => k !== null));
   const optional = new Set(notSetUp(clis, attention).map((c) => c.key));
   return clis.map((c) => {
     const t = cliTile(c);
     if (c.state !== 'signed_out') return t;
-    if (used.has(c.key)) return { ...t, state: 'Signed out', tone: 'warn', line: 'A job needs it' };
-    if (optional.has(c.key)) return { ...t, state: workedBefore(c) ? 'Signed out' : 'Not set up', tone: 'quiet', line: 'Optional' };
+    if (seatNeeded(c, attention)) return { ...t, state: 'Signed out', tone: 'warn', line: 'A job needs it' };
+    if (optional.has(c.key)) return { ...t, state: neverWorked(c) ? 'Not set up' : 'Signed out', tone: 'quiet', line: 'Optional' };
     return t;
   });
 }

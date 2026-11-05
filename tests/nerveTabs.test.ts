@@ -115,6 +115,8 @@ describe('the summary chips', () => {
     // One agent signed in is yellow even from a crew that sends no item for it; a check not answered is grey.
     expect(byId(nerveSummary(state('fresh'), snap({ clis: [{ state: 'signed_in' }, { state: 'signed_out' }] }), FB))['clis']!.tone).toBe('warn');
     expect(byId(nerveSummary(state('fresh'), snap({ clis: [{ state: 'signed_in' }, { state: 'signed_in' }, { state: 'unknown' }] }), FB))['clis']!.tone).toBe('unknown');
+    // Unknown first: one confirmed and one not answered is not known, never a sign-in to make.
+    expect(byId(nerveSummary(state('fresh'), snap({ clis: [{ state: 'signed_in' }, { state: 'unknown' }] }), FB))['clis']!.tone).toBe('unknown');
     // An older crew: two ready and one never signed in is green.
     expect(byId(nerveSummary(state('fresh'), null, { roster: [{ ready: true, failing: false }, { ready: true, failing: false }, { ready: false, failing: false }], needCount: 0, governance: 'ok' }))['clis']!.tone).toBe('ok');
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { diskReading, normalizeSnapshot, type SystemAttention } from '../src/api/system.js';
-import { notSetUpWords, systemSummary } from '../src/board/nerveCenter.js';
+import { notSetUp, notSetUpWords, systemSummary } from '../src/board/nerveCenter.js';
 import {
   helperTiles, tilesNeedingALook,
   bytesWords, cliTile, governanceTile, machineTile, overviewSentence, qePassPct, servicesTile, slowingItems, slowingLine, waitingItems, waitingWords,
@@ -132,15 +132,32 @@ describe('a CLI nobody set up (operator 2026-11-05)', () => {
   it('is a quiet "Not set up · Optional" tile that never counts as needing a look; one a job needs is amber', () => {
     const quietTiles = helperTiles(LIVE.clis, []);
     const opencode = quietTiles.find((t) => t.id === 'opencode')!;
-    expect(opencode).toMatchObject({ state: 'Not set up', tone: 'quiet', line: 'Optional', signIn: 'opencode' });
+    // Its week was not read (stats null): "Signed out", never a claim that it was not set up.
+    expect(opencode).toMatchObject({ state: 'Signed out', tone: 'quiet', line: 'Optional', signIn: 'opencode' });
+    const counted = helperTiles(LIVE.clis.map((c) => (c.key === 'opencode' ? { ...c, units: 0 } : c)), []).find((t) => t.id === 'opencode')!;
+    expect(counted.state).toBe('Not set up');
     expect(tilesNeedingALook([opencode])).toBe(0);
     const used = helperTiles(LIVE.clis, [att('cli:out:opencode', 'clis')]).find((t) => t.id === 'opencode')!;
     expect(used).toMatchObject({ state: 'Signed out', tone: 'warn', line: 'A job needs it' });
     expect(tilesNeedingALook([used])).toBe(1);
   });
 
+  it('a seat a held job\'s item names (its failover) is amber and counted, never optional', () => {
+    const dead = att('run:x', 'runs', 'red', { reason: 'Every eligible seat failed it', remedy: 'Approve the retry; sign in opencode so another helper can take over.' });
+    const t = helperTiles(LIVE.clis, [dead]).find((x) => x.id === 'opencode')!;
+    expect(t).toMatchObject({ state: 'Signed out', tone: 'warn' });
+    expect(tilesNeedingALook([t])).toBe(1);
+    expect(notSetUp(LIVE.clis, [dead]).map((c) => c.key)).not.toContain('opencode');
+  });
+
+  it('from a crew with no one-reviewer item, one agent signed in still makes none of the others optional', () => {
+    const one = LIVE.clis.map((c, i) => (i === 0 ? c : { ...c, state: 'signed_out' as const }));
+    expect(notSetUpWords(one, [])).toBeNull();
+  });
+
   it('the info line names the optional ones, and none while too few agents are signed in to review', () => {
-    expect(notSetUpWords(LIVE.clis, [])).toMatch(/^Not set up: .*— optional$/);
+    expect(notSetUpWords(LIVE.clis, [])).toBe('Signed out: opencode — optional');
+    expect(notSetUpWords(LIVE.clis.map((c) => (c.key === 'opencode' ? { ...c, units: 0 } : c)), [])).toBe('Not set up: opencode — optional');
     expect(notSetUpWords(LIVE.clis, [att('cli:one-reviewer', 'clis')])).toBeNull();
     expect(systemSummary(att('cli:one-reviewer', 'clis', 'yellow', { text: 'Sign in a second agent so a different one can review' }))).toBe('sign in a second agent');
   });

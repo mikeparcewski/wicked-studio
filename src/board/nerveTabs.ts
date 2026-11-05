@@ -1,5 +1,5 @@
 import type { SystemAttention, SystemSnapshot } from '../api/system.js';
-import type { NerveState } from './nerveCenter.js';
+import { tooFewToReview, type NerveState } from './nerveCenter.js';
 
 /**
  * NERVE CENTER'S TABS (operator 2026-10-25: "Nerve center is one giant page — use tabs or some
@@ -137,8 +137,7 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
     const signed = snapshot.clis.filter((c) => c.state === 'signed_in').length;
     // A sign-in check that has not answered is not known (grey), never green. Fewer than two
     // distinct agents signed in is yellow even when this crew sends no item for it (an older crew).
-    const distinct = new Set(snapshot.clis.filter((c) => c.state === 'signed_in' || c.state === 'benched').map((c, i) => (c.key ?? `#${i}`).split('#', 1)[0] || `#${i}`)).size;
-    const base: AreaTone = total === 0 ? 'unknown' : distinct < 2 ? 'warn' : snapshot.clis.some((c) => c.state === 'unknown') ? 'unknown' : 'ok';
+    const base: AreaTone = total === 0 || snapshot.clis.some((c) => c.state === 'unknown') ? 'unknown' : tooFewToReview(snapshot.clis) ? 'warn' : 'ok';
     clis = done('clis', total === 0 ? 'none reported' : `${signed}/${total} signed in`, worse(base, attentionTone(cliItems)));
   } else if (fallback.roster !== null) {
     const seats = fallback.roster;

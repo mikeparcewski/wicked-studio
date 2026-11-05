@@ -486,8 +486,8 @@ describe('the overview (/watch with no ?tab=, the approved ui-v2-nerve mockup)',
     expect(within(tile('claude')).getByTestId('nc-tile-line')).toHaveTextContent('42 steps · 90% pass');
     expect(within(tile('copilot')).getByTestId('nc-tile-state')).toHaveTextContent(/^Back at /);
     expect(within(tile('copilot')).queryByTestId('nc-tile-signin')).toBeNull();
-    // Pi is in no job and too few agents is not crew's word here: it is optional (operator 2026-11-05).
-    expect(within(tile('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Not set up');
+    // Pi is in no job: it is optional (operator 2026-11-05); its week was not read, so "Signed out".
+    expect(within(tile('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
     await waitFor(() => expect(screen.queryAllByTestId('rail-seat-row').length + 1).toBeGreaterThan(0));
     fireEvent.click(within(tile('pi')).getByTestId('nc-tile-signin'));
     await waitFor(() => expect(screen.getByTestId('agent-modal')).toHaveAttribute('data-agent', 'pi'));
@@ -617,8 +617,11 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
     renderBoth();
     await waitFor(() => expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('data-read', 'fresh'));
     await screen.findAllByTestId('nc-tile');
-    expect(within(tileOf('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Not signed in');
+    // Named by the held job as the reviewer it waits on: amber, and counted as needing a look.
+    expect(within(tileOf('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
+    expect(tileOf('pi')).toHaveAttribute('data-tone', 'warn');
     expect(within(tileOf('copilot')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
+    expect(tileOf('copilot')).toHaveAttribute('data-tone', 'quiet');
     expect(screen.getByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode · Signed out: GitHub Copilot CLI — optional');
   });
 

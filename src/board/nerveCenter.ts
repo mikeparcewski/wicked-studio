@@ -76,27 +76,39 @@ function names(a: SystemAttention, c: SystemCli): boolean {
   return word(c.key) || word(c.name);
 }
 
-/**
- * The signed-out CLIs nothing needs (operator 2026-11-05: "people aren't going to have all the cli's"):
- * no job's work is on them (`cli:out:<key>`) and no item names them. They are OPTIONAL, said quietly,
- * never a reason for yellow. None is optional while too few agents are signed in to review (crew's
- * `cli:one-reviewer`): then any one of them is the fix.
- */
-export function notSetUp(clis: readonly SystemCli[], attention: readonly SystemAttention[]): SystemCli[] {
-  if (attention.some((a) => a.id === ONE_REVIEWER_ID)) return [];
-  const used = new Set(attention.map(cliInUse).filter((k): k is string => k !== null));
-  return clis.filter((c) => c.state === 'signed_out' && !used.has(c.key) && !attention.some((a) => names(a, c)));
+/** Fewer than two distinct agents signed in (a benched one still is; `claude#2` is claude's): no different
+ *  agent can review. Said by crew as `cli:one-reviewer`; read here too, for a crew that sends no such item. */
+export function tooFewToReview(clis: readonly SystemCli[], attention: readonly SystemAttention[] = []): boolean {
+  if (attention.some((a) => a.id === ONE_REVIEWER_ID)) return true;
+  if (clis.length === 0 || clis.some((c) => c.state === 'unknown')) return false;
+  return new Set(clis.filter((c) => c.state === 'signed_in' || c.state === 'benched').map((c, i) => (c.key ?? `#${i}`).split('#', 1)[0] || `#${i}`)).size < 2;
 }
 
-/** Whether a signed-out CLI ever worked here this week (then it is signed out, not "not set up"). */
-export const workedBefore = (c: SystemCli): boolean => (c.units ?? 0) > 0;
+/** A signed-out seat that work needs: a job's step is on it (`cli:out:<key>`), or a job's own item names it
+ *  (the reviewer or failover a held job waits on). */
+export function seatNeeded(c: SystemCli, attention: readonly SystemAttention[]): boolean {
+  return attention.some((a) => cliInUse(a) === c.key || (a.id !== ONE_REVIEWER_ID && names(a, c)));
+}
 
-/** "Not set up: OpenCode — optional"; one that worked this week is "Signed out: Pi — optional"; null with none. */
+/**
+ * The signed-out CLIs nothing needs (operator 2026-11-05: "people aren't going to have all the cli's"):
+ * no job needs them ({@link seatNeeded}). They are OPTIONAL, said quietly, never a reason for yellow.
+ * None is optional while too few agents are signed in to review: then any one of them is the fix.
+ */
+export function notSetUp(clis: readonly SystemCli[], attention: readonly SystemAttention[]): SystemCli[] {
+  if (tooFewToReview(clis, attention)) return [];
+  return clis.filter((c) => c.state === 'signed_out' && !seatNeeded(c, attention));
+}
+
+/** "Not set up" only when crew counted this week and the CLI did nothing; an unread week says "Signed out". */
+export const neverWorked = (c: SystemCli): boolean => c.units === 0;
+
+/** "Not set up: OpenCode — optional"; one that worked (or whose week is unread) is "Signed out: Pi — optional"; null with none. */
 export function notSetUpWords(clis: readonly SystemCli[], attention: readonly SystemAttention[]): string | null {
   const out = notSetUp(clis, attention);
   if (out.length === 0) return null;
-  const never = out.filter((c) => !workedBefore(c)).map((c) => c.name);
-  const before = out.filter(workedBefore).map((c) => c.name);
+  const never = out.filter(neverWorked).map((c) => c.name);
+  const before = out.filter((c) => !neverWorked(c)).map((c) => c.name);
   const parts = [never.length > 0 ? `Not set up: ${never.join(', ')}` : null, before.length > 0 ? `Signed out: ${before.join(', ')}` : null].filter((x): x is string => x !== null);
   return `${parts.join(' · ')} — optional`;
 }
