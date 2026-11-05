@@ -2,11 +2,11 @@
  * Data shapes and the Knowledge map (DES-KNOWLEDGE-DATA-001 §10, §19 B4): the wire of `POST /sources/:name/profile`
  * and `GET /knowledge/map`, and the `payload.shape` record a data-shape proposal carries.
  *
- * A VERBATIM mirror of the contract block in `wicked-crew-api-types` 0.186.0 while studio's pin lags it (it is not
- * published yet), so `src/api/knowledgeShapes.ts` reads every answer defensively and never trusts these shapes to
- * hold.
+ * A VERBATIM mirror of the contract block in `wicked-crew-api-types` 0.186.0 plus the fields PM-1 added in 0.187.0
+ * (studio pins 0.186.0), so `src/api/knowledgeShapes.ts` reads every answer defensively and never trusts these
+ * shapes to hold.
  *
- * TODO(api-types >= 0.186.0): once studio pins `wicked-crew-api-types` 0.186.0 or later, these become re-exports
+ * TODO(api-types >= 0.187.0): once studio pins `wicked-crew-api-types` 0.187.0 or later, these become re-exports
  * from the package, and this mirror goes.
  */
 

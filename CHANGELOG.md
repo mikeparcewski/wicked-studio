@@ -84,7 +84,7 @@ gate's note, the `/` menu matching New job, and the redesigned Repositories page
   ("Report /", with the origin checked against stored, active projects). Report's chat never reads the dashboards
   (`data-page-chat-skip`).
 - **Understand's Knowledge map, the data-shape review, and Profile on a source sheet (DES-KNOWLEDGE-DATA-001 §10, §19
-  B4; crew api-types 0.186.0, mirrored until it is published).** Understand gains a **Knowledge map** beside the
+  B4; crew api-types 0.186.0, mirrored locally with PM-1's 0.187.0 fields).** Understand gains a **Knowledge map** beside the
   repositories' code and requirements graphs (`/understand?view=knowledge`): the data shapes waiting for review on top
   (the one proposal review, kind `knowledge`: the table, its value-free summary, what it joins and which code describes
   it, Approve or Reject), and below it the map crew answers (`GET /knowledge/map`): data sources and their tables,
