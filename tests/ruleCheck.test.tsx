@@ -129,3 +129,21 @@ describe('(SWAP 6) a rule deferred to delivery', () => {
     expect(by('learn-small-prs').obligations).toBeUndefined();
   });
 });
+
+describe('(SWAP 6) the delivery shows the deliver step verdict over the review deferral', () => {
+  it('joins the lift receipt with every gate, the worst row winning', () => {
+    const RUN = 'r-defer';
+    const units = [
+      makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, role: 'evaluator', status: 'done' }),
+      makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 3, role: 'neutral', status: 'done' }),
+    ] as WorkUnit[];
+    const deferred = row('learn-linked-issue', 'deferred', 'its subject is the delivery');
+    const events = [
+      { type: 'gateEvaluated', session: RUN, ord: 2, ts: 1, assurance: { ...base, rules: [row('A', 'kept'), deferred] } },
+      { type: 'deliverLiftEvaluated', session: RUN, ord: 3, ts: 2, assurance: { ...base, rules: [row('A', 'kept'), deferred] } },
+      { type: 'gateEvaluated', session: RUN, ord: 3, ts: 3, assurance: { ...base, rules: [row('learn-linked-issue', 'broken', 'the description names no issue')] } },
+    ] as unknown as CoreEvent[];
+    const d = deliveryReceiptOf(makeView({ id: RUN, status: 'awaiting_human' } as never, units), events, null)!;
+    expect(d.rules?.find((x) => x.ruleId === 'learn-linked-issue')?.status).toBe('broken');
+  });
+});

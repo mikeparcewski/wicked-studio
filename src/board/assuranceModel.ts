@@ -412,8 +412,9 @@ export function deliveryReceiptOf(
     const r = lifted !== null ? lifted.r : recorded!;
     const fb = fallbacksOf([r, ...gates]);
     const oj = judgmentsOf([r, ...gates], durableFloorOverrides(view));
-    // The engine's delivery receipt carries the run's rule rows; an older one's gates do.
-    const rules = r.rules ?? worstRules(gates.map((g) => g.rules));
+    // The lift's receipt is cut BEFORE the deliver step judged the rules deferred to it: every gate's
+    // rows join it, and the worst row per rule wins (a delivery verdict replaces a deferral).
+    const rules = worstRules([r.rules, ...gates.map((g) => g.rules)]);
     return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
