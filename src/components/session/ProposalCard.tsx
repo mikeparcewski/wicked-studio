@@ -65,8 +65,8 @@ const lastKinds = new Map<string, ProposalKind>();
 const sentPlanNotes = new Map<string, string>();
 /** studio#992: where an undone plan note waits for the reply box (never the run's shared `restoreNote` slot, which other
  *  gate choices use). */
-export function planNoteKey(runId: string): string {
-  return `plan-note:${runId}`;
+export function planNoteKey(runId: string, instance: string | null): string {
+  return `plan-note:${runId}:${instance ?? '-'}`;
 }
 
 /** A plan gate's reject arm, as its card says it. */
@@ -184,7 +184,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     && (card.state === 'ask' || (card.state === 'fail' && card.canRetry))
     && (picked === null || picked === 'go');
   useOfferReply(runId, noteChoice
-    ? { label: PLAN_NOTE_REPLY, placeholder: PLAN_NOTE_PLACEHOLDER, raw: true, restoreKey: planNoteKey(runId), ...(gate !== undefined ? { instance: gateInstance(gate)! } : {}), send: (t) => answerRef.current(t) }
+    ? { label: PLAN_NOTE_REPLY, placeholder: PLAN_NOTE_PLACEHOLDER, raw: true, restoreKey: planNoteKey(runId, gateInstance(gate)), ...(gate !== undefined ? { instance: `${runId}:${gateInstance(gate)!}` } : {}), send: (t) => answerRef.current(t) }
     : null);
   if (card === null) return null;
   const chat = variant === 'chat';
@@ -222,19 +222,21 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     const noteKey = `${runId}:${instance ?? '-'}`;
     const kept = noteChoice && note === undefined && card.state === 'fail' ? sentPlanNotes.get(noteKey) ?? '' : '';
     const amend = typed !== '' ? typed : kept;
-    if (amend !== '') sentPlanNotes.set(noteKey, amend);
+    // The note of THIS attempt, or none: a retry carries exactly what the failed attempt carried (xreview r3).
+    if (amend !== '') sentPlanNotes.set(noteKey, amend); else sentPlanNotes.delete(noteKey);
     const answer: GateAnswer = amend !== '' ? { ...base, amend } : base;
     // A note answers the gate it was typed at (xreview r1 P1): if the gate moved on, nothing is sent.
     const expect = amend !== '' ? { expect: { ord: gate.ord, receivedAt: gate.receivedAt } } : {};
     commitGateDecision(runId, answer, { ...deliver, ...expect, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.act ?? 'Approve' } })
       .then((outcome) => {
         if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey);
-        if (outcome === 'sent') sentPlanNotes.delete(noteKey);
-        // An Undo hands a plan note back to the reply box under its own key (xreview r2: never the run's shared slot,
-        // which another surface reads); a cancel (the gate moved on) never refills the box for the next plan.
-        if (outcome === 'undone' && amend !== '') {
-          if (takeRestoredNote(runId) !== amend) { /* the shared slot held no copy of this note */ }
-          restoreNote(planNoteKey(runId), amend);
+        if (outcome !== 'dropped') sentPlanNotes.delete(noteKey);
+        // A plan note never waits in the run's shared slot, which a rejection reason reads (xreview r2/r3): an Undo hands
+        // it back to the reply box under its own run + gate key; a cancel (the gate moved on) refills nothing.
+        if ((outcome === 'undone' || outcome === 'cancelled') && amend !== '') {
+          const shared = takeRestoredNote(runId);
+          if (shared !== '' && shared !== amend) restoreNote(runId, shared);
+          if (outcome === 'undone') restoreNote(planNoteKey(runId, instance), amend);
         }
       })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })

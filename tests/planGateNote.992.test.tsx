@@ -255,5 +255,39 @@ describe('studio#992: the plan gate takes a note, as a reply at the plan', () =>
     expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('');
     expect(useUndoQueue.getState().restoredNotes['r1']).toBe('GateRow send-back note');
   });
+
+  // ── xreview r3 (codex) ────────────────────────────────────────────────────────────────────────────────────────
+  it('P2 r3: a retry carries exactly the failed attempt\'s note: none after the note was undone and cleared', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true, planGateNote: true } as never);
+    confirm.mockRejectedValueOnce(new Error('engine busy'));
+    page();
+    await typeAndSend(NOTE);
+    const pending = useUndoQueue.getState().pending;
+    act(() => undoDecision(pending[0]!.id));
+    await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe(NOTE));
+    fireEvent.change(screen.getByTestId('session-composer-input'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('session-proposal-go'));
+    await act(async () => { await flushDecisionsForTest(); });
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(confirm.mock.calls[0]![1]).toEqual({ approve: true, ord: 1 });
+    const retry = await screen.findByTestId('session-proposal-go');
+    await waitFor(() => expect(retry.textContent).toMatch(/Try again/));
+    fireEvent.click(retry);
+    await act(async () => { await flushDecisionsForTest(); });
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2));
+    expect(confirm.mock.calls[1]![1]).toEqual({ approve: true, ord: 1 });
+  });
+
+  it('P2 r3: a cancelled plan note never lands in the run\'s shared note slot (a rejection reason reads it)', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true, planGateNote: true } as never);
+    page();
+    await typeAndSend(NOTE);
+    expect(useUndoQueue.getState().pending).toHaveLength(1);
+    act(() => { useGateStore.setState({ gates: { r1: { ...GATE, ord: 2, receivedAt: GATE.receivedAt + 9_000 } } }); });
+    await waitFor(() => expect(useUndoQueue.getState().pending).toHaveLength(0));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(useUndoQueue.getState().restoredNotes['r1']).toBeUndefined();
+    expect(confirm).not.toHaveBeenCalled();
+  });
 });
 
