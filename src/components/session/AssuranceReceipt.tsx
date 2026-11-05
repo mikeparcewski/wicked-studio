@@ -128,14 +128,18 @@ export function RulesChecked({ rows, testId = 'assurance-rules', soFar = false }
     <details data-testid={testId} data-tone={tone} className="wk-assurance-rules">
       <summary data-testid={`${testId}-line`} className="wk-assurance-line wk-assurance-rules-summary">{soFar ? `So far, ${s.line}` : s.line}</summary>
       <ul className="wk-assurance-list wk-assurance-rules-list">
-        {rows.map((r) => (
-          <li key={r.ruleId} data-testid="assurance-rule" data-status={r.status} className="wk-assurance-rule">
-            <span className={`wk-assurance-rule-status wk-assurance-rule-status--${r.status}`}>{RULE_WORD[r.status] ?? r.status}</span>
-            {' '}<code className="wk-assurance-rule-id">{r.ruleId}</code>
-            <span className="wk-assurance-rule-how"> {HOW_WORD[r.how] ?? r.how}{r.judge !== null ? ` (${r.judge})` : ''}</span>
-            {r.reason !== '' && <span className="wk-assurance-rule-why">: {showText(r.reason)}</span>}
-          </li>
-        ))}
+        {rows.map((r) => {
+          // Why: the engine's reason (the fact, the cite in words, the skip's reason), else the bare cite.
+          const why = r.reason !== '' ? r.reason : r.cite ?? '';
+          return (
+            <li key={r.ruleId} data-testid="assurance-rule" data-status={r.status} className="wk-assurance-rule">
+              <span className={`wk-assurance-rule-status wk-assurance-rule-status--${r.status}`}>{RULE_WORD[r.status] ?? r.status}</span>
+              {' '}<code className="wk-assurance-rule-id">{r.ruleId}</code>
+              <span className="wk-assurance-rule-how"> {HOW_WORD[r.how] ?? r.how}{r.judge !== null ? ` (${r.judge})` : ''}</span>
+              {why !== '' && <span className="wk-assurance-rule-why">: {showText(why)}</span>}
+            </li>
+          );
+        })}
       </ul>
     </details>
   );

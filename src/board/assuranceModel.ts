@@ -171,7 +171,8 @@ export interface AssuranceReceipt extends RunAssurance {
 /** One steering rule's verdict (`AssuranceReceipt.rules[]`). */
 export interface RuleRow {
   ruleId: string;
-  /** `kept` | `broken` | `n_a` | `unchecked` | `skipped` | `waived` (the person's instruction conflicts; to confirm). */
+  /** `kept` | `broken` | `n_a` | `unchecked` | `skipped` | `waived` (the person's instruction conflicts; to confirm)
+   *  | `deferred` (its subject is the delivery: checked at the deliver step). */
   status: string;
   /** `fact` | `judge` | `machine` | `cache` | `operator` | `none`. */
   how: string;
@@ -214,15 +215,56 @@ export function worstRules(lists: ReadonlyArray<readonly RuleRow[] | undefined>)
 }
 
 /**
- * A delivery's rule rows: every gate's CURRENT receipt (its newest evaluation, so a skip after a hold,
- * or a kept after a broken, replaces that gate's earlier row), the worst row per rule across distinct
- * gates; the engine's aggregate (`lifted`, a lift or a recorded delivery) only for a rule no current
- * gate names (its history is not in hand), in the aggregate's order.
+ * A delivery's rule rows. `gates` holds each gate's CURRENT rows (its newest evaluation); the worst row per rule
+ * across distinct gates wins. The engine's aggregate (`aggregate`: a lift or a recorded delivery) was cut from the
+ * gates as they stood then: a rule `superseded` says a gate evaluated it AFTER that cut (a delivery retry's deliver
+ * step, a re-check), so its aggregate row may be stale and the gates' rows replace it (an unchecked rule then
+ * skipped reads "skipped", with its reason). Any other aggregate row still joins deny-dominates: the gates in hand
+ * may be fewer than the aggregate read, and a broken or unchecked row it carries is never hidden by them.
  */
-export function currentRules(lifted: readonly RuleRow[] | undefined, gates: readonly AssuranceReceipt[]): RuleRow[] {
-  const fromGates = worstRules(gates.map((g) => g.rules));
-  const out = (lifted ?? []).map((l) => fromGates.find((g) => g.ruleId === l.ruleId) ?? l);
+export function currentRules(aggregate: readonly RuleRow[] | undefined, gates: ReadonlyArray<readonly RuleRow[]>, superseded: (ruleId: string) => boolean): RuleRow[] {
+  const fromGates = worstRules(gates);
+  const rank = (r: RuleRow): number => RULE_RANK[r.status] ?? 0;
+  const out = (aggregate ?? []).map((l) => {
+    const g = fromGates.find((x) => x.ruleId === l.ruleId);
+    if (g === undefined) return l;
+    return superseded(l.ruleId) || rank(g) >= rank(l) ? g : l;
+  });
   for (const g of fromGates) if (!out.some((o) => o.ruleId === g.ruleId)) out.push(g);
+  return out;
+}
+
+/**
+ * Each gate's current rule rows, by ord: the log's newest evaluation since the unit's newest dispatch, and for a
+ * unit the log never mentions (a store filled by live events alone), its persisted receipt.
+ */
+function gateRuleRows(view: SessionView | null | undefined, log: readonly CoreEvent[]): RuleRow[][] {
+  const byOrd = new Map<number, RuleRow[]>();
+  const mentioned = new Set<number>();
+  for (const e of log) {
+    if (typeof e.ord !== 'number') continue;
+    if (e.type === 'unitDispatched') { mentioned.add(e.ord); byOrd.delete(e.ord); }
+    if (e.type !== 'gateEvaluated') continue;
+    mentioned.add(e.ord);
+    const rows = receiptOf((e as Record<string, unknown>)['assurance'])?.rules;
+    if (rows !== undefined) byOrd.set(e.ord, rows); else byOrd.delete(e.ord);
+  }
+  for (const u of view?.units ?? []) {
+    if (mentioned.has(u.ord)) continue;
+    const rows = receiptOf((u as unknown as { assurance?: unknown }).assurance)?.rules;
+    if (rows !== undefined) byOrd.set(u.ord, rows);
+  }
+  return [...byOrd.entries()].sort((x, y) => x[0] - y[0]).map(([, r]) => r);
+}
+
+/** The rule ids a gate evaluation in `log` after index `from` names. */
+function rulesEvaluatedAfter(log: readonly CoreEvent[], from: number): Set<string> {
+  const out = new Set<string>();
+  for (let i = from + 1; i < log.length; i++) {
+    const e = log[i]!;
+    if (e.type !== 'gateEvaluated') continue;
+    for (const r of receiptOf((e as Record<string, unknown>)['assurance'])?.rules ?? []) out.add(r.ruleId);
+  }
   return out;
 }
 
@@ -406,11 +448,11 @@ export function deliveryReceiptOf(
   const log = events ?? [];
   // The CURRENT deliver attempt's lift: a re-dispatch of the deliver unit after it voids it (the
   // retry has not lifted yet), and the receipt falls back to the gates' aggregate.
-  let lifted: { ord: unknown; r: AssuranceReceipt } | null = null;
-  for (const e of log) {
+  let lifted: { ord: unknown; r: AssuranceReceipt; at: number } | null = null;
+  for (const [at, e] of log.entries()) {
     if (e.type === 'deliverLiftEvaluated') {
       const r = receiptOf((e as Record<string, unknown>)['assurance']);
-      lifted = r === null ? null : { ord: e.ord, r };
+      lifted = r === null ? null : { ord: e.ord, r, at };
     } else if (e.type === 'unitDispatched' && lifted !== null && e.ord === lifted.ord) {
       lifted = null;
     }
@@ -426,9 +468,11 @@ export function deliveryReceiptOf(
     const fb = fallbacksOf([r, ...gates]);
     const oj = judgmentsOf([r, ...gates], durableFloorOverrides(view));
     // The lift's receipt is cut BEFORE the deliver step judged the rules deferred to it, and a delivery
-    // retry's lift carries the deliver unit's PREVIOUS verdict: each gate's current rows win over it
-    // (deny-dominates across the gates), and a rule no current gate names keeps the lift's row.
-    const rules = currentRules(r.rules, gates);
+    // retry's lift carries the deliver unit's PREVIOUS verdict: a gate evaluated after the cut supersedes its
+    // row. A recorded delivery has no place in the log, so every gate the log (or, with none, the units) has
+    // in hand is newer than it.
+    const after = lifted !== null ? rulesEvaluatedAfter(log, lifted.at) : rulesEvaluatedAfter(log, -1);
+    const rules = currentRules(r.rules, gateRuleRows(view, log), (id) => after.has(id) || (lifted === null && log.length === 0));
     return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
@@ -440,7 +484,7 @@ export function deliveryReceiptOf(
   }
   const fb = fallbacksOf(gates);
   const oj = judgmentsOf(gates, durableFloorOverrides(view));
-  const rules = worstRules(gates.map((g) => g.rules));
+  const rules = worstRules(gateRuleRows(view, log));
   return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), aggregateKind: deliveryKind(out, gates) };
 }
 
@@ -776,31 +820,41 @@ export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number |
 export const RULES_UNCHECKED_SOURCE = 'rules_unchecked';
 
 /**
- * Whether the gate at `ord` is held `rules_unchecked`: the one gate where the engine takes `retry_rules` /
- * `skip_rules` (crew refuses them, 409, at any other). Read off structured wire fields only, never the
- * prompt's prose (an evaluator finding may quote it): THIS attempt's newest `gateEscalated`
- * (`denialSource`, else `condition`) or `gateEvaluated.denial.source`, whichever is newer; with no log in
- * hand, the unit record's `denial.source`.
+ * Whether the gate at `ord` is held `rules_unchecked` — the one gate where the engine takes `retry_rules` /
+ * `skip_rules` (crew refuses them, 409, at any other) — and the rows it holds, both from THIS attempt. Read off
+ * structured wire fields only, never the prompt's prose (an evaluator finding may quote it): the attempt's newest
+ * `gateEscalated` (`denialSource`, else `condition`), else its newest `gateEvaluated.denial.source`; the rows from
+ * that `gateEvaluated`. A log that never mentions the unit (empty, or filled by live events alone) leaves both to
+ * the unit record (`denial.source`, its persisted receipt); a dispatch after the hold voids it.
  */
-export function heldOnUncheckedRules(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): boolean {
-  if (typeof ord !== 'number') return false;
+export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): { held: boolean; rows: RuleRow[] } {
+  if (typeof ord !== 'number') return { held: false, rows: [] };
+  const unit = (units ?? []).find((u) => u.ord === ord) as unknown as { denial?: unknown; assurance?: unknown } | undefined;
+  const persisted = (): RuleRow[] => receiptOf(unit?.assurance)?.rules ?? [];
   const log = events ?? [];
-  for (let i = log.length - 1; i >= 0; i--) {
+  let held: boolean | null = null;
+  let rows: RuleRow[] | null = null;
+  let mentioned = false;
+  for (let i = log.length - 1; i >= 0 && (held === null || rows === null); i--) {
     const e = log[i]! as Record<string, unknown>;
     if (e['ord'] !== ord) continue;
-    if (e['type'] === 'unitDispatched') return false;
-    if (e['type'] === 'gateEscalated') {
+    if (e['type'] === 'unitDispatched') { mentioned = true; break; }
+    if (e['type'] === 'gateEscalated' && held === null) {
+      mentioned = true;
       const source = typeof e['denialSource'] === 'string' ? e['denialSource'] : '';
-      return source !== '' ? source === RULES_UNCHECKED_SOURCE : e['condition'] === RULES_UNCHECKED_SOURCE;
-    }
-    if (e['type'] === 'gateEvaluated') {
-      const d = e['denial'];
-      return isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE;
+      held = source !== '' ? source === RULES_UNCHECKED_SOURCE : e['condition'] === RULES_UNCHECKED_SOURCE;
+    } else if (e['type'] === 'gateEvaluated' && rows === null) {
+      mentioned = true;
+      rows = receiptOf(e['assurance'])?.rules ?? [];
+      if (held === null) { const d = e['denial']; held = isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE; }
     }
   }
-  if (log.length > 0) return false;
-  const d = ((units ?? []).find((u) => u.ord === ord) as unknown as { denial?: unknown } | undefined)?.denial;
-  return isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE;
+  if (!mentioned) {
+    const d = unit?.denial;
+    return { held: isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE, rows: persisted() };
+  }
+  if (held !== true) return { held: false, rows: rows ?? [] };
+  return { held, rows: rows ?? persisted() };
 }
 
 /** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */

@@ -232,3 +232,135 @@ describe('(s4-ui-fix) review findings', () => {
     expect(screen.getByTestId('assurance-rules-line').textContent).toBe('So far, 1 rule checked: 1 kept, 0 broken, 0 not applicable');
   });
 });
+
+describe('(s4-ui-fix r2) partial histories and the skip as sent', () => {
+  it('an aggregate row the gates in hand never re-evaluated still joins deny-dominates', () => {
+    const RUN = 'r-partial';
+    const units = [
+      makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, role: 'evaluator', status: 'done' }),
+      makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 4, role: 'neutral', status: 'done' }),
+    ] as WorkUnit[];
+    // The log holds review's kept row and the lift (QE's broken row is only in the lift's aggregate).
+    const events = [
+      { type: 'gateEvaluated', session: RUN, ord: 2, ts: 1, assurance: { ...base, rules: [row('R', 'kept'), row('S', 'kept')] } },
+      { type: 'deliverLiftEvaluated', session: RUN, ord: 4, ts: 2, assurance: { ...base, rules: [row('R', 'broken', 'qe found it'), row('S', 'skipped', 'skipped by you: covered')] } },
+    ] as unknown as CoreEvent[];
+    const d = deliveryReceiptOf(makeView({ id: RUN, status: 'completed' } as never, units), events, null)!;
+    expect(d.rules?.map((x) => [x.ruleId, x.status, x.reason])).toEqual([['R', 'broken', 'qe found it'], ['S', 'skipped', 'skipped by you: covered']]);
+  });
+
+  it('a unit the log never mentions joins with its persisted receipt', () => {
+    const RUN = 'r-persisted';
+    const units = [
+      makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, role: 'evaluator', status: 'done' }),
+      { ...makeUnit({ id: `${RUN}:qe`, session_id: RUN, ord: 3, role: 'evaluator', status: 'done' }), assurance: { ...base, rules: [row('R', 'broken', 'qe found it')] } },
+    ] as unknown as WorkUnit[];
+    const events = [{ type: 'gateEvaluated', session: RUN, ord: 2, ts: 1, assurance: { ...base, rules: [row('R', 'kept')] } }] as unknown as CoreEvent[];
+    expect(deliveryReceiptOf(makeView({ id: RUN, status: 'awaiting_human' } as never, units), events, null)!.rules?.[0]?.status).toBe('broken');
+  });
+
+  describe('a hold the log only partly carries', () => {
+    const RUN = 'r-partial-hold';
+    const g: OpenGate = { runId: RUN, ord: 5, prompt: 'Unit 5 is held', gateKind: 'escalation', lifecycle: 'open', receivedAt: 1 };
+    const units = [
+      makeUnit({ id: `${RUN}:fix`, session_id: RUN, ord: 4, role: 'creator', status: 'done', assigned_cli: 'pi' }),
+      { ...makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 5, role: 'evaluator', status: 'rejected', assigned_cli: 'claude' }),
+        denial: { source: 'rules_unchecked', reason: 'x' }, assurance: { ...base, rules: [row('K', 'kept'), row('U', 'unchecked'), row('W', 'waived')] } },
+    ] as unknown as WorkUnit[];
+    const offered = (events: unknown[]): Array<{ key: string; skipRuleIds?: string[] }> => {
+      const m = sessionGateChoices({ runId: RUN, gate: g, units, events: events as CoreEvent[], pool: ['pi', 'claude'], roster: null })!;
+      return [...m.choices, ...(m.overflow ?? [])] as Array<{ key: string; skipRuleIds?: string[] }>;
+    };
+    it('only an awaitingHuman frame: the unit record decides both', () => {
+      const all = offered([{ type: 'awaitingHuman', session: RUN, ord: 5, gateKind: 'escalation', prompt: 'x' }]);
+      expect(all.some((c) => c.key === 'retry-rules')).toBe(true);
+      expect(all.find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['U', 'W']);
+    });
+    it('only the escalation frame: held from the wire, the rows from the unit record', () => {
+      const all = offered([{ type: 'gateEscalated', session: RUN, ord: 5, condition: 'rules_unchecked', denialSource: 'rules_unchecked', verdictSummary: 'x' }]);
+      expect(all.some((c) => c.key === 'retry-rules')).toBe(true);
+      expect(all.find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['U', 'W']);
+    });
+  });
+
+  describe('the gate row sends crew\'s answer', () => {
+    const RUN = 'r-send';
+    const PROMPT = "Unit 2's steering rules are UNCHECKED or waived by your instruction — 2 steering rule(s) need you.";
+    const units = [
+      makeUnit({ id: `${RUN}:fix`, session_id: RUN, ord: 1, role: 'creator', status: 'done', assigned_cli: 'pi' }),
+      makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, role: 'evaluator', status: 'rejected', assigned_cli: 'claude' }),
+    ] as WorkUnit[];
+    const log = [
+      { type: 'unitDispatched', session: RUN, ord: 2, attempt: 1 },
+      { type: 'gateEvaluated', session: RUN, ord: 2, combined: true, denial: { source: 'rules_unchecked', reason: 'x', ruleIds: ['U', 'W'] }, evaluatorPolicies: [],
+        assurance: { ...base, rules: [row('K', 'kept'), row('B', 'broken'), row('U', 'unchecked'), row('W', 'waived')] } },
+      { type: 'gateEscalated', session: RUN, ord: 2, condition: 'rules_unchecked', denialSource: 'rules_unchecked', verdictSummary: 'x' },
+    ] as unknown as CoreEvent[];
+    const g: OpenGate = { runId: RUN, ord: 2, prompt: PROMPT, lifecycle: 'open', receivedAt: 1, gateKind: 'escalation' };
+
+    async function mount(windowMs: number) {
+      const client = await import('../src/api/client.js');
+      vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '' } as never);
+      const confirm = vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ ok: true } as never);
+      const { setUndoWindowForTest } = await import('../src/board/undoQueue.js');
+      setUndoWindowForTest(windowMs);
+      const { GateRow } = await import('../src/components/session/GateRow.js');
+      const { useRunEventStore } = await import('../src/store/events.js');
+      const { useGateStore } = await import('../src/store/gates.js');
+      useRunEventStore.setState({ byRun: { [RUN]: log } });
+      useGateStore.setState({ gates: { [RUN]: g } });
+      render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, units)} gate={g} />);
+      const option = (key: string): HTMLElement => document.querySelector<HTMLElement>(`[data-ask-option="${key}"]`)!;
+      return { confirm, option };
+    }
+
+    afterEach(async () => {
+      const { undoDecision, useUndoQueue, setUndoWindowForTest } = await import('../src/board/undoQueue.js');
+      for (const p of useUndoQueue.getState().pending) undoDecision(p.id);
+      setUndoWindowForTest(0);
+    });
+
+    it('the skip carries the held rules only, each with your reason, never an amend; no reason, no send', async () => {
+      const { confirm, option } = await mount(0);
+      fireEvent.click(option('skip-rules'));
+      expect(screen.getByTestId('session-gate-skip-rules-label').textContent).toMatch(/required/);
+      const note = screen.getByTestId('session-gate-note') as HTMLTextAreaElement;
+      expect(note.value).toBe('');
+      const send = screen.getByTestId('session-gate-send') as HTMLButtonElement;
+      fireEvent.change(note, { target: { value: '   ' } });
+      expect(send.disabled).toBe(true);
+      fireEvent.change(note, { target: { value: ' Covered by the release checklist ' } });
+      fireEvent.click(send);
+      await vi.waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+      const [runId, sent] = confirm.mock.calls[0]! as unknown as [string, Record<string, unknown>];
+      expect(runId).toBe(RUN);
+      expect(sent).toEqual({ approve: true, action: 'skip_rules', ord: 2, skipRules: [{ id: 'U', reason: 'Covered by the release checklist' }, { id: 'W', reason: 'Covered by the release checklist' }] });
+    });
+
+    it('the re-check sends retry_rules', async () => {
+      const { confirm, option } = await mount(0);
+      fireEvent.click(option('retry-rules'));
+      fireEvent.click(screen.getByTestId('session-gate-confirm'));
+      await vi.waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+      expect(confirm.mock.calls[0]![1]).toEqual({ approve: true, action: 'retry_rules', ord: 2 });
+    });
+
+    it('Undo gives the skip reason back', async () => {
+      const { confirm, option } = await mount(60_000);
+      fireEvent.click(option('skip-rules'));
+      fireEvent.change(screen.getByTestId('session-gate-note'), { target: { value: 'Covered elsewhere' } });
+      fireEvent.click(screen.getByTestId('session-gate-send'));
+      const { undoDecision, useUndoQueue, takeRestoredNote } = await import('../src/board/undoQueue.js');
+      await vi.waitFor(() => expect(useUndoQueue.getState().pending).toHaveLength(1));
+      undoDecision(useUndoQueue.getState().pending[0]!.id);
+      expect(confirm).not.toHaveBeenCalled();
+      expect(takeRestoredNote(RUN)).toBe('Covered elsewhere');
+    });
+  });
+});
+
+it('(s4-ui-fix r2) a row with no reason says its cite', () => {
+  const rows = receiptOf({ ...base, rules: [{ ...row('R', 'kept', ''), cite: 'src/math.test.js:12' }] })!.rules!;
+  render(<RulesChecked rows={rows} />);
+  expect(screen.getByTestId('assurance-rule').textContent).toContain(': src/math.test.js:12');
+});

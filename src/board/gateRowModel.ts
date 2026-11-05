@@ -38,7 +38,7 @@ import type { GateAnswer } from './gateActions.js';
 import { repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from './repeatProgress.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
-import { gateReceiptFor, heldOnUncheckedRules, waitsForJudge } from './assuranceModel.js';
+import { rulesHoldAt, waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
 import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
@@ -833,9 +833,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // (DES-RULE-CHECK-001) Steering rules no judge ruled on hold the gate: re-check them on the same work, or
     // skip the unchecked ones with a written reason (labelled on the run, the gate and the delivery). Offered
     // only where the engine takes them: a gate held `rules_unchecked` on the wire, never a phrase in the prompt.
-    if (deadSeat === null && heldOnUncheckedRules(events, units, gate.ord)) {
+    const rulesHold = rulesHoldAt(events, units, gate.ord);
+    if (deadSeat === null && rulesHold.held) {
       coreWithoutStop.push({ key: 'retry-rules', label: RETRY_RULES_LABEL, decision: { approve: true, action: 'retry_rules' } as unknown as GateAnswer, needsNote: false, title: 'Run the steering-rule check again on the same work. The step does not run again, and every verdict on an unchanged rule is kept.' });
-      const unchecked = (gateReceiptFor(events, units, gate.ord)?.rules ?? []).filter((r) => r.status === 'unchecked' || r.status === 'waived').map((r) => r.ruleId);
+      const unchecked = rulesHold.rows.filter((r) => r.status === 'unchecked' || r.status === 'waived').map((r) => r.ruleId);
       if (unchecked.length > 0) {
         coreWithoutStop.push({
           key: 'skip-rules',

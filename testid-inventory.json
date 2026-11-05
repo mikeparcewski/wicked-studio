@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 325,
-    "occurrences": 4708,
-    "static": 3939,
+    "occurrences": 4709,
+    "static": 3940,
     "dynamic": 173,
     "computed": 53
   },
@@ -17797,6 +17797,12 @@
     },
     {
       "testId": "session-gate-sentence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-skip-rules-label",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
