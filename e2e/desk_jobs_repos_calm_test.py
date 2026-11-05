@@ -177,6 +177,18 @@ def overflow(page) -> int:
                          ".filter(Boolean).map(e => e.scrollWidth - e.clientWidth))")
 
 
+def marks_layout(page) -> dict | None:
+    """The first repository row's marks: their flex direction, how many, and on how many lines they sit."""
+    return page.evaluate("""() => { const u = document.querySelector('[data-testid="repo-card"] .wk-know--strip');
+      if (u === null) return null; const tops = [...u.querySelectorAll('[data-testid="repo-know-mark"]')].map((m) => Math.round(m.getBoundingClientRect().top));
+      return { dir: getComputedStyle(u).flexDirection, n: tops.length, lines: new Set(tops).size }; }""")
+
+
+def marks_in_a_row(marks) -> bool:
+    """A row of pills, not one box per line (knowledge.css once styled `.wk-know` as a column too)."""
+    return marks is not None and marks["dir"] == "row" and marks["n"] > 1 and marks["lines"] < marks["n"]
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch()
     for theme, want, accent, paired in CASES:
@@ -237,11 +249,8 @@ with sync_playwright() as p:
               and s["visibleFilters"] == 0 and len(rows) > 0 and all(r["h"] >= MIN_ROW and r["dot"] and r["title"] and r["sub"] for r in rows),
               shape=s, rows=rows[:3])
         check(f"{theme}:repos-no-ids", not any(FACE_IDS.search(r["text"]) for r in rows), faces=[r["text"] for r in rows][:6])
-        # The marks under a row are a row of pills, not one box per line (knowledge.css once styled `.wk-know` too).
-        marks = page.evaluate("""() => { const u = document.querySelector('[data-testid="repo-card"] .wk-know--strip');
-          if (u === null) return null; const tops = [...u.querySelectorAll('[data-testid="repo-know-mark"]')].map((m) => Math.round(m.getBoundingClientRect().top));
-          return { dir: getComputedStyle(u).flexDirection, n: tops.length, lines: new Set(tops).size }; }""")
-        check(f"{theme}:repos-marks-row", marks is not None and marks["dir"] == "row" and marks["n"] > 1 and marks["lines"] < marks["n"], marks=marks)
+        marks = marks_layout(page)
+        check(f"{theme}:repos-marks-row", marks_in_a_row(marks), marks=marks)
         card = page.get_by_test_id("repo-card").first
         h_row = hover_de(page, card.get_by_test_id("repo-row"), card, card.locator(".wk-jr-row-title"))
         h_add = hover_de(page, page.get_by_test_id("repos-add"))
@@ -327,6 +336,8 @@ with sync_playwright() as p:
     page.get_by_test_id("repo-card").first.wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(300)
     repos_over = overflow(page)
+    phone_marks = marks_layout(page)
+    check("phone-repos-marks-row", marks_in_a_row(phone_marks), marks=phone_marks)
     page.screenshot(path=str(SHOTS / "jobs-repos-repos-phone.png"))
     check("phone-no-sideways-scroll", jobs_over <= 1 and repos_over <= 1, jobs=jobs_over, repos=repos_over)
     ctx.close()
