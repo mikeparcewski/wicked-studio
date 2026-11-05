@@ -20,6 +20,7 @@ import type {
   SourceCheckResponse,
   McpServer,
   McpServerConfigBody,
+  McpSecretResponse,
   McpServersResponse,
   SourceAllowWritesResponse,
   SourceCatalogResponse,
@@ -124,6 +125,13 @@ export const sourcesApi = {
       // (G1) The person's write grant: the preview's write tools to register enabled (a PM sheet's ticked "Asks you" rows).
       ...(enabledWrites !== undefined && enabledWrites.length > 0 ? { enabledWrites: [...enabledWrites] } : {}),
     })),
+  /**
+   * RE-KEY a saved source (crew#719: crew writes it only for a server that already references its own keychain entry):
+   * the value goes in this one request's body, never a URL, and crew answers `{ref, set: true}`, never the value. The
+   * registry row (links, agent access, tools) is not touched. A PM source's credential is re-keyed by a person only.
+   */
+  setSecret: (name: string, value: string) =>
+    apiFetch<McpSecretResponse>(`/mcp/servers/${encodeURIComponent(name)}/secret`, { method: 'PUT', body: JSON.stringify({ value }) }),
   catalog: (name: string) => apiFetch<SourceCatalogResponse>(at(name, 'catalog')),
   /** Test connection: connect with the saved login, describe again (saved) and check a read; no row is read. */
   testConnection: (name: string) => apiFetch<SourceConnectionTestResponse>(at(name, 'test'), { method: 'POST' }),

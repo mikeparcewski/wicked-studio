@@ -123,7 +123,9 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   const [held, setHeld] = useState<{ key: string; preview: McpPreviewResponse; ms: number } | null>(null);
   /** Every loopback/private address crew named for a connection (a name can resolve to several). */
   const [asks, setAsks] = useState<Array<UnconfirmedAddress & { forTarget: string }>>([]);
-  const [busy, setBusy] = useState<null | 'test' | 'save' | 'retest' | 'upload'>(null);
+  const [busy, setBusy] = useState<null | 'test' | 'save' | 'retest' | 'upload' | 'rekey'>(null);
+  /** A saved source whose secret is set: the person opened "Replace" (a missing secret's field is always open). */
+  const [replacing, setReplacing] = useState(false);
   /** The saved source's latest Test connection (its lines replace the stored describe's). */
   const [tested, setTested] = useState<SourceConnectionTestResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -321,6 +323,39 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
     // eslint-disable-next-line react-hooks/exhaustive-deps -- when the sheet opens on a saved source
   }, [focus, saved]);
 
+  /**
+   * RE-KEY a saved source (the same as a saved Jira or GitHub source's token): the password or token typed again goes
+   * to crew's keychain write (`PUT /mcp/servers/:name/secret`), the one request that carries it; the registry row (its
+   * descriptor, Allow writes, agent access) is not touched. Then the field lets go of it, and a database is tested.
+   */
+  const rekey = async (): Promise<void> => {
+    if (saved === null || inFlight.current) return;
+    const token = secret.current?.read() ?? '';
+    if (token === '') return;
+    const current = saved;
+    inFlight.current = true;
+    setBusy('rekey');
+    setError(null);
+    try {
+      await sourcesApi.setSecret(current.name, token);
+      secret.current?.clear();
+      setHasSecret(false);
+      setReplacing(false);
+      // crew answered `set: true`; the page's next read of the registry confirms it.
+      const next = { ...current, authState: 'set' } as McpServer;
+      setSaved(next);
+      onSaved(next);
+      inFlight.current = false;
+      setBusy(null);
+      if (current.kind === 'sql' || current.kind === 'graphql') await testSaved();
+    } catch (e) {
+      setError(`The ${isSqlKind(sheetKindOf(current)) ? 'password' : 'secret'} was not saved: ${words(e)}`);
+      setBusy(null);
+    } finally {
+      inFlight.current = false;
+    }
+  };
+
   const doUpload = async (): Promise<void> => {
     if (file === null || inFlight.current) return;
     inFlight.current = true;
@@ -482,8 +517,22 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   note="Kept in your keychain; never in the app, an export or an agent."
                   savedState={isNew ? null : (saved?.authState ?? 'none')}
                   disabled={busy !== null}
+                  rekey={isNew ? null : {
+                    open: replacing,
+                    onOpen: (open) => { setReplacing(open); setError(null); },
+                    replace: isSqlKind(kind) ? 'Replace password' : 'Replace secret',
+                    note: 'Type it again. Only the secret changes: the source, its Allow writes and agent access stay as they are.',
+                  }}
                   onEdit={(has) => { setHasSecret(has); setSecretEdits((n) => n + 1); setError(null); }}
                 />
+              )}
+              {!isNew && saved !== null && (saved.authState === 'missing' || (saved.authState === 'set' && replacing)) && (isSqlKind(kind) || isApiKind(kind)) && (
+                <div className="wk-src-rekey" data-testid="source-rekey">
+                  <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="source-rekey-save" disabled={!hasSecret || busy !== null} onClick={() => void rekey()}>
+                    {busy === 'rekey' ? 'Saving…' : isSqlKind(kind) ? 'Save password' : 'Save secret'}
+                  </button>
+                  <span className="wk-src-note" data-testid="source-rekey-note">{!hasSecret ? `Type the ${isSqlKind(kind) ? 'password' : 'secret'}` : saved.kind === 'sql' || saved.kind === 'graphql' ? 'Writes it to your keychain, then tests the connection.' : 'Writes it to your keychain.'}</span>
+                </div>
               )}
               {isSqlKind(kind) && isNew && (
                 <label className="wk-src-field"><span className="wk-src-label">TLS</span>
