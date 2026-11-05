@@ -38,7 +38,7 @@ import type { GateAnswer } from './gateActions.js';
 import { repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from './repeatProgress.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
-import { waitsForJudge } from './assuranceModel.js';
+import { gateReceiptFor, waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
 import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
@@ -73,6 +73,9 @@ export interface GateRowChoice {
   reassignCli?: string;
   /** Whether clicking opens the note field before sending. */
   needsNote: boolean;
+  /** (DES-RULE-CHECK-001) The unchecked steering rules this choice skips: the note is each one's reason
+   *  (`skipRules`), never an `amend`. */
+  skipRuleIds?: string[];
   /** Hover text explaining the consequence of this choice. */
   title: string;
   /** True when the engine value has no known wire meaning; rendered as a disabled button. */
@@ -827,6 +830,22 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // in this job (Reassign), or Stop.
     const deadSeat = deadSeatOf(gate.prompt, events);
     const rejudgeOffered = deadSeat === null && operatorJudgment && input.rejudge?.available === true;
+    // (DES-RULE-CHECK-001) Steering rules no judge ruled on hold the gate: re-check them on the same work, or
+    // skip the unchecked ones with a written reason (labelled on the run, the gate and the delivery).
+    if (deadSeat === null && RULES_UNCHECKED_PROMPT.test(gate.prompt)) {
+      coreWithoutStop.push({ key: 'retry-rules', label: RETRY_RULES_LABEL, decision: { approve: true, action: 'retry_rules' } as unknown as GateAnswer, needsNote: false, title: 'Run the steering-rule check again on the same work. The step does not run again, and every verdict on an unchanged rule is kept.' });
+      const unchecked = (gateReceiptFor(events, units, gate.ord)?.rules ?? []).filter((r) => r.status === 'unchecked' || r.status === 'waived').map((r) => r.ruleId);
+      if (unchecked.length > 0) {
+        coreWithoutStop.push({
+          key: 'skip-rules',
+          label: unchecked.length === 1 ? `Confirm or skip ${unchecked[0]!}` : `Confirm or skip ${unchecked.length} rules`,
+          decision: { approve: true, action: 'skip_rules' } as unknown as GateAnswer,
+          needsNote: true,
+          skipRuleIds: unchecked,
+          title: `Skip ${unchecked.join(', ')} with your written reason. The skip is labelled on the run, the gate and the delivery; a broken rule cannot be skipped.`,
+        });
+      }
+    }
     if (rejudgeOffered) {
       coreWithoutStop.push({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, needsNote: false, title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
     }
@@ -1049,3 +1068,7 @@ export function gateFloorSplit(events: readonly CoreEvent[], gate: Pick<OpenGate
 export function namedSendBackNote(fresh: readonly string[]): string {
   return `Fix only the test${fresh.length === 1 ? '' : 's'} this change broke (the others fail on the base too): ${fresh.join(', ')}`;
 }
+
+/** (DES-RULE-CHECK-001) The engine's words for a gate held because a steering rule was unchecked. */
+export const RULES_UNCHECKED_PROMPT = /steering rules are UNCHECKED/u;
+export const RETRY_RULES_LABEL = 'Re-check the rules';

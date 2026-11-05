@@ -1,5 +1,6 @@
 import { actorWords } from '../../board/actorWords.js';
 import type { SessionView } from '../../api/types.js';
+import { rulesSummary, type RuleRow } from '../../board/assuranceModel.js';
 import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL, REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, qeSkippedText, qeWords, sessionQe, unverifiedDeliveryLine, type DeliveryAssuranceView, type QeDecision, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
@@ -74,6 +75,7 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
           {judgedGates === 1 ? 'At one gate' : `At ${judgedGates} gates`} the judge could not rule, so {judgedBy.join(', ')} judged the work as it stood; that approval ran no further check.
         </p>
       )}
+      {receipt.rules !== undefined && receipt.rules.length > 0 && <RulesChecked rows={receipt.rules} />}
       {receipt.skipped.length > 0 && <p className="wk-assurance-line">{receipt.skipped.length} {receipt.skipped.length === 1 ? "check didn't" : "checks didn't"} run on this step.</p>}
       {receipt.qe !== undefined && <p className="wk-assurance-line"><QeAcceptanceLabel qe={receipt.qe} testId="assurance-qe" /></p>}
       {tech === 'own' && (
@@ -106,6 +108,31 @@ export function AssuranceReceiptTech({ receipt, passed = null, testId }: { recei
       )}
       {w.skippedDetail.length > 0 && <TechDetails summary="Why these checks did not run" text={w.skippedDetail} />}
     </div>
+  );
+}
+
+const RULE_WORD: Record<string, string> = { kept: 'kept', broken: 'broken', n_a: 'not applicable', unchecked: 'unchecked', skipped: 'skipped', waived: 'waived by your instruction' };
+const HOW_WORD: Record<string, string> = { fact: 'by fact', judge: 'by a judge', machine: 'by the engine', cache: 'unchanged since last check', operator: 'by the operator', none: 'nobody could rule' };
+
+/** (DES-RULE-CHECK-001) "N rules checked: K kept, B broken, X not applicable", expandable to every rule's
+ *  row: its verdict, how it was reached, and why (the cite, the fact, or the operator's skip reason). */
+export function RulesChecked({ rows, testId = 'assurance-rules' }: { rows: readonly RuleRow[]; testId?: string }): React.ReactElement {
+  const s = rulesSummary(rows);
+  const tone = s.broken > 0 ? 'broken' : s.unchecked + s.waived > 0 ? 'unchecked' : 'ok';
+  return (
+    <details data-testid={testId} data-tone={tone} className="wk-assurance-rules">
+      <summary data-testid={`${testId}-line`} className="wk-assurance-line wk-assurance-rules-summary">{s.line}</summary>
+      <ul className="wk-assurance-list wk-assurance-rules-list">
+        {rows.map((r) => (
+          <li key={r.ruleId} data-testid="assurance-rule" data-status={r.status} className="wk-assurance-rule">
+            <span className={`wk-assurance-rule-status wk-assurance-rule-status--${r.status}`}>{RULE_WORD[r.status] ?? r.status}</span>
+            {' '}<code className="wk-assurance-rule-id">{r.ruleId}</code>
+            <span className="wk-assurance-rule-how"> {HOW_WORD[r.how] ?? r.how}{r.judge !== null ? ` (${r.judge})` : ''}</span>
+            {r.reason !== '' && <span className="wk-assurance-rule-why">: {r.reason}</span>}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

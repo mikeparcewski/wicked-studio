@@ -1207,6 +1207,20 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-assurance-kind { font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-assurance-kind--partial, .wk-assurance-kind--same-seat, .wk-assurance-kind--floor-only, .wk-assurance-kind--unchecked { color: var(--status-warn); }
 .wk-assurance-dim { color: var(--ink-muted); }
+/* DES-RULE-CHECK-001: the steering-rule line, expandable to every rule's row. The verdict word carries the tone. */
+.wk-assurance-rules { margin: 2px 0; }
+.wk-assurance-rules-summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; color: var(--ink-body); }
+.wk-assurance-rules-summary::-webkit-details-marker { display: none; }
+.wk-assurance-rules-summary::before { content: '▸'; font-size: var(--text-sm); line-height: 1; color: var(--ink-dim); }
+.wk-assurance-rules[open] > .wk-assurance-rules-summary::before { content: '▾'; }
+.wk-assurance-rules-summary:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.wk-assurance-rules[data-tone="broken"] > .wk-assurance-rules-summary, .wk-assurance-rules[data-tone="unchecked"] > .wk-assurance-rules-summary { color: var(--status-warn); font-weight: var(--weight-semi); }
+.wk-assurance-rules-list { margin: 4px 0 0 14px; padding: 0; list-style: none; max-height: 260px; overflow: auto; }
+.wk-assurance-rule { margin: 2px 0; color: var(--ink-muted); overflow-wrap: anywhere; }
+.wk-assurance-rule-status { font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-assurance-rule-status--broken, .wk-assurance-rule-status--unchecked, .wk-assurance-rule-status--waived { color: var(--status-warn); }
+.wk-assurance-rule-status--n_a { color: var(--ink-muted); font-weight: var(--weight-normal, 400); }
+.wk-assurance-rule-id { font-size: var(--text-2xs); color: var(--ink-body); }
 .wk-assurance-optin { margin: 6px 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: var(--text-xs); color: var(--ink-body); }
 .wk-assurance-optin-label { display: inline-flex; align-items: center; gap: 6px; font-weight: var(--weight-semi); cursor: pointer; }
 .wk-assurance-optin-why { margin: 4px 0 0; color: var(--ink-muted); }

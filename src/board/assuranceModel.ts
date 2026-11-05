@@ -163,6 +163,65 @@ export interface AssuranceReceipt extends RunAssurance {
   /** Studio's mark on a DELIVERY receipt (every gate's instruments, unioned): its kind, decided per
    *  gate before the union. Its seat names are the gates' names joined for display only. */
   aggregateKind?: AssuranceKind;
+  /** (crew api-types 0.190.0, DES-RULE-CHECK-001) Every steering rule in force and its verdict at this
+   *  gate (a delivery: the worst row per rule across the run's gates); absent when no rule check ran. */
+  rules?: RuleRow[];
+}
+
+/** One steering rule's verdict (`AssuranceReceipt.rules[]`). */
+export interface RuleRow {
+  ruleId: string;
+  /** `kept` | `broken` | `n_a` | `unchecked` | `skipped` | `waived` (the person's instruction conflicts; to confirm). */
+  status: string;
+  /** `fact` | `judge` | `machine` | `cache` | `operator` | `none`. */
+  how: string;
+  reason: string;
+  cite: string | null;
+  judge: string | null;
+}
+
+const RULE_STATUSES = ['kept', 'broken', 'n_a', 'unchecked', 'skipped', 'waived'] as const;
+const RULE_RANK: Record<string, number> = { broken: 4, unchecked: 3, waived: 3, skipped: 2, kept: 1, n_a: 0 };
+
+function rulesOf(v: unknown): RuleRow[] {
+  return Array.isArray(v)
+    ? v.flatMap((r) => {
+      if (!isRecord(r) || typeof r['ruleId'] !== 'string' || r['ruleId'] === '') return [];
+      const status = typeof r['status'] === 'string' && (RULE_STATUSES as readonly string[]).includes(r['status']) ? r['status'] : 'unchecked';
+      return [{
+        ruleId: r['ruleId'],
+        status,
+        how: typeof r['how'] === 'string' ? r['how'] : 'none',
+        reason: typeof r['reason'] === 'string' ? r['reason'] : '',
+        cite: str(r['cite']),
+        judge: str(r['judge']),
+      }];
+    })
+    : [];
+}
+
+/** One row per rule across receipts, the worst status winning (deny-dominates), in first-seen order. */
+export function worstRules(lists: ReadonlyArray<readonly RuleRow[] | undefined>): RuleRow[] {
+  const out: RuleRow[] = [];
+  for (const rows of lists) {
+    for (const r of rows ?? []) {
+      const i = out.findIndex((o) => o.ruleId === r.ruleId);
+      if (i < 0) out.push(r);
+      else if ((RULE_RANK[r.status] ?? 0) > (RULE_RANK[out[i]!.status] ?? 0)) out[i] = r;
+    }
+  }
+  return out;
+}
+
+/** The counts and the one line the run page, the gate card and the delivery say:
+ *  "N rules checked: K kept, B broken, X not applicable" (+ unchecked, skipped by the operator). */
+export function rulesSummary(rows: readonly RuleRow[]): { line: string; broken: number; unchecked: number; skipped: number; waived: number } {
+  const n = (s: string) => rows.filter((r) => r.status === s).length;
+  let line = `${rows.length} ${rows.length === 1 ? 'rule' : 'rules'} checked: ${n('kept')} kept, ${n('broken')} broken, ${n('n_a')} not applicable`;
+  if (n('waived') > 0) line += `, ${n('waived')} waived by your instruction (to confirm)`;
+  if (n('unchecked') > 0) line += `, ${n('unchecked')} unchecked`;
+  if (n('skipped') > 0) line += `, ${n('skipped')} skipped by the operator`;
+  return { line, broken: n('broken'), unchecked: n('unchecked'), skipped: n('skipped'), waived: n('waived') };
 }
 
 /** One "judged by operator" record (`AssuranceReceipt.operatorJudges[]`). */
@@ -212,10 +271,12 @@ export function receiptOf(raw: unknown): AssuranceReceipt | null {
     })
     : [];
   const judged = operatorJudgesOf(raw['operatorJudges']);
+  const rules = rulesOf(raw['rules']);
   return {
     ...run,
     ...(fallbacks.length > 0 ? { judgeFallbacks: fallbacks } : {}),
     ...(judged.length > 0 ? { operatorJudges: judged } : {}),
+    ...(rules.length > 0 ? { rules } : {}),
     ran: strings(raw['ran']),
     skipped,
     creator: str(raw['creator']),
@@ -350,7 +411,9 @@ export function deliveryReceiptOf(
     const r = lifted !== null ? lifted.r : recorded!;
     const fb = fallbacksOf([r, ...gates]);
     const oj = judgmentsOf([r, ...gates], durableFloorOverrides(view));
-    return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
+    // The engine's delivery receipt carries the run's rule rows; an older one's gates do.
+    const rules = r.rules ?? worstRules(gates.map((g) => g.rules));
+    return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
   const run = sessionAssurance(view, log) ?? { mode: gates[0]!.mode, required: gates[0]!.required };
@@ -361,7 +424,8 @@ export function deliveryReceiptOf(
   }
   const fb = fallbacksOf(gates);
   const oj = judgmentsOf(gates, durableFloorOverrides(view));
-  return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), aggregateKind: deliveryKind(out, gates) };
+  const rules = worstRules(gates.map((g) => g.rules));
+  return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), aggregateKind: deliveryKind(out, gates) };
 }
 
 /** Every "judged by operator" record the receipts carry, once each (by who and when), in first-seen

@@ -794,6 +794,14 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     if (choice.decision === null) { setChosen(null); return; }
     // All note-bearing choices carry their base decision in the model (gateRowModel decides scope); the row only
     // merges the person's words as `amend` (a Stop's reason rides the reject into the Decisions ledger).
+    // (DES-RULE-CHECK-001) A rule skip's words are each skipped rule's reason, never an amend; no words, no skip.
+    if (choice.skipRuleIds !== undefined) {
+      const reason = (words ?? '').trim();
+      if (reason === '') { setChosen(null); return; }
+      const skip = { ...choice.decision, skipRules: choice.skipRuleIds.map((id) => ({ id, reason })) } as unknown as GateAnswer;
+      void commitGateDecision(runId, skip, { receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
+      return;
+    }
     const decision: GateAnswer = words !== undefined && words.trim() !== '' ? { ...choice.decision, amend: words.trim() } : choice.decision;
     void commitGateDecision(runId, decision, { receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
   };
