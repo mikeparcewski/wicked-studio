@@ -2,7 +2,7 @@ import type { SystemAction, SystemAttention, SystemSnapshot } from '../../api/sy
 import type { RosterSeat } from '../../api/types.js';
 import type { NerveState } from '../../board/nerveCenter.js';
 import {
-  cliTile, overviewSentence, slowingItems, slowingLine, systemTiles, tidyWords, tilesNeedingALook, waitingItems, waitingWords, type Tile,
+  helperTiles, overviewSentence, slowingItems, slowingLine, systemTiles, tidyWords, tilesNeedingALook, waitingItems, waitingWords, type Tile,
 } from '../../board/nerveOverview.js';
 import { landingTab, nerveTabPath, type NerveTab } from '../../board/nerveTabs.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
@@ -109,7 +109,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
   const slowing = slowingItems(state.attention);
   const causes = useRowHeadlines(slowing, runs);
   const waiting = snapshot !== null ? waitingItems(state.attention).length : needCount;
-  const helpers: Tile[] | null = snapshot !== null ? snapshot.clis.map(cliTile) : registry.roster !== null ? registry.roster.map(seatTile) : null;
+  const helpers: Tile[] | null = snapshot !== null ? helperTiles(snapshot.clis, state.attention) : registry.roster !== null ? registry.roster.map(seatTile) : null;
   const system: Tile[] | null = snapshot !== null ? systemTiles(snapshot) : state.read === 'checking' && registry.health === null ? null : fallbackSystemTiles(registry);
   // What needs a look without being in attention: a tile that is not fine (a degraded component, a helper
   // out of quota or signed out), less the areas attention already names.
@@ -181,6 +181,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
           : helpers.length === 0
             ? <p className="wk-calm-foot">Crew reports no helpers.</p>
             : <TileGrid tiles={helpers} cols={4} search={search} navigate={navigate} onSignIn={(key) => onAct({ kind: 'sign-in', target: key })} />}
+        {state.info != null && <p className="wk-calm-foot" data-testid="nc-not-set-up">{state.info}</p>}
       </CalmSection>
 
       <CalmSection label="System" data-testid="nc-system">

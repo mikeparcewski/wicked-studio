@@ -107,9 +107,24 @@ describe('the summary chips', () => {
     expect(byId(nerveSummary(state('stale', [att('crew-unreachable', 'yellow', 'infra')]), s, FB))['infra']).toMatchObject({ tone: 'fail', stale: true });
   });
 
+  it('4 of 5 signed in is green; only crew\'s seat items (a seat a job needs, too few to review) colour the chip', () => {
+    const s = snap({ clis: [{ state: 'signed_in' }, { state: 'signed_in' }, { state: 'signed_in' }, { state: 'signed_in' }, { state: 'signed_out' }] });
+    expect(byId(nerveSummary(state('fresh'), s, FB))['clis']).toMatchObject({ words: '4/5 signed in', tone: 'ok' });
+    expect(byId(nerveSummary(state('fresh', [att('cli:out:pi', 'yellow', 'clis')]), s, FB))['clis']).toMatchObject({ words: '4/5 signed in', tone: 'warn' });
+    expect(byId(nerveSummary(state('fresh', [att('cli:one-reviewer', 'yellow', 'clis')]), s, FB))['clis']!.tone).toBe('warn');
+    // One agent signed in is yellow even from a crew that sends no item for it; a check not answered is grey.
+    expect(byId(nerveSummary(state('fresh'), snap({ clis: [{ state: 'signed_in' }, { state: 'signed_out' }] }), FB))['clis']!.tone).toBe('warn');
+    expect(byId(nerveSummary(state('fresh'), snap({ clis: [{ state: 'signed_in' }, { state: 'signed_in' }, { state: 'unknown' }] }), FB))['clis']!.tone).toBe('unknown');
+    // Unknown first: one confirmed and one not answered is not known, never a sign-in to make.
+    expect(byId(nerveSummary(state('fresh'), snap({ clis: [{ state: 'signed_in' }, { state: 'unknown' }] }), FB))['clis']!.tone).toBe('unknown');
+    // An older crew: two ready and one never signed in is green.
+    expect(byId(nerveSummary(state('fresh'), null, { roster: [{ ready: true, failing: false }, { ready: true, failing: false }, { ready: false, failing: false }], needCount: 0, governance: 'ok' }))['clis']!.tone).toBe('ok');
+  });
+
   it('an older crew: CLIs from the roster, Runs from the needs-you count, governance from its read', () => {
     const fb: FallbackSignals = { roster: [{ ready: true, failing: false }, { ready: false, failing: false }], needCount: 2, governance: 'ok' };
     const a = byId(nerveSummary(state('fresh', [att('waiting-on-you', 'yellow', 'runs'), att('governance-x', 'yellow', 'governance', 'governance warning')]), null, fb));
+    // One seat ready: no different agent can review, the one sign-in gap that is yellow on an older crew.
     expect(a['clis']).toMatchObject({ words: '1/2 signed in', tone: 'warn' });
     expect(a['runs']).toMatchObject({ words: '2 waiting', tone: 'warn' });
     expect(a['infra']).toMatchObject({ words: 'ok', tone: 'ok' });
@@ -135,9 +150,9 @@ describe('the summary chips', () => {
     expect(a['clis']).toMatchObject({ words: '2/2 signed in', tone: 'warn' });
   });
 
-  it('a seat whose sign-in is not known never hides a signed-out seat or a red CLI item', () => {
+  it('a seat whose sign-in is not known keeps the chip off green, and never hides a red CLI item', () => {
     const roster = [{ ready: false, failing: false }, { ready: null, failing: false }];
-    expect(byId(nerveSummary(state('fresh'), null, { roster, needCount: 0, governance: 'ok' }))['clis']!.tone).toBe('warn');
+    expect(byId(nerveSummary(state('fresh'), null, { roster, needCount: 0, governance: 'ok' }))['clis']!.tone).toBe('unknown');
     const red = byId(nerveSummary(state('fresh', [att('cli:x', 'red', 'clis')]), null, { roster: [{ ready: null, failing: false }], needCount: 0, governance: 'ok' }));
     expect(red['clis']!.tone).toBe('fail');
     // The snapshot reporting no CLIs does not hide crew's own red CLI item either.

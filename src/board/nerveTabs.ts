@@ -1,5 +1,5 @@
 import type { SystemAttention, SystemSnapshot } from '../api/system.js';
-import type { NerveState } from './nerveCenter.js';
+import { tooFewToReview, type NerveState } from './nerveCenter.js';
 
 /**
  * NERVE CENTER'S TABS (operator 2026-10-25: "Nerve center is one giant page — use tabs or some
@@ -127,21 +127,26 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
   const n = state.attention.length;
   const attention = checking ? done('attention', 'checking', 'unknown') : done('attention', String(n), attentionTone(state.attention), n);
 
-  // CLIs: how many are signed in. A signed-out, benched or unknown CLI needs a look; only crew's own
-  // attention (a red item) says one blocks work.
+  // CLIs: how many are signed in, said as a count. The colour is crew's attention only (operator
+  // 2026-11-05): a CLI nobody set up is optional and never yellow; a seat a job needs, or too few
+  // seats to review, is crew's item and colours the chip.
   let clis: AreaSummary;
   const cliItems = of('clis');
   if (snapshot !== null) {
     const total = snapshot.clis.length;
     const signed = snapshot.clis.filter((c) => c.state === 'signed_in').length;
-    const base: AreaTone = total === 0 ? 'unknown' : signed < total ? 'warn' : 'ok';
+    // A sign-in check that has not answered is not known (grey), never green. Fewer than two
+    // distinct agents signed in is yellow even when this crew sends no item for it (an older crew).
+    const base: AreaTone = total === 0 || snapshot.clis.some((c) => c.state === 'unknown') ? 'unknown' : tooFewToReview(snapshot.clis) ? 'warn' : 'ok';
     clis = done('clis', total === 0 ? 'none reported' : `${signed}/${total} signed in`, worse(base, attentionTone(cliItems)));
   } else if (fallback.roster !== null) {
     const seats = fallback.roster;
     const total = seats.length;
     const signed = seats.filter((s) => s.ready === true).length;
-    // A seat known to be out or failing needs a look, even when another seat's state is not known.
-    const bad = seats.some((s) => s.ready === false || s.failing);
+    // A seat the roster reports failing needs a look, even when another seat's state is not known. A
+    // seat that is only not signed in is optional (an older crew says no more about it).
+    // Fewer than two seats ready is the one sign-in gap that matters: no different agent can review.
+    const bad = seats.some((s) => s.failing) || (total > 0 && signed < 2 && seats.every((s) => s.ready !== null));
     const known = seats.every((s) => s.ready !== null);
     const base: AreaTone = total === 0 ? 'unknown' : bad ? 'warn' : known ? 'ok' : 'unknown';
     const read = fallback.rosterRead ?? 'fresh';

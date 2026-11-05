@@ -486,7 +486,8 @@ describe('the overview (/watch with no ?tab=, the approved ui-v2-nerve mockup)',
     expect(within(tile('claude')).getByTestId('nc-tile-line')).toHaveTextContent('42 steps · 90% pass');
     expect(within(tile('copilot')).getByTestId('nc-tile-state')).toHaveTextContent(/^Back at /);
     expect(within(tile('copilot')).queryByTestId('nc-tile-signin')).toBeNull();
-    expect(within(tile('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Not signed in');
+    // Pi is in no job: it is optional (operator 2026-11-05); its week was not read, so "Signed out".
+    expect(within(tile('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
     await waitFor(() => expect(screen.queryAllByTestId('rail-seat-row').length + 1).toBeGreaterThan(0));
     fireEvent.click(within(tile('pi')).getByTestId('nc-tile-signin'));
     await waitFor(() => expect(screen.getByTestId('agent-modal')).toHaveAttribute('data-agent', 'pi'));
@@ -524,5 +525,123 @@ describe('the rail tile while crew has not answered', () => {
     expect(tile).toHaveAttribute('data-read', 'checking');
     expect(tile).toHaveAccessibleName('Nerve Center: checking crew');
     expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('checking crew');
+  });
+});
+
+/**
+ * THE TONE RULE (operator 2026-11-05: "people aren't going to have all the cli's … keeping yellow for a
+ * fix someone can't make makes the status system less useful"). Yellow is crew's attention only: too few
+ * signed-in agents to review, or a signed-out seat a job needs. A CLI nobody set up is a quiet line.
+ */
+describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', () => {
+  const quiet = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    checkedAt: iso(NOW), budgetMs: 4000, tookMs: 300, level: 'green', attention: [], unresolved: [],
+    clis: [
+      cli({ cli: 'claude', label: 'Claude Code' }), cli({ cli: 'codex', label: 'Codex' }), cli({ cli: 'pi', label: 'Pi' }),
+      cli({ cli: 'copilot', label: 'GitHub Copilot CLI' }),
+      cli({ cli: 'opencode', label: 'OpenCode', state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false }),
+    ],
+    runs: [run({ runId: 'r-work', title: 'Add retry to the uploader', liveness: 'working', seat: 'claude', lastEventAt: iso(NOW - 30_000), quietForMs: 30_000, reason: 'working' })],
+    infra: [{ key: 'seat_images', label: 'Seat images', state: 'ok', reason: '6 seat image(s) present and held; not built until signed in: opencode', remedy: null, checkedAt: iso(NOW), durationMs: 5, details: {} }],
+    governance: [{ key: 'judges', label: 'Judges available', state: 'ok', value: 4, reason: 'a distinct judge can be seated', remedy: null }],
+    ...over,
+  });
+  const tileOf = (key: string): HTMLElement => screen.getAllByTestId('nc-tile').find((t) => t.getAttribute('data-tile') === key)!;
+
+  it('4 of 5 signed in: the tile is green, with the optional CLI in one quiet line', async () => {
+    systemAnswer = () => Promise.resolve(quiet());
+    renderBoth();
+    const tile = screen.getByTestId('desk-rail-nerve');
+    await waitFor(() => expect(tile).toHaveAttribute('data-read', 'fresh'));
+    expect(tile).toHaveAttribute('data-tone', 'green');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('all clear');
+    expect(tile).toHaveAttribute('data-info', 'Not set up: OpenCode — optional');
+    expect(tile).toHaveAccessibleName('Nerve Center: all clear — nothing needs you. Not set up: OpenCode — optional');
+    expect(await screen.findByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode — optional');
+    expect(screen.getByTestId('nc-headline')).toHaveTextContent('Nothing is slowing work. Everything is healthy.');
+    expect(within(tileOf('opencode')).getByTestId('nc-tile-state')).toHaveTextContent('Not set up');
+    expect(tileOf('opencode')).toHaveAttribute('data-tone', 'quiet');
+    openDetails();
+    expect(chip('clis')).toHaveAttribute('data-tone', 'ok');
+    expect(within(chip('clis')).getByTestId('nc-chip-words')).toHaveTextContent('4/5 signed in');
+  });
+
+  it('1 seat signed in: yellow, "Sign in a second agent so a different one can review"', async () => {
+    const out = (key: string, label: string) => cli({ cli: key, label, state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false });
+    systemAnswer = () => Promise.resolve(quiet({
+      level: 'yellow',
+      clis: [cli({ cli: 'claude', label: 'Claude Code' }), out('codex', 'Codex'), out('opencode', 'OpenCode')],
+      attention: [{ id: 'cli:one-reviewer', severity: 'yellow', source: 'cli', kind: 'slows', title: 'Sign in a second agent so a different one can review', reason: 'Only claude is signed in, so no different agent can review its work: governed jobs would need reduced assurance', remedy: 'Sign in another agent on the Agents page.', blocks: 0, blockedRunIds: [], target: { kind: 'cli', cli: 'codex' }, action: { kind: 'sign_in', label: 'Sign in' } }],
+    }));
+    renderBoth();
+    const tile = screen.getByTestId('desk-rail-nerve');
+    await waitFor(() => expect(tile).toHaveAttribute('data-read', 'fresh'));
+    expect(tile).toHaveAttribute('data-tone', 'yellow');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('sign in a second agent');
+    const slow = await screen.findByTestId('nc-slow');
+    expect(slow).toHaveTextContent('Sign in a second agent so a different one can review');
+    // While too few agents are signed in, none of the others is "optional".
+    expect(screen.queryByTestId('nc-not-set-up')).toBeNull();
+    expect(tile).not.toHaveAttribute('data-info');
+  });
+
+  it('a seat that dropped while a job needs it turns the tile yellow and its helper tile amber', async () => {
+    systemAnswer = () => Promise.resolve(quiet({
+      level: 'yellow',
+      clis: [cli({ cli: 'claude', label: 'Claude Code' }), cli({ cli: 'codex', label: 'Codex' }), cli({ cli: 'pi', label: 'Pi', state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false }),
+        cli({ cli: 'opencode', label: 'OpenCode', state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false })],
+      attention: [{ id: 'cli:out:pi', severity: 'yellow', source: 'cli', kind: 'slows', title: 'Pi is signed out', reason: '1 job you picked it for needs it, and it can’t take its work until it is signed in again', remedy: 'Sign Pi in again, or let the job carry on with the other agents.', blocks: 1, blockedRunIds: ['r-work'], target: { kind: 'cli', cli: 'pi' }, action: { kind: 'sign_in', label: 'Sign in' } }],
+    }));
+    renderBoth();
+    const tile = screen.getByTestId('desk-rail-nerve');
+    await waitFor(() => expect(tile).toHaveAttribute('data-read', 'fresh'));
+    expect(tile).toHaveAttribute('data-tone', 'yellow');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('a helper is signed out');
+    await screen.findAllByTestId('nc-tile');
+    expect(tileOf('pi')).toHaveAttribute('data-tone', 'warn');
+    expect(within(tileOf('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
+    // The one nobody set up stays quiet, beside it.
+    expect(tileOf('opencode')).toHaveAttribute('data-tone', 'quiet');
+    expect(screen.getByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode — optional');
+  });
+
+  it('a signed-out seat a held job names (its reviewer) is not optional; one that worked this week is "Signed out"', async () => {
+    systemAnswer = () => Promise.resolve(quiet({
+      level: 'red',
+      clis: [cli({ cli: 'claude', label: 'Claude Code' }), cli({ cli: 'codex', label: 'Codex' }),
+        cli({ cli: 'pi', label: 'Pi', state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false }),
+        cli({ cli: 'copilot', label: 'GitHub Copilot CLI', state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false, stats: stats({ units: 12 }) }),
+        cli({ cli: 'opencode', label: 'OpenCode', state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false })],
+      attention: [{ id: 'judge:r1', severity: 'red', source: 'run', kind: 'prevents', title: 'A job has no independent reviewer', reason: 'No helper in the pool can review codex’s work (pi signed out)', remedy: 'Sign in another helper in the job’s pool.', blocks: 1, blockedRunIds: ['r1'], target: { kind: 'run', runId: 'r1' }, action: { kind: 'open_run', label: 'Open the job' } }],
+    }));
+    renderBoth();
+    await waitFor(() => expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('data-read', 'fresh'));
+    await screen.findAllByTestId('nc-tile');
+    // Named by the held job as the reviewer it waits on: amber, and counted as needing a look.
+    expect(within(tileOf('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
+    expect(tileOf('pi')).toHaveAttribute('data-tone', 'warn');
+    expect(within(tileOf('copilot')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
+    expect(tileOf('copilot')).toHaveAttribute('data-tone', 'quiet');
+    expect(screen.getByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode · Signed out: GitHub Copilot CLI — optional');
+  });
+
+  it('an optional CLI never signed in never turns the CLIs chip yellow, against an older crew too', async () => {
+    caps = {};
+    // Governance with no finding: nothing else is yellow on this crew.
+    apiFetch.mockImplementation((path: string) => (path === '/diagnostics' ? Promise.resolve({ governance: { ...GOVERNANCE, deadletters: { ...GOVERNANCE.deadletters, count: 0 }, findings: [] } }) : Promise.resolve({})));
+    rosterAnswer = () => Promise.resolve({ roster: [...SEATS, { ...SEATS[0]!, key: 'codex', display_name: 'Codex', binary: 'codex' }] });
+    try {
+      renderBoth(vi.fn(), '?tab=clis');
+      await waitFor(() => expect(within(chip('clis')).getByTestId('nc-chip-words')).toHaveTextContent('2/3 signed in'));
+      expect(chip('clis')).toHaveAttribute('data-tone', 'ok');
+      await waitFor(() => expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('data-read', 'fresh'));
+      expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('data-tone', 'green');
+    } finally {
+      apiFetch.mockImplementation((path: string) => {
+        if (path === '/system') return systemAnswer();
+        if (path === '/diagnostics') return Promise.resolve({ governance: GOVERNANCE });
+        return Promise.resolve({});
+      });
+    }
   });
 });

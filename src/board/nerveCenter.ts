@@ -1,4 +1,4 @@
-import type { RunLiveness, SystemAttention, SystemRun } from '../api/system.js';
+import type { RunLiveness, SystemAttention, SystemCli, SystemRun } from '../api/system.js';
 import type { SystemStore } from '../store/systemSnapshot.js';
 
 /**
@@ -30,6 +30,8 @@ export interface NerveState {
   words: string;
   /** Every item, worst first (the dashboard's Needs attention strip). */
   attention: SystemAttention[];
+  /** A quiet note that never changes the tone ("Not set up: OpenCode — optional"), or absent. */
+  info?: string | null;
 }
 
 export const CANT_REACH = "can't reach crew";
@@ -53,6 +55,63 @@ function socketItems(ws: 'connecting' | 'connected' | 'disconnected'): SystemAtt
   return ws === 'disconnected'
     ? [item('studio-socket', 'yellow', 'infra', 'live updates paused', 'Studio lost its live connection to crew, so pages stop updating on their own.', 'It reconnects by itself. Reload the page if it does not.')]
     : [];
+}
+
+/** The id crew gives "fewer than two agents signed in, so none can review another's work". */
+export const ONE_REVIEWER_ID = 'cli:one-reviewer';
+
+/** The CLI a "signed out while a job needs it" item names (`cli:out:<key>`), or null. */
+export function cliInUse(a: SystemAttention): string | null {
+  return a.panel === 'clis' && a.id.startsWith('cli:out:') ? a.id.slice('cli:out:'.length) : null;
+}
+
+const escapeRe = (w: string): string => w.replace(/[.*+?^$()|[\]\\{}]/g, '\\$&');
+
+/** Whether an attention item names a seat in its words ("pi signed out", "(codex benched)"): crew says the
+ *  seats a held job's reviewer or failover waits on inside the job's own item. */
+function names(a: SystemAttention, c: SystemCli): boolean {
+  const said = `${a.text} ${a.reason ?? ''} ${a.remedy ?? ''}`.toLowerCase();
+  // A whole word: `pi` is not inside "pipeline", and `pi#2` is its own seat.
+  const word = (w: string): boolean => w !== '' && new RegExp(`(^|[^\\w#-])${escapeRe(w.toLowerCase())}($|[^\\w#-])`).test(said);
+  return word(c.key) || word(c.name);
+}
+
+/** Fewer than two distinct agents signed in (a benched one still is; `claude#2` is claude's): no different
+ *  agent can review. Said by crew as `cli:one-reviewer`; read here too, for a crew that sends no such item. */
+export function tooFewToReview(clis: readonly SystemCli[], attention: readonly SystemAttention[] = []): boolean {
+  if (attention.some((a) => a.id === ONE_REVIEWER_ID)) return true;
+  if (clis.length === 0 || clis.some((c) => c.state === 'unknown')) return false;
+  return new Set(clis.filter((c) => c.state === 'signed_in' || c.state === 'benched').map((c, i) => (c.key ?? `#${i}`).split('#', 1)[0] || `#${i}`)).size < 2;
+}
+
+/** A signed-out seat that work needs: a job's step is on it (`cli:out:<key>`), or a JOB's own item names it
+ *  (the reviewer or failover a held job waits on). A system row that merely mentions a CLI (the seat
+ *  images' "not needed until signed in: pi") is no need. */
+export function seatNeeded(c: SystemCli, attention: readonly SystemAttention[]): boolean {
+  return attention.some((a) => cliInUse(a) === c.key || (a.panel === 'runs' && names(a, c)));
+}
+
+/**
+ * The signed-out CLIs nothing needs (operator 2026-11-05: "people aren't going to have all the cli's"):
+ * no job needs them ({@link seatNeeded}). They are OPTIONAL, said quietly, never a reason for yellow.
+ * None is optional while too few agents are signed in to review: then any one of them is the fix.
+ */
+export function notSetUp(clis: readonly SystemCli[], attention: readonly SystemAttention[]): SystemCli[] {
+  if (tooFewToReview(clis, attention)) return [];
+  return clis.filter((c) => c.state === 'signed_out' && !seatNeeded(c, attention));
+}
+
+/** "Not set up" only when crew counted this week and the CLI did nothing; an unread week says "Signed out". */
+export const neverWorked = (c: SystemCli): boolean => c.units === 0;
+
+/** "Not set up: OpenCode — optional"; one that worked (or whose week is unread) is "Signed out: Pi — optional"; null with none. */
+export function notSetUpWords(clis: readonly SystemCli[], attention: readonly SystemAttention[]): string | null {
+  const out = notSetUp(clis, attention);
+  if (out.length === 0) return null;
+  const never = out.filter(neverWorked).map((c) => c.name);
+  const before = out.filter((c) => !neverWorked(c)).map((c) => c.name);
+  const parts = [never.length > 0 ? `Not set up: ${never.join(', ')}` : null, before.length > 0 ? `Signed out: ${before.join(', ')}` : null].filter((x): x is string => x !== null);
+  return `${parts.join(' · ')} — optional`;
 }
 
 /** An older crew's attention, folded from what it can say (the old Health dot's signals, plus the
@@ -101,8 +160,9 @@ export function nerveState(s: Signals, ws: 'connecting' | 'connected' | 'disconn
     if (s.snapshotAt === null || s.snapshot === null) return checking();
     if (now - s.snapshotAt > STALE_MS) return unreachable('stale', "Crew's system snapshot is too old to trust.");
     // A ranked crew's list is kept in crew's order; an older snapshot's is worst first.
-    if (s.snapshot.ranked === true) return systemVerdict([...s.snapshot.attention, ...socketItems(ws)], s.snapshot.unresolved?.length ?? 0);
-    return systemVerdict(worstFirst([...s.snapshot.attention, ...socketItems(ws)]), 0);
+    const info = notSetUpWords(s.snapshot.clis, s.snapshot.attention);
+    if (s.snapshot.ranked === true) return { ...systemVerdict([...s.snapshot.attention, ...socketItems(ws)], s.snapshot.unresolved?.length ?? 0), info };
+    return { ...systemVerdict(worstFirst([...s.snapshot.attention, ...socketItems(ws)]), 0), info };
   } else if (s.mode === 'fallback') {
     if (s.governance.kind === 'unread') return checking();
     // The governance answer must be as fresh as the health one (a read that failed keeps no clock).
@@ -148,6 +208,7 @@ export function systemSummary(a: SystemAttention): string {
     return a.level === 'red' || /\bdown\b/.test(said) ? 'a service is down' : 'a service needs a look';
   }
   if (a.panel === 'clis') {
+    if (a.id === ONE_REVIEWER_ID) return 'sign in a second agent';
     if (/bench|quota|429|rate.?limit/.test(said)) return 'a helper is resting';
     if (/sign/.test(said)) return 'a helper is signed out';
     return 'a helper needs a look';

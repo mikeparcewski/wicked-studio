@@ -32,7 +32,11 @@ export function NerveCenterTile({ navigate, pathname, waitingOnYou, compact = fa
   const state = useNerveState(waitingOnYou);
   const here = pathname === NERVE_CENTER_PATH || pathname === '/health';
   // While crew has not answered yet the tile is neutral: no verdict, in colour or in words.
-  const label = state.read === 'checking' ? `${PAGE_NAMES.watch}: ${state.words}` : `${PAGE_NAMES.watch}: ${state.words} — ${toneWord(state.tone)}`;
+  // The quiet note (a CLI nobody set up) rides the name and tooltip of a green tile; it never colours
+  // the tile, and never crowds a tile that has something to act on.
+  const note = state.read === 'fresh' && state.tone === 'green' && state.info != null ? state.info : null;
+  const info = note !== null ? `. ${note}` : '';
+  const label = state.read === 'checking' ? `${PAGE_NAMES.watch}: ${state.words}` : `${PAGE_NAMES.watch}: ${state.words} — ${toneWord(state.tone)}${info}`;
   return (
     <a
       href={NERVE_CENTER_PATH}
@@ -45,6 +49,7 @@ export function NerveCenterTile({ navigate, pathname, waitingOnYou, compact = fa
       data-nav-dest="watch"
       data-tone={state.tone}
       data-read={state.read}
+      data-info={note ?? undefined}
       aria-current={here ? 'page' : undefined}
       aria-label={label}
       title={label}
