@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 325,
-    "occurrences": 4701,
-    "static": 3934,
+    "occurrences": 4702,
+    "static": 3935,
     "dynamic": 173,
     "computed": 53
   },
@@ -10695,6 +10695,12 @@
       "testId": "nc-insights-line",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx",
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-not-set-up",
+      "files": [
         "src/components/nerve/NerveOverview.tsx"
       ]
     },
