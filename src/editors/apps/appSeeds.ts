@@ -48,6 +48,28 @@ export function sourcesForProject(answer: unknown, projectId: string, max: numbe
   return out;
 }
 
+/** The kinds crew's app query resolver (`lookupSource` + `queryKindFits`) reads; a `toolbox-source` is not one. */
+const APP_QUERY_KINDS = new Set(['sql', 'graphql', 'rest', 'mcp-http', 'mcp-stdio']);
+
+/**
+ * Whether `projectId` has ANY registry source an app query could read, from a `GET /mcp/servers` answer (`null`: not
+ * one): enabled, of a kind crew's resolver reads, and, for a source that carries Agents switches (a data source or a
+ * PM entry), seen by this project. A REST or MCP server carries none (crew's `isSourceRecord`), so it counts as it
+ * is. This only decides whether a GENERIC data ask is on offer; it names nothing.
+ */
+export function anyAppReadable(answer: unknown, projectId: string): boolean | null {
+  const servers = typeof answer === 'object' && answer !== null ? (answer as { servers?: unknown }).servers : undefined;
+  if (!Array.isArray(servers)) return null;
+  return servers.some((s: unknown) => {
+    if (typeof s !== 'object' || s === null) return false;
+    const r = s as { name?: unknown; kind?: unknown; enabled?: unknown; agents?: unknown };
+    if (typeof r.name !== 'string' || r.name === CREW_SOURCE || r.enabled !== true || typeof r.kind !== 'string' || !APP_QUERY_KINDS.has(r.kind)) return false;
+    if (r.agents === undefined) return true;
+    const a = agentAccessOf(r);
+    return a !== null && a.see && (a.everyProject || a.projects.includes(projectId));
+  });
+}
+
 /**
  * (DES-KNOWLEDGE-DATA-001 §9.1) The sources a DATA suggestion may name (Apps page, an app's chat, Report's Build
  * sheet): the ones the project's knowledge summary lists as described (what the builder is given), and that an app

@@ -6,7 +6,7 @@ import type { AppSpec } from '../src/api/types.js';
 import { readKnowledgeSummary, type KnowledgeSummary } from '../src/api/knowledgeSummary.js';
 import { AppChat } from '../src/components/apps/AppChat.js';
 import { AppsPage } from '../src/components/apps/AppsPage.js';
-import { dataSourcesFor } from '../src/editors/apps/appSeeds.js';
+import { anyAppReadable, dataSourcesFor } from '../src/editors/apps/appSeeds.js';
 import { suggestionsFor } from '../src/editors/apps/appTurns.js';
 import { knowledgeAddition, knowledgeSeeds } from '../src/editors/apps/knowledgeSeeds.js';
 import { SAMPLE_APPS } from '../src/editors/apps/samples.js';
@@ -151,7 +151,8 @@ describe('Make a new app: knowledge and data, side by side', () => {
     expect(chips).toEqual(['A dashboard of my main numbers with a table of the latest rows']);
     unmount();
     vi.restoreAllMocks();
-    const second = page(null, true);
+    // The listed app is in project q: q has a readable source, so the generic ask is on offer, and still names none.
+    const second = page(null, true, [server('support-pg', 'sql', ['p', 'q'])]);
     render(<AppsPage navigate={vi.fn()} />);
     await settled(second.calls);
     const none = screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent ?? '').join(' ');
@@ -280,6 +281,65 @@ describe('(ak-fix, codex r1 and r2 on the fold) chat follow-ups never land on a 
     expect(suggestionsFor(empty, [], null, null)).toEqual(['Show my main numbers as KPIs', 'Add a table of the latest rows, newest first']);
     expect(suggestionsFor(empty, [], null, true)).toEqual(['Show my main numbers as KPIs', 'Add a table of the latest rows, newest first']);
     expect(suggestionsFor(empty, [], 'Add a bar chart of this project\'s steering rules by type', false)).toEqual(["Add a bar chart of this project's steering rules by type"]);
+  });
+});
+
+describe('(ak-fix, codex r3) no ask the project cannot build; a picked suggestion stays with its project', () => {
+  it('anyAppReadable follows crew: a REST server has no Agents switches and counts; a Toolbox-runtime source does not', () => {
+    const rest = { name: 'billing-api', kind: 'rest', enabled: true };
+    expect(anyAppReadable({ servers: [rest] }, 'p')).toBe(true);
+    expect(anyAppReadable({ servers: [{ ...rest, enabled: false }] }, 'p')).toBe(false);
+    expect(anyAppReadable({ servers: [server('tb-pg', 'toolbox-source')] }, 'p')).toBe(false);
+    expect(anyAppReadable({ servers: [server('elsewhere-pg', 'sql', ['q'])] }, 'p')).toBe(false);
+    expect(anyAppReadable({ servers: [] }, 'p')).toBe(false);
+    expect(anyAppReadable('nope', 'p')).toBeNull();
+  });
+
+  it('Make a new app: no source an app can read and no knowledge -> no chip; a REST source keeps the generic ask, unnamed', async () => {
+    const first = page(EMPTY, false, []);
+    const { unmount } = render(<AppsPage navigate={vi.fn()} />);
+    await settled(first.calls);
+    expect(screen.queryAllByTestId('apps-new-composer-suggestion')).toHaveLength(0);
+    unmount();
+    vi.restoreAllMocks();
+    const second = page({ ...EMPTY, memories: { project: 1, shared: 0 } }, false, [{ name: 'billing-api', kind: 'rest', enabled: true }]);
+    render(<AppsPage navigate={vi.fn()} />);
+    await settled(second.calls);
+    const chips = screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent ?? '');
+    expect(chips).toContain('A dashboard of my main numbers with a table of the latest rows');
+    expect(chips.join(' ')).not.toContain('billing-api');
+  });
+
+  it('a picked suggestion goes when the project changes; words the person typed stay', async () => {
+    const BILLING: KnowledgeSummary = { ...EMPTY, sources: [{ name: 'billing-pg', described: true, query: false, shapes: 0 }] };
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, 'http://studio.local');
+      const path = url.pathname.replace(/^\/api\/v1/u, '');
+      const json = (b: unknown, status = 200): Response => new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } });
+      if (path === '/health') return json(health.body);
+      if (path === '/apps') return json({ apps: [] });
+      if (path === '/editors') return json({ editors: [] });
+      if (path === '/projects') return json({ projects: [{ id: 'p', name: 'Billing' }, { id: 'q', name: 'Ops' }] });
+      if (path === '/mcp/servers') return json({ servers: [server('billing-pg')], discovered: [] });
+      if (path === '/knowledge/summary') return json(url.searchParams.get('project') === 'p' ? BILLING : { ...EMPTY, projectId: 'q' });
+      return json({ error: 'no route' }, 404);
+    }) as typeof fetch);
+    useProjectsStore.setState({ projects: [] });
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('apps-new-composer-suggestion').map((b) => b.textContent)).toContain('What we know about billing-pg: its tables and their columns'), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByTestId('apps-new-project')).toBeTruthy(), { timeout: 4000 });
+    const input = (): HTMLTextAreaElement => screen.getByTestId('apps-new-composer-input') as HTMLTextAreaElement;
+    fireEvent.click(screen.getAllByTestId('apps-new-composer-suggestion').find((b) => b.textContent === 'What we know about billing-pg: its tables and their columns')!);
+    expect(input().value).toBe('What we know about billing-pg: its tables and their columns');
+    fireEvent.change(screen.getByTestId('apps-new-project'), { target: { value: 'q' } });
+    await waitFor(() => expect(input().value).toBe(''));
+    fireEvent.change(screen.getByTestId('apps-new-project'), { target: { value: 'p' } });
+    await waitFor(() => expect(screen.getAllByTestId('apps-new-composer-suggestion').length).toBeGreaterThan(0), { timeout: 4000 });
+    fireEvent.click(screen.getAllByTestId('apps-new-composer-suggestion')[0]!);
+    fireEvent.change(input(), { target: { value: 'What we know about billing-pg, by owner' } });
+    fireEvent.change(screen.getByTestId('apps-new-project'), { target: { value: 'q' } });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(input().value).toBe('What we know about billing-pg, by owner');
   });
 });
 

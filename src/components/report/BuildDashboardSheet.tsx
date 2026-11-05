@@ -5,7 +5,7 @@ import { reportOrigin, type AppOrigin } from '../../editors/apps/appOrigin.js';
 import { dashboardSeeds } from '../../editors/apps/appSeeds.js';
 import type { KnowledgeSummary } from '../../api/knowledgeSummary.js';
 import { readSuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
-import { dataSeedsBeside, knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
+import { dataSeedsWhen, knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
 import { nameFrom } from '../../editors/apps/appTurns.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useProjectsStore } from '../../store/projects.js';
@@ -121,7 +121,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
   const summary = sources.state === 'ok' || sources.state === 'failed' ? sources.summary : null;
   const known = summary !== null && sources.state !== 'none' && summary.projectId === sources.project ? knowledgeSeeds(summary) : [];
   const seeds = sources.state === 'reading' || sources.state === 'none' ? []
-    : mixSeeds(known, dataSeedsBeside(known, dashboardSeeds(period, names), sources.state === 'ok' ? sources.readable : null));
+    : mixSeeds(known, dataSeedsWhen(dashboardSeeds(period, names), sources.state === 'ok' ? sources.readable : null));
   const chosenName = sources.state === 'none' ? null : projects.find((p) => p.id === sources.project)?.name ?? sources.project;
 
   const run = useBuildRun();

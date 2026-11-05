@@ -636,6 +636,15 @@ describe('9. projects and seeds', () => {
     expect(screen.getByTestId('report-build-sheet').textContent ?? '').not.toContain('support-pg');
   });
 
+  it('(ak-fix, codex r3) no source an app can read and no knowledge: no seed, and the sheet says why', async () => {
+    crew({ servers: [source('tb-pg', ['pa'], { kind: 'toolbox-source' })], summary: { pa: described() } });
+    report('pa');
+    await waitFor(() => expect(screen.getByTestId('report-build')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('report-build'));
+    await waitFor(() => expect(screen.getByTestId('report-build-sources-none').textContent).toBe('No data source to suggest for Alpha yet.'));
+    expect(screen.queryAllByTestId('apps-new-composer-suggestion')).toHaveLength(0);
+  });
+
   it('(ak-fix P2) no source is named while the summary is still being read', async () => {
     const late = deferred();
     crew({ servers: [source('outside-db', ['pa'], { kind: 'graphql' }), source('support-pg', ['pa'])], summary: { pa: described('support-pg') }, summaryGate: late.promise });

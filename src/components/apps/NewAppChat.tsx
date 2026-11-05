@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Project } from '../../api/types.js';
 import { createByChat } from '../../editors/apps/appTurns.js';
-import { dataSeedsBeside, knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
+import { dataSeedsWhen, knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
 import { readSuggestionGrounds, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
 import { useProjectsStore } from '../../store/projects.js';
 import type { ComposerSuggestion } from '../session/Composer.js';
@@ -91,8 +91,19 @@ export function NewAppChat({
     : ['A dashboard of my main numbers with a table of the latest rows'])
     .concat(dataSources.length > 1 ? [`Compare a number from ${dataSources[0]} with one from ${dataSources[1]} side by side`] : []);
   const knowledge = knowledgeSeeds(current?.summary ?? null);
-  const labels = given ?? mixSeeds(knowledge, dataSeedsBeside(knowledge, data, current?.readable ?? null));
-  const suggestions: ComposerSuggestion[] = labels.slice(0, given === undefined && knowledge.length > 0 ? 4 : 3).map((label, i) => ({ id: `new-app-${i}`, label, onPick: () => setText(label) }));
+  const labels = given ?? mixSeeds(knowledge, dataSeedsWhen(data, current?.readable ?? null));
+  // A suggestion is made for the project chosen when it was picked: left as it was, it goes when the project changes
+  // (it may name a source the new project cannot read); words the person typed or edited stay (ak-fix review: codex r3).
+  const picked = useRef<{ label: string; project: string | null } | null>(null);
+  useEffect(() => {
+    const p = picked.current;
+    if (p === null || p.project === chosen) return;
+    picked.current = null;
+    setText((t) => (t === p.label ? '' : t));
+  }, [chosen]);
+  const suggestions: ComposerSuggestion[] = labels.slice(0, given === undefined && knowledge.length > 0 ? 4 : 3).map((label, i) => ({
+    id: `new-app-${i}`, label, onPick: () => { picked.current = { label, project: chosen }; setText(label); },
+  }));
   /** True when the message was taken (an app was made and its first turn started, or it waits in that app's chat). */
   const send = async (words: string): Promise<boolean> => {
     if (words === '' || busy || framed || blocked !== null) return false;
