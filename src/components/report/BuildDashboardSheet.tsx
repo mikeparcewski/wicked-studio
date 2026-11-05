@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
-import { sourcesApi } from '../../api/sources.js';
+// The registry's read only (the sources API, with its writes, stays the sources components' alone).
+import { mcpApi } from '../../api/mcp.js';
 import { reportOrigin, type AppOrigin } from '../../editors/apps/appOrigin.js';
 import { dashboardSeeds, sourcesForProject } from '../../editors/apps/appSeeds.js';
 import { nameFrom } from '../../editors/apps/appTurns.js';
@@ -104,7 +105,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
     const g = ++gen.current;
     if (id === null) { setSources({ state: 'none' }); return; }
     setSources({ state: 'reading', project: id });
-    sourcesApi.list().then(
+    mcpApi.servers().then(
       (r) => { if (g === gen.current) setSources({ state: 'ok', project: id, names: sourcesForProject(r, id) }); },
       (e: unknown) => { if (g === gen.current) setSources({ state: 'failed', project: id, why: (e instanceof Error ? e.message : String(e)).slice(0, 160) }); },
     );

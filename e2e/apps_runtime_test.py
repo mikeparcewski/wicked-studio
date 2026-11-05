@@ -312,7 +312,8 @@ def main() -> None:
         frame.wait_for_selector(".wk-palette")
         edits0 = count(origin, "POST", "/edits")
         frame.click('[data-component="open_kpi"] .wk-kpi-value')
-        frame.wait_for_selector('[data-testid="apps-properties"]')
+        # Properties are the host's, in the app's side panel, for every crew app (DES-REPORT-DASHBOARDS-001 §2).
+        page.wait_for_selector('[data-testid="app-properties"][data-component="open_kpi"]')
         page.wait_for_selector('[data-testid="apps-chip"]')
         chip = page.text_content('[data-testid="apps-chip"]')
         box = frame.locator('[data-component="open_kpi"]').bounding_box()
@@ -339,7 +340,7 @@ def main() -> None:
               and chip == "about: KPI “Open” (Main, v1)", edits=len(edits), kpi_box=kpi.get("box"), style_during_drag=style_mid, chip=chip)
 
         # 7b. a title typed and then left with a click on studio's own Preview still lands (it commits as focus leaves)
-        title = frame.locator('[data-prop="title"]')
+        title = page.locator('[data-testid="app-prop-title"]')
         title.click()
         title.press("ControlOrMeta+a")
         title.press_sequentially("Open now")
