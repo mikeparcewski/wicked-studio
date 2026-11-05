@@ -46,6 +46,8 @@ interface Fake {
   apps: App[];
   projects: Array<{ id: string; name: string; status: 'active' | 'archived' }>;
   servers: unknown[];
+  /** (DES-KNOWLEDGE-DATA-001 §9.1) `GET /knowledge/summary` per project; absent = crew has none (404). */
+  summary?: Record<string, unknown>;
   whoami: unknown;
   settingsGet?: () => Answer;
   put?: (body: Record<string, unknown>, n: number) => Answer | null;
@@ -103,6 +105,11 @@ function crew(over: Partial<Fake> = {}): Fake {
     }
     if (method === 'GET' && path === '/whoami') return fake.whoami === null ? json({ error: 'no route' }, 404) : json(fake.whoami);
     if (method === 'GET' && path === '/projects') return json({ projects: fake.projects.filter((p) => p.status === 'active').map((p) => ({ ...p, description: null, scope: '', created_at: 1, updated_at: 1 })) });
+    if (method === 'GET' && path === '/knowledge/summary') {
+      const pid = new URL(raw, 'http://studio.local').searchParams.get('project') ?? '';
+      const sm = fake.summary?.[pid];
+      return sm === undefined ? json({ error: 'no route' }, 404) : json({ projectId: pid, ...(sm as object) });
+    }
     if (method === 'GET' && path === '/mcp/servers') { serverReads += 1; return fake.serversAnswer?.(serverReads) ?? json({ servers: fake.servers, discovered: [] }); }
     if (method === 'GET' && path === '/apps') {
       const project = u.searchParams.get('project');
@@ -554,6 +561,20 @@ describe('9. projects and seeds', () => {
     const message = (fake.calls.find((c) => /\/turns$/u.test(c.path))!.body as { message: string }).message;
     expect(message).toMatch(/support-pg/u);
     expect(message).not.toMatch(/IGNORE|drop every/u);
+  });
+
+  it('(DES-KNOWLEDGE-DATA-001 §9.1) the Build sheet offers dashboards on the project\'s knowledge, only what its summary shows', async () => {
+    crew({ servers: [source('support-pg', ['pa'])], summary: { pa: { sources: [{ name: 'support-pg', described: true, query: false, shapes: 2 }], memories: { project: 0, shared: 0 }, steering: { total: 3, byType: { security: 3 } } } } });
+    report('pa');
+    await waitFor(() => expect(screen.getByTestId('report-build')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('report-build'));
+    await waitFor(() => expect(screen.getAllByTestId('apps-new-composer-suggestion').map((s) => s.textContent ?? '')[0]).toBe('What we know about support-pg: its tables, their data shapes and joins'));
+    const sugg = screen.getAllByTestId('apps-new-composer-suggestion').map((s) => s.textContent ?? '');
+    expect(sugg).toHaveLength(3);
+    expect(sugg[1]).toMatch(/support-pg over the last 7 days/u);
+    expect(sugg[2]).toBe('Steering rules for this project by type as a bar chart, with the rules in a table');
+    // NEGATIVE: no memories in the summary, so no memories seed; no summary at all (pb) gives the data seeds only.
+    expect(sugg.join(' ')).not.toMatch(/remembers/u);
   });
 
   it('a source answer arriving out of order after a project switch is dropped', async () => {

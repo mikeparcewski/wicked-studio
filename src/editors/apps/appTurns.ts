@@ -136,25 +136,29 @@ export function endedLine(t: AppTurnRecord): string {
 
 /**
  * Suggestions for the composer (operator 2026-11-04: "suggestions in the chat"): what this app could ask next, from its
- * own spec and the sources it could read. Plain asks a person would type; never a claim about the data.
+ * own spec and the sources its project's knowledge summary lists. Plain asks a person would type; never a claim about
+ * the data, and never a word the builder or a source wrote (a source is named only by its registry name).
  */
-export function suggestionsFor(spec: AppSpec | null, sources: readonly string[]): string[] {
+export function suggestionsFor(spec: AppSpec | null, sources: readonly string[], knowledge: string | null = null): string[] {
   const out: string[] = [];
   const comps = (spec?.pages ?? []).flatMap((p) => p.components);
   const used = new Set((spec?.queries ?? []).map((q) => q.source));
+  // (DES-KNOWLEDGE-DATA-001 §9.1) An app that reads none of its project's knowledge yet is offered one knowledge
+  // addition (`knowledgeAddition`, from the project's summary), early, so a person learns it can.
+  if (knowledge !== null && !used.has('estate')) out.push(knowledge);
   const kpis = comps.filter((c) => c.type === 'kpi');
   const charts = comps.filter((c) => c.type === 'chart');
   const tables = comps.filter((c) => c.type === 'table');
   if (comps.length === 0) {
     const s = sources[0];
-    out.push(s !== undefined ? `Show the main numbers from ${s} as KPIs` : 'Show my main numbers as KPIs');
+    out.push(s !== undefined && s !== 'estate' ? `Show the main numbers from ${s} as KPIs` : 'Show my main numbers as KPIs');
     out.push('Add a table of the latest rows, newest first');
   }
-  const k = kpis[0] as { title?: string } | undefined;
-  if (k?.title !== undefined) out.push(`Show ${k.title.toLowerCase()} by day as a line chart`);
+  // A title is the builder's text: a suggestion a person may send never quotes it (fixed words only).
+  if (kpis.length > 0) out.push('Show the first KPI by day as a line chart');
   if (charts.length > 0) out.push('Add a filter by region that drives every chart');
   if (tables.length > 0 && !comps.some((c) => c.type === 'filter')) out.push('Add a search box above the table');
-  const other = sources.find((s) => !used.has(s));
+  const other = sources.find((s) => !used.has(s) && s !== 'estate' && s !== 'crew');
   if (other !== undefined && comps.length > 0) out.push(`Add a KPI from ${other} beside these`);
   if ((spec?.pages.length ?? 0) === 1 && comps.length >= 4) out.push('Make it two pages: an overview and a detail page');
   if (charts.length === 0 && comps.length > 0) out.push('Add a bar chart that breaks this down by category');

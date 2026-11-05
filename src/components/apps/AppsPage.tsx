@@ -93,7 +93,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   const keep = origin === null ? '' : `?from=${encodeURIComponent(origin.kind === 'report' ? 'report' : `project:${origin.id}`)}`;
   return (
     <PageFrame data-testid="apps-page" title={PAGE_NAMES.apps}
-      intro="Dashboards and tools over your data, built by chat. Open one to use it and to ask for changes; Edit is for fine-tuning by hand.">
+      intro="Dashboards and tools over your data and what your projects know, built by chat. Open one to use it and to ask for changes; Edit is for fine-tuning by hand.">
       {(filter !== null || back !== null) && (
         <p className="wk-apps-filterline" data-testid="apps-filter">
           {filter !== null && (
@@ -111,7 +111,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
         </p>
       )}
       {turnsOn && dir !== null && dir.source === 'crew' && (
-        <NewAppChat navigate={navigate} sources={[...new Set(dir.apps.flatMap((a) => a.sources))].slice(0, 20)} projectOfApps={filter ?? dir.apps.find((a) => a.detail !== null)?.detail?.projectId ?? null} framed={framed} />
+        <NewAppChat navigate={navigate} projectOfApps={filter ?? dir.apps.find((a) => a.detail !== null)?.detail?.projectId ?? null} framed={framed} />
       )}
       {dir === null && <div className="wk-apps-grid" data-testid="apps-loading">{[0, 1, 2].map((i) => <div key={i} className="wk-appcard wk-appcard--ghost" />)}</div>}
       {dir !== null && dir.source === 'error' && (

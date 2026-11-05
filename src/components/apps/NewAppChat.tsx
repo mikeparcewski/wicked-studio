@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Project } from '../../api/types.js';
+import { fetchKnowledgeSummary, type KnowledgeSummary } from '../../api/knowledgeSummary.js';
 import { createByChat } from '../../editors/apps/appTurns.js';
+import { knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
 import { useProjectsStore } from '../../store/projects.js';
 import type { ComposerSuggestion } from '../session/Composer.js';
 import { stashDraft } from './AppChat.js';
@@ -24,13 +26,11 @@ import { AppComposer } from './AppComposer.js';
 const NOT_A_HOME = (p: Project): boolean => p.id === 'default' || p.status !== 'active';
 
 export function NewAppChat({
-  navigate, framed, sources = [], projectOfApps = null, composerKey = 'apps:new', heading = true, lock = null, eligibleOnly = false,
+  navigate, framed, projectOfApps = null, composerKey = 'apps:new', heading = true, lock = null, eligibleOnly = false,
   suggestions: given, onProject, onSend, onFailed, onMade, before = null, blocked = null, placeholder = 'Describe the app you want…', ariaLabel = 'Describe the app you want', testId = 'apps-new-chat',
 }: {
   navigate: (p: string) => void;
   framed: boolean;
-  /** (Apps page) Source names its suggestions name. */
-  sources?: readonly string[];
   /** (Apps page) The project the listed apps are in: the default choice. */
   projectOfApps?: string | null;
   composerKey?: string;
@@ -71,12 +71,27 @@ export function NewAppChat({
     : eligibleOnly ? (project !== null && projects.some((p) => p.id === project) ? project : projects.length === 1 ? projects[0]!.id : null)
       : project ?? projectOfApps ?? projects[0]?.id ?? null;
   useEffect(() => { onProject?.(chosen); }, [chosen, onProject]);
-  const s0 = sources[0];
-  const labels = given ?? (s0 !== undefined
+  // (DES-KNOWLEDGE-DATA-001 §9.1, Apps page) What the chosen project knows: an app can be built on it, and the suggestions
+  // say so. Read per project; an answer for a project no longer chosen is dropped. A caller with its own seeds reads it.
+  const [summary, setSummary] = useState<KnowledgeSummary | null>(null);
+  useEffect(() => {
+    setSummary(null);
+    if (given !== undefined || chosen === null || framed) return;
+    let live = true;
+    void fetchKnowledgeSummary(chosen).then((s) => { if (live) setSummary(s); });
+    return () => { live = false; };
+  }, [chosen, framed, given]);
+  // Only an answer for THIS project counts; data suggestions name only sources its summary lists as built on.
+  const current = summary !== null && summary.projectId === chosen ? summary : null;
+  const dataSources = current !== null ? current.sources.filter((x) => x.described).map((x) => x.name) : [];
+  const s0 = dataSources[0];
+  const data = (s0 !== undefined
     ? [`A dashboard of open tickets by region from ${s0}`, `KPIs for the main numbers in ${s0}, with a table of the latest rows`]
     : ['A dashboard of my main numbers with a table of the latest rows'])
-    .concat(given === undefined && sources.length > 1 ? [`Compare a number from ${sources[0]} with one from ${sources[1]} side by side`] : []);
-  const suggestions: ComposerSuggestion[] = labels.slice(0, 3).map((label, i) => ({ id: `new-app-${i}`, label, onPick: () => setText(label) }));
+    .concat(dataSources.length > 1 ? [`Compare a number from ${dataSources[0]} with one from ${dataSources[1]} side by side`] : []);
+  const knowledge = knowledgeSeeds(current);
+  const labels = given ?? mixSeeds(knowledge, data);
+  const suggestions: ComposerSuggestion[] = labels.slice(0, given === undefined && knowledge.length > 0 ? 4 : 3).map((label, i) => ({ id: `new-app-${i}`, label, onPick: () => setText(label) }));
   /** True when the message was taken (an app was made and its first turn started, or it waits in that app's chat). */
   const send = async (words: string): Promise<boolean> => {
     if (words === '' || busy || framed || blocked !== null) return false;
@@ -120,7 +135,7 @@ export function NewAppChat({
       {heading && (
         <div className="wk-newapp-head">
           <h2 className="wk-newapp-title">Make a new app</h2>
-          <span className="wk-newapp-sub">Say what it should show. An agent builds it from your data sources' structure, another reviews it, and it opens here.</span>
+          <span className="wk-newapp-sub">Say what it should show: your data sources, or what this project knows (its documents, memories, steering rules and data shapes). An agent builds it, another reviews it, and it opens here.</span>
         </div>
       )}
       {before}

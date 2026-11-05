@@ -4,6 +4,8 @@ import { create } from 'zustand';
 import { mcpApi } from '../../api/mcp.js';
 import { reportOrigin, type AppOrigin } from '../../editors/apps/appOrigin.js';
 import { dashboardSeeds, sourcesForProject } from '../../editors/apps/appSeeds.js';
+import { fetchKnowledgeSummary, type KnowledgeSummary } from '../../api/knowledgeSummary.js';
+import { knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
 import { nameFrom } from '../../editors/apps/appTurns.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useProjectsStore } from '../../store/projects.js';
@@ -100,18 +102,24 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
   // The sources the chosen project can see: read again on every project change; an answer for an earlier choice
   // (out of order) is dropped.
   const [sources, setSources] = useState<Sources>({ state: 'none' });
+  // (DES-KNOWLEDGE-DATA-001 §9.1) What the chosen project KNOWS, read with its sources (same generation guard): the
+  // seeds offer dashboards on its knowledge too.
+  const [summary, setSummary] = useState<KnowledgeSummary | null>(null);
   const gen = useRef(0);
   const onProject = useCallback((id: string | null) => {
     const g = ++gen.current;
+    setSummary(null);
     if (id === null) { setSources({ state: 'none' }); return; }
     setSources({ state: 'reading', project: id });
+    void fetchKnowledgeSummary(id).then((s) => { if (g === gen.current) setSummary(s); });
     mcpApi.servers().then(
       (r) => { if (g === gen.current) setSources({ state: 'ok', project: id, names: sourcesForProject(r, id) }); },
       (e: unknown) => { if (g === gen.current) setSources({ state: 'failed', project: id, why: (e instanceof Error ? e.message : String(e)).slice(0, 160) }); },
     );
   }, []);
   const names = sources.state === 'ok' ? sources.names : [];
-  const seeds = sources.state === 'reading' || sources.state === 'none' ? [] : dashboardSeeds(period, names);
+  const known = summary !== null && sources.state !== 'none' && summary.projectId === sources.project ? knowledgeSeeds(summary) : [];
+  const seeds = sources.state === 'reading' || sources.state === 'none' ? [] : mixSeeds(known, dashboardSeeds(period, names));
   const chosenName = sources.state === 'none' ? null : projects.find((p) => p.id === sources.project)?.name ?? sources.project;
 
   const run = useBuildRun();
