@@ -5,7 +5,7 @@
  * offers "Re-check the rules" and a confirm-or-skip with the person's reason.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import { deliveryReceiptOf, receiptOf, rulesSummary, worstRules, type RuleRow } from '../src/board/assuranceModel.js';
 import { sessionGateChoices, RETRY_RULES_LABEL } from '../src/board/gateRowModel.js';
@@ -54,7 +54,7 @@ describe('the receipt carries every rule', () => {
     const RUN = 'r-rules';
     const units = [makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, role: 'evaluator', status: 'done' })] as WorkUnit[];
     const events = [{ type: 'gateEvaluated', session: RUN, ord: 2, ts: 1, assurance: { ...base, rules: [row('A', 'kept'), row('S', 'skipped', 'waived by instruction ("touch no test"), confirmed by you: covered')] } }] as unknown as CoreEvent[];
-    const view = makeView({ session: { id: RUN, status: 'awaiting_human' } as never, units } as never);
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, units);
     const d = deliveryReceiptOf(view, events, null)!;
     expect(d.rules?.map((x) => x.ruleId)).toEqual(['A', 'S']);
   });
@@ -87,5 +87,27 @@ describe('the gate held on rules offers the re-check and the confirm-or-skip', (
     const m = sessionGateChoices({ runId: RUN, gate: { ...gate, prompt: 'Unit 5 verdict is NOT PASS — confirm to retry the phase, or reject to cancel the run' }, units, events, pool: ['pi'], roster: null })!;
     const all = [...m.choices, ...(m.overflow ?? [])] as Array<{ key: string }>;
     expect(all.some((c) => c.key === 'retry-rules' || c.key === 'skip-rules')).toBe(false);
+  });
+});
+
+describe('the gate card says the rule line under its question', () => {
+  it('renders session-gate-rules and leaves the receipt foot without a second one', async () => {
+    const client = await import('../src/api/client.js');
+    vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '' } as never);
+    const { GateRow } = await import('../src/components/session/GateRow.js');
+    const { useRunEventStore } = await import('../src/store/events.js');
+    const RUN = 'r-card';
+    const units = [
+      makeUnit({ id: `${RUN}:fix`, session_id: RUN, ord: 1, role: 'creator', status: 'done', assigned_cli: 'pi' }),
+      makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, role: 'evaluator', status: 'rejected', assigned_cli: 'claude' }),
+    ] as WorkUnit[];
+    useRunEventStore.setState({ byRun: { [RUN]: [
+      { type: 'unitDispatched', ord: 2, attempt: 1 },
+      { type: 'gateEvaluated', session: RUN, ord: 2, combined: false, denial: { source: 'rule_check', reason: 'x', ruleIds: ['learn-tests-with-fixes'] }, evaluatorPolicies: [], assurance: { ...base, rules: [row('learn-tests-with-fixes', 'broken'), row('MCPS-1001', 'n_a')] } },
+    ] as unknown as CoreEvent[] } });
+    const g: OpenGate = { runId: RUN, ord: 2, prompt: 'Unit 2 BROKE steering rule(s): learn-tests-with-fixes. Request changes to send it back for rework, approve to run the step again, or reject to cancel the run', lifecycle: 'open', receivedAt: 1, gateKind: 'escalation' };
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, units)} gate={g} />);
+    expect(screen.getByTestId('session-gate-rules-line').textContent).toBe('2 rules checked: 0 kept, 1 broken, 1 not applicable');
+    expect(screen.queryByTestId('assurance-rules-line')).toBeNull();
   });
 });
