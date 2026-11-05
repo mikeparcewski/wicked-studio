@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 // The registry's read only (the sources API, with its writes, stays the sources components' alone).
-import { mcpApi } from '../../api/mcp.js';
 import { reportOrigin, type AppOrigin } from '../../editors/apps/appOrigin.js';
-import { dashboardSeeds, sourcesForProject } from '../../editors/apps/appSeeds.js';
+import { dashboardSeeds } from '../../editors/apps/appSeeds.js';
+import type { KnowledgeSummary } from '../../api/knowledgeSummary.js';
+import { readSuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
+import { dataSeedsWhen, knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
 import { nameFrom } from '../../editors/apps/appTurns.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useProjectsStore } from '../../store/projects.js';
@@ -27,7 +29,10 @@ import { useDialogFocus } from '../steer/useDialogFocus.js';
  * it. Nothing here ever makes a second app.
  */
 
-type Sources = { state: 'none' } | { state: 'reading'; project: string } | { state: 'failed'; project: string; why: string } | { state: 'ok'; project: string; names: string[] };
+/** `summary`: the project's knowledge summary, `null` when crew has none (then no source is named). */
+type Sources = { state: 'none' } | { state: 'reading'; project: string }
+  | { state: 'failed'; project: string; why: string; summary: KnowledgeSummary | null }
+  | { state: 'ok'; project: string; names: string[]; readable: boolean; summary: KnowledgeSummary | null };
 
 interface Made { slug: string; name: string; verdict: ShownVerdict; busy: boolean }
 
@@ -97,21 +102,26 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
   const lock = projectId !== undefined && projectId !== 'default' ? projectId : null;
   const origin = reportOrigin(lock ?? undefined);
 
-  // The sources the chosen project can see: read again on every project change; an answer for an earlier choice
-  // (out of order) is dropped.
+  // The sources the chosen project's dashboards can be built on, and what it KNOWS (DES-KNOWLEDGE-DATA-001 §9.1): read
+  // together, again on every project change; an answer for an earlier choice (out of order) is dropped. A source is
+  // named only when the project's knowledge summary lists it and an app query can read it (`dataSourcesFor`), the
+  // same rule as the Apps page.
   const [sources, setSources] = useState<Sources>({ state: 'none' });
   const gen = useRef(0);
   const onProject = useCallback((id: string | null) => {
     const g = ++gen.current;
     if (id === null) { setSources({ state: 'none' }); return; }
     setSources({ state: 'reading', project: id });
-    mcpApi.servers().then(
-      (r) => { if (g === gen.current) setSources({ state: 'ok', project: id, names: sourcesForProject(r, id) }); },
-      (e: unknown) => { if (g === gen.current) setSources({ state: 'failed', project: id, why: (e instanceof Error ? e.message : String(e)).slice(0, 160) }); },
-    );
+    void readSuggestionGrounds(id).then((r) => {
+      if (g !== gen.current) return;
+      setSources(r.servers !== null ? { state: 'failed', project: id, why: r.servers.failed, summary: r.summary } : { state: 'ok', project: id, names: r.data, readable: r.readable ?? true, summary: r.summary });
+    });
   }, []);
   const names = sources.state === 'ok' ? sources.names : [];
-  const seeds = sources.state === 'reading' || sources.state === 'none' ? [] : dashboardSeeds(period, names);
+  const summary = sources.state === 'ok' || sources.state === 'failed' ? sources.summary : null;
+  const known = summary !== null && sources.state !== 'none' && summary.projectId === sources.project ? knowledgeSeeds(summary) : [];
+  const seeds = sources.state === 'reading' || sources.state === 'none' ? []
+    : mixSeeds(known, dataSeedsWhen(dashboardSeeds(period, names), sources.state === 'ok' ? sources.readable : null));
   const chosenName = sources.state === 'none' ? null : projects.find((p) => p.id === sources.project)?.name ?? sources.project;
 
   const run = useBuildRun();
@@ -169,7 +179,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
           <h2 id="wk-rep-build-title" className="wk-rep-build-title">Build a dashboard</h2>
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm wk-rep-build-x" data-testid="report-build-close" aria-label="Close" onClick={onClose}>×</button>
         </header>
-        <p className="wk-rep-build-sub">Say what it should show. An agent builds it from your data sources’ structure, another reviews it, and it’s pinned here.</p>
+        <p className="wk-rep-build-sub">Say what it should show: your data sources, or what this project knows (its documents, memories, steering rules and data shapes). An agent builds it, another reviews it, and it’s pinned here.</p>
         {made !== null ? (
           <div ref={status} className="wk-rep-build-made" data-testid="report-build-made" data-verdict={made.busy ? 'pending' : made.verdict.kind}>
             {made.busy ? <p className="wk-rep-build-line" role="status">Made {made.name}. Putting it on Report…</p> : (
@@ -190,7 +200,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
               <span>Suggested for</span> <span className="wk-rep-chip" data-testid="report-build-period">{period}</span>
               {sources.state === 'reading' && <span data-testid="report-build-sources-reading">Reading the sources {chosenName} can use…</span>}
               {sources.state === 'failed' && <span data-testid="report-build-sources-failed">The sources {chosenName} can use couldn’t be read: {sources.why}</span>}
-              {sources.state === 'ok' && names.length === 0 && <span data-testid="report-build-sources-none">No data source is open to {chosenName}’s agents yet.</span>}
+              {sources.state === 'ok' && names.length === 0 && !sources.readable && <span data-testid="report-build-sources-none">No data source to suggest for {chosenName} yet.</span>}
               {sources.state === 'ok' && names.length > 0 && (
                 <span className="wk-rep-build-sources">from the sources {chosenName} can use: {names.map((n) => <span key={n} className="wk-rep-chip" data-testid="report-build-source">{n}</span>)}</span>
               )}
@@ -205,7 +215,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
             <p className="wk-rep-build-foot" data-testid="report-build-foot">
               {full ? 'Its Show on Report switch can be turned on later, from its Properties.'
                 : <>It shows on this Report when it’s made: <b>Show on Report</b> starts on ({shown.length} of {REPORT_MAX} shown).</>}
-              {' '}It reads your data sources; Report’s own numbers, such as spend and steps, can’t go on a dashboard yet.
+              {' '}It reads your data sources or what this project knows; Report’s own numbers, such as spend and steps, can’t go on a dashboard yet.
             </p>
             {run.failNote !== null && <p className="wk-rep-build-line" data-tone="warn" data-testid="report-build-failnote">{run.failNote}</p>}
             {load === 'failed' && <p className="wk-rep-build-line" data-tone="warn">{UNREAD_WHY}: it is tried again when the app is made.</p>}

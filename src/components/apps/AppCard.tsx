@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { KNOWLEDGE_SOURCE } from '../../editors/apps/knowledgeSeeds.js';
 import { MoreHorizontal } from 'lucide-react';
 import { apiBase, apiFetch } from '../../api/client.js';
 import type { AppDetail, AppDetailResponse, AppSpec } from '../../api/types.js';
@@ -220,7 +221,7 @@ export function AppCard({ tile, editor, navigate, scheduler, origin = null, acti
           {crew && live?.at != null && live.code === null && <> · <span data-testid="apps-card-updated">updated {ago(live.at, now)}</span></>}
         </p>
         {crew && <p className="wk-appcard-meta" data-testid="apps-card-preview-when">{snapAt !== null ? `Picture from when you last opened it, ${ago(snapAt, now)}` : 'Open it to see its charts here'}</p>}
-        {tile.sources.length > 0 && <p className="wk-appcard-meta" data-testid="apps-card-sources">Reads {tile.sources.join(', ')}</p>}
+        {tile.sources.length > 0 && <p className="wk-appcard-meta" data-testid="apps-card-sources">Reads {tile.sources.map((x) => (x === KNOWLEDGE_SOURCE ? "this project's knowledge" : x)).join(', ')}</p>}
         <div className="wk-appcard-actions">{actions}</div>
       </div>
     </article>

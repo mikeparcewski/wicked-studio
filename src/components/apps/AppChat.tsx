@@ -4,6 +4,8 @@ import { sessionPath } from '../../board/sessionModel.js';
 import { busyText, changeLine, componentWords, endedLine, hasTurnLog, seatWord, sendTurn, suggestionsFor, turnsOf, type AppTurnRecord } from '../../editors/apps/appTurns.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 import type { ComposerSuggestion } from '../session/Composer.js';
+import { knowledgeAddition } from '../../editors/apps/knowledgeSeeds.js';
+import { readSuggestionGrounds, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
 import { AppComposer } from './AppComposer.js';
 import { LiveActivity } from '../session/LiveActivity.js';
 import { RunQuestions } from '../session/ThreadQuestions.js';
@@ -147,12 +149,24 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   }, [turns.length, last?.state]);
   const latestLandedRun = [...turns].reverse().find((t) => t.state === 'landed')?.runId ?? null;
   const supported = detail === null || hasTurnLog(detail);
-  // The sources this app already reads, from its own spec: a chat module never reaches the sources API (the
-  // human-only source sheet's; tests/sourcesHumanOnly.test.ts).
-  const appSources = useMemo(() => [...new Set((detail?.spec.queries ?? []).map((q) => q.source))].slice(0, 20), [detail]);
-  const suggestions: ComposerSuggestion[] = useMemo(() => (busy || framed ? [] : suggestionsFor(detail?.spec ?? null, appSources).map((s, i) => ({
+  // (DES-KNOWLEDGE-DATA-001 §9.1) What the app's project knows: one chip offers to add it when the app reads none yet.
+  const projectId = detail?.projectId ?? null;
+  const [grounds, setGrounds] = useState<SuggestionGrounds | null>(null);
+  useEffect(() => {
+    setGrounds(null);
+    if (projectId === null || framed) return;
+    let live = true;
+    void readSuggestionGrounds(projectId).then((g) => { if (live) setGrounds(g); });
+    return () => { live = false; };
+  }, [projectId, framed]);
+  const current = grounds !== null && grounds.projectId === projectId ? grounds : null;
+  const addKnowledge = useMemo(() => knowledgeAddition(current?.summary ?? null), [current]);
+  // A suggestion names only a source the current project's summary lists as built on AND an app query can read
+  // (`dataSourcesFor`: a Toolbox-runtime source is not one); none without a summary.
+  const buildable = useMemo(() => current?.data ?? [], [current]);
+  const suggestions: ComposerSuggestion[] = useMemo(() => (busy || framed ? [] : suggestionsFor(detail?.spec ?? null, buildable, addKnowledge, current?.readable ?? null).map((s, i) => ({
     id: `app-suggest-${i}`, label: s, title: 'Put this in the box', onPick: () => setTextState(s),
-  }))), [busy, framed, detail, appSources]);
+  }))), [busy, framed, detail, buildable, addKnowledge, current]);
 
   /** The composer's submit: true when the message was taken (the box and the chips then clear). */
   const send = async (words: string, about: string[]): Promise<boolean> => {
