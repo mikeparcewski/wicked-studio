@@ -190,11 +190,13 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   It lists the source's recent agent queries, never the SQL. A job's gate cards and its delivery say
   which sources its agents read ("Agents read data: support-pg · 3 queries · 12 rows"), or "not
   known", never "none".
-- **Link your trackers** — register GitHub Issues or Jira on Data sources, then link trackers on a
-  project's **Linked trackers** card or on a repository's page: one or several, from one tool or
-  more. A job or chat in a project sees its project's trackers and its repositories' trackers, under
-  the source's Agents box. Start a job from an issue, and its pull request names the issues it
-  closes.
+- **Link your trackers** — add **Jira** or **GitHub Issues** on Data sources (Test connection shows
+  the sites or repositories the token reaches), then **Link a tracker** under **Linked trackers** on a
+  project's Repositories tab or on a repository's page: one or several, from one tool or more. A job
+  or chat in a project sees its project's trackers and its repositories' trackers, under the source's
+  Agents box, and its Run tab lists **Trackers this job can read**. Start a job **From an issue** in
+  the launch composer; its pull request names the issues it closes, and at delivery a card offers to
+  comment on an issue or move it, which crew does only when you confirm.
 - **See your knowledge** — Understand's **Knowledge map** draws your data sources and their tables
   beside your repositories and code, with the approved data shapes (what joins what, and which code
   describes a table) and the tracker links. **Profile this source** on a Postgres source's sheet
