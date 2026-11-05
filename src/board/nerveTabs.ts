@@ -135,7 +135,10 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
   if (snapshot !== null) {
     const total = snapshot.clis.length;
     const signed = snapshot.clis.filter((c) => c.state === 'signed_in').length;
-    const base: AreaTone = total === 0 ? 'unknown' : 'ok';
+    // A sign-in check that has not answered is not known (grey), never green. Fewer than two
+    // distinct agents signed in is yellow even when this crew sends no item for it (an older crew).
+    const distinct = new Set(snapshot.clis.filter((c) => c.state === 'signed_in' || c.state === 'benched').map((c, i) => (c.key ?? `#${i}`).split('#', 1)[0] || `#${i}`)).size;
+    const base: AreaTone = total === 0 ? 'unknown' : distinct < 2 ? 'warn' : snapshot.clis.some((c) => c.state === 'unknown') ? 'unknown' : 'ok';
     clis = done('clis', total === 0 ? 'none reported' : `${signed}/${total} signed in`, worse(base, attentionTone(cliItems)));
   } else if (fallback.roster !== null) {
     const seats = fallback.roster;
@@ -143,7 +146,8 @@ export function nerveSummary(state: Pick<NerveState, 'read' | 'attention'>, snap
     const signed = seats.filter((s) => s.ready === true).length;
     // A seat the roster reports failing needs a look, even when another seat's state is not known. A
     // seat that is only not signed in is optional (an older crew says no more about it).
-    const bad = seats.some((s) => s.failing);
+    // Fewer than two seats ready is the one sign-in gap that matters: no different agent can review.
+    const bad = seats.some((s) => s.failing) || (total > 0 && signed < 2 && seats.every((s) => s.ready !== null));
     const known = seats.every((s) => s.ready !== null);
     const base: AreaTone = total === 0 ? 'unknown' : bad ? 'warn' : known ? 'ok' : 'unknown';
     const read = fallback.rosterRead ?? 'fresh';

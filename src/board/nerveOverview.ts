@@ -1,5 +1,5 @@
 import type { SystemAttention, SystemCli, SystemGovernanceCard, SystemInfra, SystemSnapshot } from '../api/system.js';
-import { cliInUse, notSetUp, toResolveWords, type NerveState } from './nerveCenter.js';
+import { cliInUse, notSetUp, toResolveWords, workedBefore, type NerveState } from './nerveCenter.js';
 import type { NerveTab } from './nerveTabs.js';
 import { countWord } from './deskHome.js';
 import { rowLead } from './rowHeadline.js';
@@ -84,7 +84,7 @@ export function helperTiles(clis: readonly SystemCli[], attention: readonly Syst
     const t = cliTile(c);
     if (c.state !== 'signed_out') return t;
     if (used.has(c.key)) return { ...t, state: 'Signed out', tone: 'warn', line: 'A job needs it' };
-    if (optional.has(c.key)) return { ...t, state: 'Not set up', tone: 'quiet', line: 'Optional' };
+    if (optional.has(c.key)) return { ...t, state: workedBefore(c) ? 'Signed out' : 'Not set up', tone: 'quiet', line: 'Optional' };
     return t;
   });
 }

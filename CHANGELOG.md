@@ -197,12 +197,14 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 - **Nerve Center keeps yellow for a fix you can make (operator, 2026-11-05).** A CLI nobody set up no longer makes
-  anything yellow. The CLIs chip still counts it ("4/5 signed in") but takes its colour from crew's seat items only.
-  The helper tile reads "Not set up · Optional" and no longer counts toward "N things need a look". The Helpers
-  section adds one quiet line ("Not set up: OpenCode — optional"), and a green rail tile carries the same note in its
-  tooltip. Yellow stays for crew's `cli:one-reviewer` item, whose tile words are "sign in a second agent", and for
-  `cli:out:<cli>`, a seat that signed out while a job needs it, whose helper tile reads "Signed out · A job needs
-  it". Against an older crew, a seat that is only not signed in no longer warns the CLIs chip.
+  anything yellow. The CLIs chip still counts it ("4/5 signed in") but turns yellow only for crew's seat items, or
+  when fewer than two agents are signed in. It stays grey while a sign-in check has not answered. A signed-out
+  helper that nothing needs reads "Not set up · Optional", or "Signed out · Optional" when it worked this week. It no
+  longer counts toward "N things need a look". The Helpers section adds one quiet line ("Not set up: OpenCode —
+  optional"), and a green rail tile carries the same note in its tooltip. A seat that a job's item names, such as
+  the reviewer a held job waits on, is never called optional. Yellow stays for crew's `cli:one-reviewer` item, whose
+  tile words are "sign in a second agent", and for `cli:out:<seat>`, a signed-out seat with a job's work on it,
+  whose helper tile reads "Signed out · A job needs it".
 - **On a phone, the run page's jump-to-latest button no longer floats over the job's title.** With the decision
   sheet unfolded, the thread keeps almost no room, and the round "↓" button at its foot sat over the title (rig shot
   `gate-data-use-dark-390`). The unfolded sheet now hides the button. Folding the sheet brings it back, and the desk

@@ -605,13 +605,31 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
     expect(screen.getByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode — optional');
   });
 
+  it('a signed-out seat a held job names (its reviewer) is not optional; one that worked this week is "Signed out"', async () => {
+    systemAnswer = () => Promise.resolve(quiet({
+      level: 'red',
+      clis: [cli({ cli: 'claude', label: 'Claude Code' }), cli({ cli: 'codex', label: 'Codex' }),
+        cli({ cli: 'pi', label: 'Pi', state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false }),
+        cli({ cli: 'copilot', label: 'GitHub Copilot CLI', state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false, stats: stats({ units: 12 }) }),
+        cli({ cli: 'opencode', label: 'OpenCode', state: 'signed_out', stateReason: 'signed out', councilEligible: false, workEligible: false })],
+      attention: [{ id: 'judge:r1', severity: 'red', source: 'run', kind: 'prevents', title: 'A job has no independent reviewer', reason: 'No helper in the pool can review codex’s work (pi signed out)', remedy: 'Sign in another helper in the job’s pool.', blocks: 1, blockedRunIds: ['r1'], target: { kind: 'run', runId: 'r1' }, action: { kind: 'open_run', label: 'Open the job' } }],
+    }));
+    renderBoth();
+    await waitFor(() => expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('data-read', 'fresh'));
+    await screen.findAllByTestId('nc-tile');
+    expect(within(tileOf('pi')).getByTestId('nc-tile-state')).toHaveTextContent('Not signed in');
+    expect(within(tileOf('copilot')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
+    expect(screen.getByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode · Signed out: GitHub Copilot CLI — optional');
+  });
+
   it('an optional CLI never signed in never turns the CLIs chip yellow, against an older crew too', async () => {
     caps = {};
     // Governance with no finding: nothing else is yellow on this crew.
     apiFetch.mockImplementation((path: string) => (path === '/diagnostics' ? Promise.resolve({ governance: { ...GOVERNANCE, deadletters: { ...GOVERNANCE.deadletters, count: 0 }, findings: [] } }) : Promise.resolve({})));
+    rosterAnswer = () => Promise.resolve({ roster: [...SEATS, { ...SEATS[0]!, key: 'codex', display_name: 'Codex', binary: 'codex' }] });
     try {
       renderBoth(vi.fn(), '?tab=clis');
-      await waitFor(() => expect(within(chip('clis')).getByTestId('nc-chip-words')).toHaveTextContent('1/2 signed in'));
+      await waitFor(() => expect(within(chip('clis')).getByTestId('nc-chip-words')).toHaveTextContent('2/3 signed in'));
       expect(chip('clis')).toHaveAttribute('data-tone', 'ok');
       await waitFor(() => expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('data-read', 'fresh'));
       expect(screen.getByTestId('desk-rail-nerve')).toHaveAttribute('data-tone', 'green');
