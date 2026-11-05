@@ -89,7 +89,10 @@ export interface KnowledgeShapeRecord {
 /** (api-types 0.186.0) A node of the Knowledge map. `key` is `<store>:<id>` (`source:`, `repo:`, `knowledge:`, `estate:`). */
 export interface KnowledgeMapNode {
   key: string;
-  kind: 'source' | 'table' | 'shape' | 'code' | 'repo' | 'knowledge';
+  /** (api-types 0.187.0, DES-PM-001 §3.4, §4) `tracker` and `project`: a linked tracker and the studio project it is `tracked_in`
+   *  (a project's key is `control:project:<id>`); `issue` (an issue_ref, labelled by its key) and `run` (a job, "job <id8>"):
+   *  the trail, `run addresses issue`, and `pr` (the delivered PR that `closes` it). */
+  kind: 'source' | 'table' | 'shape' | 'code' | 'repo' | 'knowledge' | 'tracker' | 'project' | 'issue' | 'run' | 'pr';
   label: string;
   /** A table's source name. */
   source?: string;
@@ -99,6 +102,8 @@ export interface KnowledgeMapNode {
   proposalId?: string;
   /** A shape's value-free summary. */
   summary?: string;
+  /** (api-types 0.187.0) A tracker node's PM source (registry name) and key. */
+  tracker?: { source: string; key: string };
 }
 
 /**

@@ -58,13 +58,6 @@ function Harness(): React.ReactElement {
     </>
   );
 }
-function type(text: string): void {
-  const box = screen.getByTestId('desk-composer-input') as HTMLTextAreaElement;
-  fireEvent.change(box, { target: { value: text, selectionStart: text.length } });
-  box.setSelectionRange(text.length, text.length);
-  fireEvent.select(box);
-}
-const key = (k: string): void => { fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: k }); };
 const next = (): void => { fireEvent.click(screen.getByTestId('launch-wizard-next')); };
 
 beforeEach(() => {
@@ -84,11 +77,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetComposerSeats(); });
 
 describe('launch wizard', () => {
-  it('picking a workflow in the composer opens the wizard (a modal dialog), not the inline strip', async () => {
+  // ux-tonight: a composer's `/` pick starts in its chat (tests/inlineStart.test.tsx); the wizard is what a named
+  // opener (Learn, Settings' editor plugin, Testing) opens on its workflow.
+  it('a named opener opens the wizard (a modal dialog) on its workflow, not the inline strip', async () => {
     render(<Harness />);
-    type('/workflow-mcp-server');
-    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
-    key('Enter');
+    act(() => { openLaunchWizard({ workflowId: 'mcp-server', composerKey: 'desk' }); });
     const dialog = await screen.findByTestId('launch-wizard');
     expect(dialog.getAttribute('role')).toBe('dialog');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
@@ -99,9 +92,7 @@ describe('launch wizard', () => {
   it('Launch sends the same body the strip sent for the same choices', async () => {
     render(<Harness />);
     act(() => { useLaunchSeats.getState().toggle('codex'); });
-    type('/workflow-mcp-server');
-    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
-    key('Enter');
+    act(() => { openLaunchWizard({ workflowId: 'mcp-server', composerKey: 'desk' }); });
     await screen.findByTestId('launch-wizard');
     fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
     next();
@@ -127,12 +118,14 @@ describe('launch wizard', () => {
     expect(useLaunchWizard.getState().draft?.workflowId).toBe('mcp-server');
   });
 
-  it('opened with no workflow it asks which one first, listing the daemon catalog', async () => {
+  it('opened with no workflow it asks which one first, listing the daemon catalog; a card click starts it in a chat', async () => {
     render(<Harness />);
     act(() => { openLaunchWizard({}); });
     expect((await screen.findByTestId('launch-wizard-step')).dataset.step).toBe('workflow');
     fireEvent.click(await screen.findByTestId('launch-wizard-workflow-mcp-server'));
-    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('what');
+    // ux-tonight: the modal closes and the job is shaped in a chat (tests/inlineStart.test.tsx).
+    expect(screen.queryByTestId('launch-wizard')).toBeNull();
+    expect(posts).toEqual([]);
   });
 
   it('codex r1: a draft from one composer never resumes in another (a fresh job there)', () => {

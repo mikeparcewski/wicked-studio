@@ -117,8 +117,13 @@ export const sourcesApi = {
    * Register exactly the preview `previewHash` named (and write its secret to the keychain). `allowOrigin`
    * is the origin a REST preview's calls go to, sent only when the person confirmed it (G2).
    */
-  save: (previewHash: string, allowOrigin?: string) =>
-    apiFetch<McpServer>('/mcp/servers', post(allowOrigin === undefined ? { previewHash } : { previewHash, allowOrigin })),
+  save: (previewHash: string, allowOrigin?: string, enabledWrites?: readonly string[]) =>
+    apiFetch<McpServer>('/mcp/servers', post({
+      previewHash,
+      ...(allowOrigin !== undefined ? { allowOrigin } : {}),
+      // (G1) The person's write grant: the preview's write tools to register enabled (a PM sheet's ticked "Asks you" rows).
+      ...(enabledWrites !== undefined && enabledWrites.length > 0 ? { enabledWrites: [...enabledWrites] } : {}),
+    })),
   catalog: (name: string) => apiFetch<SourceCatalogResponse>(at(name, 'catalog')),
   /** Test connection: connect with the saved login, describe again (saved) and check a read; no row is read. */
   testConnection: (name: string) => apiFetch<SourceConnectionTestResponse>(at(name, 'test'), { method: 'POST' }),

@@ -12,6 +12,7 @@ import { TechDetails } from './ui/TechDetails.js';
 import { ProjectCodeGraph } from './ProjectCodeGraph.js';
 import type { ProjectIssueHandler } from './product/ProjectAggregates.js';
 import type { RepoUse } from '../board/projectModel.js';
+import { registerRepoPath } from '../hooks/ambientProject.js';
 
 /**
  * The project's repositories — the one UI path that attaches a `crew.repo`
@@ -93,6 +94,8 @@ interface Props {
   /** DES-frontdoor P: the repositories the project's jobs used (`board/projectModel.reposUsed`) —
    *  an attached row says how many jobs used it, and a used-but-not-attached one is offered Attach. */
   used?: readonly RepoUse[];
+  /** App navigation: "Add a repository" opens the register form for this project (registering onboards it). */
+  navigate?: (path: string) => void;
 }
 
 /** "on main" and the latest commit's first line, read once when the row is shown (`GET /repos/:id/git-history`). */
@@ -113,7 +116,7 @@ function BranchLine({ repo }: { repo: RepoEntry }): React.ReactElement {
   );
 }
 
-export function ProjectRepositories({ projectId, members, onMembersChange, onIssue, used = [] }: Props): React.ReactElement | null {
+export function ProjectRepositories({ projectId, members, onMembersChange, onIssue, used = [], navigate }: Props): React.ReactElement | null {
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -324,7 +327,15 @@ export function ProjectRepositories({ projectId, members, onMembersChange, onIss
 
   return (
     <section data-testid="project-repos" data-count={repoMembers.length} className="wk-card wk-pg-proj-stack">
-      <SectionTitle>Repositories and branches</SectionTitle>
+      <div className="wk-pg-proj-head">
+        <SectionTitle>Repositories and branches</SectionTitle>
+        {/* ux-tonight (operator 2026-11-04: "don't I see a way to onboard a repo anymore"): a repository studio does not
+            have yet is added HERE, in this project: the register form registers it, onboards it and attaches it. */}
+        {navigate !== undefined && (
+          <a href={registerRepoPath(projectId)} data-testid="project-repos-add" className="wk-btn wk-btn--primary wk-btn--sm"
+            onClick={(e) => { e.preventDefault(); navigate(registerRepoPath(projectId)); }}>Add a repository</a>
+        )}
+      </div>
       <StatLine items={[{ label: 'attached', value: registryError === null ? repoMembers.length : null }, { label: 'used by jobs, not attached', value: unattached.length }]} />
       {unattached.length > 0 && (
         <div data-testid="project-repos-used">
@@ -398,7 +409,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange, onIss
       </label>
       {pickerOpen && repos === null && registryError === null && <Skeleton rows={2} />}
       {pickerOpen && repos !== null && (shown.length === 0 ? <p className="wk-field-note" data-testid="project-repo-options-empty">
-        {repos.length === 0 ? 'No repositories registered yet. Register a repository first.' : query.trim() === '' ? 'Every registered repository is already attached.' : 'No registered repository matches.'}
+        {repos.length === 0 ? 'No repositories registered yet: add one above.' : query.trim() === '' ? 'Every registered repository is already attached.' : 'No registered repository matches.'}
       </p> : <div data-testid="project-repo-options" className="wk-pg-proj-actions">
         {shown.map((r) => <button key={r.id} type="button" data-testid="project-repo-option" data-repo={r.id} disabled={busy} onClick={() => void attach(r)} className="wk-btn wk-btn--secondary">{attaching === r.id ? 'Attaching…' : 'Attach'} {r.name}</button>)}
         {overflow > 0 && <span className="wk-field-note">{overflow} more — type to narrow</span>}

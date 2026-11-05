@@ -50,6 +50,7 @@ import {
   withRange,
 } from './sourceModel.js';
 import { TestCall } from './TestCall.js';
+import { TrackerBadge } from '../trackers/TrackerParts.js';
 import { focusRadio, radioKey } from './radioKeys.js';
 import { useDialogFocus } from './useDialogFocus.js';
 
@@ -72,8 +73,10 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, servers, agentsUnverified: agentsUnverifiedSet, onReread, onSaved, onAllowWrites, onAgents, onDescribed, onClose, focus = null, onFocusUsed }: {
+export function SourceSheet({ target, existing, servers, agentsUnverified: agentsUnverifiedSet, onReread, onSaved, onAllowWrites, onAgents, onDescribed, onClose, focus = null, onFocusUsed, onPickPm }: {
   target: SheetTarget;
+  /** (DES-PM-001) On a crew with tracker links: the kinds rail offers Jira and GitHub Issues, whose own sheet opens. */
+  onPickPm?: (system: 'jira' | 'github') => void;
   /** Opened from the data panel's menu: "Test connection" tests at once, "Ask a question…" focuses the question. */
   focus?: 'test' | 'ask' | null;
   /** The sheet acted on `focus` (once): the host forgets it, so no later opening inherits it. */
@@ -380,7 +383,8 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
         </header>
         <div className="wk-src-sheet-main">
           {isNew && (
-            <div className="wk-src-kinds" role="radiogroup" aria-label="Kind of source" data-testid="source-kinds">
+            <div className="wk-src-kinds">
+            <div className="wk-src-kinds-list" role="radiogroup" aria-label="Kind of source" data-testid="source-kinds">
               {SHEET_KINDS.map((k, i) => {
                 const I = KIND_ICON[k.kind];
                 const pick = (next: SheetKind): void => {
@@ -410,6 +414,14 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   </button>
                 );
               })}
+            </div>
+            {onPickPm !== undefined && (
+              <div className="wk-src-kinds-list" role="group" aria-labelledby={`${titleId}-pm`} data-testid="source-kinds-pm">
+                <span id={`${titleId}-pm`} className="wk-src-kinds-label">Project management</span>
+                <button type="button" className="wk-src-kind" data-testid="source-kind-jira" disabled={busy !== null} onClick={() => onPickPm('jira')}><TrackerBadge system="jira" small /><span>Jira</span></button>
+                <button type="button" className="wk-src-kind" data-testid="source-kind-github" disabled={busy !== null} onClick={() => onPickPm('github')}><TrackerBadge system="github" small /><span>GitHub Issues</span></button>
+              </div>
+            )}
             </div>
           )}
           <div className="wk-src-grid">

@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.14.1",
   "counts": {
-    "files": 311,
-    "occurrences": 4445,
-    "static": 3716,
-    "dynamic": 160,
-    "computed": 50
+    "files": 320,
+    "occurrences": 4592,
+    "static": 3837,
+    "dynamic": 170,
+    "computed": 53
   },
   "static": [
     {
@@ -3020,6 +3020,12 @@
       ]
     },
     {
+      "testId": "chat-trackers",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "chat-tray",
       "files": [
         "src/components/chat/ChatWindow.tsx"
@@ -3168,6 +3174,78 @@
       "testId": "composer-seats-refused",
       "files": [
         "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-add-repo",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-error",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-line",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-more",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-project",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-projects",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-reduced",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-repo",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-repo-change",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-repos",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-retry",
+      "files": [
+        "src/components/session/InlineStart.tsx"
       ]
     },
     {
@@ -7388,6 +7466,72 @@
       ]
     },
     {
+      "testId": "issue-picker",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-absent",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-close",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-failed",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-group",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-group-error",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-group-where",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-issue",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-none",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-search",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
+      "testId": "issue-picker-unreadable",
+      "files": [
+        "src/components/trackers/IssuePicker.tsx"
+      ]
+    },
+    {
       "testId": "jobs-page-ask",
       "files": [
         "src/components/desk/DeskRuns.tsx"
@@ -7502,7 +7646,19 @@
       ]
     },
     {
+      "testId": "knowledge-map-trackers",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
       "testId": "knowledge-selected",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-selected-tracker",
       "files": [
         "src/components/desk/KnowledgeView.tsx"
       ]
@@ -7784,6 +7940,12 @@
       ]
     },
     {
+      "testId": "launch-from-issue",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "launch-gate",
       "files": [
         "src/components/ContextPopover.tsx"
@@ -7796,7 +7958,19 @@
       ]
     },
     {
+      "testId": "launch-linked-issue-ambiguous",
+      "files": [
+        "src/components/LinkedIssuesLine.tsx"
+      ]
+    },
+    {
       "testId": "launch-linked-issue-include",
+      "files": [
+        "src/components/LinkedIssuesLine.tsx"
+      ]
+    },
+    {
+      "testId": "launch-linked-issue-qualify",
       "files": [
         "src/components/LinkedIssuesLine.tsx"
       ]
@@ -12310,6 +12484,264 @@
       ]
     },
     {
+      "testId": "pm-add-github",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "pm-add-jira",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "pm-agent-controls",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-agents-after-save",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-cancel",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-done",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-email",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-links",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-links-unreadable",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-name",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-replaces",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-save",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-secret",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sheet",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sheet-close",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sheet-error",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sheet-foot",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sheet-form",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sheet-scrim",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sheet-title",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sheet-tools",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-source",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "pm-source-unreadable",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sources",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "pm-sources-empty",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "pm-test",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-test-fail",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-test-lines",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-test-note",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-test-ok",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-test-reach",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-test-reach-error",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-test-reach-lines",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-test-run",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-token-advice",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-tool",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-tool-grant",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-tool-granted",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-tool-verdict",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-tools",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-tools-empty",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-tools-unreadable",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-url",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "power-act",
       "files": [
         "src/components/session/PowerMode.tsx"
@@ -12618,6 +13050,12 @@
     },
     {
       "testId": "project-ask-voice",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-attach-repo",
       "files": [
         "src/components/desk/ProjectHome.tsx"
       ]
@@ -13068,6 +13506,12 @@
       ]
     },
     {
+      "testId": "project-repos-add",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
       "testId": "project-repos-empty",
       "files": [
         "src/components/ProjectRepositories.tsx"
@@ -13155,6 +13599,66 @@
       "testId": "project-title",
       "files": [
         "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "project-tracker",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "project-tracker-via",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "project-trackers",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "project-trackers-add",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "project-trackers-count",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "project-trackers-empty",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "project-trackers-error",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "project-trackers-repos",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "project-trackers-rule",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "project-trackers-via-empty",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
       ]
     },
     {
@@ -14345,6 +14849,54 @@
       ]
     },
     {
+      "testId": "repo-tracker",
+      "files": [
+        "src/components/RepoTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "repo-trackers",
+      "files": [
+        "src/components/RepoTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "repo-trackers-add",
+      "files": [
+        "src/components/RepoTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "repo-trackers-empty",
+      "files": [
+        "src/components/RepoTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "repo-trackers-error",
+      "files": [
+        "src/components/RepoTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "repo-trackers-projects",
+      "files": [
+        "src/components/RepoTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "repo-trackers-reach",
+      "files": [
+        "src/components/RepoTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "repo-trackers-stay",
+      "files": [
+        "src/components/RepoTrackers.tsx"
+      ]
+    },
+    {
       "testId": "report-agents",
       "files": [
         "src/components/report/ReportPage.tsx"
@@ -15348,6 +15900,12 @@
       ]
     },
     {
+      "testId": "run-delivery-tracker-actions",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
       "testId": "run-delivery-worktree",
       "files": [
         "src/components/RunDelivery.tsx"
@@ -15970,6 +16528,12 @@
       ]
     },
     {
+      "testId": "run-tab-trackers",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-transport",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -16221,6 +16785,12 @@
       "testId": "session-chat-questions",
       "files": [
         "src/components/session/ThreadQuestions.tsx"
+      ]
+    },
+    {
+      "testId": "session-chat-trackers",
+      "files": [
+        "src/components/session/SessionView.tsx"
       ]
     },
     {
@@ -16675,6 +17245,12 @@
     },
     {
       "testId": "session-gate-track-record",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-tracker-actions",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -17139,6 +17715,12 @@
     },
     {
       "testId": "session-proposal-track-record",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-tracker-actions",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -18798,7 +19380,25 @@
       ]
     },
     {
+      "testId": "source-kind-github",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-kind-jira",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "source-kinds",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-kinds-pm",
       "files": [
         "src/components/sources/SourceSheet.tsx"
       ]
@@ -21169,6 +21769,132 @@
       ]
     },
     {
+      "testId": "tracker-actions",
+      "files": [
+        "src/components/trackers/TrackerActions.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-agents-off",
+      "files": [
+        "src/components/trackers/TrackerParts.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-close",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-empty",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-error",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-link",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-more",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-none",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-option",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-results",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-search",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-site",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-source",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-projection",
+      "files": [
+        "src/components/trackers/TrackerParts.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-remove",
+      "files": [
+        "src/components/trackers/TrackerParts.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-row",
+      "files": [
+        "src/components/trackers/TrackerParts.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-set",
+      "files": [
+        "src/components/trackers/TrackerSet.tsx"
+      ]
+    },
+    {
+      "testId": "trackers-failed",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "trackers-loading",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
+      "testId": "trackers-unreadable",
+      "files": [
+        "src/components/ProjectTrackers.tsx"
+      ]
+    },
+    {
       "testId": "trust-receipt",
       "files": [
         "src/components/TrustReceipt.tsx"
@@ -22503,10 +23229,17 @@
       ]
     },
     {
+      "pattern": "*-comment",
+      "files": [
+        "src/components/trackers/TrackerActions.tsx"
+      ]
+    },
+    {
       "pattern": "*-confirm",
       "files": [
         "src/components/sources/AgentAccess.tsx",
-        "src/components/sources/AllowWritesSwitch.tsx"
+        "src/components/sources/AllowWritesSwitch.tsx",
+        "src/components/trackers/TrackerActions.tsx"
       ]
     },
     {
@@ -22536,6 +23269,12 @@
       ]
     },
     {
+      "pattern": "*-count",
+      "files": [
+        "src/components/trackers/TrackerSet.tsx"
+      ]
+    },
+    {
       "pattern": "*-detail",
       "files": [
         "src/components/QeRefusalWarning.tsx",
@@ -22562,6 +23301,12 @@
       ]
     },
     {
+      "pattern": "*-empty",
+      "files": [
+        "src/components/trackers/TrackerSet.tsx"
+      ]
+    },
+    {
       "pattern": "*-error",
       "files": [
         "src/components/sources/AgentAccess.tsx",
@@ -22574,6 +23319,12 @@
       "pattern": "*-every",
       "files": [
         "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-excluded",
+      "files": [
+        "src/components/trackers/TrackerSet.tsx"
       ]
     },
     {
@@ -22631,6 +23382,12 @@
       ]
     },
     {
+      "pattern": "*-item",
+      "files": [
+        "src/components/trackers/TrackerSet.tsx"
+      ]
+    },
+    {
       "pattern": "*-label",
       "files": [
         "src/components/session/RunDataUse.tsx"
@@ -22682,7 +23439,8 @@
     {
       "pattern": "*-note",
       "files": [
-        "src/components/QeOffNote.tsx"
+        "src/components/QeOffNote.tsx",
+        "src/components/trackers/TrackerActions.tsx"
       ]
     },
     {
@@ -22784,6 +23542,12 @@
       ]
     },
     {
+      "pattern": "*-refused",
+      "files": [
+        "src/components/trackers/TrackerActions.tsx"
+      ]
+    },
+    {
       "pattern": "*-reonboard",
       "files": [
         "src/components/RepoFindings.tsx"
@@ -22805,7 +23569,14 @@
       "pattern": "*-result",
       "files": [
         "src/components/sources/AskData.tsx",
-        "src/components/sources/TestCall.tsx"
+        "src/components/sources/TestCall.tsx",
+        "src/components/trackers/TrackerActions.tsx"
+      ]
+    },
+    {
+      "pattern": "*-result-unknown",
+      "files": [
+        "src/components/trackers/TrackerActions.tsx"
       ]
     },
     {
@@ -22817,7 +23588,8 @@
     {
       "pattern": "*-row",
       "files": [
-        "src/components/RepoFindings.tsx"
+        "src/components/RepoFindings.tsx",
+        "src/components/trackers/TrackerActions.tsx"
       ]
     },
     {
@@ -22890,7 +23662,8 @@
     {
       "pattern": "*-skip",
       "files": [
-        "src/components/session/AssuranceReceipt.tsx"
+        "src/components/session/AssuranceReceipt.tsx",
+        "src/components/trackers/TrackerActions.tsx"
       ]
     },
     {
@@ -22903,6 +23676,12 @@
       "pattern": "*-skip-reason",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "pattern": "*-skipped",
+      "files": [
+        "src/components/trackers/TrackerActions.tsx"
       ]
     },
     {
@@ -22933,7 +23712,8 @@
     {
       "pattern": "*-structure-only",
       "files": [
-        "src/components/sources/AgentAccess.tsx"
+        "src/components/sources/AgentAccess.tsx",
+        "src/components/trackers/TrackerSet.tsx"
       ]
     },
     {
@@ -22986,6 +23766,12 @@
       ]
     },
     {
+      "pattern": "*-unreadable",
+      "files": [
+        "src/components/trackers/TrackerActions.tsx"
+      ]
+    },
+    {
       "pattern": "*-unsaved",
       "files": [
         "src/components/sources/AllowWritesSwitch.tsx"
@@ -23002,6 +23788,12 @@
       "pattern": "*-value",
       "files": [
         "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "pattern": "*-who",
+      "files": [
+        "src/components/trackers/TrackerActions.tsx"
       ]
     },
     {
@@ -23543,6 +24335,9 @@
         "src/components/sources/TestCall.tsx",
         "src/components/steer/EvaluateSurface.tsx",
         "src/components/steer/SeStat.tsx",
+        "src/components/trackers/TrackerActions.tsx",
+        "src/components/trackers/TrackerParts.tsx",
+        "src/components/trackers/TrackerSet.tsx",
         "src/components/ui/BrandMarks.tsx",
         "src/components/ui/Combobox.tsx",
         "src/components/ui/DayBars.tsx",
@@ -23675,6 +24470,24 @@
       "expression": "testId = 'tech-details'",
       "files": [
         "src/components/ui/TechDetails.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'tracker-actions'",
+      "files": [
+        "src/components/trackers/TrackerActions.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'tracker-row'",
+      "files": [
+        "src/components/trackers/TrackerParts.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'tracker-set'",
+      "files": [
+        "src/components/trackers/TrackerSet.tsx"
       ]
     },
     {

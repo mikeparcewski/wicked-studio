@@ -118,6 +118,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     // sentence (a skills 409's `revision`).
     throw new ApiError(res.status, msg, parsed);
   }
+  // A 204 has no body to parse (crew's `DELETE /tracker-links/:id`): the caller gets `undefined`.
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 

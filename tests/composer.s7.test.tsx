@@ -296,11 +296,11 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     const startRows = screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-group') === 'start-work');
     expect(startRows.map((r) => r.getAttribute('data-cmd'))).toStrictEqual(['workflow-bug', 'workflow-feature']);
     fireEvent.mouseDown(startRows[0]!);
-    // The launch wizard (operator 2026-10-11): the pick opens the one modal on that workflow — no
-    // chip, no inline strip, nothing sent (tests/launchWizard.test.tsx drives its steps and body).
+    // ux-tonight (operator 2026-11-04: "clicking on a workflow opens a modal rather than starting an inline chat"):
+    // the pick puts the card on this composer, no modal, nothing sent (tests/inlineStart.test.tsx drives the start).
     expect(screen.queryByTestId('composer-menu')).toBeNull();
-    expect(useLaunchWizard.getState().open).toBe(true);
-    expect(useLaunchWizard.getState().draft?.workflowId).toBe('bug');
+    expect(useLaunchWizard.getState().open).toBe(false);
+    expect(screen.getByTestId('composer-chip').dataset.kind).toBe('workflow');
     expect(screen.queryByTestId('composer-launch-row')).toBeNull();
     expect(posts).toStrictEqual([]);
     expect(navigate).not.toHaveBeenCalled();
@@ -318,7 +318,7 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     expect(screen.queryByTestId('composer-chip')).toBeNull();
   });
 
-  it('a whole command typed in opens the wizard on Enter, carrying the words after it, and sends nothing', async () => {
+  it('a whole command typed in puts its card on the composer on Enter, carrying the words after it, and sends nothing', async () => {
     render(<Harness runs={[]} onSend={() => {}} />);
     type('/workflow-bug');
     await screen.findByTestId('composer-menu');
@@ -326,7 +326,9 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     expect(screen.queryByTestId('composer-menu')).toBeNull();
     type('/workflow-bug the charge never clears');
     key('Enter');
-    expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'bug', intent: 'the charge never clears' });
+    expect(screen.getByTestId('composer-chip').dataset.kind).toBe('workflow');
+    expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('the charge never clears');
+    expect(useLaunchWizard.getState().open).toBe(false);
     expect(posts).toStrictEqual([]);
   });
 
@@ -401,7 +403,7 @@ describe('S19b: no Detected banner, the hint, and the composer seed', () => {
     expect(posts).toStrictEqual([]);
   });
 
-  it('"Type / for workflows" sits under the box beside the footer; hidden while the menu is open, back once a pick opened the wizard', async () => {
+  it('"Type / for workflows" sits under the box beside the footer; hidden while the menu is open and while a card is on the box', async () => {
     render(<DeskHarness />);
     expect(screen.getByTestId('composer-hint').textContent).toBe('Type / for workflows');
     expect(screen.getByTestId('foot-slot')).toBeInTheDocument();
@@ -409,9 +411,10 @@ describe('S19b: no Detected banner, the hint, and the composer seed', () => {
     await screen.findByTestId('composer-menu');
     expect(screen.queryByTestId('composer-hint')).toBeNull();
     fireEvent.mouseDown(screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-cmd') === 'workflow-bug')[0]!);
-    expect(useLaunchWizard.getState().draft?.workflowId).toBe('bug');
+    expect(useLaunchWizard.getState().open).toBe(false);
     expect(screen.queryByTestId('composer-menu')).toBeNull();
-    expect(screen.getByTestId('composer-hint')).toBeInTheDocument();
+    // The card on the box is what Enter starts; the hint gives way to it (a chip hides it).
+    expect(screen.queryByTestId('composer-hint')).toBeNull();
     expect(screen.getByTestId('foot-slot')).toBeInTheDocument();
   });
 

@@ -1,6 +1,7 @@
 import { UNFILED_MOUNT } from '../api/interactive.js';
 import { everythingPath, isDocFormat, madeKindForFormat } from '../board/everythingModel.js';
 import { entryOffered, type CatalogEntry } from '../board/workflowCatalog.js';
+import { registerRepoPath } from '../hooks/ambientProject.js';
 import { openChatFlow } from './chatFlow.js';
 import { seedNewDocumentBrief } from './newDocumentSeed.js';
 
@@ -13,6 +14,8 @@ import { seedNewDocumentBrief } from './newDocumentSeed.js';
  *    opens on it). The caller says how (`shape`).
  *  - `document`: New document on its list, in the format the card names, the words as its brief.
  *  - `chat`: a new chat on its own page, the words as its first message.
+ *  - `repo` (ux-tonight): Add a repository, in the project the pick is made in; registering it onboards it.
+ *  - `app` (ux-tonight): a new app by chat, which the caller starts in its chat like a run (`shape`).
  *  - `none`, or an entry that is not ready (coming soon, not available): nothing starts.
  */
 export interface StartEntryContext {
@@ -34,6 +37,11 @@ export function startCatalogEntry(e: CatalogEntry, ctx: StartEntryContext): bool
   if (e.launchKind === 'chat') {
     ctx.leave?.();
     openChatFlow({ projectId: project, seedText: ctx.intent });
+    return true;
+  }
+  if (e.launchKind === 'repo') {
+    ctx.leave?.();
+    ctx.navigate(registerRepoPath(project));
     return true;
   }
   if (e.launchKind === 'document') {

@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { getKnowledgeMap, type KnowledgeMapEdge, type KnowledgeMapNode, type KnowledgeMapResponse } from '../../api/knowledgeShapes.js';
 import { readErrorKind } from '../../api/errors.js';
 import { sourcesPath } from '../../api/sources.js';
+import { useTrackerLinksSupported } from '../../api/trackers.js';
 import { ProposalsSection } from '../ProposalsSection.js';
 import { EmptyState, Skeleton, StateBanner } from '../ui/index.js';
 
@@ -17,6 +18,11 @@ const KIND_WORDS: Record<KnowledgeMapNode['kind'], string> = {
   code: 'Code',
   repo: 'Repository',
   knowledge: 'Knowledge',
+  tracker: 'Tracker',
+  project: 'Project',
+  issue: 'Issue',
+  run: 'Job',
+  pr: 'Pull request',
 };
 
 type MapRead = { phase: 'loading' } | { phase: 'ok'; map: KnowledgeMapResponse } | { phase: 'failed'; kind: 'offline' | 'error'; message: string };
@@ -85,10 +91,16 @@ export function KnowledgeView(): React.ReactElement {
     };
   }, [load]);
 
-  const map = read.phase === 'ok' ? read.map : null;
+  // (DES-PM-001) Trackers, projects and the trail are drawn only on a crew with tracker links: without the capability
+  // the map holds what it held before PM-1, whatever the answer carried.
+  const trackerLinks = useTrackerLinksSupported();
+  const map = useMemo(() => (read.phase !== 'ok' ? null : trackerLinks ? read.map : withoutPm(read.map)), [read, trackerLinks]);
   const byKey = useMemo(() => new Map((map?.nodes ?? []).map((n) => [n.key, n])), [map]);
   const typed = useMemo(() => (map?.edges ?? []).filter((e) => LISTED.has(e.rel)), [map]);
   const shapes = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'shape'), [map]);
+  // (DES-PM-001 §3.4) Linked trackers and the projects they are tracked in.
+  const trackers = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'tracker'), [map]);
+  const projectsOnMap = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'project').length, [map]);
   const selected = selectedKey === null ? null : byKey.get(selectedKey) ?? null;
   // The inventory holds EVERY node the map draws: each source with its tables, each repository with its code (by the
   // node's own source/repo, or a drawn `contains` edge), and every other node on its own.
@@ -152,6 +164,7 @@ export function KnowledgeView(): React.ReactElement {
               {' · '}{map.nodes.filter((n) => n.kind === 'table').length} tables
               {' · '}{shapes.length === 1 ? '1 approved shape' : `${shapes.length} approved shapes`}
               {' · '}{typed.length === 1 ? '1 connection' : `${typed.length} connections`}
+              {trackers.length > 0 && <span data-testid="knowledge-map-trackers">{' · '}{trackers.length === 1 ? '1 tracker' : `${trackers.length} trackers`}{projectsOnMap > 0 ? ` in ${projectsOnMap === 1 ? '1 project' : `${projectsOnMap} projects`}` : ''}</span>}
               {map.truncated && ' · the largest maps are cut to fit'}
             </p>
             <ul className="wk-know-legend" aria-label="What the map draws">
@@ -161,9 +174,16 @@ export function KnowledgeView(): React.ReactElement {
               <li data-kind="repo"><span className="wk-know-swatch" data-kind="repo" aria-hidden />Repository</li>
               <li data-kind="code"><span className="wk-know-swatch" data-kind="code" aria-hidden />Code</li>
               {map.nodes.some((n) => n.kind === 'knowledge') && <li data-kind="knowledge"><span className="wk-know-swatch" data-kind="knowledge" aria-hidden />Other knowledge</li>}
+              {trackers.length > 0 && <li data-kind="tracker"><span className="wk-know-swatch" data-kind="tracker" aria-hidden />Tracker</li>}
+              {projectsOnMap > 0 && <li data-kind="project"><span className="wk-know-swatch" data-kind="project" aria-hidden />Project</li>}
+              {map.nodes.some((n) => n.kind === 'issue') && <li data-kind="issue"><span className="wk-know-swatch" data-kind="issue" aria-hidden />Issue</li>}
+              {map.nodes.some((n) => n.kind === 'run') && <li data-kind="run"><span className="wk-know-swatch" data-kind="run" aria-hidden />Job</li>}
+              {map.nodes.some((n) => n.kind === 'pr') && <li data-kind="pr"><span className="wk-know-swatch" data-kind="pr" aria-hidden />Pull request</li>}
               <li data-rel="joins"><span className="wk-know-line" data-rel="joins" aria-hidden />joins</li>
               <li data-rel="describes"><span className="wk-know-line" data-rel="describes" aria-hidden />describes</li>
               <li data-rel="governed_by"><span className="wk-know-line" data-rel="governed_by" aria-hidden />governed by</li>
+              {typed.some((e) => e.rel === 'tracked_in') && <li data-rel="tracked_in"><span className="wk-know-line" data-rel="tracked_in" aria-hidden />tracked in</li>}
+              {typed.some((e) => e.rel === 'addresses' || e.rel === 'closes') && <li data-rel="addresses"><span className="wk-know-line" data-rel="addresses" aria-hidden />the trail (addresses, closes)</li>}
             </ul>
             <div className="wk-know-body">
               <div className="wk-know-canvas" data-testid="knowledge-graph">
@@ -179,6 +199,7 @@ export function KnowledgeView(): React.ReactElement {
                     {selected.source !== undefined && <p className="wk-gk-muted">In data source {selected.source}</p>}
                     {selected.repo !== undefined && <p className="wk-gk-muted">In repository {selected.repo}</p>}
                     {selected.summary !== undefined && <p className="wk-gk-content">{selected.summary}</p>}
+                    {selected.kind === 'tracker' && <TrackerFacts node={selected} edges={map.edges} byKey={byKey} />}
                   </div>
                 )}
                 <h3 className="wk-know-subtitle">Connections</h3>
@@ -246,4 +267,24 @@ export function KnowledgeView(): React.ReactElement {
       </section>
     </div>
   );
+}
+
+/** A selected tracker: its tool, where it is tracked in (its `tracked_in` edges), and where its links are changed. */
+function TrackerFacts({ node, edges, byKey }: { node: KnowledgeMapNode; edges: readonly KnowledgeMapEdge[]; byKey: ReadonlyMap<string, KnowledgeMapNode> }): React.ReactElement {
+  const ins = edges.filter((e) => e.rel === 'tracked_in' && e.from === node.key).map((e) => byKey.get(e.to)).filter((n): n is KnowledgeMapNode => n !== undefined);
+  return (
+    <div data-testid="knowledge-selected-tracker">
+      {node.tracker !== undefined && <p className="wk-gk-muted">In {node.tracker.source} as {node.tracker.key}</p>}
+      <p className="wk-gk-muted">Tracked in: {ins.length === 0 ? 'nothing you can see' : ins.map((n) => `${n.label} (${n.kind === 'project' ? 'project' : 'repository'})`).join(', ')}</p>
+      <p className="wk-gk-muted">Linked on the Projects and Repositories pages. Removing a link there takes away that way in: another link may still bring the tracker to the same jobs, and the map follows once crew has updated it.</p>
+    </div>
+  );
+}
+
+const PM_KINDS: ReadonlySet<string> = new Set(['tracker', 'project', 'issue', 'run', 'pr']);
+/** The map without its PM nodes, and without any edge that touched one. */
+export function withoutPm(m: KnowledgeMapResponse): KnowledgeMapResponse {
+  const nodes = m.nodes.filter((n) => !PM_KINDS.has(n.kind));
+  const keys = new Set(nodes.map((n) => n.key));
+  return { ...m, nodes, edges: m.edges.filter((e) => keys.has(e.from) && keys.has(e.to)) };
 }

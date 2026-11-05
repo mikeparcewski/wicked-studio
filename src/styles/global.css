@@ -56,6 +56,7 @@
 @import './sections/repo-know.css';
 @import './sections/sources.css';
 @import './sections/knowledge.css';
+@import './sections/trackers.css';
 
 @tailwind base;
 @tailwind components;

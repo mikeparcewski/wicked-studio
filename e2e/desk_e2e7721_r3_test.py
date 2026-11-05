@@ -64,31 +64,23 @@ def note_open(req) -> None:
 
 
 def wizard_helpers(page, tag: str):
-    """Desk → New job → the first ordinary job → its Helpers step; returns the helper pills."""
+    """Desk → New job → the first ordinary job, which starts in a new chat (ux-tonight: a card click starts the work
+    in the chat, not in the modal) → the job's helpers row on that chat's composer; returns the helper pills."""
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
     page.get_by_test_id("launch-wizard").wait_for(state="visible", timeout=10000)
     if page.get_by_test_id("launch-catalog").count() > 0:
         page.get_by_test_id("launch-wizard-workflow-bug").click()
-    intent = page.get_by_test_id("launch-wizard-intent")
-    intent.wait_for(state="visible", timeout=8000)
-    if intent.input_value() == "":
-        intent.fill("fix the greeting so it trims its input")
-    for _ in range(4):
-        if page.locator('[data-testid="launch-wizard-seat"]').count() > 0:
-            break
-        repo = page.get_by_test_id("launch-wizard-repo")
-        if repo.count() > 0 and repo.input_value() == "":
-            value = page.evaluate("""() => [...document.querySelectorAll('[data-testid="launch-wizard-repo"] option')]
-              .map((o) => o.value).find((v) => v) || ''""")
-            if value:
-                repo.select_option(value)
-        page.get_by_test_id("launch-wizard-next").click()
-        page.wait_for_timeout(300)
-    if page.locator('[data-testid="launch-wizard-seat"]').count() == 0:
+    page.get_by_test_id("composer-start").wait_for(state="visible", timeout=8000)
+    page.get_by_test_id("session-composer-input").fill("fix the greeting so it trims its input")
+    try:
+        page.wait_for_function("() => document.querySelectorAll('[data-testid=\"composer-seat\"]').length > 0", timeout=8000)
+    except Exception:  # noqa: BLE001 — reported below
+        pass
+    if page.locator('[data-testid="composer-seat"]').count() == 0:
         page.screenshot(path=str(SHOTS / f"desk-e2e7721r3-{tag}-missing.png"))
         fail(f"{tag}-helpers-step", page.evaluate("() => document.body.innerText.slice(0, 1200)"))
-    return page.evaluate(PILLS, '[data-testid="launch-wizard-seat"]')
+    return page.evaluate(PILLS, '[data-testid="composer-seat"]')
 
 
 def open_ask(page):
@@ -128,14 +120,14 @@ with sync_playwright() as p:
     check("wizard-has-helpers", len(keys) >= 2, pills=pills)
     keep = keys[0]
     for k in keys[1:]:
-        btn = page.locator(f'[data-testid="launch-wizard-seat"][data-key="{k}"]')
+        btn = page.locator(f'[data-testid="composer-seat"][data-key="{k}"]')
         if btn.get_attribute("aria-pressed") == "true":
             btn.click()
-    after = page.evaluate(PILLS, '[data-testid="launch-wizard-seat"]')
+    after = page.evaluate(PILLS, '[data-testid="composer-seat"]')
     page.screenshot(path=str(SHOTS / "desk-e2e7721r3-1-wizard-one-helper.png"))
     check("wizard-one-on", [k for k, on in after if on == "true"] == [keep], pills=after)
-    page.get_by_test_id("launch-wizard-close").click()
-    page.get_by_test_id("launch-wizard").wait_for(state="hidden", timeout=5000)
+    # Nothing is launched: the card leaves the composer.
+    page.get_by_test_id("composer-chip-remove").first.click()
 
     # ── 2. the system chat: ONE CLI picked; the wizard's choice never narrows who the chat can seat ────
     pick = open_ask(page)
@@ -173,7 +165,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-e2e7721r3-4-wizard-kept.png"))
     check("wizard-kept-its-choice", [k for k, on in again if on == "true"] == [keep], pills=again)
     check("no-hscroll", not page.evaluate(HSCROLL))
-    page.get_by_test_id("launch-wizard-close").click()
+    page.get_by_test_id("composer-chip-remove").first.click()
     ctx.close()
     browser.close()
 

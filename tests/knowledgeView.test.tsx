@@ -30,6 +30,7 @@ const { ProposalsList } = await import('../src/components/ProposalsList.js');
 const { proposalConsequence, proposalConsequenceLine } = await import('../src/board/proposalTriage.js');
 const { proposalKind } = await import('../src/api/proposals.js');
 const { ApiError } = await import('../src/api/errors.js');
+const { useCapabilities } = await import('../src/store/capabilities.js');
 type Proposal = import('../src/api/proposals.js').Proposal;
 
 const SID = '3f0c9a1e-0000-4000-8000-00000000b4a1';
@@ -399,5 +400,38 @@ describe('the source sheet\'s Profile box', () => {
     expect(profileRefusal(new ApiError(409, 'x', { code: 'not_in_knowledge', error: 'x' }))).toContain('Test its connection again');
     expect(profileRefusal(new ApiError(404, 'Not Found'))).toContain('does not profile sources yet');
     expect(profileRefusal(new ApiError(403, 'x', { code: 'profile_human_only' }))).toContain('operator');
+  });
+});
+
+describe('DES-PM-001: trackers and projects on the map', () => {
+  const PM_MAP = {
+    ...MAP,
+    nodes: [...MAP.nodes, { key: 'source:trk_bill', kind: 'tracker', label: 'BILL · Jira', tracker: { source: 'acme-jira', key: 'BILL' } }, { key: 'control:project:proj_b', kind: 'project', label: 'Billing' }],
+    edges: [...MAP.edges, { rel: 'tracked_in', from: 'source:trk_bill', to: 'control:project:proj_b', confidence: null, evidence: null, owner: 'd' }],
+  };
+  afterEach(() => useCapabilities.setState({ trackerLinks: false }));
+  const renderWith = async (on: boolean): Promise<void> => {
+    useCapabilities.setState({ loaded: true, trackerLinks: on });
+    apiFetch.mockImplementation((path: unknown) => {
+      const s = String(path);
+      if (s === '/knowledge/map') return Promise.resolve(structuredClone(PM_MAP));
+      if (s.startsWith('/proposals')) return Promise.resolve({ proposals: [] });
+      return Promise.reject(new Error(`unexpected ${s}`));
+    });
+    render(<KnowledgeView />);
+    await screen.findByTestId('knowledge-graph-stub');
+  };
+  it('with tracker links: drawn, counted and listed in words', async () => {
+    await renderWith(true);
+    expect(screen.getByTestId('knowledge-graph-stub').dataset.nodes).toContain('BILL · Jira');
+    expect(screen.getByTestId('knowledge-map-trackers')).toHaveTextContent('1 tracker in 1 project');
+    expect(screen.getAllByTestId('knowledge-connection').map((c) => c.textContent)).toContain('BILL · Jira tracked in Billing');
+  });
+  it('NC1: without them, none of it is drawn, counted or listed', async () => {
+    await renderWith(false);
+    expect(screen.getByTestId('knowledge-graph-stub').dataset.nodes).not.toContain('BILL · Jira');
+    expect(screen.getByTestId('knowledge-graph-stub').dataset.rels).not.toContain('tracked_in');
+    expect(screen.queryByTestId('knowledge-map-trackers')).toBeNull();
+    expect(screen.getAllByTestId('knowledge-connection').map((c) => c.textContent)).not.toContain('BILL · Jira tracked in Billing');
   });
 });

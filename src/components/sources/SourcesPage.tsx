@@ -9,6 +9,10 @@ import { DataPanel, type PanelRowWrite } from './DataPanel.js';
 import { NO_APP_GRANTS, RowWriteDialog, type RowWriteGrantPort } from './RowWriteDialog.js';
 import { SourceSheet, type SheetTarget } from './SourceSheet.js';
 import { relationName, rowWriteKey } from './sourceModel.js';
+import { PmSourceSheet, type PmSheetTarget } from './PmSourceSheet.js';
+import { hasPmMarker, pmSystemOf, systemName, trackerLinksListOf, useTrackerLinksSupported } from '../../api/trackers.js';
+import { agentAccessOf } from '../../api/sourceAgents.js';
+import { TrackerBadge } from '../trackers/TrackerParts.js';
 
 /** A declared row write as the page keeps it: granted FOR one connection descriptor of its source. */
 interface PageRowWrite extends Omit<PanelRowWrite, 'granted'> {
@@ -54,6 +58,10 @@ export function SourcesPage(props: { navigate: Navigate; search: string; grants?
 
 function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigate: Navigate; search: string; grants?: RowWriteGrantPort }): React.ReactElement {
   const [sources, setSources] = useState<McpServer[]>([]);
+  /** (DES-PM-001) The project-management sources (Jira, GitHub Issues): their own list and sheet, never an app's data. */
+  const pmOn = useTrackerLinksSupported();
+  const [pmSources, setPmSources] = useState<McpServer[]>([]);
+  const [pmSheet, setPmSheet] = useState<PmSheetTarget | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
@@ -84,7 +92,10 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     try {
       const r = await sourcesApi.list();
       if (gen !== listGen.current) return;
-      setSources(r.servers.filter(appReadable));
+      // A PM entry is not an app's data source (crew gives Apps no PM entry in PM-1): it is listed on its own.
+      // A record with a PM marker this studio can't read is quarantined with them, never shown as app data.
+      setSources(r.servers.filter((x) => appReadable(x) && !hasPmMarker(x as { pm?: unknown })));
+      setPmSources(r.servers.filter((x) => hasPmMarker(x as { pm?: unknown })));
       setError(null);
       toVerify.current.clear();
       setUnverified((cur) => (cur.size === 0 ? cur : new Set()));
@@ -106,18 +117,22 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
   // isn't there) closes it. A new source's sheet is the page's own, not the address's.
   const deep = readSourceDeepLink(search);
   useEffect(() => {
-    if (deep === null) { setSheet((s) => (s !== null && s.mode !== 'new' ? null : s)); return; }
-    if (deep === CREW_SOURCE) { setSheet({ mode: 'crew' }); return; }
+    if (deep === null) { setSheet((s) => (s !== null && s.mode !== 'new' ? null : s)); setPmSheet((s) => (s !== null && s.mode !== 'new' ? null : s)); return; }
+    // One sheet at a time: the address that opens one closes the other kind's.
+    if (deep === CREW_SOURCE) { setPmSheet(null); setSheet({ mode: 'crew' }); return; }
     const s = sources.find((x) => x.name === deep);
-    if (s !== undefined) { setSheet({ mode: 'saved', server: s }); return; }
-    if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`No source named ${deep}.`); }
-  }, [deep, sources, loading]);
+    if (s !== undefined) { setPmSheet(null); setSheet({ mode: 'saved', server: s }); return; }
+    const pm = pmOn ? pmSources.find((x) => x.name === deep && pmSystemOf(x as { pm?: unknown }) !== null) : undefined;
+    if (pm !== undefined) { setSheet(null); setPmSheet((cur) => (cur !== null && cur.mode === 'new' ? cur : { mode: 'saved', server: pm })); return; }
+    if (pmSources.some((x) => x.name === deep)) { setSheet(null); setPmSheet(null); setError(`${deep} is a project-management tool this studio can’t read: update studio.`); return; }
+    if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setPmSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`No source named ${deep}.`); }
+  }, [deep, sources, pmSources, pmOn, loading]);
 
   const open = (name: string, focus: 'test' | 'ask' | null = null): void => { openGen.current++; setSheetFocus(focus === null ? null : { name, focus }); navigate(sourcesPath(name)); };
   // A sheet closed by the address (Back) forgets what it was opened for.
   useEffect(() => { if (sheet === null) setSheetFocus(null); }, [sheet]);
   /** "Add a data source" (the page's button and the panel's ＋): a Grant still reading its table never opens over it. */
-  const openAdd = (): void => { openGen.current++; setSheet({ mode: 'new' }); };
+  const openAdd = (): void => { openGen.current++; setPmSheet(null); setSheet({ mode: 'new' }); };
   const close = (): void => { setSheet(null); setSheetFocus(null); if (deep !== null) navigate(sourcesPath()); };
   const setWrites = (name: string, allowed: boolean): void => {
     setSources((list) => list.map((s) => (s.name === name ? { ...s, allowWrites: allowed } : s)));
@@ -202,6 +217,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           actions={shownActions}
           onGrantAction={(id) => void grantAction(id)}
         />
+        {pmOn && <PmSourcesList sources={pmSources} onOpen={(name) => open(name)} onAdd={(system) => { openGen.current++; setSheet(null); setPmSheet({ mode: 'new', system }); }} />}
       </div>
       {sheet !== null && (
         <SourceSheet
@@ -226,6 +242,23 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           onAgents={(name, agents) => setSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)))}
           onDescribed={(name) => setEpochs((m) => ({ ...m, [name]: (Object.hasOwn(m, name) ? (m[name] ?? 0) : 0) + 1 }))}
           onClose={close}
+          {...(pmOn ? { onPickPm: (system: 'jira' | 'github') => { setSheet(null); setPmSheet({ mode: 'new', system }); } } : {})}
+        />
+      )}
+      {pmOn && pmSheet !== null && (
+        <PmSourceSheet
+          key={pmSheet.mode === 'saved' ? `saved:${pmSheet.server.name}:${pmSheet.server.descriptorHash ?? ''}` : `new:${pmSheet.system}`}
+          target={pmSheet}
+          existing={[...sources, ...pmSources].map((s) => s.name)}
+          servers={pmSources}
+          agentsUnverified={unverified}
+          onReread={() => void refresh()}
+          onSaved={(saved) => {
+            setPmSources((list) => (list.some((s) => s.name === saved.name) ? list.map((s) => (s.name === saved.name ? saved : s)) : [...list, saved]));
+            void refresh();
+          }}
+          onAgents={(name, agents) => setPmSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)))}
+          onClose={() => { setPmSheet(null); if (deep !== null) navigate(sourcesPath()); }}
         />
       )}
       {dialog !== null && dialogSource !== null && (
@@ -243,5 +276,46 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
         />
       )}
     </CalmPage>
+  );
+}
+
+/**
+ * (DES-PM-001) PROJECT MANAGEMENT on the Data sources page: each registered Jira or GitHub Issues source, how many
+ * trackers are linked, and whether agents may use it; each opens its sheet. Shown only on a crew with tracker links.
+ */
+function PmSourcesList({ sources, onOpen, onAdd }: { sources: readonly McpServer[]; onOpen: (name: string) => void; onAdd: (system: 'jira' | 'github') => void }): React.ReactElement {
+  return (
+    <section className="wk-src-box wk-pm-list" aria-labelledby="wk-pm-list-title" data-testid="pm-sources">
+      <div className="wk-src-box-head">
+        <h2 id="wk-pm-list-title" className="wk-src-strong wk-pm-list-title">Project management</h2>
+        <span className="wk-src-sp" />
+        <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="pm-add-jira" onClick={() => onAdd('jira')}>Add Jira</button>
+        <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="pm-add-github" onClick={() => onAdd('github')}>Add GitHub Issues</button>
+      </div>
+      {sources.length === 0 ? (
+        <p className="wk-src-note" data-testid="pm-sources-empty">No tracker tool yet. Add Jira or GitHub Issues, then link its projects to your projects and repositories: agents read issues only from what you link.</p>
+      ) : (
+        <ul className="wk-src-list">
+          {sources.map((s) => {
+            const system = pmSystemOf(s as { pm?: unknown });
+            if (system === null) {
+              return <li key={s.name} className="wk-src-note" data-testid="pm-source-unreadable"><b>{s.name}</b>: a project-management tool this studio can’t read. Update studio; it is not offered to apps meanwhile.</li>;
+            }
+            const trackers = trackerLinksListOf((s as unknown as { trackers?: unknown }).trackers);
+            const linked = trackers === null ? null : new Set(trackers.map((l) => l.trackerId)).size;
+            const a = agentAccessOf(s as { agents?: unknown });
+            const agents = a === null ? null : !a.see || (!a.everyProject && a.projects.length === 0) ? 'agents can’t use it yet' : a.query ? 'agents can read issues' : 'agents see its structure';
+            return (
+              <li key={s.name}>
+                <button type="button" className="wk-src-row wk-src-row-main wk-pm-row" data-testid="pm-source" data-name={s.name} onClick={() => onOpen(s.name)}>
+                  <TrackerBadge system={system} small />
+                  <span className="wk-src-row-name"><b>{s.name}</b> <span className="wk-src-cap">{systemName(system)} · {linked === null ? 'its links can’t be read' : linked === 1 ? '1 tracker linked' : `${linked} trackers linked`}{agents !== null ? ` · ${agents}` : ''}</span></span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

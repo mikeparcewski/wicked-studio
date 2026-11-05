@@ -25,7 +25,7 @@ import { workflowPurpose } from './workflowPurpose.js';
 export type CatalogStatus = 'ready' | 'soon' | 'unavailable';
 
 /** How studio starts an entry (wf-catalog WIRE v1 `launch.kind`). */
-export type LaunchKind = 'run' | 'demo' | 'compose' | 'document' | 'chat' | 'none';
+export type LaunchKind = 'run' | 'demo' | 'compose' | 'document' | 'chat' | 'app' | 'repo' | 'none';
 
 export interface CatalogInput {
   key: string;
@@ -171,6 +171,9 @@ function launchOf(id: string, v: unknown): { launchKind: LaunchKind; launchId: s
       return { launchKind: 'document', launchId: `document:${id}`, docStyle: style };
     }
     case 'chat': return { launchKind: 'chat', launchId: `chat:${id}`, docStyle: null };
+    // ux-tonight (api-types 0.187.0): a new app by chat (DES-APPS-001 §6.2), and Add a repository (registering onboards).
+    case 'app': return { launchKind: 'app', launchId: `app:${id}`, docStyle: null };
+    case 'repo': return { launchKind: 'repo', launchId: `repo:${id}`, docStyle: null };
     // `none`, or a kind this studio does not know: shown, never launched.
     default: return { launchKind: 'none', launchId: `none:${id}`, docStyle: null };
   }
@@ -383,6 +386,26 @@ export const NO_FILTERS: CatalogFilters = { category: null, repo: 'any', showSoo
 
 export function needsRepo(e: Pick<CatalogEntry, 'needs'>): boolean {
   return e.needs.includes('repo');
+}
+
+/** An entry a pick starts in the chat it is made in (ux-tonight, operator 2026-11-04: "clicking on a workflow opens a
+ *  modal rather than starting an inline chat"): a workflow run, or a new app by chat. The composer holds it and its
+ *  next Enter starts it; what it still needs is asked there. */
+export function startsInline(e: Pick<CatalogEntry, 'launchKind'>): boolean {
+  return e.launchKind === 'run' || e.launchKind === 'app';
+}
+
+/** What an entry asks for its words (New job's rule): its form's first text input, optional only when the catalog's
+ *  form says every text input is (a run; crew still needs a problem, so a launch with none sends the summary). */
+export function entryWords(e: Pick<CatalogEntry, 'inputs' | 'form' | 'launchKind'>): { label: string; optional: boolean } {
+  const texts = e.inputs.filter((i) => i.kind === 'text');
+  const optional = e.launchKind === 'run' && e.form && texts.every((i) => !i.required);
+  return { label: texts[0]?.label ?? (optional ? 'Anything to focus on?' : 'What do you want done?'), optional };
+}
+
+/** Whether an entry must have a project to start: a run whose card needs one, and a new app (an app belongs to one). */
+export function needsProject(e: Pick<CatalogEntry, 'needs' | 'launchKind'>): boolean {
+  return e.launchKind === 'app' || (e.launchKind === 'run' && e.needs.includes('project'));
 }
 
 export function filtersActive(f: CatalogFilters): boolean {

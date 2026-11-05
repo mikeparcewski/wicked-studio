@@ -69,6 +69,8 @@ import { LiveActivity } from './LiveActivity.js';
 import { usePower } from '../../hooks/usePower.js';
 import { powerOf } from '../../api/power.js';
 import { mergePower } from '../../board/powerMode.js';
+import { TrackerSet } from '../trackers/TrackerSet.js';
+import { useTrackerLinksSupported } from '../../api/trackers.js';
 import { RunRibbon, RunTab } from './RunTab.js';
 import { useRunHostValue } from './RunHost.js';
 import { HostPanel, useNarrow } from '../editorHost/HostPanel.js';
@@ -88,6 +90,12 @@ import { useRunEventStore } from '../../store/events.js';
 import { headlineProgress } from '../../board/repeatProgress.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { needTone } from '../../board/needTone.js';
+
+/** The project a chat's scope (`GET /chats/:id` `scope.projectId`) files it in, or null. */
+function chatScopeProject(scope: unknown): string | null {
+  const p = scope !== null && typeof scope === 'object' ? (scope as { projectId?: unknown }).projectId : undefined;
+  return typeof p === 'string' && p !== '' && p !== 'default' ? p : null;
+}
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -249,6 +257,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // "New chat" with its composer; the first Send opens it on the daemon under this id.
   const fresh = useChatFlow((s) => (ref.kind === 'chat' ? s.fresh[ref.chatId] ?? null : null));
   const freshProjectName = useProjectsStore((s) => (fresh?.projectId == null ? null : s.projects.find((p) => p.id === fresh.projectId)?.name ?? null));
+  // The project a live chat is filed in, as crew recorded its scope (`ChatScope.projectId`).
+  const chatScope = chatDetail?.scope;
+  const chatProjectId = typeof chatScope === 'object' && chatScope !== null && typeof (chatScope as { projectId?: unknown }).projectId === 'string' && (chatScope as { projectId: string }).projectId !== 'default'
+    ? (chatScope as { projectId: string }).projectId : null;
+  const chatProjectName = useProjectsStore((s) => (chatProjectId === null ? null : s.projects.find((p) => p.id === chatProjectId)?.name ?? null));
+  const trackerLinks = useTrackerLinksSupported();
   const freshOpening = useChatFlow((s) => (ref.kind === 'chat' && s.opening[ref.chatId] === true));
   // Opened on the daemon: read the chat again, and until THAT read answers the page stays the new chat
   // (codex r1: the read from before the open said "closed", which is not what the page now is).
@@ -1010,6 +1024,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     runs: mine,
     started: entries.length > 0,
     navigate,
+    // ux-tonight: a card started on this chat's composer files its job in the chat's project: the fresh mark before
+    // the daemon knows the chat, then the scope crew answered with (codex r1 on #982).
+    contextProjectId: fresh?.projectId ?? chatScopeProject(chatDetail?.scope) ?? null,
     ariaLabel: 'Ask or tell studio what to do next',
     placeholder: "Ask about this, or say what's next — / adds a step, @ a helper",
     variant: 'session' as const,
@@ -1096,6 +1113,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       {/* domain-graph-3: a job that keeps going says where it got to, on its own line under the header (the header row
           stays one line at desk widths). */}
       {progressLine !== null && <p data-testid="session-progress-line" className="wk-session-progress wk-measure wk-measure--thread">{progressLine}</p>}
+      {/* (DES-PM-001 §3.2) A chat in a project: the trackers its answers may read, crew's tracker set for that project. */}
+      {chatProjectId !== null && trackerLinks && (
+        <details className="wk-trk-chat wk-measure wk-measure--thread" data-testid="session-chat-trackers">
+          <summary>Trackers this chat can read</summary>
+          <TrackerSet projectId={chatProjectId} projectName={chatProjectName} repoId={null} kind="chat" data-testid="chat-trackers" />
+        </details>
+      )}
       {/* Operator 2026-10-18: what waits on you is a banner below the header, in the page's flow (the thread reflows). */}
       {/* What the dock already holds is not said again above the thread. */}
       {ready && <NeedsBanner items={waiting.filter((w) => !dockItems.some((d) => d.key === w.runId))} onJump={jumpToItem} />}

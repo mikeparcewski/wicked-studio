@@ -101,9 +101,12 @@ describe("a project's home (no ?tab=, the approved ui-v2-projects mockup)", () =
     expect(rows.map((r) => r.getAttribute('data-run-id'))).toEqual(['member']);
     expect(rows[0]).toHaveTextContent('repo · step 2 of 3');
     expect(screen.getByTestId('project-needs-calm')).toBeInTheDocument();
-    // Repositories: the chip, and Add a repository opens the Repositories tab (where Attach is).
+    // Repositories: the chip; Add a repository opens the register form in this project (registering onboards it,
+    // ux-tonight), and Attach takes one already added on the Repositories tab.
     expect(await screen.findAllByTestId('project-repo-chip')).toHaveLength(1);
     fireEvent.click(screen.getByTestId('project-add-repo'));
+    expect(navigate).toHaveBeenLastCalledWith('/repos/new?project=p1');
+    fireEvent.click(screen.getByTestId('project-attach-repo'));
     expect(navigate).toHaveBeenLastCalledWith('/projects/p1?tab=repositories');
     expect(screen.getByTestId('project-week')).toHaveTextContent('This week: 1 job finished');
     fireEvent.click(screen.getByTestId('project-week-report'));

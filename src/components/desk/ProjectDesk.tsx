@@ -16,6 +16,7 @@ import { openLaunchWizard } from '../../store/launchWizard.js';
 import { openAskDock } from '../../store/askDock.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { ProjectRepositories } from '../ProjectRepositories.js';
+import { ProjectTrackers } from '../ProjectTrackers.js';
 import { ProjectDocumentsRoot } from '../ProjectDocumentsRoot.js';
 import { ProjectRequirementsSection } from '../product/ProjectRequirementsSection.js';
 import { ProjectCoverage, ProjectDomain, type ProjectReadIssue, type ProjectIssueHandler } from '../product/ProjectAggregates.js';
@@ -274,7 +275,9 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     if (tab !== 'repositories') return hosted?.(tab, at, projectId);
     return <div className="wk-desk2-repos wk-project-desk-repos">
       {isDefault ? <p>Work not in a project has no repositories of its own. <a className="wk-link" href={deskTabPath('repositories')} onClick={go(deskTabPath('repositories'))}>Go to the Repositories page</a></p> : <>
-        <div id="project-repos"><ProjectRepositories projectId={projectId} members={members} used={used} onIssue={onIssue} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} /></div>
+        <div id="project-repos"><ProjectRepositories projectId={projectId} members={members} used={used} onIssue={onIssue} navigate={navigate} onMembersChange={(update) => setDetail((d) => d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d)} /></div>
+        {/* (DES-PM-001 §3.3) The trackers linked to this project, and those its repositories bring. */}
+        <ProjectTrackers projectId={projectId} projectName={title} repoNames={members.filter((m) => m.member_kind === REPO_KIND).map((m) => m.member_ref)} navigate={navigate} />
         {members.some((m) => m.member_kind === REPO_KIND) && <><ProjectCoverage projectId={projectId} navigate={navigate} onIssue={onIssue} /><ProjectDomain projectId={projectId} navigate={navigate} onIssue={onIssue} /></>}
       </>}
     </div>;

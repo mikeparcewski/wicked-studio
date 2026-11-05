@@ -182,3 +182,7 @@
 .wk-launch-wizard .wk-field-note { font-size: var(--text-sm); }
 /* studio#726: a selected helper chip has an accent edge, so a row with every chip on still reads selected. */
 .wk-composer-seat[aria-pressed='true'] { border-color: var(--accent); }
+
+/* ux-tonight: the start row under a card on the composer (what Enter starts, and the choices it still needs). */
+.wk-composer-start-need { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wk-composer-start-need .wk-link { font-size: var(--text-xs); }
