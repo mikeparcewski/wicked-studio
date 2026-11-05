@@ -200,7 +200,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
               <span>Suggested for</span> <span className="wk-rep-chip" data-testid="report-build-period">{period}</span>
               {sources.state === 'reading' && <span data-testid="report-build-sources-reading">Reading the sources {chosenName} can use…</span>}
               {sources.state === 'failed' && <span data-testid="report-build-sources-failed">The sources {chosenName} can use couldn’t be read: {sources.why}</span>}
-              {sources.state === 'ok' && sources.summary !== null && names.length === 0 && <span data-testid="report-build-sources-none">No data source to suggest for {chosenName} yet.</span>}
+              {sources.state === 'ok' && names.length === 0 && !sources.readable && <span data-testid="report-build-sources-none">No data source to suggest for {chosenName} yet.</span>}
               {sources.state === 'ok' && names.length > 0 && (
                 <span className="wk-rep-build-sources">from the sources {chosenName} can use: {names.map((n) => <span key={n} className="wk-rep-chip" data-testid="report-build-source">{n}</span>)}</span>
               )}

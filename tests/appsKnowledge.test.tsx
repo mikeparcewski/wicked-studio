@@ -247,24 +247,39 @@ describe('(ak-fix P2) a data suggestion names only a source an app query can rea
     render(<AppChat slug="desk" detail={d as never} runs={[]} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
     await waitFor(() => expect(screen.getAllByTestId('app-composer-suggestion').map((b) => b.textContent)).toContain("Add a table of what we know about tb-pg's tables"), { timeout: 4000 });
     const chips = screen.getAllByTestId('app-composer-suggestion').map((b) => b.textContent ?? '');
-    expect(chips).toContain('Show my main numbers as KPIs');
-    expect(chips.join(' ')).not.toMatch(/from tb-pg/u);
+    // No source an app query can read (codex r2): no data ask for the empty app, only the knowledge addition.
+    expect(chips.join(' ')).not.toMatch(/main numbers|latest rows|from tb-pg/u);
   });
 });
 
-describe('(ak-fix, codex r1 on the fold) chat follow-ups fit the tile they are about', () => {
-  it('a knowledge tile (a recall) gets no by-day, region-filter or search-box ask; a data tile still does', () => {
-    const base = structuredClone(SAMPLE_APPS['escalations']!.spec);
-    const tile = (id: string, type: string, query: string): never => ({ id, type, title: 'T', box: { x: 0, y: 0, w: 3, h: 2 }, data: { query }, value: 'n', x: 'key', series: [], columns: [] } as never);
-    const recall = (id: string): AppSpec['queries'][number] => ({ id, source: 'estate', kind: 'recall' as never, output: [{ name: 'key', type: 'string' }] });
-    const knowledgeOnly: AppSpec = { ...base, pages: [{ id: 'k', title: 'K', components: [tile('a', 'kpi', 'r1'), tile('b', 'chart', 'r2'), tile('c', 'table', 'r3')] }], queries: [recall('r1'), recall('r2'), recall('r3')] };
+describe('(ak-fix, codex r1 and r2 on the fold) chat follow-ups never land on a knowledge tile', () => {
+  const base = structuredClone(SAMPLE_APPS['escalations']!.spec);
+  const tile = (id: string, type: string, query?: string): never => ({ id, type, title: 'T', box: { x: 0, y: 0, w: 3, h: 2 }, ...(query !== undefined ? { data: { query } } : { text: 'Heading' }), value: 'n', x: 'key', series: [], columns: [] } as never);
+  const recall = (id: string): AppSpec['queries'][number] => ({ id, source: 'estate', kind: 'recall' as never, output: [{ name: 'key', type: 'string' }] });
+  const DATA_FOLLOW_UPS = /by day|filter by region|search box|by category/u;
+
+  it('a knowledge-only app, with or without a plain heading, gets no by-day, region, search or category ask', () => {
+    const knowledgeOnly: AppSpec = { ...base, pages: [{ id: 'k', title: 'K', components: [tile('a', 'kpi', 'r1'), tile('b', 'chart', 'r2'), tile('c', 'table', 'r3'), tile('h', 'text')] }], queries: [recall('r1'), recall('r2'), recall('r3')] };
     const asks = suggestionsFor(knowledgeOnly, ['support-pg']);
-    expect(asks.join(' ')).not.toMatch(/by day|filter by region|search box|by category/u);
+    expect(asks.join(' ')).not.toMatch(DATA_FOLLOW_UPS);
     expect(asks).toContain('Add a KPI from support-pg beside these');
+    const tableAndHeading: AppSpec = { ...base, pages: [{ id: 'k', title: 'K', components: [tile('c', 'table', 'r3'), tile('h', 'text')] }], queries: [recall('r3')] };
+    expect(suggestionsFor(tableAndHeading, []).join(' ')).not.toMatch(DATA_FOLLOW_UPS);
+  });
+
+  it('a mixed app (a recall KPI first, a recall chart beside a data chart) gets none either; a data-only app still does', () => {
     const dataQ = base.queries[0]!;
-    const mixed: AppSpec = { ...knowledgeOnly, pages: [{ id: 'k', title: 'K', components: [tile('a', 'kpi', 'r1'), tile('d', 'kpi', dataQ.id), tile('c', 'table', 'r3')] }], queries: [dataQ, recall('r1'), recall('r3')] };
-    expect(suggestionsFor(mixed, [])).toContain('Show the first KPI by day as a line chart');
-    expect(suggestionsFor(mixed, []).join(' ')).not.toMatch(/search box/u);
+    const mixed: AppSpec = { ...base, pages: [{ id: 'k', title: 'K', components: [tile('a', 'kpi', 'r1'), tile('d', 'kpi', dataQ.id), tile('e', 'chart', 'r2'), tile('f', 'chart', dataQ.id)] }], queries: [dataQ, recall('r1'), recall('r2')] };
+    expect(suggestionsFor(mixed, []).join(' ')).not.toMatch(DATA_FOLLOW_UPS);
+    const dataOnly: AppSpec = { ...base, pages: [{ id: 'k', title: 'K', components: [tile('d', 'kpi', dataQ.id), tile('f', 'chart', dataQ.id)] }], queries: [dataQ] };
+    expect(suggestionsFor(dataOnly, [])).toEqual(['Show the first KPI by day as a line chart', 'Add a filter by region that drives every chart']);
+  });
+
+  it('an empty app gets its data asks unless the registry lists no source an app query can read', () => {
+    const empty: AppSpec = { ...base, pages: [{ id: 'k', title: 'K', components: [] }], queries: [] };
+    expect(suggestionsFor(empty, [], null, null)).toEqual(['Show my main numbers as KPIs', 'Add a table of the latest rows, newest first']);
+    expect(suggestionsFor(empty, [], null, true)).toEqual(['Show my main numbers as KPIs', 'Add a table of the latest rows, newest first']);
+    expect(suggestionsFor(empty, [], 'Add a bar chart of this project\'s steering rules by type', false)).toEqual(["Add a bar chart of this project's steering rules by type"]);
   });
 });
 

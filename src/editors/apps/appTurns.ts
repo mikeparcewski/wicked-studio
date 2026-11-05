@@ -140,36 +140,35 @@ export function endedLine(t: AppTurnRecord): string {
  * own spec and the sources its project's knowledge summary lists. Plain asks a person would type; never a claim about
  * the data, and never a word the builder or a source wrote (a source is named only by its registry name).
  */
-export function suggestionsFor(spec: AppSpec | null, sources: readonly string[], knowledge: string | null = null): string[] {
+export function suggestionsFor(spec: AppSpec | null, sources: readonly string[], knowledge: string | null = null, readable: boolean | null = null): string[] {
   const out: string[] = [];
   const comps = (spec?.pages ?? []).flatMap((p) => p.components);
   const used = new Set((spec?.queries ?? []).map((q) => q.source));
   // (DES-KNOWLEDGE-DATA-001 §9.1) An app that reads none of its project's knowledge yet is offered one knowledge
   // addition (`knowledgeAddition`, from the project's summary), early, so a person learns it can.
-  if (knowledge !== null && !used.has('estate')) out.push(knowledge);
+  if (knowledge !== null && !used.has(KNOWLEDGE_SOURCE)) out.push(knowledge);
   // A knowledge tile (a `recall` on estate: rules, memories, a source's tables) has no date, region or search
-  // parameter, so the data follow-ups below are offered on data tiles only (ak-fix review: codex).
-  const recalls = new Set((spec?.queries ?? []).filter((q) => q.source === KNOWLEDGE_SOURCE).map((q) => q.id));
-  const onData = comps.filter((c) => {
-    const q = (c as { data?: { query?: unknown } }).data?.query;
-    return typeof q !== 'string' || !recalls.has(q);
-  });
-  const kpis = onData.filter((c) => c.type === 'kpi');
-  const charts = onData.filter((c) => c.type === 'chart');
-  const tables = onData.filter((c) => c.type === 'table');
-  if (comps.length === 0) {
+  // parameter, and these follow-ups name no tile they are about ("the first KPI", "every chart"): an app that reads
+  // any knowledge is offered none of them, so none can land on a recall tile (ak-fix review: codex r1, r2).
+  const dataOnly = !used.has(KNOWLEDGE_SOURCE);
+  const kpis = dataOnly ? comps.filter((c) => c.type === 'kpi') : [];
+  const charts = dataOnly ? comps.filter((c) => c.type === 'chart') : [];
+  const tables = dataOnly ? comps.filter((c) => c.type === 'table') : [];
+  // An empty app's data asks need a source an app query can read: none when crew's registry lists none for the
+  // project (`readable === false`); unknown (`null`) keeps them.
+  if (comps.length === 0 && readable !== false) {
     const s = sources[0];
-    out.push(s !== undefined && s !== 'estate' ? `Show the main numbers from ${s} as KPIs` : 'Show my main numbers as KPIs');
+    out.push(s !== undefined && s !== KNOWLEDGE_SOURCE ? `Show the main numbers from ${s} as KPIs` : 'Show my main numbers as KPIs');
     out.push('Add a table of the latest rows, newest first');
   }
   // A title is the builder's text: a suggestion a person may send never quotes it (fixed words only).
   if (kpis.length > 0) out.push('Show the first KPI by day as a line chart');
   if (charts.length > 0) out.push('Add a filter by region that drives every chart');
   if (tables.length > 0 && !comps.some((c) => c.type === 'filter')) out.push('Add a search box above the table');
-  const other = sources.find((s) => !used.has(s) && s !== 'estate' && s !== 'crew');
+  const other = sources.find((s) => !used.has(s) && s !== KNOWLEDGE_SOURCE && s !== 'crew');
   if (other !== undefined && comps.length > 0) out.push(`Add a KPI from ${other} beside these`);
   if ((spec?.pages.length ?? 0) === 1 && comps.length >= 4) out.push('Make it two pages: an overview and a detail page');
-  if (charts.length === 0 && onData.length > 0) out.push('Add a bar chart that breaks this down by category');
+  if (dataOnly && charts.length === 0 && comps.length > 0) out.push('Add a bar chart that breaks this down by category');
   return [...new Set(out)].slice(0, 3);
 }
 

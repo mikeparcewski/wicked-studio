@@ -164,9 +164,9 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   // A suggestion names only a source the current project's summary lists as built on AND an app query can read
   // (`dataSourcesFor`: a Toolbox-runtime source is not one); none without a summary.
   const buildable = useMemo(() => current?.data ?? [], [current]);
-  const suggestions: ComposerSuggestion[] = useMemo(() => (busy || framed ? [] : suggestionsFor(detail?.spec ?? null, buildable, addKnowledge).map((s, i) => ({
+  const suggestions: ComposerSuggestion[] = useMemo(() => (busy || framed ? [] : suggestionsFor(detail?.spec ?? null, buildable, addKnowledge, current?.readable ?? null).map((s, i) => ({
     id: `app-suggest-${i}`, label: s, title: 'Put this in the box', onPick: () => setTextState(s),
-  }))), [busy, framed, detail, buildable, addKnowledge]);
+  }))), [busy, framed, detail, buildable, addKnowledge, current]);
 
   /** The composer's submit: true when the message was taken (the box and the chips then clear). */
   const send = async (words: string, about: string[]): Promise<boolean> => {

@@ -609,8 +609,9 @@ describe('9. projects and seeds', () => {
     const sheet = screen.getByTestId('report-build-sheet').textContent ?? '';
     expect(sheet).not.toContain('outside-db');
     expect(screen.queryAllByTestId('report-build-source')).toHaveLength(0);
-    expect(screen.getByTestId('report-build-sources-none').textContent).toBe('No data source to suggest for Alpha yet.');
-    // outside-db is a source an app query can read, so the generic data seed (which names none) stays on offer.
+    // outside-db is a source an app query can read, so the generic data seed (which names none) stays on offer, and
+    // the sheet does not also say there is no data source (pi r2).
+    expect(screen.queryByTestId('report-build-sources-none')).toBeNull();
     expect(screen.getAllByTestId('apps-new-composer-suggestion').map((s) => s.textContent ?? '')).toContain('My main numbers over the last 7 days, with a table of the newest rows');
     cleanup();
     // A Toolbox-runtime source the summary lists (described): named by a knowledge seed, never by a data seed.
@@ -623,6 +624,7 @@ describe('9. projects and seeds', () => {
     expect(seeds.filter((x) => x.includes('tb-pg'))).toStrictEqual(['What we know about tb-pg: its tables and their columns']);
     // No source an app query can read, and knowledge on offer: no data seed at all (codex r1 on the fold).
     expect(seeds.join(' ')).not.toMatch(/main numbers|What changed per day/u);
+    expect(screen.getByTestId('report-build-sources-none').textContent).toBe('No data source to suggest for Alpha yet.');
     expect(screen.queryAllByTestId('report-build-source')).toHaveLength(0);
     cleanup();
     // No summary (an older crew): the registry's sql source is still not named; the generic data seed only.
