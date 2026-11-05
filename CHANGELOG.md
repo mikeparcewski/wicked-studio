@@ -12,7 +12,15 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-11-05
+
+A feature release for crew 0.17.0: Apps by chat (K5) on the data sources sheet and panel (K3), Ask a question of a
+source, the Agents box and the Knowledge map, project-management trackers (PM-1), dashboards on the Report, the plan
+gate's note, the `/` menu matching New job, and the redesigned Repositories pages. Pins wicked-crew-api-types
+0.186.0.
+
 ### Added
+
 - **Repositories: a table of columns, and a repository's page with a header and six tabs (#998, operator
   2026-11-05).** `/repos` lists one row per repository (language · branch, Projects, Code map, Trackers, Last
   activity, and the next step), each a link to its page; Projects and Trackers come from crew's tracker links and are
@@ -199,6 +207,7 @@ npm publish dates. Every version listed here exists on
   command palette; an older crew's page says it doesn't support data sources yet.
 
 ### Changed
+
 - **The type and the marks (fonts-v3, the operator's pick 2026-11-02).** The text face is Wicked Sans A, an OFL cut
   of Inter (same family name and weights; its licence ships as `dist/fonts/LICENSE-WickedSans.txt`). The rail's
   wordmark and the phone top bar show the Wicked Studio lockup, the Shoreline mark beside the Wave W lettering, in
@@ -226,6 +235,7 @@ npm publish dates. Every version listed here exists on
     Project select that was hidden under Search and filter.
 
 ### Fixed
+
 - **The rail's list fade keeps one ResizeObserver per list (studio#970, #971).** It made a new observer on every
   change of its rows, headings, fold or page, and WebKit now and then reported "ResizeObserver loop completed with
   undelivered notifications" on the desk app page. The list now gets one observer when it attaches.
@@ -3074,7 +3084,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.12.3...v0.13.0
