@@ -961,6 +961,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   phased required, delivered); GET|POST /runs/:id/power and POST /runs/:id/rigor, the pause gate tapped
          #   (GET /__fixture/power-posts; POST /__fixture {reset_power: true} clears them). Stands alone, like chat_native.
          "power_mode": False,
+         # plan_gate_note — studio#992 (e2e/desk_plan_gate_note_test.py): GET /health says capabilities.planGateNote
+         #   (crew#1139, api-types 0.188.0), so a reply typed at a plan gate is the approval's note (`amend`).
+         "plan_gate_note": False,
          # gate_move — brainstorm-actionable ideas 1+2 (e2e/gate_move_test.py): r-review, paused at an
          #   evaluator NOT PASS escalation (the engine's recorded `VERDICT: FAIL` frames), rides GET
          #   /runs; its events, gate and the creator phase's transcript are served for the card.
@@ -6417,6 +6420,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                 apps_on = state["apps"]
                 if state["chat_native"]:
                     caps["launchPrimary"] = True  # the Lead agent (crew#1077, api-types 0.128.0)
+                if state["plan_gate_note"]:
+                    caps["planGateNote"] = True  # studio#992 (crew#1139, api-types 0.188.0)
                 if state["power_mode"]:
                     caps["powerMode"] = True  # program DES-POWER-MODE (api-types 0.149.0)
                     # GET /system answers as crew will once wicked-crew#1206 lands: a paused power run waits on you.

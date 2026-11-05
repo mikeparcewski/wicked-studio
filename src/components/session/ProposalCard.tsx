@@ -14,6 +14,9 @@ import { deliverAcceptance, ownEvidenceOf } from '../../board/checkState.js';
 import { overriddenFloorsOf } from '../../board/failingChecks.js';
 import type { RunAcceptanceSummary } from '../../api/types.js';
 import { useGateStore } from '../../store/gates.js';
+import { restoreNote, takeRestoredNote } from '../../board/undoQueue.js';
+import { useCapabilities } from '../../store/capabilities.js';
+import { useOfferReply } from './DecisionDock.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { Tech } from '../Tech.js';
 import { draftLine, heldPoolsOf } from '../../board/planDraft.js';
@@ -58,9 +61,21 @@ function goTo(path: string): void {
  *  back) still knows an accepted hand-over was one (Copilot). A reload starts empty: the run's own
  *  deliver unit then says so (`proposalCard`'s late-join evidence). */
 const lastKinds = new Map<string, ProposalKind>();
+/** studio#992 (xreview r2): the note a plan approval was sent with, per `<run>:<gate instance>`, so Try again carries it
+ *  even after the card remounts (the refusal itself lives in the shared gate-action store). */
+const sentPlanNotes = new Map<string, string>();
+/** studio#992: where an undone plan note waits for the reply box (never the run's shared `restoreNote` slot, which other
+ *  gate choices use). */
+export function planNoteKey(runId: string, instance: string | null): string {
+  return `plan-note:${runId}:${instance ?? '-'}`;
+}
 
 /** A plan gate's reject arm, as its card says it. */
 export const PLAN_STOP = 'Don’t start';
+/** studio#992: the plan gate's note choice, as the reply box names it ("Replies to this decision (…)"). */
+export const PLAN_NOTE_REPLY = 'Approve plan with your note';
+/** studio#992: the reply box's words while the plan gate takes a note. */
+export const PLAN_NOTE_PLACEHOLDER = 'Type a note to approve the plan with…';
 
 export function ProposalCard({ view, chain, acceptance = null, ask = null, onBringBack, handedOver = false, variant = 'card', onEdit, editing = false }: {
   view: SessionView;
@@ -158,6 +173,20 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // checks the new result), through the gate's undo window.
   const [picked, setPicked] = useState<string | null>(null);
   const rerun = useRerunFromHere(view);
+  // studio#992 (crew#1139): at an open plan gate on an engine that lands plan-gate notes, a reply typed in the docked
+  // reply box is the approval's note — sent as `amend` beside `approve: true` (and the edited plan, if any), through
+  // the same answer and undo window as Approve plan. The card keeps its quick replies; without the capability nothing
+  // is offered and the approve is unchanged.
+  const planGateNote = useCapabilities((s) => s.planGateNote);
+  const answerRef = useRef<(note?: string) => void>(() => undefined);
+  // A card way with its own reason box (Don't start) stands it down: one note input per choice (as GateRow does).
+  // A refused approval that can be tried again takes a (new) note too (xreview r1).
+  const noteChoice = planGateNote && card !== null && card.kind === 'plan' && ask === null && gate !== undefined
+    && (card.state === 'ask' || (card.state === 'fail' && card.canRetry))
+    && (picked === null || picked === 'go');
+  useOfferReply(runId, noteChoice
+    ? { label: PLAN_NOTE_REPLY, placeholder: PLAN_NOTE_PLACEHOLDER, raw: true, restoreKey: planNoteKey(runId, gateInstance(gate)), ...(gate !== undefined ? { instance: `${runId}:${gateInstance(gate)!}` } : {}), send: (t) => answerRef.current(t) }
+    : null);
   if (card === null) return null;
   const chat = variant === 'chat';
   const instance = gateInstance(gate);
@@ -170,7 +199,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // editor list read one vocabulary.
   const planWords = draft !== null && planGate.view !== null ? planStepWords(planGate.view.planSteps) : undefined;
 
-  const answer = (): void => {
+  const answer = (note?: string): void => {
     if (deliverRefused) return; // crew refuses it: never send a delivery that cannot land
     if (sending.current || gate === undefined) return; // double clicks are ignored
     sending.current = true;
@@ -187,12 +216,34 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     // studio#617: the held plan's pools ride the amended plan (a draft that only adds or moves a step
     // must not reset a pool the plan lowered).
     const held = planGate.view !== null ? heldPoolsOf(planGate.view.editSeed, planGate.view.editPools) : undefined;
-    const answer: GateAnswer = draft !== null ? { approve: true, plan: gateDraftPlan(draft, held) } : { approve: true };
-    commitGateDecision(runId, answer, { ...deliver, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.act ?? 'Approve' } })
-      .then((outcome) => { if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey); })
+    const base: GateAnswer = draft !== null ? { approve: true, plan: gateDraftPlan(draft, held) } : { approve: true };
+    // studio#992: the note rides only a plan approval on an engine that lands it (a blank one is no note). A retry of a
+    // refused send on the same gate carries the note that send had (xreview r1).
+    const typed = noteChoice ? (note ?? '').trim() : '';
+    const noteKey = `${runId}:${instance ?? '-'}`;
+    const kept = noteChoice && note === undefined && card.state === 'fail' ? sentPlanNotes.get(noteKey) ?? '' : '';
+    const amend = typed !== '' ? typed : kept;
+    // The note of THIS attempt, or none: a retry carries exactly what the failed attempt carried (xreview r3).
+    if (amend !== '') sentPlanNotes.set(noteKey, amend); else sentPlanNotes.delete(noteKey);
+    const answer: GateAnswer = amend !== '' ? { ...base, amend } : base;
+    // A note answers the gate it was typed at (xreview r1 P1): if the gate moved on, nothing is sent.
+    const expect = amend !== '' ? { expect: { ord: gate.ord, receivedAt: gate.receivedAt } } : {};
+    commitGateDecision(runId, answer, { ...deliver, ...expect, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.act ?? 'Approve' } })
+      .then((outcome) => {
+        if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey);
+        if (outcome !== 'dropped') sentPlanNotes.delete(noteKey);
+        // A plan note never waits in the run's shared slot, which a rejection reason reads (xreview r2/r3): an Undo hands
+        // it back to the reply box under its own run + gate key; a cancel (the gate moved on) refills nothing.
+        if ((outcome === 'undone' || outcome === 'cancelled') && amend !== '') {
+          const shared = takeRestoredNote(runId);
+          if (shared !== '' && shared !== amend) restoreNote(runId, shared);
+          if (outcome === 'undone') restoreNote(planNoteKey(runId, instance), amend);
+        }
+      })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });
   };
+  answerRef.current = (note) => answer(note);
   const go = (): void => {
     if (deliverRefused) return;
     if (card.kind === 'deliver' && card.state !== 'confirm') { setUi((u) => ({ ...u, confirming: instance })); return; }
@@ -351,7 +402,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             <div data-testid="session-proposal-confirm" role="alertdialog" aria-label={`Are you sure? ${card.confirm.q}`} className="wk-prop-confirm">
               <p className="wk-prop-why"><b>Are you sure? {card.confirm.q}</b> {card.confirm.w}</p>
               <div className="wk-prop-btns">
-                <button ref={yesRef} type="button" data-testid="session-proposal-confirm-yes" onClick={answer} disabled={deliverRefused} className="wk-prop-btn wk-prop-btn--danger">{card.confirm.a}</button>
+                <button ref={yesRef} type="button" data-testid="session-proposal-confirm-yes" onClick={() => answer()} disabled={deliverRefused} className="wk-prop-btn wk-prop-btn--danger">{card.confirm.a}</button>
                 <button type="button" data-testid="session-proposal-confirm-cancel" onClick={() => setUi((u) => ({ ...u, confirming: null }))} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
               </div>
             </div>

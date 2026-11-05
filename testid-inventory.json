@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 320,
-    "occurrences": 4591,
-    "static": 3836,
+    "occurrences": 4592,
+    "static": 3837,
     "dynamic": 170,
     "computed": 53
   },
@@ -17745,6 +17745,12 @@
     },
     {
       "testId": "session-reply-flip",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-reply-moved",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

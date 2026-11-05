@@ -80,6 +80,7 @@ import { useRunPanel } from '../../store/runPanel.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
 import { RunBlock } from './RunConversation.js';
 import { DecisionDockFrame, type DockItem, type DockReply } from './DecisionDock.js';
+import { takeRestoredNote, useUndoQueue } from '../../board/undoQueue.js';
 import { switchWords, useReplyRoute } from '../../board/replyRoute.js';
 import { useDraftRouter } from '../../hooks/useDraftRouter.js';
 import { useElicitationStore } from '../../store/elicitations.js';
@@ -1388,6 +1389,24 @@ function DockedComposer({ reply, docked, composerProps, who }: {
 }): React.ReactElement {
   const router = useDraftRouter();
   const { route, flip } = useReplyRoute(reply === null ? '' : composerProps.text ?? '', router);
+  // studio#992 (xreview r1): a note an Undo handed back returns to the box while it is empty (never over a new draft).
+  const restoreKey = reply?.restoreKey ?? null;
+  const restored = useUndoQueue((s) => (restoreKey === null ? '' : s.restoredNotes[restoreKey] ?? ''));
+  const setText = composerProps.setText;
+  const empty = (composerProps.text ?? '').trim() === '';
+  useEffect(() => {
+    if (restoreKey === null || restored === '' || !empty) return;
+    setText?.(takeRestoredNote(restoreKey));
+  }, [restoreKey, restored, empty, setText]);
+  // studio#992 (xreview r2): the decision instance the draft was begun under. A draft started at another instance (or
+  // before this decision opened) is not sent to it by one Send: the box says so, and the next Send is the person's own.
+  const bound = useRef<string | null>(null);
+  useEffect(() => {
+    if (empty) bound.current = reply?.instance ?? null;
+  }, [empty, reply?.instance]);
+  // The draft a Send was held back for: the box says why while it still holds that text.
+  const [movedFor, setMovedFor] = useState<string | null>(null);
+  const moved = movedFor !== null && movedFor === (composerProps.text ?? '');
   if (reply === null && docked) {
     // The docked decision takes no note (a hand-over, a plan, a question from a run): Send asks a separate question.
     return (
@@ -1400,6 +1419,7 @@ function DockedComposer({ reply, docked, composerProps, who }: {
   const words = switchWords(route, reply.label);
   const footer = (
     <p data-testid="session-reply-switch" data-to={route.to} data-why={route.why} role="note" className="wk-composer-hint wk-reply-switch">
+      {moved && <span data-testid="session-reply-moved" className="wk-reply-why">Not sent: this decision changed since you began typing. Read it, then Send again. · </span>}
       <span data-testid="session-reply-dest">{words.dest}</span>
       {words.why !== null && <span className="wk-reply-why"> · {words.why}</span>}
       {' · '}
@@ -1409,9 +1429,22 @@ function DockedComposer({ reply, docked, composerProps, who }: {
   return (
     <Composer
       {...composerProps}
-      placeholder={`Or tell ${who ?? 'the job'} what to do…`}
+      placeholder={reply.placeholder ?? `Or tell ${who ?? 'the job'} what to do…`}
       footer={footer}
-      onSend={(text, opts) => { if (route.to === 'reply') reply.send(text); else composerProps.onSend(text, opts); }}
+      onSend={(text, opts) => {
+        // A raw choice (the plan gate's note) takes what the person typed, never the about chips' context.
+        if (route.to === 'reply') {
+          if (reply.instance !== undefined && bound.current !== reply.instance) {
+            bound.current = reply.instance;
+            // Composer clears its box after a send: put the draft back so nothing the person typed is lost.
+            const keep = composerProps.text ?? text;
+            setMovedFor(keep);
+            queueMicrotask(() => composerProps.setText?.(keep));
+            return;
+          }
+          reply.send(reply.raw === true ? (composerProps.text ?? text) : text);
+        } else composerProps.onSend(text, opts);
+      }}
       className="wk-session-composer"
     />
   );
