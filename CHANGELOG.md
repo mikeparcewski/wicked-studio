@@ -20,6 +20,19 @@ gate's note, the `/` menu matching New job, and the redesigned Repositories page
 0.186.0.
 
 ### Added
+- **Every steering rule a job is checked against shows on the run, the gate and the delivery (DES-RULE-CHECK-001
+  S4; crew api-types 0.190.0, core-ts 0.15.28).** The receipt says "N rules checked: K kept, B broken, X not
+  applicable", with each rule's verdict and its evidence. A gate card held because a rule was not checked says so
+  under its question and offers Re-check the rules or Skip with a reason (crew's `retry_rules` / `skip_rules`, sent
+  only on your click). A rule about the delivery (the pull request text) shows as deferred to the deliver step until
+  that step's verdict replaces it. The starter rules carry their engine checks.
+- **New-app and Report suggestions built on the project's knowledge (DES-KNOWLEDGE-DATA-001 §9.1; crew
+  api-types 0.189.0).** Make a new app and Report's Build a dashboard read the chosen project's knowledge summary
+  (crew's `GET /knowledge/summary`) and offer apps built on what it knows: its described sources' tables, shapes and
+  joins, its steering rules by type, what it remembers, a knowledge search. Each suggestion is a fixed sentence used
+  only for its own project and filled only with names crew listed; on a crew without the summary the data
+  suggestions stay as they were. The app chat offers one knowledge addition, and an app card's line reads "this
+  project's knowledge" for an app built on it.
 
 - **Repositories: a table of columns, and a repository's page with a header and six tabs (#998, operator
   2026-11-05).** `/repos` lists one row per repository (language · branch, Projects, Code map, Trackers, Last
