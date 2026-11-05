@@ -10,7 +10,7 @@ import { registerRepoPath } from '../../hooks/ambientProject.js';
 import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
-import { usePlanCatalog } from '../../store/planCatalog.js';
+import { invalidatePresets, usePlanCatalog } from '../../store/planCatalog.js';
 import { startAppByChat } from '../../store/inlineStart.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { useProvenanceStore } from '../../store/provenance.js';
@@ -28,6 +28,9 @@ export interface InlineStartHandle {
 
 /** How many choices a need row offers before "N more" shows the rest. */
 const CHOICES_MAX = 6;
+
+/** How long a start waits for `GET /health` before it gives up and says so (a test shortens it). */
+export const INLINE_START_LIMITS = { healthWaitMs: 15_000 };
 
 /** Starts in flight, by composer: two composers on one chat (the thread's and the full-screen drawer's) share it. */
 const inFlight = new Set<string>();
@@ -113,9 +116,11 @@ export function InlineStart({
     && (def === null || def.phases.some((p) => p.executes_code)) ? 'pr' : null;
   // The gate is placed off the launch preview, which needs this project's presets read first (codex r1 P1): until then
   // a scoped preset's "before step 1" would land on its scope step and the first work step would run unconfirmed.
-  // (An older daemon's or a failed read's `unsupported` has no presets to shift by, as in New job: codex r2.)
+  // A failed read is not "no presets": a scoped preset's gate could land on its scope step, so the start holds and
+  // offers a retry (codex r3 P1). Fail closed. A daemon that serves no presets route (`unsupported`) has none to shift.
   const presetsState = usePlanCatalog((s) => s.presets[project ?? '']);
-  const presetsRead = presetsState !== undefined && presetsState !== 'loading';
+  const presetsRead = Array.isArray(presetsState) || presetsState === 'unsupported';
+  const presetsFailed = presetsState === 'failed';
   const preview = useLaunchPreview({
     plan: null, workflow: entry !== null && entry.launchKind === 'run' ? entry.launchId : '', projectId: project, repoRef, deliver,
     mode: undefined, confirm: COMPOSER_DEFAULT_GATE_POSTURE.mode, beforeOrd: COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd,
@@ -134,7 +139,8 @@ export function InlineStart({
         : wantsRepo && repoRef === null ? 'Which repository? Pick one below.'
           : wantsProject && project === null ? 'Which project? Pick one below.'
             // What the daemon can do (power mode, the chat link) and this project's presets are read before a start.
-            : entry.launchKind === 'run' && !presetsRead ? 'Checking this workflow…'
+            : entry.launchKind === 'run' && presetsFailed ? 'This workflow’s steps could not be read, so its plan gate cannot be placed. Try again.'
+              : entry.launchKind === 'run' && !presetsRead ? 'Checking this workflow…'
               : entry.launchKind === 'run' && seats.length === 0 ? 'Turn on at least one helper.'
                 : null;
   useEffect(() => { onBlocker(blocker); }, [blocker, onBlocker]);
@@ -170,7 +176,14 @@ export function InlineStart({
         // no plan gate) start because `power: false` was left out. No answer, no start.
         let caps: Record<string, unknown>;
         try {
-          caps = ((await api.getHealth()) as unknown as { capabilities?: Record<string, unknown> }).capabilities ?? {};
+          // Bounded (codex r3): a health read that never answers releases the start; a late answer launches nothing.
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const giveUp = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer in ${Math.round(INLINE_START_LIMITS.healthWaitMs / 1000)} s`)), INLINE_START_LIMITS.healthWaitMs); });
+          try {
+            caps = ((await Promise.race([api.getHealth(), giveUp])) as unknown as { capabilities?: Record<string, unknown> }).capabilities ?? {};
+          } finally {
+            clearTimeout(timer);
+          }
         } catch (e) {
           throw new Error(`the daemon did not say what it can do (${e instanceof Error ? e.message : String(e)}); try again`);
         }
@@ -259,6 +272,9 @@ export function InlineStart({
         </span>
       )}
       {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="composer-start-reduced" />}
+      {entry !== null && entry.launchKind === 'run' && presetsFailed && (
+        <button type="button" data-testid="composer-start-retry" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => invalidatePresets()}>Try again</button>
+      )}
       {error !== null && <span data-testid="composer-start-error" role="alert" className="wk-composer-note wk-composer-note--bad">{error}</span>}
     </div>
   );

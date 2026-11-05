@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 312,
-    "occurrences": 4458,
-    "static": 3728,
+    "occurrences": 4459,
+    "static": 3729,
     "dynamic": 160,
     "computed": 50
   },
@@ -3232,6 +3232,12 @@
     },
     {
       "testId": "composer-start-repos",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-retry",
       "files": [
         "src/components/session/InlineStart.tsx"
       ]

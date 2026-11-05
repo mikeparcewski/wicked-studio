@@ -16,6 +16,7 @@ import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { catalogFromWire } from '../src/board/workflowCatalog.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { Composer } from '../src/components/session/Composer.js';
+import { INLINE_START_LIMITS } from '../src/components/session/InlineStart.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
 import { chipsOf, useComposerChips } from '../src/store/composerChips.js';
@@ -309,6 +310,48 @@ describe('codex r1 on #982: the plan gate and the request are exactly what the r
     await waitFor(() => expect(launches()).toHaveLength(1));
     expect(launches()[0]!['humanConfirm']).toBe('before:2');
     expect(posts.some((p) => p.path === '/plans/preview')).toBe(true);
+  });
+
+  it('codex r3 P1: a failed presets read holds the start (fail closed) until a retry reads them', async () => {
+    let presetsDown = true;
+    const base = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (String(url).includes('/presets') && presetsDown
+      ? Promise.resolve(new Response(JSON.stringify({ error: 'busy' }), { status: 503, headers: { 'content-type': 'application/json' } }))
+      : base(url, init))));
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-retry')).toBeInTheDocument());
+    enter();
+    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+    expect(launches()).toEqual([]);
+    presetsDown = false;
+    presets = [{ name: 'bug', scope: 'global', steps: [{ id: 'build', catalog: 'build' }], created_by: 'builtin', updated_at: 1 }];
+    preview = { steps: [{ id: 'pa-scope', catalog: 'pa-scope' }, { id: 'build', catalog: 'build' }] };
+    fireEvent.click(screen.getByTestId('composer-start-retry'));
+    await waitFor(() => expect(screen.getByTestId('session-composer-send')).not.toBeDisabled());
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]!['humanConfirm']).toBe('before:2');
+  });
+
+  it('codex r3: a health read that never answers gives up, frees the start, and a retry in the same chat starts', async () => {
+    INLINE_START_LIMITS.healthWaitMs = 300;
+    try {
+      holdHealth = true;
+      render(<Harness navigate={() => {}} />);
+      await pick('bug', 'bug');
+      type('x');
+      await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+      enter();
+      await waitFor(() => expect(screen.getByTestId('composer-start-error')).toHaveTextContent('did not say what it can do'));
+      expect(launches()).toEqual([]);
+      holdHealth = false;
+      enter();
+      await waitFor(() => expect(launches()).toHaveLength(1));
+    } finally {
+      INLINE_START_LIMITS.healthWaitMs = 15_000;
+    }
   });
 
   it('a signed-out helper is off on the row and not sent; turned on by hand, it is', async () => {
