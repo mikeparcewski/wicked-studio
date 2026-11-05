@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
-import { jiraBasic, PmSourceSheet, reachFailureOf, reachLines, reachOf, toolGroupsOf, toolReview, toolReviewsOf } from '../src/components/sources/PmSourceSheet.js';
+import { codeWords, jiraBasic, PmSourceSheet, reachFailureOf, reachLines, reachOf, savedWords, toolGroupsOf, toolReview, toolReviewsOf } from '../src/components/sources/PmSourceSheet.js';
 import { ApiError } from '../src/api/errors.js';
 import { SourcesPage } from '../src/components/sources/SourcesPage.js';
 import { useCapabilities } from '../src/store/capabilities.js';
@@ -266,7 +266,7 @@ describe('the real Atlassian v2 server (pm-real-jira)', () => {
     const box = await screen.findByTestId('pm-test-reach-error');
     expect(screen.getByTestId('pm-test-fail')).toHaveTextContent('Test failed');
     expect(screen.queryByText('Not connected')).toBeNull();
-    expect(within(box).getByTestId('pm-test-saved')).toHaveTextContent('The source is saved, with its token.');
+    expect(within(box).getByTestId('pm-test-saved')).toHaveTextContent('The source is saved. This test, which reads what the token reaches, failed');
     expect(within(box).getByTestId('pm-test-crew-said')).toHaveTextContent(`crew said: “${said}”`);
     expect(within(box).getByTestId('pm-test-crew-code')).toHaveTextContent('source_unavailable: vendor_error');
     expect(box).not.toHaveTextContent('couldn’t be reached just now');
@@ -275,5 +275,35 @@ describe('the real Atlassian v2 server (pm-real-jira)', () => {
     expect(reachFailureOf(new Error('x'))).toBeNull();
     expect(reachFailureOf(new ApiError(503, 'w', undefined))).toBeNull();
     expect(reachFailureOf(new ApiError(503, 'w', { error: 'said', code: 'Bad Code <b>', cause: 'unknown_shape' }))).toEqual({ said: 'said', code: null, cause: 'unknown_shape' });
+    // A cause without a code is still shown; the same word once.
+    expect(codeWords({ code: null, cause: 'unknown_shape' })).toBe('unknown_shape');
+    expect(codeWords({ code: 'source_unavailable', cause: 'source_unavailable' })).toBe('source_unavailable');
+    // A long sentence says it was cut.
+    expect(reachFailureOf(new ApiError(503, 'w', { error: 'x'.repeat(1_300) }))!.said).toMatch(/… \(cut at 1200 characters\)$/);
+  });
+  it('says no more about the saved source than crew’s answer supports', () => {
+    expect(savedWords({ code: 'source_not_found', cause: null })).toBe('crew no longer has this source: it was removed since this page was read.');
+    expect(savedWords({ code: 'source_unavailable', cause: 'secret_missing' })).toContain('can’t read its token');
+    expect(savedWords(null)).not.toContain('token.');
+  });
+  it('crew’s review state outranks a name: a changed or unreadable review is "Check again", not "not part of trackers"', () => {
+    const reviews = toolReviewsOf([
+      { name: 'getGraphContext', class: 'read', binding: { policy: 'p', inForce: false } },
+      { name: 'getConfluenceContent', class: 'admin', binding: null },
+    ], true)!;
+    expect(toolGroupsOf('jira', reviews).map((g) => [g.key, g.tools.map((t) => t.name)])).toEqual([['again', ['getGraphContext', 'getConfluenceContent']]]);
+  });
+  it('a GitHub code write is never offered a grant; a kept grant on a write outside the tracker stays visible', async () => {
+    const gh = toolReviewsOf([{ name: 'push_files', class: 'write', binding: null }, { name: 'add_issue_comment', class: 'write', binding: null }], false)!;
+    expect(toolGroupsOf('github', gh).map((g) => [g.key, g.tools.map((t) => t.name)])).toEqual([['writes', ['add_issue_comment']], ['code', ['push_files']]]);
+    const server = jiraServer({ tools: [
+      { name: 'createConfluenceContent', class: 'write', derivedClass: 'write', enabled: true, status: 'registered', schemaHash: 'h', observedSchemaHash: 'h', binding: null, subject: 'c', description: null, annotations: null, inputSchema: null, classOverride: null },
+      { name: 'getJiraIssue', class: 'read', derivedClass: 'read', enabled: true, status: 'registered', schemaHash: 'h', observedSchemaHash: 'h', binding: { policy: 'jira/getJiraIssue@1', schemaHash: 'h', inForce: true }, subject: 'g', description: null, annotations: null, inputSchema: null, classOverride: null },
+    ] });
+    render(<PmSourceSheet target={{ mode: 'saved', server: server as never }} existing={['jira']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    const chip = screen.getAllByTestId('pm-tool-chip').find((c) => c.dataset.tool === 'createConfluenceContent')!;
+    expect(within(chip).getByTestId('pm-tool-chip-granted')).toHaveTextContent('granted');
+    expect(screen.queryAllByTestId('pm-tool-grant')).toHaveLength(0);
+    expect(screen.getByRole('heading', { name: /Not part of trackers \(Confluence\)/ })).toBeInTheDocument();
   });
 });

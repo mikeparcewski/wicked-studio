@@ -102,8 +102,10 @@
 .wk-pm-tool { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2) 0; border-top: 1px solid var(--border-subtle); }
 .wk-pm-groups { display: flex; flex-direction: column; gap: var(--space-3); }
 .wk-pm-group { display: flex; flex-direction: column; gap: 4px; }
-.wk-pm-tool-names { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0; }
+.wk-pm-group-head { margin: 0; font-weight: inherit; }
+.wk-pm-tool-names { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0; padding: 0; }
 .wk-pm-tool-name { color: var(--ink-body); font-family: var(--font-mono); font-size: var(--text-code); padding: 1px 6px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); overflow-wrap: anywhere; }
+.wk-pm-granted { color: var(--status-warn); font-family: var(--font-sans, inherit); }
 .wk-pm-tool-head { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .wk-pm-tool-head code { color: var(--ink-high); font-family: var(--font-mono); font-size: var(--text-code); overflow-wrap: anywhere; }
 .wk-pm-list-title { margin: 0; font-size: var(--text-body); }

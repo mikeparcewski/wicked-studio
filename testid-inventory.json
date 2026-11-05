@@ -12,8 +12,8 @@
   "studioVersion": "0.14.1",
   "counts": {
     "files": 320,
-    "occurrences": 4599,
-    "static": 3844,
+    "occurrences": 4600,
+    "static": 3845,
     "dynamic": 170,
     "computed": 53
   },
@@ -12719,6 +12719,12 @@
     },
     {
       "testId": "pm-tool-chip",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-tool-chip-granted",
       "files": [
         "src/components/sources/PmSourceSheet.tsx"
       ]

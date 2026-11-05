@@ -66,6 +66,8 @@ const BOUND_NOTES: Record<string, string> = {
 };
 const UNBOUND_NOTES: Record<string, string> = {
   getVisibleJiraProjects: 'No project argument: it lists the whole site.',
+  // An older crew holds no binding for it: then it is not the agents'.
+  getAccessibleAtlassianResources: 'It lists every site the token reaches.',
   search_repositories: 'No repository argument: it lists everything the token sees.',
 };
 
@@ -125,7 +127,7 @@ export function toolGroupsOf(system: 'jira' | 'github', reviews: readonly ToolRe
   const groups: ToolGroup[] = [
     { key: 'agents', title: 'Agents can use', reason: `Limited to the ${where} you link: crew names the ${system === 'jira' ? 'site and project' : 'repository'}, and drops anything else from an answer.`, rows: true, tools: [] },
     { key: 'writes', title: 'Writes', reason: 'You confirm each one at delivery: an agent never sends one itself.', rows: true, tools: [] },
-    { key: 'again', title: 'Check again', reason: 'Its review changed or could not be read, so no agent gets it for now.', rows: true, tools: [] },
+    { key: 'again', title: 'Check again', reason: 'Its review changed since the save, or could not be read, so no agent gets it for now: save this source again.', rows: false, tools: [] },
     { key: 'unscoped', title: 'Not for agents', reason: `Can’t be limited to your linked ${where}.`, rows: false, tools: [] },
     { key: 'confluence', title: 'Not for agents', reason: 'Not part of trackers (Confluence).', rows: false, tools: [] },
     { key: 'graph', title: 'Not for agents', reason: 'Not part of trackers (Teamwork Graph, people and Loom).', rows: false, tools: [] },
@@ -133,25 +135,41 @@ export function toolGroupsOf(system: 'jira' | 'github', reviews: readonly ToolRe
     { key: 'code', title: 'Not for agents', reason: 'Not part of trackers (code, pull requests and the rest of GitHub).', rows: false, tools: [] },
   ];
   const put = (k: ToolGroup['key'], t: ToolReview): void => { groups.find((g) => g.key === k)!.tools.push(t); };
+  // crew's review state first (bound, changed, unreadable); then a tool of another product or a generic one, whatever its
+  // kind; then the tracker's writes; the rest can't be limited. A name only says WHY a tool is not the agents'.
   for (const t of reviews) {
     if (t.verdict === 'reviewed') put('agents', t);
+    else if (t.verdict === 'review_again' || t.verdict === 'unknown') put('again', t);
     else if (system === 'jira' && /confluence/i.test(t.name)) put('confluence', t);
     else if (system === 'jira' && /graph|loom|people|collaborators|workactivity|workportfolio/i.test(t.name)) put('graph', t);
     else if (system === 'jira' && /compass|bitbucket/i.test(t.name)) put('product', t);
     else if (system === 'jira' && GENERIC.has(t.name)) put('unscoped', t);
-    else if (t.verdict === 'asks') put('writes', t);
-    else if (t.verdict === 'review_again' || t.verdict === 'unknown') put('again', t);
     else if (system === 'github' && !/issue/i.test(t.name) && t.name !== 'get_me' && t.name !== 'search_repositories') put('code', t);
+    else if (t.verdict === 'asks') put('writes', t);
     else put('unscoped', t);
   }
   return groups.filter((g) => g.tools.length > 0);
+}
+
+/** What the sheet may say about the saved source when its test failed: no more than crew's answer supports. */
+export function savedWords(crew: { code: string | null; cause: string | null } | null): string {
+  if (crew?.code === 'source_not_found') return 'crew no longer has this source: it was removed since this page was read.';
+  if (crew?.cause === 'secret_missing') return 'The source is saved, but crew can’t read its token: save it again with the token.';
+  return 'The source is saved. This test, which reads what the token reaches, failed; nothing else changed.';
+}
+
+/** crew's code and cause, each shown only when it is a code word, once when they are the same. */
+export function codeWords(crew: { code: string | null; cause: string | null }): string | null {
+  const parts = [crew.code, crew.cause].filter((x, i, a): x is string => x !== null && a.indexOf(x) === i);
+  return parts.length === 0 ? null : parts.join(': ');
 }
 
 /** crew's own words for a refused read of what a saved source reaches: its sentence, its code and the cause it names. */
 export function reachFailureOf(e: unknown): { said: string; code: string | null; cause: string | null } | null {
   if (!(e instanceof ApiError)) return null;
   const b = e.body as { error?: unknown; code?: unknown; cause?: unknown } | undefined;
-  const said = typeof b?.error === 'string' && b.error.trim() !== '' ? b.error.trim().slice(0, 1_200) : null;
+  const whole = typeof b?.error === 'string' && b.error.trim() !== '' ? b.error.trim() : null;
+  const said = whole === null ? null : whole.length <= 1_200 ? whole : `${whole.slice(0, 1_200)}… (cut at 1200 characters)`;
   if (said === null) return null;
   const tok = (v: unknown): string | null => (typeof v === 'string' && /^[a-z][a-z0-9_]{1,63}$/.test(v) ? v : null);
   return { said, code: tok(b?.code), cause: tok(b?.cause) };
@@ -438,10 +456,10 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                 {!isNew && reach?.ok === true && <ul className="wk-pm-lines" data-testid="pm-test-reach-lines">{reachLines(system, reach.r).map((l) => <li key={l}>{l}</li>)}</ul>}
                 {!isNew && reach?.ok === false && (
                   <div data-testid="pm-test-reach-error">
-                    <p className="wk-src-note" data-testid="pm-test-saved">The source is saved, with its token. Only this test, which reads what the token reaches, failed.</p>
+                    <p className="wk-src-note" data-testid="pm-test-saved">{savedWords(reach.crew ?? null)}</p>
                     {reach.crew != null ? (
                       <p className="wk-src-note wk-src-tone-fail" data-testid="pm-test-crew-said">
-                        crew said: “{reach.crew.said}”{reach.crew.code !== null && <> <code data-testid="pm-test-crew-code">{reach.crew.cause !== null && reach.crew.cause !== reach.crew.code ? `${reach.crew.code}: ${reach.crew.cause}` : reach.crew.code}</code></>}
+                        crew said: “{reach.crew.said}”{codeWords(reach.crew) !== null && <> <code data-testid="pm-test-crew-code">{codeWords(reach.crew)}</code></>}
                       </p>
                     ) : <p className="wk-src-note wk-src-tone-fail">{reach.words}</p>}
                   </div>
@@ -466,8 +484,8 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
               {tools === null ? <p className="wk-src-note wk-src-tone-fail" data-testid="pm-tools-unreadable">crew’s list of this source’s tools could not be read, so no review is shown.</p> : tools.length === 0 ? <p className="wk-src-note" data-testid="pm-tools-empty">{isNew ? 'Test the connection, and each tool crew finds is listed here with its review.' : 'crew listed no tools for this source.'}</p> : (
                 <div className="wk-pm-groups" data-testid="pm-tools">
                   {toolGroupsOf(system, tools).map((grp) => (
-                    <section key={grp.key} className="wk-pm-group" data-testid="pm-tool-group" data-group={grp.key}>
-                      <p className="wk-src-note" data-testid="pm-tool-group-head"><span className="wk-src-strong">{grp.title}</span>{grp.rows ? '' : ` (${grp.tools.length})`}: {grp.reason}</p>
+                    <section key={grp.key} className="wk-pm-group" data-testid="pm-tool-group" data-group={grp.key} aria-labelledby={`${titleId}-${grp.key}`}>
+                      <h3 className="wk-src-note wk-pm-group-head" id={`${titleId}-${grp.key}`} data-testid="pm-tool-group-head"><span className="wk-src-strong">{grp.title}</span>{grp.rows ? '' : ` (${grp.tools.length})`}: {grp.reason}</h3>
                       {grp.rows ? (
                         <ul className="wk-pm-tools">
                           {grp.tools.map((t) => (
@@ -492,9 +510,15 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                           ))}
                         </ul>
                       ) : (
-                        <p className="wk-pm-tool-names" data-testid="pm-tool-names">
-                          {grp.tools.map((t) => <code key={t.name} className="wk-pm-tool-name" data-testid="pm-tool-chip" data-tool={t.name} data-verdict={t.verdict}>{t.name}</code>)}
-                        </p>
+                        <ul className="wk-pm-tool-names" data-testid="pm-tool-names">
+                          {grp.tools.map((t) => (
+                            <li key={t.name} className="wk-pm-tool-name" data-testid="pm-tool-chip" data-tool={t.name} data-verdict={t.verdict}>
+                              <code>{t.name}</code>
+                              {/* A write's grant is shown wherever the write is listed: a grant kept from a save stays visible. */}
+                              {t.kind === 'writes' && t.granted === true && <span className="wk-pm-granted" data-testid="pm-tool-chip-granted"> · granted</span>}
+                            </li>
+                          ))}
+                        </ul>
                       )}
                     </section>
                   ))}
