@@ -13,6 +13,14 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **The plan gate takes a note (studio#992; crew#1139, wire core#1270 + crew#1350).** On a daemon whose
+  `GET /health.capabilities.planGateNote` is true, a reply typed in the reply box under an open plan card is the
+  approval's note: the box reads "Type a note to approve the plan with…", the switch says "Replies to this decision
+  (Approve plan with your note)", and Send approves the plan (with your edited steps, if any) carrying the note as
+  `amend`, through the same 10 s undo window. crew lands it on the plan's first creator step. The card keeps its quick
+  replies (Approve plan / Change something / Not now / Don't start); picking Don't start, which has its own reason box,
+  stands the note down. Without the capability nothing changes: the box asks a separate question and Approve sends no
+  note.
 - **Understand's Knowledge map, the data-shape review, and Profile on a source sheet (DES-KNOWLEDGE-DATA-001 §10, §19
   B4; crew api-types 0.186.0, mirrored until it is published).** Understand gains a **Knowledge map** beside the
   repositories' code and requirements graphs (`/understand?view=knowledge`): the data shapes waiting for review on top

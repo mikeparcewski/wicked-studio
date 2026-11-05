@@ -64,6 +64,10 @@ interface CapabilitiesStore {
    *  `POST /apps/uploads`, registered together (crew `registerSourceRoutes`). The sidebar's Data sources entry shows only
    *  then; `/sources` still answers by address and says this crew doesn't support data sources yet. */
   dataSources: boolean;
+  /** `planGateNote` (crew#1139, api-types 0.188.0) — a plan approval carries the person's note (`amend` beside
+   *  `approve: true` at a plan gate), landing on the plan's first creator step. Absent or false (an older engine
+   *  refuses the note): the plan card offers no note and the approve never carries `amend` (studio#992). */
+  planGateNote: boolean;
   load: () => Promise<void>;
 }
 
@@ -88,6 +92,7 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   chatArtifactsStub: false,
   chatArtifactsStubOps: null,
   dataSources: false,
+  planGateNote: false,
   load: () => {
     if (get().loaded) return Promise.resolve();
     // The HTTP client is reached lazily: the stores that read a capability (gates, the ask thread)
@@ -95,9 +100,9 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true, chatArtifactsStubOps: stubOpsOf(caps['chatArtifacts']), dataSources: (caps['apps'] as { uploads?: unknown } | undefined)?.uploads === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true, chatArtifactsStubOps: stubOpsOf(caps['chatArtifacts']), dataSources: (caps['apps'] as { uploads?: unknown } | undefined)?.uploads === true, planGateNote: caps['planGateNote'] === true });
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false, chatArtifactsStubOps: null, dataSources: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false, chatArtifactsStubOps: null, dataSources: false, planGateNote: false }); })
       .finally(() => { inflight = null; });
     return inflight;
   },

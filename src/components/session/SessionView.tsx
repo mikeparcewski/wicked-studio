@@ -1385,7 +1385,7 @@ function DockedComposer({ reply, docked, composerProps, who }: {
   return (
     <Composer
       {...composerProps}
-      placeholder={`Or tell ${who ?? 'the job'} what to do…`}
+      placeholder={reply.placeholder ?? `Or tell ${who ?? 'the job'} what to do…`}
       footer={footer}
       onSend={(text, opts) => { if (route.to === 'reply') reply.send(text); else composerProps.onSend(text, opts); }}
       className="wk-session-composer"

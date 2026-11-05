@@ -31,7 +31,12 @@ export interface DockItem {
 }
 
 /** The docked decision's note choice, for the reply box: its label ("Send back") and the send (its undo window). */
-export interface DockReply { label: string; send: (text: string) => void }
+export interface DockReply {
+  label: string;
+  send: (text: string) => void;
+  /** The reply box's placeholder while this choice is offered (studio#992: the plan gate's note); else the dock's own. */
+  placeholder?: string;
+}
 
 interface DockCtx {
   /** The docked renderer offers its note choice to the reply box (null withdraws it). */
@@ -256,12 +261,13 @@ export function useOfferReply(key: string, reply: DockReply | null): void {
   const docked = ctx !== null && ctx.activeKey === key && ctx.slot !== null;
   const setReply = ctx?.setReply;
   const label = reply?.label ?? null;
+  const placeholder = reply?.placeholder;
   const sendRef = useRef(reply?.send);
   sendRef.current = reply?.send;
   useEffect(() => {
     if (setReply === undefined) return;
     if (!docked || label === null) { setReply(key, null); return; }
-    setReply(key, { label, send: (t) => sendRef.current?.(t) });
+    setReply(key, { label, send: (t) => sendRef.current?.(t), ...(placeholder !== undefined ? { placeholder } : {}) });
     return () => setReply(key, null);
-  }, [setReply, docked, key, label]);
+  }, [setReply, docked, key, label, placeholder]);
 }

@@ -14,6 +14,8 @@ import { deliverAcceptance, ownEvidenceOf } from '../../board/checkState.js';
 import { overriddenFloorsOf } from '../../board/failingChecks.js';
 import type { RunAcceptanceSummary } from '../../api/types.js';
 import { useGateStore } from '../../store/gates.js';
+import { useCapabilities } from '../../store/capabilities.js';
+import { useOfferReply } from './DecisionDock.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { Tech } from '../Tech.js';
 import { draftLine, heldPoolsOf } from '../../board/planDraft.js';
@@ -60,6 +62,10 @@ const lastKinds = new Map<string, ProposalKind>();
 
 /** A plan gate's reject arm, as its card says it. */
 export const PLAN_STOP = 'Don’t start';
+/** studio#992: the plan gate's note choice, as the reply box names it ("Replies to this decision (…)"). */
+export const PLAN_NOTE_REPLY = 'Approve plan with your note';
+/** studio#992: the reply box's words while the plan gate takes a note. */
+export const PLAN_NOTE_PLACEHOLDER = 'Type a note to approve the plan with…';
 
 export function ProposalCard({ view, chain, acceptance = null, ask = null, onBringBack, handedOver = false, variant = 'card', onEdit, editing = false }: {
   view: SessionView;
@@ -157,6 +163,16 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // checks the new result), through the gate's undo window.
   const [picked, setPicked] = useState<string | null>(null);
   const rerun = useRerunFromHere(view);
+  // studio#992 (crew#1139): at an open plan gate on an engine that lands plan-gate notes, a reply typed in the docked
+  // reply box is the approval's note — sent as `amend` beside `approve: true` (and the edited plan, if any), through
+  // the same answer and undo window as Approve plan. The card keeps its quick replies; without the capability nothing
+  // is offered and the approve is unchanged.
+  const planGateNote = useCapabilities((s) => s.planGateNote);
+  const answerRef = useRef<(note?: string) => void>(() => undefined);
+  // A card way with its own reason box (Don't start) stands it down: one note input per choice (as GateRow does).
+  const noteChoice = planGateNote && card !== null && card.kind === 'plan' && card.state === 'ask' && ask === null && gate !== undefined
+    && (picked === null || picked === 'go');
+  useOfferReply(runId, noteChoice ? { label: PLAN_NOTE_REPLY, placeholder: PLAN_NOTE_PLACEHOLDER, send: (t) => answerRef.current(t) } : null);
   if (card === null) return null;
   const chat = variant === 'chat';
   const instance = gateInstance(gate);
@@ -169,7 +185,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // editor list read one vocabulary.
   const planWords = draft !== null && planGate.view !== null ? planStepWords(planGate.view.planSteps) : undefined;
 
-  const answer = (): void => {
+  const answer = (note?: string): void => {
     if (deliverRefused) return; // crew refuses it: never send a delivery that cannot land
     if (sending.current || gate === undefined) return; // double clicks are ignored
     sending.current = true;
@@ -186,12 +202,16 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     // studio#617: the held plan's pools ride the amended plan (a draft that only adds or moves a step
     // must not reset a pool the plan lowered).
     const held = planGate.view !== null ? heldPoolsOf(planGate.view.editSeed, planGate.view.editPools) : undefined;
-    const answer: GateAnswer = draft !== null ? { approve: true, plan: gateDraftPlan(draft, held) } : { approve: true };
+    const base: GateAnswer = draft !== null ? { approve: true, plan: gateDraftPlan(draft, held) } : { approve: true };
+    // studio#992: the note rides only a plan approval on an engine that lands it (a blank one is no note).
+    const amend = noteChoice ? (note ?? '').trim() : '';
+    const answer: GateAnswer = amend !== '' ? { ...base, amend } : base;
     commitGateDecision(runId, answer, { ...deliver, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.act ?? 'Approve' } })
       .then((outcome) => { if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey); })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });
   };
+  answerRef.current = (note) => answer(note);
   const go = (): void => {
     if (deliverRefused) return;
     if (card.kind === 'deliver' && card.state !== 'confirm') { setUi((u) => ({ ...u, confirming: instance })); return; }
@@ -350,7 +370,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             <div data-testid="session-proposal-confirm" role="alertdialog" aria-label={`Are you sure? ${card.confirm.q}`} className="wk-prop-confirm">
               <p className="wk-prop-why"><b>Are you sure? {card.confirm.q}</b> {card.confirm.w}</p>
               <div className="wk-prop-btns">
-                <button ref={yesRef} type="button" data-testid="session-proposal-confirm-yes" onClick={answer} disabled={deliverRefused} className="wk-prop-btn wk-prop-btn--danger">{card.confirm.a}</button>
+                <button ref={yesRef} type="button" data-testid="session-proposal-confirm-yes" onClick={() => answer()} disabled={deliverRefused} className="wk-prop-btn wk-prop-btn--danger">{card.confirm.a}</button>
                 <button type="button" data-testid="session-proposal-confirm-cancel" onClick={() => setUi((u) => ({ ...u, confirming: null }))} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
               </div>
             </div>
