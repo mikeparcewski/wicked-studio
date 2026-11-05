@@ -11,7 +11,9 @@ import { knowledgeMarks } from '../board/repoKnowledge.js';
 import { mapCell, projectsByJobs } from '../board/repoListRow.js';
 import { useProjectsStore } from '../store/projects.js';
 import { languageWords, repoReadiness } from '../board/repoRows.js';
-import { CAPTURE_TONE, GRAPH_TONE, captureStateWord, graphState as graphStateOf, graphStateWord } from '../board/repoStateWords.js';
+import { captureStateWord, captureTone, graphState as graphStateOf, graphStateWord, graphTone } from '../board/repoStateWords.js';
+import { useHeldMarked } from '../hooks/useHeldMarked.js';
+import { isHeldRun } from '../board/heldRuns.js';
 import { repoCapture, repoGraphGap, repoOnboard } from '../board/repoStats.js';
 import { REPO_TAB_LABEL, repoDetailPath, repoTabOf, type RepoTab } from '../board/repoTabs.js';
 import { ambientProjectId } from '../hooks/ambientProject.js';
@@ -94,7 +96,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const ambientProject = ambientProjectId('', search);
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
-  const [runs, setRuns] = useState<SessionView[]>([]);
+  const [rawRuns, setRuns] = useState<SessionView[]>([]);
+  // (crew#1042) The runs, marked from the shared held set (subscribed): a run a Needs-you row holds is not
+  // "working now" (Overview, Jobs), and each row's word (statusWord) says it waits on you.
+  const runs = useHeldMarked(rawRuns);
   const [runsFailed, setRunsFailed] = useState(false);
   const [graph, setGraph] = useState<CodeGraphData | null>(null);
   // studio#461: a failed graph read is its own state, never "not indexed".
@@ -218,7 +223,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   }
 
   const now = Date.now();
-  const active = runs.filter(v => !TERMINAL_STATUSES.has(v.session.status));
+  const active = runs.filter(v => !TERMINAL_STATUSES.has(v.session.status) && !isHeldRun(v.session));
   const graphGap = repoGraphGap(repo);
   const onboard = repoOnboard(runs, repo.id);
   const capture = repoCapture(runs, repo.id);
@@ -495,7 +500,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                       <p data-testid="action-preview">Onboarding rebuilds this repository’s code map as a tracked run you can watch; it usually takes a few minutes.</p>
                       {runsFailed
                         ? <p className="wk-rp-state" data-testid="repo-graph-state" data-state="unknown" data-tone="quiet">Unknown: this repository’s jobs could not be read.</p>
-                        : <p className="wk-rp-state" data-testid="repo-graph-state" data-state={graphStateOf(state)} data-tone={GRAPH_TONE[graphStateOf(state)] ?? 'quiet'}>{graphStateWord(state, attachedAt, now)}</p>}
+                        : <p className="wk-rp-state" data-testid="repo-graph-state" data-state={graphStateOf(state)} data-tone={graphTone(state)}>{graphStateWord(state, attachedAt, now)}</p>}
                     </div>
                     {onboard.run !== null && (
                       <div className="wk-rp-upkeep">
@@ -518,7 +523,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                       <p>A tracked run that saves what this repository’s history teaches.</p>
                       {runsFailed
                         ? <p className="wk-rp-state" data-testid="repo-capture-state" data-state="unknown" data-tone="quiet">Unknown: this repository’s jobs could not be read.</p>
-                        : <p className="wk-rp-state" data-testid="repo-capture-state" data-state={capture.state} data-tone={CAPTURE_TONE[capture.state] ?? 'quiet'}>{captureStateWord(state, attachedAt, now)}</p>}
+                        : <p className="wk-rp-state" data-testid="repo-capture-state" data-state={capture.state} data-tone={captureTone(state)}>{captureStateWord(state, attachedAt, now)}</p>}
                     </div>
                   </section>
                 </div>

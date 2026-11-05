@@ -11,11 +11,16 @@ import type { SessionView } from '../api/types.js';
  * The wire `status` is untouched: gate logic, actions and anything reading the raw status see the
  * daemon's own word. A run at a gate (`awaiting_human`) or ended is never marked — it already says
  * what it is.
+ *
+ * (crew#1042) The same set is in a shared store (`store/heldRuns.ts`), so a surface that fetches its own
+ * runs — the run page, the repositories list, a repository's page — marks them the same way
+ * (`hooks/useHeldMarked.ts`, subscribed). The mark stays the ONE input here: no hidden global read, so a
+ * verdict is a pure function of the runs a surface renders and never outlives the hold behind a memo.
  */
 const HELD_KEY = 'studio_held';
 const NOT_LIVE: ReadonlySet<string> = new Set(['awaiting_human', 'completed', 'failed', 'cancelled']);
 
-/** True when App marked this run as held by a Needs-you row. */
+/** True when this live run is marked held by a Needs-you row (App's mark, or a surface's useHeldMarked), or power mode paused it. */
 export function isHeldRun(session: SessionView['session']): boolean {
   return (session as unknown as Record<string, unknown>)[HELD_KEY] === true || isPowerPaused(session);
 }

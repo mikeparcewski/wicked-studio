@@ -27,6 +27,8 @@ import type { Navigate } from '../hooks/useRoute.js';
 import { PageAskButton, usePageChatFor } from './chat/PageChat.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { linksOf, useRepoLinksFor } from '../store/repoLinks.js';
+import { useHeldMarked } from '../hooks/useHeldMarked.js';
+import { isHeldRun } from '../board/heldRuns.js';
 import { useTrackerLinksSupported } from '../api/trackers.js';
 
 type SourceMode = 'local' | 'remote';
@@ -72,7 +74,10 @@ function errorText(e: unknown): string {
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
   usePageChatFor('repos', 'Knows Repositories: each registered repository, its code graph and its work.', 'repos-page');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
-  const [runs, setRuns] = useState<SessionView[]>([]);
+  const [rawRuns, setRuns] = useState<SessionView[]>([]);
+  // (crew#1042) The runs, marked from the shared held set (subscribed): the fleet folds a run a Needs-you row
+  // holds as waiting, not working, and each row's words and next step follow it.
+  const runs = useHeldMarked(rawRuns);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [search, setSearch] = useState('');
@@ -334,10 +339,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     [fleet],
   ));
   const waitingN = fleet.reduce((a, m) => a + m.waiting.length, 0);
+  const heldIndexing = fleet.filter((m) => m.onboard.state === 'onboarding' && m.onboard.run !== null && isHeldRun(m.onboard.run.session)).length;
   // An app's own repository is not "not indexed yet" work for you: the sentence counts the others and names the apps'.
   const appRepos = fleet.filter((m) => appOf.has(m.repo.id));
   const ownReadiness = fleet.filter((m) => !appOf.has(m.repo.id)).map((m) => readiness.get(m.repo.id) ?? 'never');
-  const baseSentence = reposSentence(loading ? 'loading' : error !== null ? 'failed' : 'known', ownReadiness, waitingN);
+  const baseSentence = reposSentence(loading ? 'loading' : error !== null ? 'failed' : 'known', ownReadiness, waitingN, heldIndexing);
   const sentence = !loading && error === null && appRepos.length > 0 ? withApps(fleet.length, appRepos.length, baseSentence) : baseSentence;
   // The projects whose jobs used each repository: names from the shared projects mirror and the membership join the
   // board model keeps (store reads, never a new request).

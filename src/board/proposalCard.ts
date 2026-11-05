@@ -5,6 +5,7 @@ import { deliverRefusalOf, deliverTargetOf, isDeliverGate } from '../components/
 import type { OpenGate } from '../store/gates.js';
 import type { GateActionState } from './gateActions.js';
 import { gatePlanLabels, stepAtOrd, type ChainModel } from './chainModel.js';
+import { isHeldRun } from './heldRuns.js';
 import { plainDeliverSentence, repoNameOf } from './deskWords.js';
 import type { AskProposal } from './askThread.js';
 
@@ -145,6 +146,9 @@ export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenG
   if (pause !== null && pause !== undefined && typeof pause === 'object') {
     return `Paused${typeof pause.checkpoint === 'number' ? ` at checkpoint ${pause.checkpoint}` : ''} — waiting on you${count}`;
   }
+  // (crew#1042) A live run a Needs-you row holds (an orphan, a stall, an open question) is not being worked on:
+  // it waits on you, and the Needs-you row says why.
+  if (isHeldRun(view.session)) return `Waiting on you — see Needs you${count}`;
   const running = chain.steps.find((x) => x.state === 'running');
   // (J4 0.16.6) A step silent past crew's quiet mark is not "running" in words: it says how long it has said nothing.
   if (silentMinutes !== null) return `${running !== undefined ? stepWords(running.label) : 'The step'} has had no output for ${silentMinutes} min${count}`;

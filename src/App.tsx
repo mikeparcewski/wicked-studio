@@ -64,6 +64,7 @@ import { ObjectSheet } from './components/sheets/ObjectSheet.js';
 import { AltPeek } from './components/sheets/AltPeek.js';
 import { needRunId } from './board/deskModel.js';
 import { markHeld } from './board/heldRuns.js';
+import { useHeldRuns } from './store/heldRuns.js';
 import { objectCommands, type ObjectCommands } from './components/sheets/objectCommands.js';
 import { cmdkObject, trackPointedObject } from './store/sheets.js';
 import { useNeedsClock, useNeedsRows, useSettledNeeds } from './hooks/useNeedsRows.js';
@@ -547,6 +548,8 @@ export function App(): React.ReactElement {
   // studio#805: the Desk's surfaces read a held live run as waiting on you (statusWord reads the mark).
   // Needs-you rows above are folded from the raw runs; gate logic and actions keep the raw runs too.
   const shownRuns = useMemo(() => markHeld(runs, heldByNeeds), [runs, heldByNeeds]);
+  // crew#1042: the same set for the surfaces that fetch their own runs (the run page, the repositories).
+  useEffect(() => { useHeldRuns.getState().setHeld(heldByNeeds); }, [heldByNeeds]);
   // Ambient (operator 2026-11-01): the mood the work sets, from the runs and the settled needs-you count already held.
   const ambientNeeds = useSettledNeeds(needRows, runsLoaded, runsError !== null).count ?? 0;
   useAmbientMood(shownRuns, ambientNeeds);

@@ -1,6 +1,7 @@
 import type { OnboardState, RepoFleetModel } from './repoStats.js';
 import { indexedAt } from './repoRows.js';
 import { ago } from '../components/AgeStamp.js';
+import { isHeldRun } from './heldRuns.js';
 
 /**
  * A repository's code-map and learnings states in one plain sentence each (moved from the Repositories list's row
@@ -27,7 +28,8 @@ export function graphStateWord(m: Pick<RepoFleetModel, 'onboard' | 'graphGap'>, 
       : 'No code map yet';
   }
   if (state === 'ready') return `Code map ready${when === '' ? '' : ` · onboarded${when}`}`;
-  if (state === 'onboarding') return 'Onboarding now — mapping the code…';
+  // (crew#1042) A held onboarding (an orphan, a stall) is not mapping anything: it waits on you.
+  if (state === 'onboarding') return run !== null && isHeldRun(run.session) ? 'Onboarding waits on you — see Needs you' : 'Onboarding now — mapping the code…';
   if (state === 'failed') return `Onboarding failed${when}`;
   return 'Not onboarded yet';
 }
@@ -49,9 +51,22 @@ export function captureStateWord(m: Pick<RepoFleetModel, 'capture'>, attachedAt:
   const clock = run === null ? undefined : attachedAt[run.session.id];
   const when = clock === undefined ? '' : ` ${ago(clock, now)} ago`;
   if (state === 'captured') return `Learnings captured${when}`;
-  if (state === 'capturing') return 'Capturing learnings now…';
+  if (state === 'capturing') return run !== null && isHeldRun(run.session) ? 'Capturing learnings waits on you — see Needs you' : 'Capturing learnings now…';
   if (state === 'failed') return `Capturing learnings failed${when}`;
   return 'No learnings captured yet';
+}
+
+/** (crew#1042) The graph line's tone: a held onboarding waits on you (the gate tint), whatever the run says. */
+export function graphTone(m: Pick<RepoFleetModel, 'onboard' | 'graphGap'>): string {
+  const state = graphState(m);
+  if (state === 'onboarding' && m.onboard.run !== null && isHeldRun(m.onboard.run.session)) return 'gate';
+  return GRAPH_TONE[state] ?? 'quiet';
+}
+
+/** (crew#1042) The learnings line's tone: a held capture waits on you. */
+export function captureTone(m: Pick<RepoFleetModel, 'capture'>): string {
+  if (m.capture.state === 'capturing' && m.capture.run !== null && isHeldRun(m.capture.run.session)) return 'gate';
+  return CAPTURE_TONE[m.capture.state] ?? 'quiet';
 }
 
 export const CAPTURE_TONE: Record<string, 'quiet' | 'run' | 'fail'> = {

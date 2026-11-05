@@ -101,9 +101,10 @@ function whyOf(s: ChainStep): string {
 }
 
 /** What the run is doing, for the "now" marker: working (executing, not orphaned), stopped (failed or
- *  cancelled), or neither. A step's own `running`/`failed` state alone is not enough — an orphaned run's
- *  cursor and a retained team claim still read `running` (codex r2). */
-export type RunPhase = 'working' | 'stopped' | 'other';
+ *  cancelled), held (crew#1042: live, but a Needs-you row holds it — an orphan, a stall, an open question),
+ *  or neither. A step's own `running`/`failed` state alone is not enough — an orphaned run's cursor and a
+ *  retained team claim still read `running` (codex r2). */
+export type RunPhase = 'working' | 'stopped' | 'held' | 'other';
 
 /** Run clarity: which step is "now", and its word — the step waiting on you (the open gate's unit), else
  *  the one working while the run works, else the one it stopped at once it stopped. `null` for a
@@ -113,6 +114,9 @@ export function nowStep(chain: ChainModel, units: readonly SessionView['units'][
   const at = waitOrd === null ? undefined : stepAtOrd(chain, units, waitOrd);
   const wait = at === undefined ? -1 : chain.steps.indexOf(at);
   if (wait !== -1) return { index: wait, kind: 'wait', word: 'waiting on you' };
+  // (crew#1042) A held run's step in hand waits on you: nothing is working on it.
+  const held = phase === 'held' ? chain.steps.findIndex((s) => s.state === 'running') : -1;
+  if (held !== -1) return { index: held, kind: 'wait', word: 'waiting on you' };
   const run = phase === 'working' ? chain.steps.findIndex((s) => s.state === 'running') : -1;
   if (run !== -1) return { index: run, kind: 'run', word: 'now' };
   const stopped = phase === 'stopped' ? chain.steps.findIndex((s) => s.state === 'failed') : -1;
@@ -164,7 +168,7 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
               {...(ord !== null && jumpOrd !== null && ord === jumpOrd ? { 'data-jumped': 'true' } : {})}
               {...(isNow ? { 'data-now': now.kind, 'aria-current': 'step' as const } : {})}
               title={whyOf(s)}
-              aria-label={`${s.label}: ${!isNow ? STATE_WORD[s.state] : now.kind === 'stopped' ? now.word : `${STATE_WORD[s.state]}, ${now.word}`} — ${whyOf(s)}`}
+              aria-label={`${s.label}: ${!isNow ? STATE_WORD[s.state] : now.kind === 'stopped' || (now.kind === 'wait' && s.state === 'running') ? now.word : `${STATE_WORD[s.state]}, ${now.word}`} — ${whyOf(s)}`}
               className={`wk-chain-step wk-chain-step--${s.state}${isNow ? ` wk-chain-step--now wk-chain-step--now-${now.kind}` : ''}`}
             >
               {i > 0 && <span aria-hidden className="wk-chain-join" />}

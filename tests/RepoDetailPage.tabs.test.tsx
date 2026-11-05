@@ -54,6 +54,7 @@ const { trackersApi } = await import('../src/api/trackers.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
 const { useMembershipStore } = await import('../src/store/membership.js');
 const { resetRepoLinks } = await import('../src/store/repoLinks.js');
+const { useHeldRuns } = await import('../src/store/heldRuns.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { resetRepoKnowledge } = await import('../src/store/repoKnowledge.js');
 const { clearRetryPrefill, peekRetryPrefill } = await import('../src/store/retryPrefill.js');
@@ -405,6 +406,47 @@ describe('review folds (codex on #998)', () => {
     expect(navigate).toHaveBeenCalledWith('/repo-detail/studio-api?tab=jobs');
   });
 });
+
+describe('held runs (crew#1042): a run a Needs-you row holds waits on you, on the list and the page', () => {
+  afterEach(() => useHeldRuns.getState().setHeld(new Set()));
+
+  it('the list’s next step says it waits on you, not working now', async () => {
+    useHeldRuns.getState().setHeld(new Set(['r-a1']));
+    render(<RepositoriesPanel navigate={() => {}} />);
+    const card = (await screen.findAllByTestId('repo-card'))[0]!;
+    expect(within(card).getByTestId('repo-needs-you')).toHaveTextContent('Waiting on you');
+    expect(within(card).queryByTestId('repo-row-word')).toBeNull();
+    expect(screen.getByTestId('repos-sentence')).toHaveTextContent('One job waits on you.');
+  });
+
+  it('the page: nothing working now on Overview or Jobs; the run’s row says it waits', async () => {
+    useHeldRuns.getState().setHeld(new Set(['r-a1']));
+    await page();
+    expect(screen.queryByTestId('repo-overview-working')).toBeNull();
+    cleanup();
+    await page('?tab=jobs');
+    expect(screen.queryByTestId('repo-jobs-working')).toBeNull();
+    expect(screen.getByTestId('repo-detail-stats').textContent).not.toContain('working now');
+    const row = within(screen.getByTestId('repo-jobs-all')).getAllByTestId('run-link').find((b) => b.getAttribute('data-run-id') === 'r-a1')!;
+    expect(row.textContent).toMatch(/waiting on you/iu);
+  });
+
+  it('a held onboarding is not "indexing now": the code map and Settings say it waits on you', async () => {
+    listRuns.mockImplementation(() => Promise.resolve({ runs: [makeView({ id: 'o-held', repo_ref: 'studio-api', workflow_id: 'onboarding', status: 'executing', problem: 'Onboard studio-api' })] }));
+    useHeldRuns.getState().setHeld(new Set(['o-held']));
+    await page('?tab=settings');
+    expect(screen.getByTestId('repo-detail-meta')).toHaveTextContent('Indexing waits on you');
+    expect(screen.getByTestId('repo-graph-state')).toHaveAttribute('data-tone', 'gate');
+    expect(screen.getByTestId('repo-graph-state')).toHaveTextContent('Onboarding waits on you — see Needs you');
+    cleanup();
+    render(<RepositoriesPanel navigate={() => {}} />);
+    const card = (await screen.findAllByTestId('repo-card'))[0]!;
+    expect(within(card).getByTestId('repo-row-map')).toHaveAttribute('data-tone', 'gate');
+    expect(within(card).getByTestId('repo-row-line')).toHaveTextContent('Indexing waits on you');
+    listRuns.mockImplementation(() => Promise.resolve({ runs: RUNS }));
+  });
+});
+
 describe('an app’s own repository (crew’s apps store): marked App, no Index nag', () => {
   it('reads App, says it is an app’s, offers no Index, and the sentence counts it apart', async () => {
     listApps.mockImplementation(() => Promise.resolve({ apps: [{ slug: 'tickets', name: 'Open tickets', repoId: 'tickets' }] }));

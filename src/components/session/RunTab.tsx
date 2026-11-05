@@ -45,6 +45,8 @@ import { FileViewer } from '../FileViewer.js';
 import { ActivityTail, EvidenceTab, GoalBrief, HelpersList, RunSection, SignIns, StepsList } from '../sheets/ObjectSheet.js';
 import { PANEL_SECTIONS, panelStateKind, quietSections, sectionOpen, type PanelSectionId } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
+import { useHeldMarkedView } from '../../hooks/useHeldMarked.js';
+import { isHeldRun } from '../../board/heldRuns.js';
 import { TeamRosterLines } from './TeamRosterLines.js';
 import { panelRows, pluginSections } from '../../board/runPluginPanels.js';
 import { RUN_PLUGINS } from '../../plugins/runPlugins.js';
@@ -132,6 +134,10 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // The whole log (not only while executing): a finished run's delivery receipt reads it too.
   const { events } = useRunEvents(id);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
+  // (crew#1042) Held by a Needs-you row (an orphan, a stall): the status line, the plan's marker and the helpers
+  // read the view marked from the shared held set (subscribed).
+  const shown = useHeldMarkedView(view);
+  const held = isHeldRun(shown.session);
   // (J4 0.16.6) The step silent past crew's quiet mark: the Now section says so, as the header does.
   const silent = useSilentStep(view);
   const floor = useRunningFloor(view);
@@ -198,7 +204,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const total = chain.steps.length;
   const stepAt = current !== undefined ? chain.steps.indexOf(current) + 1 : doneSteps;
   const builder = builderResponder(view, gate?.ord ?? null, roster);
-  const runningOrd = executingOrd(view.session, view.units);
+  // (crew#1042) A held run has no helper "building" or "reviewing": nothing is working on it.
+  const runningOrd = held ? null : executingOrd(view.session, view.units);
   const helpers = clis.filter(isHelperSeat).map((cli) => {
     const seat = roster?.find((entry) => entry.key === cli);
     const name = seat === undefined ? cli : seatLabel(seat);
@@ -246,9 +253,9 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // manifest's `order`, a pinned plugin section at the top (DES-LEARN §1.2).
   const core: Record<PanelSectionId, React.ReactElement> = {
     now: (
-      <Section id="now" {...fold} summary={silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word}>
+      <Section id="now" {...fold} summary={/* (crew#1042) held: it waits on you, no "working for N min" or silence clock */ held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word}>
         <div data-testid="run-tab-now" className="wk-run-tab-block">
-          <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(view, chain, gate, action, silent?.minutes ?? null)}</p>
+          <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(shown, chain, gate, action, silent?.minutes ?? null)}</p>
           {(started !== null || ended !== null) && (
             <p data-testid="run-tab-times" className="wk-run-tab-muted">
               {started !== null && `Started ${ago(started)} ago`}{started !== null && ended !== null && ' · '}{ended !== null && `ended ${ago(ended)} ago`}
@@ -260,7 +267,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         <div data-testid="run-tab-workflow" className="wk-run-tab-block">
           <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-            <span className="wk-run-tab-pill">{chatStatusWord([view]).word}</span>
+            <span className="wk-run-tab-pill">{chatStatusWord([shown]).word}</span>
           </p>
           {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
             <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>
@@ -304,7 +311,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
               {chain.steps.map((step) => (
                 <li key={step.id} data-testid="run-tab-phase" data-state={step.state} data-current={step === current ? 'true' : 'false'} className="wk-run-tab-phase">
                   {(step.state === 'done' || step.state === 'checked') && <span aria-label="Done">✓ </span>}
-                  {step.label}{step.state === 'checked' && <span className="wk-run-tab-pill">checked</span>}{step.state === 'failed' && <span className="wk-run-tab-pill">failed</span>}{step === current && <span className="wk-run-tab-pill">{view.session.status === 'awaiting_human' ? 'waiting on you' : 'now'}</span>}
+                  {step.label}{step.state === 'checked' && <span className="wk-run-tab-pill">checked</span>}{step.state === 'failed' && <span className="wk-run-tab-pill">failed</span>}{step === current && <span className="wk-run-tab-pill">{view.session.status === 'awaiting_human' || held ? 'waiting on you' : 'now'}</span>}
                 </li>
               ))}
             </ol>
@@ -517,10 +524,12 @@ export function RunRibbon({ runs }: { runs: SessionView[] }): React.ReactElement
 
 function RunRibbonLine({ view }: { view: SessionView }): React.ReactElement {
   const { chain } = useRunChain(view);
+  // (crew#1042) Its status word follows the shared held set, as the rest of the run page does.
+  const shown = useHeldMarkedView(view);
   const spend = spendWords(view);
   return (
     <span data-testid="run-ribbon-line" className="wk-run-tab-ribbon">
-      {workflowLabel(view.session.workflow_id)} · {currentStep(view, chain)?.label ?? chatStatusWord([view]).word} · {agentsWord(assignedClis(view).length)}{spend !== null && ` · ${spend}`}
+      {workflowLabel(view.session.workflow_id)} · {currentStep(view, chain)?.label ?? chatStatusWord([shown]).word} · {agentsWord(assignedClis(view).length)}{spend !== null && ` · ${spend}`}
     </span>
   );
 }
