@@ -16,7 +16,8 @@ import { useElicitationStore } from '../src/store/elicitations.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
 import { useSheets } from '../src/store/sheets.js';
 import { useHostPanel } from '../src/editors/hostApi.js';
-import { flushDecisionsForTest, resetDecisionsForTest } from '../src/board/undoQueue.js';
+import { flushDecisionsForTest, resetDecisionsForTest, undoDecision, useUndoQueue } from '../src/board/undoQueue.js';
+import { addAboutChip, clearAboutChips } from '../src/store/composerChips.js';
 import { provideDraftRouter } from '../src/hooks/useDraftRouter.js';
 import { resetRunPanel } from '../src/store/runPanel.js';
 import { RUN_PANEL_KEY } from '../src/board/runPanelModel.js';
@@ -142,4 +143,64 @@ describe('studio#992: the plan gate takes a note, as a reply at the plan', () =>
     await act(async () => { await flushDecisionsForTest(); });
     expect(confirm).not.toHaveBeenCalled();
   });
+
+  // ── xreview r1 (codex) ────────────────────────────────────────────────────────────────────────────────────────
+  it('P1: a reply sent after the plan gate was replaced (a stale card) is not sent to the new gate', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true, planGateNote: true } as never);
+    page();
+    await screen.findByTestId('session-proposal');
+    const input = screen.getByTestId('session-composer-input');
+    fireEvent.change(input, { target: { value: NOTE } });
+    await waitFor(() => expect(screen.getByTestId('session-reply-dest').textContent).toBe(`Replies to this decision (${PLAN_NOTE_REPLY})`));
+    // The gate moves to a hand-over in the same tick as Enter: the handler still holds the plan card's closure.
+    act(() => {
+      useGateStore.setState({ gates: { r1: { runId: 'r1', ord: 9, prompt: 'Approve delivery before unit 9 runs.', lifecycle: 'open', receivedAt: Date.now(), gateKind: 'deliver' } } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('P2: Try again after a refused send carries the same note', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true, planGateNote: true } as never);
+    confirm.mockRejectedValueOnce(new Error('engine busy'));
+    page();
+    await typeAndSend(NOTE);
+    await act(async () => { await flushDecisionsForTest(); });
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    const retry = await screen.findByTestId('session-proposal-go');
+    await waitFor(() => expect(retry.textContent).toMatch(/Try again/));
+    fireEvent.click(retry);
+    await act(async () => { await flushDecisionsForTest(); });
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2));
+    expect(confirm.mock.calls[1]![1]).toEqual({ approve: true, amend: NOTE, ord: 1 });
+  });
+
+  it('P2: the note is what the person typed, never the about chips\' context', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true, planGateNote: true } as never);
+    addAboutChip('run:r1', { kind: 'about', key: 'p:1', label: 'a selected paragraph' });
+    try {
+      page();
+      await typeAndSend(NOTE);
+      await act(async () => { await flushDecisionsForTest(); });
+      await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+      expect(confirm.mock.calls[0]![1]).toEqual({ approve: true, amend: NOTE, ord: 1 });
+    } finally {
+      clearAboutChips('run:r1');
+    }
+  });
+
+  it('P3: Undo hands the note back to the reply box', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true, planGateNote: true } as never);
+    page();
+    const input = await typeAndSend(NOTE) as HTMLTextAreaElement;
+    const pending = useUndoQueue.getState().pending;
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.amend).toBe(NOTE);
+    act(() => undoDecision(pending[0]!.id));
+    await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe(NOTE));
+    expect(input).toBeDefined();
+    expect(confirm).not.toHaveBeenCalled();
+  });
 });
+

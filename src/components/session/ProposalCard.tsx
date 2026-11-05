@@ -170,9 +170,15 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const planGateNote = useCapabilities((s) => s.planGateNote);
   const answerRef = useRef<(note?: string) => void>(() => undefined);
   // A card way with its own reason box (Don't start) stands it down: one note input per choice (as GateRow does).
-  const noteChoice = planGateNote && card !== null && card.kind === 'plan' && card.state === 'ask' && ask === null && gate !== undefined
+  // A refused approval that can be tried again takes a (new) note too (xreview r1).
+  const noteChoice = planGateNote && card !== null && card.kind === 'plan' && ask === null && gate !== undefined
+    && (card.state === 'ask' || (card.state === 'fail' && card.canRetry))
     && (picked === null || picked === 'go');
-  useOfferReply(runId, noteChoice ? { label: PLAN_NOTE_REPLY, placeholder: PLAN_NOTE_PLACEHOLDER, send: (t) => answerRef.current(t) } : null);
+  // The note sent on this gate instance: Try again after a refused send carries it again (xreview r1), never drops it.
+  const sentNote = useRef<{ instance: string | null; note: string } | null>(null);
+  useOfferReply(runId, noteChoice
+    ? { label: PLAN_NOTE_REPLY, placeholder: PLAN_NOTE_PLACEHOLDER, raw: true, restoreKey: runId, send: (t) => answerRef.current(t) }
+    : null);
   if (card === null) return null;
   const chat = variant === 'chat';
   const instance = gateInstance(gate);
@@ -203,10 +209,16 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     // must not reset a pool the plan lowered).
     const held = planGate.view !== null ? heldPoolsOf(planGate.view.editSeed, planGate.view.editPools) : undefined;
     const base: GateAnswer = draft !== null ? { approve: true, plan: gateDraftPlan(draft, held) } : { approve: true };
-    // studio#992: the note rides only a plan approval on an engine that lands it (a blank one is no note).
-    const amend = noteChoice ? (note ?? '').trim() : '';
+    // studio#992: the note rides only a plan approval on an engine that lands it (a blank one is no note). A retry of a
+    // refused send on the same gate carries the note that send had (xreview r1).
+    const typed = noteChoice ? (note ?? '').trim() : '';
+    const kept = noteChoice && note === undefined && card.state === 'fail' && sentNote.current?.instance === instance ? sentNote.current.note : '';
+    const amend = typed !== '' ? typed : kept;
+    if (amend !== '') sentNote.current = { instance, note: amend };
     const answer: GateAnswer = amend !== '' ? { ...base, amend } : base;
-    commitGateDecision(runId, answer, { ...deliver, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.act ?? 'Approve' } })
+    // A note answers the gate it was typed at (xreview r1 P1): if the gate moved on, nothing is sent.
+    const expect = amend !== '' ? { expect: { ord: gate.ord, receivedAt: gate.receivedAt } } : {};
+    commitGateDecision(runId, answer, { ...deliver, ...expect, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.act ?? 'Approve' } })
       .then((outcome) => { if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey); })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });

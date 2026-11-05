@@ -36,6 +36,11 @@ export interface DockReply {
   send: (text: string) => void;
   /** The reply box's placeholder while this choice is offered (studio#992: the plan gate's note); else the dock's own. */
   placeholder?: string;
+  /** studio#992 (xreview r1): send the typed text alone — never the about chips' context — as the choice's note. */
+  raw?: boolean;
+  /** studio#992 (xreview r1): an Undo hands the note back under this key (`restoreNote`); the reply box takes it back
+   *  while it is empty. */
+  restoreKey?: string;
 }
 
 interface DockCtx {
@@ -262,12 +267,17 @@ export function useOfferReply(key: string, reply: DockReply | null): void {
   const setReply = ctx?.setReply;
   const label = reply?.label ?? null;
   const placeholder = reply?.placeholder;
+  const raw = reply?.raw === true;
+  const restoreKey = reply?.restoreKey;
   const sendRef = useRef(reply?.send);
   sendRef.current = reply?.send;
   useEffect(() => {
     if (setReply === undefined) return;
     if (!docked || label === null) { setReply(key, null); return; }
-    setReply(key, { label, send: (t) => sendRef.current?.(t), ...(placeholder !== undefined ? { placeholder } : {}) });
+    setReply(key, {
+      label, send: (t) => sendRef.current?.(t),
+      ...(placeholder !== undefined ? { placeholder } : {}), ...(raw ? { raw } : {}), ...(restoreKey !== undefined ? { restoreKey } : {}),
+    });
     return () => setReply(key, null);
-  }, [setReply, docked, key, label, placeholder]);
+  }, [setReply, docked, key, label, placeholder, raw, restoreKey]);
 }

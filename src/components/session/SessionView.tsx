@@ -78,6 +78,7 @@ import { useRunPanel } from '../../store/runPanel.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
 import { RunBlock } from './RunConversation.js';
 import { DecisionDockFrame, type DockItem, type DockReply } from './DecisionDock.js';
+import { takeRestoredNote, useUndoQueue } from '../../board/undoQueue.js';
 import { switchWords, useReplyRoute } from '../../board/replyRoute.js';
 import { useDraftRouter } from '../../hooks/useDraftRouter.js';
 import { useElicitationStore } from '../../store/elicitations.js';
@@ -1364,6 +1365,15 @@ function DockedComposer({ reply, docked, composerProps, who }: {
 }): React.ReactElement {
   const router = useDraftRouter();
   const { route, flip } = useReplyRoute(reply === null ? '' : composerProps.text ?? '', router);
+  // studio#992 (xreview r1): a note an Undo handed back returns to the box while it is empty (never over a new draft).
+  const restoreKey = reply?.restoreKey ?? null;
+  const restored = useUndoQueue((s) => (restoreKey === null ? '' : s.restoredNotes[restoreKey] ?? ''));
+  const setText = composerProps.setText;
+  const empty = (composerProps.text ?? '').trim() === '';
+  useEffect(() => {
+    if (restoreKey === null || restored === '' || !empty) return;
+    setText?.(takeRestoredNote(restoreKey));
+  }, [restoreKey, restored, empty, setText]);
   if (reply === null && docked) {
     // The docked decision takes no note (a hand-over, a plan, a question from a run): Send asks a separate question.
     return (
@@ -1387,7 +1397,11 @@ function DockedComposer({ reply, docked, composerProps, who }: {
       {...composerProps}
       placeholder={reply.placeholder ?? `Or tell ${who ?? 'the job'} what to do…`}
       footer={footer}
-      onSend={(text, opts) => { if (route.to === 'reply') reply.send(text); else composerProps.onSend(text, opts); }}
+      onSend={(text, opts) => {
+        // A raw choice (the plan gate's note) takes what the person typed, never the about chips' context.
+        if (route.to === 'reply') reply.send(reply.raw === true ? (composerProps.text ?? text) : text);
+        else composerProps.onSend(text, opts);
+      }}
       className="wk-session-composer"
     />
   );
