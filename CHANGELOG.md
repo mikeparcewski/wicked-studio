@@ -180,6 +180,14 @@ npm publish dates. Every version listed here exists on
     Project select that was hidden under Search and filter.
 
 ### Fixed
+- **The Jira and GitHub Issues sheets say what crew said when a saved source's test fails, and group the tools by
+  why (pm-real-jira).** A saved source whose Test connection fails no longer reads "Not connected": the sheet says the
+  source is saved with its token, that only the test failed, and quotes crew's own message with its code and cause
+  (for example the HTTP status and the scopes Atlassian says the token lacks). The tool list is grouped, each group
+  with one line: Agents can use (limited to your linked projects; Jira's account details included), Writes (you
+  confirm each one at delivery), and Not for agents by reason: can't be limited to your linked projects, not part of
+  trackers (Confluence), not part of trackers (Teamwork Graph, people and Loom). Notes for crew's new bindings
+  (`listJiraIssueComments`, `atlassianUserInfo`, `getAccessibleAtlassianResources`).
 - **A workflow starts in the chat, not in a modal; Apps is a new app by chat; Add a repository on the project page
   (operator 2026-11-04 on the test rig: "clicking on a workflow opens a modal rather than starting an inline chat",
   "are apps showing as coming soon (in chat)", "don't I see a way to onboard a repo anymore").** A `/` pick of a
