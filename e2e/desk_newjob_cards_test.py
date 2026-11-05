@@ -161,21 +161,17 @@ with sync_playwright() as p:
             ranked = page.evaluate("() => [...document.querySelectorAll('[data-section=results] [data-catalog-card]')].map((c) => c.dataset.testid)")
             page.screenshot(path=str(SHOTS / "desk-newjob-catalog-search-1440.png"))
             check("sentence-ranks-docs-first", ranked[:1] == ["launch-wizard-workflow-docs"], ranked=ranked[:5])
+            # ux-tonight (operator 2026-11-04: "clicking on a workflow opens a modal rather than starting an inline chat"):
+            # Enter on the card starts it in a chat: the modal closes and a new chat holds the card on its composer.
             page.keyboard.press("Enter")
-            page.get_by_test_id("launch-wizard-intent").wait_for(state="visible", timeout=5000)
-            step = page.get_by_test_id("launch-wizard-step").get_attribute("data-step")
-            title = page.locator(".wk-launch-wizard-title").inner_text()
-            shape = page.get_by_test_id("launch-wizard-shape").inner_text()
-            page.screenshot(path=str(SHOTS / "desk-newjob-catalog-shape-1440.png"))
-            check("enter-picks-into-shaping", step == "what" and title == "New job: Write docs in the repo"
-                  and "Docs in your repository" in shape and "a repository" in shape, landed=step, title=title, shape=shape)
-            page.get_by_test_id("launch-wizard-change").click()
-            page.wait_for_timeout(300)
-            back = page.evaluate(FOCUSED)
-            pressed = page.get_by_test_id("launch-wizard-workflow-docs").get_attribute("aria-pressed")
-            check("change-job-returns-to-the-picked-card", back == "launch-wizard-workflow-docs" and pressed == "true", focused=back)
-            page.keyboard.press("Escape")
             page.get_by_test_id("launch-wizard").wait_for(state="detached", timeout=5000)
+            page.get_by_test_id("composer-start").wait_for(state="visible", timeout=8000)
+            landed = page.evaluate("""() => ({ path: location.pathname,
+                chip: document.querySelector('[data-testid="composer-chip"][data-kind="workflow"]')?.textContent ?? null,
+                words: document.querySelector('[data-testid="session-composer-input"]')?.value ?? null })""")
+            page.screenshot(path=str(SHOTS / "desk-newjob-catalog-shape-1440.png"))
+            check("enter-starts-in-a-chat", landed["path"].startswith("/s/") and landed["chip"] is not None
+                  and "Write docs" in landed["chip"], landed=landed)
         if w == 390:
             check("phone-search-on-top", m["searchTop"] < 140, measured=m)
         ctx.close()

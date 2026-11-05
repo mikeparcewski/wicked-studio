@@ -112,13 +112,10 @@ with sync_playwright() as p:
 
     def to_options() -> None:
         set_fixture(origin, appearance={**DEFAULT_APPEARANCE, "theme": "light"}, **SW, repo=True)
-        page.goto(f"{origin}/", wait_until="networkidle")
-        page.get_by_test_id("desk-rail-new-job").click()
+        # ux-tonight: a New job card click starts the work in a chat; the wizard's options (the Lead agent) are what a
+        # named opener walks. The retired Testing landing is one: New job on the test workflow.
+        page.goto(f"{origin}/testing/campaigns", wait_until="networkidle")
         page.get_by_test_id("launch-wizard").wait_for(state="visible", timeout=10000)
-        if page.get_by_test_id("launch-wizard-step").get_attribute("data-step") == "workflow":
-            card = page.locator('[data-testid="launch-catalog-results"] button[data-testid^="launch-wizard-workflow-"]'
-                                ':not([data-testid$="demo-video"]):not([data-testid$="draft-epics"])').first
-            card.click()
         page.get_by_test_id("launch-wizard-intent").fill("add a CSV export")
         for _ in range(6):
             step = page.get_by_test_id("launch-wizard-step").get_attribute("data-step")
