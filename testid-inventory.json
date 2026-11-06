@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4709,
-    "static": 3940,
+    "occurrences": 4710,
+    "static": 3941,
     "dynamic": 173,
     "computed": 53
   },
@@ -580,6 +580,12 @@
     },
     {
       "testId": "app-chat-empty",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-gate",
       "files": [
         "src/components/apps/AppChat.tsx"
       ]

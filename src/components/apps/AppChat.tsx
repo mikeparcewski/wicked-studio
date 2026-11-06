@@ -9,6 +9,9 @@ import { readSuggestionGrounds, type SuggestionGrounds } from '../../editors/app
 import { AppComposer } from './AppComposer.js';
 import { LiveActivity } from '../session/LiveActivity.js';
 import { RunQuestions } from '../session/ThreadQuestions.js';
+import { GateRow } from '../session/GateRow.js';
+import { useGateStore } from '../../store/gates.js';
+import { rulesHoldAt } from '../../board/assuranceModel.js';
 
 /**
  * THE APP'S CHAT (DES-APPS-001 §6.1-§6.2, §9.2; operator 2026-11-04: "I should be driving the changes mostly via chat"):
@@ -16,7 +19,9 @@ import { RunQuestions } from '../session/ThreadQuestions.js';
  * change, crew checks it against the app's data sources, a different seat reviews it — and it lands as a new version
  * or says why it did not. The thread IS crew's record of the app's turns (`AppDetail.turns`), so a reload and a second
  * tab read the same thing; while a turn runs the reply shows which step it is on, the run's live activity and any
- * question it asks (studio's own run machinery: {@link LiveActivity}, {@link RunQuestions}).
+ * question it asks (studio's own run machinery: {@link LiveActivity}, {@link RunQuestions}). (F22) A gate the run
+ * parks on is answered here with the run page's own {@link GateRow}: a review held on steering rules no judge ruled
+ * on ("the work was not rejected") offers Re-check the rules and Confirm or skip, exactly as the run page does.
  *
  * Selecting a component in Edit puts an "about:" chip on this composer (its words from the spec); the message names
  * the component by id and crew describes it to the builder from the spec, never from these words.
@@ -65,15 +70,19 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
     <a href={sessionPath(`run:${t.runId}`)} className="wk-link wk-appchat-job" data-testid="app-chat-job"
       onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${t.runId}`)); }}>See the job</a>
   );
+  // The run's open gate (the shell's runs poller late-joins it; a live frame sets it).
+  const gate = useGateStore((s) => s.gates[t.runId]);
   if (t.state === 'running') {
     const busy = busyText(view);
+    // (F22) A step held on steering rules was not rejected: it shows as the step waiting on you, never as failed.
+    const heldOrd = view !== null && gate !== undefined && rulesHoldAt(null, view.units, gate.ord).held ? gate.ord : null;
     return (
       <div className="wk-appchat-reply wk-appchat-reply--busy" data-testid="app-chat-busy" data-step={busy.step ?? ''} aria-live="polite">
         <p className="wk-appchat-busyline"><span className="wk-appchat-pulse" aria-hidden="true" />{busy.line}</p>
         <ol className="wk-appchat-steps" aria-label="Steps">
           {(['build', 'check', 'review'] as const).map((s) => {
             const u = view?.units.find((x) => x.id === `${t.runId}:${s}`) ?? null;
-            const state = u === null ? 'pending' : u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed' : u.status === 'distributed' ? 'now' : 'pending';
+            const state = u === null ? 'pending' : u.ord === heldOrd ? 'now' : u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed' : u.status === 'distributed' ? 'now' : 'pending';
             const label = s === 'build' ? 'Build' : s === 'check' ? 'Check' : 'Review';
             const who = u?.assigned_cli != null && u.assigned_cli !== '' && s !== 'check' ? ` · ${seatWord(u.assigned_cli)}` : '';
             return <li key={s} data-testid="app-chat-step" data-state={state}>{label}{who}</li>;
@@ -82,6 +91,10 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
         {/* The live activity offers Steer and Stop: never inside another page (xreview r2 on K5). */}
         {view !== null && busy.ord !== null && !framed && <LiveActivity runId={t.runId} ord={busy.ord} seat={busy.seat} />}
         {view !== null && !framed && <RunQuestions view={view} />}
+        {/* (F22) The gate, answered here as on the run page; never inside another page (no answers there). */}
+        {view !== null && gate !== undefined && !framed && (
+          <div className="wk-appchat-gate" data-testid="app-chat-gate"><GateRow view={view} gate={gate} navigate={navigate} /></div>
+        )}
         <p className="wk-appchat-meta">The app is read-only until this lands. Preview still works. · {job}</p>
       </div>
     );

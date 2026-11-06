@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppDetail, AppSpec, SessionView } from '../src/api/types.js';
+import type { AppDetail, AppSpec, CoreEvent, SessionView } from '../src/api/types.js';
+import { useGateStore, type OpenGate } from '../src/store/gates.js';
+import { useRunEventStore } from '../src/store/events.js';
 import { AppChat, aboutComponent, appComposerKey } from '../src/components/apps/AppChat.js';
 import { AppsPage } from '../src/components/apps/AppsPage.js';
 import { busyText, changeLine, endedLine, slugFrom, suggestionsFor, turnsOf } from '../src/editors/apps/appTurns.js';
@@ -187,6 +189,50 @@ describe('the app chat: crew\'s turn log, in words', () => {
     expect(screen.getByTestId('app-chat-code').textContent).toBe('review_refused');
     expect(screen.getByTestId('app-chat-reason').textContent).toBe('Nothing landed: The reviewer refused the change: reads a column nobody asked for');
     expect(screen.queryByTestId('app-chat-undo')).toBeNull();
+  });
+});
+
+describe('the app chat: a review held on steering rules is answered here (F22)', () => {
+  const RUN = 'apps-desk-00000000000a';
+  const HOLD = '1 steering rule(s) need you: learn-accessible unchecked (the judge did not answer for it, in its batch or asked alone).';
+  const units = [
+    { id: `${RUN}:build`, session_id: RUN, ord: 1, status: 'done', assigned_cli: 'claude', role: 'creator' },
+    { id: `${RUN}:check`, session_id: RUN, ord: 2, status: 'done', assigned_cli: null },
+    { id: `${RUN}:review`, session_id: RUN, ord: 3, status: 'rejected', assigned_cli: 'codex', role: 'evaluator', denial_reason: HOLD, denial: { phase: 'unit-3', source: 'rules_unchecked', reason: HOLD } },
+  ];
+  const runs = [{ session: { id: RUN, status: 'awaiting_human', unit_ix: 2, clis: ['claude', 'codex', 'pi'] }, units }] as unknown as SessionView[];
+  const gate: OpenGate = { runId: RUN, ord: 3, prompt: `Unit 3's steering rules are UNCHECKED or waived by your instruction — ${HOLD} The work was not rejected.`, gateKind: 'escalation', lifecycle: 'open', receivedAt: 1 };
+  const rules = [{ ruleId: 'learn-small-prs', status: 'kept', how: 'judge', reason: 'apps.json', ruleKey: 'k1' }, { ruleId: 'learn-accessible', status: 'unchecked', how: 'none', reason: 'the judge did not answer', ruleKey: 'k2' }];
+  const events = [
+    { type: 'unitDispatched', session: RUN, ord: 3, attempt: 0, ts: 1 },
+    { type: 'gateEvaluated', session: RUN, ord: 3, ts: 2, denial: { source: 'rules_unchecked', reason: HOLD, claimId: null, ruleIds: ['learn-accessible'], deniedTool: null, phase: 'unit-3' }, assurance: { mode: 'full', required: ['distinct_evaluator'], ran: ['distinct_evaluator', 'judge', 'rule_check'], skipped: [], creator: 'claude', evaluator: 'codex', judge: 'pi', tree: 't', attempt: 0, rules } },
+    { type: 'gateEscalated', session: RUN, ord: 3, attempt: 0, condition: 'rules_unchecked', denialSource: 'rules_unchecked', verdictSummary: HOLD, ts: 3 },
+  ] as unknown as CoreEvent[];
+  const running = () => detail({ turn: { runId: RUN, startedAt: 1, base: 3, actor: 'local' }, turns: [turn({ runId: RUN, state: 'running', endedAt: null, version: null })] });
+  afterEach(() => { useGateStore.setState({ gates: {} }); useRunEventStore.setState({ byRun: {} }); });
+
+  it('shows the run page\'s gate with Re-check the rules and Confirm or skip, and the held review as waiting, not failed', async () => {
+    mockFetch(() => null);
+    useRunEventStore.setState({ byRun: { [RUN]: events } });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    render(<AppChat slug="desk" detail={running()} runs={runs} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    const box = screen.getByTestId('app-chat-gate');
+    await waitFor(() => expect(box.textContent).toContain('Re-check the rules'));
+    expect(box.textContent).toContain('Confirm or skip learn-accessible');
+    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'now']);
+  });
+
+  it('framed, or with no open gate, there is no gate here (a refused review still reads failed)', () => {
+    mockFetch(() => null);
+    useRunEventStore.setState({ byRun: { [RUN]: events } });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const { unmount } = render(<AppChat slug="desk" detail={running()} runs={runs} framed navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+    unmount();
+    useGateStore.setState({ gates: {} });
+    render(<AppChat slug="desk" detail={running()} runs={runs} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'failed']);
   });
 });
 
