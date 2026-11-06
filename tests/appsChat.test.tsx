@@ -201,75 +201,102 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     { id: `${RUN}:review`, session_id: RUN, ord: 3, status: 'rejected', assigned_cli: 'codex', role: 'evaluator', denial_reason: HOLD, denial: { phase: 'unit-3', source: 'rules_unchecked', reason: HOLD } },
   ];
   const runs = [{ session: { id: RUN, status: 'awaiting_human', unit_ix: 2, clis: ['claude', 'codex', 'pi'] }, units }] as unknown as SessionView[];
+  const bareRuns = (denial?: unknown) => [{ ...runs[0]!, units: units.map((u) => (u.ord === 3 ? { ...u, denial } : u)) }] as unknown as SessionView[];
   const gate: OpenGate = { runId: RUN, ord: 3, prompt: `Unit 3's steering rules are UNCHECKED or waived by your instruction — ${HOLD} The work was not rejected.`, gateKind: 'escalation', lifecycle: 'open', receivedAt: 1 };
   const rules = [{ ruleId: 'learn-small-prs', status: 'kept', how: 'judge', reason: 'apps.json', ruleKey: 'k1' }, { ruleId: 'learn-accessible', status: 'unchecked', how: 'none', reason: 'the judge did not answer', ruleKey: 'k2' }];
-  const events = [
-    { type: 'unitDispatched', session: RUN, ord: 3, attempt: 0, ts: 1 },
-    { type: 'gateEvaluated', session: RUN, ord: 3, ts: 2, denial: { source: 'rules_unchecked', reason: HOLD, claimId: null, ruleIds: ['learn-accessible'], deniedTool: null, phase: 'unit-3' }, assurance: { mode: 'full', required: ['distinct_evaluator'], ran: ['distinct_evaluator', 'judge', 'rule_check'], skipped: [], creator: 'claude', evaluator: 'codex', judge: 'pi', tree: 't', attempt: 0, rules } },
-    { type: 'gateEscalated', session: RUN, ord: 3, attempt: 0, condition: 'rules_unchecked', denialSource: 'rules_unchecked', verdictSummary: HOLD, ts: 3 },
-  ] as unknown as CoreEvent[];
+  const receipt = { mode: 'full', required: ['distinct_evaluator'], ran: ['distinct_evaluator', 'judge', 'rule_check'], skipped: [], creator: 'claude', evaluator: 'codex', judge: 'pi', tree: 't', attempt: 0, rules };
+  const seq = (list: Array<Record<string, unknown>>): CoreEvent[] => list.map((e, i) => ({ session: RUN, seq: i + 1, ts: i + 1, ...e })) as unknown as CoreEvent[];
+  const holdTrail = seq([
+    { type: 'unitDispatched', ord: 3, attempt: 0 },
+    { type: 'gateEvaluated', ord: 3, denial: { source: 'rules_unchecked', reason: HOLD, claimId: null, ruleIds: ['learn-accessible'], deniedTool: null, phase: 'unit-3' }, assurance: receipt },
+    { type: 'gateEscalated', ord: 3, attempt: 0, condition: 'rules_unchecked', denialSource: 'rules_unchecked', verdictSummary: HOLD },
+  ]);
+  /** The daemon's recorded trail for the run (what `GET /runs/:id/events` answers). */
+  const serve = (trail: CoreEvent[]) => mockFetch((path) => (path === `/runs/${RUN}/events` ? { body: { runId: RUN, total: trail.length, returned: trail.length, events: trail } } : null));
   const running = () => detail({ turn: { runId: RUN, startedAt: 1, base: 3, actor: 'local' }, turns: [turn({ runId: RUN, state: 'running', endedAt: null, version: null })] });
+  const show = (r: SessionView[], framed = false) => render(<AppChat slug="desk" detail={running()} runs={r} framed={framed} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+  const steps = () => screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'));
   afterEach(() => { useGateStore.setState({ gates: {} }); useRunEventStore.setState({ byRun: {} }); });
 
-  it('shows the run page\'s gate with Re-check the rules and Confirm or skip, and the held review as waiting, not failed', async () => {
-    mockFetch(() => null);
-    useRunEventStore.setState({ byRun: { [RUN]: events } });
+  it('reads the run\'s trail, then shows the run page\'s gate with Re-check the rules and Confirm or skip; the held review reads waiting, not failed', async () => {
+    const { calls } = serve(holdTrail);
     useGateStore.setState({ gates: { [RUN]: gate } });
-    render(<AppChat slug="desk" detail={running()} runs={runs} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
-    const box = screen.getByTestId('app-chat-gate');
-    await waitFor(() => expect(box.textContent).toContain('Re-check the rules'));
-    expect(box.textContent).toContain('Confirm or skip learn-accessible');
-    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'now']);
-  });
-
-  it('a hold the log alone names (no unit denial) reads the same, and a refusal gate is not answered here', async () => {
-    mockFetch(() => null);
-    const bare = [{ ...runs[0]!, units: units.map((u) => (u.ord === 3 ? { ...u, denial: undefined } : u)) }] as unknown as SessionView[];
-    useRunEventStore.setState({ byRun: { [RUN]: events } });
-    useGateStore.setState({ gates: { [RUN]: gate } });
-    const { unmount } = render(<AppChat slug="desk" detail={running()} runs={bare} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Re-check the rules'));
-    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'now']);
-    unmount();
-    // The reviewer refused (crew stops the run): no answers in the chat, the step reads failed.
-    const refused = [events[0]!, { ...(events[1] as unknown as Record<string, unknown>), denial: { source: 'evaluator_verdict', reason: 'FAIL' } }, { ...(events[2] as unknown as Record<string, unknown>), condition: 'verdict_not_pass', denialSource: 'evaluator_verdict' }] as unknown as CoreEvent[];
-    useRunEventStore.setState({ byRun: { [RUN]: refused } });
-    render(<AppChat slug="desk" detail={running()} runs={bare} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
-    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
-    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'failed']);
-  });
-
-  it('a live buffer that missed the hold (a reconnect) reads the trail again, then offers the rules answers; an unknown gate kind is not answered here', async () => {
-    const { calls } = mockFetch((path) => (path === `/runs/${RUN}/events` ? { body: { runId: RUN, total: 3, returned: 3, events: events.map((e, i) => ({ ...(e as unknown as Record<string, unknown>), seq: i + 1 })) } } : null));
-    // The buffer holds only the dispatch: the escalation frames were missed. The polled unit record names the hold.
-    useRunEventStore.setState({ byRun: { [RUN]: [events[0]!] } });
-    useGateStore.setState({ gates: { [RUN]: gate } });
-    const { unmount } = render(<AppChat slug="desk" detail={running()} runs={runs} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
-    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'now']);
+    show(runs);
+    expect(steps()).toStrictEqual(['done', 'done', 'now']);
     await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Re-check the rules'));
     expect(screen.getByTestId('app-chat-gate').textContent).toContain('Confirm or skip learn-accessible');
     expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(1);
+  });
+
+  it('a live buffer that missed the hold (a reconnect) is completed from the trail; a hold the log alone names (no unit denial) reads the same', async () => {
+    serve(holdTrail);
+    useRunEventStore.setState({ byRun: { [RUN]: [holdTrail[0]!] } });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const { unmount } = show(bareRuns(undefined));
+    await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Confirm or skip learn-accessible'));
+    expect(steps()).toStrictEqual(['done', 'done', 'now']);
     unmount();
-    // A refusal whose late-join gate carries no kind (an older crew): the log names it an escalation, so no answers here.
-    const bare = [{ ...runs[0]!, units: units.map((u) => (u.ord === 3 ? { ...u, denial: { source: 'rule_check', reason: 'broken' } } : u)) }] as unknown as SessionView[];
-    const refusal = [events[0]!, { type: 'gateEscalated', session: RUN, ord: 3, attempt: 0, condition: 'rule_broken', denialSource: 'rule_check', verdictSummary: 'broken', ts: 3 }, { type: 'awaitingHuman', session: RUN, ord: 3, gateKind: 'escalation', prompt: 'broken', ts: 4 }] as unknown as CoreEvent[];
-    useRunEventStore.setState({ byRun: { [RUN]: refusal } });
-    useGateStore.setState({ gates: { [RUN]: { ...gate, gateKind: undefined } as unknown as OpenGate } });
-    render(<AppChat slug="desk" detail={running()} runs={bare} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+  });
+
+  it('a stale hold on the unit record is voided by the trail: re-dispatched and BROKEN, no answers here and the review reads failed', async () => {
+    const broken = seq([...holdTrail.map((e) => e as unknown as Record<string, unknown>), { type: 'gateDecided', ord: 3, allow: true }, { type: 'unitDispatched', ord: 3, attempt: 1 },
+      { type: 'gateEvaluated', ord: 3, denial: { source: 'rule_check', reason: 'broken' }, assurance: { ...receipt, attempt: 1, rules: [{ ...rules[1]!, status: 'broken', how: 'judge' }] } },
+      { type: 'gateEscalated', ord: 3, attempt: 1, condition: 'rule_broken', denialSource: 'rule_check', verdictSummary: 'broken' }]);
+    const { calls } = serve(broken);
+    // The live buffer still holds attempt 0's hold; the polled record still names it too.
+    useRunEventStore.setState({ byRun: { [RUN]: holdTrail } });
+    useGateStore.setState({ gates: { [RUN]: { ...gate, receivedAt: 2 } } });
+    show(runs);
+    await waitFor(() => expect(calls.some((c) => c.path === `/runs/${RUN}/events`)).toBe(true));
+    await waitFor(() => expect(steps()).toStrictEqual(['done', 'done', 'failed']));
     expect(screen.queryByTestId('app-chat-gate')).toBeNull();
   });
 
-  it('framed, or with no open gate, there is no gate here (a refused review still reads failed)', () => {
-    mockFetch(() => null);
-    useRunEventStore.setState({ byRun: { [RUN]: events } });
+  it('a refusal gate, or one whose kind is unknown (an older late join), is not answered here', async () => {
+    const refused = seq([{ type: 'unitDispatched', ord: 3, attempt: 0 }, { type: 'gateEvaluated', ord: 3, denial: { source: 'evaluator_verdict', reason: 'FAIL' } }, { type: 'gateEscalated', ord: 3, attempt: 0, condition: 'verdict_not_pass', denialSource: 'evaluator_verdict', verdictSummary: 'FAIL' }]);
+    const { calls } = serve(refused);
     useGateStore.setState({ gates: { [RUN]: gate } });
-    const { unmount } = render(<AppChat slug="desk" detail={running()} runs={runs} framed navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    const { unmount } = show(bareRuns({ source: 'evaluator_verdict', reason: 'FAIL' }));
+    await waitFor(() => expect(calls.some((c) => c.path === `/runs/${RUN}/events`)).toBe(true));
+    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+    expect(steps()).toStrictEqual(['done', 'done', 'failed']);
+    unmount();
+    useRunEventStore.setState({ byRun: {} });
+    useGateStore.setState({ gates: { [RUN]: { ...gate, gateKind: undefined, receivedAt: 3 } as unknown as OpenGate } });
+    show(bareRuns({ source: 'rule_check', reason: 'broken' }));
+    await waitFor(() => expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(2));
+    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+  });
+
+  it('a failed trail read answers nothing yet (See the job still does) and is tried again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let fail = true;
+      const { calls } = mockFetch((path) => (path === `/runs/${RUN}/events` ? (fail ? { status: 503, body: { error: 'busy' } } : { body: { events: holdTrail } }) : null));
+      useGateStore.setState({ gates: { [RUN]: gate } });
+      show(runs);
+      await waitFor(() => expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(1));
+      expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+      expect(screen.getByTestId('app-chat-job')).toBeTruthy();
+      fail = false;
+      await act(async () => { vi.advanceTimersByTime(5100); });
+      await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Re-check the rules'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('framed, or with no open gate, there is no gate here and nothing is read', async () => {
+    const { calls } = serve(holdTrail);
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const { unmount } = show(runs, true);
     expect(screen.queryByTestId('app-chat-gate')).toBeNull();
     unmount();
     useGateStore.setState({ gates: {} });
-    render(<AppChat slug="desk" detail={running()} runs={runs} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    show(runs);
     expect(screen.queryByTestId('app-chat-gate')).toBeNull();
-    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'failed']);
+    expect(steps()).toStrictEqual(['done', 'done', 'failed']);
+    expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(0);
   });
 });
 

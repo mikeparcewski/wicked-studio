@@ -12,7 +12,8 @@ import { useGateStore } from '../../store/gates.js';
 import { GateRow } from '../session/GateRow.js';
 import { RunQuestions } from '../session/ThreadQuestions.js';
 import { rulesHoldAt } from '../../board/assuranceModel.js';
-import { hydrateRunEvents, useRunEvents } from '../../hooks/useRunEvents.js';
+import { api } from '../../api/client.js';
+import { useRunEventStore } from '../../store/events.js';
 import { gateWithLogChoices } from '../../board/gateHeadline.js';
 
 /**
@@ -79,28 +80,45 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
       onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${t.runId}`)); }}>See the job</a>
   );
   // The run's open gate (the shell's runs poller late-joins it; a live frame sets it), and the run's events while one
-  // is open (the same shared read the gate row makes).
+  // is open (the same shared log the gate row reads).
   const gate = useGateStore((s) => s.gates[t.runId]);
-  const { events } = useRunEvents(t.runId, t.state === 'running' && gate !== undefined);
-  // (F22) A step held on steering rules, read as the gate row reads it: this attempt's structured record in the run's
-  // log (else the unit's own). When the polled unit record names a hold the log does not (a live buffer that missed the
-  // frames, on a reconnect), the recorded trail is read once more and merged, so the gate row offers the rules answers.
-  const heldByLog = t.state === 'running' && view !== null && gate !== undefined && rulesHoldAt(events, view.units, gate.ord).held;
-  const heldByRecord = t.state === 'running' && view !== null && gate !== undefined && rulesHoldAt(null, view.units, gate.ord).held;
-  const backfilled = useRef<string | null>(null);
-  const backfillKey = gate === undefined ? null : `${t.runId}:${gate.ord}`;
+  const live = t.state === 'running' && gate !== undefined;
+  // A framed studio answers nothing, so it reads nothing for it either.
+  const reading = live && !framed;
+  const events = useRunEventStore((s) => s.byRun[t.runId]) ?? null;
+  // (F22) Each gate the turn's run opens is read against the run's RECORDED trail once (merged into the shared log), so
+  // the hold is this attempt's, whatever the live buffer missed on a reconnect: a rules hold is answered here only then.
+  // A failed read is tried again a little later; See the job reaches the run page's gate meanwhile.
+  const gateKey = reading && gate !== undefined ? `${t.runId}:${gate.ord}:${gate.receivedAt}` : null;
+  const [readFor, setReadFor] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
   useEffect(() => {
-    if (backfillKey === null || events === null || !heldByRecord || heldByLog || backfilled.current === backfillKey) return;
-    backfilled.current = backfillKey;
-    void hydrateRunEvents(t.runId).catch(() => { /* the run page's gate stays reachable (See the job) */ });
-  }, [backfillKey, events, heldByRecord, heldByLog, t.runId]);
+    if (gateKey === null) return undefined;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    api.getRunEvents(t.runId).then(
+      ({ events: trail }) => {
+        useRunEventStore.getState().hydrate(t.runId, trail);
+        if (alive) setReadFor(gateKey);
+      },
+      () => {
+        if (alive) timer = setTimeout(() => setRetryTick((n) => n + 1), 5000);
+      },
+    );
+    return () => { alive = false; if (timer !== undefined) clearTimeout(timer); };
+  }, [gateKey, t.runId, retryTick]);
+  const verified = gateKey !== null && readFor === gateKey;
+  // Held: this attempt's structured record in the read trail (as the gate row reads it). Until the trail is read, the
+  // polled unit record only styles the step (never answers).
+  const heldNow = live && view !== null && rulesHoldAt(verified ? events : null, view.units, gate.ord).held;
+  const heldByLog = verified && heldNow;
   if (t.state === 'running') {
     const busy = busyText(view);
     // The held step shows as the step waiting on you, never as failed.
-    const heldOrd = gate !== undefined && (heldByLog || heldByRecord) ? gate.ord : null;
-    // Answered here: a rules hold the log shows (so the row carries Re-check and Confirm or skip), or a gate whose kind is known and is not one crew stops a turn at (a refused step's
-    // gate is crew's to stop: the turn cannot land through it). An unknown kind (an older late join) is not answered
-    // here; See the job still reaches it.
+    const heldOrd = gate !== undefined && heldNow ? gate.ord : null;
+    // Answered here: a rules hold the read trail shows (so the row carries Re-check and Confirm or skip), or a gate whose
+    // kind is known and is not one crew stops a turn at (a refused step's gate is crew's to stop: the turn cannot land
+    // through it). An unknown kind (an older late join) is not answered here; See the job still reaches it.
     const kind = gate === undefined ? '' : (events !== null ? gateWithLogChoices(gate, events) : gate).gateKind ?? '';
     const answerable = gate !== undefined && (heldByLog || (kind !== '' && !REFUSAL_GATE_KINDS.has(kind)));
     return (
