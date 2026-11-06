@@ -330,7 +330,7 @@ describe('follow-up: plan outline, re-plan on record, ticks', () => {
       { event_id: 6, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g3', ord: 1, plan_rev: 3 } },
     ];
     expect(jobTicks(l, rows, 'Codex').map((t) => [t.at, t.text])).toEqual([
-      [10, 'You started the job, v1'],
+      [10, 'You started the job'],
       [20, 'Codex’s plan, v1, is ready'],
       [30, 'You sent plan v1 back'],
       [40, 'Codex’s plan, v2, is ready'],
@@ -366,7 +366,7 @@ describe('follow-up review folds (records)', () => {
       rec(40, 'proposal', { proposal: v2({ reshapes: 'run-1' } as never) }, 't2'),
     ])[0]!;
     const rows = [{ event_id: 2, emitted_at: 20, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } }];
-    expect(jobTicks(l, [{ runId: 'run-1', rows }], 'Codex').map((t) => t.text)).toEqual(['You started the job, v1', 'Codex’s plan, v1, is ready']);
+    expect(jobTicks(l, [{ runId: 'run-1', rows }], 'Codex').map((t) => t.text)).toEqual(['You started the job', 'Codex’s plan, v1, is ready']);
   });
 });
 
@@ -394,5 +394,15 @@ describe('follow-up round 2 folds (records)', () => {
       rec(10, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'go', result: { runId: 'run-1', artifactRef: null, adopted: false, stub: false } })])[0]!;
     const rows = [{ event_id: 2, emitted_at: 20, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } }];
     expect(jobTicks(l, [{ runId: 'run-1', rows, lead: 'Codex' }], 'Claude').map((t) => t.text)).toContain('Codex’s plan, v1, is ready');
+  });
+});
+
+describe('round 3 (coordinator): failureWhy names a step by the caller’s step list', () => {
+  it('uses the given step name, lower-casing its first letter but not an acronym', async () => {
+    const { failureWhy } = await import('../src/board/failureWhy.js');
+    const view = makeView({ id: 'run-1', status: 'failed', unit_ix: 1 }, [makeUnit({ id: 'run-1:u1', ord: 1, status: 'rejected', phase_ref: 'test', stage: 'recon' })]);
+    expect(failureWhy(view, []).plain).toMatch(/research/);
+    expect(failureWhy(view, [], () => 'Test').plain).toBe('A check stopped the test step.');
+    expect(failureWhy(view, [], () => 'QE acceptance').plain).toBe('A check stopped the QE acceptance step.');
   });
 });

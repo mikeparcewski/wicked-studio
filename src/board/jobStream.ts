@@ -439,7 +439,7 @@ function jobDecisionTicks(l: JobLineage): JobTick[] {
   // Every decision the lineage recorded (a reshape's replacement keeps its predecessor's), keyed by its own pid.
   for (const d of l.decisions) {
     if (d.decision === 'go' && d.stub) continue; // the test configuration started nothing: no "started" tick
-    out.push({ key: `${l.lineage}:${d.decision}:${d.pid}`, at: d.at, text: d.decision === 'go' ? `You started the job, v${d.version}` : 'You chose Not now' });
+    out.push({ key: `${l.lineage}:${d.decision}:${d.pid}`, at: d.at, text: d.decision === 'go' ? 'You started the job' : 'You chose Not now' });
   }
   return out;
 }
