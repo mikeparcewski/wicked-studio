@@ -269,6 +269,9 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     const prompt = (n: number, ids: string) => `Unit 3's steering rules are UNCHECKED or waived by your instruction — ${n} steering rule(s) need you: ${ids} (the judge did not answer for it, in its batch or asked alone). The work was not rejected.`;
     expect(plainGateQuestion(prompt(1, 'learn-accessible unchecked'), 'escalation')).toBe('The rule learn-accessible needs your call before this step can go on');
     expect(plainGateQuestion(prompt(2, 'a unchecked, b waived'), 'escalation')).toBe('2 steering rules need your call before this step can go on');
+    // Only core's own rules-hold stem, on an escalation (codex r8): a prompt sharing the prefix, or another gate kind, keeps its words.
+    expect(plainGateQuestion('Unit 3\u2019s steering rules are already satisfied. Continue with the remaining work?', undefined)).not.toMatch(/needs your call/);
+    expect(plainGateQuestion(prompt(1, 'learn-accessible unchecked'), 'team_transport')).not.toMatch(/needs your call/);
     // A BROKEN rule is not a hold: its prompt keeps its own words.
     expect(plainGateQuestion('Unit 3 BROKE steering rule(s): 1 steering rule(s) broken: learn-tests-with-fixes — no test', 'escalation')).not.toMatch(/needs your call/);
   });

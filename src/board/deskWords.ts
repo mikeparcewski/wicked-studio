@@ -112,7 +112,7 @@ export function rulesHoldWords(ids: readonly string[], count: number | null = nu
 function pausedStepQuestion(p: string, gateKind: string | undefined): string | null {
   // (F22) A gate held on steering rules no judge ruled on (core's `rules_unchecked` prompt: "Unit N's steering rules
   // are UNCHECKED or waived by your instruction — K steering rule(s) need you: <id> unchecked (…)"). Not a rejection.
-  if (/^\s*Unit\s+\d+['’]s steering rules are\b/i.test(p)) {
+  if ((gateKind === undefined || gateKind === 'escalation') && /^\s*Unit\s+\d+['’]s steering rules are UNCHECKED\b/.test(p)) {
     const count = Number(/(\d+) steering rule\(s\) need you/i.exec(p)?.[1] ?? NaN);
     const one = count === 1 ? /need you:\s*([A-Za-z0-9_.:\/-]+)\s+(?:unchecked|waived|disputed)\b/i.exec(p)?.[1] : undefined;
     return rulesHoldWords(one !== undefined ? [one] : [], Number.isFinite(count) ? count : null);
