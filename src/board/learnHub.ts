@@ -203,7 +203,7 @@ export const STARTER_RULES: readonly StarterRule[] = [
     criteria: 'Not applicable when neither the job nor the pull request text names a tracked issue (an issue number or link). Broken when an issue the work resolves is named but the description does not close it with a closing keyword.',
     obligations: ['evidence:delivery'],
     previous: [{ statement: 'Every pull request names the issue it closes in its description.' }],
-    changed: 'Now it applies only when the job or the pull request names a tracked issue, and then the pull request must close it (Fixes #N). Keep yours if every pull request must have an issue.',
+    changed: 'With no named issue it does not apply. When the work resolves a named issue, the pull request must close it (Fixes #N). Keep yours if every pull request must have an issue.',
   },
   { id: 'learn-accessible', title: 'Accessible by default', line: 'Labels, focus and contrast on every screen', type: 'design-ux', statement: 'Every new screen has labelled controls, a visible focus and text contrast of at least 4.5:1.' },
   { id: 'learn-reversible-migrations', title: 'Migrations are reversible', line: 'Every schema change has a down step', type: 'operations', statement: 'Every schema migration has a tested down step.' },

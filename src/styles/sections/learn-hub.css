@@ -90,7 +90,7 @@
 .wk-learn-changed { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 16px; max-width: 900px; margin: 0 0 16px; padding: 12px 14px;
   border-left: 3px solid var(--accent); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); }
 .wk-learn-changed-t { display: flex; flex: 1 1 320px; flex-direction: column; gap: 4px; min-width: 0; }
-.wk-learn-changed-t h3 { margin: 0; color: var(--ink-high); font-size: var(--text-sm); font-weight: var(--weight-semi); }
+.wk-learn-changed-t h2 { margin: 0; color: var(--ink-high); font-size: var(--text-sm); font-weight: var(--weight-semi); }
 .wk-learn-changed-t > span { color: var(--ink-body); font-size: var(--text-sm); line-height: 1.45; }
 .wk-learn-changed-dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 4px 0 0; font-size: var(--text-xs); line-height: 1.45; }
 .wk-learn-changed-dl dt { color: var(--ink-muted); font-weight: var(--weight-semi); }

@@ -98,7 +98,7 @@ describe('Learn: rules', () => {
   const adopted = (over: object = {}): Record<string, unknown> => ({
     id: 'learn-linked-issue', rule_type: 'policy', statement: OLD_LINKED, severity: 'error', confidence: 0.9, targets: {},
     provenance: { source: 'ui', ref: 'learn:starter', source_kinds: ['doc'] }, steering_type: 'development', applies_to: ['phase:deliver'],
-    excludes: [], weight: 1, obligations: ['evidence:delivery'], created_at: 7, ...over,
+    excludes: ['tool:mcp'], weight: 1, obligations: ['evidence:delivery', 'check:team-own'], created_at: 7, ...over,
   });
 
   it('an adopted copy of a changed starter is offered the update; nothing is written until Update, which keeps the team’s fields', async () => {
@@ -112,9 +112,9 @@ describe('Learn: rules', () => {
     expect(within(offer).getByTestId('learn-starter-yours').textContent).toBe(OLD_LINKED);
     expect(within(offer).getByTestId('learn-starter-now').textContent).toContain('When a pull request resolves a tracked issue');
     expect(within(offer).getByTestId('learn-starter-criteria').textContent).toMatch(/^Not applicable when neither the job nor the pull request text names a tracked issue/u);
-    expect(offer.textContent).toContain('Now it applies only when the job or the pull request names a tracked issue');
+    expect(offer.textContent).toContain('With no named issue it does not apply. When the work resolves a named issue, the pull request must close it (Fixes #N).');
     expect(offer.textContent).toContain('Keep yours if every pull request must have an issue.');
-    expect(within(offer).getByRole('heading', { level: 3 }).textContent).toBe('This starter changed: Linked issue');
+    expect(within(offer).getByRole('heading', { level: 2 }).textContent).toBe('This starter changed: Linked issue');
     expect(d.sent('POST /governance/rules')).toHaveLength(0);
     const button = within(offer).getByRole('button', { name: 'Update Linked issue' });
     button.focus();
@@ -167,6 +167,7 @@ describe('Learn: rules', () => {
     render(<LearnHub navigate={nav} search="?tab=rules" />);
     fireEvent.click(within(await screen.findByTestId('learn-starter-changed')).getByTestId('learn-starter-update'));
     await waitFor(() => expect(screen.getByTestId('learn-rules-note').textContent).toContain('changed since this page loaded'));
+    expect(screen.getByTestId('learn-rules-note').className).not.toContain('wk-learn-bad');
     expect(d.sent('POST /governance/rules')).toHaveLength(0);
   });
 });

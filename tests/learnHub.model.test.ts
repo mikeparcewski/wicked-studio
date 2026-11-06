@@ -111,7 +111,7 @@ describe('the linked-issue starter is conditional, and an adopted copy is offere
   });
 
   it('offers the update for the old text verbatim, keeping every field the team set', () => {
-    const mine = copy({ severity: 'error', applies_to: ['phase:deliver'], weight: 2, targets: { project: 'pay' } } as Partial<ConformanceRule>);
+    const mine = copy({ severity: 'error', applies_to: ['phase:deliver'], excludes: ['tool:mcp'], obligations: ['evidence:delivery', 'check:team-own'], weight: 2, targets: { project: 'pay' } } as Partial<ConformanceRule>);
     const next = starterUpdate(linked, [mine])!;
     expect(next).toEqual({ ...mine, statement: linked.statement, criteria: linked.criteria });
     // Surrounding whitespace is not an edit.
