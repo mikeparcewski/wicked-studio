@@ -111,7 +111,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   }, [swapPending, pid, lineage.lineage, local]);
   /** A revision whose answer never came (the connection dropped): its hold stays until crew's next version, and
    *  "Try again" re-sends it under the same request id (crew answers a repeat with the same proposal). */
-  const [lost, setLost] = useState<{ body: Parameters<typeof api.reviseChatProposal>[1]; token: string | null } | null>(null);
+  const [lost, setLost] = useState<{ body: Parameters<typeof api.reviseChatProposal>[1]; token: string | null; typed: string | null } | null>(null);
+  /** Words the person typed for an answer crew refused, kept while the box holds something newer (never lost). */
+  const [unsent, setUnsent] = useState<string | null>(null);
+  const keepWords = (typed: string): void => {
+    if (typed.trim() === '') return;
+    if (composerFree()) useSessionDrafts.getState().setDraft(sessionId, typed); else setUnsent(typed);
+  };
 
   // Only what changed moves (§2.7.3 rule 1): tokens whose label changed since the version seen when this passage
   // mounted wash; a page that opens on v2 washes nothing. Under reduced motion the wash is static and clears when the
@@ -159,7 +165,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         if (!(e instanceof ApiError) || e.status === 0) {
           // No answer from crew: it may have taken the change. The hold stays; the next version or a retry ends it.
           // Only the request that still owns the hold offers a retry: an older one's late failure is moot.
-          if (useJobLocal.getState().swapRequest[lineage.lineage] === body.requestId) setLost({ body, token });
+          if (useJobLocal.getState().swapRequest[lineage.lineage] === body.requestId) setLost({ body, token, typed });
           onChanged();
           return;
         }
@@ -167,7 +173,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         // person typed for it come back to a free box (a fresh answer is a fresh binding).
         local.endSwap(lineage.lineage, body.requestId);
         setError(proposalRefusal(e).words);
-        if (typed !== null && typed.trim() !== '' && composerFree()) useSessionDrafts.getState().setDraft(sessionId, typed);
+        if (typed !== null) keepWords(typed);
         onChanged();
       });
   };
@@ -218,7 +224,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     }).catch((e: unknown) => {
       // The send failed: crew's words say why, and the person's words are not lost.
       setError(e instanceof Error ? e.message : String(e));
-      if (composerFree()) useSessionDrafts.getState().setDraft(sessionId, text);
+      keepWords(text);
     });
     return true;
   };
@@ -564,11 +570,20 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         </div>
       )}
       {press.note !== null && <p data-testid="job-passage-press-note" role="status" className="wk-pass-why">{press.note.text}</p>}
+      {unsent !== null && (
+        <p data-testid="job-passage-unsent" role="status" className="wk-pass-sub">
+          Not sent: “{unsent}”.{' '}
+          <button type="button" className="wk-pass-inl" data-testid="job-passage-unsent-put"
+            onClick={() => { const d = useSessionDrafts.getState(); const cur = d.drafts[sessionId] ?? ''; d.setDraft(sessionId, cur.trim() === '' ? unsent : `${cur}\n${unsent}`); setUnsent(null); }}>Put it in the box</button>
+          {' · '}
+          <button type="button" className="wk-pass-inl" onClick={() => setUnsent(null)}>Dismiss</button>
+        </p>
+      )}
       {lost !== null && v.phase === 'swapPending' && (
         <p data-testid="job-passage-lost" role="alert" className="wk-pass-sub wk-pass-error">
           Studio’s service didn’t answer, so your change may or may not have landed. Start waits until it does.{' '}
           <button type="button" className="wk-pass-inl" data-testid="job-passage-retry"
-            onClick={() => { if (lost.body.revises === pid && useJobLocal.getState().swapRequest[lineage.lineage] === lost.body.requestId) sendRevision(lost.body, lost.token); else setLost(null); }}>Try again</button>
+            onClick={() => { if (lost.body.revises === pid && useJobLocal.getState().swapRequest[lineage.lineage] === lost.body.requestId) sendRevision(lost.body, lost.token, lost.typed); else { if (lost.typed !== null) keepWords(lost.typed); setLost(null); } }}>Try again</button>
         </p>
       )}
       {error !== null && <p data-testid="job-passage-error" role="alert" className="wk-pass-sub wk-pass-error">{error}</p>}

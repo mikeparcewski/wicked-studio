@@ -754,3 +754,49 @@ describe('review round 5 folds', () => {
     await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('a prototype nobody uses'));
   });
 });
+
+describe('review round 6 fold', () => {
+  const q = { kind: 'lost_check', text: 'Skip QE acceptance?', choices: [{ label: 'Skip it, with a reason…', edit: { skipQe: { reason: '' }, confirmLoss: true } }, { label: 'Keep QE', edit: { restoreQe: true } }],
+    lost: ['qe-acceptance'], input: { kind: 'text', label: 'Why skip QE acceptance', edit: 'skipQe.reason' } };
+  const deferred = (): { answers: Array<{ res: (r: Response) => void; rej: (e: unknown) => void }> } => {
+    const answers: Array<{ res: (r: Response) => void; rej: (e: unknown) => void }> = [];
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') { posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> }); return new Promise<Response>((res, rej) => answers.push({ res, rej })); }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    return { answers };
+  };
+  const answerTyped = async (words: string): Promise<void> => {
+    await screen.findByTestId('job-passage');
+    fireEvent.click(reply('choice:0'));
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: words } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(posts.length).toBeGreaterThan(0));
+  };
+  beforeEach(() => { messages = [USER, SEAT, { at: T0 + 2, turnId: 't1', kind: 'proposal', proposal: jobProposal({ question: q as never }) }]; });
+
+  it('a refusal that lands while the box holds a newer draft keeps the words in the passage', async () => {
+    const { answers } = deferred();
+    page();
+    await answerTyped('a prototype nobody uses');
+    fireEvent.change(screen.getByTestId('session-composer-input'), { target: { value: 'something newer' } });
+    await act(async () => { answers[0]!.res(ok({ error: 'replaced', code: 'proposal_stale' }, 409)); await Promise.resolve(); });
+    expect((await screen.findByTestId('job-passage-unsent')).textContent).toContain('a prototype nobody uses');
+    expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('something newer');
+  });
+
+  it('a lost answer retried and then refused still gives the words back', async () => {
+    const { answers } = deferred();
+    page();
+    await answerTyped('a prototype nobody uses');
+    await act(async () => { answers[0]!.rej(new TypeError('Failed to fetch')); await Promise.resolve(); });
+    fireEvent.click(await screen.findByTestId('job-passage-retry'));
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[1]!.body['requestId']).toBe(posts[0]!.body['requestId']);
+    await act(async () => { answers[1]!.res(ok({ error: 'replaced', code: 'proposal_stale' }, 409)); await Promise.resolve(); });
+    await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('a prototype nobody uses'));
+  });
+});
