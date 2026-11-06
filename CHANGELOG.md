@@ -12,6 +12,15 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+
+- **A Demo video the engine records (wicked-core#1249, DES-DEMO-RECORD-001).** A run of either demo preset is a demo
+  run, `demo-human-review` included (an app whose data stays out of model context: no model review, the person
+  reviews the take at the record gate). At the plan gate, "What the engine will record" lists the approved
+  storyline's chapters and steps in words, read-only against the app. The seat line names the engine as the
+  recorder ("the engine records on this machine (sandbox-exec, the app's port only)") when crew says it did
+  (`DemoView.producer`, read structurally until studio's wicked-crew-api-types has it).
+
 ## [0.15.0] — 2026-11-05
 
 A feature release for crew 0.17.0: Apps by chat (K5) on the data sources sheet and panel (K3), Ask a question of a

@@ -204,6 +204,19 @@ function DemoScriptActions({ runId, units, onChanged }: { runId: string; units: 
   };
   return (
     <div data-testid="demo-script-actions" className="wk-walk-actions">
+      {rec.storyline !== undefined && rec.storyline.length > 0 && (
+        <details data-testid="demo-storyline" className="wk-walk-edit">
+          <summary className="wk-walk-quiet">What the engine will record: {rec.storyline.length} chapter{rec.storyline.length === 1 ? '' : 's'}, read-only against the app</summary>
+          <ol className="wk-demo-storyline">
+            {rec.storyline.map((c) => (
+              <li key={c.key}>
+                <strong>{c.title}</strong>
+                {c.steps.length > 0 && <ul>{c.steps.map((st, i) => <li key={i}>{st}</li>)}</ul>}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
       <button type="button" data-testid="demo-script-edit" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="wk-prop-btn wk-prop-btn--ghost">Edit the script</button>
       {open && (
         <div data-testid="demo-script-box" className="wk-walk-edit">
