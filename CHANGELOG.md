@@ -22,7 +22,8 @@ npm publish dates. Every version listed here exists on
   same thing everywhere, from one reading (`useTurnRulesHold`): the busy line reads "Waiting on you: a rule needs your
   call", the app page's "Needs you" strip counts the hold ("1 waiting", answer it in the chat), and a rules hold's gate
   heading names the rule ("The rule learn-accessible needs your call before this step can go on"; a count for several)
-  instead of "The step was escalated" (gate headline, so the run page and the Desk rows say it too). Needs crew with the
+  instead of "The step was escalated". The gate headline and the prompt-only surfaces (the gate toast, the Desk, the
+  dock) use the same words, so the run page says it too. Needs crew with the
   matching fix (wicked-crew#1385: a held turn is no longer cancelled); on an older crew the turn ends refused as before.
 
 ## [0.15.0] — 2026-11-05
