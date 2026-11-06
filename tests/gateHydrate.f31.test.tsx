@@ -65,6 +65,7 @@ describe('a waiting run’s thread reads its own gate', () => {
   beforeEach(() => {
     useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [RUN]: [] } }));
     useGateActionStore.setState({ byGate: { [RUN]: IDLE_GATE_ACTION } });
+    useConnectionStore.setState({ status: 'connected' } as never);
     vi.spyOn(teamPlanApi, 'team').mockResolvedValue({ rows: [], units: [] } as never);
     vi.spyOn(client.api, 'getRunEvents').mockResolvedValue({ events: [] } as never);
     vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false } as never);
@@ -83,18 +84,19 @@ describe('a waiting run’s thread reads its own gate', () => {
     expect(getGate).toHaveBeenCalledWith(RUN, expect.any(AbortSignal));
   });
 
-  it('after the socket drops and reconnects, the thread reads its gate again (the read on its way was made obsolete)', async () => {
+  it('a drop: the read on its way is dropped and no new read starts while down; a reconnect reads again and draws the card', async () => {
     const { calls, spy } = heldGetGate();
     render(<RunBlock view={makeView({ id: RUN, status: 'awaiting_human', problem: 'fix the sum bug' })} badge={1} sessionId={`run:${RUN}`} />);
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
-    act(() => { invalidateGateReads(); }); // the socket dropped
-    act(() => { invalidateGateReads(); }); // and came back
-    await waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
-    calls[0]!.resolve(planInfo(RUN, 2)); // the obsolete reads land: dropped
-    calls[1]!.resolve(planInfo(RUN, 2));
+    act(() => { useConnectionStore.setState({ status: 'disconnected' } as never); });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(spy).toHaveBeenCalledTimes(1); // nothing read while the socket is down
+    calls[0]!.resolve(planInfo(RUN, 2)); // gate A, read before the drop, lands during it: dropped
     await new Promise((r) => setTimeout(r, 0));
     expect(useGateStore.getState().gates[RUN]).toBeUndefined();
-    calls[2]!.resolve(planInfo(RUN, 3));
+    act(() => { useConnectionStore.setState({ status: 'connected' } as never); });
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    calls[1]!.resolve(planInfo(RUN, 3)); // the gate open now (B)
     await waitFor(() => expect(screen.queryByTestId('session-proposal')).not.toBeNull());
     expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 3 });
   });
@@ -236,14 +238,12 @@ describe('one read per run, no re-read storm', () => {
     expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 7 });
   });
 
-  it('a read that lands while the socket is down is dropped (the runs list invalidates reads on a drop)', async () => {
+  it('a read that lands while the socket is down is dropped (every connection status change invalidates reads)', async () => {
     const RUN = fresh('drop');
     const { calls } = heldGetGate();
     useConnectionStore.setState({ status: 'connected' } as never);
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{"runs":[]}', { status: 200, headers: { 'content-type': 'application/json' } }))));
-    renderHook(() => useRuns());
     const read = ensureGate(RUN);
-    act(() => { useConnectionStore.setState({ status: 'disconnected' } as never); });
+    useConnectionStore.setState({ status: 'disconnected' } as never);
     calls[0]!.resolve(planInfo(RUN));
     await read;
     expect(useGateStore.getState().gates[RUN]).toBeUndefined();

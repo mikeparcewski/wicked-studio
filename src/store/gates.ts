@@ -4,6 +4,7 @@ import { isAwaitingPinned } from './awaitingPins.js';
 import { isAskTurnGate } from '../board/askThread.js';
 import { useAskThreadStore } from './askThread.js';
 import { useCapabilities } from './capabilities.js';
+import { useConnectionStore } from './connection.js';
 
 /**
  * A browser-side open-gate record, keyed by run id. Mirrors the daemon's
@@ -142,9 +143,6 @@ interface GateStore {
   gates: Record<string, OpenGate>;
   /** Escalated-but-not-yet-posted gates keyed by run id (§1.3's preview). */
   approaching: Record<string, ApproachingGate>;
-  /** F31: bumped when the socket connects or drops (`invalidateGateReads`): a waiting run's thread reads its gate
-   *  again, because the read it had on its way was made obsolete. */
-  readEpoch: number;
   /** Upsert a gate (from a live event or a `GET /runs/:id/gate` reconcile). */
   setGate: (gate: OpenGate) => void;
   /** Drop a run's gate (it was answered here, or crew has none open). */
@@ -167,7 +165,7 @@ interface GateStore {
 /**
  * F31: per run, the gate's generation: bumped by every WRITE to the run's gate that is not itself a read (a live frame
  * that opens one or moves the run past it, `gateDecided`, an answer sent here, a prune by the runs list, the ask-path
- * reclassification). A `GET /runs/:id/gate` read carries the generation it began under (`beginGateRead`) and applies
+ * reclassification) and by every change of the socket's status (`invalidateGateReads`). A `GET /runs/:id/gate` read carries the generation it began under (`beginGateRead`) and applies
  * only if it is unchanged, so a read that overlapped any of those never brings back a gate that is gone. Reads do not
  * bump it: among reads, the one begun last wins (`readSeq` / `appliedSeq`), whatever order they land in.
  */
@@ -188,10 +186,10 @@ export interface GateReadTicket {
   seq: number;
 }
 /** The socket connected or dropped: frames may be missed, so every read begun before it is obsolete (never applied,
- *  never joined), and `readEpoch` tells the waiting threads to read again. */
+ *  never joined). Run on every connection status change, synchronously (below), so it precedes any read a re-render
+ *  starts for the new status. */
 export function invalidateGateReads(): void {
   for (const id of Object.keys(readSeq)) bump(id);
-  useGateStore.setState((s) => ({ readEpoch: s.readEpoch + 1 }));
 }
 /** Begin a gate read: take its ticket before the request goes out. */
 export function beginGateRead(runId: string): GateReadTicket {
@@ -219,7 +217,6 @@ export const useGateStore = create<GateStore>((set) => {
   return {
   gates: {},
   approaching: {},
-  readEpoch: 0,
 
   setGate: (gate) => {
     bump(gate.runId);
@@ -354,4 +351,9 @@ export const useGateStore = create<GateStore>((set) => {
     });
   },
   };
+});
+
+// F31: a drop or a reconnect makes every gate read begun before it obsolete.
+useConnectionStore.subscribe((now, before) => {
+  if (now.status !== before.status) invalidateGateReads();
 });
