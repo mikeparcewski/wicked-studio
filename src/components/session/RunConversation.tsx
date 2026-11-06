@@ -247,8 +247,10 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     : status === 'failed' || status === 'cancelled' ? 'stopped' : 'other';
   const gate = useGateStore((s) => s.gates[id]);
   // F31: a run that waits on a person reads its own open gate when its thread opens, instead of waiting its turn in
-  // the runs list's late-join pass (98 parked runs: the newest run's plan card came ~28 s after a reload). Only on
-  // mount and on a status change: a gate answered here is not read again while the run's status catches up.
+  // the runs list's late-join pass (98 parked runs: the newest run's plan card came ~28 s after a reload). On mount and
+  // on a status change only. A remount right after an answer here may read again, but the store drops a read of the
+  // gate just answered (its ord) until crew says the run moved; a read a frame made stale is redone by the runs
+  // refresh that frame triggers.
   useEffect(() => {
     if (status === 'awaiting_human' && useGateStore.getState().gates[id] === undefined) void ensureGate(id);
   }, [id, status]);

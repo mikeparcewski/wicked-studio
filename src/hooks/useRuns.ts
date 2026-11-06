@@ -6,7 +6,7 @@ import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { useGateStore } from '../store/gates.js';
 import { answerShapeOf, askerOf, useElicitationStore } from '../store/elicitations.js';
-import { ensureGate, rememberWorkTitles } from '../board/gateActions.js';
+import { GATE_READ_PATIENCE_MS, ensureGate, rememberWorkTitles, resetGateProbes } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -42,16 +42,26 @@ export function newestFirst(views: readonly SessionView[]): string[] {
   return views.map((v, i) => ({ v, i })).sort((a, b) => at(b.v) - at(a.v) || a.i - b.i).map(({ v }) => v.session.id);
 }
 
-/** Run `fn` over `items` with at most `limit` on their way at once, in order. */
-export async function eachLimited<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
-  let next = 0;
-  const lane = async (): Promise<void> => {
-    while (next < items.length) {
-      const item = items[next++] as T;
-      await fn(item);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+/**
+ * F31: the late-join passes' shared read slots. At most `GATE_READS_IN_FLIGHT` reads are on their way across every
+ * pass (a refresh that replaces a pass does not add four more); a slot whose read is overdue
+ * (`GATE_READ_PATIENCE_MS`) is given back, so a hung request cannot stall the passes after it.
+ */
+let slotsBusy = 0;
+const slotWaiters: Array<() => void> = [];
+export async function inGateSlot(fn: () => Promise<void>): Promise<void> {
+  // A freed slot is handed to the longest waiter (first in, first out), never taken by a newcomer.
+  if (slotsBusy < GATE_READS_IN_FLIGHT) slotsBusy += 1;
+  else await new Promise<void>((r) => slotWaiters.push(r));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([fn(), new Promise<void>((r) => { timer = setTimeout(r, GATE_READ_PATIENCE_MS); })]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    const next = slotWaiters.shift();
+    if (next !== undefined) next();
+    else slotsBusy -= 1;
+  }
 }
 
 /** Test seam. */
@@ -122,7 +132,7 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
   }, []);
 
   // A (re)connect may have missed a question's live frame: every live run is read again (review r1).
-  useEffect(() => { if (status === 'connected') resetElicitationProbes(); }, [status]);
+  useEffect(() => { if (status === 'connected') { resetElicitationProbes(); resetGateProbes(); } }, [status]);
 
   useEffect(() => {
     if (status !== 'connected') return;
@@ -171,12 +181,13 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       void hydrateElicitations(fetched, () => cancelled);
 
       // F31: the newest waiting runs first (the ones a person just launched and is looking at), a few reads at a
-      // time. A refresh that cancels this pass stops new reads; a read that lands still applies, because
-      // `refreshGate` drops it if the run's gate moved meanwhile. A failed read leaves the id-only gate working.
-      await eachLimited(newestFirst(fetched.filter((v) => v.session.status === 'awaiting_human')), GATE_READS_IN_FLIGHT, async (id) => {
+      // time across passes (`inGateSlot`). A refresh that cancels this pass stops its new reads; a read that lands
+      // still applies, because `applyGateRead` drops it if the run's gate moved meanwhile. A failed read leaves the
+      // id-only gate working and is tried again on the next pass.
+      await Promise.all(newestFirst(fetched.filter((v) => v.session.status === 'awaiting_human')).map((id) => inGateSlot(async () => {
         if (cancelled || useGateStore.getState().gates[id] !== undefined) return;
         await ensureGate(id);
-      });
+      })));
     })();
 
     return () => {
