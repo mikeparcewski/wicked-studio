@@ -6,7 +6,7 @@ import { STEERING_TYPE_LABELS, steeringTypeOf } from '../../api/steering.js';
 import { rulePath } from '../../api/decisions.js';
 import { DESK_VIEW_PATH } from '../../board/navModel.js';
 import type { ConformanceRule } from '../../api/types.js';
-import { rulesYouCareAbout, STARTER_RULES, starterRule, starterUpdate, type StarterRule } from '../../board/learnHub.js';
+import { rulesYouCareAbout, STARTER_RULES, starterAdoption, starterUpdate, type StarterRule } from '../../board/learnHub.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useFirstRun } from '../../store/firstRun.js';
 import { AuthorPanel } from '../SteeringAuthorPanel.js';
@@ -28,27 +28,49 @@ export function RulesTab({ navigate }: { navigate: Navigate }): React.ReactEleme
   const [importing, setImporting] = useState(false);
   const pageRef = useRef<HTMLDivElement | null>(null);
 
-  const load = (): void => {
+  const noteRef = useRef<HTMLParagraphElement | null>(null);
+  const [focusNote, setFocusNote] = useState(false);
+
+  const load = (): Promise<void> => {
     setError(null);
-    api.listConformanceRules().then((r) => setRules(r.rules), setError);
+    return api.listConformanceRules().then((r) => setRules(r.rules), setError);
   };
-  useEffect(load, []);
+  useEffect(() => { void load(); }, []);
+  // After an Update the offer (and the focused button) is gone: focus moves to the note that says what happened.
+  useEffect(() => {
+    if (focusNote && note !== null) {
+      noteRef.current?.focus();
+      setFocusNote(false);
+    }
+  }, [focusNote, note]);
 
   const inForce = (s: StarterRule): boolean => rules?.some((r) => r.id === s.id && r.retired !== true) ?? false;
+  /**
+   * Picking or unpicking a starter decides on a FRESH read, never on this page's copy: a copy adopted or edited
+   * elsewhere since the page loaded is shown, not overwritten. Picking a starter the team retired brings their own
+   * copy back as it was (F21: never replaced by the starter's defaults).
+   */
   const toggle = async (s: StarterRule): Promise<void> => {
     if (busy !== null || rules === null) return;
+    const wasOn = inForce(s);
     setBusy(s.id);
     setNote(null);
     try {
-      if (inForce(s)) {
+      const fresh = (await api.listConformanceRules()).rules;
+      const nowOn = fresh.some((r) => r.id === s.id && r.retired !== true);
+      if (nowOn !== wasOn) {
+        setNote({ tone: 'ok', text: `“${s.title}” changed since this page loaded; here it is as it is now.` });
+      } else if (wasOn) {
         await api.retireConformanceRule(s.id);
         setNote({ tone: 'ok', text: `“${s.title}” is no longer in force.` });
       } else {
-        await api.upsertConformanceRule(starterRule(s));
-        setNote({ tone: 'ok', text: `“${s.title}” is in force now.` });
+        const write = starterAdoption(s, fresh);
+        if (write !== null) await api.upsertConformanceRule(write);
+        const restored = fresh.some((r) => r.id === s.id);
+        setNote({ tone: 'ok', text: restored ? `“${s.title}” is in force again, as you had it.` : `“${s.title}” is in force now.` });
         void useFirstRun.getState().markLearnUsed();
       }
-      load();
+      await load();
     } catch (e) {
       setNote({ tone: 'fail', text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -65,24 +87,26 @@ export function RulesTab({ navigate }: { navigate: Navigate }): React.ReactEleme
     try {
       const next = starterUpdate(s, (await api.listConformanceRules()).rules);
       if (next === null) {
-        setNote({ tone: 'fail', text: `Your “${s.title}” changed since this page loaded, so it was left as it is.` });
+        setNote({ tone: 'ok', text: `Your “${s.title}” changed since this page loaded, so it was left as it is.` });
       } else {
         await api.upsertConformanceRule(next);
         setNote({ tone: 'ok', text: `“${s.title}” now reads the new starter text.` });
       }
-      load();
+      setFocusNote(true);
+      await load();
     } catch (e) {
       setNote({ tone: 'fail', text: e instanceof Error ? e.message : String(e) });
+      setFocusNote(true);
     } finally {
       setBusy(null);
     }
   };
 
-  if (error !== null) return <StateBanner kind={readErrorKind(error)} what="your rules" error={error instanceof Error ? error.message : String(error)} onRetry={load} data-testid="learn-rules-error" />;
+  if (error !== null) return <StateBanner kind={readErrorKind(error)} what="your rules" error={error instanceof Error ? error.message : String(error)} onRetry={() => void load()} data-testid="learn-rules-error" />;
   if (rules === null) return <Skeleton rows={4} data-testid="learn-rules-loading" />;
   const mine = rulesYouCareAbout(rules);
   const changed = STARTER_RULES.flatMap((s) => {
-    const copy = starterUpdate(s, rules) === null ? undefined : rules.find((r) => r.id === s.id);
+    const copy = starterUpdate(s, rules) === null ? undefined : rules.find((r) => r.id === s.id && r.retired !== true);
     return copy === undefined ? [] : [{ s, yours: copy.statement }];
   });
 
@@ -106,18 +130,19 @@ export function RulesTab({ navigate }: { navigate: Navigate }): React.ReactEleme
       {changed.map(({ s, yours }) => (
         <section key={s.id} className="wk-learn-changed" aria-label={`This starter changed: ${s.title}`} data-testid="learn-starter-changed" data-starter={s.id}>
           <div className="wk-learn-changed-t">
-            <b>This starter changed: {s.title}</b>
+            <h3>This starter changed: {s.title}</h3>
             {s.changed !== undefined && <span>{s.changed}</span>}
             <dl className="wk-learn-changed-dl">
               <dt>Yours</dt><dd data-testid="learn-starter-yours">{yours}</dd>
               <dt>Now</dt><dd data-testid="learn-starter-now">{s.statement}</dd>
+              {s.criteria !== undefined && <><dt>Adds</dt><dd data-testid="learn-starter-criteria">{s.criteria}</dd></>}
             </dl>
           </div>
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="learn-starter-update" disabled={busy !== null}
-            onClick={() => void update(s)}>Update</button>
+            aria-label={`Update ${s.title}`} onClick={() => void update(s)}>Update</button>
         </section>
       ))}
-      {note !== null && <p className={`wk-learn-quiet${note.tone === 'fail' ? ' wk-learn-bad' : ''}`} role="status" data-testid="learn-rules-note">{note.text}</p>}
+      {note !== null && <p ref={noteRef} tabIndex={-1} className={`wk-learn-quiet${note.tone === 'fail' ? ' wk-learn-bad' : ''}`} role="status" data-testid="learn-rules-note">{note.text}</p>}
       <div className="wk-learn-res-head">
         <h2 className="wk-learn-h2">In force for you <span className="wk-learn-quiet" data-testid="learn-rules-count">· {mine.length}</span></h2>
         <div className="wk-learn-row">
@@ -128,7 +153,7 @@ export function RulesTab({ navigate }: { navigate: Navigate }): React.ReactEleme
       </div>
       {chat && (
         <div className="wk-learn-chat" data-testid="learn-rules-author">
-          <AuthorPanel type="development" onClose={() => setChat(false)} onAuthored={() => { load(); void useFirstRun.getState().markLearnUsed(); }} />
+          <AuthorPanel type="development" onClose={() => setChat(false)} onAuthored={() => { void load(); void useFirstRun.getState().markLearnUsed(); }} />
         </div>
       )}
       {mine.length === 0 ? (
@@ -147,7 +172,7 @@ export function RulesTab({ navigate }: { navigate: Navigate }): React.ReactEleme
           ))}
         </ul>
       )}
-      {importing && <ImportDialog defaultType="development" background={pageRef} onClose={() => setImporting(false)} onImported={() => { load(); void useFirstRun.getState().markLearnUsed(); }} />}
+      {importing && <ImportDialog defaultType="development" background={pageRef} onClose={() => setImporting(false)} onImported={() => { void load(); void useFirstRun.getState().markLearnUsed(); }} />}
     </div>
   );
 }

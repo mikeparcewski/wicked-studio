@@ -111,14 +111,46 @@ describe('Learn: rules', () => {
     expect(within(offer).getByText('This starter changed: Linked issue')).toBeTruthy();
     expect(within(offer).getByTestId('learn-starter-yours').textContent).toBe(OLD_LINKED);
     expect(within(offer).getByTestId('learn-starter-now').textContent).toContain('When a pull request resolves a tracked issue');
+    expect(within(offer).getByTestId('learn-starter-criteria').textContent).toMatch(/^Not applicable when neither the job nor the pull request text names a tracked issue/u);
+    expect(offer.textContent).toContain('Now it applies only when the job or the pull request names a tracked issue');
     expect(offer.textContent).toContain('Keep yours if every pull request must have an issue.');
+    expect(within(offer).getByRole('heading', { level: 3 }).textContent).toBe('This starter changed: Linked issue');
     expect(d.sent('POST /governance/rules')).toHaveLength(0);
-    fireEvent.click(within(offer).getByTestId('learn-starter-update'));
+    const button = within(offer).getByRole('button', { name: 'Update Linked issue' });
+    button.focus();
+    fireEvent.click(button);
     await waitFor(() => expect(d.sent('POST /governance/rules')).toHaveLength(1));
     const posted = d.sent('POST /governance/rules')[0] as Record<string, unknown>;
     expect(posted).toEqual({ ...adopted(), statement: expect.stringContaining('When a pull request resolves a tracked issue'), criteria: expect.stringContaining('Not applicable when') });
     await waitFor(() => expect(screen.queryByTestId('learn-starter-changed')).toBeNull());
     expect(screen.getByTestId('learn-rules-note').textContent).toBe('“Linked issue” now reads the new starter text.');
+    // The focused button went with the offer: focus lands on the note that says what happened.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('learn-rules-note')));
+  });
+
+  it('picking a starter the team retired brings their copy back as it was, never the starter’s defaults', async () => {
+    let rules: Record<string, unknown>[] = [adopted({ statement: 'Every pull request names its Jira ticket.', retired: true })];
+    d.on('GET /governance/rules', () => ({ rules }));
+    d.on('POST /governance/rules', (b) => { rules = [b as Record<string, unknown>]; return { status: 'ok' }; });
+    render(<LearnHub navigate={nav} search="?tab=rules" />);
+    const tile = (await screen.findAllByTestId('learn-starter')).find((t) => t.getAttribute('data-starter') === 'learn-linked-issue')!;
+    expect(tile.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(tile);
+    await waitFor(() => expect(d.sent('POST /governance/rules')).toHaveLength(1));
+    expect(d.sent('POST /governance/rules')[0]).toEqual(adopted({ statement: 'Every pull request names its Jira ticket.', retired: false }));
+    await waitFor(() => expect(screen.getByTestId('learn-rules-note').textContent).toBe('“Linked issue” is in force again, as you had it.'));
+  });
+
+  it('a starter adopted elsewhere since the page loaded is shown, not overwritten', async () => {
+    let reads = 0;
+    d.on('GET /governance/rules', () => ({ rules: reads++ === 0 ? [] : [adopted({ statement: 'Edited in another tab.' })] }));
+    d.on('POST /governance/rules', { status: 'ok' });
+    render(<LearnHub navigate={nav} search="?tab=rules" />);
+    const tile = (await screen.findAllByTestId('learn-starter')).find((t) => t.getAttribute('data-starter') === 'learn-linked-issue')!;
+    fireEvent.click(tile);
+    await waitFor(() => expect(screen.getByTestId('learn-rules-note').textContent).toBe('“Linked issue” changed since this page loaded; here it is as it is now.'));
+    expect(d.calls.filter((c) => c.method !== 'GET')).toEqual([]);
+    await waitFor(() => expect(screen.getAllByTestId('learn-starter').find((t) => t.getAttribute('data-starter') === 'learn-linked-issue')!.getAttribute('aria-pressed')).toBe('true'));
   });
 
   it('an edited copy is never offered the update', async () => {
@@ -225,15 +257,26 @@ describe('First run (§4)', () => {
     expect((settings['studio.firstRun'] as { answers: Record<string, unknown> }).answers['repos']).toBeTruthy();
   });
 
-  it('the rules ask never rewrites a starter already in force (a team’s copy may be edited)', async () => {
+  it('the rules ask never rewrites a team’s copy: one in force is left alone, a retired one comes back as it was', async () => {
     settings['studio.firstRun'] = { answers: Object.fromEntries(['repos', 'agents', 'style'].map((k) => [k, { line: k, words: k, done: true }])) };
-    d.on('GET /governance/rules', { rules: [{ id: 'learn-small-prs', statement: 'Under 800 lines.', provenance: { source: 'ui', ref: 'learn:starter', source_kinds: [] } }] });
+    const retired = { id: 'learn-tests-with-fixes', statement: 'A fix carries a regression test.', severity: 'error', retired: true, provenance: { source: 'ui', ref: 'learn:starter', source_kinds: [] } };
+    d.on('GET /governance/rules', { rules: [{ id: 'learn-small-prs', statement: 'Under 800 lines.', provenance: { source: 'ui', ref: 'learn:starter', source_kinds: [] } }, retired] });
     d.on('POST /governance/rules', { status: 'ok' });
     render(<FirstRun navigate={nav} agents={agents} hasRoster />);
     const ask = await screen.findByTestId('first-run-ask-rules');
     fireEvent.click(within(ask).getByTestId('ask-confirm'));
     await waitFor(() => expect(screen.getByTestId('first-run-record-rules')).toBeTruthy());
-    expect(d.sent('POST /governance/rules').map((r) => (r as { id: string }).id)).toEqual(['learn-tests-with-fixes']);
+    expect(d.sent('POST /governance/rules')).toEqual([{ ...retired, retired: false }]);
+  });
+
+  it('choosing no rules needs no rules read', async () => {
+    settings['studio.firstRun'] = { answers: Object.fromEntries(['repos', 'agents', 'style'].map((k) => [k, { line: k, words: k, done: true }])) };
+    render(<FirstRun navigate={nav} agents={agents} hasRoster />);
+    const ask = await screen.findByTestId('first-run-ask-rules');
+    for (const o of within(ask).getAllByTestId('ask-option').filter((x) => x.getAttribute('aria-checked') === 'true')) fireEvent.click(o);
+    fireEvent.click(within(ask).getByTestId('ask-confirm'));
+    await waitFor(() => expect(screen.getByTestId('first-run-record-rules')).toBeTruthy());
+    expect(d.calls.filter((c) => c.path.startsWith('/governance/rules'))).toEqual([]);
   });
 
   it('picking a personality saves it as yours and moves Learn below Evaluate', async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   firstNameOf, firstRunOpen, nextSetupAsk, PERSONA_PRESETS, previewAnswer, readFirstRun, rulesYouCareAbout, siteOfEmail,
-  STARTER_RULES, starterRule, starterUpdate, styleStations, writingStyleNotes, jobLine, repoStyleProblem,
+  STARTER_RULES, starterAdoption, starterRule, starterUpdate, styleStations, writingStyleNotes, jobLine, repoStyleProblem,
 } from '../src/board/learnHub.js';
 import { LEARN_ITEM, navCurrent, navGroups, NAV_GROUPS } from '../src/board/navModel.js';
 import type { ConformanceRule, SessionView } from '../src/api/types.js';
@@ -124,10 +124,26 @@ describe('the linked-issue starter is conditional, and an adopted copy is offere
     expect(starterUpdate(linked, [copy({ criteria: 'Strict: an issue for every pull request.' })])).toBeNull();
     expect(starterUpdate(linked, [copy({ retired: true })])).toBeNull();
     expect(starterUpdate(linked, [copy({ provenance: { source: 'doc-ingest', ref: 'CONTRIBUTING.md', source_kinds: ['doc'] } })])).toBeNull();
+    // Each part of the starter's provenance alone: a copy re-sourced or re-kinded is not the adopted starter.
+    expect(starterUpdate(linked, [copy({ provenance: { source: 'doc-ingest', ref: 'learn:starter', source_kinds: ['doc'] } })])).toBeNull();
+    expect(starterUpdate(linked, [copy({ provenance: { source: 'ui', ref: 'learn:starter', source_kinds: ['code'] } })])).toBeNull();
     expect(starterUpdate(linked, [starterRule(linked)])).toBeNull();
     expect(starterUpdate(linked, [])).toBeNull();
     // A starter with no earlier text never offers one.
     expect(starterUpdate(STARTER_RULES[0]!, [starterRule(STARTER_RULES[0]!)])).toBeNull();
+  });
+});
+
+describe('picking a starter never replaces the team’s copy (F21)', () => {
+  const linked = STARTER_RULES.find((s) => s.id === 'learn-linked-issue')!;
+  const edited = { ...starterRule(linked), statement: 'Every pull request names its Jira ticket.', severity: 'error', applies_to: ['phase:deliver'], weight: 3 } as ConformanceRule;
+
+  it('a starter never adopted is written fresh; one in force writes nothing; a retired copy comes back exactly as it was', () => {
+    expect(starterAdoption(linked, [])).toEqual(starterRule(linked));
+    expect(starterAdoption(linked, [edited])).toBeNull();
+    expect(starterAdoption(linked, [{ ...edited, retired: true }])).toEqual({ ...edited, retired: false });
+    // A retired copy beside one in force: the one in force wins (nothing to write).
+    expect(starterAdoption(linked, [{ ...edited, retired: true }, starterRule(linked)])).toBeNull();
   });
 });
 
