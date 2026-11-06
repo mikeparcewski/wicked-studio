@@ -245,6 +245,25 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       .finally(() => local.setReshaping(run0, false));
   };
   const reshapeIds = useRef(new Map<string, string>());
+  /** A hand-off after a stop or failure is being made (one at a time; a retry of a lost one reuses its request id). */
+  const [handOff, setHandOff] = useState(false);
+  const handOffIds = useRef(new Map<string, string>());
+  const handOffJob = (what: 'bug' | 'again'): void => {
+    const p = v.proposal;
+    if (run === null || handOff) return;
+    const key = `${what}:${run.session.id}`;
+    const requestId = handOffIds.current.get(key) ?? newRequestId();
+    handOffIds.current.set(key, requestId);
+    const why = failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[]).plain;
+    // Bug: crew's Bug card, its intent the failed job and crew's own failure words. Again: the same shape and words.
+    const body = what === 'bug'
+      ? { card: 'bug', option: null, depth: null, words: `${p.what.title} failed: ${why}`, source: 'pick' as const, requestId }
+      : { card: p.shape!.card, option: p.shape!.option, depth: p.shape!.depth, ...(p.words !== undefined ? { words: p.words } : {}), source: 'pick' as const, requestId };
+    setError(null);
+    setHandOff(true);
+    api.proposeInChat(chatId, body).then(() => onChanged()).catch((e: unknown) => setError(proposalRefusal(e).words))
+      .finally(() => setHandOff(false));
+  };
   const bind = (reply: JobReply, label: string, placeholder: string, send: (text: string) => boolean): void => {
     const target = reply.target;
     useJobBinding.getState().bind({
@@ -427,9 +446,21 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
             {v.phase === 'replanning'
               ? `${leadName} is re-planning with your words. No version can be approved while it re-plans.`
               : <>{leadName}’s plan, <b>version {v.plan.planRev}</b>, {v.plan.steps.length} steps.</>}
+            {v.phase !== 'replanning' && v.plan.changed !== null && <> <span data-testid="job-passage-plan-changed" className="wk-pass-changed">{v.plan.changed}.</span></>}
           </p>
           <ol data-testid="job-passage-plan" aria-label={`Plan version ${v.plan.planRev}`} className={`wk-pass-ol${v.phase === 'replanning' ? ' wk-pass-ol--dim' : ''}`}>
-            {v.plan.steps.map((s, i) => <li key={`${i}:${s}`}><span className="n">{i + 1}</span><span className="l"><b>{s}</b></span></li>)}
+            {v.plan.steps.map((s, i) => (
+              <li key={`${i}:${s.id ?? s.label}`} data-testid="job-passage-plan-step" {...(s.added ? { 'data-added': 'true' } : {})} className={s.added ? 'wk-pass-new' : undefined}>
+                <span className="n">{i + 1}</span>
+                <span className="l">
+                  <b>{s.label}</b>
+                  {s.detail !== null && <span className="d"> {s.detail}</span>}
+                  {s.asks && <em className="wk-pass-asks"> asks you</em>}
+                  {s.floor && <em className="wk-pass-floor"> added for this risk</em>}
+                  {s.added && <span className="wk-visually-hidden"> (new in this version)</span>}
+                </span>
+              </li>
+            ))}
           </ol>
         </>
       )}
@@ -480,6 +511,21 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {v.phase === 'delivered' && run !== null && <Delivered run={run} />}
       {v.phase === 'stopped' && run !== null && (
         <p data-testid="job-passage-stopped" className="wk-pass-sub">Stopped. {progress !== null ? `${progress.done} of ${progress.total} steps had run.` : ''} {deliverySummary(run) ?? ''}</p>
+      )}
+      {/* After a stop or a failure: the person's own next job, made in this chat by the existing person route
+          (POST /chats/:id/proposals) and run only by its Start. */}
+      {(v.phase === 'stopped' || v.phase === 'failed') && run !== null && (
+        <div role="group" aria-label="What next" data-testid="job-passage-after" className="wk-pass-acts">
+          {v.phase === 'failed' && v.proposal.launch !== 'document' && (
+            <button type="button" data-testid="job-passage-fix-bug" disabled={handOff} className="wk-pass-act wk-pass-act--go"
+              {...press.bind('fix-bug', `ended:${run.session.id}`, () => handOffJob('bug'), 'The job changed.')}>Fix it as a bug</button>
+          )}
+          {v.phase === 'failed' && v.proposal.launch !== 'document' && v.proposal.shape !== undefined && <span aria-hidden className="wk-pass-dot">·</span>}
+          {v.proposal.shape !== undefined && (
+            <button type="button" data-testid="job-passage-try-again" disabled={handOff} className={`wk-pass-act${v.phase === 'stopped' ? ' wk-pass-act--go' : ''}`}
+              {...press.bind('try-again', `ended:${run.session.id}`, () => handOffJob('again'), 'The job changed.')}>Try again</button>
+          )}
+        </div>
       )}
       {v.phase === 'failed' && run !== null && (
         <p data-testid="job-passage-failed" className="wk-pass-sub">

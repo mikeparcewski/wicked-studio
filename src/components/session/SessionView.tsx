@@ -21,7 +21,8 @@ import { useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { ArtifactProposalCard } from '../chat/ArtifactProposalCard.js';
 import { JobPassage } from './JobPassage.js';
-import { foldJobLineages, type JobLineage } from '../../board/jobStream.js';
+import { foldJobLineages, jobTicks, type JobLineage, type JobTick } from '../../board/jobStream.js';
+import { useTeamPlanStore } from '../../store/teamPlan.js';
 import { jobRunId } from '../../hooks/useJobStream.js';
 import { useJobBinding } from '../../store/jobBinding.js';
 import { foldChatProposals, reconcileProposals, type ProposalEntry } from '../../board/artifactProposal.js';
@@ -157,7 +158,9 @@ type ThreadEntry =
   /** DES-CHAT-ARTIFACTS-001 §4.2 (A2): a seat's proposal to make an artifact, as crew resolved it. */
   | { kind: 'artifact'; key: string; at: number; entry: ProposalEntry }
   /** DES-CATALOG-002 rev 7 §2.8.1: a job, as wicked's passage (its proposals, then the run it launched). */
-  | { kind: 'job'; key: string; at: number; lineage: JobLineage; settled: boolean };
+  | { kind: 'job'; key: string; at: number; lineage: JobLineage; settled: boolean }
+  /** rev 6 §2.7.1: one dim line for a state the job reached or the person's act, from its record. */
+  | { kind: 'tick'; key: string; at: number; text: string };
 
 
 /** How long a just-decided proposal keeps the run's block away while the daemon's status catches up. */
@@ -364,6 +367,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   }, [jobLineages, mine]);
   // The proposals a passage owns: never drawn again as a card.
   const jobPids = useMemo(() => new Set(jobLineages.flatMap((l) => l.versions.map((v) => v.pid))), [jobLineages]);
+  // The ticks: the job's states and the person's acts, each from its record (the run's team record is the one the
+  // passage folds), in time order among the messages.
+  const teamByRun = useTeamPlanStore((s) => s.byRun);
+  const rosterForTicks = useRoster();
+  const ticks = useMemo<JobTick[]>(() => jobLineages.flatMap((l) => {
+    const id = jobRunId(l, mine);
+    const lead = l.head.proposal.seats?.lead ?? null;
+    return jobTicks(l, id === null ? [] : teamByRun[id]?.rows ?? [], lead !== null ? seatResponder(lead, rosterForTicks).name : 'The lead');
+  }), [jobLineages, mine, teamByRun, rosterForTicks]);
   // The change marks under the person's messages (rev 6 §2.7.1): "↳ Changed the job to v2: a move".
   const jobMarks = useMemo(() => {
     const out = new Map<string, string[]>();
@@ -684,6 +696,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       out.push({ kind: 'artifact', key: `ap:${p.pid}`, at: p.at, entry: p });
     }
     jobLineages.forEach((l, i) => out.push({ kind: 'job', key: `job:${l.lineage}`, at: l.at, lineage: l, settled: i < jobLineages.length - 1 }));
+    for (const t of ticks) out.push({ kind: 'tick', key: `tick:${t.key}`, at: t.at, text: t.text });
     // Something visible while a helper works: a step executing (and not held by Needs you) gets a
     // live line at the thread's foot, so nobody types again or clicks because nothing seems to move.
     // A chat's own "thinking" line already says it for the answering step.
@@ -700,7 +713,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses, proposalEntries, jobPids, jobsOn, jobLineages, jobRunIds]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses, proposalEntries, jobPids, jobsOn, jobLineages, jobRunIds, ticks]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -1268,7 +1281,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             const prev = i === 0 ? leadWho : whoOfEntry(entries[i - 1]!);
             // DES-CHAT-NATIVE-RUN: a run's messages carry their own speakers, and the working line names its helper.
             // A proposal card names its seat in its own header (no second speaker line above it).
-            const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && e.kind !== 'artifact' && e.kind !== 'job' && (prev === null || responderKey(prev) !== responderKey(who))
+            const label = e.kind !== 'turn' && e.kind !== 'run' && e.kind !== 'working' && e.kind !== 'artifact' && e.kind !== 'job' && e.kind !== 'tick' && (prev === null || responderKey(prev) !== responderKey(who))
               ? <TurnWho who={who} runId={e.kind === 'proposal' ? e.view.session.id : askRunId} {...(e.kind === 'typing' ? { suffix: 'thinking' } : {})} at={e.kind === 'line' ? e.line.at : e.kind === 'proposal' ? e.at : null} />
               : null;
             const node = (e.kind === 'line'
@@ -1307,6 +1320,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                     navigate={navigate} say={(t) => composerProps.onSend(t, {})} onChanged={() => setChatTry((n) => n + 1)} />
               : e.kind === 'job'
                 ? null
+              : e.kind === 'tick'
+                ? <p key={e.key} data-testid="job-tick" className="wk-pass-tick">{e.text} · {new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 : e.kind === 'turn'
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})}

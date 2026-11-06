@@ -1,3 +1,4 @@
+import { rememberProposalRuns } from '../board/planRevBinding.js';
 import { useAskThreadStore } from '../store/askThread.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
@@ -146,6 +147,8 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       setError(null);
       // studio#443: the decision notices name the work, not the run id.
       rememberWorkTitles(fetched);
+      // DES-CATALOG-002: which runs were launched from a chat proposal (their plan answers carry planRev on every path).
+      rememberProposalRuns(fetched);
       // ASK-S1: ask paths are known before their gates reconcile, so the turn gate stays undrawn here too.
       useAskThreadStore.getState().learnRuns(fetched);
       useGateStore.getState().reclassifyAskGates();

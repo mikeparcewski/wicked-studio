@@ -4,6 +4,7 @@ import {
   IDLE_GATE_ACTION, isDecisionPending, sendGateDecision, unwatchDecision, useGateActionStore, watchDecision,
 } from './gateActions.js';
 import { describeDecision, queueDecision, reportDecision, restoreNote } from './undoQueue.js';
+import { PLAN_UNSEEN_TEXT, seenPlanRev } from './planRevBinding.js';
 
 /** The key a batch reject note is handed back under after an Undo. */
 export const BATCH_NOTE_KEY = 'batch';
@@ -112,6 +113,20 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
     useBatchGateStore.setState({ selected: ids });
   }
   if (ids.length === 0) return Promise.resolve();
+  // A plan answer to a run launched from a proposal carries the revision each gate showed; one that can't be named
+  // here leaves the batch, said (never sent without it, never with a revision nobody saw).
+  const revs: Record<string, number> = {};
+  const unseen = ids.filter((id) => {
+    const r = seenPlanRev(id, decision);
+    if (typeof r === 'number') revs[id] = r;
+    return r === null;
+  });
+  if (unseen.length > 0) {
+    reportDecision('not-sent', `${unseen.length} selected ${unseen.length === 1 ? 'gate is a job’s plan' : 'gates are jobs’ plans'} not read here — left out of the batch. ${PLAN_UNSEEN_TEXT}`);
+    ids.splice(0, ids.length, ...ids.filter((id) => !unseen.includes(id)));
+    useBatchGateStore.setState({ selected: ids });
+    if (ids.length === 0) return Promise.resolve();
+  }
   const { verb, preview } = describeDecision(decision, ids.length);
   const amend = decision.amend ?? null;
   const markQueued = (queued: boolean): void =>
@@ -136,7 +151,7 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
       amend,
       commit: async () => {
         release();
-        await fanOut(ids, decision, ords);
+        await fanOut(ids, decision, ords, revs);
         const { failures } = useBatchGateStore.getState();
         if (failures.length === 0) reportDecision('sent', `${ids.length} gates answered.`);
         else reportDecision('failed', `${ids.length - failures.length} of ${ids.length} gates answered — ${failures.length} failed (listed on the bar).`);
@@ -162,13 +177,14 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
  * A second call while one runs is dropped (plus `sendGateDecision`'s own per-run
  * guard underneath — the shared-store double-submit contract).
  */
-async function fanOut(ids: string[], decision: GateDecision, ords: Record<string, number | undefined> = {}): Promise<void> {
+async function fanOut(ids: string[], decision: GateDecision, ords: Record<string, number | undefined> = {}, revs: Record<string, number> = {}): Promise<void> {
   if (useBatchGateStore.getState().running) return;
   useBatchGateStore.setState({
     running: true, done: 0, total: ids.length, failures: [], lastDecision: decision,
   });
   for (const runId of ids) {
-    const error = await decideOne(runId, decision, ords[runId]);
+    const rev = revs[runId];
+    const error = await decideOne(runId, rev !== undefined ? { ...decision, planRev: rev } : decision, ords[runId]);
     useBatchGateStore.setState((cur) => ({
       done: cur.done + 1,
       // Success leaves the selection (its answered state now shows on the
@@ -185,7 +201,10 @@ export async function retryBatchOne(runId: string): Promise<void> {
   const s = useBatchGateStore.getState();
   if (s.running || s.lastDecision === null) return;
   if (!s.failures.some((f) => f.runId === runId)) return;
-  const decision = s.lastDecision;
+  // A retry is a fresh press on the gate shown now: a plan answer names the revision it shows, or is not sent.
+  const rev = seenPlanRev(runId, s.lastDecision);
+  if (rev === null) { reportDecision('not-sent', PLAN_UNSEEN_TEXT); return; }
+  const decision = rev === undefined ? s.lastDecision : { ...s.lastDecision, planRev: rev };
   useBatchGateStore.setState({ running: true });
   const error = await decideOne(runId, decision);
   useBatchGateStore.setState((cur) => ({
