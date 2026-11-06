@@ -408,7 +408,7 @@ function digest(text: string): string {
 
 /** The press target of a proposal: its pid and a digest of everything a press on it answers. */
 export function proposalTarget(p: JobProposal): string {
-  return `${p.pid}#${digest(JSON.stringify([p.sentence, p.question ?? null, p.suggestions ?? [], p.blocked, p.sketch ?? null, p.gate ?? null]))}`;
+  return `${p.pid}#${digest(JSON.stringify([p.sentence, p.question ?? null, p.suggestions ?? [], p.blocked, p.sketch ?? null, p.gate ?? null, p.seats ?? null, p.what, p.shape ?? null]))}`;
 }
 
 /** The plain words of the catalog's check ids. */
@@ -439,8 +439,10 @@ export function progressOf(view: SessionView, stepName: StepName, gateOrd: numbe
   const nowOrd = gateOrd ?? (cursor !== undefined && cursor.status !== 'done' && cursor.status !== 'rejected' ? cursor.ord : null);
   const rows: JobStepRow[] = units.map((u) => {
     const skipped = u.phase_status === 'skipped';
-    const state: JobStepRow['state'] = skipped ? 'skipped' : u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed'
-      : u.ord === nowOrd ? (gateOrd !== null ? 'waiting' : 'now') : 'todo';
+    // The step a gate waits at is waiting, whatever its last attempt's outcome (a retry or an escalation on a refused
+    // step): the gate is anchored to its recorded ord.
+    const state: JobStepRow['state'] = gateOrd !== null && u.ord === gateOrd ? 'waiting' : skipped ? 'skipped' : u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed'
+      : u.ord === nowOrd ? 'now' : 'todo';
     return { ord: u.ord, label: stepName(u), seat: u.assigned_cli ?? null, state };
   });
   const finished = rows.filter((r) => r.state === 'done' || r.state === 'skipped' || r.state === 'failed');

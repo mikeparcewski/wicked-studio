@@ -25,6 +25,9 @@ import { focusSessionComposer, useJobBinding } from '../../store/jobBinding.js';
 import { openSheet, stopRun } from '../../store/sheets.js';
 import { RunAssuranceLabel } from './AssuranceReceipt.js';
 import { GateRow } from './GateRow.js';
+import { ProposalCard } from './ProposalCard.js';
+import { useRunChain } from './ChainLine.js';
+import { proposalKindOf } from '../../board/proposalCard.js';
 import { LiveActivity } from './LiveActivity.js';
 import { RunQuestions } from './ThreadQuestions.js';
 
@@ -39,6 +42,9 @@ import { RunQuestions } from './ThreadQuestions.js';
  * began on (§2.7.3 rule 6, `usePressBinding`); a swap, suggestion or question choice holds Start until crew answers
  * (Swap pending); `revising` holds Start; plan answers carry `ord` + `planRev`.
  */
+
+/** What a queued decision does, in its own words (a Stop is never called an Approve). */
+const QUEUED_WORD: Readonly<Record<string, string>> = { approve: 'Approve', 'request-changes': 'Send back', reject: 'Reject', stop: 'Stop the job', 'edit-plan': 'Add a step' };
 
 const TOKEN_KIND: Readonly<Record<ProposalToken['kind'], string>> = {
   card: 'kind of job', option: 'kind of job', repo: 'repository', project: 'project', seats: 'who works on it',
@@ -67,7 +73,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [ticking]);
-  const { view: v, run, inputs } = useJobView(lineage, runs, now);
+  const { view: v, run, inputs, teamRetry } = useJobView(lineage, runs, now);
   const roster = useRoster();
   const press = usePressBinding();
   const local = useJobLocal();
@@ -126,7 +132,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // The reply that bound the composer is marked "· answering"; a Send after its target moved is refused there.
   const bound = binding !== null && binding.sessionId === sessionId && binding.replyKey.startsWith(`${lineage.lineage}:`) ? binding : null;
 
-  const lead = (head.proposal.seats?.lead ?? null);
+  // Who leads, from the proposal drawn (what Go accepted once started), never a version Go did not take.
+  const lead = (v.proposal.seats?.lead ?? null);
   const leadName = lead !== null ? seatResponder(lead, roster).name : 'The lead';
 
   // ── the routes ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -147,7 +154,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       .catch((e: unknown) => {
         if (!(e instanceof ApiError) || e.status === 0) {
           // No answer from crew: it may have taken the change. The hold stays; the next version or a retry ends it.
-          setLost({ body, token });
+          // Only the request that still owns the hold offers a retry: an older one's late failure is moot.
+          if (useJobLocal.getState().swapRequest[lineage.lineage] === body.requestId) setLost({ body, token });
           onChanged();
           return;
         }
@@ -191,9 +199,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       // Undo hands the words back to the box, bound again to the SAME plan version (never a newer one), and only into an
       // empty box (a newer draft is never overwritten).
       if (outcome === 'undone') {
-        const back = takeRestoredNote(run0);
+        // Only into a box nobody else owns now: no newer draft, no other binding. Otherwise the words stay where Undo
+        // left them (the queue's restored notes) and nothing is rebound.
         const drafts = useSessionDrafts.getState();
-        if (back !== '' && (drafts.drafts[sessionId] ?? '').trim() === '') drafts.setDraft(sessionId, back);
+        const free = (drafts.drafts[sessionId] ?? '').trim() === '' && useJobBinding.getState().binding === null;
+        if (!free) return;
+        const back = takeRestoredNote(run0);
+        if (back !== '') drafts.setDraft(sessionId, back);
         if (rebind !== null && currentTarget.current.get(rebind.id) === rebind.target) bindChange(rebind, planRev);
       }
     }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
@@ -204,10 +216,18 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     // Never beside an answer already queued or being sent for this plan (the reshape answers the same plan).
     if (r === undefined || runId === null || isQueued(runId) || v.offerHeld !== null || v.reshapeHeld !== null) return;
     setError(null);
-    api.reshapeRun(runId, {
-      card: r.card, option: r.option, depth: r.depth, requestId: newRequestId(), confirmLoss: [...r.lost, ...r.lostSeats], ord: o.ord, planRev: o.planRev,
-    }).then(() => onChanged()).catch((e: unknown) => { setError(proposalRefusal(e).words); onChanged(); });
+    // One reshape per offer: a retry reuses its request id (crew answers a repeat with the same result), and while it is
+    // in flight every other answer to this plan is held.
+    const requestId = reshapeIds.current.get(o.id) ?? newRequestId();
+    reshapeIds.current.set(o.id, requestId);
+    const run0 = runId;
+    local.setReshaping(run0, true);
+    api.reshapeRun(run0, {
+      card: r.card, option: r.option, depth: r.depth, requestId, confirmLoss: [...r.lost, ...r.lostSeats], ord: o.ord, planRev: o.planRev,
+    }).then(() => onChanged()).catch((e: unknown) => { setError(proposalRefusal(e).words); onChanged(); })
+      .finally(() => local.setReshaping(run0, false));
   };
+  const reshapeIds = useRef(new Map<string, string>());
   const bind = (reply: JobReply, label: string, placeholder: string, send: (text: string) => boolean): void => {
     const target = reply.target;
     useJobBinding.getState().bind({
@@ -261,7 +281,6 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const pickSwap = (t: ProposalToken, i: number | 'else'): void => {
     setOpenSwap(null);
     // Focus stays on the token the person was changing (it stays focusable while the change is in flight).
-    queueMicrotask(() => tokenRefs.current.get(t.id)?.focus());
     if (swapOpenedOn.current !== pt) { press.say('The job changed while you picked. Nothing was sent.'); return; }
     if (i === 'else') {
       // Something else…: the composer, with the token named (a typed correction is the seat's revision).
@@ -419,9 +438,10 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
                 <button type="button" className="wk-pass-inl" data-testid="job-passage-more" aria-expanded={moreOpen} onClick={() => setMoreOpen((m) => !m)}>{moreOpen ? 'Less' : 'More'}</button>
               )}
               {/* A gate unfolds under its step: the existing gate renderer, its replies and its 10 s undo unchanged. */}
-              {v.phase === 'gate' && <div className="wk-pass-gate" data-testid="job-passage-gate"><Undocked><GateRow view={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} /></Undocked></div>}
             </div>
           )}
+          {/* The gate unfolds under its step, anchored to its own ord (drawn even when no step row matches it). */}
+          {run !== null && v.phase === 'gate' && <PassageGate run={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
           {/* A run's question (and a stalled step handed to you), answered here: never only a marker for a dock it isn't in. */}
           {run !== null && (v.phase === 'running' || v.phase === 'gate' || v.phase === 'runQuestion') && (
             <div className="wk-pass-gate" data-testid="job-passage-run-question"><Undocked><RunQuestions view={run} /></Undocked></div>
@@ -448,6 +468,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         <p data-testid="job-passage-failed" className="wk-pass-sub">
           Failed. {failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[]).plain} {deliverySummary(run) ?? ''}{' '}
           <button type="button" className="wk-pass-inl" onClick={() => openSheet({ kind: 'session', sessionId: `run:${run.session.id}` })}>Look underneath</button>
+        </p>
+      )}
+
+      {v.phase === 'planHeld' && v.plan === null && teamRetry !== null && (
+        <p data-testid="job-passage-plan-unread" role="alert" className="wk-pass-sub wk-pass-error">
+          The plan couldn’t be read, so nothing can be approved yet.{' '}
+          <button type="button" className="wk-pass-inl" onClick={teamRetry}>Retry</button>
         </p>
       )}
 
@@ -484,7 +511,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {/* studio's own receipt for an answer in its undo window: never a tick, until crew records it (rev 6 §2.7.1). */}
       {queued !== null && (v.phase === 'planHeld' || v.phase === 'replanning') && (
         <p data-testid="job-passage-queued" className="wk-pass-receipt">
-          {queued.verb === 'request-changes' ? 'Send back' : 'Approve'}: queued, not sent yet · sends in {Math.max(0, Math.ceil((queued.dueAt - Math.max(now, queued.queuedAt)) / 1000))} s ·{' '}
+          {QUEUED_WORD[queued.verb] ?? 'Your answer'}: queued, not sent yet · sends in {Math.max(0, Math.ceil((queued.dueAt - Math.max(now, queued.queuedAt)) / 1000))} s ·{' '}
           <button type="button" data-testid="job-passage-undo" className="wk-pass-act" {...press.bind('undo', `queued:${queued.id}`, () => undoDecision(queued.id), 'That answer was replaced.')}>Undo</button>
         </p>
       )}
@@ -520,7 +547,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {lost !== null && v.phase === 'swapPending' && (
         <p data-testid="job-passage-lost" role="alert" className="wk-pass-sub wk-pass-error">
           Studio’s service didn’t answer, so your change may or may not have landed. Start waits until it does.{' '}
-          <button type="button" className="wk-pass-inl" data-testid="job-passage-retry" onClick={() => sendRevision(lost.body, lost.token)}>Try again</button>
+          <button type="button" className="wk-pass-inl" data-testid="job-passage-retry"
+            onClick={() => { if (lost.body.revises === pid && useJobLocal.getState().swapRequest[lineage.lineage] === lost.body.requestId) sendRevision(lost.body, lost.token); else setLost(null); }}>Try again</button>
         </p>
       )}
       {error !== null && <p data-testid="job-passage-error" role="alert" className="wk-pass-sub wk-pass-error">{error}</p>}
@@ -547,6 +575,16 @@ function TokenButton({ token, label, wash, open, expanded, held, tokenRef, expla
   const count = choices.length + 1;
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
   useEffect(() => { if (open) { setCursor(0); queueMicrotask(() => optionRefs.current[0]?.focus()); } }, [open]);
+  // The listbox closed (a pick, or crew's next version closed it): focus that was in it comes back to the token, never
+  // to the page; focus the pick sent elsewhere (Something else… → the composer) stays there.
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (wasOpen.current && !open) {
+      const a = document.activeElement;
+      if (a === null || a === document.body) ref.current?.focus();
+    }
+    wasOpen.current = open;
+  }, [open]);
   const close = (): void => { onClose(); ref.current?.focus(); };
   const checks = token.kind === 'checks';
   return (
@@ -554,7 +592,7 @@ function TokenButton({ token, label, wash, open, expanded, held, tokenRef, expla
       <span
         ref={(el) => { ref.current = el; tokenRef(el); }} role="button" tabIndex={0} data-testid="job-passage-token" data-token={token.id} data-kind={token.kind}
         {...(held ? { 'aria-disabled': true } : {})}
-        {...(checks ? { 'aria-controls': explainId } : { 'aria-haspopup': 'listbox' as const })} aria-expanded={expanded} {...(open ? { 'aria-controls': listId } : {})}
+        {...(checks ? (expanded ? { 'aria-controls': explainId } : {}) : { 'aria-haspopup': 'listbox' as const })} aria-expanded={expanded} {...(open ? { 'aria-controls': listId } : {})}
         aria-label={`${label}, ${TOKEN_KIND[token.kind]}`} aria-description={checks ? 'Why these checks stay' : 'Change it'}
         className={`wk-pass-tok${checks ? ' wk-pass-tok--chk' : ''}${wash}`}
         onClick={onOpen}
@@ -604,4 +642,18 @@ function useJobTicking(lineage: JobLineage, runs: readonly SessionView[]): boole
   const run = jobRunId(lineage, runs);
   const queued = useUndoQueue((s) => run !== null && s.pending.some((p) => p.runIds.includes(run)));
   return queued || lineage.state === 'accepting';
+}
+
+/** A gate under its step (§2.8.1): the existing renderers, unchanged and in place. A hand-over is the plan and
+ *  hand-over card's (its consent, receipt and drift), every other gate GateRow's. */
+function PassageGate({ run, gate, navigate }: { run: SessionView; gate: ReturnType<typeof useGateStore.getState>['gates'][string] | undefined; navigate?: Navigate }): React.ReactElement {
+  const { chain } = useRunChain(run);
+  const deliver = gate !== undefined && proposalKindOf(run.session.id, gate, run.units) === 'deliver';
+  return (
+    <div className="wk-pass-gate" data-testid="job-passage-gate" data-kind={deliver ? 'deliver' : 'gate'}>
+      <Undocked>
+        {deliver ? <ProposalCard view={run} chain={chain} variant="chat" /> : <GateRow view={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
+      </Undocked>
+    </div>
+  );
 }

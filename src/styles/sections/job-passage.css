@@ -109,6 +109,7 @@
 .wk-pass-report { font-size: 14px; color: var(--ink-muted); }
 .wk-pass-report--clamp { max-height: 3.2em; overflow: hidden; }
 .wk-pass-gate { margin-top: 4px; }
+.wk-pass-gate:empty { display: none; }
 .wk-pass-next { margin: 0; font-size: 13px; color: var(--ink-muted); }
 .wk-pass-next span { font-weight: 700; margin-right: 4px; }
 .wk-pass-checks { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-high); }

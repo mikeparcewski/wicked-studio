@@ -23,7 +23,7 @@ const { useSheets } = await import('../src/store/sheets.js');
 const { useJobBinding } = await import('../src/store/jobBinding.js');
 const { useElicitationStore } = await import('../src/store/elicitations.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
-const { resetJobLocal } = await import('../src/hooks/useJobStream.js');
+const { resetJobLocal, useJobLocal } = await import('../src/hooks/useJobStream.js');
 const { flushDecisionsForTest, resetDecisionsForTest, setUndoWindowForTest } = await import('../src/board/undoQueue.js');
 const { makeUnit, makeView } = await import('./factories.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
@@ -379,5 +379,196 @@ describe('review round 1 folds (the run half)', () => {
     const q = await screen.findByTestId('job-passage-run-question');
     expect(within(q).queryByTestId('decision-marker')).toBeNull();
     expect(q.textContent).toContain('Which region?');
+  });
+});
+
+describe('review round 2 folds', () => {
+  const RUN = 'run-1';
+  const decided = { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } };
+  const units = (st1: 'pending' | 'rejected' = 'pending') => [
+    makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'done', phase_ref: 'pa-scope' }),
+    makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: st1, phase_ref: 'build' }),
+    makeUnit({ id: `${RUN}:u2`, session_id: RUN, ord: 2, status: 'pending', phase_ref: 'deliver' }),
+  ];
+  const run = (status = 'awaiting_human', st1: 'pending' | 'rejected' = 'pending') => makeView({ id: RUN, status: status as never, unit_ix: 1, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, units(st1));
+  const planTeam = (rev: number) => ({
+    teamed: true, rows: [
+      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build' }] } },
+      { event_id: 2 + rev, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: `g${rev}`, ord: 1, plan_rev: rev } },
+    ], units: [], planRev: rev,
+  });
+  const planGate = () => useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 7, gateKind: 'plan_approval' } }, approaching: {} });
+  beforeEach(() => { messages = [USER, SEAT, P1, decided]; team = planTeam(2); setUndoWindowForTest(10_000); });
+  afterEach(() => { setUndoWindowForTest(0); });
+
+  it('the bound answer is the typed words alone, never the about chips’ context', async () => {
+    planGate();
+    const { addAboutChip } = await import('../src/store/composerChips.js');
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    act(() => addAboutChip(CHAT, { kind: 'about', key: 'q:x', label: '“parity”' }));
+    fireEvent.click(reply('change'));
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'add a rollback step' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts[0]?.body['amend']).toBe('add a rollback step');
+  });
+
+  it('a queued Stop is said as a Stop, never an Approve', async () => {
+    planGate();
+    const { stopRun } = await import('../src/store/sheets.js');
+    page([run()]);
+    await waitFor(() => expect(reply('approve').disabled).toBe(false));
+    act(() => { stopRun([RUN], 'the job'); });
+    expect((await screen.findByTestId('job-passage-queued')).textContent).toMatch(/^Stop the job: queued/);
+    expect(reply('approve').disabled).toBe(true);
+  });
+
+  it('Undo never overwrites a newer draft or binds over it', async () => {
+    planGate();
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'add a rollback step' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await screen.findByTestId('job-passage-undo');
+    fireEvent.change(screen.getByTestId('session-composer-input'), { target: { value: 'a newer thought' } });
+    fireEvent.click(screen.getByTestId('job-passage-undo'));
+    await act(async () => { await flushDecisionsForTest(); });
+    expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('a newer thought');
+    expect(screen.queryByTestId('job-binding-label')).toBeNull();
+  });
+
+  it('a gate whose kind is unknown and whose plan read failed stays held, with Retry (never a planRev-less GateRow)', async () => {
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve?', lifecycle: 'open', receivedAt: 7 } }, approaching: {} });
+    team = 500;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') { posts.push({ path, body: {} }); return Promise.resolve(ok({})); }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      if (path.endsWith('/team')) return Promise.resolve(new Response('{"error":"down"}', { status: 500 }));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page([run()]);
+    await waitFor(() => expect(screen.getByTestId('job-passage').dataset['phase']).toBe('planHeld'));
+    expect(reply('approve').disabled).toBe(true);
+    expect(screen.queryByTestId('job-passage-gate')).toBeNull();
+    expect(await screen.findByTestId('job-passage-plan-unread')).toBeTruthy();
+  });
+
+  it('a gate on a step whose last attempt was refused still unfolds under its step', async () => {
+    team = { teamed: true, rows: [{ event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } }], units: [] };
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'The build was refused. Retry?', lifecycle: 'open', receivedAt: 7, gateKind: 'escalation' } }, approaching: {} });
+    page([run('awaiting_human', 'rejected')]);
+    expect((await screen.findByTestId('job-passage-gate')).dataset['kind']).toBe('gate');
+  });
+
+  it('a hand-over gate is the hand-over card in place', async () => {
+    team = { teamed: true, rows: [{ event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } }], units: [] };
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 2, prompt: 'Deliver?', lifecycle: 'open', receivedAt: 7, gateKind: 'deliver' } }, approaching: {} });
+    page([run('awaiting_human')]);
+    expect((await screen.findByTestId('job-passage-gate')).dataset['kind']).toBe('deliver');
+  });
+
+  it('Something else… leaves focus in the bound composer', async () => {
+    messages = [USER, SEAT, P1];
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(document.querySelector('[data-token="repo"]')!);
+    fireEvent.click(screen.getByTestId('job-passage-swap-else'));
+    await waitFor(() => expect(screen.getByTestId('job-binding-label').textContent).toContain('something else'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.activeElement).toBe(screen.getByTestId('session-composer-input'));
+  });
+
+  it('a listbox crew’s next version closes gives focus back to its token', async () => {
+    messages = [USER, SEAT, P1];
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(document.querySelector('[data-token="repo"]')!);
+    await waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('option'));
+    await frame({ at: T0 + 4, turnId: 't2', kind: 'proposal', proposal: v2() });
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-token')).toBe('repo'));
+  });
+
+  it('who plans is the lead Go accepted, not a version Go did not take', async () => {
+    team = { teamed: true, rows: [], units: [] };
+    const accepted = jobProposal({ seats: { lead: 'claude', keys: ['claude'], label: 'Claude' } });
+    messages = [USER, SEAT, P1, { at: T0 + 4, turnId: 't1', kind: 'proposal_accepting', pid: `${CHAT}:t1`, actor: 'me', edits: null, resolution: accepted, identity: { runId: RUN, artifactRef: null } }, decided];
+    page([run('executing')]);
+    expect((await screen.findByTestId('job-passage-planning')).textContent).toMatch(/^Claude Code is planning/);
+  });
+
+  it('an older lost revision never offers a retry over a newer one’s hold', async () => {
+    messages = [USER, SEAT, P1];
+    const answers: Array<{ res: (r: Response) => void; rej: (e: unknown) => void }> = [];
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') { posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> }); return new Promise<Response>((res, rej) => answers.push({ res, rej })); }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) { reads += 1; return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages })); }
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(document.querySelector('[data-token="option"]')!);
+    fireEvent.click(screen.getAllByTestId('job-passage-swap-option')[0]!);
+    await waitFor(() => expect(posts).toHaveLength(1));
+    await frame({ at: T0 + 4, turnId: 't2', kind: 'proposal', proposal: v2() });
+    await waitFor(() => expect(reply('start').disabled).toBe(false));
+    fireEvent.click(document.querySelector('[data-token="option"]')!);
+    fireEvent.click(screen.getAllByTestId('job-passage-swap-option')[0]!);
+    await waitFor(() => expect(posts).toHaveLength(2));
+    await act(async () => { answers[0]!.rej(new TypeError('Failed to fetch')); await Promise.resolve(); });
+    expect(screen.queryByTestId('job-passage-lost')).toBeNull();
+    expect(reply('start').disabled).toBe(true);
+  });
+  it('a reshape in flight holds every other answer to the same plan', async () => {
+    planGate();
+    const offer = { id: 'o-r', kind: 'reshape', runId: RUN, pid: `${CHAT}:t1`, ord: 1, planRev: 2, text: 'That’s a different job: start it again as a move?',
+      reshape: { card: 'migrate', option: 'move', depth: null, label: 'a move', command: null, lost: [], lostSeats: [], needs: [] },
+      choices: [{ label: 'Start again', action: 'reshape' }, { label: 'Keep this plan', action: 'dismiss' }] };
+    messages = [USER, SEAT, P1, { at: T0 + 4, turnId: 't1', kind: 'plan_offer', offer }, decided];
+    let release: (r: Response) => void = () => undefined;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') { posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> }); return new Promise<Response>((res) => { release = res; }); }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      if (path.endsWith('/team')) return Promise.resolve(ok(team));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page([run()]);
+    await waitFor(() => expect(reply('approve').disabled).toBe(false));
+    const again = (await screen.findAllByTestId('job-passage-offer-choice')).find((b) => b.dataset['action'] === 'reshape')!;
+    fireEvent.click(again);
+    await waitFor(() => expect(posts[0]).toMatchObject({ path: `/runs/${RUN}/reshape`, body: { card: 'migrate', option: 'move', ord: 1, planRev: 2 } }));
+    await waitFor(() => expect(reply('approve').disabled).toBe(true));
+    expect((screen.getAllByTestId('job-passage-offer-choice').find((b) => b.dataset['action'] === 'reshape') as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { release(ok({ view: {} })); await Promise.resolve(); });
+  });
+
+  it('a send-back is retired once a newer plan revision is on record (the job never reads re-planning again)', async () => {
+    planGate();
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    act(() => { useJobLocal.getState().setSentBack(RUN, 2); });
+    act(() => { useTeamPlanStore.getState().hydrate(RUN, { ...(planTeam(3) as Record<string, unknown>), runId: RUN } as never); });
+    await waitFor(() => expect(useJobLocal.getState().sentBack[RUN] ?? null).toBeNull());
+  });
+  it('a press in the passage binds the composer ahead of a docked decision’s note reply', async () => {
+    useGateStore.setState({ gates: {
+      [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 7, gateKind: 'plan_approval' },
+      [CHAT]: { runId: CHAT, ord: 0, prompt: 'Should the chat keep going?', lifecycle: 'open', receivedAt: 8 },
+    }, approaching: {} });
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    expect(screen.getByTestId('job-binding-label').textContent).toBe('Answering: what should change in plan v2');
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'add a rollback step' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts.map((x) => x.path)).toEqual([`/runs/${RUN}/gate`]);
   });
 });
