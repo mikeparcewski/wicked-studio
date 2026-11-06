@@ -255,3 +255,50 @@ describe('fmtTime', () => {
     expect(fmtTime(131.4)).toBe('2:11');
   });
 });
+
+describe('a demo the engine records (wicked-core#1249)', () => {
+  const base = {
+    runId: 'e1', url: 'http://127.0.0.1:7721/apps/esc', audience: null, stage: 'plan_gate', script: '# s', chapters: [], markers: [],
+    sheets: [], video: null, recording: { readOnly: null }, review: { verdict: null, findings: [], text: null, rejected: false },
+    seats: { recorder: null, reviewer: null }, syntheticLabelled: false,
+  } as unknown as DemoView;
+
+  it('names the engine as the recorder, with its jail', () => {
+    const r = recordingOfDemo({ ...base, producer: { kind: 'engine', tool: 'demo_record', jail: 'sandbox-exec' } } as DemoView);
+    expect(seatLine(r)).toBe("the engine records on this machine (sandbox-exec, the app's port only)");
+    expect(seatLine(recordingOfDemo({ ...base, seats: { recorder: null, reviewer: 'codex' }, producer: { kind: 'engine', tool: 'demo_record', jail: null } } as DemoView)))
+      .toBe('codex reviews, the engine records on this machine');
+  });
+
+  it('reads the approved storyline as chapters of plain steps', () => {
+    const r = recordingOfDemo({
+      ...base,
+      storyline: {
+        segments: [{
+          key: '01-board', title: 'The board', steps: [
+            { go: { path: '/apps/esc' } }, { caption: { kicker: 'k', title: 'Everything open' } }, { hold: { ms: 500 } },
+            { click: { target: { role: 'tab', name: 'How it counts' } } }, { point: { target: { text: 'Open tickets', in: 'content' }, label: 'Open now' } },
+            { time: { label: 'load', steps: [{ waitVisible: { target: { button: 'Zoom' } } }] } },
+          ],
+        }],
+      },
+    } as unknown as DemoView);
+    expect(r.storyline).toEqual([{
+      key: '01-board', title: 'The board', steps: [
+        'Open /apps/esc', 'Caption: Everything open', 'Click the tab “How it counts”', 'Point at “Open tickets” in the app (“Open now”)', 'Wait for button “Zoom”',
+      ],
+    }]);
+    expect(recordingOfDemo(base).storyline).toEqual([]);
+  });
+});
+
+
+describe('both demo presets are demo runs (wicked-core#1249)', () => {
+  it('reads demo and demo-human-review as demo runs, nothing else', async () => {
+    const { isDemoRun } = await import('../src/api/demo.js');
+    const run = (preset: unknown) => ({ session: { team_plan: { preset } } }) as never;
+    expect(isDemoRun(run('demo'))).toBe(true);
+    expect(isDemoRun(run('demo-human-review'))).toBe(true);
+    expect(isDemoRun(run('feature'))).toBe(false);
+  });
+});

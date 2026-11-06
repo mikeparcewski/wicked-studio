@@ -1,4 +1,5 @@
 import type { DemoMarker, DemoView } from '../api/demo.js';
+import { demoProducer, storylineChapters, type StorylineChapter } from '../api/demo.js';
 import type { WalkthroughCheck, WalkthroughState, WalkthroughVerdict, WalkthroughView } from '../api/walkthrough.js';
 
 /**
@@ -65,6 +66,10 @@ export interface Recording {
   /** S15d: the presenter's script can be rewritten now — only while the demo's plan gate is open
    *  (`PUT /demo/script` answers 409 before and after: the recorder has read it). Never for a walkthrough. */
   scriptEditable: boolean;
+  /** (wicked-core#1249) A demo the engine records on this machine (its jail named), not a seat; `null` otherwise. */
+  recordedBy?: { kind: 'engine'; jail: string | null } | null;
+  /** (wicked-core#1249) The storyline the engine records, in words — what the person approves at the plan gate. */
+  storyline?: StorylineChapter[];
 }
 
 /** "0:41" */
@@ -141,6 +146,8 @@ export function recordingOfDemo(view: DemoView): Recording {
     sealed: false, video: view.video?.path ?? null, poster: null, markers, chapters, script: view.script,
     exportable: view.stage === 'review_gate' || view.stage === 'done' || view.stage === 'failed',
     scriptEditable: view.stage === 'plan_gate',
+    recordedBy: (() => { const p = demoProducer(view); return p?.kind === 'engine' ? p : null; })(),
+    storyline: storylineChapters(view),
   };
 }
 
@@ -197,9 +204,12 @@ export function stateLine(r: Recording, opts: { authorWaiting?: boolean } = {}):
 export function seatLine(r: Recording): string | null {
   const ev = r.seat.evaluator;
   const builders = r.seat.builders;
-  if (ev === null && builders.length === 0) return null;
+  const engine = r.recordedBy?.kind === 'engine';
+  if (ev === null && builders.length === 0 && !engine) return null;
   const parts: string[] = [];
   if (ev !== null) parts.push(`${ev} ${r.kind === 'demo-video' ? 'reviews' : 'checks'}`);
+  // (wicked-core#1249) The engine records a demo on this machine, in its jail, from the storyline you approved.
+  if (engine) parts.push(`the engine records on this machine${r.recordedBy?.jail ? ` (${r.recordedBy.jail}, the app's port only)` : ''}`);
   if (builders.length > 0) parts.push(`${builders.join(' and ')} ${r.kind === 'demo-video' ? 'records' : builders.length === 1 ? 'builds' : 'build'}`);
   return parts.join(', ');
 }

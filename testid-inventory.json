@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4719,
-    "static": 3948,
+    "occurrences": 4720,
+    "static": 3949,
     "dynamic": 176,
     "computed": 53
   },
@@ -4269,6 +4269,12 @@
       "files": [
         "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "demo-storyline",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {

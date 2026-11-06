@@ -2124,3 +2124,6 @@ button.wk-who-name:hover { text-decoration: underline; }
 .wk-reqcov-min { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink-muted); }
 .wk-req-none-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .wk-req-none-actions .wk-field-note { margin: 0; }
+/* (wicked-core#1249) The storyline the engine will record, read-only, at the plan gate. */
+.wk-demo-storyline { margin: 6px 0 0; padding-left: 18px; font-size: var(--text-sm); color: var(--ink-high); }
+.wk-demo-storyline ul { margin: 2px 0 6px; padding-left: 16px; color: var(--ink-mid); }
