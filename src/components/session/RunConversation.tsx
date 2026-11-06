@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
 import { RunPhaseRows, RunPluginJumpRows, WorkingDocSteerRows } from './RunThreadPlugin.js';
 import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
-import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
+import { IDLE_GATE_ACTION, ensureGate, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import type { Responder } from '../../board/responder.js';
 import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
@@ -246,6 +246,12 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     ? (held ? 'held' : orphanedOf(status, trail) === null ? 'working' : 'other')
     : status === 'failed' || status === 'cancelled' ? 'stopped' : 'other';
   const gate = useGateStore((s) => s.gates[id]);
+  // F31: a run that waits on a person reads its own open gate when its thread opens, instead of waiting its turn in
+  // the runs list's late-join pass (98 parked runs: the newest run's plan card came ~28 s after a reload). Only on
+  // mount and on a status change: a gate answered here is not read again while the run's status catches up.
+  useEffect(() => {
+    if (status === 'awaiting_human' && useGateStore.getState().gates[id] === undefined) void ensureGate(id);
+  }, [id, status]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   const acceptance = useRunAcceptance(view, planChain, gate, true);
   const checks = acceptance?.walkthrough?.steps ?? null;

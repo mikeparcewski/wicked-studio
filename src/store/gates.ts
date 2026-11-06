@@ -155,6 +155,23 @@ interface GateStore {
   reclassifyAskGates: () => void;
 }
 
+/**
+ * F31: each run's gate generation, bumped by every write to that run's gate (a live frame, an answer, a prune, a read
+ * that landed). A `GET /runs/:id/gate` read applies only if the generation it started under is still current
+ * (`refreshGate`), so a read that overlapped an answer, a newer frame or a prune never brings back a gate that is gone.
+ */
+const generations: Record<string, number> = {};
+function bump(runId: string): void {
+  generations[runId] = (generations[runId] ?? 0) + 1;
+}
+/** The run's gate generation now: compare it before and after a gate read. */
+export function gateGen(runId: string): number {
+  return generations[runId] ?? 0;
+}
+/** Frames that change a run's gate: one opens, or the run moved past it. Each bumps the run's generation, cached gate
+ *  or not, so a read already on its way for the older state is dropped. */
+const GATE_WRITES: ReadonlySet<string> = new Set(['awaitingHuman', 'resumed', 'sessionCompleted', 'runCancelled', 'sessionFailed']);
+
 export const useGateStore = create<GateStore>((set) => ({
   gates: {},
   approaching: {},
@@ -162,6 +179,7 @@ export const useGateStore = create<GateStore>((set) => ({
   // A gate reconciled on a late join (`GET /runs/:id/gate`, no kind) is classified by the engine's
   // own words, so the turn gate stays undrawn there too (codex on ASK-S1 #3).
   setGate: (gate) => {
+    bump(gate.runId);
     if (useCapabilities.getState().askPath && isAskTurnGate(useAskThreadStore.getState(), gate.runId, gate.gateKind, gate.prompt, gate.ord)) {
       useAskThreadStore.getState().recordTurnGate(gate.runId, gate.ord);
       set((s) => { if (!(gate.runId in s.gates)) return s; const next = { ...s.gates }; delete next[gate.runId]; return { gates: next }; });
@@ -172,17 +190,20 @@ export const useGateStore = create<GateStore>((set) => ({
     set((s) => ({ gates: { ...s.gates, [gate.runId]: gate } }));
   },
 
-  clearGate: (runId) =>
+  clearGate: (runId) => {
+    bump(runId);
     set((s) => {
       if (!(runId in s.gates)) return s;
       const next = { ...s.gates };
       delete next[runId];
       return { gates: next };
-    }),
+    });
+  },
 
   ingest: (event) => {
     const session = typeof event.session === 'string' ? event.session : undefined;
     if (session === undefined) return;
+    if (GATE_WRITES.has(event.type)) bump(session);
     set((s) => {
       // The approaching preview folds FIRST (slice BA): it opens on
       // `gateEscalated` and retires on any frame that supersedes it —
@@ -273,7 +294,7 @@ export const useGateStore = create<GateStore>((set) => ({
         // against (§11.5 — a chat-keyed gate is never in GET /runs); only a
         // real resolution (ingest/clearGate) may retire them.
         if (keep.has(id) || isAwaitingPinned(id)) next[id] = gate;
-        else changed = true;
+        else { changed = true; bump(id); }
       }
       return changed ? { gates: next } : s;
     }),

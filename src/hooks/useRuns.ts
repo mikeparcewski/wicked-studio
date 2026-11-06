@@ -4,9 +4,9 @@ import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
-import { gateFromInfo, useGateStore } from '../store/gates.js';
+import { useGateStore } from '../store/gates.js';
 import { answerShapeOf, askerOf, useElicitationStore } from '../store/elicitations.js';
-import { rememberWorkTitles } from '../board/gateActions.js';
+import { ensureGate, rememberWorkTitles } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -32,6 +32,27 @@ const TERMINAL = new Set(['completed', 'cancelled', 'failed']);
  * bought nothing. Keyed run → the status it had when it answered none.
  */
 const answeredNone = new Map<string, string>();
+
+/** F31: how many late-join gate reads are on their way at once (98 parked runs read one by one took ~28 s on the rig). */
+export const GATE_READS_IN_FLIGHT = 4;
+
+/** F31: waiting runs' ids, newest first (`created_at` descending; a run with none goes last, in list order). */
+export function newestFirst(views: readonly SessionView[]): string[] {
+  const at = (v: SessionView): number => (typeof v.session.created_at === 'number' ? v.session.created_at : Number.NEGATIVE_INFINITY);
+  return views.map((v, i) => ({ v, i })).sort((a, b) => at(b.v) - at(a.v) || a.i - b.i).map(({ v }) => v.session.id);
+}
+
+/** Run `fn` over `items` with at most `limit` on their way at once, in order. */
+export async function eachLimited<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const lane = async (): Promise<void> => {
+    while (next < items.length) {
+      const item = items[next++] as T;
+      await fn(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+}
 
 /** Test seam. */
 export function resetElicitationProbes(): void {
@@ -70,7 +91,6 @@ export async function hydrateElicitations(runs: readonly SessionView[], cancelle
 
 export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: boolean; error: string | null } {
   const status = useConnectionStore((s) => s.status);
-  const setGate = useGateStore((s) => s.setGate);
   const reconcileGates = useGateStore((s) => s.reconcile);
   const reconcileElicitations = useElicitationStore((s) => s.reconcile);
   const [runs, setRuns] = useState<SessionView[]>([]);
@@ -150,22 +170,19 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       // cleared for a broken daemon).
       void hydrateElicitations(fetched, () => cancelled);
 
-      for (const id of awaiting) {
-        if (useGateStore.getState().gates[id]) continue;
-        try {
-          const g = await api.getGate(id);
-          if (cancelled) return;
-          setGate(gateFromInfo(g));
-        } catch {
-          /* no cached prompt — id-only gate still works */
-        }
-      }
+      // F31: the newest waiting runs first (the ones a person just launched and is looking at), a few reads at a
+      // time. A refresh that cancels this pass stops new reads; a read that lands still applies, because
+      // `refreshGate` drops it if the run's gate moved meanwhile. A failed read leaves the id-only gate working.
+      await eachLimited(newestFirst(fetched.filter((v) => v.session.status === 'awaiting_human')), GATE_READS_IN_FLIGHT, async (id) => {
+        if (cancelled || useGateStore.getState().gates[id] !== undefined) return;
+        await ensureGate(id);
+      });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [status, tick, setGate, reconcileGates, reconcileElicitations]);
+  }, [status, tick, reconcileGates, reconcileElicitations]);
 
   // ASK-S1: `/health` may answer AFTER the first runs list (codex r4 #1) — when the capability lands,
   // the list already in hand is classified and any gate cached meanwhile is reclassified.

@@ -8,7 +8,7 @@ import type { GateDecision, SessionView } from '../api/types.js';
 import { jobTitle, plainGateQuestion } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
-import { gateFromInfo, useGateStore } from '../store/gates.js';
+import { gateFromInfo, gateGen, useGateStore } from '../store/gates.js';
 import { recordShown } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
@@ -450,14 +450,37 @@ export function gateMovedCode(e: unknown): 'gate_changed' | 'gate_unknown' | nul
 /**
  * Re-read the run's open gate (`GET /runs/:id/gate`) into the gate store: the new gate replaces
  * the old one, and no cached gate drops it. A failed read leaves the store as it was.
+ *
+ * F31: the answer applies only if nothing wrote the run's gate while it was on its way (`gateGen`):
+ * an answer sent here, a live frame or a prune is newer than the read, so a read that overlapped
+ * one never brings back a gate that is gone.
  */
 export async function refreshGate(runId: string): Promise<void> {
   const store = useGateStore.getState();
+  const at = gateGen(runId);
   try {
-    store.setGate(gateFromInfo(await api.getGate(runId)));
+    const gate = gateFromInfo(await api.getGate(runId));
+    if (gateGen(runId) === at) store.setGate(gate);
   } catch (e) {
-    if (e instanceof ApiError && e.status === 404) store.clearGate(runId);
+    if (e instanceof ApiError && e.status === 404 && gateGen(runId) === at) store.clearGate(runId);
   }
+}
+
+/** The gate reads on their way, one per run (`ensureGate`). */
+const gateReads = new Map<string, Promise<void>>();
+
+/**
+ * F31: make sure a run that waits on a person has its open gate in the store: nothing when one is
+ * cached, else one `refreshGate`, shared by every caller while it is on its way (the run's own
+ * thread on mount and the runs list's late-join pass ask for the same run at once).
+ */
+export function ensureGate(runId: string): Promise<void> {
+  if (useGateStore.getState().gates[runId] !== undefined) return Promise.resolve();
+  const reading = gateReads.get(runId);
+  if (reading !== undefined) return reading;
+  const read = refreshGate(runId).finally(() => { gateReads.delete(runId); });
+  gateReads.set(runId, read);
+  return read;
 }
 
 /** A gate's one honest affordance: the session thread at the gate anchor. */
