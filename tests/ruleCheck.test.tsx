@@ -401,7 +401,7 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
     ruleId: id, status: 'disputed', how: 'council', ruleKey: 'k', judge: 'claude', origin: 'judge',
     reason: 'the council reached no ruling (1 of 3 answered): no_quorum: the counted votes reached no majority (1 of 3 counted)',
     reviewer: reviewerPos,
-    council: { taskId: 't-1', positions: [judgePos, reviewerPos], votes: [{ seat: 'agy', status: 'broken', counted: true }, { seat: 'pi', counted: false, whyNot: 'no answer' }, { seat: 'opencode', counted: false, whyNot: 'no answer' }], seated: 3, returned: 1, agreementPct: 100, consensus: false, seed: 7, eligible: ['agy', 'pi', 'opencode'], reason: 'no_quorum: the counted votes reached no majority (1 of 3 counted)' },
+    council: { taskId: 't-1', positions: [judgePos, reviewerPos], votes: [{ seat: 'agy', status: 'broken', counted: true }, { seat: 'pi', counted: false, whyNot: 'no answer' }, { seat: 'opencode', status: 'kept', counted: false, whyNot: 'names no changed file' }], seated: 3, returned: 2, agreementPct: 100, consensus: false, seed: 7, eligible: ['agy', 'pi', 'opencode'], reason: 'no_quorum: the counted votes reached no majority (1 of 3 counted)' },
   });
   const settled = (how = 'council'): Record<string, unknown> => ({
     ruleId: 'DEV-TINYMATH-2', status: 'broken', how, ruleKey: 'k', judge: 'claude', origin: 'council',
@@ -441,7 +441,7 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
     expect(pos[0]).toContain('Rule judge (claude): broken, ');
     expect(pos[0]).toContain('no test exercises it');
     expect(pos[1]).toContain('Reviewer (codex): kept, ');
-    expect(screen.getByTestId('assurance-rule-votes').textContent).toBe('Council votes: agy broken · pi named no position (not counted: no answer) · opencode named no position (not counted: no answer)');
+    expect(screen.getByTestId('assurance-rule-votes').textContent).toBe('Council votes: agy: broken · pi: no vote (no answer) · opencode: kept (not counted: names no changed file)');
   });
 
   it('a council ruling says its vote and its own seats, never the rule judge as the council', () => {
@@ -455,7 +455,7 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
       expect(said).not.toContain('claude');
       expect(screen.getByTestId('assurance-rule').textContent).toContain(': sum() changed with no test');
       expect(screen.getAllByTestId('assurance-rule-position').map((x) => x.getAttribute('data-by'))).toEqual(['rule_judge', 'reviewer']);
-      expect(screen.getAllByTestId('assurance-rule-vote').map((x) => x.textContent)).toEqual(['agy broken', ' · pi broken', ' · opencode kept']);
+      expect(screen.getAllByTestId('assurance-rule-vote').map((x) => x.textContent)).toEqual(['agy: broken', ' · pi: broken', ' · opencode: kept']);
       unmount();
     }
     // A council row whose ruling it does not carry is never "by a judge (claude)" either.
@@ -469,7 +469,7 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
     render(<RulesChecked rows={r.rules!} />);
     const group = screen.getByTestId('assurance-rules-process');
     expect(group.textContent).toContain('Process rules: reported, they do not block this gate');
-    expect(group.textContent).toContain("broken RVWL-1001 the reviewer's conduct, reported, does not block");
+    expect(group.textContent).toContain("broken RVWL-1001 by a judge (claude): from the engine record · about the reviewer's conduct; reported, does not block");
     expect(screen.getByTestId('assurance-rules').getAttribute('data-tone')).toBe('ok');
   });
 
