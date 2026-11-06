@@ -840,8 +840,13 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // (e2e-1105 F23) A QE review that gave no verdict on the work (inconclusive, no reviewer, none bound): the REDO of the
     // QE check leads, where the engine's prompt names it (it drops it at the cap). It is never the person's verdict; their
     // own judgment stays a separate, labelled choice.
-    // The engine names `retry_qe` only at a gate it takes it at: a late join with no denial frames still gets the offer.
-    const qeRedo = deadSeat === null && !deniedUnit && qe?.outcome !== 'fail' && qeRecordedOutcome(units, gate.ord) !== 'fail' && offersQeRedo(gate.prompt);
+    // The engine names `retry_qe` only at a gate it takes it at. A late join with no denial frames still gets the offer when
+    // the gated unit's own QE record is a non-verdict (a quoted mention in a reason, or a recorded FAIL, never does).
+    const recordedQe = qeRecordedOutcome(units, gate.ord);
+    const recordedNonVerdict = recordedQe === 'inconclusive' || recordedQe === 'unavailable' || recordedQe === 'invalid';
+    const qeRedo = deadSeat === null && !deniedUnit && (qe !== null ? qe.outcome !== 'fail' && recordedQe !== 'fail' : recordedNonVerdict) && offersQeRedo(gate.prompt);
+    // studio#761 on a late join too: a redo at a record that bound no verdict judged nothing, so nothing is sent back.
+    const noVerdictGate = qeNoVerdict || (qe === null && qeRedo && recordedQe === 'invalid');
     if (qeRedo) {
       coreWithoutStop.push({ key: QE_REDO_KEY, label: QE_REDO_LABEL, decision: { approve: true, action: QE_REDO_ACTION } as unknown as GateAnswer, needsNote: false, title: QE_REDO_TITLE });
     }
@@ -855,7 +860,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     }
     if (deadSeat === null && deniedUnit) {
       coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
-    } else if (deadSeat === null && qeNoVerdict) {
+    } else if (deadSeat === null && noVerdictGate) {
       // studio#761: nothing was judged, so no Send back; with the engine's redo offered it IS the retry (fresh evidence).
       if (!qeRedo) coreWithoutStop.push({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
     } else if (deadSeat === null && sendBackAccepted(units, gate.ord)) {

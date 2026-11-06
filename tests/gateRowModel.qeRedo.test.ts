@@ -158,6 +158,16 @@ describe('F23 — every other non-verdict takes the redo too; a FAIL never does'
     const evs = events(UNBOUND, 'qe_review', 'verdict_not_pass', NV_PROMPT(true)).filter((e) => (e as { type: string }).type === 'awaitingHuman');
     const late = sessionGateChoices({ runId: RUN, gate, units: units('fail'), events: evs, pool: ['pi', 'claude'], roster: null })!;
     expect(all(late).some((c) => c.key === QE_REDO_KEY)).toBe(false);
+    // The whole engine clause quoted inside a non-QE reason, on a late join: the unit's record is no QE non-verdict.
+    const clause = `Unit 6 verdict is NOT PASS (the docs say:${REDO_CLAUSE.slice(0, 120)}) — confirm to retry the phase, request changes to send the review back to the creator phase, or reject to cancel the run`;
+    const g2: OpenGate = { ...gate, prompt: clause };
+    const e2 = events('x', 'evaluator_verdict', 'verdict_not_pass', clause).filter((e) => (e as { type: string }).type === 'awaitingHuman');
+    const q = sessionGateChoices({ runId: RUN, gate: g2, units: units('pass'), events: e2, pool: ['pi', 'claude'], roster: null })!;
+    expect(all(q).some((c) => c.key === QE_REDO_KEY)).toBe(false);
+    // A late join at a genuine no-verdict gate: the redo, and still no Send back.
+    const nv = sessionGateChoices({ runId: RUN, gate, units: units('invalid'), events: evs, pool: ['pi', 'claude'], roster: null })!;
+    expect(nv.choices[0]).toMatchObject({ key: QE_REDO_KEY });
+    expect(all(nv).some((c) => c.key === 'send-back')).toBe(false);
   });
 
   it('a recorded FAIL is a verdict: no redo, even if a prompt mentions it', () => {
