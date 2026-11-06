@@ -130,7 +130,7 @@ export function RulesTab({ navigate }: { navigate: Navigate }): React.ReactEleme
       {changed.map(({ s, yours }) => (
         <section key={s.id} className="wk-learn-changed" aria-label={`This starter changed: ${s.title}`} data-testid="learn-starter-changed" data-starter={s.id}>
           <div className="wk-learn-changed-t">
-            <h3>This starter changed: {s.title}</h3>
+            <h2>This starter changed: {s.title}</h2>
             {s.changed !== undefined && <span>{s.changed}</span>}
             <dl className="wk-learn-changed-dl">
               <dt>Yours</dt><dd data-testid="learn-starter-yours">{yours}</dd>
