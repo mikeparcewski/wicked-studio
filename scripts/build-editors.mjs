@@ -48,6 +48,7 @@ export const EDITORS = [
       { id: 'artifact.write', why: 'to land what you type on an element as one version, with Undo' },
       { id: 'selection.chip', why: 'to make the element you click the subject of your next message' },
       { id: 'network.media', why: 'to show the page’s web images and fonts' },
+      { id: 'artifact.export', why: 'to offer the page as a web page or a PDF from its card (the host makes the file)' },
       { id: 'artifact.theme', why: 'to change the page’s theme, colours and fonts from its Style tab, as one version with Undo' },
       { id: 'ui.fullscreen', why: 'to show the page full screen' },
     ],

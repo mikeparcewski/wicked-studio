@@ -63,6 +63,20 @@ export const useEditorPicks = create<{ picks: Record<string, string>; pick: (kin
   }),
 }));
 
+/** Whether an editor reads the artifact it is opened on: it declares `artifact.read`. One without it shows its own
+ *  form, never the artifact (plugins-complete G9), so it is not a way to open one. */
+export function editorReads(e: EditorView): boolean {
+  return Array.isArray(e.permissions) && e.permissions.some((p) => p.id === 'artifact.read');
+}
+
+/** The editor that opens `kind` among `editors`: the person's pick only when that editor reads the artifact (a stored
+ *  pick of one that does not is ignored), else the first fitting editor that reads it, else the first fitting one. */
+export function openingEditor(editors: readonly EditorView[], kind: string, preferred: string | null): EditorView | null {
+  const fit = editorsFor(editors, kind);
+  const readers = fit.filter(editorReads);
+  return (preferred !== null ? readers.find((e) => e.id === preferred) : undefined) ?? readers[0] ?? editorFor(editors, kind, 'inline');
+}
+
 /** The editor that opens `kind`, once the registry is read: `undefined` while loading, `null` when none claims it. */
 export function useEditorFor(kind: string): EditorView | null | undefined {
   const state = useEditors((s) => s.state);
@@ -70,19 +84,32 @@ export function useEditorFor(kind: string): EditorView | null | undefined {
   const preferred = useEditorPicks((s) => s.picks[kind] ?? null);
   useEffect(() => { if (state === 'idle') void useEditors.getState().load(); }, [state]);
   if (state === 'idle' || state === 'loading') return undefined;
-  return editorFor(editors, kind, 'inline', preferred);
+  return openingEditor(editors, kind, preferred);
 }
 
-/** Every editor that can open `kind` (the "Open with" choices), once the registry is read; `[]` before. */
+/** Every editor that can open `kind` (the "Open with" choices), once the registry is read; `[]` before. An editor
+ *  that does not read the artifact is left out. */
 export function useEditorChoices(kind: string): EditorView[] {
   const state = useEditors((s) => s.state);
   const editors = useEditors((s) => s.editors);
-  return state === 'ready' ? editorsFor(editors, kind) : [];
+  return state === 'ready' ? editorsFor(editors, kind).filter(editorReads) : [];
+}
+
+/**
+ * A plugin's own notes on its artifact (`checks.contribute`, plugins-complete G25), per options group (editor ×
+ * artifact): the newest list from any of its instances (card, full screen, options). Advisory: the card shows them as
+ * the plugin's notes, never as a review or a check that ran.
+ */
+export interface AdvisoryNote { id: string; text: string }
+export const useAdvisoryNotes = create<{ byGroup: Record<string, readonly AdvisoryNote[]> }>(() => ({ byGroup: {} }));
+export function setAdvisoryNotes(group: string, notes: readonly AdvisoryNote[]): void {
+  useAdvisoryNotes.setState((s) => ({ byGroup: { ...s.byGroup, [group]: notes } }));
 }
 
 /** Test seam. */
 export function resetEditors(): void {
   useEditors.setState({ state: 'idle', editors: [], reason: null });
   useEditorPicks.setState({ picks: {} });
+  useAdvisoryNotes.setState({ byGroup: {} });
   try { localStorage.removeItem(PICK_KEY); } catch { /* none kept */ }
 }
