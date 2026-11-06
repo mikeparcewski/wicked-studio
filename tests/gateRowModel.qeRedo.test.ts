@@ -128,6 +128,8 @@ describe('F23 — every other non-verdict takes the redo too; a FAIL never does'
     expect(m.choices[0]).toMatchObject({ key: QE_REDO_KEY, decision: { approve: true, action: 'retry_qe' } });
     expect(m.recommended).toBe(0);
     expect(all(m).some((c) => c.key === 'retry')).toBe(false);
+    // studio#761 holds: nothing was judged, so nothing is sent back.
+    expect(all(m).some((c) => c.key === 'send-back')).toBe(false);
   });
 
   it('a binding failure (no reviewer ran) is said as such, not "didn\'t record a verdict"', () => {
