@@ -79,6 +79,9 @@ def handle(r):
         return give(r, {"repo": {"id": "r-hb", "name": "handbook"}, "onboardRunId": None})
     if path == "/governance/rules" and m == "POST":
         return give(r, {"status": "ok"})
+    # First run reads the rules before adopting starters (it never rewrites a team's copy): none adopted yet.
+    if path == "/governance/rules" and m == "GET":
+        return give(r, {"rules": []})
     r.continue_()
 
 
