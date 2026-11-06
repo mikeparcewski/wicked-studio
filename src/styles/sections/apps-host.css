@@ -47,6 +47,9 @@
 .wk-appchat-steps li[data-state='now'] { border-color: var(--accent); color: var(--ink-high); }
 .wk-appchat-steps li[data-state='done'] { color: var(--status-ok); border-color: color-mix(in srgb, var(--status-ok) 50%, var(--border)); }
 .wk-appchat-steps li[data-state='failed'] { color: var(--status-fail); border-color: color-mix(in srgb, var(--status-fail) 50%, var(--border)); }
+/* (F22) A run gate answered in the chat's narrow column: one option per row and the question at body size, as on a phone. */
+.wk-appchat-gate .wk-ask-opts { grid-template-columns: minmax(0, 1fr); }
+.wk-appchat-gate .wk-gate2-q { font-size: var(--text-md); }
 .wk-appchat-lines { margin: 0; padding-left: 1.1em; color: var(--ink-body); font-size: var(--text-caption); overflow-wrap: anywhere; }
 .wk-appchat-meta { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); overflow-wrap: anywhere; }
 .wk-appchat-code { padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-body); }

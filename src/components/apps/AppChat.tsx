@@ -13,6 +13,7 @@ import { GateRow } from '../session/GateRow.js';
 import { useGateStore } from '../../store/gates.js';
 import { rulesHoldAt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
+import { gateWithLogChoices } from '../../board/gateHeadline.js';
 
 /**
  * THE APP'S CHAT (DES-APPS-001 §6.1-§6.2, §9.2; operator 2026-11-04: "I should be driving the changes mostly via chat"):
@@ -82,11 +83,15 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
   if (t.state === 'running') {
     const busy = busyText(view);
     // (F22) A step held on steering rules was not rejected: it shows as the step waiting on you, never as failed. Read
-    // as the gate row reads it (this attempt's structured record, else the unit's own).
-    const heldOrd = view !== null && gate !== undefined && rulesHoldAt(events, view.units, gate.ord).held ? gate.ord : null;
-    // Answered here: a rules hold, or a gate crew does not take for a refusal. A refused step's gate is crew's to stop
-    // (the turn cannot land through it), so the chat never offers to approve past it.
-    const answerable = gate !== undefined && (heldOrd !== null || !REFUSAL_GATE_KINDS.has(gate.gateKind ?? ''));
+    // as the gate row reads it (this attempt's structured record) OR from the unit's own record on the polled runs list,
+    // so a live-event buffer that missed the hold (a reconnect) never hides it; crew stops a turn that is not held.
+    const heldOrd = view !== null && gate !== undefined
+      && (rulesHoldAt(events, view.units, gate.ord).held || rulesHoldAt(null, view.units, gate.ord).held) ? gate.ord : null;
+    // Answered here: a rules hold, or a gate whose kind is known and is not one crew stops a turn at (a refused step's
+    // gate is crew's to stop: the turn cannot land through it). An unknown kind (an older late join) is not answered
+    // here; See the job still reaches it.
+    const kind = gate === undefined ? '' : (events !== null ? gateWithLogChoices(gate, events) : gate).gateKind ?? '';
+    const answerable = gate !== undefined && (heldOrd !== null || (kind !== '' && !REFUSAL_GATE_KINDS.has(kind)));
     return (
       <div className="wk-appchat-reply wk-appchat-reply--busy" data-testid="app-chat-busy" data-step={busy.step ?? ''} aria-live="polite">
         <p className="wk-appchat-busyline"><span className="wk-appchat-pulse" aria-hidden="true" />{busy.line}</p>
