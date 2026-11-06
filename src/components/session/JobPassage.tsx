@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { create } from 'zustand';
 import { api } from '../../api/client.js';
 import type { ChatPlanOffer, ProposalRevisionEdits, ProposalToken, SessionView } from '../../api/types.js';
 import { ApiError } from '../../api/errors.js';
@@ -136,12 +137,16 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // A job the person asked for from an ended one (Try again, Fix it as a bug): this new passage says so once and takes
   // the focus (an explicit act's result; a passive arrival never moves focus).
   const passageRef = useRef<HTMLElement | null>(null);
+  // Bound to the proposal crew answered with (its chat and lineage), whether its record mounted this passage before or
+  // after the answer: no other passage, in this chat or another, ever claims it.
+  const handOffFor = useHandOff((s) => (s.intent !== null && s.intent.chatId === chatId && s.intent.lineage === lineage.lineage ? s.intent : null));
   useEffect(() => {
-    if (!takeHandOff(lineage.lineage)) return;
+    if (handOffFor === null) return;
+    useHandOff.setState({ intent: null });
     setAnnounce(`wicked proposes the next job: ${v.proposal.what.label}`);
     queueMicrotask(() => (passageRef.current?.querySelector<HTMLElement>('[data-testid="job-passage-reply"]:not([disabled])') ?? passageRef.current)?.focus());
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when this passage mounts
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per intent
+  }, [handOffFor]);
   useEffect(() => {
     const said = announceOf(prevView.current, v);
     if (said !== null) setAnnounce(said);
@@ -274,10 +279,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     }
     setError(null);
     setHandOff(true);
-    api.proposeInChat(chatId, body).then(() => {
+    api.proposeInChat(chatId, body).then((res) => {
       handOffBodies.current.delete(key);
-      // The person asked for the next job: its passage, when crew's record of it arrives, takes the focus and says so.
-      expectHandOff();
+      // The person asked for the next job: ITS passage (the proposal crew answered with) takes the focus and says so.
+      const made = (res as { view?: { proposal?: { pid?: unknown; lineage?: unknown } } } | undefined)?.view?.proposal;
+      const madeLineage = typeof made?.lineage === 'string' ? made.lineage : typeof made?.pid === 'string' ? made.pid : null;
+      if (madeLineage !== null) useHandOff.setState({ intent: { chatId, lineage: madeLineage } });
       onChanged();
     }).catch((e: unknown) => setError(proposalRefusal(e).words))
       .finally(() => setHandOff(false));
@@ -477,6 +484,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
                   {s.detail !== null && <span className="d"> {s.detail}</span>}
                   {s.asks === 'always' && <em className="wk-pass-asks"> asks you</em>}
                   {s.asks === 'if-fails' && <em className="wk-pass-asks"> asks you if its check fails</em>}
+                  {s.asks === 'maybe' && <em className="wk-pass-asks"> may ask you</em>}
                   {s.floor && <em className="wk-pass-floor"> added for this risk</em>}
                   {s.added && <span className="wk-visually-hidden"> (new in this version)</span>}
                 </span>
@@ -780,13 +788,5 @@ function PassageRunExtras({ run, sessionId, gateOpen }: { run: SessionView; sess
   );
 }
 
-/** A hand-off the person just made: the next passage that mounts (a new lineage) is its result, within a short window. */
-let handOffAt: number | null = null;
-const handOffSeen = new Set<string>();
-function expectHandOff(): void { handOffAt = Date.now(); }
-function takeHandOff(lineage: string): boolean {
-  if (handOffAt === null || Date.now() - handOffAt > 30_000 || handOffSeen.has(lineage)) { handOffSeen.add(lineage); return false; }
-  handOffAt = null;
-  handOffSeen.add(lineage);
-  return true;
-}
+/** The job a hand-off (Try again, Fix it as a bug) made: its chat and lineage, as crew answered. Claimed once, by it. */
+export const useHandOff = create<{ intent: { chatId: string; lineage: string } | null }>(() => ({ intent: null }));

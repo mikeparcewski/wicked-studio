@@ -21,6 +21,7 @@ const { useGateStore } = await import('../src/store/gates.js');
 const { usePlanGateStore } = await import('../src/store/planGates.js');
 const { useSheets } = await import('../src/store/sheets.js');
 const { useJobBinding } = await import('../src/store/jobBinding.js');
+const { useHandOff } = await import('../src/components/session/JobPassage.js');
 const { useElicitationStore } = await import('../src/store/elicitations.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { resetJobLocal, useJobLocal } = await import('../src/hooks/useJobStream.js');
@@ -57,6 +58,7 @@ beforeEach(() => {
   resetJobLocal();
   resetDecisionsForTest();
   useJobBinding.setState({ binding: null });
+  useHandOff.setState({ intent: null });
   useElicitationStore.setState({ elicitations: {}, generations: {} });
   useSessionDrafts.setState({ drafts: {}, scroll: {} });
   useCapabilities.setState({ loaded: true, runChatId: true, askPath: false, chatProposals: true, chatList: true, chatJobProposals: true, reshapeRun: true });
@@ -887,6 +889,7 @@ describe('follow-up review folds (the passage)', () => {
   it('the job the person asked for takes the focus and is announced when it arrives', async () => {
     messages = [USER, SEAT, P1, decided];
     team = { teamed: true, units: [], rows: [] };
+    reviseAnswer = () => ok({ view: { proposal: { pid: `${CHAT}:retry1`, lineage: `${CHAT}:retry1` }, state: 'open' } }, 201);
     page([failedRun()]);
     fireEvent.click(await screen.findByTestId('job-passage-try-again'));
     await waitFor(() => expect(posts).toHaveLength(1));
@@ -896,5 +899,50 @@ describe('follow-up review folds (the passage)', () => {
     const fresh = screen.getAllByTestId('job-passage').find((p) => p.dataset['lineage'] === `${CHAT}:retry1`)!;
     await waitFor(() => expect(fresh.contains(document.activeElement)).toBe(true));
     expect(within(fresh).getByTestId('job-passage-live').textContent).toMatch(/^wicked proposes the next job/);
+  });
+});
+
+
+describe('follow-up round 2 folds: the hand-off is bound to the job crew made', () => {
+  const RUN = 'run-1';
+  const decided = { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } };
+  const failedRun = () => makeView({ id: RUN, status: 'failed' as never, unit_ix: 1, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, [
+    makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'done', phase_ref: 'pa-scope' }), makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: 'rejected', phase_ref: 'build' })]);
+  const other = jobProposal({ pid: `${CHAT}:other`, turnId: 't8', lineage: `${CHAT}:other`, revises: null });
+  const mine = jobProposal({ pid: `${CHAT}:retry1`, turnId: 't9', lineage: `${CHAT}:retry1`, revises: null });
+
+  it('an unrelated passage arriving first never takes the focus or the announcement', async () => {
+    messages = [USER, SEAT, P1, decided];
+    team = { teamed: true, units: [], rows: [] };
+    reviseAnswer = () => ok({ view: { proposal: { pid: `${CHAT}:retry1`, lineage: `${CHAT}:retry1` }, state: 'open' } }, 201);
+    page([failedRun()]);
+    fireEvent.click(await screen.findByTestId('job-passage-try-again'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    await frame({ at: T0 + 50, turnId: 't8', kind: 'proposal', proposal: other });
+    const wrong = await waitFor(() => screen.getAllByTestId('job-passage').find((p) => p.dataset['lineage'] === `${CHAT}:other`)!);
+    expect(wrong.contains(document.activeElement)).toBe(false);
+    expect(within(wrong).getByTestId('job-passage-live').textContent).toBe('');
+  });
+
+  it('the job’s record landing before crew’s answer still gets the focus when the answer arrives', async () => {
+    messages = [USER, SEAT, P1, decided];
+    team = { teamed: true, units: [], rows: [] };
+    let answer: (r: Response) => void = () => undefined;
+    reviseAnswer = () => { throw new Error('unused'); };
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') { posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> }); return new Promise<Response>((res) => { answer = res; }); }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) { reads += 1; return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages })); }
+      if (path.endsWith('/team')) return Promise.resolve(ok(team));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page([failedRun()]);
+    fireEvent.click(await screen.findByTestId('job-passage-try-again'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    await frame({ at: T0 + 50, turnId: 't9', kind: 'proposal', proposal: mine });
+    const fresh = await waitFor(() => screen.getAllByTestId('job-passage').find((p) => p.dataset['lineage'] === `${CHAT}:retry1`)!);
+    expect(fresh.contains(document.activeElement)).toBe(false);
+    await act(async () => { answer(ok({ view: { proposal: { pid: `${CHAT}:retry1`, lineage: `${CHAT}:retry1` }, state: 'open' } }, 201)); await Promise.resolve(); });
+    await waitFor(() => expect(fresh.contains(document.activeElement)).toBe(true));
   });
 });

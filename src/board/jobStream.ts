@@ -268,7 +268,8 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
       l.result = (r['result'] ?? null) as ProposalResult | null;
       l.decidedAt = at;
       if (l.result !== null && !l.result.stub) l.runId = l.result.runId;
-      l.decisions.push({ pid: String(pid), version: l.versions.findIndex((x) => x.pid === pid) + 1, decision: l.decision!, at, runId: l.result !== null && !l.result.stub ? l.result.runId : null, stub: l.result?.stub === true });
+      const vix = l.versions.findIndex((x) => x.pid === pid);
+      if (vix >= 0) l.decisions.push({ pid: String(pid), version: vix + 1, decision: l.decision!, at, runId: l.result !== null && !l.result.stub ? l.result.runId : null, stub: l.result?.stub === true });
     } else if (r['kind'] === 'plan_offer') {
       const o = r['offer'];
       if (!isOffer(o)) continue;
@@ -327,7 +328,7 @@ export interface JobPlanStep {
   detail: string | null;
   /** The step raises a human gate: it asks the person always, or only if its check fails (`GateSpec`); `null` = never
    *  (an automatic gate, or none). */
-  asks: 'always' | 'if-fails' | null;
+  asks: 'always' | 'if-fails' | 'maybe' | null;
   /** The floor added it for this risk (not the lead). */
   floor: boolean;
   /** New in this revision (not in the revision before it): washed, "what changed". */
@@ -341,7 +342,7 @@ const strOf = (v: unknown): string | null => (typeof v === 'string' && v !== '' 
 function asksOf(gate: unknown): JobPlanStep['asks'] {
   if (gate === 'consent_before') return 'always';
   if (typeof gate === 'object' && gate !== null) {
-    if ('human_confirm' in gate) return 'always';
+    if ('human_confirm' in gate) return (gate as { human_confirm?: { unconditional?: unknown } }).human_confirm?.unconditional === true ? 'always' : 'maybe';
     if ('human_confirm_if' in gate) return 'if-fails';
   }
   return null;
@@ -359,7 +360,9 @@ export function enrichPlan(steps: ReadonlyArray<{ id: string | null; catalog: st
   const gateRow = [...rows].filter((r) => r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval' && r.payload['plan_rev'] === planRev)
     .sort((a, b) => a.event_id - b.event_id).pop();
   const refused = new Set(rows.filter((r) => r.event_type === 'wicked.team.plan.refused').map((r) => String(r.payload['proposal_id'])));
-  const proposed = rows.filter((r) => r.event_type === 'wicked.team.plan.proposed' && (gateRow === undefined || r.event_id < gateRow.event_id)
+  // No gate on record for this revision yet (the team record lags the plan read): nothing describes it but its names.
+  if (gateRow === undefined) return { steps: steps.map((s) => ({ id: s.id, label: s.label, detail: null, asks: null, floor: false, added: false })), changed: null };
+  const proposed = rows.filter((r) => r.event_type === 'wicked.team.plan.proposed' && r.event_id < gateRow.event_id
     && !(typeof r.payload['proposal_id'] === 'string' && refused.has(r.payload['proposal_id']))).sort((a, b) => a.event_id - b.event_id);
   const stepsOf = (r: Row | undefined): Array<Record<string, unknown>> => (Array.isArray(r?.payload['steps']) ? (r!.payload['steps'] as unknown[]).filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null) : []);
   const held = proposed[proposed.length - 1];
@@ -395,7 +398,9 @@ export function replanningOnRecord(rows: readonly Row[], units: ReadonlyArray<{ 
   const opened = new Map<string, { rev: number; ord: number }>();
   for (const r of sorted) {
     if (r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval') {
-      opened.set(String(r.payload['gate_id']), { rev: typeof r.payload['plan_rev'] === 'number' ? r.payload['plan_rev'] : 0, ord: typeof r.payload['ord'] === 'number' ? r.payload['ord'] : -1 });
+      // The work the plan gate stands before: its `reviewing_ord` (the envelope's `ord` is nullable), else the envelope's.
+      const ord = typeof r.payload['reviewing_ord'] === 'number' ? r.payload['reviewing_ord'] : typeof r.payload['ord'] === 'number' ? r.payload['ord'] : null;
+      opened.set(String(r.payload['gate_id']), { rev: typeof r.payload['plan_rev'] === 'number' ? r.payload['plan_rev'] : 0, ord: ord ?? -1 });
     }
   }
   const decided = sorted.filter((r) => r.event_type === 'wicked.team.gate.decided' && r.payload['kind'] === 'plan_approval');
@@ -406,8 +411,9 @@ export function replanningOnRecord(rows: readonly Row[], units: ReadonlyArray<{ 
   const since = sorted.some((r) => r.event_id > last.event_id && (r.event_type === 'wicked.team.plan.accepted'
     || (r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval')));
   if (since) return null;
+  // Only while the work the gate stood before is on record and has not started.
   const work = units.find((u) => u.ord === gate.ord);
-  if (work !== undefined && work.status !== 'pending') return null;
+  if (work === undefined || work.status !== 'pending') return null;
   return gate.rev;
 }
 
@@ -420,11 +426,11 @@ export interface JobTick { key: string; at: number; text: string }
  * v2", "You sent plan v1 back", "You stopped the job at plan v1"). A queued answer in its undo window is never a tick:
  * it has no record until it is sent.
  */
-export function jobTicks(l: JobLineage, rows: readonly Row[] | ReadonlyArray<{ runId: string; rows: readonly Row[] }>, lead: string): JobTick[] {
-  // Each run the lineage launched has its own team record (a reshape replaces the run): ticks from each, kept apart.
-  const runs = rows.length > 0 && 'runId' in (rows[0] as object) ? rows as ReadonlyArray<{ runId: string; rows: readonly Row[] }> : [{ runId: '', rows: rows as readonly Row[] }];
+export function jobTicks(l: JobLineage, rows: readonly Row[] | ReadonlyArray<{ runId: string; rows: readonly Row[]; lead?: string }>, lead: string): JobTick[] {
+  // Each run the lineage launched has its own team record and its own lead (a reshape replaces both): kept apart.
+  const runs = rows.length > 0 && 'runId' in (rows[0] as object) ? rows as ReadonlyArray<{ runId: string; rows: readonly Row[]; lead?: string }> : [{ runId: '', rows: rows as readonly Row[] }];
   const out = jobDecisionTicks(l);
-  for (const run of runs) out.push(...runTicks(l.lineage, run.runId, run.rows, lead));
+  for (const run of runs) out.push(...runTicks(l.lineage, run.runId, run.rows, ('lead' in run && run.lead !== undefined) ? run.lead : lead));
   return out.sort((a, b) => a.at - b.at);
 }
 
