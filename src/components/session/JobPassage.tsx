@@ -149,7 +149,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       .catch((e: unknown) => { setError(proposalRefusal(e).words); onChanged(); })
       .finally(() => local.setDeciding(lineage.lineage, false));
   };
-  const sendRevision = (body: Parameters<typeof api.reviseChatProposal>[1], token: string | null): void => {
+  const sendRevision = (body: Parameters<typeof api.reviseChatProposal>[1], token: string | null, typed: string | null = null): void => {
     setError(null);
     setLost(null);
     local.setSwap(lineage.lineage, body.revises, token, body.requestId);
@@ -163,14 +163,16 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           onChanged();
           return;
         }
-        // Crew's refusal restores the unchanged proposal: this request's hold ends (never a newer one's).
+        // Crew's refusal restores the unchanged proposal: this request's hold ends (never a newer one's), and words the
+        // person typed for it come back to a free box (a fresh answer is a fresh binding).
         local.endSwap(lineage.lineage, body.requestId);
         setError(proposalRefusal(e).words);
+        if (typed !== null && typed.trim() !== '' && composerFree()) useSessionDrafts.getState().setDraft(sessionId, typed);
         onChanged();
       });
   };
-  const revise = (edits: ProposalRevisionEdits, source: 'swap' | 'suggestion' | 'question', words?: string, token: string | null = null): void => {
-    sendRevision({ revises: pid, edits, source, requestId: newRequestId(), ...(words !== undefined ? { words } : {}) }, token);
+  const revise = (edits: ProposalRevisionEdits, source: 'swap' | 'suggestion' | 'question', words?: string, token: string | null = null, typed: string | null = null): void => {
+    sendRevision({ revises: pid, edits, source, requestId: newRequestId(), ...(words !== undefined ? { words } : {}) }, token, typed);
   };
   const gateExpect = (): { ord: number; receivedAt: number } | null => {
     if (runId === null || inputs.plan === null) return null;
@@ -267,7 +269,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       if (needsWords(q, c.edit)) {
         bind(r, `Answering: ${q.input?.label ?? q.text}`, q.input?.label ?? 'Say why…', (t) => {
           if (t.trim() === '') return false;
-          revise(withWords(q, c.edit, t), 'question');
+          revise(withWords(q, c.edit, t), 'question', undefined, null, t);
           return true;
         });
       }
