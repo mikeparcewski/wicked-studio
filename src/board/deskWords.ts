@@ -99,9 +99,24 @@ export function governanceDenialHeadline(prompt: string | undefined): string | n
   return null;
 }
 
+/** (F22) A rules hold's words: the one rule that needs the person's call, else how many (else one, unnamed). Every
+ *  surface says the same: the gate row (from the structured rows), the toast, the Desk and the dock (from the prompt). */
+export function rulesHoldWords(ids: readonly string[], count: number | null = null): string {
+  if (ids.length === 1) return `The rule ${ids[0]!} needs your call before this step can go on`;
+  const n = ids.length > 1 ? ids.length : count ?? 1;
+  return n > 1 ? `${n} steering rules need your call before this step can go on` : 'A steering rule needs your call before this step can go on';
+}
+
 /** The engine's pause prompts in one line each: what happened, and what the row's choices do
  *  (studio#570). `null` for every other prompt — the caller keeps its own fallbacks. */
 function pausedStepQuestion(p: string, gateKind: string | undefined): string | null {
+  // (F22) A gate held on steering rules no judge ruled on (core's `rules_unchecked` prompt: "Unit N's steering rules
+  // are UNCHECKED or waived by your instruction — K steering rule(s) need you: <id> unchecked (…)"). Not a rejection.
+  if (/^\s*Unit\s+\d+['’]s steering rules are\b/i.test(p)) {
+    const count = Number(/(\d+) steering rule\(s\) need you/i.exec(p)?.[1] ?? NaN);
+    const one = count === 1 ? /need you:\s*([A-Za-z0-9_.:\/-]+)\s+(?:unchecked|waived|disputed)\b/i.exec(p)?.[1] : undefined;
+    return rulesHoldWords(one !== undefined ? [one] : [], Number.isFinite(count) ? count : null);
+  }
   if (/^\s*Unit\s+\d+\s+verdict is NOT PASS\b/i.test(p)) {
     // The reviewer edited the tree instead of judging it (wicked-core#431 / the read-only guard):
     // the edit was discarded and Approve retries on the restored tree — not a FAIL verdict.
