@@ -7,7 +7,7 @@ import type { RepoEntry } from '../../api/types.js';
 import { recordLine } from '../../board/askModel.js';
 import {
   firstNameOf, firstRunOpen, nextSetupAsk, PERSONA_PRESETS, previewAnswer, repoStyleProblem, SETUP_ASKS, shareWords, siteOfEmail,
-  STARTER_RULES, starterRule, type SetupAnswer, type SetupAskKey,
+  STARTER_RULES, starterAdoption, type SetupAnswer, type SetupAskKey,
 } from '../../board/learnHub.js';
 import type { AgentRow } from '../../board/agentsModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -103,9 +103,14 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
         await record(key, { line, done: a.option !== 'later', words: a.option === 'later' ? 'later · Learn keeps a reminder' : opt?.label ?? '' });
         if (a.option === 'pick') navigate(learnPath('style'));
       } else if (key === 'rules') {
-        // A starter already in force is the team's copy (maybe edited): first run never rewrites it (F21).
-        const inForce = new Set((await api.listConformanceRules()).rules.filter((r) => r.retired !== true).map((r) => r.id));
-        for (const s of STARTER_RULES.filter((x) => picked.includes(x.id) && !inForce.has(x.id))) await api.upsertConformanceRule(starterRule(s));
+        // A starter the team already has is their copy (maybe edited): first run never rewrites it. One in force is
+        // left alone; a retired one comes back as it was (F21).
+        const chosen = STARTER_RULES.filter((x) => picked.includes(x.id));
+        const have = chosen.length > 0 ? (await api.listConformanceRules()).rules : [];
+        for (const s of chosen) {
+          const write = starterAdoption(s, have);
+          if (write !== null) await api.upsertConformanceRule(write);
+        }
         if (picked.length > 0) void useFirstRun.getState().markLearnUsed();
         await record(key, { line, done: picked.length > 0, words: picked.length === 0 ? 'none picked' : `${picked.length} picked` });
       } else if (key === 'persona') {

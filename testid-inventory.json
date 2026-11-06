@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4709,
-    "static": 3940,
+    "occurrences": 4714,
+    "static": 3945,
     "dynamic": 173,
     "computed": 53
   },
@@ -8757,6 +8757,36 @@
     },
     {
       "testId": "learn-starter",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-starter-changed",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-starter-criteria",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-starter-now",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-starter-update",
+      "files": [
+        "src/components/learn/RulesTab.tsx"
+      ]
+    },
+    {
+      "testId": "learn-starter-yours",
       "files": [
         "src/components/learn/RulesTab.tsx"
       ]
