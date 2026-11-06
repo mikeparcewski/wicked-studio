@@ -1080,6 +1080,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   };
   // H3 (HOST-API §6): full screen's chat drawer is this run's own thread, compact — its conversation turns,
   // each with who responded, and the same composer (the run's cards stay in the thread behind it).
+  // The drawer's composer is the same box: a job binding answers there as it does in the thread.
+  const drawerBinding = useJobBinding((st) => (st.binding !== null && st.binding.sessionId === sessionId ? st.binding : null));
   const drawerTurns = entries.filter((e): e is Extract<ThreadEntry, { kind: 'turn' }> => e.kind === 'turn').slice(-12);
   const renderChat = (): React.ReactNode => (
     <div data-testid="run-chat-drawer" className="wk-run-chat">
@@ -1094,7 +1096,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       </div>
       {/* The SAME composer key: the "about:" chip a plugin's selection puts on the run's composer, and a
           typed character it forwards, land here while the drawer is the composer in view (DES §7.3). */}
-      <Composer {...composerProps} className="wk-run-chat-composer" />
+      {drawerBinding !== null
+        ? <JobBoundComposer binding={drawerBinding} composerProps={composerProps} className="wk-run-chat-composer" />
+        : <Composer {...composerProps} className="wk-run-chat-composer" />}
     </div>
   );
   const runHost = useRunHostValue(mine, renderChat);
@@ -1436,6 +1440,47 @@ export { RunBlock };
  * its note choice, or asks a separate question — the draft's intent picks which (the platform's prompt routing; none
  * on today's crew, so it replies, and says so), and one click on the switch overrides it for that draft.
  */
+/**
+ * The composer while a job's reply binds it (the thread's and full screen's chat drawer alike): "Answering: …" with ×,
+ * and Send hands the typed words alone to the job, only while its target is what the binding was made on and its
+ * reply can still be pressed. A refused Send keeps the words in the box and says why.
+ */
+function JobBoundComposer({ binding, composerProps, className }: {
+  binding: NonNullable<ReturnType<typeof useJobBinding.getState>['binding']>;
+  composerProps: React.ComponentProps<typeof Composer>;
+  className: string;
+}): React.ReactElement {
+  const [refused, setRefused] = useState<string | null>(null);
+  const leave = (): void => { useJobBinding.getState().clear(); setRefused(null); };
+  // A binding is made by a press in the passage: the box it becomes takes the caret (it is a new box).
+  const box = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => { box.current?.focus(); }, [binding.replyKey]);
+  return (
+    <Composer {...composerProps} inputRef={box} answerOnly placeholder={binding.placeholder}
+      footer={(
+        <p data-testid="job-binding" role="note" className="wk-composer-hint wk-reply-switch">
+          {refused !== null && <span data-testid="job-binding-moved" className="wk-reply-why">{refused} · </span>}
+          <span data-testid="job-binding-label">{binding.label}</span>{' '}
+          <button type="button" data-testid="job-binding-leave" aria-label="Stop answering the job" onClick={leave} className="wk-reply-flip">×</button>
+        </p>
+      )}
+      onSend={(text) => {
+        if (binding.current() !== binding.instance) {
+          setRefused('Not sent: the job changed since you began. Read it, then answer again, or leave with ×');
+          return;
+        }
+        if (!binding.send(text)) {
+          setRefused('Not sent: the job can’t take this answer now. Read it, then answer again, or leave with ×');
+          return;
+        }
+        setRefused(null);
+        composerProps.setText?.('');
+        useJobBinding.getState().clear(binding.replyKey);
+      }}
+      className={className} />
+  );
+}
+
 function DockedComposer({ reply, docked, composerProps, who }: {
   reply: DockReply | null;
   /** A decision is docked: with no note choice to reply through, the box says plainly that Send asks separately. */
@@ -1463,43 +1508,10 @@ function DockedComposer({ reply, docked, composerProps, who }: {
   // The draft a Send was held back for: the box says why while it still holds that text.
   const [movedFor, setMovedFor] = useState<string | null>(null);
   const moved = movedFor !== null && movedFor === (composerProps.text ?? '');
-  // DES-CATALOG-002 §2.4: a job's reply that takes words (Change, a typed answer) binds this box, one at a time.
+  // DES-CATALOG-002 §2.4: a job's reply that takes words (Change, a typed answer) binds this box, one at a time. An
+  // explicit job binding (a press in the passage) is the box's destination, ahead of any docked note reply.
   const jobBinding = useJobBinding((s) => (s.binding !== null && s.binding.sessionId === composerProps.composerKey ? s.binding : null));
-  const [jobMoved, setJobMoved] = useState<string | null>(null);
-  // An explicit job binding (a press in the passage) is the box's destination, ahead of any docked note reply.
-  if (jobBinding !== null) {
-    const leave = (): void => { useJobBinding.getState().clear(); setJobMoved(null); };
-    return (
-      <Composer {...composerProps} placeholder={jobBinding.placeholder}
-        footer={(
-          <p data-testid="job-binding" role="note" className="wk-composer-hint wk-reply-switch">
-            {jobMoved !== null && <span data-testid="job-binding-moved" className="wk-reply-why">{jobMoved} · </span>}
-            <span data-testid="job-binding-label">{jobBinding.label}</span>{' '}
-            <button type="button" data-testid="job-binding-leave" aria-label="Stop answering the job" onClick={leave} className="wk-reply-flip">×</button>
-          </p>
-        )}
-        onSend={(text) => {
-          // A binding answers only the version it was made on: if the job moved, nothing is sent and the words stay.
-          if (jobBinding.current() !== jobBinding.instance) {
-            const keep = composerProps.text ?? text;
-            setJobMoved('Not sent: the job changed since you began. Read it, then answer again, or leave with ×');
-            queueMicrotask(() => composerProps.setText?.(keep));
-            return;
-          }
-          // The job takes the words only when the reply is still open (not queued, not moved): else they stay here.
-          const keep = composerProps.text ?? text;
-          // The typed answer alone, never the about chips' context (the dock's raw replies do the same).
-          if (!jobBinding.send(composerProps.text ?? text)) {
-            setJobMoved('Not sent: the job can’t take this answer now. Read it, then answer again, or leave with ×');
-            queueMicrotask(() => composerProps.setText?.(keep));
-            return;
-          }
-          setJobMoved(null);
-          useJobBinding.getState().clear(jobBinding.replyKey);
-        }}
-        className="wk-session-composer" />
-    );
-  }
+  if (jobBinding !== null) return <JobBoundComposer binding={jobBinding} composerProps={composerProps} className="wk-session-composer" />;
   if (reply === null && docked) {
     // The docked decision takes no note (a hand-over, a plan, a question from a run): Send asks a separate question.
     return (

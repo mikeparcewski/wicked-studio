@@ -617,3 +617,79 @@ describe('review round 3 folds (the passage)', () => {
     expect(await screen.findByTestId('job-passage-run-unread')).toBeTruthy();
   });
 });
+
+describe('review round 4 folds', () => {
+  const RUN = 'run-1';
+  const decided = { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } };
+  const run = (status = 'awaiting_human') => makeView({ id: RUN, status: status as never, unit_ix: 1, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, [
+    makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'done', phase_ref: 'pa-scope' }),
+    makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: 'pending', phase_ref: 'build' }),
+  ]);
+  const planTeam = { teamed: true, units: [], planRev: 2, rows: [
+    { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build' }] } },
+    { event_id: 4, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 1, plan_rev: 2 } }] };
+  beforeEach(() => {
+    messages = [USER, SEAT, P1, decided];
+    team = planTeam;
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 7, gateKind: 'plan_approval' } }, approaching: {} });
+  });
+
+  it('a workflow chip in the box never turns a bound answer into a new run', async () => {
+    const { useComposerChips } = await import('../src/store/composerChips.js');
+    act(() => { useComposerChips.setState({ byComposer: { [CHAT]: [{ kind: 'workflow', key: 'w:bug', label: 'Fix a bug', workflowId: 'bug' }] } }); });
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'add a rollback step' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts.map((x) => x.path)).toEqual([`/runs/${RUN}/gate`]);
+  });
+
+  it('a send-back the daemon refuses hands the words back to the box', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') { posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> }); return Promise.resolve(new Response('{"error":"the plan moved","code":"gate_changed"}', { status: 409 })); }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      if (path.endsWith('/team')) return Promise.resolve(ok(team));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'add a rollback step' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await act(async () => { await flushDecisionsForTest(); });
+    await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('add a rollback step'));
+    expect(screen.getByTestId('job-passage-error')).toBeTruthy();
+  });
+
+  it('a run linked only by from_proposal still gets its Resume in the passage', async () => {
+    messages = [USER, SEAT, P1];
+    team = { teamed: true, rows: [{ event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } }], units: [] };
+    useGateStore.setState({ gates: {}, approaching: {} });
+    const { useRunEventStore } = await import('../src/store/events.js');
+    act(() => { useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [RUN]: [{ type: 'runOrphaned', session: RUN, ord: 1, ts: T0 } as never] } })); });
+    page([run('executing')]);
+    expect(await screen.findByTestId('session-orphaned-resume')).toBeTruthy();
+    expect(screen.queryAllByTestId('job-passage-reply').some((b) => b.dataset['reply'] === 'start')).toBe(false);
+  });
+
+  it('a listbox the person already left does not pull focus back when crew’s next version closes it', async () => {
+    messages = [USER, SEAT, P1];
+    team = { teamed: false, rows: [], units: [] };
+    useGateStore.setState({ gates: {}, approaching: {} });
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(document.querySelector('[data-token="repo"]')!);
+    await waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('option'));
+    const opt = document.activeElement as HTMLElement;
+    fireEvent.blur(opt, { relatedTarget: null });
+    (opt as HTMLElement).blur();
+    await frame({ at: T0 + 4, turnId: 't2', kind: 'proposal', proposal: v2() });
+    await waitFor(() => expect(screen.queryByTestId('job-passage-swap')).toBeNull());
+    expect(document.activeElement?.getAttribute('data-token')).not.toBe('repo');
+  });
+});

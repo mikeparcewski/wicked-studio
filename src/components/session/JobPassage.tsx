@@ -188,6 +188,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       receipt: { kind: 'plan', chosenLabel: `Approve plan v${p.planRev}` },
     }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   };
+  const composerFree = (): boolean => (useSessionDrafts.getState().drafts[sessionId] ?? '').trim() === '' && useJobBinding.getState().binding === null;
   const sendBack = (words: string, planRev: number, rebind: JobReply | null): boolean => {
     const text = words.trim();
     const expect = gateExpect();
@@ -202,17 +203,21 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       if (outcome === 'sent') local.setSentBack(run0, planRev);
       // Undo hands the words back to the box, bound again to the SAME plan version (never a newer one), and only into an
       // empty box (a newer draft is never overwritten).
-      if (outcome === 'undone') {
-        // Only into a box nobody else owns now: no newer draft, no other binding. Otherwise the words stay where Undo
-        // left them (the queue's restored notes) and nothing is rebound.
-        const drafts = useSessionDrafts.getState();
-        const free = (drafts.drafts[sessionId] ?? '').trim() === '' && useJobBinding.getState().binding === null;
-        if (!free) return;
-        const back = takeRestoredNote(run0);
-        if (back !== '') drafts.setDraft(sessionId, back);
-        if (rebind !== null && currentTarget.current.get(rebind.id) === rebind.target) bindChange(rebind, planRev);
+      // Undo, or the world cancelling it (the gate moved): the words come back, only into a box nobody else owns now
+      // (no newer draft, no other binding); otherwise they stay where the queue left them and nothing is rebound. Only
+      // an Undo rebinds, and only to the same plan version.
+      if (outcome !== 'sent') {
+        if (!composerFree()) return;
+        // The queue hands an Undo's or a cancel's words back; a send refused before it queued (dropped) has them here.
+        const back = takeRestoredNote(run0) || text;
+        if (back !== '') useSessionDrafts.getState().setDraft(sessionId, back);
+        if (outcome === 'undone' && rebind !== null && currentTarget.current.get(rebind.id) === rebind.target) bindChange(rebind, planRev);
       }
-    }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    }).catch((e: unknown) => {
+      // The send failed: crew's words say why, and the person's words are not lost.
+      setError(e instanceof Error ? e.message : String(e));
+      if (composerFree()) useSessionDrafts.getState().setDraft(sessionId, text);
+    });
     return true;
   };
   const reshape = (o: ChatPlanOffer): void => {
@@ -489,7 +494,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       )}
       {/* What the run's block drew for it and the passage now holds: a restart's Resume, a power checkpoint's answer,
           and what the run made (a document, a deck, a walkthrough, a demo video). */}
-      {run !== null && v.runId !== null && <PassageRunExtras run={run} sessionId={sessionId} gateOpen={gate !== undefined} />}
+      {run !== null && <PassageRunExtras run={run} sessionId={sessionId} gateOpen={gate !== undefined} />}
 
       {/* crew's offers at the plan held now (Lane D): only a press on one calls a route, bound to its version. */}
       {v.offers.filter((o) => !dismissed.has(o.id)).map((o) => (
@@ -591,11 +596,14 @@ function TokenButton({ token, label, wash, open, expanded, held, tokenRef, expla
   // The listbox closed (a pick, or crew's next version closed it): focus that was in it comes back to the token, never
   // to the page; focus the pick sent elsewhere (Something else… → the composer) stays there.
   const wasOpen = useRef(open);
+  /** Focus is in the listbox (set on focus within it, cleared when it leaves for somewhere else). */
+  const focusIn = useRef(false);
   useEffect(() => {
     if (wasOpen.current && !open) {
       const a = document.activeElement;
-      if (a === null || a === document.body) ref.current?.focus();
+      if (focusIn.current && (a === null || a === document.body)) ref.current?.focus();
     }
+    if (!open) focusIn.current = false;
     wasOpen.current = open;
   }, [open]);
   const close = (): void => { onClose(); ref.current?.focus(); };
@@ -613,6 +621,8 @@ function TokenButton({ token, label, wash, open, expanded, held, tokenRef, expla
       >{label}{checks && <span aria-hidden className="wk-pass-lock" />}</span>
       {open && !checks && (
         <ul id={listId} role="listbox" aria-label={`Change ${TOKEN_KIND[token.kind]}`} data-testid="job-passage-swap" className="wk-pass-swap"
+          onFocus={() => { focusIn.current = true; }}
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) focusIn.current = false; }}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); const n = (cursor + 1) % count; setCursor(n); optionRefs.current[n]?.focus(); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); const n = (cursor - 1 + count) % count; setCursor(n); optionRefs.current[n]?.focus(); }
