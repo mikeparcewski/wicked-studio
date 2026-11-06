@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   firstNameOf, firstRunOpen, nextSetupAsk, PERSONA_PRESETS, previewAnswer, readFirstRun, rulesYouCareAbout, siteOfEmail,
-  STARTER_RULES, starterRule, styleStations, writingStyleNotes, jobLine, repoStyleProblem,
+  STARTER_RULES, starterRule, starterUpdate, styleStations, writingStyleNotes, jobLine, repoStyleProblem,
 } from '../src/board/learnHub.js';
 import { LEARN_ITEM, navCurrent, navGroups, NAV_GROUPS } from '../src/board/navModel.js';
 import type { ConformanceRule, SessionView } from '../src/api/types.js';
@@ -90,6 +90,44 @@ describe('starter rules (§3.2)', () => {
   it('rules you care about: added or adopted by a person, not built in or imported, not retired', () => {
     const r = (id: string, source: string, retired = false): ConformanceRule => ({ ...starterRule(STARTER_RULES[0]!), id, provenance: { source, source_kinds: [] }, retired } as ConformanceRule);
     expect(rulesYouCareAbout([r('a', 'ui'), r('b', 'chat'), r('c', 'doc-ingest'), r('d', 'ui', true)]).map((x) => x.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('the linked-issue starter is conditional, and an adopted copy is offered the update (F21, operator Q3)', () => {
+  const linked = STARTER_RULES.find((s) => s.id === 'learn-linked-issue')!;
+  const OLD = 'Every pull request names the issue it closes in its description.';
+  /** A copy as the store lists it: adopted from the OLD starter, then maybe changed by the team. */
+  const copy = (over: Partial<ConformanceRule> = {}): ConformanceRule =>
+    ({ ...starterRule(linked), statement: OLD, criteria: undefined, ...over }) as ConformanceRule;
+
+  it('the starter reads conditionally, with criteria that make a no-issue job N/A, and still checks the delivery', () => {
+    const r = starterRule(linked);
+    expect(r.statement).toBe('When a pull request resolves a tracked issue, its description names it with a closing keyword (Fixes #N).');
+    expect(r.criteria).toMatch(/^Not applicable when neither the job nor the pull request text names a tracked issue/u);
+    expect(r.criteria).toContain('Broken when an issue the work resolves is named but the description does not close it');
+    expect(r.obligations).toEqual(['evidence:delivery']);
+    // Starters with no criteria carry none on the wire.
+    expect('criteria' in starterRule(STARTER_RULES[0]!)).toBe(false);
+  });
+
+  it('offers the update for the old text verbatim, keeping every field the team set', () => {
+    const mine = copy({ severity: 'error', applies_to: ['phase:deliver'], weight: 2, targets: { project: 'pay' } } as Partial<ConformanceRule>);
+    const next = starterUpdate(linked, [mine])!;
+    expect(next).toEqual({ ...mine, statement: linked.statement, criteria: linked.criteria });
+    // Surrounding whitespace is not an edit.
+    expect(starterUpdate(linked, [copy({ statement: `  ${OLD}\n` })])).not.toBeNull();
+  });
+
+  it('never offers it for a copy anyone changed, a retired copy, a rule that is not the adopted starter, or the new text', () => {
+    expect(starterUpdate(linked, [copy({ statement: 'Every pull request names the issue it closes in its description, always.' })])).toBeNull();
+    expect(starterUpdate(linked, [copy({ statement: OLD.toLowerCase() })])).toBeNull();
+    expect(starterUpdate(linked, [copy({ criteria: 'Strict: an issue for every pull request.' })])).toBeNull();
+    expect(starterUpdate(linked, [copy({ retired: true })])).toBeNull();
+    expect(starterUpdate(linked, [copy({ provenance: { source: 'doc-ingest', ref: 'CONTRIBUTING.md', source_kinds: ['doc'] } })])).toBeNull();
+    expect(starterUpdate(linked, [starterRule(linked)])).toBeNull();
+    expect(starterUpdate(linked, [])).toBeNull();
+    // A starter with no earlier text never offers one.
+    expect(starterUpdate(STARTER_RULES[0]!, [starterRule(STARTER_RULES[0]!)])).toBeNull();
   });
 });
 

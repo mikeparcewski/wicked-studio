@@ -92,6 +92,51 @@ describe('Learn: rules', () => {
     fireEvent.click(screen.getAllByTestId('learn-starter').find((t) => t.getAttribute('data-starter') === 'learn-small-prs')!);
     await waitFor(() => expect(d.calls.some((c) => c.method === 'DELETE')).toBe(true));
   });
+
+  // (F21, operator Q3) An adopted copy of the old linked-issue starter: offered the update, written only on the click.
+  const OLD_LINKED = 'Every pull request names the issue it closes in its description.';
+  const adopted = (over: object = {}): Record<string, unknown> => ({
+    id: 'learn-linked-issue', rule_type: 'policy', statement: OLD_LINKED, severity: 'error', confidence: 0.9, targets: {},
+    provenance: { source: 'ui', ref: 'learn:starter', source_kinds: ['doc'] }, steering_type: 'development', applies_to: ['phase:deliver'],
+    excludes: [], weight: 1, obligations: ['evidence:delivery'], created_at: 7, ...over,
+  });
+
+  it('an adopted copy of a changed starter is offered the update; nothing is written until Update, which keeps the team’s fields', async () => {
+    let rules: Record<string, unknown>[] = [adopted()];
+    d.on('GET /governance/rules', () => ({ rules }));
+    d.on('POST /governance/rules', (b) => { rules = [b as Record<string, unknown>]; return { status: 'ok' }; });
+    render(<LearnHub navigate={nav} search="?tab=rules" />);
+    const offer = await screen.findByTestId('learn-starter-changed');
+    expect(offer.getAttribute('data-starter')).toBe('learn-linked-issue');
+    expect(within(offer).getByText('This starter changed: Linked issue')).toBeTruthy();
+    expect(within(offer).getByTestId('learn-starter-yours').textContent).toBe(OLD_LINKED);
+    expect(within(offer).getByTestId('learn-starter-now').textContent).toContain('When a pull request resolves a tracked issue');
+    expect(offer.textContent).toContain('Keep yours if every pull request must have an issue.');
+    expect(d.sent('POST /governance/rules')).toHaveLength(0);
+    fireEvent.click(within(offer).getByTestId('learn-starter-update'));
+    await waitFor(() => expect(d.sent('POST /governance/rules')).toHaveLength(1));
+    const posted = d.sent('POST /governance/rules')[0] as Record<string, unknown>;
+    expect(posted).toEqual({ ...adopted(), statement: expect.stringContaining('When a pull request resolves a tracked issue'), criteria: expect.stringContaining('Not applicable when') });
+    await waitFor(() => expect(screen.queryByTestId('learn-starter-changed')).toBeNull());
+    expect(screen.getByTestId('learn-rules-note').textContent).toBe('“Linked issue” now reads the new starter text.');
+  });
+
+  it('an edited copy is never offered the update', async () => {
+    d.on('GET /governance/rules', { rules: [adopted({ statement: 'Every pull request names the Jira ticket it closes.' })] });
+    render(<LearnHub navigate={nav} search="?tab=rules" />);
+    await screen.findAllByTestId('learn-starter');
+    expect(screen.queryByTestId('learn-starter-changed')).toBeNull();
+  });
+
+  it('a copy edited after the page loaded is left alone at the click', async () => {
+    let reads = 0;
+    d.on('GET /governance/rules', () => ({ rules: [reads++ === 0 ? adopted() : adopted({ statement: 'Edited in Steering meanwhile.' })] }));
+    d.on('POST /governance/rules', { status: 'ok' });
+    render(<LearnHub navigate={nav} search="?tab=rules" />);
+    fireEvent.click(within(await screen.findByTestId('learn-starter-changed')).getByTestId('learn-starter-update'));
+    await waitFor(() => expect(screen.getByTestId('learn-rules-note').textContent).toContain('changed since this page loaded'));
+    expect(d.sent('POST /governance/rules')).toHaveLength(0);
+  });
 });
 
 describe('Learn: Style review', () => {
@@ -178,6 +223,17 @@ describe('First run (§4)', () => {
     const agentsAsk = await screen.findByTestId('first-run-ask-agents');
     expect(within(agentsAsk).getByTestId('ask-question').textContent).toBe('Sign Codex in now? Jobs need a second agent to check the work.');
     expect((settings['studio.firstRun'] as { answers: Record<string, unknown> }).answers['repos']).toBeTruthy();
+  });
+
+  it('the rules ask never rewrites a starter already in force (a team’s copy may be edited)', async () => {
+    settings['studio.firstRun'] = { answers: Object.fromEntries(['repos', 'agents', 'style'].map((k) => [k, { line: k, words: k, done: true }])) };
+    d.on('GET /governance/rules', { rules: [{ id: 'learn-small-prs', statement: 'Under 800 lines.', provenance: { source: 'ui', ref: 'learn:starter', source_kinds: [] } }] });
+    d.on('POST /governance/rules', { status: 'ok' });
+    render(<FirstRun navigate={nav} agents={agents} hasRoster />);
+    const ask = await screen.findByTestId('first-run-ask-rules');
+    fireEvent.click(within(ask).getByTestId('ask-confirm'));
+    await waitFor(() => expect(screen.getByTestId('first-run-record-rules')).toBeTruthy());
+    expect(d.sent('POST /governance/rules').map((r) => (r as { id: string }).id)).toEqual(['learn-tests-with-fixes']);
   });
 
   it('picking a personality saves it as yours and moves Learn below Evaluate', async () => {
