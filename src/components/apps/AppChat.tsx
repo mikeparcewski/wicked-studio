@@ -14,7 +14,6 @@ import { useGateStore } from '../../store/gates.js';
 import { rulesHoldAt } from '../../board/assuranceModel.js';
 import { api } from '../../api/client.js';
 import { useRunEventStore } from '../../store/events.js';
-import { gateWithLogChoices } from '../../board/gateHeadline.js';
 
 /**
  * THE APP'S CHAT (DES-APPS-001 §6.1-§6.2, §9.2; operator 2026-11-04: "I should be driving the changes mostly via chat"):
@@ -61,10 +60,6 @@ function peekDraft(slug: string): string {
 function dropDraft(slug: string): void {
   try { sessionStorage.removeItem(DRAFT_KEY(slug)); } catch { /* nothing kept */ }
 }
-
-/** The gate kinds crew stops a turn at (`apps/turns.ts` REFUSAL_GATES): a turn never lands through one, so the chat
- *  shows no answers there, a rules hold excepted. */
-const REFUSAL_GATE_KINDS = new Set(['escalation', 'failure', 'triage']);
 
 function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed, pending }: {
   t: AppTurnRecord; view: SessionView | null; detail: AppDetail; onUndo: () => void; navigate: (p: string) => void; now: number; latestLanded: boolean;
@@ -114,11 +109,10 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
     const busy = busyText(view);
     // The held step shows as the step waiting on you, never as failed.
     const heldOrd = gate !== undefined && heldNow ? gate.ord : null;
-    // Answered here: a rules hold the read trail shows (so the row carries Re-check and Confirm or skip), or a gate whose
-    // kind is known and is not one crew stops a turn at (a refused step's gate is crew's to stop: the turn cannot land
-    // through it). An unknown kind (an older late join) is not answered here; See the job still reaches it.
-    const kind = gate === undefined ? '' : (events !== null ? gateWithLogChoices(gate, events) : gate).gateKind ?? '';
-    const answerable = gate !== undefined && (heldByLog || (kind !== '' && !REFUSAL_GATE_KINDS.has(kind)));
+    // Answered here: only a rules hold this gate's recorded trail shows (so the row carries Re-check and Confirm or skip).
+    // Every other gate an app turn can park on is a refusal crew stops (the turn cannot land through it), or one this
+    // chat does not know: See the job reaches the run page's gate.
+    const answerable = heldByLog;
     return (
       <div className="wk-appchat-reply wk-appchat-reply--busy" data-testid="app-chat-busy" data-step={busy.step ?? ''} aria-live="polite">
         <p className="wk-appchat-busyline"><span className="wk-appchat-pulse" aria-hidden="true" />{busy.line}</p>
