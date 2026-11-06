@@ -16,7 +16,8 @@ import { useRunEventStore } from '../store/events.js';
  */
 const inflight = new Map<string, Promise<void>>();
 
-function hydrateRunEvents(runId: string): Promise<void> {
+/** Read a run's recorded trail and merge it into the shared log (one read in flight per run). */
+export function hydrateRunEvents(runId: string): Promise<void> {
   const open = inflight.get(runId);
   if (open !== undefined) return open;
   const read = api.getRunEvents(runId)

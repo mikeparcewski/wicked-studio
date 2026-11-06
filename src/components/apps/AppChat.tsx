@@ -12,7 +12,7 @@ import { RunQuestions } from '../session/ThreadQuestions.js';
 import { GateRow } from '../session/GateRow.js';
 import { useGateStore } from '../../store/gates.js';
 import { rulesHoldAt } from '../../board/assuranceModel.js';
-import { useRunEvents } from '../../hooks/useRunEvents.js';
+import { hydrateRunEvents, useRunEvents } from '../../hooks/useRunEvents.js';
 import { gateWithLogChoices } from '../../board/gateHeadline.js';
 
 /**
@@ -80,18 +80,27 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
   // is open (the same shared read the gate row makes).
   const gate = useGateStore((s) => s.gates[t.runId]);
   const { events } = useRunEvents(t.runId, t.state === 'running' && gate !== undefined);
+  // (F22) A step held on steering rules, read as the gate row reads it: this attempt's structured record in the run's
+  // log (else the unit's own). When the polled unit record names a hold the log does not (a live buffer that missed the
+  // frames, on a reconnect), the recorded trail is read once more and merged, so the gate row offers the rules answers.
+  const heldByLog = t.state === 'running' && view !== null && gate !== undefined && rulesHoldAt(events, view.units, gate.ord).held;
+  const heldByRecord = t.state === 'running' && view !== null && gate !== undefined && rulesHoldAt(null, view.units, gate.ord).held;
+  const backfilled = useRef<string | null>(null);
+  const backfillKey = gate === undefined ? null : `${t.runId}:${gate.ord}`;
+  useEffect(() => {
+    if (backfillKey === null || events === null || !heldByRecord || heldByLog || backfilled.current === backfillKey) return;
+    backfilled.current = backfillKey;
+    void hydrateRunEvents(t.runId).catch(() => { /* the run page's gate stays reachable (See the job) */ });
+  }, [backfillKey, events, heldByRecord, heldByLog, t.runId]);
   if (t.state === 'running') {
     const busy = busyText(view);
-    // (F22) A step held on steering rules was not rejected: it shows as the step waiting on you, never as failed. Read
-    // as the gate row reads it (this attempt's structured record) OR from the unit's own record on the polled runs list,
-    // so a live-event buffer that missed the hold (a reconnect) never hides it; crew stops a turn that is not held.
-    const heldOrd = view !== null && gate !== undefined
-      && (rulesHoldAt(events, view.units, gate.ord).held || rulesHoldAt(null, view.units, gate.ord).held) ? gate.ord : null;
-    // Answered here: a rules hold, or a gate whose kind is known and is not one crew stops a turn at (a refused step's
+    // The held step shows as the step waiting on you, never as failed.
+    const heldOrd = gate !== undefined && (heldByLog || heldByRecord) ? gate.ord : null;
+    // Answered here: a rules hold the log shows (so the row carries Re-check and Confirm or skip), or a gate whose kind is known and is not one crew stops a turn at (a refused step's
     // gate is crew's to stop: the turn cannot land through it). An unknown kind (an older late join) is not answered
     // here; See the job still reaches it.
     const kind = gate === undefined ? '' : (events !== null ? gateWithLogChoices(gate, events) : gate).gateKind ?? '';
-    const answerable = gate !== undefined && (heldOrd !== null || (kind !== '' && !REFUSAL_GATE_KINDS.has(kind)));
+    const answerable = gate !== undefined && (heldByLog || (kind !== '' && !REFUSAL_GATE_KINDS.has(kind)));
     return (
       <div className="wk-appchat-reply wk-appchat-reply--busy" data-testid="app-chat-busy" data-step={busy.step ?? ''} aria-live="polite">
         <p className="wk-appchat-busyline"><span className="wk-appchat-pulse" aria-hidden="true" />{busy.line}</p>

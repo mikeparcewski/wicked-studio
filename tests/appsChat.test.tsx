@@ -239,14 +239,16 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'failed']);
   });
 
-  it('a live buffer that missed the hold (a reconnect) still shows it from the unit record; an unknown gate kind is not answered here', async () => {
-    mockFetch(() => null);
+  it('a live buffer that missed the hold (a reconnect) reads the trail again, then offers the rules answers; an unknown gate kind is not answered here', async () => {
+    const { calls } = mockFetch((path) => (path === `/runs/${RUN}/events` ? { body: { runId: RUN, total: 3, returned: 3, events: events.map((e, i) => ({ ...(e as unknown as Record<string, unknown>), seq: i + 1 })) } } : null));
     // The buffer holds only the dispatch: the escalation frames were missed. The polled unit record names the hold.
     useRunEventStore.setState({ byRun: { [RUN]: [events[0]!] } });
     useGateStore.setState({ gates: { [RUN]: gate } });
     const { unmount } = render(<AppChat slug="desk" detail={running()} runs={runs} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
-    expect(screen.getByTestId('app-chat-gate')).toBeTruthy();
     expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'now']);
+    await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Re-check the rules'));
+    expect(screen.getByTestId('app-chat-gate').textContent).toContain('Confirm or skip learn-accessible');
+    expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(1);
     unmount();
     // A refusal whose late-join gate carries no kind (an older crew): the log names it an escalation, so no answers here.
     const bare = [{ ...runs[0]!, units: units.map((u) => (u.ord === 3 ? { ...u, denial: { source: 'rule_check', reason: 'broken' } } : u)) }] as unknown as SessionView[];
