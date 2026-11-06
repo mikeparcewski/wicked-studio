@@ -6,7 +6,7 @@ export function jobProposal(over: Partial<JobProposal> = {}): JobProposal {
   return {
     pid: `${CHAT}:t1`, chatId: CHAT, turnId: 't1', kind: 'job', seat: 'claude',
     what: { entry: 'migrate', title: 'Get reporting off .NET Framework', label: 'Migrate · Upgrade', outcome: null },
-    brief: null, reason: null, sources: [], repos: ['reporting-api'], helpers: null, time: null, stops: null,
+    brief: null, reason: null, sources: [], repos: ['reporting-api'], repoRefs: ['reporting'], helpers: null, time: null, stops: null,
     filedIn: { projectId: null, label: 'Not in a project' }, blocked: null,
     shape: { card: 'migrate', option: 'upgrade', depth: null, by: 'detected', source: 'chat' },
     launch: 'run',

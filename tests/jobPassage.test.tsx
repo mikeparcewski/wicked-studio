@@ -966,19 +966,110 @@ describe('round 3 (coordinator): one step, one name', () => {
 });
 
 describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
-  it('a proposal’s Start says it reviews the plan first (crew holds a chat-proposed job at its plan)', async () => {
-    const { resetPowerDefault } = await import('../src/store/reviewPlan.js');
-    resetPowerDefault();
-    useCapabilities.setState({ powerMode: true });
-    vi.stubGlobal('fetch', vi.fn((url: string) => {
+  /** A daemon with power mode, the setting as given (it may change between reads), and the decision POSTs recorded. */
+  function powerDaemon(o: { chatJobPower?: boolean; settings?: () => boolean } = {}) {
+    let settingsReads = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
       const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
-      if (path === '/settings') return Promise.resolve(ok({ settings: { powerModeDefault: true } }));
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return Promise.resolve(ok({ view: {} }));
+      }
+      if (path === '/settings') { settingsReads += 1; return Promise.resolve(ok({ settings: { powerModeDefault: (o.settings ?? (() => true))() } })); }
+      if (path === '/health') return Promise.resolve(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: o.chatJobPower ?? true } }));
       if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
       return Promise.resolve(new Response('{}', { status: 404 }));
     }));
+    return { reads: () => settingsReads };
+  }
+  const decisions = () => posts.filter((p) => p.path === `/chats/${CHAT}/proposals/${encodeURIComponent(`${CHAT}:t1`)}`);
+  let resetPower: () => void = () => undefined;
+  beforeEach(async () => {
+    const m = await import('../src/store/reviewPlan.js');
+    resetPower = m.resetPowerDefault;
+    resetPower();
+    m.useReviewPlan.getState().set(false);
+    useCapabilities.setState({ powerMode: true, chatJobPower: true });
+  });
+  afterEach(() => {
+    useCapabilities.setState({ powerMode: false, chatJobPower: false });
+    resetPower();
+    try { window.localStorage.removeItem('studio.chatReviewPlan'); } catch { /* none */ }
+  });
+
+  it('Review plan off: Start sends a power run, checked against fresh reads', async () => {
+    const d = powerDaemon();
     page();
-    expect((await screen.findByTestId('job-passage-review-plan')).textContent).toMatch(/^You’ll review the plan first/);
-    useCapabilities.setState({ powerMode: false });
-    resetPowerDefault();
+    const toggle = await screen.findByTestId('job-passage-review-plan-toggle');
+    expect(screen.getByTestId('job-passage-review-plan').textContent).toContain('Power run: no plan review.');
+    expect(toggle.getAttribute('aria-checked') ?? (toggle as HTMLInputElement).checked?.toString()).toMatch(/false/);
+    const before = d.reads();
+    fireEvent.click(reply('start'));
+    await waitFor(() => expect(decisions()).toHaveLength(1));
+    expect(decisions()[0]!.body).toEqual({ decision: 'go', power: true });
+    expect(d.reads()).toBeGreaterThan(before);
+  });
+
+  it('Review plan on: Start sends power false (it stops at its plan)', async () => {
+    powerDaemon();
+    page();
+    fireEvent.click(await screen.findByTestId('job-passage-review-plan-toggle'));
+    await waitFor(() => expect(screen.getByTestId('job-passage-review-plan').textContent).toContain('You’ll review the plan first.'));
+    fireEvent.click(reply('start'));
+    await waitFor(() => expect(decisions()).toHaveLength(1));
+    expect(decisions()[0]!.body).toEqual({ decision: 'go', power: false });
+  });
+
+  it('the setting turned off since it was drawn: nothing is sent, and it says why', async () => {
+    let on = true;
+    powerDaemon({ settings: () => on });
+    page();
+    await screen.findByTestId('job-passage-review-plan-toggle');
+    on = false;
+    fireEvent.click(reply('start'));
+    expect(await screen.findByText(/Power mode for new jobs is off now/)).toBeTruthy();
+    expect(decisions()).toHaveLength(0);
+  });
+
+  it('Power mode for new jobs off: no toggle and today’s body', async () => {
+    powerDaemon({ settings: () => false });
+    page();
+    await screen.findByTestId('job-passage');
+    await waitFor(() => expect(reply('start').disabled).toBe(false));
+    expect(screen.queryByTestId('job-passage-review-plan')).toBeNull();
+    fireEvent.click(reply('start'));
+    await waitFor(() => expect(decisions()).toHaveLength(1));
+    expect(decisions()[0]!.body).toEqual({ decision: 'go' });
+  });
+
+  it('an older daemon (no chatJobPower): no toggle, the plan-review note, and today’s body', async () => {
+    useCapabilities.setState({ chatJobPower: false });
+    powerDaemon({ chatJobPower: false });
+    page();
+    expect((await screen.findByTestId('job-passage-review-plan-note')).textContent).toMatch(/^You’ll review the plan first/);
+    expect(screen.queryByTestId('job-passage-review-plan-toggle')).toBeNull();
+    fireEvent.click(reply('start'));
+    await waitFor(() => expect(decisions()).toHaveLength(1));
+    expect(decisions()[0]!.body).toEqual({ decision: 'go' });
+  });
+
+  it('a job with no repository can’t run as a power run: the note, and no power sent', async () => {
+    messages = [USER, SEAT, { ...P1, proposal: jobProposal({ repoRefs: [] }) }];
+    powerDaemon();
+    page();
+    expect((await screen.findByTestId('job-passage-review-plan-note')).textContent).toContain('only a workflow run on a repository');
+    fireEvent.click(reply('start'));
+    await waitFor(() => expect(decisions()).toHaveLength(1));
+    expect(decisions()[0]!.body).toEqual({ decision: 'go' });
+  });
+
+  it('an interrupted Start’s Go again carries the choice too', async () => {
+    messages = [USER, SEAT, P1, { at: T0 + 3, turnId: 't1', kind: 'proposal_accepting', pid: `${CHAT}:t1`, actor: 'me', edits: null, resolution: jobProposal(), identity: { runId: 'run-x', artifactRef: null } }];
+    powerDaemon();
+    page();
+    await screen.findByTestId('job-passage-review-plan-toggle');
+    fireEvent.click(reply('go_again'));
+    await waitFor(() => expect(decisions()).toHaveLength(1));
+    expect(decisions()[0]!.body).toEqual({ decision: 'go', power: true });
   });
 });

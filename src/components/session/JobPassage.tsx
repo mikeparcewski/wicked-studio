@@ -15,8 +15,10 @@ import { seatResponder } from '../../board/responder.js';
 import { isQueued, takeRestoredNote, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { jobRunId, useJobLocal, useJobView } from '../../hooks/useJobStream.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
+import { useCapabilities } from '../../store/capabilities.js';
 import { Undocked } from './DecisionDock.js';
-import { usePowerDefaultOn } from '../../store/reviewPlan.js';
+import { jobStartPower, proposalPowerFits, usePowerDefaultOn, useReviewPlan } from '../../store/reviewPlan.js';
+import { Switch } from '../ui/Switch.js';
 import { usePressBinding } from '../../hooks/usePressBinding.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -83,6 +85,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const { view: v, run, inputs, planRetry, runRetry } = useJobView(lineage, runs, now);
   const roster = useRoster();
   const powerDefaultOn = usePowerDefaultOn();
+  const jobPowerCap = useCapabilities((s) => s.chatJobPower);
+  const reviewPlan = useReviewPlan((s) => s.on);
+  const setReviewPlan = useReviewPlan((s) => s.set);
   const press = usePressBinding();
   const local = useJobLocal();
   const swapToken = useJobLocal((s) => s.swapToken[lineage.lineage] ?? null);
@@ -96,6 +101,16 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const [explain, setExplain] = useState(false);
   const head = lineage.head;
   const pid = head.pid;
+  // (operator ruling 2026-11-06; api-types 0.196.0) Power mode for new jobs is on and crew takes a Start's choice: the
+  // passage offers Review plan before Start, as the chat box does. Off = a power run (no plan gate), on = it stops at its
+  // plan. A job that can't run as one (no repository, not a workflow run) reviews its plan and says so.
+  const preStart = v.phase === 'proposed' || v.phase === 'asking' || v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'interrupted';
+  const powerFits = proposalPowerFits(head.proposal);
+  const offerReview = jobPowerCap && powerDefaultOn === true && powerFits && preStart;
+  const offerReviewNow = useRef(offerReview);
+  offerReviewNow.current = offerReview;
+  const reviewPlanNow = useRef(reviewPlan);
+  reviewPlanNow.current = reviewPlan;
   const runId = run?.session.id ?? lineage.runId;
   const gate = useGateStore((st) => (runId === null ? undefined : st.gates[runId]));
   const runEvents = useRunEventStore((st) => (runId === null ? undefined : st.byRun[runId]));
@@ -167,9 +182,17 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const decide = (decision: 'go' | 'not_now'): void => {
     setError(null);
     local.setDeciding(lineage.lineage, true);
-    api.decideChatProposal(chatId, pid, { decision })
-      .then(() => onChanged())
-      .catch((e: unknown) => { setError(proposalRefusal(e).words); onChanged(); })
+    // What the passage showed at the press (Review plan offered, and its choice), captured before any read redraws it.
+    const shownOn = decision === 'go' && offerReviewNow.current;
+    const reviewAsked = reviewPlanNow.current;
+    jobStartPower(shownOn, reviewAsked, () => reviewPlanNow.current)
+      .then(
+        (power) => api.decideChatProposal(chatId, pid, { decision, ...(power !== undefined ? { power } : {}) })
+          .then(() => onChanged())
+          .catch((e: unknown) => { setError(proposalRefusal(e).words); onChanged(); }),
+        // Checked at the press and refused: nothing was sent.
+        (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
+      )
       .finally(() => local.setDeciding(lineage.lineage, false));
   };
   const sendRevision = (body: Parameters<typeof api.reviseChatProposal>[1], token: string | null, typed: string | null = null): void => {
@@ -454,10 +477,18 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           <p>{v.question.text}</p>
         </div>
       )}
-      {/* Power mode for new jobs is on (operator ruling 2026-11-06): say plainly that this start still reviews its plan —
-          crew launches a job proposed in the chat held at its plan, and its Start carries no power choice yet. */}
-      {powerDefaultOn === true && (v.phase === 'proposed' || v.phase === 'asking' || v.phase === 'revising' || v.phase === 'swapPending') && (
-        <p data-testid="job-passage-review-plan" className="wk-pass-sub wk-pass-grey">You’ll review the plan first: a job proposed in the chat always stops at its plan.</p>
+      {/* Power mode for new jobs is on (operator ruling 2026-11-06): the Start's choice, shown before Start; where crew
+          can't take it (an older daemon) or this job can't run as a power run, say plainly that it reviews its plan. */}
+      {offerReview && (
+        <div data-testid="job-passage-review-plan" className="wk-pass-sub">
+          <Switch label="Review plan" checked={reviewPlan} onChange={setReviewPlan} data-testid="job-passage-review-plan-toggle"
+            hint={reviewPlan ? 'You’ll review the plan first.' : 'Power run: no plan review.'} />
+        </div>
+      )}
+      {!offerReview && powerDefaultOn === true && preStart && (
+        <p data-testid="job-passage-review-plan-note" className="wk-pass-sub wk-pass-grey">
+          {!jobPowerCap ? 'You’ll review the plan first: this daemon stops a job proposed in the chat at its plan.' : 'You’ll review the plan first: only a workflow run on a repository runs as a power run.'}
+        </p>
       )}
       {(v.phase === 'revising' || v.phase === 'swapPending') && (
         <p data-testid="job-passage-updating" className="wk-pass-sub wk-pass-grey">Updating from your {v.phase === 'revising' ? 'message' : 'change'}… Start waits until it settles.</p>
