@@ -234,8 +234,8 @@ describe('studio#722: the announcement never covers content', () => {
   });
 });
 
-// F31: the late-join gate reads run newest first and in parallel, so the store's insertion order no longer says
-// which gate a page load leads with. A page load leads with the oldest waiting run, as on main; a gate that arrives
+// F31: the late-join gate reads run in the list's order but 4 at a time, so they can land out of order and the
+// store's insertion order no longer says which gate a page load leads with. A page load leads with the oldest waiting run, as on main; a gate that arrives
 // live queues behind the card on screen, as on main, whatever its run's age or clock.
 describe('GateNotifications lead card (F31)', () => {
   const T = 1_700_000_000_000;

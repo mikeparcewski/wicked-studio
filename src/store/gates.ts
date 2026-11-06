@@ -241,8 +241,8 @@ export const useGateStore = create<GateStore>((set) => {
     if (gateGen(runId) !== ticket.gen || ticket.seq < (appliedSeq[runId] ?? 0)) return false;
     appliedSeq[runId] = ticket.seq;
     if (gate !== null) {
-      // A read keeps the toast place of a gate already cached for the run (a refresh never promotes a live gate); only
-      // a gate the store did not hold yet is marked as read.
+      // A read keeps the toast group of a gate already cached for the run (a refresh never promotes a live gate, and a
+      // read gate stays read); a gate the store did not hold yet is marked as read.
       const prev = useGateStore.getState().gates[runId];
       put(prev === undefined || prev.fromRead === true ? { ...gate, fromRead: true } : gate);
       return true;

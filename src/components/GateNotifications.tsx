@@ -68,7 +68,7 @@ export function leadCardOrder(gates: readonly OpenGate[], runs: readonly Session
   for (const r of runs) if (typeof r.session.created_at === 'number') created.set(r.session.id, r.session.created_at);
   const runAt = (g: OpenGate): number => created.get(g.runId) ?? Number.POSITIVE_INFINITY;
   const read = gates.map((g, i) => ({ g, i })).filter(({ g }) => g.fromRead === true)
-    .sort((a, b) => (runAt(a.g) - runAt(b.g)) || a.i - b.i).map(({ g }) => g);
+    .sort((a, b) => (runAt(a.g) === runAt(b.g) ? a.i - b.i : runAt(a.g) - runAt(b.g))).map(({ g }) => g);
   return [...read, ...gates.filter((g) => g.fromRead !== true)];
 }
 
