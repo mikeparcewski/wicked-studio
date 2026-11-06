@@ -1218,7 +1218,14 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-assurance-rules-list { margin: 4px 0 0 14px; padding: 0; list-style: none; max-height: 260px; overflow: auto; }
 .wk-assurance-rule { margin: 2px 0; color: var(--ink-muted); overflow-wrap: anywhere; }
 .wk-assurance-rule-status { font-weight: var(--weight-semi); color: var(--ink-high); }
-.wk-assurance-rule-status--broken, .wk-assurance-rule-status--unchecked, .wk-assurance-rule-status--waived { color: var(--status-warn); }
+.wk-assurance-rule-status--broken, .wk-assurance-rule-status--unchecked, .wk-assurance-rule-status--waived, .wk-assurance-rule-status--disputed { color: var(--status-warn); }
+.wk-assurance-rule-council { margin: 2px 0 4px 14px; padding: 0; list-style: none; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-assurance-rule-council > li { margin: 1px 0; }
+.wk-assurance-rules-process { margin-top: 6px; }
+.wk-assurance-rules-process-head { font-size: var(--text-xs); color: var(--ink-dim); }
+/* A process rule never decides the gate: its verdict word is not drawn as a warning. */
+.wk-assurance-rules-process .wk-assurance-rule-status { color: var(--ink-high); }
+.wk-assurance-rules-process > .wk-assurance-list { margin: 2px 0 0 0; padding: 0; list-style: none; }
 .wk-assurance-rule-status--n_a { color: var(--ink-muted); font-weight: var(--weight-regular); }
 .wk-assurance-rule-id { font-size: var(--text-2xs); color: var(--ink-body); }
 .wk-assurance-optin { margin: 6px 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: var(--text-xs); color: var(--ink-body); }
