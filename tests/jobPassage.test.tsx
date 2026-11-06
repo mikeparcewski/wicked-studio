@@ -800,3 +800,60 @@ describe('review round 6 fold', () => {
     await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('a prototype nobody uses'));
   });
 });
+
+describe('follow-up (the passage)', () => {
+  const RUN = 'run-1';
+  const decided = { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } };
+  const run = (status: string, units: ReturnType<typeof makeUnit>[]) => makeView({ id: RUN, status: status as never, unit_ix: 0, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, units);
+  const u = (ord: number, status: 'pending' | 'distributed' | 'done' | 'rejected', phase: string) => makeUnit({ id: `${RUN}:u${ord}`, session_id: RUN, ord, status, phase_ref: phase });
+  beforeEach(() => { messages = [USER, SEAT, P1, decided]; });
+
+  it('a plan sent back in another tab reads as re-planning, not running', async () => {
+    team = { teamed: true, units: [], rows: [
+      { event_id: 2, emitted_at: T0 + 10, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } },
+      { event_id: 3, emitted_at: T0 + 20, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g1', decision: 'human_amended' } }] };
+    page([run('executing', [u(0, 'distributed', 'pa-scope'), u(1, 'pending', 'build')])]);
+    await waitFor(() => expect(screen.getByTestId('job-passage').dataset['phase']).toBe('replanning'));
+    expect(screen.queryByTestId('job-passage-fold')).toBeNull();
+  });
+
+  it('the held plan outlines each step’s detail, who it asks, and what this version added', async () => {
+    team = { teamed: true, units: [], planRev: 2, rows: [
+      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build', instructions: 'Port reporting-api to .NET 8' }] } },
+      { event_id: 2, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build', instructions: 'Port reporting-api to .NET 8' }, { id: 'review', catalog: 'review', gate: { Human: {} } }] } },
+      { event_id: 4, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 1, plan_rev: 2 } }] };
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 7, gateKind: 'plan_approval' } }, approaching: {} });
+    page([run('awaiting_human', [u(0, 'done', 'pa-scope'), u(1, 'pending', 'build')])]);
+    await waitFor(() => expect(screen.getAllByTestId('job-passage-plan-step')).toHaveLength(2));
+    const [first, second] = screen.getAllByTestId('job-passage-plan-step');
+    expect(first!.textContent).toContain('Port reporting-api to .NET 8');
+    expect(second!.textContent).toContain('asks you');
+    expect(second!.dataset['added']).toBe('true');
+    expect(screen.getByTestId('job-passage-plan-changed').textContent).toMatch(/^Plan v2: added /);
+  });
+
+  it('ticks sit in the thread from their records', async () => {
+    team = { teamed: true, units: [], rows: [
+      { event_id: 2, emitted_at: T0 + 10, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } },
+      { event_id: 3, emitted_at: T0 + 20, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g1', decision: 'human_approved' } }] };
+    page([run('executing', [u(0, 'done', 'pa-scope'), u(1, 'distributed', 'build')])]);
+    await waitFor(() => expect(screen.getAllByTestId('job-tick').map((t) => t.textContent?.split(' · ')[0])).toEqual(['You started the job, v1', 'Codex’s plan, v1, is ready', 'You approved plan v1']));
+  });
+
+  it('a failed job offers Fix it as a bug and Try again, each a person-made proposal in this chat', async () => {
+    team = { teamed: true, units: [], rows: [] };
+    page([run('failed', [u(0, 'done', 'pa-scope'), u(1, 'rejected', 'build')])]);
+    fireEvent.click(await screen.findByTestId('job-passage-fix-bug'));
+    await waitFor(() => expect(posts[0]).toMatchObject({ path: `/chats/${CHAT}/proposals`, body: { card: 'bug', option: null, source: 'pick' } }));
+    expect(String(posts[0]!.body['words'])).toMatch(/^Get reporting off \.NET Framework failed: /);
+    fireEvent.click(screen.getByTestId('job-passage-try-again'));
+    await waitFor(() => expect(posts[1]).toMatchObject({ path: `/chats/${CHAT}/proposals`, body: { card: 'migrate', option: 'upgrade', source: 'pick' } }));
+  });
+
+  it('a stopped job offers Try again only', async () => {
+    team = { teamed: true, units: [], rows: [] };
+    page([run('cancelled', [u(0, 'done', 'pa-scope'), u(1, 'pending', 'build')])]);
+    expect(await screen.findByTestId('job-passage-try-again')).toBeTruthy();
+    expect(screen.queryByTestId('job-passage-fix-bug')).toBeNull();
+  });
+});

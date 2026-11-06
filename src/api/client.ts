@@ -42,7 +42,7 @@ import type { GuidanceUpdate } from './guidance.js';
 import type { ElicitationAnswerBody } from './ask.js';
 import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
 import type { ChatMessageContext, ChatProposalDecisionBody, ChatProposalDecisionResponse } from './chatArtifacts-wire.js';
-import type { PersonProposalResponse, PersonRevisionBody, ReshapeRunBody, ReshapeRunResponse } from 'wicked-crew-api-types';
+import type { PersonProposalBody, PersonProposalResponse, PersonRevisionBody, ReshapeRunBody, ReshapeRunResponse } from 'wicked-crew-api-types';
 
 export type * from './types.js';
 export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
@@ -384,6 +384,13 @@ export const api = {
   /** (api-types 0.192.0, DES-CATALOG-002 §4.6; `capabilities.chatJobProposals`) A person's revision of the open job
    *  proposal (a token swap, a suggestion, a question's choice): crew merges it and writes a new proposal superseding
    *  the parent. 409 `proposal_stale` / `proposal_revising` / `catalog_changed`, 400 `edits_invalid`. */
+  /** (api-types 0.192.0) A person-made proposal in the chat (a `/` pick, a typed command, a hand-off such as "Fix it as
+   *  a bug" or "Try again"): crew resolves it and posts it as a new job; only the person's Start runs it. */
+  proposeInChat: (chatId: string, body: PersonProposalBody) =>
+    apiFetch<PersonProposalResponse>(`/chats/${encodeURIComponent(chatId)}/proposals`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   reviseChatProposal: (chatId: string, body: PersonRevisionBody) =>
     apiFetch<PersonProposalResponse>(`/chats/${encodeURIComponent(chatId)}/proposals`, {
       method: 'POST',

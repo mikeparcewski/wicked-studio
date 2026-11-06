@@ -294,7 +294,7 @@ export interface JobRunInputs {
   /** The run's open gate (the gate store's), or `null`. */
   gate: { ord: number; receivedAt: number; gateKind?: string | undefined; prompt: string } | null;
   /** The plan the open plan gate holds (`usePlanGate`), with whether the read was made for THIS gate instance. */
-  plan: { ord: number; planRev: number; steps: string[]; fresh: boolean } | null;
+  plan: { ord: number; planRev: number; steps: JobPlanStep[]; changed?: string | null; fresh: boolean } | null;
   /** The plan gate is known open but its read for this instance is still on its way. */
   planReading: boolean;
   /** The open gate's kind is not known yet (no live frame named it, the team read has not answered): a run launched
@@ -315,6 +315,123 @@ export interface JobRunInputs {
 }
 
 export const NO_RUN: JobRunInputs = { view: null, gate: null, plan: null, planReading: false, planUnknown: false, answering: false, reshapeOn: true, planDecided: false, sentBack: null, question: false, pending: null };
+
+/** One step of the held plan as the passage outlines it, every word from the plan record. */
+export interface JobPlanStep {
+  id: string | null;
+  label: string;
+  /** The step's own instructions, first line (crew's plan record), or `null`. */
+  detail: string | null;
+  /** The step raises a gate: it asks the person. */
+  asks: boolean;
+  /** The floor added it for this risk (not the lead). */
+  floor: boolean;
+  /** New in this revision (not in the revision before it): washed, "what changed". */
+  added: boolean;
+}
+
+type Row = { event_id: number; event_type: string; payload: Record<string, unknown>; emitted_at?: number };
+const strOf = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+
+/**
+ * The held plan's steps, enriched from the team record (`plan.proposed`): the step's instructions as its detail, a
+ * raised gate as "asks you", a floor step as such, and what is new against the revision before it ("Plan v2: added
+ * Roll back if parity fails"). The order and the step list are the plan gate's own (`steps`, floor steps in place);
+ * a step the record cannot describe keeps its name only.
+ */
+export function enrichPlan(steps: ReadonlyArray<{ id: string | null; catalog: string | null; label: string }>, rows: readonly Row[], planRev: number, floorAdded: readonly string[] = []): { steps: JobPlanStep[]; changed: string | null } {
+  const proposed = rows.filter((r) => r.event_type === 'wicked.team.plan.proposed').sort((a, b) => a.event_id - b.event_id);
+  const stepsOf = (r: Row | undefined): Array<Record<string, unknown>> => (Array.isArray(r?.payload['steps']) ? (r!.payload['steps'] as unknown[]).filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null) : []);
+  const held = proposed[proposed.length - 1];
+  const before = proposed.length > 1 ? proposed[proposed.length - 2] : undefined;
+  const asksIds = new Set(Array.isArray(held?.payload['asks']) ? (held!.payload['asks'] as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+  const byId = new Map(stepsOf(held).map((st) => [strOf(st['id']) ?? strOf(st['catalog']) ?? '', st]));
+  const prevIds = before === undefined ? null : new Set(stepsOf(before).map((st) => strOf(st['id']) ?? strOf(st['catalog']) ?? ''));
+  const out = steps.map((s): JobPlanStep => {
+    const rec = s.id !== null ? byId.get(s.id) : undefined;
+    const instr = strOf(rec?.['instructions']);
+    const first = instr === null ? null : instr.split('\n')[0]!.trim();
+    return {
+      id: s.id,
+      label: s.label,
+      detail: first === null || first === '' ? null : first.length > 90 ? `${first.slice(0, 89).trimEnd()}…` : first,
+      asks: rec !== undefined && ((rec['gate'] !== undefined && rec['gate'] !== null) || (s.id !== null && asksIds.has(s.id))),
+      floor: rec?.['added_by'] === 'floor' || (s.catalog !== null && floorAdded.includes(s.catalog) && rec === undefined),
+      added: prevIds !== null && planRev > 1 && s.id !== null && !prevIds.has(s.id),
+    };
+  });
+  const added = out.filter((s) => s.added).map((s) => s.label);
+  const removed = prevIds === null || planRev <= 1 ? [] : [...prevIds].filter((id) => id !== '' && !steps.some((s) => s.id === id));
+  const parts = [...(added.length > 0 ? [`added ${added.join(', ')}`] : []), ...(removed.length > 0 ? [`removed ${removed.length} step${removed.length === 1 ? '' : 's'}`] : [])];
+  return { steps: out, changed: parts.length > 0 ? `Plan v${planRev}: ${parts.join('; ')}` : null };
+}
+
+/**
+ * Whether the lead is re-planning on crew's record (a send-back answered in ANY tab): the newest plan decision on the
+ * team record is an amended one, nothing was accepted or held since, and the step the gate stood before has not
+ * started. Returns the revision sent back, or `null`.
+ */
+export function replanningOnRecord(rows: readonly Row[], units: ReadonlyArray<{ ord: number; status: string }>): number | null {
+  const sorted = [...rows].sort((a, b) => a.event_id - b.event_id);
+  const opened = new Map<string, { rev: number; ord: number }>();
+  for (const r of sorted) {
+    if (r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval') {
+      opened.set(String(r.payload['gate_id']), { rev: typeof r.payload['plan_rev'] === 'number' ? r.payload['plan_rev'] : 0, ord: typeof r.payload['ord'] === 'number' ? r.payload['ord'] : -1 });
+    }
+  }
+  const decided = sorted.filter((r) => r.event_type === 'wicked.team.gate.decided' && r.payload['kind'] === 'plan_approval');
+  const last = decided[decided.length - 1];
+  if (last === undefined || last.payload['decision'] !== 'human_amended') return null;
+  const gate = opened.get(String(last.payload['gate_id']));
+  if (gate === undefined) return null;
+  const since = sorted.some((r) => r.event_id > last.event_id && (r.event_type === 'wicked.team.plan.accepted'
+    || (r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval')));
+  if (since) return null;
+  const work = units.find((u) => u.ord === gate.ord);
+  if (work !== undefined && work.status !== 'pending') return null;
+  return gate.rev;
+}
+
+/** A tick: one dim line for a state the job reached or an act of the person's (rev 6 §2.7.1), from crew's records. */
+export interface JobTick { key: string; at: number; text: string }
+
+/**
+ * The job's ticks, in time order, each from a record: the proposal's decision ("You started the job"), and from the
+ * run's team record each plan revision held ("Codex's plan, v1, is ready") and how it was answered ("You approved plan
+ * v2", "You sent plan v1 back", "You stopped the job at plan v1"). A queued answer in its undo window is never a tick:
+ * it has no record until it is sent.
+ */
+export function jobTicks(l: JobLineage, rows: readonly Row[], lead: string): JobTick[] {
+  const out: JobTick[] = [];
+  if (l.state === 'decided' && l.decidedAt !== null) {
+    if (l.decision === 'go') out.push({ key: `${l.lineage}:go`, at: l.decidedAt, text: `You started the job, v${l.versions.length}` });
+    else if (l.decision === 'not_now') out.push({ key: `${l.lineage}:not-now`, at: l.decidedAt, text: 'You chose Not now' });
+  }
+  const sorted = [...rows].sort((a, b) => a.event_id - b.event_id);
+  const revOf = new Map<string, number>();
+  for (const r of sorted) {
+    if (r.payload['kind'] !== 'plan_approval') continue;
+    const at = typeof r.emitted_at === 'number' ? r.emitted_at : null;
+    if (at === null) continue; // no time on record: no tick (never placed by guess)
+    if (r.event_type === 'wicked.team.gate.opened') {
+      const rev = typeof r.payload['plan_rev'] === 'number' ? r.payload['plan_rev'] : null;
+      if (rev === null) continue;
+      revOf.set(String(r.payload['gate_id']), rev);
+      out.push({ key: `${l.lineage}:plan:${rev}:${r.event_id}`, at, text: `${lead}’s plan, v${rev}, is ready` });
+    } else if (r.event_type === 'wicked.team.gate.decided') {
+      const rev = revOf.get(String(r.payload['gate_id']));
+      if (rev === undefined) continue;
+      const d = r.payload['decision'];
+      const later = sorted.some((x) => x.event_id > r.event_id && x.event_type === 'wicked.team.gate.opened' && x.payload['kind'] === 'plan_approval');
+      const accepted = sorted.some((x) => x.event_id > r.event_id && x.event_type === 'wicked.team.plan.accepted');
+      const text = d === 'human_approved' || d === 'allow' ? `You approved plan v${rev}`
+        : d === 'human_amended' ? (accepted && !later ? `You approved plan v${rev} with your changes` : `You sent plan v${rev} back`)
+          : d === 'human_rejected' || d === 'deny' ? `You stopped the job at plan v${rev}` : null;
+      if (text !== null) out.push({ key: `${l.lineage}:answer:${rev}:${r.event_id}`, at, text });
+    }
+  }
+  return out;
+}
 
 /** The press target a reply is bound to (§2.7.3 rule 6): a press counts only for what it began on. */
 export type JobReplyId = 'start' | 'not_now' | 'go_again' | `suggestion:${number}` | `choice:${number}` | 'approve' | 'change' | 'stop'
@@ -373,7 +490,7 @@ export interface JobView {
   tokensLive: boolean;
   /** The tokens are held (a change is in flight): focusable, but nothing opens. */
   tokensHeld: boolean;
-  plan: { ord: number; planRev: number; steps: string[] } | null;
+  plan: { ord: number; planRev: number; steps: JobPlanStep[]; changed: string | null } | null;
   progress: JobProgress | null;
   /** The run the job launched. */
   runId: string | null;
@@ -557,7 +674,7 @@ export function jobView(l: JobLineage, run: JobRunInputs, opts: {
   const version = l.versions.length;
   const previous = version > 1 ? l.versions[version - 2]!.proposal : null;
   const preStart = phase === 'proposed' || phase === 'asking' || phase === 'revising' || phase === 'swapPending' || phase === 'coming';
-  const plan = run.plan !== null && (phase === 'planHeld' || phase === 'replanning') ? { ord: run.plan.ord, planRev: run.plan.planRev, steps: run.plan.steps } : null;
+  const plan = run.plan !== null && (phase === 'planHeld' || phase === 'replanning') ? { ord: run.plan.ord, planRev: run.plan.planRev, steps: run.plan.steps, changed: run.plan.changed ?? null } : null;
   const progress = run.view !== null && (phase === 'running' || phase === 'gate' || phase === 'runQuestion' || phase === 'delivered' || phase === 'stopped' || phase === 'failed')
     ? progressOf(run.view, opts.stepName, phase === 'gate' && run.gate !== null ? run.gate.ord : null) : null;
   // The proposal's target is its pid AND what it says: a re-resolution under the same pid (crew changed the sentence,

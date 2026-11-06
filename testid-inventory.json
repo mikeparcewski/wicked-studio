@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 330,
-    "occurrences": 4918,
-    "static": 4136,
+    "occurrences": 4924,
+    "static": 4142,
     "dynamic": 177,
     "computed": 53
   },
@@ -8036,6 +8036,12 @@
       ]
     },
     {
+      "testId": "job-passage-after",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-checks",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8079,6 +8085,12 @@
     },
     {
       "testId": "job-passage-failed",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-fix-bug",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
@@ -8174,6 +8186,12 @@
       ]
     },
     {
+      "testId": "job-passage-plan-changed",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-plan-head",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8181,6 +8199,12 @@
     },
     {
       "testId": "job-passage-plan-retry",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-plan-step",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
@@ -8318,6 +8342,12 @@
       ]
     },
     {
+      "testId": "job-passage-try-again",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-undo",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8345,6 +8375,12 @@
       "testId": "job-passage-version",
       "files": [
         "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-tick",
+      "files": [
+        "src/components/session/SessionView.tsx"
       ]
     },
     {

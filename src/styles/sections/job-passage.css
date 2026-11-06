@@ -101,6 +101,13 @@
 .wk-pass-ol li { display: flex; gap: 10px; font-size: var(--text-body); line-height: 1.5; color: var(--ink-high); }
 .wk-pass-ol .n, .wk-pass-now .n { width: 16px; text-align: right; color: var(--ink-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .wk-pass-ol--ghost li, .wk-pass-ol--dim li { opacity: 0.45; }
+.wk-pass-ol li { position: relative; }
+.wk-pass-ol .d { color: var(--ink-muted); }
+.wk-pass-floor { font-style: normal; font-size: var(--text-caption); color: var(--ink-muted); }
+/* What changed in this revision (§2.7.3 rule 4): only the new steps are washed, with crew's what-changed line. */
+.wk-pass-new::before { content: ''; position: absolute; left: -24px; top: 2px; bottom: 2px; width: 3px; border-radius: 2px; background: var(--wk-pass-rule); }
+.wk-pass-new .l b { background: var(--wk-pass-chg); border-radius: 3px; padding: 0 3px; }
+.wk-pass-changed { font-style: italic; color: var(--ink-high); background: var(--wk-pass-chg); border-radius: 3px; padding: 1px 4px; }
 
 .wk-pass-fold { margin: 0; font-size: var(--text-body); line-height: 1.6; color: var(--ink-body); }
 .wk-pass-ok { color: var(--status-ok); }
@@ -150,3 +157,7 @@
   /* The wash is static and clears when the person next interacts with the passage. */
   .wk-pass-tok--chg { animation: none; background: var(--wk-pass-chg); }
 }
+
+/* A tick (rev 6 §2.7.1): one dim line for a state the job reached or the person's act, from its record. */
+.wk-pass-tick { margin: 2px 0; padding-left: 32px; font-size: var(--text-caption); color: var(--ink-muted); display: flex; gap: 8px; align-items: baseline; }
+.wk-pass-tick::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--wk-pass-rule); transform: translateY(-2px); flex-shrink: 0; }

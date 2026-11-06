@@ -4,7 +4,7 @@ import { IDLE_GATE_ACTION, useGateActionStore } from '../board/gateActions.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { create } from 'zustand';
 import type { SessionView } from '../api/types.js';
-import { jobView, type JobLineage, type JobRunInputs, type JobView } from '../board/jobStream.js';
+import { enrichPlan, jobView, replanningOnRecord, type JobLineage, type JobRunInputs, type JobView } from '../board/jobStream.js';
 import { planStepLabel, unitStepName } from '../board/chainModel.js';
 import { useUndoQueue } from '../board/undoQueue.js';
 import { useElicitationStore } from '../store/elicitations.js';
@@ -92,8 +92,7 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   const gate = useGateStore((s) => (runId === null ? undefined : s.gates[runId]));
   const waiting = run?.session.status === 'awaiting_human';
   const plan = usePlanGate(runId, waiting);
-  const live = run !== null && !['completed', 'cancelled', 'failed'].includes(run.session.status);
-  const { fold, error: teamError, retry: teamRetry } = useTeamFold(live ? runId : null, run === null ? '' : `${run.session.status}:${run.session.unit_ix}`);
+  const { fold, error: teamError, retry: teamRetry } = useTeamFold(runId, run === null ? '' : `${run.session.status}:${run.session.unit_ix}`);
   const question = useElicitationStore((s) => (runId === null ? false : s.elicitations[runId] !== undefined));
   // Any queued decision covering this run (a batch included) holds its answers.
   const pending = useUndoQueue((s) => (runId === null ? null : s.pending.find((p) => p.runIds.includes(runId)) ?? null));
@@ -126,10 +125,12 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
     const pv = plan.view;
     // The plan this gate holds: only a read made for the gate open now may be approved (`fresh`).
     const planIn = pv !== null && (gate === undefined || gate.ord === pv.ord)
-      ? { ord: pv.ord, planRev: pv.planRev, steps: pv.planSteps.map((s) => planStepLabel(s.id, s.catalog)), fresh: plan.fresh }
+      ? { ord: pv.ord, planRev: pv.planRev, ...enrichPlan(pv.planSteps.map((s) => ({ id: s.id, catalog: s.catalog, label: planStepLabel(s.id, s.catalog) })), fold?.rows ?? [], pv.planRev, pv.floorAdded), fresh: plan.fresh }
       : null;
-    // A send-back stands until a newer revision of the plan is held (or the run moves past its plan).
-    const sentBack = sentBackRaw !== null && (planIn === null || planIn.planRev <= sentBackRaw) ? sentBackRaw : null;
+    // A send-back stands until a newer revision of the plan is held (or the run moves past its plan): this tab's own, or
+    // one crew's record shows (answered in another tab).
+    const sent = sentBackRaw ?? (run !== null ? replanningOnRecord(fold?.rows ?? [], run.units) : null);
+    const sentBack = sent !== null && (planIn === null || planIn.planRev <= sent) ? sent : null;
     return {
       view: run,
       gate: gate === undefined ? null : { ord: gate.ord, receivedAt: gate.receivedAt, gateKind: gate.gateKind, prompt: gate.prompt },
@@ -143,7 +144,7 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
       question,
       pending: pending === null ? null : { id: pending.id, queuedAt: pending.queuedAt, dueAt: pending.dueAt, verb: pending.verb },
     };
-  }, [run, gate, plan.view, plan.fresh, plan.reading, waiting, classified, answering, reshapeOn, planDecided, sentBackRaw, question, pending]);
+  }, [run, gate, plan.view, plan.fresh, plan.reading, waiting, classified, answering, reshapeOn, planDecided, sentBackRaw, question, pending, fold]);
   const view = useMemo(() => jobView(lineage, inputs, { stepName: unitStepName, swapPending, deciding, starting: deciding, now }),
     [lineage, inputs, swapPending, deciding, now]);
   // The plan gate is held but nothing readable came back for it: a failed read (either reader), not "still reading".
