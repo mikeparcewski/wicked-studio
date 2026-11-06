@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { ApiError } from '../../api/errors.js';
 import { sourcesApi, type McpPreviewResponse, type McpServer, type McpServerConfigBody } from '../../api/sources.js';
@@ -19,6 +19,7 @@ import { useModalEscape } from '../Modal.js';
 import { TrackerBadge } from '../trackers/TrackerParts.js';
 import { AgentAccess } from './AgentAccess.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
+import { elsewhereWords, refusalWords, rekeyFailure, rekeyPending, rekeySource, secretRefKind, secretShapeProblem, takeRekeyOutcome } from './rekey.js';
 import { keychainRef, NAME_RE } from './sourceModel.js';
 import { useDialogFocus } from './useDialogFocus.js';
 
@@ -152,9 +153,12 @@ export function toolGroupsOf(system: 'jira' | 'github', reviews: readonly ToolRe
 }
 
 /** What the sheet may say about the saved source when its test failed: no more than crew's answer supports. */
-export function savedWords(crew: { code: string | null; cause: string | null } | null): string {
+export function savedWords(crew: { code: string | null; cause: string | null } | null, refKind: 'own' | 'env' | 'other' | 'none' = 'own'): string {
   if (crew?.code === 'source_not_found') return 'crew no longer has this source: it was removed since this page was read.';
-  if (crew?.cause === 'secret_missing') return 'The source is saved, but crew can’t read its token: save it again with the token.';
+  if (crew?.cause === 'secret_missing') {
+    return refKind === 'env' || refKind === 'other' ? `The source is saved, but crew can’t read its token. ${elsewhereWords(refKind, 'token')}`
+      : 'The source is saved, but crew can’t read its token: type it again above and choose Save token.';
+  }
   return 'The source is saved. This test, which reads what the token reaches, failed; nothing else changed.';
 }
 
@@ -257,7 +261,7 @@ const codeOf = (e: unknown): string | null => {
   return typeof c === 'string' ? c : null;
 };
 
-export function PmSourceSheet({ target, existing, servers, agentsUnverified, onReread, onSaved, onAgents, onClose }: {
+export function PmSourceSheet({ target, existing, servers, agentsUnverified, onReread, onSaved, onRekeyed, onAgents, onClose }: {
   target: PmSheetTarget;
   existing: readonly string[];
   /** The page's latest read of the registry: a sheet opened as new follows its saved source there. */
@@ -265,16 +269,29 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   agentsUnverified?: ReadonlySet<string>;
   onReread?: () => void;
   onSaved: (server: McpServer) => void;
+  /**
+   * crew wrote the source's token again (its `authState` is `set`): nothing else about the source changed. A page that
+   * passes `servers` merges it there too, since the sheet shows the page's record before its own.
+   */
+  onRekeyed?: (name: string) => void;
   onAgents?: (name: string, agents: SourceAgentAccess) => void;
   onClose: () => void;
 }): React.ReactElement {
   const titleId = useId();
+  const emailRef = useRef<HTMLInputElement | null>(null);
+  /** The sheet is on the page: a write that settles after it closed runs no test here (a reopened sheet reads crew). */
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  /** What the last re-key did, for the status line (a rotation is Set before and after: this is what changes). */
+  const [rekeyStatus, setRekeyStatus] = useState('');
   const box = useRef<HTMLDivElement | null>(null);
   useModalEscape(onClose);
   useDialogFocus(box);
   const [saved, setSaved] = useState<McpServer | null>(target.mode === 'saved' ? target.server : null);
   const followed = saved !== null ? servers?.find((s) => s.name === saved.name) ?? null : null;
-  const shownServer = followed ?? (target.mode === 'saved' ? target.server : saved);
+  // The page's latest read, else this sheet's own record (a saved target starts as it; a re-key or the Agents switches
+  // update it).
+  const shownServer = followed ?? saved;
   const system: 'jira' | 'github' = target.mode === 'new' ? target.system : ((shownServer as { pm?: { system?: string } } | null)?.pm?.system === 'jira' ? 'jira' : 'github');
   const [name, setName] = useState(target.mode === 'saved' ? target.server.name : system === 'jira' ? 'jira' : 'github');
   const [url, setUrl] = useState(target.mode === 'saved' ? target.server.url ?? '' : SERVERS[system]);
@@ -287,7 +304,9 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   /** The write tools the person grants at the save (crew's G1 `enabledWrites`): only a granted write can be asked for at the deliver gate. */
   const [grants, setGrants] = useState<{ key: string; names: ReadonlySet<string> }>({ key: '', names: new Set() });
   const [held, setHeld] = useState<{ key: string; preview: McpPreviewResponse } | null>(null);
-  const [busy, setBusy] = useState<null | 'test' | 'save' | 'reach'>(null);
+  const [busy, setBusy] = useState<null | 'test' | 'save' | 'reach' | 'rekey'>(null);
+  /** A saved source whose token is set: the person opened "Replace token" (a missing token's field is always open). */
+  const [replacing, setReplacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reach, setReach] = useState<{ ok: true; r: Reach; at: string } | { ok: false; words: string; crew?: { said: string; code: string | null; cause: string | null } | null } | null>(null);
   const seq = useRef(0);
@@ -335,11 +354,20 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
     setBusy('reach');
     setReach(null);
     try {
+      // A token write still out goes first: the test reads what the token crew ends up with.
+      // (Only then: with none out, the test starts in this same tick.)
+      const out = rekeyPending(sourceName);
+      if (out !== null) { await out.catch(() => undefined); if (mine !== reachGen.current) return; }
       const r = sourceTrackersOf(await trackersApi.sourceTrackers(sourceName), sourceName);
       if (mine !== reachGen.current) return;
       setReach(r === null ? { ok: false, words: 'crew’s answer could not be read: update studio or crew.' } : { ok: true, r: reachOf(r.trackers, r.next), at: new Date().toISOString() });
     } catch (e) {
-      if (mine === reachGen.current) setReach({ ok: false, words: trackerRefusal(e, 'read'), crew: reachFailureOf(e) });
+      if (mine === reachGen.current) {
+        const crew = reachFailureOf(e);
+        setReach({ ok: false, words: trackerRefusal(e, 'read'), crew });
+        // crew can't read the token: the field to type it again opens, and the page reads crew's state again.
+        if (crew?.cause === 'secret_missing') { if (canRekey) setReplacing(true); onReread?.(); }
+      }
     } finally {
       if (mine === reachGen.current) setBusy(null);
     }
@@ -371,6 +399,112 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
     }
   };
 
+  /**
+   * RE-KEY a saved source: the token typed again goes to crew's keychain write (`PUT /mcp/servers/:name/secret`), the
+   * one request that carries it (Jira's as the same Basic credential the preview sends), and nothing else is sent: the
+   * registry row (its links, agent access and tools) stays as it is, and only its `authState` is updated here. Then the
+   * field lets go of it, and Test connection reads what the new token reaches. Only a source whose token is its own
+   * keychain entry can take one (crew#719).
+   */
+  const savedAuth = !isNew ? (shownServer?.authState ?? 'none') : null;
+  const refKind = secretRefKind(shownServer);
+  const canRekey = !isNew && savedAuth !== 'none' && refKind === 'own';
+  const rekeyOpen = canRekey && (savedAuth === 'missing' || replacing);
+  const rekeyBlocker = !rekeyOpen ? null
+    : system === 'jira' && !/^\S+@\S+$/.test(email.trim()) ? 'Account email is needed'
+      : !hasSecret ? (system === 'jira' ? 'Type the API token' : 'Type the personal access token') : null;
+  // A write sent by a sheet that closed: this one says how it ended (now, or when it settles), takes a saved token's
+  // state into its record and the page's, and reads crew again. While it is out, this sheet writes nothing.
+  const savedName = !isNew ? shownServer?.name ?? null : null;
+  useEffect(() => {
+    if (savedName === null) return;
+    let live = true;
+    const say = (o: 'saved' | 'refused' | 'unknown' | null): void => {
+      if (o === null) return;
+      if (o === 'saved') {
+        setSaved((cur) => (cur !== null && cur.name === savedName ? ({ ...cur, authState: 'set' } as McpServer) : cur));
+        onRekeyed?.(savedName);
+        setRekeyStatus('The token typed before this sheet was opened again was saved to your keychain.');
+      } else {
+        setError(o === 'refused' ? 'The token typed before this sheet was opened again was not saved: type it again.'
+          : 'studio could not confirm the token typed before this sheet was opened again was saved: Test connection shows whether it works.');
+      }
+      onReread?.();
+    };
+    const out = rekeyPending(savedName);
+    if (out === null) { say(takeRekeyOutcome(savedName)); return; }
+    // The busy state is the write's only while nothing else holds it (a test the sheet opened on waits for the write).
+    setBusy((b) => b ?? 'rekey');
+    const settle = (): void => {
+      if (!live) return;
+      setBusy((b) => (b === 'rekey' ? null : b));
+      say(takeRekeyOutcome(savedName));
+    };
+    out.then(settle, settle);
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the source the sheet opened on
+  }, [savedName]);
+  const rekey = async (): Promise<void> => {
+    if (shownServer === null || !rekeyOpen || rekeyBlocker !== null || busy !== null || inFlight.current || rekeyPending(shownServer.name) !== null) return;
+    const sourceName = shownServer.name;
+    const token = secret.current?.read() ?? '';
+    if (token === '') return;
+    const value = system === 'jira' ? jiraBasic(email.trim(), token) : token;
+    // crew's own rule for the value it is sent, said at the field rather than as a refused request.
+    const shape = secretShapeProblem(value, 'token');
+    if (shape !== null) { setError(shape); return; }
+    inFlight.current = true;
+    // Any test still out is older than this write: its answer lands nowhere.
+    ++reachGen.current;
+    setBusy('rekey');
+    setError(null);
+    setReach(null);
+    setRekeyStatus('');
+    const letGo = (): void => {
+      secret.current?.clear();
+      setHasSecret(false);
+      setEmail('');
+    };
+    try {
+      await rekeySource(sourceName, value);
+      // crew wrote it: the field lets go of it, and of the account email that went with it.
+      letGo();
+      setReplacing(false);
+      // Only the token's state changed: the latest record of THIS source takes it (crew's next list read confirms it).
+      setSaved((cur) => (cur !== null && cur.name === sourceName ? ({ ...cur, authState: 'set' } as McpServer) : cur));
+      onRekeyed?.(sourceName);
+      inFlight.current = false;
+      // Closed meanwhile: the outcome is left for the next sheet to say, and no test runs here.
+      if (!alive.current) return;
+      takeRekeyOutcome(sourceName);
+      setRekeyStatus('Token saved to your keychain.');
+      await readReach(sourceName);
+    } catch (e) {
+      if (!alive.current) return;
+      takeRekeyOutcome(sourceName);
+      const f = rekeyFailure(e);
+      if (f.kind === 'unknown') {
+        // No answer that proves nothing was written: crew may have written it. The field lets go of it either way, and
+        // the page reads crew's state again; Test connection says whether the token works.
+        letGo();
+        onReread?.();
+        setError('studio could not confirm the token was saved. crew may have written it: Test connection shows whether it works; type it again if not.');
+      } else {
+        setError(refusalWords(f, 'token'));
+      }
+      setBusy(null);
+    } finally {
+      inFlight.current = false;
+    }
+  };
+  useEffect(() => {
+    // The field opening (Replace, or crew finding the token missing at a test) takes the focus: on Jira the account
+    // email, which comes first; on GitHub the token field.
+    if (!replacing) return;
+    if (system === 'jira') emailRef.current?.focus();
+    else box.current?.querySelector<HTMLInputElement>('[data-testid="pm-secret"]')?.focus();
+  }, [replacing, system]);
+
   const tools: ToolReview[] | null = shownServer !== null && !isNew ? toolReviewsOf((shownServer as { tools?: unknown }).tools, true)
     : preview !== null ? toolReviewsOf((preview as { tools?: unknown }).tools, false) : [];
   const agentAccess = !isNew && shownServer !== null ? agentAccessOf(shownServer as { agents?: unknown }) : null;
@@ -380,6 +514,23 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   const replaces = isNew && existing.includes(name.trim());
   const title = isNew ? `Add ${systemName(system)}` : shownServer?.name ?? systemName(system);
   const frozen = busy === 'save';
+  const tokenNote = tokenSent ? 'Sent once, with this test. Save keeps it in your keychain; type it again only to test again.' : 'Kept in your keychain. Never shown again, never in a file, a log or an agent’s context.';
+  const savedNote = !isNew && savedAuth !== 'none' && (refKind === 'env' || refKind === 'other') ? elsewhereWords(refKind, 'token') : tokenNote;
+  const secretField = (label: string): React.ReactElement => (
+    <SecretField ref={secret} label={label} data-testid="pm-secret" note={isNew ? tokenNote : savedNote}
+      savedState={savedAuth} disabled={busy !== null}
+      rekey={!canRekey ? null : {
+        open: replacing,
+        onOpen: (open) => { setReplacing(open); setError(null); setRekeyStatus(''); if (!open) setEmail(''); },
+        replace: 'Replace token',
+        submit: () => void rekey(),
+        focusOnOpen: system !== 'jira',
+        note: system === 'jira'
+          ? 'Type the account email and a new API token. Only the token changes: the links, agent access and tools stay as they are.'
+          : 'Type a new token. Only the token changes: the links, agent access and tools stay as they are.',
+      }}
+      onEdit={(has) => { setHasSecret(has); setTokenSent(false); setSecretEdits((n) => n + 1); setError(null); }} />
+  );
 
   return (
     <div className="wk-src-scrim" data-testid="pm-sheet-scrim">
@@ -407,20 +558,29 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                   <input data-testid="pm-url" className="wk-field wk-src-input wk-src-mono" spellCheck={false} disabled={!isNew || frozen} value={url} onChange={(e) => { setUrl(e.target.value); setError(null); }} />
                 </label>
               </div>
-              {system === 'jira' && isNew ? (
-                <div className="wk-src-pair">
-                  <label className="wk-src-field"><span className="wk-src-label">Account email</span>
-                    <input data-testid="pm-email" type="email" autoComplete="off" className="wk-field wk-src-input" spellCheck={false} disabled={frozen} value={email} placeholder="crew-bot@example.com" onChange={(e) => { setEmail(e.target.value); setError(null); }} />
-                  </label>
-                  <SecretField ref={secret} label="API token" data-testid="pm-secret" note={tokenSent ? 'Sent once, with this test. Save keeps it in your keychain; type it again only to test again.' : 'Kept in your keychain. Never shown again, never in a file, a log or an agent’s context.'}
-                    savedState={isNew ? null : (shownServer?.authState ?? 'none')} disabled={busy !== null}
-                    onEdit={(has) => { setHasSecret(has); setTokenSent(false); setSecretEdits((n) => n + 1); setError(null); }} />
+              {system === 'jira' ? (
+                // New: email and token side by side. Saved: the token under its state, with the email above it while it is
+                // typed again (one wrapper either way, so the field keeps its place and its focus handling).
+                <div className={isNew ? 'wk-src-pair' : 'wk-src-stack'}>
+                  {(isNew || rekeyOpen) && (
+                    <label className="wk-src-field"><span className="wk-src-label">Account email</span>
+                      <input ref={emailRef} data-testid="pm-email" type="email" autoComplete="off" className="wk-field wk-src-input" spellCheck={false} disabled={isNew ? frozen : busy !== null} value={email} placeholder="crew-bot@example.com"
+                        onChange={(e) => { setEmail(e.target.value); setError(null); }}
+                        onKeyDown={isNew ? undefined : (e) => { if (e.key === 'Enter') { e.preventDefault(); void rekey(); } }} />
+                    </label>
+                  )}
+                  {secretField('API token')}
                 </div>
-              ) : (
-                <SecretField ref={secret} label={system === 'jira' ? 'API token' : 'Personal access token'} data-testid="pm-secret" note={tokenSent ? 'Sent once, with this test. Save keeps it in your keychain; type it again only to test again.' : 'Kept in your keychain. Never shown again, never in a file, a log or an agent’s context.'}
-                  savedState={isNew ? null : (shownServer?.authState ?? 'none')} disabled={busy !== null}
-                  onEdit={(has) => { setHasSecret(has); setTokenSent(false); setSecretEdits((n) => n + 1); setError(null); }} />
+              ) : secretField('Personal access token')}
+              {rekeyOpen && (
+                <div className="wk-src-rekey" data-testid="pm-rekey">
+                  <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="pm-rekey-save" disabled={rekeyBlocker !== null || busy !== null} title={rekeyBlocker ?? undefined} onClick={() => void rekey()}>
+                    {busy === 'rekey' ? 'Saving…' : 'Save token'}
+                  </button>
+                  <span className="wk-src-note" data-testid="pm-rekey-note">{rekeyBlocker ?? 'Writes it to your keychain, then tests the connection.'}</span>
+                </div>
               )}
+              {canRekey && <span role="status" className="wk-src-note wk-src-tone-ok" data-testid="pm-rekey-status">{rekeyStatus}</span>}
               {system === 'jira' ? (
                 <div className="wk-pm-guide" data-tone="warn" data-testid="pm-token-advice">
                   <b>Jira API tokens can’t be limited to projects.</b> crew limits every call to the Jira projects you link: it sets the site, adds your linked projects to every search, and drops anything else from an answer before an agent sees it.
@@ -456,7 +616,7 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                 {!isNew && reach?.ok === true && <ul className="wk-pm-lines" data-testid="pm-test-reach-lines">{reachLines(system, reach.r).map((l) => <li key={l}>{l}</li>)}</ul>}
                 {!isNew && reach?.ok === false && (
                   <div data-testid="pm-test-reach-error">
-                    <p className="wk-src-note" data-testid="pm-test-saved">{savedWords(reach.crew ?? null)}</p>
+                    <p className="wk-src-note" data-testid="pm-test-saved">{savedWords(reach.crew ?? null, refKind)}</p>
                     {reach.crew != null ? (
                       <p className="wk-src-note wk-src-tone-fail" data-testid="pm-test-crew-said">
                         crew said: “{reach.crew.said}”{codeWords(reach.crew) !== null && <> <code data-testid="pm-test-crew-code">{codeWords(reach.crew)}</code></>}

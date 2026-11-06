@@ -10,6 +10,7 @@ import { NO_APP_GRANTS, RowWriteDialog, type RowWriteGrantPort } from './RowWrit
 import { SourceSheet, type SheetTarget } from './SourceSheet.js';
 import { relationName, rowWriteKey } from './sourceModel.js';
 import { PmSourceSheet, type PmSheetTarget } from './PmSourceSheet.js';
+import { onRekeySettled } from './rekey.js';
 import { hasPmMarker, pmSystemOf, systemName, trackerLinksListOf, useTrackerLinksSupported } from '../../api/trackers.js';
 import { agentAccessOf } from '../../api/sourceAgents.js';
 import { TrackerBadge } from '../trackers/TrackerParts.js';
@@ -107,6 +108,8 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
       if (gen === listGen.current) setLoading(false);
     }
   }, []);
+  // A re-key settles (whichever sheet sent it, this page's or one that closed with an earlier page): crew is read again.
+  useEffect(() => onRekeySettled(() => { void refresh(); }), [refresh]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   // (DES-KNOWLEDGE-DATA-001 §19 B5) Every agent-switch write that settles, from any sheet (or a page since unmounted),
@@ -234,6 +237,8 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
             setSources((list) => (list.some((s) => s.name === saved.name) ? list.map((s) => (s.name === saved.name ? saved : s)) : appReadable(saved) ? [...list, saved] : list));
             void refresh();
           }}
+          // Only the secret's state changed: merged into the latest record (the re-key's settle re-reads crew's list).
+          onRekeyed={(name) => setSources((list) => list.map((s) => (s.name === name ? ({ ...s, authState: 'set' } as McpServer) : s)))}
           onAllowWrites={setWrites}
           servers={sources}
           agentsUnverified={unverified}
@@ -257,6 +262,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
             setPmSources((list) => (list.some((s) => s.name === saved.name) ? list.map((s) => (s.name === saved.name ? saved : s)) : [...list, saved]));
             void refresh();
           }}
+          onRekeyed={(name) => setPmSources((list) => list.map((s) => (s.name === name ? ({ ...s, authState: 'set' } as McpServer) : s)))}
           onAgents={(name, agents) => setPmSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)))}
           onClose={() => { setPmSheet(null); if (deep !== null) navigate(sourcesPath()); }}
         />

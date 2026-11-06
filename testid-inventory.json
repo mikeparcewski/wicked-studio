@@ -12,9 +12,9 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4709,
-    "static": 3940,
-    "dynamic": 173,
+    "occurrences": 4719,
+    "static": 3948,
+    "dynamic": 176,
     "computed": 53
   },
   "static": [
@@ -12634,6 +12634,30 @@
       ]
     },
     {
+      "testId": "pm-rekey",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-rekey-note",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-rekey-save",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-rekey-status",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "pm-replaces",
       "files": [
         "src/components/sources/PmSourceSheet.tsx"
@@ -20088,6 +20112,30 @@
       ]
     },
     {
+      "testId": "source-rekey",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rekey-note",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rekey-save",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rekey-status",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "source-replaces",
       "files": [
         "src/components/sources/SourceSheet.tsx"
@@ -24173,6 +24221,18 @@
       ]
     },
     {
+      "pattern": "*-replace",
+      "files": [
+        "src/components/sources/SecretField.tsx"
+      ]
+    },
+    {
+      "pattern": "*-replace-cancel",
+      "files": [
+        "src/components/sources/SecretField.tsx"
+      ]
+    },
+    {
       "pattern": "*-request",
       "files": [
         "src/components/sources/TestCall.tsx"
@@ -24227,6 +24287,12 @@
       "pattern": "*-run-error",
       "files": [
         "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
+      "pattern": "*-saved",
+      "files": [
+        "src/components/sources/SecretField.tsx"
       ]
     },
     {
