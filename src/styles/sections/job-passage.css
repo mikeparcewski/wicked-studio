@@ -110,6 +110,7 @@
 .wk-pass-report--clamp { max-height: 3.2em; overflow: hidden; }
 .wk-pass-gate { margin-top: 4px; }
 .wk-pass-gate:empty { display: none; }
+.wk-pass-made { margin-top: 4px; }
 .wk-pass-next { margin: 0; font-size: var(--text-code); color: var(--ink-muted); }
 .wk-pass-next span { font-weight: var(--weight-strong); margin-right: 4px; }
 .wk-pass-checks { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--text-code); color: var(--ink-high); }
@@ -143,9 +144,6 @@
   .wk-pass { margin-left: 0; }
   .wk-pass-mg { position: static; width: auto; text-align: left; flex-direction: row; gap: 6px; align-items: baseline; }
   .wk-pass-mg-v { margin-top: 0; }
-}
-@media (max-width: 600px) {
-  .wk-pass-lede { font-size: var(--text-lead); }
 }
 @media (prefers-reduced-motion: reduce) {
   .wk-pass::before, .wk-pass-lede, .wk-pass--busy::before { animation: none; transition: none; }

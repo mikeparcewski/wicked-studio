@@ -147,8 +147,11 @@ export interface ComposerSuggestion { id: string; label: string; title?: string;
 
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null,
+  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false,
 }: {
+  /** The box answers one thing (a job's bound reply, DES-CATALOG-002 §2.4): Send hands over the typed words alone —
+   *  no workflow chip, `/` command or about-chip context starts or decorates anything. */
+  answerOnly?: boolean;
   /** `desk`, or the session id. */
   composerKey: string;
   text: string;
@@ -447,6 +450,11 @@ export function Composer({
 
 
   const send = (): void => {
+    if (answerOnly) {
+      if (text.trim() === '') return;
+      onSend(text, {});
+      return;
+    }
     // A `/workflow-<key>` line typed whole (menu closed, a paste): Enter NAMES it — the options row
     // then asks for the repository. Nothing is sent until the next Enter.
     const typed = parseWorkflowCommand(text);
