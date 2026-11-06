@@ -239,6 +239,24 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'failed']);
   });
 
+  it('a live buffer that missed the hold (a reconnect) still shows it from the unit record; an unknown gate kind is not answered here', async () => {
+    mockFetch(() => null);
+    // The buffer holds only the dispatch: the escalation frames were missed. The polled unit record names the hold.
+    useRunEventStore.setState({ byRun: { [RUN]: [events[0]!] } });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const { unmount } = render(<AppChat slug="desk" detail={running()} runs={runs} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    expect(screen.getByTestId('app-chat-gate')).toBeTruthy();
+    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'now']);
+    unmount();
+    // A refusal whose late-join gate carries no kind (an older crew): the log names it an escalation, so no answers here.
+    const bare = [{ ...runs[0]!, units: units.map((u) => (u.ord === 3 ? { ...u, denial: { source: 'rule_check', reason: 'broken' } } : u)) }] as unknown as SessionView[];
+    const refusal = [events[0]!, { type: 'gateEscalated', session: RUN, ord: 3, attempt: 0, condition: 'rule_broken', denialSource: 'rule_check', verdictSummary: 'broken', ts: 3 }, { type: 'awaitingHuman', session: RUN, ord: 3, gateKind: 'escalation', prompt: 'broken', ts: 4 }] as unknown as CoreEvent[];
+    useRunEventStore.setState({ byRun: { [RUN]: refusal } });
+    useGateStore.setState({ gates: { [RUN]: { ...gate, gateKind: undefined } as unknown as OpenGate } });
+    render(<AppChat slug="desk" detail={running()} runs={bare} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+  });
+
   it('framed, or with no open gate, there is no gate here (a refused review still reads failed)', () => {
     mockFetch(() => null);
     useRunEventStore.setState({ byRun: { [RUN]: events } });
