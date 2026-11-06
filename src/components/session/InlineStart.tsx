@@ -207,9 +207,12 @@ export function InlineStart({
         // the box showed: a setting that changed since (or that can't be read) starts nothing, and the box redraws
         // with it, so a power run never starts behind a line that promised a plan review.
         const powerCapNow = caps['powerMode'] === true;
+        // The box draws from the capability store: a fresh answer that differs (a startup read that failed) updates it,
+        // so a refused start's redraw shows what this start was checked against.
+        if (useCapabilities.getState().powerMode !== powerCapNow) useCapabilities.setState({ powerMode: powerCapNow });
         let defaultNow = false;
         if (powerCapNow) {
-          try { defaultNow = await readPowerDefault(); } catch (e) {
+          try { defaultNow = await readPowerDefault({ fresh: true }); } catch (e) {
             throw new Error(`the Power-mode setting could not be read (${e instanceof Error ? e.message : String(e)}); try again`);
           }
           if (defaultNow !== shownAtPress) {
