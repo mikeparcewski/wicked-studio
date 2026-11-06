@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4709,
-    "static": 3940,
+    "occurrences": 4714,
+    "static": 3945,
     "dynamic": 173,
     "computed": 53
   },
@@ -5531,6 +5531,30 @@
       ]
     },
     {
+      "testId": "doc-subject-add",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-add-cancel",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-add-error",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-add-select",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
       "testId": "doc-subject-error",
       "files": [
         "src/components/DocSubjectPicker.tsx"
@@ -5562,6 +5586,12 @@
     },
     {
       "testId": "doc-subject-retry",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-unfiled",
       "files": [
         "src/components/DocSubjectPicker.tsx"
       ]
