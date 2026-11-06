@@ -87,6 +87,12 @@
      urgent row. The same value on every theme. */
   --spark: #ffda19;
   --spark-ink: #0d1117;
+  /* wicked's passage (DES-CATALOG-002 rev 7 §2.8.6): the gold rule and the token underline meet 3:1 against the page;
+     dark keeps #c9a400 (7.84:1 on #121212). The light themes override it (themes/light.css). */
+  --wk-pass-rule: #c9a400;
+  --wk-pass-ink: #fff3b8;
+  --wk-pass-wash: #2a2508;
+  --wk-pass-chg: #4d4300;
 
   /* The keyboard focus ring: a gap in the colour UNDER the control, then the accent. A panel
      that is not the page (the gate card) re-points --focus-gap at its own surface, so the gap

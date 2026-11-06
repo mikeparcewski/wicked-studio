@@ -21,6 +21,8 @@ const { useGateStore } = await import('../src/store/gates.js');
 const { usePlanGateStore } = await import('../src/store/planGates.js');
 const { useSheets } = await import('../src/store/sheets.js');
 const { useJobBinding } = await import('../src/store/jobBinding.js');
+const { useElicitationStore } = await import('../src/store/elicitations.js');
+const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { resetJobLocal } = await import('../src/hooks/useJobStream.js');
 const { flushDecisionsForTest, resetDecisionsForTest, setUndoWindowForTest } = await import('../src/board/undoQueue.js');
 const { makeUnit, makeView } = await import('./factories.js');
@@ -55,6 +57,8 @@ beforeEach(() => {
   resetJobLocal();
   resetDecisionsForTest();
   useJobBinding.setState({ binding: null });
+  useElicitationStore.setState({ elicitations: {}, generations: {} });
+  useSessionDrafts.setState({ drafts: {}, scroll: {} });
   useCapabilities.setState({ loaded: true, runChatId: true, askPath: false, chatProposals: true, chatList: true, chatJobProposals: true, reshapeRun: true });
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, chatClosed: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: {} });
   useTeamPlanStore.setState({ byRun: {}, refs: {} });
@@ -250,5 +254,130 @@ describe('wicked’s passage (the held plan)', () => {
     fireEvent.keyDown(box, { key: 'Enter' });
     await act(async () => { await flushDecisionsForTest(); });
     expect(posts).toEqual([{ path: `/runs/${RUN}/gate`, body: { approve: false, action: 'request_changes', amend: 'add a rollback step', planRev: 2, ord: 1 } }]);
+  });
+});
+
+describe('review round 1 folds (the passage)', () => {
+  it('a same-pid re-resolution disarms a Start that kept focus', async () => {
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.focus(reply('start'));
+    const re = jobProposal({ blocked: null, suggestions: [] });
+    await frame({ at: T0 + 3, turnId: 't1', kind: 'proposal', proposal: re });
+    await waitFor(() => expect(screen.queryAllByTestId('job-passage-reply').some((b) => b.dataset['reply'] === 'suggestion:0')).toBe(false));
+    fireEvent.keyDown(reply('start'), { key: 'Enter' });
+    fireEvent.click(reply('start'));
+    expect(posts).toEqual([]);
+  });
+
+  it('a swap picked on a listbox opened on v1 sends nothing once v2 landed, and focus stays on the token', async () => {
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(document.querySelector('[data-token="repo"]')!);
+    expect(screen.getByTestId('job-passage-swap')).toBeTruthy();
+    // crew's v2 lands while the listbox is open: it closes (its choices were v1's)
+    await frame({ at: T0 + 4, turnId: 't2', kind: 'proposal', proposal: v2() });
+    await waitFor(() => expect(screen.queryByTestId('job-passage-swap')).toBeNull());
+    expect(posts).toEqual([]);
+    // a fresh open on v2 picks for v2
+    const tok = document.querySelector<HTMLElement>('[data-token="repo"]')!;
+    fireEvent.click(tok);
+    fireEvent.click(screen.getAllByTestId('job-passage-swap-option')[0]!);
+    await waitFor(() => expect(posts[0]?.body).toMatchObject({ revises: `${CHAT}:t2`, source: 'swap' }));
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-token')).toBe('repo'));
+  });
+
+  it('a late refusal of an earlier swap never releases a newer swap’s hold', async () => {
+    let n = 0;
+    const answers: Array<(r: Response) => void> = [];
+    reviseAnswer = () => { n += 1; return ok({}, 201); };
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') { posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> }); return new Promise<Response>((res) => answers.push(res)); }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) { reads += 1; return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages })); }
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(document.querySelector('[data-token="option"]')!);
+    fireEvent.click(screen.getAllByTestId('job-passage-swap-option')[0]!);
+    await waitFor(() => expect(posts).toHaveLength(1));
+    await frame({ at: T0 + 4, turnId: 't2', kind: 'proposal', proposal: v2() });
+    await waitFor(() => expect(reply('start').disabled).toBe(false));
+    fireEvent.click(document.querySelector('[data-token="option"]')!);
+    fireEvent.click(screen.getAllByTestId('job-passage-swap-option')[0]!);
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(reply('start').disabled).toBe(true);
+    // the FIRST request's refusal arrives late
+    await act(async () => { answers[0]!(ok({ error: 'stale', code: 'proposal_stale' }, 409)); await Promise.resolve(); });
+    await screen.findByTestId('job-passage-error');
+    expect(reply('start').disabled).toBe(true);
+    expect(n).toBe(0);
+  });
+
+  it('a v1 (non-v2) document proposal still draws its card beside the capability', async () => {
+    messages = [USER, SEAT, { at: T0 + 2, turnId: 't1', kind: 'proposal', proposal: { ...jobProposal(), kind: 'create', sentence: undefined, lineage: undefined, revises: undefined } }];
+    page();
+    await screen.findByText('That is a framework change.');
+    expect(screen.queryByTestId('job-passage')).toBeNull();
+  });
+});
+
+describe('review round 1 folds (the run half)', () => {
+  const RUN = 'run-1';
+  const decided = { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } };
+  const run = (status = 'awaiting_human') => makeView({ id: RUN, status: status as never, unit_ix: 1, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, [
+    makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'done', phase_ref: 'pa-scope' }),
+    makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: 'pending', phase_ref: 'build' }),
+  ]);
+  const planTeam = (rev: number) => ({
+    teamed: true, rows: [
+      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build' }] } },
+      { event_id: 2 + rev, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: `g${rev}`, ord: 1, plan_rev: rev } },
+    ], units: [], planRev: rev,
+  });
+  beforeEach(() => {
+    messages = [USER, SEAT, P1, decided];
+    team = planTeam(2);
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 7, gateKind: 'plan_approval' } }, approaching: {} });
+    setUndoWindowForTest(10_000);
+  });
+  afterEach(() => { setUndoWindowForTest(0); });
+
+  it('Undo of a send-back hands the words back to the box, bound again to the same plan version', async () => {
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'add a rollback step' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('job-passage-undo'));
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts).toEqual([]);
+    await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('add a rollback step'));
+    expect(screen.getByTestId('job-binding-label').textContent).toBe('Answering: what should change in plan v2');
+  });
+
+  it('a bound Change whose answer can’t be taken now keeps the words and sends nothing', async () => {
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    fireEvent.click(reply('approve'));
+    await screen.findByTestId('job-passage-queued');
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'add a rollback step' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(await screen.findByTestId('job-binding-moved')).toBeTruthy();
+    await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('add a rollback step'));
+  });
+
+  it('a run question is answered in the passage, never a marker for a dock it isn’t in', async () => {
+    team = { teamed: true, rows: [{ event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } }], units: [] };
+    useGateStore.setState({ gates: {}, approaching: {} });
+    page([run('executing')]);
+    act(() => { useElicitationStore.getState().setElicitation({ runId: RUN, elicitationId: 'e1', message: 'Which region?', options: ['eu', 'us'], receivedAt: new Date().toISOString() }); });
+    const q = await screen.findByTestId('job-passage-run-question');
+    expect(within(q).queryByTestId('decision-marker')).toBeNull();
+    expect(q.textContent).toContain('Which region?');
   });
 });

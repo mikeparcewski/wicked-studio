@@ -17,9 +17,11 @@ export interface JobBinding {
   placeholder: string;
   /** The target the binding answers (a pid, or `plan:<run>:<ord>:<planRev>`). */
   instance: string;
-  /** The target now (read at Send): a binding whose target moved sends nothing. */
+  /** The target now, while its reply can be pressed (read at Send): a binding whose target moved, or whose reply is
+   *  held, sends nothing. */
   current: () => string | null;
-  send: (text: string) => void;
+  /** Hand the words to the job; `false` when it refused them (the words stay in the box). */
+  send: (text: string) => boolean;
 }
 
 interface JobBindingStore {

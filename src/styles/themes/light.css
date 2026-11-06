@@ -10,6 +10,11 @@
 
 [data-theme="light"],
 [data-theme="wicked-light"] {
+  /* wicked's passage (DES-CATALOG-002 §2.8.6): #e0b400 is only 1.80:1 on #f5f5f4, so the light rule is #a77f00 (3.39:1). */
+  --wk-pass-rule: #a77f00;
+  --wk-pass-ink: #18181a;
+  --wk-pass-wash: #fff6cc;
+  --wk-pass-chg: #ffe98a;
   /* Project-management tools' marks (tokens.css), dark enough for a light ground. */
   --pm-jira:   #1f5fc7;
   --pm-github: #24292f;

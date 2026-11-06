@@ -4,23 +4,12 @@
  * #a77f00 (3.39:1 on #f5f5f4). "Needs you" is studio's own warm attention colour (operator 2026-11-01: no violet). */
 
 .wk-pass {
-  --wk-pass-rule: #c9a400;
-  --wk-pass-ink: #fff3b8;
-  --wk-pass-wash: #2a2508;
-  --wk-pass-chg: #4d4300;
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 4px 0 6px 22px;
   margin: 4px 0 4px 112px;
-}
-[data-theme="light"] .wk-pass,
-[data-theme="wicked-light"] .wk-pass {
-  --wk-pass-rule: #a77f00;
-  --wk-pass-ink: var(--ink-high);
-  --wk-pass-wash: #fff6cc;
-  --wk-pass-chg: #ffe98a;
 }
 .wk-pass::before {
   content: '';

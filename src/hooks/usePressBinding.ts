@@ -14,12 +14,15 @@ export function usePressBinding(): {
   bind: (replyId: string, target: string, act: () => void, changed: string) => React.ButtonHTMLAttributes<HTMLButtonElement>;
   note: PressNote | null;
   clearNote: () => void;
+  /** Say why a press sent nothing, for a press that is guarded elsewhere (a listbox pick). */
+  say: (text: string) => void;
 } {
   const latest = useRef(new Map<string, string>());
   const armed = useRef(new Map<string, string>());
   const down = useRef(new Map<string, string>());
   const [note, setNote] = useState<PressNote | null>(null);
   const clearNote = useCallback(() => setNote(null), []);
+  const say = useCallback((text: string) => setNote({ replyId: '', text }), []);
   const bind = (replyId: string, target: string, act: () => void, changed: string): React.ButtonHTMLAttributes<HTMLButtonElement> => {
     latest.current.set(replyId, target);
     const arm = (): void => { armed.current.set(replyId, latest.current.get(replyId) ?? target); };
@@ -49,5 +52,5 @@ export function usePressBinding(): {
       },
     };
   };
-  return { bind, note, clearNote };
+  return { bind, note, clearNote, say };
 }
