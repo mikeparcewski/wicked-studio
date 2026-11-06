@@ -119,7 +119,7 @@ const HOW_WORD: Record<string, string> = { fact: 'by fact', judge: 'by a judge',
 /** Who each side of a dispute is (`RulePosition.by`). */
 const BY_WORD: Record<string, string> = { rule_judge: 'Rule judge', reviewer: 'Reviewer' };
 /** A process rule's party (`RuleRow.party`): whose conduct it is about. */
-const PARTY_WORD: Record<string, string> = { reviewer: "the reviewer's conduct", engine: 'the engine', person: 'your intent' };
+const PARTY_WORD: Record<string, string> = { reviewer: "about the reviewer's conduct", engine: 'about the engine', person: 'about your intent' };
 /** The engine's no-ruling codes (`RuleCouncilRecord.reason`) lead its detail; the detail says it in words. */
 const NO_RULING_CODE = /\b(?:no_quorum|timeout|seats_benched|cap|error|incomplete_evidence|identity_unknown):\s*/g;
 
@@ -159,9 +159,9 @@ function RuleItem({ r }: { r: RuleRow }): React.ReactElement {
     <li data-testid="assurance-rule" data-status={r.status} data-origin={r.origin ?? undefined} className="wk-assurance-rule">
       <span className={`wk-assurance-rule-status wk-assurance-rule-status--${r.status}`}>{RULE_WORD[r.status] ?? r.status}</span>
       {' '}<code className="wk-assurance-rule-id">{r.ruleId}</code>
-      {!r.blocking && <span data-testid="assurance-rule-party" className="wk-assurance-rule-how"> {PARTY_WORD[r.party ?? ''] ?? r.party ?? 'process'}, reported, does not block</span>}
       {how !== '' && <span data-testid="assurance-rule-how" className="wk-assurance-rule-how"> {how}</span>}
       {why !== '' && <span className="wk-assurance-rule-why">: {showText(why)}</span>}
+      {!r.blocking && <span data-testid="assurance-rule-party" className="wk-assurance-rule-how"> · {PARTY_WORD[r.party ?? ''] ?? (r.party !== null ? `about ${r.party}` : 'a process rule')}; reported, does not block</span>}
       {c !== null && (
         <ul data-testid="assurance-rule-council" className="wk-assurance-rule-council">
           {c.positions.map((p, i) => (
@@ -173,8 +173,8 @@ function RuleItem({ r }: { r: RuleRow }): React.ReactElement {
             <li data-testid="assurance-rule-votes">
               Council votes: {c.votes.map((v, i) => (
                 <span key={`v${i}`} data-testid="assurance-rule-vote" data-counted={v.counted ? 'true' : 'false'}>
-                  {i > 0 ? ' · ' : ''}{v.seat} {v.status !== undefined ? RULE_WORD[v.status] ?? v.status : 'named no position'}
-                  {!v.counted && ` (not counted${v.whyNot !== undefined ? `: ${showText(v.whyNot)}` : ''})`}
+                  {i > 0 ? ' · ' : ''}{v.seat}: {v.status !== undefined ? RULE_WORD[v.status] ?? v.status : 'no vote'}
+                  {!v.counted && (v.status !== undefined ? ` (not counted${v.whyNot !== undefined ? `: ${showText(v.whyNot)}` : ''})` : v.whyNot !== undefined ? ` (${showText(v.whyNot)})` : '')}
                 </span>
               ))}
             </li>
