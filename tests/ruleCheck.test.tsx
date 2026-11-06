@@ -450,7 +450,7 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
       const { unmount } = render(<ReceiptView receipt={r} passed={false} />);
       fireEvent.click(screen.getByTestId('assurance-rules-line'));
       const said = screen.getByTestId('assurance-rule-how').textContent!;
-      expect(said).toBe(` settled by council 2-1 (agy, pi, opencode)${how === 'cache' ? ', unchanged since' : ''}`);
+      expect(said).toBe(` settled by council 2-1 (agy, pi, opencode)${how === 'cache' ? ', unchanged since the last check' : ''}`);
       // Negative control: the row's judge (the rule judge, claude) is not named as who settled it.
       expect(said).not.toContain('claude');
       expect(screen.getByTestId('assurance-rule').textContent).toContain(': sum() changed with no test');
@@ -462,6 +462,27 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
     const odd = receiptOf({ ...base, rules: [{ ...settled(), council: null }] })!;
     render(<RulesChecked rows={odd.rules!} />);
     expect(screen.getByTestId('assurance-rule-how').textContent).toBe(' by council');
+  });
+
+  it('a ruling names only the seats whose votes counted, and a council waiver is not "settled"', () => {
+    const twoNil = { ...settled(), council: { ...(settled()['council'] as object), votes: [{ seat: 'agy', status: 'broken', counted: true }, { seat: 'pi', status: 'broken', counted: true }, { seat: 'opencode', counted: false, whyNot: 'no answer' }] } };
+    render(<RulesChecked rows={receiptOf({ ...base, rules: [twoNil] })!.rules!} />);
+    expect(screen.getByTestId('assurance-rule-how').textContent).toBe(' settled by council 2-0 (agy, pi; opencode not counted)');
+    cleanup();
+    const waiver = { ...settled(), status: 'waived', council: { ...(settled()['council'] as object), ruling: 'waived', votes: [{ seat: 'agy', status: 'kept', counted: true }, { seat: 'pi', status: 'kept', counted: true }, { seat: 'opencode', status: 'broken', counted: true }] } };
+    const rows = receiptOf({ ...base, rules: [waiver] })!.rules!;
+    expect(rulesSummary(rows).line).toBe('1 rule checked: 0 kept, 0 broken, 0 not applicable, 1 waived by your instruction (to confirm)');
+    render(<RulesChecked rows={rows} />);
+    expect(screen.getByTestId('assurance-rule-how').textContent).toBe(' the council kept it only on your instruction, 2-1 (agy, pi, opencode): confirm or skip it');
+  });
+
+  it('across gates a disputed row outranks a kept one, and a broken one outranks it (deny-dominates)', () => {
+    const d = receiptOf({ ...base, rules: [disputed()] })!.rules!;
+    const k = receiptOf({ ...base, rules: [row('DEV-TINYMATH-2', 'kept')] })!.rules!;
+    const b = receiptOf({ ...base, rules: [row('DEV-TINYMATH-2', 'broken')] })!.rules!;
+    expect(worstRules([k, d])[0]!.status).toBe('disputed');
+    expect(worstRules([d, k])[0]!.status).toBe('disputed');
+    expect(worstRules([d, b])[0]!.status).toBe('broken');
   });
 
   it('a process row sits in its own group, with its party, said not to block', () => {
@@ -507,13 +528,60 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
       expect(all.map((c) => c.key)).toEqual(expect.arrayContaining(['retry-rules', 'skip-rules']));
     });
 
-    it('negative controls: no rule held behind it (broken, kept, process only) offers neither; a dispatch after it voids it', () => {
-      for (const rules of [[row('B', 'broken')], [row('A', 'kept')], [proc('RVWL-1002', 'unchecked', 'engine'), proc('RVWL-1001', 'broken', 'reviewer')]]) {
+    it('negative controls: no rule layer behind it (kept, process only) offers neither; a broken one only the re-check; a dispatch after it voids it', () => {
+      for (const rules of [[row('A', 'kept')], [proc('RVWL-1002', 'unchecked', 'engine'), proc('RVWL-1001', 'broken', 'reviewer')]]) {
         const keys = offered(log(rules)).map((c) => c.key);
         expect(keys.some((k) => k === 'retry-rules' || k === 'skip-rules'), JSON.stringify(rules)).toBe(false);
       }
+      // A broken rule is a rule layer (`rule_check`): the engine re-checks it (a changed rule is judged again), and
+      // never takes its skip.
+      const broken = offered(log([row('B', 'broken')])).map((c) => c.key);
+      expect(broken).toContain('retry-rules');
+      expect(broken).not.toContain('skip-rules');
       const later = [...log([disputed()]), { type: 'unitDispatched', session: RUN, ord: 5, ts: 4 }] as unknown as CoreEvent[];
       expect(offered(later).some((c) => c.key === 'retry-rules')).toBe(false);
+    });
+
+    it("an evaluation of another attempt (the dispatch between is missing) never gives its rows to skip", () => {
+      const stale = [
+        { type: 'gateEvaluated', session: RUN, ord: 5, ts: 2, combined: false, denial: { source: 'evaluator_verdict', reason: 'FAIL' }, assurance: { ...base, attempt: 1, rules: [disputed()] } },
+        { type: 'gateEscalated', session: RUN, ord: 5, ts: 3, attempt: 2, condition: 'verdict_not_pass', denialSource: 'evaluator_verdict', verdictSummary: 'FAIL' },
+      ] as unknown as CoreEvent[];
+      // The unit record is attempt 2's: there the rule is broken, so no skip (the engine would refuse it).
+      const u2 = units.map((u) => (u.ord === 5 ? { ...u, assurance: { ...base, attempt: 2, rules: [{ ...settled(), status: 'broken' }] } } : u)) as unknown as WorkUnit[];
+      const all = offered(stale, FAIL, 'escalation', u2);
+      expect(all.some((c) => c.key === 'skip-rules')).toBe(false);
+      expect(all.some((c) => c.key === 'retry-rules')).toBe(true);
+    });
+
+    it("an evaluation without rule rows: the same attempt's unit record (rows, denials_behind) decides", () => {
+      const bare = [
+        { type: 'unitDispatched', session: RUN, ord: 5, ts: 1 },
+        { type: 'gateEvaluated', session: RUN, ord: 5, ts: 2, combined: false, denial: { source: 'evaluator_verdict', reason: 'FAIL' }, assurance: { ...base, attempt: 1 } },
+        { type: 'gateEscalated', session: RUN, ord: 5, ts: 3, attempt: 1, condition: 'verdict_not_pass', denialSource: 'evaluator_verdict', verdictSummary: 'FAIL' },
+      ] as unknown as CoreEvent[];
+      const rec = (attempt: number) => units.map((u) => (u.ord === 5 ? { ...u, denials_behind: [{ source: 'evaluator_verdict', reason: 'x' }, { source: 'rules_unchecked', reason: 'y' }], assurance: { ...base, attempt, rules: [disputed()] } } : u)) as unknown as WorkUnit[];
+      expect(offered(bare, FAIL, 'escalation', rec(1)).find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['DEV-TINYMATH-2']);
+      // Another attempt's record: neither its rows nor its layers.
+      expect(offered(bare, FAIL, 'escalation', rec(0)).some((c) => c.key === 'retry-rules' || c.key === 'skip-rules')).toBe(false);
+    });
+
+    it('a restored-tree retry gate with a rule hold behind it offers both, after Retry', () => {
+      const restored = [
+        { type: 'unitDispatched', session: RUN, ord: 5, ts: 1 },
+        { type: 'evaluatorMutatedWorktree', session: RUN, ord: 5, ts: 2, restored: true },
+        { type: 'gateEvaluated', session: RUN, ord: 5, ts: 3, combined: false, denial: { source: 'worktree_guard', reason: 'worktree guard' }, assurance: { ...base, rules: [row('A', 'kept'), disputed()] } },
+      ] as unknown as CoreEvent[];
+      const g = { runId: RUN, ord: 5, prompt: 'Approve to retry the phase against the restored tree, or reject', lifecycle: 'open', receivedAt: 1 } as OpenGate;
+      const m = sessionGateChoices({ runId: RUN, gate: g, units, events: restored, pool: ['pi', 'codex'], roster: null })!;
+      expect(m.reason).toBe('retry');
+      const keys = [...m.choices, ...m.overflow].map((c) => c.key);
+      expect(keys.indexOf('retry')).toBeLessThan(keys.indexOf('retry-rules'));
+      expect([...m.choices, ...m.overflow].find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['DEV-TINYMATH-2']);
+      // The same gate with nothing held behind: neither.
+      const clean = restored.map((e) => ((e as unknown as { type: string }).type === 'gateEvaluated' ? { ...(e as object), assurance: { ...base, rules: [row('A', 'kept')] } } : e)) as unknown as CoreEvent[];
+      const none = sessionGateChoices({ runId: RUN, gate: g, units, events: clean, pool: ['pi', 'codex'], roster: null })!;
+      expect([...none.choices, ...none.overflow].some((c) => c.key === 'retry-rules' || c.key === 'skip-rules')).toBe(false);
     });
 
     it("no log in hand: the unit record's denials_behind decides", () => {
@@ -521,6 +589,9 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
       expect(offered([], FAIL, 'escalation', rec([{ source: 'evaluator_verdict', reason: 'x' }, { source: 'rules_unchecked', reason: 'y' }])).some((c) => c.key === 'retry-rules')).toBe(true);
       expect(offered([], FAIL, 'escalation', rec([{ source: 'evaluator_verdict', reason: 'x' }])).some((c) => c.key === 'retry-rules')).toBe(false);
       expect(offered([], FAIL, 'escalation', rec([], [disputed()])).find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['DEV-TINYMATH-2']);
+      // Published WorkUnit fields only (no `denial`): a rule layer in denials_behind is enough.
+      const published = units.map((u) => (u.ord === 5 ? { ...u, denials_behind: [{ source: 'evaluator_verdict', reason: 'x' }, { source: 'rules_unchecked', reason: 'y' }], assurance: { ...base, rules: [disputed()] } } : u)) as unknown as WorkUnit[];
+      expect(offered([], FAIL, 'escalation', published).find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['DEV-TINYMATH-2']);
     });
 
     it('the gate card says the dispute, both readings and the offer', async () => {

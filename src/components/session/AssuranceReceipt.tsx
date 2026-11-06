@@ -129,8 +129,10 @@ const NO_RULING_CODE = /\b(?:no_quorum|timeout|seats_benched|cap|error|incomplet
 function howWords(r: RuleRow): string {
   const ruled = councilRulingOf(r);
   if (ruled !== null) {
-    const seats = ruled.seats.length > 0 ? ` (${ruled.seats.join(', ')})` : '';
-    return `settled by council ${ruled.tally}${seats}${r.how === 'cache' ? ', unchanged since' : ''}`;
+    const who = [ruled.seats.join(', '), ...(ruled.uncounted.length > 0 ? [`${ruled.uncounted.join(', ')} not counted`] : [])].filter((x) => x !== '').join('; ');
+    const seats = who !== '' ? ` (${who})` : '';
+    const lead = ruled.ruling === 'waived' ? `the council kept it only on your instruction, ${ruled.tally}${seats}: confirm or skip it` : `settled by council ${ruled.tally}${seats}`;
+    return `${lead}${r.how === 'cache' ? ', unchanged since the last check' : ''}`;
   }
   if (r.status === 'disputed') return '';
   // A council row with no ruling it carries is never "by a judge (<the rule judge>)".
