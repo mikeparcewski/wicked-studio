@@ -31,6 +31,7 @@ const { useGateStore } = await import('../src/store/gates.js');
 const { usePlanGateStore } = await import('../src/store/planGates.js');
 const { useSheets } = await import('../src/store/sheets.js');
 const { useJobBinding } = await import('../src/store/jobBinding.js');
+const { useHandOff } = await import('../src/components/session/JobPassage.js');
 const { useElicitationStore } = await import('../src/store/elicitations.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { resetJobLocal } = await import('../src/hooks/useJobStream.js');
@@ -62,6 +63,7 @@ beforeEach(() => {
   resetJobLocal();
   resetDecisionsForTest();
   useJobBinding.setState({ binding: null });
+  useHandOff.setState({ intent: null });
   useElicitationStore.setState({ elicitations: {}, generations: {} });
   useSessionDrafts.setState({ drafts: {}, scroll: {} });
   useCapabilities.setState({ loaded: true, runChatId: true, askPath: false, chatProposals: true, chatList: true, chatJobProposals: true, reshapeRun: true });

@@ -376,7 +376,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const ticks = useMemo<JobTick[]>(() => jobLineages.flatMap((l) => {
     const ids = [...new Set([...l.decisions.map((d) => d.runId), jobRunId(l, mine)].filter((x): x is string => x !== null))];
     const lead = l.head.proposal.seats?.lead ?? null;
-    return jobTicks(l, ids.map((runId) => ({ runId, rows: teamByRun[runId]?.rows ?? [] })), lead !== null ? seatResponder(lead, rosterForTicks).name : 'The lead');
+    // Each run's lead is the one of the version that launched it (a reshape may name another).
+    const leadOf = (runId: string): string | undefined => {
+      const d = l.decisions.find((x) => x.runId === runId);
+      const ver = d === undefined ? undefined : l.versions.find((x) => x.pid === d.pid);
+      const key = ver?.proposal.seats?.lead ?? null;
+      return key === null ? undefined : seatResponder(key, rosterForTicks).name;
+    };
+    return jobTicks(l, ids.map((runId) => ({ runId, rows: teamByRun[runId]?.rows ?? [], ...(leadOf(runId) !== undefined ? { lead: leadOf(runId)! } : {}) })), lead !== null ? seatResponder(lead, rosterForTicks).name : 'The lead');
   }), [jobLineages, mine, teamByRun, rosterForTicks]);
   // The change marks under the person's messages (rev 6 §2.7.1): "↳ Changed the job to v2: a move".
   const jobMarks = useMemo(() => {

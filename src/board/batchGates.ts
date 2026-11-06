@@ -183,6 +183,7 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
  */
 async function fanOut(ids: string[], decision: GateDecision, ords: Record<string, number | undefined> = {}, revs: Record<string, number> = {}): Promise<void> {
   if (useBatchGateStore.getState().running) return;
+  sentByRun.clear(); // only the newest fan-out's targets are retried
   useBatchGateStore.setState({
     running: true, done: 0, total: ids.length, failures: [], lastDecision: decision,
   });

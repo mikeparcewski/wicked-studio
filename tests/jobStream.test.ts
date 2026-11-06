@@ -369,3 +369,30 @@ describe('follow-up review folds (records)', () => {
     expect(jobTicks(l, [{ runId: 'run-1', rows }], 'Codex').map((t) => t.text)).toEqual(['You started the job, v1', 'Codex’s plan, v1, is ready']);
   });
 });
+
+
+describe('follow-up round 2 folds (records)', () => {
+  it('a plan gate names its work by reviewing_ord; work on record and started is no re-plan', async () => {
+    const { replanningOnRecord } = await import('../src/board/jobStream.js');
+    const opened = { event_id: 2, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: null, reviewing_ord: 2, plan_rev: 1 } };
+    const amended = { event_id: 3, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g1', decision: 'human_amended' } };
+    expect(replanningOnRecord([opened, amended], [{ ord: 1, status: 'done' }, { ord: 2, status: 'distributed' }])).toBeNull();
+    expect(replanningOnRecord([opened, amended], [{ ord: 1, status: 'distributed' }, { ord: 2, status: 'pending' }])).toBe(1);
+    expect(replanningOnRecord([opened, amended], [{ ord: 1, status: 'distributed' }])).toBeNull();
+  });
+  it('a conditional human_confirm may ask; an unconditional one asks', async () => {
+    const { enrichPlan } = await import('../src/board/jobStream.js');
+    const rows = [
+      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'a', catalog: 'build', gate: { human_confirm: { unconditional: false } } }, { id: 'b', catalog: 'build', gate: { human_confirm: { unconditional: true } } }] } },
+      { event_id: 2, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } },
+    ];
+    expect(enrichPlan([{ id: 'a', catalog: 'build', label: 'A' }, { id: 'b', catalog: 'build', label: 'B' }], rows, 1).steps.map((x) => x.asks)).toEqual(['maybe', 'always']);
+  });
+  it('each run’s plan ticks name the lead of the version that launched it', async () => {
+    const { jobTicks } = await import('../src/board/jobStream.js');
+    const l = foldJobLineages([rec(2, 'proposal', { proposal: jobProposal() }),
+      rec(10, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'go', result: { runId: 'run-1', artifactRef: null, adopted: false, stub: false } })])[0]!;
+    const rows = [{ event_id: 2, emitted_at: 20, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } }];
+    expect(jobTicks(l, [{ runId: 'run-1', rows, lead: 'Codex' }], 'Claude').map((t) => t.text)).toContain('Codex’s plan, v1, is ready');
+  });
+});
