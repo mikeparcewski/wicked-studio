@@ -8,7 +8,7 @@ import type { GateDecision, SessionView } from '../api/types.js';
 import { jobTitle, plainGateQuestion } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
-import { gateFromInfo, useGateStore } from '../store/gates.js';
+import { beginGateRead, gateFromInfo, gateGen, useGateStore, type GateReadTicket } from '../store/gates.js';
 import { recordShown } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
@@ -450,14 +450,58 @@ export function gateMovedCode(e: unknown): 'gate_changed' | 'gate_unknown' | nul
 /**
  * Re-read the run's open gate (`GET /runs/:id/gate`) into the gate store: the new gate replaces
  * the old one, and no cached gate drops it. A failed read leaves the store as it was.
+ *
+ * F31: the answer applies only if nothing wrote the run's gate while it was on its way and no read
+ * begun after it has applied (`applyGateRead`): an answer sent here, a live frame or a prune is newer
+ * than the read, so a read that overlapped one never brings back a gate that is gone; and of two reads
+ * the later one wins, whichever lands first.
  */
-export async function refreshGate(runId: string): Promise<void> {
-  const store = useGateStore.getState();
-  try {
-    store.setGate(gateFromInfo(await api.getGate(runId)));
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 404) store.clearGate(runId);
-  }
+export function refreshGate(runId: string): Promise<void> {
+  return startGateRead(runId).promise;
+}
+
+/** F31: a gate read is abandoned after this long, so a hung request cannot hold a run's card, or one of the runs
+ *  list's read slots, forever. An abandoned read applies nothing; the next pass reads again. */
+export const GATE_READ_DEADLINE_MS = 10_000;
+
+interface GateRead {
+  ticket: GateReadTicket;
+  promise: Promise<void>;
+}
+/** The newest gate read of each run while it is on its way. */
+const gateReads = new Map<string, GateRead>();
+
+function startGateRead(runId: string): GateRead {
+  const ticket = beginGateRead(runId);
+  const read: GateRead = { ticket, promise: Promise.resolve() };
+  read.promise = (async () => {
+    const store = useGateStore.getState();
+    const deadline = new AbortController();
+    const timer = setTimeout(() => deadline.abort(), GATE_READ_DEADLINE_MS);
+    try {
+      store.applyGateRead(ticket, gateFromInfo(await api.getGate(runId, deadline.signal)));
+    } catch (e) {
+      // crew's 404: no open gate. Any other failure (network, the deadline) leaves the store as it was.
+      if (e instanceof ApiError && e.status === 404) store.applyGateRead(ticket, null);
+    } finally {
+      clearTimeout(timer);
+      if (gateReads.get(runId) === read) gateReads.delete(runId);
+    }
+  })();
+  gateReads.set(runId, read);
+  return read;
+}
+
+/**
+ * F31: make sure a run that waits on a person has its open gate in the store: nothing when one is
+ * cached; else join the read on its way when it was begun at this generation (a read begun before a
+ * write is obsolete: it will be dropped, so it cannot stand in); else one new read.
+ */
+export function ensureGate(runId: string): Promise<void> {
+  if (useGateStore.getState().gates[runId] !== undefined) return Promise.resolve();
+  const on = gateReads.get(runId);
+  if (on !== undefined && on.ticket.gen === gateGen(runId)) return on.promise;
+  return startGateRead(runId).promise;
 }
 
 /** A gate's one honest affordance: the session thread at the gate anchor. */

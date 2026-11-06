@@ -4,9 +4,9 @@ import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
-import { gateFromInfo, useGateStore } from '../store/gates.js';
+import { useGateStore } from '../store/gates.js';
 import { answerShapeOf, askerOf, useElicitationStore } from '../store/elicitations.js';
-import { rememberWorkTitles } from '../board/gateActions.js';
+import { ensureGate, rememberWorkTitles } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -32,6 +32,29 @@ const TERMINAL = new Set(['completed', 'cancelled', 'failed']);
  * bought nothing. Keyed run → the status it had when it answered none.
  */
 const answeredNone = new Map<string, string>();
+
+/** F31: how many late-join gate reads are on their way at once (98 parked runs read one by one took ~28 s on the rig). */
+export const GATE_READS_IN_FLIGHT = 4;
+
+/**
+ * F31: the late-join passes' shared read slots. At most `GATE_READS_IN_FLIGHT` reads are on their way across every
+ * pass (a refresh that replaces a pass does not add four more). A slot is held until its read ends; a hydration read
+ * ends by its deadline at the latest (`GATE_READ_DEADLINE_MS`), so a hung request cannot stall the passes after it.
+ */
+let slotsBusy = 0;
+const slotWaiters: Array<() => void> = [];
+export async function inGateSlot(fn: () => Promise<void>): Promise<void> {
+  // A freed slot is handed to the longest waiter (first in, first out), never taken by a newcomer.
+  if (slotsBusy < GATE_READS_IN_FLIGHT) slotsBusy += 1;
+  else await new Promise<void>((r) => slotWaiters.push(r));
+  try {
+    await fn();
+  } finally {
+    const next = slotWaiters.shift();
+    if (next !== undefined) next();
+    else slotsBusy -= 1;
+  }
+}
 
 /** Test seam. */
 export function resetElicitationProbes(): void {
@@ -70,7 +93,6 @@ export async function hydrateElicitations(runs: readonly SessionView[], cancelle
 
 export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: boolean; error: string | null } {
   const status = useConnectionStore((s) => s.status);
-  const setGate = useGateStore((s) => s.setGate);
   const reconcileGates = useGateStore((s) => s.reconcile);
   const reconcileElicitations = useElicitationStore((s) => s.reconcile);
   const [runs, setRuns] = useState<SessionView[]>([]);
@@ -150,22 +172,21 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       // cleared for a broken daemon).
       void hydrateElicitations(fetched, () => cancelled);
 
-      for (const id of awaiting) {
-        if (useGateStore.getState().gates[id]) continue;
-        try {
-          const g = await api.getGate(id);
-          if (cancelled) return;
-          setGate(gateFromInfo(g));
-        } catch {
-          /* no cached prompt — id-only gate still works */
-        }
-      }
+      // F31: in the list's order, as before (so the toast strip leads as it did), but a few reads at a time across passes
+      // (`inGateSlot`) instead of one by one; the run a person is looking at reads its own gate first (RunBlock). A
+      // refresh that cancels this pass stops its new reads; a read that lands still applies, because `applyGateRead`
+      // drops it if the run's gate moved meanwhile. A failed read leaves the id-only gate working and is tried again on
+      // the next pass.
+      await Promise.all(awaiting.map((id) => inGateSlot(async () => {
+        if (cancelled || useGateStore.getState().gates[id] !== undefined) return;
+        await ensureGate(id);
+      })));
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [status, tick, setGate, reconcileGates, reconcileElicitations]);
+  }, [status, tick, reconcileGates, reconcileElicitations]);
 
   // ASK-S1: `/health` may answer AFTER the first runs list (codex r4 #1) — when the capability lands,
   // the list already in hand is classified and any gate cached meanwhile is reclassified.

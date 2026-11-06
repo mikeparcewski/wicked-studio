@@ -202,7 +202,7 @@ describe('a gate decision that outlived its gate', () => {
       const error = await sendGateDecision('r1', { approve: true, ord: 3 });
       expect(error).toBe(GATE_MOVED_TEXT);
       expect(confirmGate).toHaveBeenCalledTimes(1);
-      expect(getGate).toHaveBeenCalledWith('r1');
+      expect(getGate).toHaveBeenCalledWith('r1', expect.any(AbortSignal));
       expect(useGateStore.getState().gates['r1']).toMatchObject({ ord: 4, prompt: 'gate 4' });
       expect(useGateActionStore.getState().byGate['r1']).toMatchObject({ error: GATE_MOVED_TEXT, busy: false, answered: null });
     });

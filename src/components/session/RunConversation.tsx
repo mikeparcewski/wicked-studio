@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
 import { RunPhaseRows, RunPluginJumpRows, WorkingDocSteerRows } from './RunThreadPlugin.js';
 import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
-import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
+import { IDLE_GATE_ACTION, ensureGate, useGateActionStore } from '../../board/gateActions.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import type { Responder } from '../../board/responder.js';
 import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
@@ -24,6 +24,7 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
+import { useConnectionStore } from '../../store/connection.js';
 import { useGateStore } from '../../store/gates.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { useRunEventStore } from '../../store/events.js';
@@ -246,6 +247,15 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
     ? (held ? 'held' : orphanedOf(status, trail) === null ? 'working' : 'other')
     : status === 'failed' || status === 'cancelled' ? 'stopped' : 'other';
   const gate = useGateStore((s) => s.gates[id]);
+  // F31: a run that waits on a person reads its own open gate when its thread opens, instead of waiting its turn in
+  // the runs list's late-join pass (98 parked runs: the newest run's plan card came ~28 s after a reload). On mount and
+  // on a status change, and when the socket reconnects (a drop made the read on its way obsolete); never while the
+  // socket is down, as the runs list's pass. A read a frame made stale is dropped by the store and redone by the runs
+  // refresh that frame triggers.
+  const connected = useConnectionStore((s) => s.status === 'connected');
+  useEffect(() => {
+    if (connected && status === 'awaiting_human' && useGateStore.getState().gates[id] === undefined) void ensureGate(id);
+  }, [id, status, connected]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   const acceptance = useRunAcceptance(view, planChain, gate, true);
   const checks = acceptance?.walkthrough?.steps ?? null;

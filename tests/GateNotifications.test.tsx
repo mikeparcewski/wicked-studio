@@ -9,10 +9,11 @@ import userEvent from '@testing-library/user-event';
 import {
   GateNotifications,
   MAX_TOAST_CARDS,
+  leadCardOrder,
   resetToastLedger,
   TOAST_DWELL_MS,
 } from '../src/components/GateNotifications.js';
-import { useGateStore } from '../src/store/gates.js';
+import { beginGateRead, useGateStore } from '../src/store/gates.js';
 import type { OpenGate } from '../src/store/gates.js';
 import { useMembershipStore } from '../src/store/membership.js';
 import { makeView } from './factories.js';
@@ -230,5 +231,72 @@ describe('studio#722: the announcement never covers content', () => {
     expect(layer.className).toContain('wk-gate-strip');
     expect(layer.className).not.toMatch(/\bfixed\b/);
     expect(layer.getAttribute('style') ?? '').not.toMatch(/position|bottom/);
+  });
+});
+
+// F31: the late-join gate reads run in the list's order but 4 at a time, so they can land out of order and the
+// store's insertion order no longer says which gate a page load leads with. A page load leads with the oldest waiting run, as on main; a gate that arrives
+// live queues behind the card on screen, as on main, whatever its run's age or clock.
+describe('GateNotifications lead card (F31)', () => {
+  const T = 1_700_000_000_000;
+  const read = (runId: string, over: Partial<OpenGate> = {}): OpenGate => gate(runId, { fromRead: true, ...over });
+  const runs = [
+    makeView({ id: 'run-new', status: 'awaiting_human', created_at: 2_000 } as never),
+    makeView({ id: 'run-old', status: 'awaiting_human', created_at: 1_000 } as never),
+  ];
+  const lead = (): string | null => screen.getAllByTestId('gate-notification')[0]!.getAttribute('data-run-id');
+
+  it('a page load leads with the oldest waiting run, whatever order the reads landed in and whenever each gate opened', () => {
+    // The newer run's read landed first, and its gate opened EARLIER than the older run's.
+    seed(read('run-new', { receivedAt: T }), read('run-old', { receivedAt: T + 60_000 }), read('run-unlisted', { receivedAt: T - 1 }));
+    render(<GateNotifications onSelect={() => {}} runs={runs} />);
+    expect(screen.getAllByTestId('gate-notification')).toHaveLength(1);
+    expect(lead()).toBe('run-old');
+  });
+
+  it('a gate that arrives live for an OLDER run queues behind the card on screen: same clock tick or a skewed one', () => {
+    for (const liveAt of [T, T - 5_000]) {
+      cleanup();
+      resetToastLedger();
+      vi.useFakeTimers({ now: T });
+      seed(read('run-new', { receivedAt: T }));
+      const { rerender } = render(<GateNotifications onSelect={() => {}} runs={runs} />);
+      expect(lead()).toBe('run-new');
+      vi.setSystemTime(liveAt); // the browser's clock at the live frame: equal to, or behind, crew's
+      act(() => {
+        useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'run-old', ord: 1, prompt: 'gate for run-old' } as never);
+      });
+      rerender(<GateNotifications onSelect={() => {}} runs={runs} />);
+      expect(screen.getAllByTestId('gate-notification')).toHaveLength(1);
+      expect(lead(), `live at ${liveAt - T}`).toBe('run-new');
+      vi.useRealTimers();
+    }
+  });
+
+  it('a live frame for the gate a read put there (same ord) keeps its place; a refresh never promotes a live gate', async () => {
+    // Read: run-old leads, run-new waits in "+1".
+    useGateStore.getState().applyGateRead(beginGateRead('run-new'), gate('run-new', { ord: 2, receivedAt: T }));
+    useGateStore.getState().applyGateRead(beginGateRead('run-old'), gate('run-old', { ord: 2, receivedAt: T }));
+    const { rerender } = render(<GateNotifications onSelect={() => {}} runs={runs} />);
+    expect(lead()).toBe('run-old');
+    // The same gate arrives live (a replayed frame): it stays the lead.
+    act(() => { useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'run-old', ord: 2, prompt: 'gate for run-old' } as never); });
+    rerender(<GateNotifications onSelect={() => {}} runs={runs} />);
+    expect(lead()).toBe('run-old');
+    expect(useGateStore.getState().gates['run-old']).toMatchObject({ fromRead: true });
+    // A live gate queued behind a read lead is re-read (a refresh after a 409): it stays live, behind.
+    act(() => { useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'run-live', ord: 1, prompt: 'gate for run-live' } as never); });
+    act(() => { useGateStore.getState().applyGateRead(beginGateRead('run-live'), gate('run-live', { ord: 1, receivedAt: T })); });
+    expect(useGateStore.getState().gates['run-live']?.fromRead).toBeUndefined();
+    expect(leadCardOrder(Object.values(useGateStore.getState().gates), runs).map((g) => g.runId)).toStrictEqual(['run-old', 'run-new', 'run-live']);
+  });
+
+  it('leadCardOrder: read gates by run age (unlisted after, ties in store order), then live gates in store order', () => {
+    const order = leadCardOrder(
+      [gate('live-1'), read('c'), read('x'), gate('live-0', { receivedAt: 0 }), read('a'), read('b'), read('y')],
+      [makeView({ id: 'a', created_at: 1 } as never), makeView({ id: 'b', created_at: 1 } as never), makeView({ id: 'c', created_at: 3 } as never),
+        makeView({ id: 'live-0', created_at: 0 } as never)],
+    ).map((g) => g.runId);
+    expect(order).toStrictEqual(['a', 'b', 'c', 'x', 'y', 'live-1', 'live-0']);
   });
 });
