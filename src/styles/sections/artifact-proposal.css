@@ -48,3 +48,22 @@ button.wk-proposal-chip:focus-visible { outline: 2px solid var(--focus-ring, var
 /* The form's chip rows wrap inside the thread at any width (a phone keeps every helper in view). */
 .wk-proposal-answer .wk-prop-btns { flex-wrap: wrap; min-width: 0; }
 .wk-proposal-answer .wk-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+/* Slice A7 (DES §9, mockup e): a theme proposal — swatches, the preview bar on every page, and the Theme page's
+   "Proposed in chat" panel. */
+.wk-proposal-swatches { display: inline-flex; gap: 6px; vertical-align: middle; }
+.wk-proposal-swatch { display: inline-block; width: 26px; height: 26px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--border-strong); }
+.wk-theme-bar { position: fixed; top: var(--space-3); left: 50%; transform: translateX(-50%); z-index: 49; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 8px 10px; max-width: min(720px, calc(100vw - 24px)); padding: 6px 8px 6px 12px; border-radius: 10px;
+  background: var(--surface-overlay); color: var(--ink-body); box-shadow: var(--shadow-overlay), inset 0 0 0 1px var(--border-strong); font-size: var(--text-sm); line-height: 1.4; }
+.wk-theme-bar-icon { flex-shrink: 0; color: var(--ink-muted); }
+.wk-theme-bar-words { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.wk-theme-bar-words b { color: var(--ink-high); font-weight: var(--weight-strong); }
+.wk-theme-proposal-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wk-theme-proposal-title { margin: 0; color: var(--ink-high); font-size: var(--text-md); font-weight: var(--weight-strong); overflow-wrap: anywhere; }
+.wk-theme-proposal-sp { flex: 1 1 auto; }
+.wk-theme-proposal-twins { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.wk-theme-proposal .wk-proposal-error { margin: 0; }
+@media (max-width: 599px) {
+  .wk-theme-bar { top: auto; bottom: var(--space-3); }
+}

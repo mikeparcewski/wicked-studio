@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 325,
-    "occurrences": 4709,
-    "static": 3940,
+    "files": 327,
+    "occurrences": 4735,
+    "static": 3963,
     "dynamic": 173,
     "computed": 53
   },
@@ -784,6 +784,12 @@
     },
     {
       "testId": "appearance-preview",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "appearance-previewing",
       "files": [
         "src/components/AppearanceSettings.tsx"
       ]
@@ -1597,6 +1603,12 @@
       ]
     },
     {
+      "testId": "artifact-proposal-previewing",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "artifact-proposal-reason",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
@@ -1640,6 +1652,48 @@
     },
     {
       "testId": "artifact-proposal-theme",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-theme-apply",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-theme-back",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-theme-contrast",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-theme-disclosure",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-theme-limits",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-theme-open",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-theme-swatches",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
       ]
@@ -22354,6 +22408,90 @@
       "testId": "theme-picker",
       "files": [
         "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "theme-preview-apply",
+      "files": [
+        "src/components/ThemePreviewBar.tsx"
+      ]
+    },
+    {
+      "testId": "theme-preview-back",
+      "files": [
+        "src/components/ThemePreviewBar.tsx"
+      ]
+    },
+    {
+      "testId": "theme-preview-bar",
+      "files": [
+        "src/components/ThemePreviewBar.tsx"
+      ]
+    },
+    {
+      "testId": "theme-preview-dismiss",
+      "files": [
+        "src/components/ThemePreviewBar.tsx"
+      ]
+    },
+    {
+      "testId": "theme-preview-undo",
+      "files": [
+        "src/components/ThemePreviewBar.tsx"
+      ]
+    },
+    {
+      "testId": "theme-proposal-apply",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-proposal-changes",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-proposal-contrast",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-proposal-discard",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-proposal-error",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-proposal-panel",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-proposal-theirs",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-proposal-yours",
+      "files": [
+        "src/components/ThemePage.tsx"
+      ]
+    },
+    {
+      "testId": "theme-swatches",
+      "files": [
+        "src/components/ThemeSwatches.tsx"
       ]
     },
     {
