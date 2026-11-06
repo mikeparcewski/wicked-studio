@@ -28,6 +28,9 @@ interface JobLocal {
   swapToken: Record<string, string | null>;
   sentBack: Record<string, number | null>;
   deciding: Record<string, boolean>;
+  /** A plan offer's Start again is in flight for the run: every other answer to that plan waits for it. */
+  reshaping: Record<string, boolean>;
+  setReshaping: (runId: string, on: boolean) => void;
   setSwap: (lineage: string, pid: string | null, token?: string | null, request?: string | null) => void;
   /** End the hold only when `request` still owns it (a late refusal never releases a newer swap's hold). */
   endSwap: (lineage: string, request: string) => void;
@@ -41,6 +44,8 @@ export const useJobLocal = create<JobLocal>((set) => ({
   swapToken: {},
   sentBack: {},
   deciding: {},
+  reshaping: {},
+  setReshaping: (runId, on) => set((s) => ({ reshaping: { ...s.reshaping, [runId]: on } })),
   setSwap: (lineage, pid, token = null, request = null) => set((s) => ({ swapPending: { ...s.swapPending, [lineage]: pid }, swapToken: { ...s.swapToken, [lineage]: pid === null ? null : token }, swapRequest: { ...s.swapRequest, [lineage]: pid === null ? null : request } })),
   endSwap: (lineage, request) => set((s) => (s.swapRequest[lineage] !== request ? s
     : { swapPending: { ...s.swapPending, [lineage]: null }, swapToken: { ...s.swapToken, [lineage]: null }, swapRequest: { ...s.swapRequest, [lineage]: null } })),
@@ -50,7 +55,7 @@ export const useJobLocal = create<JobLocal>((set) => ({
 
 /** Tests: forget what this tab had in flight. */
 export function resetJobLocal(): void {
-  useJobLocal.setState({ swapPending: {}, swapRequest: {}, swapToken: {}, sentBack: {}, deciding: {} });
+  useJobLocal.setState({ swapPending: {}, swapRequest: {}, swapToken: {}, sentBack: {}, deciding: {}, reshaping: {} });
 }
 
 const PLAN_DECIDED = new Set(['human_approved', 'human_amended', 'allow']);
@@ -63,7 +68,7 @@ export function jobRunId(lineage: JobLineage, runs: readonly SessionView[]): str
   return runs.find((r) => (r.session as { from_proposal?: unknown }).from_proposal === head)?.session.id ?? null;
 }
 
-export function useJobView(lineage: JobLineage, runs: readonly SessionView[], now: number): { view: JobView; run: SessionView | null; inputs: JobRunInputs } {
+export function useJobView(lineage: JobLineage, runs: readonly SessionView[], now: number): { view: JobView; run: SessionView | null; inputs: JobRunInputs; teamRetry: (() => void) | null } {
   const runId = jobRunId(lineage, runs);
   const listed = runId === null ? null : runs.find((r) => r.session.id === runId) ?? null;
   // A known run the runs index lacks (archived, or not listed yet) is read once by id, so its delivery still shows.
@@ -79,12 +84,13 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   const waiting = run?.session.status === 'awaiting_human';
   const plan = usePlanGate(runId, waiting);
   const live = run !== null && !['completed', 'cancelled', 'failed'].includes(run.session.status);
-  const { fold } = useTeamFold(live ? runId : null, run === null ? '' : `${run.session.status}:${run.session.unit_ix}`);
+  const { fold, error: teamError, retry: teamRetry } = useTeamFold(live ? runId : null, run === null ? '' : `${run.session.status}:${run.session.unit_ix}`);
   const question = useElicitationStore((s) => (runId === null ? false : s.elicitations[runId] !== undefined));
   // Any queued decision covering this run (a batch included) holds its answers.
   const pending = useUndoQueue((s) => (runId === null ? null : s.pending.find((p) => p.runIds.includes(runId)) ?? null));
   const action = useGateActionStore((s) => (runId === null ? IDLE_GATE_ACTION : s.byGate[runId] ?? IDLE_GATE_ACTION));
-  const answering = action.busy || action.answered !== null;
+  const reshaping = useJobLocal((s) => (runId === null ? false : s.reshaping[runId] === true));
+  const answering = action.busy || action.answered !== null || reshaping;
   const reshapeOn = useCapabilities((s) => s.reshapeRun);
   const sentBackRaw = useJobLocal((s) => (runId === null ? null : s.sentBack[runId] ?? null));
   const swapPending = useJobLocal((s) => s.swapPending[lineage.lineage] ?? null);
@@ -92,6 +98,21 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   // Past its plan: a plan approval decided on the team record, or a run that is not a team run (no plan gate to wait on).
   const planDecided = useMemo(() => fold?.snapshot?.teamed === false || (fold?.rows ?? []).some((r) => r.event_type === 'wicked.team.gate.decided'
     && r.payload['kind'] === 'plan_approval' && PLAN_DECIDED.has(String(r.payload['decision']))), [fold]);
+  // The newest plan revision crew has opened a plan gate for, from the team record.
+  const newestPlanRev = useMemo(() => Math.max(-1, ...(fold?.rows ?? []).filter((r) => r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval')
+    .map((r) => (typeof r.payload['plan_rev'] === 'number' ? r.payload['plan_rev'] : -1))), [fold]);
+  // A send-back is retired for good once a newer revision is on record (it never comes back after that plan is approved).
+  useEffect(() => {
+    if (runId !== null && sentBackRaw !== null && (newestPlanRev > sentBackRaw || (plan.view !== null && plan.view.planRev > sentBackRaw))) useJobLocal.getState().setSentBack(runId, null);
+  }, [runId, sentBackRaw, newestPlanRev, plan.view]);
+  // Whether the open gate is known NOT to be a plan gate: the team read answered and holds no open plan approval. A
+  // failed or pending read is not that: the gate stays unclassified, and its answers stay held (never planRev-less).
+  const openPlanOnRecord = useMemo(() => {
+    const rows = fold?.rows ?? [];
+    const decided = new Set(rows.filter((r) => r.event_type === 'wicked.team.gate.decided').map((r) => String(r.payload['gate_id'])));
+    return rows.some((r) => r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval' && !decided.has(String(r.payload['gate_id'])));
+  }, [fold]);
+  const classified = gate?.gateKind !== undefined || (fold?.snapshot != null && !openPlanOnRecord && teamError === null) || plan.view !== null;
   const inputs = useMemo<JobRunInputs>(() => {
     const pv = plan.view;
     // The plan this gate holds: only a read made for the gate open now may be approved (`fresh`).
@@ -105,7 +126,7 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
       gate: gate === undefined ? null : { ord: gate.ord, receivedAt: gate.receivedAt, gateKind: gate.gateKind, prompt: gate.prompt },
       plan: planIn,
       planReading: plan.reading,
-      planUnknown: plan.pending,
+      planUnknown: waiting && !classified,
       answering,
       reshapeOn,
       planDecided,
@@ -113,8 +134,8 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
       question,
       pending: pending === null ? null : { id: pending.id, queuedAt: pending.queuedAt, dueAt: pending.dueAt, verb: pending.verb },
     };
-  }, [run, gate, plan.view, plan.fresh, plan.reading, plan.pending, answering, reshapeOn, planDecided, sentBackRaw, question, pending]);
+  }, [run, gate, plan.view, plan.fresh, plan.reading, waiting, classified, answering, reshapeOn, planDecided, sentBackRaw, question, pending]);
   const view = useMemo(() => jobView(lineage, inputs, { stepName: unitStepName, swapPending, deciding, starting: deciding, now }),
     [lineage, inputs, swapPending, deciding, now]);
-  return { view, run, inputs };
+  return { view, run, inputs, teamRetry: teamError !== null ? teamRetry : null };
 }

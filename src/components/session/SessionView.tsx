@@ -680,7 +680,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // A2: each proposal card sits where crew recorded it (after the reply that carried its block).
     for (const p of proposalEntries) {
       // A v2 proposal (it carries wicked's sentence) is the passage's, never a second card.
-      if (jobPids.has(p.pid)) continue;
+      if (jobPids.has(p.pid) || (jobsOn && (p.proposal as { sentence?: unknown }).sentence !== undefined)) continue;
       out.push({ kind: 'artifact', key: `ap:${p.pid}`, at: p.at, entry: p });
     }
     jobLineages.forEach((l, i) => out.push({ kind: 'job', key: `job:${l.lineage}`, at: l.at, lineage: l, settled: i < jobLineages.length - 1 }));
@@ -700,7 +700,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses, proposalEntries, jobPids, jobLineages, jobRunIds]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses, proposalEntries, jobPids, jobsOn, jobLineages, jobRunIds]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -938,7 +938,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     id: v.session.id, workdir: typeof v.session.workdir === 'string' ? v.session.workdir : null,
   })).filter((r) => r.workdir !== null), [mine]);
   // An ended chat whose kept history still holds its proposal cards is not "nothing here".
-  const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none') && proposalEntries.length === 0
+  const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none') && proposalEntries.length === 0 && jobLineages.length === 0
     && !waitingForKept && keptError === null;
   // studio#631 (2): a chat's thread has its own Stop — the same 10 s-undo stop ⌘K offers ("Stop this
   // session"), on every run of the chat still going. Hidden when nothing in it is running.
@@ -1466,7 +1466,8 @@ function DockedComposer({ reply, docked, composerProps, who }: {
   // DES-CATALOG-002 §2.4: a job's reply that takes words (Change, a typed answer) binds this box, one at a time.
   const jobBinding = useJobBinding((s) => (s.binding !== null && s.binding.sessionId === composerProps.composerKey ? s.binding : null));
   const [jobMoved, setJobMoved] = useState<string | null>(null);
-  if (reply === null && jobBinding !== null) {
+  // An explicit job binding (a press in the passage) is the box's destination, ahead of any docked note reply.
+  if (jobBinding !== null) {
     const leave = (): void => { useJobBinding.getState().clear(); setJobMoved(null); };
     return (
       <Composer {...composerProps} placeholder={jobBinding.placeholder}
@@ -1487,7 +1488,8 @@ function DockedComposer({ reply, docked, composerProps, who }: {
           }
           // The job takes the words only when the reply is still open (not queued, not moved): else they stay here.
           const keep = composerProps.text ?? text;
-          if (!jobBinding.send(text)) {
+          // The typed answer alone, never the about chips' context (the dock's raw replies do the same).
+          if (!jobBinding.send(composerProps.text ?? text)) {
             setJobMoved('Not sent: the job can’t take this answer now. Read it, then answer again, or leave with ×');
             queueMicrotask(() => composerProps.setText?.(keep));
             return;

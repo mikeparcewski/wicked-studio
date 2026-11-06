@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 330,
-    "occurrences": 4911,
-    "static": 4129,
+    "occurrences": 4912,
+    "static": 4130,
     "dynamic": 177,
     "computed": 53
   },
@@ -8169,6 +8169,12 @@
     },
     {
       "testId": "job-passage-plan-head",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-plan-unread",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
