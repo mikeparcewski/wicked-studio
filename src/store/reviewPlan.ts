@@ -31,12 +31,15 @@ let pending: Promise<boolean> | null = null;
 
 /** The power-mode default read NOW (a start reads it before it launches): `powerModeDefault`, absent = on. A failed
  *  read rejects, so a start never guesses. */
-export function readPowerDefault(): Promise<boolean> {
-  pending ??= api.getSettings().then((r) => {
+export function readPowerDefault(opts: { fresh?: boolean } = {}): Promise<boolean> {
+  const read = (): Promise<boolean> => api.getSettings().then((r) => {
     const on = (r.settings as { powerModeDefault?: unknown }).powerModeDefault !== false;
     usePowerDefaultStore.setState({ value: on });
     return on;
-  }).finally(() => { pending = null; });
+  });
+  // A start's own check is a request made after the press, never one begun before it (a display read may share).
+  if (opts.fresh === true) return read();
+  pending ??= read().finally(() => { pending = null; });
   return pending;
 }
 
