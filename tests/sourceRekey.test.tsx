@@ -35,7 +35,9 @@ const pmServer = (system: 'jira' | 'github', over: Record<string, unknown> = {})
   ...over,
 });
 
-let calls: Array<{ path: string; method: string; body: unknown; raw: string | undefined; init: string }> = [];
+let calls: Array<{ path: string; method: string; body: unknown; raw: string | undefined; init: string; headers?: string[] }> = [];
+/** Every header a request carries, whatever form it was given in (a `Headers`, pairs or a plain object). */
+const headersOf = (init?: RequestInit): string[] => [...new Headers(init?.headers ?? {}).entries()].map(([k, v]) => `${k}: ${v}`);
 let secretAnswer: () => Promise<unknown>;
 let servers: unknown[] = [];
 beforeEach(() => {
@@ -50,7 +52,7 @@ beforeEach(() => {
   apiFetch.mockImplementation((path: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
     const raw = typeof init?.body === 'string' ? init.body : undefined;
-    calls.push({ path, method, body: raw === undefined ? undefined : JSON.parse(raw), raw, init: JSON.stringify({ ...init, headers: init?.headers ?? null }) });
+    calls.push({ path, method, body: raw === undefined ? undefined : JSON.parse(raw), raw, init: JSON.stringify({ ...init, headers: headersOf(init) }), headers: headersOf(init) });
     if (method === 'PUT' && /^\/mcp\/servers\/[^/]+\/secret$/.test(path)) return secretAnswer();
     if (path === '/mcp/servers' && method === 'GET') return Promise.resolve({ servers, discovered: [] });
     if (path === '/sources/jira/trackers') return Promise.resolve({ name: 'jira', next: null, trackers: [{ tenant: 'cloud-1', tenantLabel: 'acme.atlassian.net', key: 'BILL', label: 'Billing', links: [] }] });
@@ -68,7 +70,9 @@ afterEach(() => { cleanup(); useCapabilities.setState({ trackerLinks: false }); 
 const configWrites = () => calls.filter((c) => c.method !== 'GET' && !c.path.endsWith('/secret') && !c.path.endsWith('/test'));
 const secretPuts = () => calls.filter((c) => c.method === 'PUT' && c.path.endsWith('/secret'));
 /** Every request that carries any of `values` anywhere: its path (and query), its headers or its body. */
-const carriers = (values: readonly string[]) => calls.filter((c) => values.some((v) => c.path.includes(v) || c.init.includes(v) || (c.raw ?? '').includes(v)));
+const carriers = (values: readonly string[]) => calls.filter((c) => values.some((v) => c.path.includes(v) || c.init.includes(v) || (c.raw ?? '').includes(v) || (c.headers ?? []).some((h) => h.includes(v))));
+/** Requests that carry any of `values` in a header or the path (and query): none may. */
+const headerOrPathCarriers = (values: readonly string[]) => calls.filter((c) => values.some((v) => c.path.includes(v) || (c.headers ?? []).some((h) => h.includes(v))));
 
 /** Every place outside the input node a value could land: the DOM, React's state and props, storage, the console. */
 function leaksOf(values: readonly string[], spies: ReadonlyArray<{ mock: { calls: unknown[][] } }>): string[] {
@@ -215,6 +219,7 @@ describe('a saved Jira source whose token is missing (the operator’s dead end)
     // The raw token and the credential ride exactly one request, in its body: no URL, header or other request (the
     // Test connection that follows included).
     expect(carriers([TOKEN, jiraBasic(EMAIL, TOKEN)]).map((c) => `${c.method} ${c.path}`)).toEqual(['PUT /mcp/servers/jira/secret']);
+    expect(headerOrPathCarriers([TOKEN, jiraBasic(EMAIL, TOKEN)])).toEqual([]);
     expect(calls.some((c) => c.path === '/sources/jira/trackers')).toBe(true);
     expect(screen.getByTestId('pm-rekey-status')).toHaveTextContent('Token saved to your keychain.');
 
@@ -361,6 +366,7 @@ describe('the database sheet: the same re-key (support-pg)', () => {
     expect(secretPuts().map((c) => [c.path, c.body])).toEqual([['/mcp/servers/support-pg/secret', { value: TOKEN }]]);
     expect(configWrites()).toEqual([]);
     expect(carriers([TOKEN]).map((c) => `${c.method} ${c.path}`)).toEqual(['PUT /mcp/servers/support-pg/secret']);
+    expect(headerOrPathCarriers([TOKEN])).toEqual([]);
     expect(calls.some((c) => c.path === '/sources/support-pg/test')).toBe(true);
     expect(screen.getByTestId('source-rekey-status')).toHaveTextContent('Password saved to your keychain.');
     expect(screen.getByTestId('source-secret-state')).toHaveAttribute('data-state', 'set');
@@ -416,7 +422,10 @@ describe('review r1 folds (codex + pi)', () => {
     expect(secretPuts()).toHaveLength(1);
     out.resolve({ ref: 'keychain:wicked-mcp/github', set: true });
     await waitFor(() => expect(onReread).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByTestId('pm-rekey-save')).toBeEnabled());
+    // It landed: this sheet reads Set, and Replace is there to use (the second value was never sent).
+    await waitFor(() => expect(screen.getByTestId('pm-secret-replace')).toBeEnabled());
+    expect(screen.getByTestId('pm-secret-state')).toHaveAttribute('data-state', 'set');
+    expect(secretPuts()).toHaveLength(1);
   });
 
   it('a write the sheet hears no answer to: the field lets go, the sheet says it could not confirm, and crew is read again', async () => {
@@ -426,7 +435,7 @@ describe('review r1 folds (codex + pi)', () => {
     const field = screen.getByTestId('pm-secret') as HTMLInputElement;
     type(field, TOKEN);
     fireEvent.click(screen.getByTestId('pm-rekey-save'));
-    expect(await screen.findByTestId('pm-sheet-error')).toHaveTextContent('studio could not confirm the token was saved (Failed to fetch). crew may have written it: Test connection shows whether it works');
+    expect(await screen.findByTestId('pm-sheet-error')).toHaveTextContent('studio could not confirm the token was saved. crew may have written it: Test connection shows whether it works; type it again if not.');
     expect(field.value).toBe('');
     expect(onReread).toHaveBeenCalled();
   });
@@ -452,7 +461,7 @@ describe('review r1 folds (codex + pi)', () => {
     expect(screen.getByTestId('pm-secret-state')).toHaveAttribute('data-state', 'missing');
     expect(screen.queryByTestId('pm-secret')).toBeNull();
     expect(screen.queryByTestId('pm-rekey-save')).toBeNull();
-    expect(screen.getByTestId('pm-sheet-form')).toHaveTextContent('crew reads this token from somewhere other than its own keychain entry');
+    expect(screen.getByTestId('pm-sheet-form')).toHaveTextContent('crew reads this token from a variable of the crew daemon, so it can’t be typed again here: set that variable where crew runs.');
   });
 
   it('the database sheet: the same for a password in a daemon variable', () => {
@@ -526,7 +535,7 @@ describe('review r2 folds (codex + pi)', () => {
     const field = screen.getByTestId('pm-secret') as HTMLInputElement;
     type(field, TOKEN);
     fireEvent.click(screen.getByTestId('pm-rekey-save'));
-    expect(await screen.findByTestId('pm-sheet-error')).toHaveTextContent(/^The token was not saved: .*body: value too_big\. Nothing was written\.$/);
+    expect(await screen.findByTestId('pm-sheet-error')).toHaveTextContent('crew refused the token: it takes one line of 8 to 8192 characters. Nothing was written.');
     expect(field.value).toBe(TOKEN);
   });
 
@@ -536,17 +545,71 @@ describe('review r2 folds (codex + pi)', () => {
     const field = screen.getByTestId('source-secret') as HTMLInputElement;
     type(field, TOKEN);
     fireEvent.click(screen.getByTestId('source-rekey-save'));
-    await waitFor(() => expect(screen.getByTestId('source-sheet')).toHaveTextContent(/studio could not confirm the password was saved \(.*the keychain refused the write\)\. crew may have written it: Test connection shows whether it works/));
+    await waitFor(() => expect(screen.getByTestId('source-sheet')).toHaveTextContent('studio could not confirm the password was saved. crew may have written it: Test connection shows whether it works; type it again if not.'));
     expect(field.value).toBe('');
   });
 
-  it('an answer that repeats the value is not shown', async () => {
-    secretAnswer = () => Promise.reject(new ApiError(400, `bad value ${TOKEN}`, { error: `bad value ${TOKEN}` }));
+  it('crew’s own text is never shown for a refused write, so an answer quoting the value (escaped or not) can’t reach the page', async () => {
+    const quoted = 'a"b\\c-fixture-password';
+    secretAnswer = () => Promise.reject(new ApiError(400, `bad ${JSON.stringify({ value: quoted })} and ${quoted}`, { error: `bad ${JSON.stringify({ value: quoted })}` }));
+    render(<SourceSheet target={{ mode: 'saved', server: pgServer({ name: 'support-pg', authState: 'missing' }) }} existing={['support-pg']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    type(screen.getByTestId('source-secret'), quoted);
+    fireEvent.click(screen.getByTestId('source-rekey-save'));
+    await waitFor(() => expect(screen.getByTestId('source-sheet')).toHaveTextContent('crew refused the password: it takes one line of 8 to 8192 characters. Nothing was written.'));
+    expect(leaksOf([quoted, JSON.stringify(quoted).slice(1, -1)], [])).toEqual([]);
+  });
+
+  it('the same status from something that is not crew (a proxy’s HTML 503) proves nothing: uncertain, the field lets go', async () => {
+    secretAnswer = () => Promise.reject(new ApiError(503, '<html>Service Unavailable</html>', undefined));
     render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    const field = screen.getByTestId('pm-secret') as HTMLInputElement;
+    type(field, TOKEN);
+    fireEvent.click(screen.getByTestId('pm-rekey-save'));
+    expect(await screen.findByTestId('pm-sheet-error')).toHaveTextContent('studio could not confirm the token was saved.');
+    expect(field.value).toBe('');
+  });
+
+  it('a write that fails while no sheet is open is said by the next sheet', async () => {
+    const out = deferred<unknown>();
+    secretAnswer = () => out.promise;
+    const first = render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
     type(screen.getByTestId('pm-secret'), TOKEN);
     fireEvent.click(screen.getByTestId('pm-rekey-save'));
-    expect(await screen.findByTestId('pm-sheet-error')).toHaveTextContent('its answer repeated what you typed, so it is not shown');
-    expect(leaksOf([TOKEN], [])).toEqual([]);
+    first.unmount();
+    out.reject(new ApiError(403, 'no', { error: 'no', code: 'pm_source_human_only' }));
+    await new Promise((r) => setTimeout(r, 0));
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    expect(await screen.findByTestId('pm-sheet-error')).toHaveTextContent('The token typed before this sheet was opened again was not saved: type it again.');
+  });
+
+  it('a write that succeeds while a reopened sheet waits: that sheet reads Set and tells its page', async () => {
+    const out = deferred<unknown>();
+    secretAnswer = () => out.promise;
+    const first = render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    type(screen.getByTestId('pm-secret'), TOKEN);
+    fireEvent.click(screen.getByTestId('pm-rekey-save'));
+    first.unmount();
+    const onRekeyed = vi.fn();
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github') as never }} existing={['github']} onSaved={vi.fn()} onRekeyed={onRekeyed} onClose={vi.fn()} />);
+    expect(screen.getByTestId('pm-secret-state')).toHaveAttribute('data-state', 'missing');
+    out.resolve({ ref: 'keychain:wicked-mcp/github', set: true });
+    await waitFor(() => expect(screen.getByTestId('pm-secret-state')).toHaveAttribute('data-state', 'set'));
+    expect(onRekeyed.mock.calls).toEqual([['github']]);
+    expect(screen.getByTestId('pm-rekey-status')).toHaveTextContent('The token typed before this sheet was opened again was saved to your keychain.');
+  });
+
+  it('a token in another source’s keychain entry: re-key is withheld and the sheet says where to replace it', () => {
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('jira', { auth: { ref: 'keychain:wicked-mcp/shared-jira', header: 'Authorization', prefix: 'Basic ' } }) as never }} existing={['jira']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.queryByTestId('pm-secret')).toBeNull();
+    expect(screen.getByTestId('pm-sheet-form')).toHaveTextContent('crew reads this token from a keychain entry another source owns, so it can’t be typed again here: replace it on that source.');
+  });
+
+  it('the request probe sees a header in every form it can be given', () => {
+    expect(headersOf({ headers: new Headers({ 'X-T': TOKEN }) })).toEqual([`x-t: ${TOKEN}`]);
+    expect(headersOf({ headers: [['X-T', TOKEN]] })).toEqual([`x-t: ${TOKEN}`]);
+    expect(headersOf({ headers: { 'X-T': TOKEN } })).toEqual([`x-t: ${TOKEN}`]);
+    calls.push({ path: '/mcp/servers/x/secret', method: 'PUT', body: { value: TOKEN }, raw: JSON.stringify({ value: TOKEN }), init: '{}', headers: [`authorization: Bearer ${TOKEN}`] });
+    expect(headerOrPathCarriers([TOKEN])).toHaveLength(1);
   });
 
   it('a value crew would refuse (too long) is said before anything is sent', () => {
@@ -614,10 +677,18 @@ describe('review r2 folds (codex + pi)', () => {
     render(<SourceSheet target={{ mode: 'saved', server: pgServer({ name: 'support-pg', authState: 'missing' }) }} focus="test" existing={['support-pg']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
     await new Promise((r) => setTimeout(r, 20));
     expect(calls.some((c) => c.path === '/sources/support-pg/test')).toBe(false);
+    // The test's answer is held: the sheet stays busy through the write's settling and the whole test.
+    const answer = deferred<unknown>();
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => (path === '/sources/support-pg/test' ? (calls.push({ path, method: 'POST', body: undefined, raw: undefined, init: '{}' }), answer.promise) : base(path, init)));
     out.resolve({ ref: 'keychain:wicked-mcp/support-pg', set: true });
     await waitFor(() => expect(calls.some((c) => c.path === '/sources/support-pg/test')).toBe(true));
+    expect(screen.getByTestId('source-test-connection')).toBeDisabled();
+    expect(screen.getByTestId('source-secret-replace')).toBeDisabled();
     // The detached first sheet ran no test of its own: one test, the live sheet's.
     expect(calls.filter((c) => c.path === '/sources/support-pg/test')).toHaveLength(1);
+    answer.resolve({ name: 'support-pg', kind: 'sql', driver: 'postgres', ok: true, ms: 4, testedAt: '2026-11-05T18:00:00Z', tls: 'verified' });
+    await waitFor(() => expect(screen.getByTestId('source-test-connection')).toBeEnabled());
   });
 
   it('a token crew reads from a daemon variable: its secret_missing failure says where to set it, and opens no field', async () => {
@@ -629,7 +700,7 @@ describe('review r2 folds (codex + pi)', () => {
     });
     render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github', { authState: 'set', auth: { ref: 'env:GITHUB_TOKEN', header: 'Authorization', prefix: 'Bearer ' } }) as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
     fireEvent.click(screen.getByTestId('pm-test-reach'));
-    expect(await screen.findByTestId('pm-test-saved')).toHaveTextContent('which it reads from a variable of the crew daemon: set that variable where crew runs');
+    expect(await screen.findByTestId('pm-test-saved')).toHaveTextContent('The source is saved, but crew can’t read its token. crew reads this token from a variable of the crew daemon, so it can’t be typed again here: set that variable where crew runs.');
     expect(screen.queryByTestId('pm-secret')).toBeNull();
   });
 });

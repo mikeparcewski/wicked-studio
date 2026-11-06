@@ -28,7 +28,23 @@ export function ownsKeychainEntry(server: Pick<McpServer, 'name' | 'auth'> | nul
   return server != null && server.auth?.ref === keychainRef(server.name);
 }
 
+/** Where crew reads a saved source's secret: its own keychain entry, a daemon variable, another keychain entry, none. */
+export function secretRefKind(server: Pick<McpServer, 'name' | 'auth'> | null | undefined): 'own' | 'env' | 'other' | 'none' {
+  const ref = server?.auth?.ref;
+  if (server == null || typeof ref !== 'string' || ref === '') return 'none';
+  return ref === keychainRef(server.name) ? 'own' : ref.startsWith('env:') ? 'env' : 'other';
+}
+
+/** What a sheet says when crew reads the secret somewhere studio can't type it again. */
+export function elsewhereWords(kind: 'env' | 'other', what: string): string {
+  return kind === 'env'
+    ? `crew reads this ${what} from a variable of the crew daemon, so it can’t be typed again here: set that variable where crew runs.`
+    : `crew reads this ${what} from a keychain entry another source owns, so it can’t be typed again here: replace it on that source.`;
+}
+
 const pending = new Map<string, Promise<unknown>>();
+/** How each source's last write ended, until a sheet on the page says it (it may settle while no sheet is open). */
+const outcomes = new Map<string, 'saved' | 'refused' | 'unknown'>();
 const listeners = new Set<(name: string) => void>();
 
 /** The re-key of `name` still out, if any (the sheet that sent it may have closed). */
@@ -46,38 +62,59 @@ export function onRekeySettled(fn: (name: string) => void): () => void {
 export function rekeySource(name: string, value: string): Promise<unknown> {
   const p = sourcesApi.setSecret(name, value);
   pending.set(name, p);
-  const done = (): void => {
+  const done = (outcome: 'saved' | 'refused' | 'unknown'): void => {
     if (pending.get(name) === p) pending.delete(name);
+    outcomes.set(name, outcome);
     for (const fn of [...listeners]) fn(name);
   };
-  p.then(done, done);
+  p.then(() => done('saved'), (e: unknown) => done(rekeyFailure(e).kind));
   return p;
+}
+
+/** How the last write of `name` ended, once: the sheet that says it takes it. `null` when none is left to say. */
+export function takeRekeyOutcome(name: string): 'saved' | 'refused' | 'unknown' | null {
+  const o = outcomes.get(name) ?? null;
+  outcomes.delete(name);
+  return o;
 }
 
 /**
  * crew's answers that come BEFORE it writes anything (crew's PUT route and `setSecret`): a body it refuses (400), an
- * actor it refuses (401/403), an unknown source (404), no OS store (501), no registry (503). A 502 is the store's own
- * failure, which can follow the write (the macOS store writes, then checks), so it is no proof that nothing was written.
+ * actor it refuses (401/403), an unknown source (404), no OS store (501), no registry (503). Each is crew's own JSON
+ * (`{error, code?}`); the same status from anything else (a proxy's page) proves nothing. A 502 is the store's own
+ * failure, which can follow the write (the macOS store writes, then checks), so it is no proof either.
  */
 const BEFORE_WRITE: ReadonlySet<number> = new Set([400, 401, 403, 404, 501, 503]);
 
 /**
  * What a failed write means. `refused`: crew refused it before writing, so nothing was written. `unknown`: no answer
- * that proves that (a dropped connection, a proxy's page, the store failing), so crew may have written it. crew's
- * sentence is kept, but never with the value in it: an answer that repeats any of `sent` is not shown.
+ * that proves that (a dropped connection, another server's page, the store failing), so crew may have written it.
  */
-export function rekeyFailure(e: unknown, sent: readonly string[]): { kind: 'refused'; code: string | null; said: string } | { kind: 'unknown'; said: string } {
-  const raw = e instanceof Error ? e.message : String(e);
-  const said = sent.some((v) => v !== '' && raw.includes(v)) ? 'its answer repeated what you typed, so it is not shown' : raw;
-  if (e instanceof ApiError && BEFORE_WRITE.has(e.status)) {
-    const code = (e.body as { code?: unknown } | undefined)?.code;
-    return { kind: 'refused', code: typeof code === 'string' && /^[a-z][a-z0-9_]{1,63}$/.test(code) ? code : null, said };
-  }
-  return { kind: 'unknown', said };
+export function rekeyFailure(e: unknown): { kind: 'refused'; status: number; code: string | null } | { kind: 'unknown' } {
+  if (!(e instanceof ApiError) || !BEFORE_WRITE.has(e.status)) return { kind: 'unknown' };
+  const b = e.body as { error?: unknown; code?: unknown } | null | undefined;
+  if (typeof b !== 'object' || b === null || typeof b.error !== 'string') return { kind: 'unknown' };
+  return { kind: 'refused', status: e.status, code: typeof b.code === 'string' && /^[a-z][a-z0-9_]{1,63}$/.test(b.code) ? b.code : null };
+}
+
+/**
+ * The sheet's words for crew's refusal. Fixed sentences only: crew's own text is never shown here, so an answer that
+ * quotes what was sent (escaped or not) can't put it on the page.
+ */
+export function refusalWords(f: { status: number; code: string | null }, what: string): string {
+  const said = f.code === 'pm_source_human_only' ? `Only a person signed in to studio can replace a project-management source’s ${what}.`
+    : f.code === 'secret_not_referenced' ? `crew no longer reads this ${what} from the source’s own keychain entry, so it can’t be typed again here.`
+      : f.code === 'secret_store_unavailable' ? `crew has no OS secret store on this machine to keep the ${what} in.`
+        : f.code === 'secret_in_ref' ? `crew refused the ${what}: it appears in the source’s own keychain reference; choose a different one.`
+          : f.status === 404 ? 'crew no longer has this source: it was removed since this page was read.'
+            : f.status === 400 ? `crew refused the ${what}: it takes one line of ${SECRET_MIN} to ${SECRET_MAX} characters.`
+              : `crew refused the ${what} (${f.code ?? `HTTP ${f.status}`}).`;
+  return `${said} Nothing was written.`;
 }
 
 /** Test seam: forget every write still out, and every listener. */
 export function resetRekeysForTests(): void {
   pending.clear();
+  outcomes.clear();
   listeners.clear();
 }

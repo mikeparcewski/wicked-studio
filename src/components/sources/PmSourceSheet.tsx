@@ -19,7 +19,7 @@ import { useModalEscape } from '../Modal.js';
 import { TrackerBadge } from '../trackers/TrackerParts.js';
 import { AgentAccess } from './AgentAccess.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
-import { ownsKeychainEntry, rekeyFailure, rekeyPending, rekeySource, secretShapeProblem } from './rekey.js';
+import { elsewhereWords, refusalWords, rekeyFailure, rekeyPending, rekeySource, secretRefKind, secretShapeProblem, takeRekeyOutcome } from './rekey.js';
 import { keychainRef, NAME_RE } from './sourceModel.js';
 import { useDialogFocus } from './useDialogFocus.js';
 
@@ -153,11 +153,11 @@ export function toolGroupsOf(system: 'jira' | 'github', reviews: readonly ToolRe
 }
 
 /** What the sheet may say about the saved source when its test failed: no more than crew's answer supports. */
-export function savedWords(crew: { code: string | null; cause: string | null } | null, canRekey = true): string {
+export function savedWords(crew: { code: string | null; cause: string | null } | null, refKind: 'own' | 'env' | 'other' | 'none' = 'own'): string {
   if (crew?.code === 'source_not_found') return 'crew no longer has this source: it was removed since this page was read.';
   if (crew?.cause === 'secret_missing') {
-    return canRekey ? 'The source is saved, but crew can’t read its token: type it again above and choose Save token.'
-      : 'The source is saved, but crew can’t read its token, which it reads from a variable of the crew daemon: set that variable where crew runs.';
+    return refKind === 'env' || refKind === 'other' ? `The source is saved, but crew can’t read its token. ${elsewhereWords(refKind, 'token')}`
+      : 'The source is saved, but crew can’t read its token: type it again above and choose Save token.';
   }
   return 'The source is saved. This test, which reads what the token reaches, failed; nothing else changed.';
 }
@@ -269,7 +269,10 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   agentsUnverified?: ReadonlySet<string>;
   onReread?: () => void;
   onSaved: (server: McpServer) => void;
-  /** crew wrote the source's token again (its `authState` is `set`): nothing else about the source changed. */
+  /**
+   * crew wrote the source's token again (its `authState` is `set`): nothing else about the source changed. A page that
+   * passes `servers` merges it there too, since the sheet shows the page's record before its own.
+   */
   onRekeyed?: (name: string) => void;
   onAgents?: (name: string, agents: SourceAgentAccess) => void;
   onClose: () => void;
@@ -404,30 +407,40 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
    * keychain entry can take one (crew#719).
    */
   const savedAuth = !isNew ? (shownServer?.authState ?? 'none') : null;
-  const canRekey = !isNew && savedAuth !== 'none' && ownsKeychainEntry(shownServer);
+  const refKind = secretRefKind(shownServer);
+  const canRekey = !isNew && savedAuth !== 'none' && refKind === 'own';
   const rekeyOpen = canRekey && (savedAuth === 'missing' || replacing);
   const rekeyBlocker = !rekeyOpen ? null
     : system === 'jira' && !/^\S+@\S+$/.test(email.trim()) ? 'Account email is needed'
       : !hasSecret ? (system === 'jira' ? 'Type the API token' : 'Type the personal access token') : null;
-  // A write the sheet sent before it closed is still out: this one waits for it, then reads crew's state again.
+  // A write sent by a sheet that closed: this one says how it ended (now, or when it settles), takes a saved token's
+  // state into its record and the page's, and reads crew again. While it is out, this sheet writes nothing.
   const savedName = !isNew ? shownServer?.name ?? null : null;
   useEffect(() => {
     if (savedName === null) return;
-    const out = rekeyPending(savedName);
-    if (out === null) return;
     let live = true;
-    setBusy('rekey');
-    const settle = (e?: unknown): void => {
+    const say = (o: 'saved' | 'refused' | 'unknown' | null): void => {
+      if (o === null) return;
+      if (o === 'saved') {
+        setSaved((cur) => (cur !== null && cur.name === savedName ? ({ ...cur, authState: 'set' } as McpServer) : cur));
+        onRekeyed?.(savedName);
+        setRekeyStatus('The token typed before this sheet was opened again was saved to your keychain.');
+      } else {
+        setError(o === 'refused' ? 'The token typed before this sheet was opened again was not saved: type it again.'
+          : 'studio could not confirm the token typed before this sheet was opened again was saved: Test connection shows whether it works.');
+      }
+      onReread?.();
+    };
+    const out = rekeyPending(savedName);
+    if (out === null) { say(takeRekeyOutcome(savedName)); return; }
+    // The busy state is the write's only while nothing else holds it (a test the sheet opened on waits for the write).
+    setBusy((b) => b ?? 'rekey');
+    const settle = (): void => {
       if (!live) return;
       setBusy((b) => (b === 'rekey' ? null : b));
-      onReread?.();
-      // How it ended is said here too (this sheet never held the value, so crew's own words are not repeated).
-      if (e !== undefined) {
-        setError(rekeyFailure(e, []).kind === 'refused' ? 'The token typed before this sheet was opened again was not saved: type it again.'
-          : 'studio could not confirm the token typed before this sheet was opened again was saved: Test connection shows whether it works.');
-      } else setRekeyStatus('The token typed before this sheet was opened again was saved to your keychain.');
+      say(takeRekeyOutcome(savedName));
     };
-    out.then(() => settle(), (e: unknown) => settle(e ?? new Error('failed')));
+    out.then(settle, settle);
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the source the sheet opened on
   }, [savedName]);
@@ -461,21 +474,23 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
       setSaved((cur) => (cur !== null && cur.name === sourceName ? ({ ...cur, authState: 'set' } as McpServer) : cur));
       onRekeyed?.(sourceName);
       inFlight.current = false;
+      // Closed meanwhile: the outcome is left for the next sheet to say, and no test runs here.
       if (!alive.current) return;
+      takeRekeyOutcome(sourceName);
       setRekeyStatus('Token saved to your keychain.');
       await readReach(sourceName);
     } catch (e) {
-      const f = rekeyFailure(e, [token, value]);
+      if (!alive.current) return;
+      takeRekeyOutcome(sourceName);
+      const f = rekeyFailure(e);
       if (f.kind === 'unknown') {
-        // No answer studio can read: crew may have written it. The field lets go of it either way, and the page reads
-        // crew's state again; Test connection says whether the token works.
+        // No answer that proves nothing was written: crew may have written it. The field lets go of it either way, and
+        // the page reads crew's state again; Test connection says whether the token works.
         letGo();
         onReread?.();
-        setError(`studio could not confirm the token was saved (${f.said}). crew may have written it: Test connection shows whether it works; type it again if not.`);
+        setError('studio could not confirm the token was saved. crew may have written it: Test connection shows whether it works; type it again if not.');
       } else {
-        setError(f.code === 'pm_source_human_only'
-          ? 'Only a person signed in to studio can replace a project-management source’s token. Nothing was written.'
-          : `The token was not saved: ${f.said}. Nothing was written.`);
+        setError(refusalWords(f, 'token'));
       }
       setBusy(null);
     } finally {
@@ -497,9 +512,7 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   const title = isNew ? `Add ${systemName(system)}` : shownServer?.name ?? systemName(system);
   const frozen = busy === 'save';
   const tokenNote = tokenSent ? 'Sent once, with this test. Save keeps it in your keychain; type it again only to test again.' : 'Kept in your keychain. Never shown again, never in a file, a log or an agent’s context.';
-  const savedNote = !isNew && savedAuth !== 'none' && !canRekey
-    ? 'crew reads this token from somewhere other than its own keychain entry (a daemon variable), so it can’t be typed again here.'
-    : tokenNote;
+  const savedNote = !isNew && savedAuth !== 'none' && (refKind === 'env' || refKind === 'other') ? elsewhereWords(refKind, 'token') : tokenNote;
   const secretField = (label: string): React.ReactElement => (
     <SecretField ref={secret} label={label} data-testid="pm-secret" note={isNew ? tokenNote : savedNote}
       savedState={savedAuth} disabled={busy !== null}
@@ -600,7 +613,7 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                 {!isNew && reach?.ok === true && <ul className="wk-pm-lines" data-testid="pm-test-reach-lines">{reachLines(system, reach.r).map((l) => <li key={l}>{l}</li>)}</ul>}
                 {!isNew && reach?.ok === false && (
                   <div data-testid="pm-test-reach-error">
-                    <p className="wk-src-note" data-testid="pm-test-saved">{savedWords(reach.crew ?? null, canRekey)}</p>
+                    <p className="wk-src-note" data-testid="pm-test-saved">{savedWords(reach.crew ?? null, refKind)}</p>
                     {reach.crew != null ? (
                       <p className="wk-src-note wk-src-tone-fail" data-testid="pm-test-crew-said">
                         crew said: “{reach.crew.said}”{codeWords(reach.crew) !== null && <> <code data-testid="pm-test-crew-code">{codeWords(reach.crew)}</code></>}

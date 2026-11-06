@@ -20,7 +20,7 @@ import { ProfileBox } from './ProfileBox.js';
 import { AllowWritesSwitch } from './AllowWritesSwitch.js';
 import { AskData } from './AskData.js';
 import { ConnectionTestLines } from './ConnectionTest.js';
-import { ownsKeychainEntry, rekeyFailure, rekeyPending, rekeySource, secretShapeProblem } from './rekey.js';
+import { elsewhereWords, ownsKeychainEntry, refusalWords, rekeyFailure, rekeyPending, rekeySource, secretRefKind, secretShapeProblem, takeRekeyOutcome } from './rekey.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
 import {
   agentsSeeWords,
@@ -342,22 +342,33 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
    */
   const rekeyName = saved?.name ?? null;
   const testable = saved?.kind === 'sql' || saved?.kind === 'graphql';
-  // A write the sheet sent before it closed is still out: this one waits for it, says how it ended, reads crew again.
+  // A write sent by a sheet that closed: this one says how it ended (now, or when it settles), takes a saved secret's
+  // state into its record and the page's, and reads crew again. While it is out, this sheet writes nothing.
   useEffect(() => {
     if (rekeyName === null) return;
-    const out = rekeyPending(rekeyName);
-    if (out === null) return;
     let live = true;
-    setBusy('rekey');
-    const settle = (e?: unknown): void => {
+    const say = (o: 'saved' | 'refused' | 'unknown' | null): void => {
+      if (o === null) return;
+      if (o === 'saved') {
+        setSaved((cur) => (cur !== null && cur.name === rekeyName ? ({ ...cur, authState: 'set' } as McpServer) : cur));
+        onRekeyed?.(rekeyName);
+        setRekeyStatus('The secret typed before this sheet was opened again was saved to your keychain.');
+      } else {
+        setError(o === 'refused' ? 'The secret typed before this sheet was opened again was not saved: type it again.'
+          : `studio could not confirm the secret typed before this sheet was opened again was saved${testable ? ': Test connection shows whether it works.' : '.'}`);
+      }
+      onReread?.();
+    };
+    const out = rekeyPending(rekeyName);
+    if (out === null) { say(takeRekeyOutcome(rekeyName)); return; }
+    // The busy state is the write's only while nothing else holds it (a test the sheet opened on waits for the write).
+    setBusy((b) => b ?? 'rekey');
+    const settle = (): void => {
       if (!live) return;
       setBusy((b) => (b === 'rekey' ? null : b));
-      onReread?.();
-      if (e === undefined) { setRekeyStatus('The secret typed before this sheet was opened again was saved to your keychain.'); return; }
-      setError(rekeyFailure(e, []).kind === 'refused' ? 'The secret typed before this sheet was opened again was not saved: type it again.'
-        : `studio could not confirm the secret typed before this sheet was opened again was saved${testable ? ': Test connection shows whether it works.' : '.'}`);
+      say(takeRekeyOutcome(rekeyName));
     };
-    out.then(() => settle(), (e: unknown) => settle(e ?? new Error('failed')));
+    out.then(settle, settle);
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the source the sheet opened on
   }, [rekeyName]);
@@ -386,20 +397,24 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
       setSaved((cur) => (cur !== null && cur.name === current.name ? ({ ...cur, authState: 'set' } as McpServer) : cur));
       onRekeyed?.(current.name);
       inFlight.current = false;
+      // Closed meanwhile: the outcome is left for the next sheet to say, and no test runs here.
       if (!alive.current) return;
+      takeRekeyOutcome(current.name);
       setRekeyStatus(`${what === 'password' ? 'Password' : 'Secret'} saved to your keychain.`);
       // A database is tested at once (Test connection takes the busy state over in this same tick).
       if (current.kind === 'sql' || current.kind === 'graphql') await testSaved();
       else setBusy(null);
     } catch (e) {
-      const f = rekeyFailure(e, [token]);
+      if (!alive.current) return;
+      takeRekeyOutcome(current.name);
+      const f = rekeyFailure(e);
       if (f.kind === 'unknown') {
         // No answer that proves nothing was written: crew may have written it. The field lets go of it either way.
         letGo();
         onReread?.();
-        setError(`studio could not confirm the ${what} was saved (${f.said}). crew may have written it: ${current.kind === 'sql' || current.kind === 'graphql' ? 'Test connection shows whether it works; type it again if not.' : 'type it again to be sure.'}`);
+        setError(`studio could not confirm the ${what} was saved. crew may have written it: ${current.kind === 'sql' || current.kind === 'graphql' ? 'Test connection shows whether it works; type it again if not.' : 'type it again to be sure.'}`);
       } else {
-        setError(`The ${what} was not saved: ${f.said}. Nothing was written.`);
+        setError(refusalWords(f, what));
       }
       setBusy(null);
     } finally {
@@ -565,7 +580,10 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                 <SecretField
                   ref={secret}
                   label={isSqlKind(kind) ? 'Password' : 'Secret (token or key)'}
-                  note={!isNew && saved !== null && saved.authState !== 'none' && !ownsKeychainEntry(saved) ? 'crew reads this secret from somewhere other than its own keychain entry (a daemon variable), so it can’t be typed again here.' : 'Kept in your keychain; never in the app, an export or an agent.'}
+                  note={(() => {
+                    const k = isNew || saved === null || saved.authState === 'none' ? 'none' : secretRefKind(saved);
+                    return k === 'env' || k === 'other' ? elsewhereWords(k, isSqlKind(kind) ? 'password' : 'secret') : 'Kept in your keychain; never in the app, an export or an agent.';
+                  })()}
                   savedState={isNew ? null : (saved?.authState ?? 'none')}
                   disabled={busy !== null}
                   rekey={isNew || !ownsKeychainEntry(saved) ? null : {

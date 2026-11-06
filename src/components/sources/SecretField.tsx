@@ -102,7 +102,7 @@ export const SecretField = forwardRef<SecretHandle, {
       <div className="wk-src-field" data-testid={`${testId}-saved`} data-rekey={open ? 'open' : canRekey ? 'offered' : 'none'}>
         {open ? <label htmlFor={id} className="wk-src-label">{label}</label> : <span className="wk-src-label">{label}</span>}
         <span className="wk-src-rekey-row">
-          <span data-testid={`${testId}-state`} data-state={savedState} aria-live="polite" className={`wk-src-input wk-src-input--static${savedState === 'missing' ? ' wk-src-tone-warn' : ''}`}>{words}</span>
+          <span data-testid={`${testId}-state`} data-state={savedState} className={`wk-src-input wk-src-input--static${savedState === 'missing' ? ' wk-src-tone-warn' : ''}`}>{words}</span>
           {canRekey && savedState === 'set' && !open && (
             <button ref={replaceBtn} type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid={`${testId}-replace`} disabled={disabled} onClick={() => { if (rekey.focusOnOpen !== false) focusField.current = true; rekey.onOpen(true); }}>{rekey.replace}</button>
           )}
