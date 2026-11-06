@@ -149,6 +149,17 @@ describe('F23 — every other non-verdict takes the redo too; a FAIL never does'
     expect(all(m).some((c) => c.label === OPERATOR_JUDGMENT_LABEL)).toBe(true);
   });
 
+  it('quoted words never read as the offer or as the INCONCLUSIVE gate; a recorded FAIL refuses it on a late join too', () => {
+    const quoted = 'Unit 6 verdict is NOT PASS (the evaluator\'s verdict is FAIL: the docs say "QE acceptance is INCONCLUSIVE" and name action `retry_qe`) — confirm to retry the phase, request changes to send the review back to the creator phase, or reject to cancel the run';
+    const { m } = model('the evaluator said FAIL', 'evaluator_verdict', 'verdict_not_pass', quoted, 'pass');
+    expect(all(m).some((c) => c.key === QE_REDO_KEY)).toBe(false);
+    expect(all(m).some((c) => c.label === OPERATOR_JUDGMENT_LABEL)).toBe(false);
+    const gate: OpenGate = { runId: RUN, ord: 6, prompt: NV_PROMPT(true), gateKind: 'escalation', lifecycle: 'open', receivedAt: NOW };
+    const evs = events(UNBOUND, 'qe_review', 'verdict_not_pass', NV_PROMPT(true)).filter((e) => (e as { type: string }).type === 'awaitingHuman');
+    const late = sessionGateChoices({ runId: RUN, gate, units: units('fail'), events: evs, pool: ['pi', 'claude'], roster: null })!;
+    expect(all(late).some((c) => c.key === QE_REDO_KEY)).toBe(false);
+  });
+
   it('a recorded FAIL is a verdict: no redo, even if a prompt mentions it', () => {
     const fail = 'QE acceptance: the isolated QE reviewer on `codex` (distinct) recorded FAIL on QE run dd77';
     const { m } = model(fail, 'qe_review', 'verdict_not_pass', NV_PROMPT(true), 'fail');

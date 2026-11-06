@@ -44,9 +44,23 @@ export const QE_REDO_LABEL = 'Redo the QE check';
 export const QE_REDO_TITLE = 'Run the QE check again from fresh evidence, with a new reviewer session (on another reviewer seat when one can run). It is not a verdict: only that reviewer\'s pass counts.';
 export const QE_REDO_CONSEQUENCE = 'The QE check runs again from fresh evidence with a new reviewer; the earlier steps are kept';
 
-/** Whether the engine's gate prompt offers the redo (`action \`retry_qe\``) — it drops the offer at the cap. */
+/** The engine's own offer clause (wicked-core#1312 `qe_redo_clause`): matched whole, so a reviewer's quoted words that
+ *  merely mention the action never read as the offer. */
+const QE_REDO_OFFER = ` Redo the QE check (action \`${QE_REDO_ACTION}\`): the QE step takes its evidence again`;
+
+/** Whether the engine's gate prompt offers the redo — it drops the offer at the cap. */
 export function offersQeRedo(prompt: string | undefined): boolean {
-  return prompt !== undefined && prompt.includes(`action \`${QE_REDO_ACTION}\``);
+  return prompt !== undefined && prompt.includes(QE_REDO_OFFER);
+}
+
+/** Whether the engine's prompt is its INCONCLUSIVE QE gate (its opening words, never a quote inside a reason). */
+export function isInconclusiveQePrompt(prompt: string | undefined): boolean {
+  return prompt !== undefined && /^Unit \d+'s QE acceptance is INCONCLUSIVE — /.test(prompt);
+}
+
+/** The unit's recorded QE outcome (`qe_review.outcome`), read even when no denial frame is in hand. */
+export function qeRecordedOutcome(units: readonly WorkUnit[], ord: number): string | null {
+  return unitOutcome(units, ord);
 }
 
 const QE_SOURCES: ReadonlySet<string> = new Set(['qe_review', 'qe_reviewer_unavailable', 'qe_inconclusive']);

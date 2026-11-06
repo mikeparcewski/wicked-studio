@@ -12,7 +12,7 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
-- **Redo the QE check (e2e-1105 F23; wicked-core#1312, crew api-types 0.195.0).** When the isolated QE reviewer gave
+- **Redo the QE check (e2e-1105 F23; wicked-core#1312; pins wicked-crew-api-types 0.195.0).** When the isolated QE reviewer gave
   no verdict on the work (it couldn't run its checks, no reviewer could run, or no verdict could be bound), the gate
   row now leads with **Redo the QE check** (`retry_qe`), suggested. The QE step runs again from fresh evidence with a
   new reviewer session. It is not a verdict: only that reviewer's pass counts. The row offers it only where the

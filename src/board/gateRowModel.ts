@@ -37,7 +37,7 @@ import type { ReassignCandidate, RunBench } from '../components/gateVerdictModel
 import type { GateAnswer } from './gateActions.js';
 import { repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from './repeatProgress.js';
 import type { RerunOffer } from '../components/rerunModel.js';
-import { offersQeRedo, qeGateOf, QE_REDO_ACTION, QE_REDO_CONSEQUENCE, QE_REDO_KEY, QE_REDO_LABEL, QE_REDO_TITLE, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
+import { isInconclusiveQePrompt, offersQeRedo, qeGateOf, qeRecordedOutcome, QE_REDO_ACTION, QE_REDO_CONSEQUENCE, QE_REDO_KEY, QE_REDO_LABEL, QE_REDO_TITLE, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
 import { ruleHolds, rulesHoldAt, waitsForJudge, type RuleRow } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
@@ -824,7 +824,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // (e2e-1105 F23, review) An INCONCLUSIVE or no-reviewer QE record is the same judge-unavailable class even when this
     // attempt's only frame is its `gateEvaluated` (no `gateEscalated`): its plain approve is the operator's judgment.
     const judgeWait = waitsForJudge(events, gate.ord, gate.prompt) || qe?.outcome === 'inconclusive' || qe?.outcome === 'unavailable'
-      || /\bQE acceptance is INCONCLUSIVE\b/.test(gate.prompt);
+      || isInconclusiveQePrompt(gate.prompt);
     // A team member's step is the exception: the engine re-runs it on approve ("approve to re-run the
     // phase"), so neither the judgment label nor the re-judge applies there.
     const operatorJudgment = judgeWait && !/\bapprove to re-run the phase\b/i.test(gate.prompt);
@@ -841,7 +841,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // QE check leads, where the engine's prompt names it (it drops it at the cap). It is never the person's verdict; their
     // own judgment stays a separate, labelled choice.
     // The engine names `retry_qe` only at a gate it takes it at: a late join with no denial frames still gets the offer.
-    const qeRedo = deadSeat === null && !deniedUnit && qe?.outcome !== 'fail' && offersQeRedo(gate.prompt);
+    const qeRedo = deadSeat === null && !deniedUnit && qe?.outcome !== 'fail' && qeRecordedOutcome(units, gate.ord) !== 'fail' && offersQeRedo(gate.prompt);
     if (qeRedo) {
       coreWithoutStop.push({ key: QE_REDO_KEY, label: QE_REDO_LABEL, decision: { approve: true, action: QE_REDO_ACTION } as unknown as GateAnswer, needsNote: false, title: QE_REDO_TITLE });
     }
