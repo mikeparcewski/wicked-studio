@@ -6,6 +6,7 @@ import {
 } from '../../editors/hostApi.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge.js';
+import { setAdvisoryNotes } from '../../store/editors.js';
 import type { Control, OptionsTab } from '../../editors/surfaces.js';
 
 /**
@@ -47,6 +48,10 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
   // Folded or narrow, the panel is the ribbon — but its subtree stays mounted (hidden), so the group's options
   // instance and its confirmed values live as long as the group (codex h2b-r1 P2).
   const collapsed = narrow ? !overlay : folded;
+  // plugins-complete G24: a card's Options pressed in its full screen opens over that full screen (the panel beside the
+  // page sits under it), at the right edge; × or Esc closes it back to the full screen.
+  const fullKey = useHostChrome((s) => s.full);
+  const overFull = group !== null && fullKey !== null && group.binding.artifactKey === fullKey;
   // The edge handle and the panel's close hand the keyboard focus to each other, so it never drops to the page.
   const handleRef = useRef<HTMLButtonElement | null>(null);
   const foldRef = useRef<HTMLButtonElement | null>(null);
@@ -74,9 +79,20 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
           {ribbon ?? (group !== null ? `${group.editor.title} options` : 'Options')}
         </button>
       )}
-    <aside id="run-details-panel" data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}
-      // Over the page (below 1200 px), Esc closes the run page's panel back to its handle.
-      onKeyDown={(e) => { if (narrow && edgeHandle !== undefined && e.key === 'Escape' && !e.defaultPrevented) { moveFocus.current = true; setOverlay(false); } }}>
+    <aside id="run-details-panel" data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} data-over-full={overFull ? 'true' : undefined} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}${overFull ? ' wk-hpanel--overfull' : ''}`}
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented) return;
+        // Over a full screen, Esc closes these options (not the full screen under them) and gives the focus back to
+        // the full screen's Options.
+        if (overFull) {
+          e.preventDefault();
+          closeGroup();
+          queueMicrotask(() => document.querySelector<HTMLButtonElement>('[data-testid="full-shell"] [data-testid="plugin-card-options"]')?.focus());
+          return;
+        }
+        // Over the page (below 1200 px), Esc closes the run page's panel back to its handle.
+        if (narrow && edgeHandle !== undefined) { moveFocus.current = true; setOverlay(false); }
+      }}>
       <div className="wk-hpanel-head">
         {/* Without a group the panel is the run's details alone: its heading says so, and there is no one-tab strip. */}
         {group !== null ? <span className="wk-hpanel-heading">{`${group.editor.title} options`}</span>
@@ -251,6 +267,8 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
         morph: () => undefined,
         status: (text) => relay(group.key, 'options', { type: 'status', text }),
         notes: () => undefined,
+        // The plugin's own notes reach its card, labelled advisory (plugins-complete G25).
+        advisory: (notes) => setAdvisoryNotes(group.key, notes),
         thread: () => undefined,
         shown: () => cb.current.onShown(),
         fullscreen: async () => false,

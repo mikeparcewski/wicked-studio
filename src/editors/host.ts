@@ -10,6 +10,7 @@ import {
   type MediaRef, type PanelTone, type AnchorRef, type ErrorCode, type PermissionId, type Size,
 } from './protocol.js';
 import type { EventsBatch } from './runEvents.js';
+import type { ExportOption, ExportOutcome } from './hostApi.js';
 import { clampCardHeight, parseSurfaces, parseWireSurfaces, sameSurfaces, v1Surfaces, valuesOk, controlValueOk, type FullMode, type Surfaces } from './surfaces.js';
 
 /** Protocol 2's three surfaces (DES-EDITOR-PLUGIN-CONTRACT-001 §4). */
@@ -103,6 +104,13 @@ export interface HostAdapter {
   fork(from: number): Promise<AdapterResult<{ version: number }>>;
   checks?(): Promise<AdapterResult<{ checks: { id: string; text: string }[]; total: number }>>;
   exportAs?(format: string): Promise<AdapterResult<{ started: true }>>;
+  /** The formats the host's own Export makes, and the call that makes one of `version` (a data plane whose files the
+   *  host makes, e.g. interactive): a plugin's `export.request` uses them when the adapter has no `exportAs`. */
+  exports?(): readonly ExportOption[];
+  exportFile?(format: string, version: number): Promise<ExportOutcome>;
+  /** `artifact.sources` (`sources.read`): the reference files the artifact was made from. An adapter without it never
+   *  has the grant announced (plugins-complete G25: a grant must be a function the host delivers). */
+  sources?(): Promise<AdapterResult<{ sources: { name: string; status: string }[] }>>;
   /** Protocol 2 `theme.set` (§6): write the artifact's theme tokens on `base`, as a new version. */
   theme?(base: number, tokens: Record<string, unknown>): Promise<AdapterResult<{ version: number }>>;
 }
@@ -116,6 +124,12 @@ export interface HostUi {
   morph(to: Size): void;
   status(line: string): void;
   notes(count: number): void;
+  /** `checks.contribute`: the plugin's own notes, each one line. Advisory: the host shows them as the plugin's, never
+   *  as a review or a check that ran (plugins-complete G25). */
+  advisory?(notes: readonly { id: string; text: string }[]): void;
+  /** A plugin's `export.request` the host carried out through `exportFile`: the working line, then the outcome (the
+   *  host's own line and Download, as its Export menu draws them). */
+  exportLine?(line: { working: string } | { out: ExportOutcome }): void;
   thread(line: string): void;
   /** A write this editor made, structured, so a host can draw its own line and Undo (EP-P2). `anchors`
    *  are the HOST-checked ids the write touched — the words of the line come from them, never from
@@ -553,7 +567,8 @@ export class EditorHost {
     }
     const id = msg.id;
     let settled = false;
-    const limitMs = msg.type === 'mcp.request' ? LIMITS.mcpReplyMs : msg.type === 'data.action' || msg.type === 'link.open' ? LIMITS.askReplyMs : LIMITS.replyMs;
+    // An export renders a file (a PDF takes a while): it has the long reply window.
+    const limitMs = msg.type === 'mcp.request' ? LIMITS.mcpReplyMs : msg.type === 'data.action' || msg.type === 'link.open' || msg.type === 'export.request' ? LIMITS.askReplyMs : LIMITS.replyMs;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -711,8 +726,23 @@ export class EditorHost {
       case 'steer.propose':
         this.o.ui.steerProposal?.(String(p['text']).trim());
         return { shown: this.o.ui.steerProposal !== undefined };
-      case 'export.request':
-        return a.exportAs !== undefined ? a.exportAs(String(p['format'])) : { error: 'unsupported', message: 'no export for this artifact' };
+      case 'artifact.sources':
+        return a.sources !== undefined ? a.sources() : { error: 'unsupported', message: 'no sources for this artifact' };
+      case 'export.request': {
+        // A file is made only under the person's click in THIS frame, judged at receipt (as `tools/call` is).
+        if (!this.clickedNow()) return { error: 'refused', message: 'an export starts only from a click in the editor' };
+        const format = String(p['format']);
+        if (a.exportAs !== undefined) return a.exportAs(format);
+        // plugins-complete G25: the data plane's own export (the one the card's Export menu uses), for a format it offers.
+        const offered = a.exports?.().find((x) => x.format === format);
+        if (a.exportFile === undefined || offered === undefined) return { error: 'unsupported', message: `no ${format} export for this artifact` };
+        const version = a.artifact().head;
+        if (version < 1) return { error: 'unavailable', message: 'there is no version to export yet' };
+        this.o.ui.exportLine?.({ working: `Making the ${offered.label} of version ${version}…` });
+        const out = await a.exportFile(format, version);
+        if (!this.torn) this.o.ui.exportLine?.({ out });
+        return out.ok ? { started: true, version, file: out.file } : { error: 'unavailable', message: out.text };
+      }
       case 'theme.set': {
         if (a.theme === undefined) return { error: 'unsupported', message: 'this artifact has no theme' };
         if (a.artifact().readonly) return { error: 'refused', message: 'this artifact is read-only here' };
@@ -953,9 +983,12 @@ export class EditorHost {
         if (this.o.events?.panel === undefined) { this.log({ kind: 'dropped', type, why: 'not shown as a panel section' }); return; }
         this.o.ui.panelSummary?.({ text: String(p['text']).slice(0, PANEL_SUMMARY_CHARS), tone: (p['tone'] as PanelTone | undefined) ?? 'none' });
         return;
-      case 'checks.contribute':
-        this.o.ui.notes((p['checks'] as unknown[]).length);
+      case 'checks.contribute': {
+        const notes = (p['checks'] as { id: string; text: string }[]).map((c) => ({ id: c.id, text: c.text }));
+        this.o.ui.notes(notes.length);
+        this.o.ui.advisory?.(notes);
         return;
+      }
       case 'ui.morph': {
         const to = String(p['to']);
         this.o.ui.morph(to === 'card' ? 'inline' : (to as Size));
@@ -1136,7 +1169,8 @@ export class EditorHost {
   /** DES-APPS-001 §7.1: `data.read` / `data.write` are the app host's to give, to the first-party `wicked-apps` bundle
    *  only; every other editor (and any host that is not an app host) never holds them, whatever it was handed. */
   private appGrants(grants: readonly PermissionId[]): Set<PermissionId> {
-    const out = new Set(grants.filter((g) => !APP_ONLY.has(g)));
+    // `sources.read` only where the adapter serves `artifact.sources` (plugins-complete G25).
+    const out = new Set(grants.filter((g) => !APP_ONLY.has(g) && (g !== 'sources.read' || this.o.adapter.sources !== undefined)));
     if (this.o.app !== undefined && this.o.editor === APPS_EDITOR && this.o.firstParty) for (const g of APP_ONLY) out.add(g);
     return out;
   }

@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 327,
-    "occurrences": 4823,
-    "static": 4047,
+    "occurrences": 4828,
+    "static": 4052,
     "dynamic": 177,
     "computed": 53
   },
@@ -1543,6 +1543,18 @@
     },
     {
       "testId": "artifact-checks-refresh",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-review",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-review-state",
       "files": [
         "src/components/session/ChecksPanel.tsx"
       ]
@@ -7100,6 +7112,12 @@
       ]
     },
     {
+      "testId": "full-shell-actions",
+      "files": [
+        "src/components/editorHost/FullShell.tsx"
+      ]
+    },
+    {
       "testId": "full-shell-chat",
       "files": [
         "src/components/editorHost/FullShell.tsx"
@@ -12609,6 +12627,18 @@
     },
     {
       "testId": "plugin-card-action",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-advisory",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-advisory-note",
       "files": [
         "src/components/editorHost/PluginCard.tsx"
       ]

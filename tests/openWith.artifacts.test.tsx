@@ -17,12 +17,14 @@ import { resetEditors, useEditorPicks, useEditors } from '../src/store/editors.j
 function view(over: Partial<EditorView>): EditorView {
   return {
     id: 'wicked-page', title: 'Page', version: '0.13.0', protocol: [1, 2], kinds: ['page'], sizes: ['inline', 'pane', 'full'],
-    permissions: [{ id: 'artifact.write', why: 'save' }], sha256: 'a'.repeat(64), bytes: 1, first_party: true, enabled: true, source: 'studio-bundle',
+    permissions: [{ id: 'artifact.read', why: 'show' }, { id: 'artifact.write', why: 'save' }], sha256: 'a'.repeat(64), bytes: 1, first_party: true, enabled: true, source: 'studio-bundle',
     entry_url: '/api/v1/editors/wicked-page/0.13.0/entry', ...over,
   } as EditorView;
 }
 const page = view({});
-const pack = view({ id: 'mpx-changelog-entry', title: 'Changelog entry', first_party: false, source: 'pack', permissions: [{ id: 'ui.fullscreen', why: 'full screen' }] as never });
+const pack = view({ id: 'mpx-changelog-entry', title: 'Changelog entry', first_party: false, source: 'pack', permissions: [{ id: 'artifact.read', why: 'show' }, { id: 'ui.fullscreen', why: 'full screen' }] as never });
+// plugins-complete G9: a kind editor that never reads the artifact it is opened on (the J6 form-only pack).
+const blind = view({ id: 'mpx-blind-entry', title: 'Blind entry', first_party: false, source: 'pack', permissions: [{ id: 'ui.fullscreen', why: 'full screen' }] as never });
 
 beforeEach(() => { cleanup(); resetEditors(); });
 
@@ -54,5 +56,21 @@ describe('Open with', () => {
     useEditors.setState({ state: 'ready', editors: [page], reason: null });
     render(<OpenWith kind="page" current={page} />);
     expect(screen.queryByTestId('plugin-card-open-with')).toBeNull();
+  });
+});
+
+describe('Open with leaves out an editor that does not read the artifact (G9)', () => {
+  it('is not offered, and a stored pick of it is ignored', () => {
+    useEditors.setState({ state: 'ready', editors: [blind, page], reason: null });
+    useEditorPicks.getState().pick('page', 'mpx-blind-entry');
+    render(<ArtifactMorph artifactKey="r1:p/doc" title="Status" projectId="p" docId="doc" composerKey="c" kind="page" />);
+    expect(screen.getByTestId('stub-card')).toHaveAttribute('data-editor', 'wicked-page');
+    expect(screen.queryByTestId('plugin-card-open-with')).toBeNull();
+  });
+  it('lists only the editors that read it', () => {
+    useEditors.setState({ state: 'ready', editors: [blind, pack, page], reason: null });
+    render(<OpenWith kind="page" current={page} />);
+    const select = screen.getByTestId('plugin-card-open-with-select') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.value)).toEqual(['wicked-page', 'mpx-changelog-entry']);
   });
 });
