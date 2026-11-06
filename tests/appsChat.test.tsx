@@ -211,6 +211,10 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     { type: 'gateEvaluated', ord: 3, denial: { source: 'rules_unchecked', reason: HOLD, claimId: null, ruleIds: ['learn-accessible'], deniedTool: null, phase: 'unit-3' }, assurance: receipt },
     { type: 'gateEscalated', ord: 3, attempt: 0, condition: 'rules_unchecked', denialSource: 'rules_unchecked', verdictSummary: HOLD },
   ]);
+  /** Attempt 0 held on rules, re-checked, then attempt 1 dispatched and found the rule BROKEN. */
+  const brokenTrail = seq([...holdTrail.map((e) => e as unknown as Record<string, unknown>), { type: 'gateDecided', ord: 3, allow: true }, { type: 'unitDispatched', ord: 3, attempt: 1 },
+    { type: 'gateEvaluated', ord: 3, denial: { source: 'rule_check', reason: 'broken' }, assurance: { ...receipt, attempt: 1, rules: [{ ...rules[1]!, status: 'broken', how: 'judge' }] } },
+    { type: 'gateEscalated', ord: 3, attempt: 1, condition: 'rule_broken', denialSource: 'rule_check', verdictSummary: 'broken' }]);
   /** The daemon's recorded trail for the run (what `GET /runs/:id/events` answers). */
   const serve = (trail: CoreEvent[]) => mockFetch((path) => (path === `/runs/${RUN}/events` ? { body: { runId: RUN, total: trail.length, returned: trail.length, events: trail } } : null));
   const running = () => detail({ turn: { runId: RUN, startedAt: 1, base: 3, actor: 'local' }, turns: [turn({ runId: RUN, state: 'running', endedAt: null, version: null })] });
@@ -239,10 +243,7 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
   });
 
   it('a stale hold on the unit record is voided by the trail: re-dispatched and BROKEN, no answers here and the review reads failed', async () => {
-    const broken = seq([...holdTrail.map((e) => e as unknown as Record<string, unknown>), { type: 'gateDecided', ord: 3, allow: true }, { type: 'unitDispatched', ord: 3, attempt: 1 },
-      { type: 'gateEvaluated', ord: 3, denial: { source: 'rule_check', reason: 'broken' }, assurance: { ...receipt, attempt: 1, rules: [{ ...rules[1]!, status: 'broken', how: 'judge' }] } },
-      { type: 'gateEscalated', ord: 3, attempt: 1, condition: 'rule_broken', denialSource: 'rule_check', verdictSummary: 'broken' }]);
-    const { calls } = serve(broken);
+    const { calls } = serve(brokenTrail);
     // The live buffer still holds attempt 0's hold; the polled record still names it too.
     useRunEventStore.setState({ byRun: { [RUN]: holdTrail } });
     useGateStore.setState({ gates: { [RUN]: { ...gate, receivedAt: 2 } } });
@@ -263,8 +264,19 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     unmount();
     useRunEventStore.setState({ byRun: {} });
     useGateStore.setState({ gates: { [RUN]: { ...gate, gateKind: undefined, receivedAt: 3 } as unknown as OpenGate } });
-    show(bareRuns({ source: 'rule_check', reason: 'broken' }));
+    const second = show(bareRuns({ source: 'rule_check', reason: 'broken' }));
     await waitFor(() => expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(2));
+    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+    second.unmount();
+    // A kind this chat does not know, over a stale buffer that once held (the trail says attempt 1 broke it): no answers
+    // here, before or after the read (codex r5).
+    calls.length = 0;
+    serve(brokenTrail);
+    useRunEventStore.setState({ byRun: { [RUN]: holdTrail } });
+    useGateStore.setState({ gates: { [RUN]: { ...gate, gateKind: 'future_kind', receivedAt: 4 } } });
+    show(bareRuns({ source: 'rule_check', reason: 'broken' }));
+    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+    await waitFor(() => expect(steps()).toStrictEqual(['done', 'done', 'failed']));
     expect(screen.queryByTestId('app-chat-gate')).toBeNull();
   });
 
