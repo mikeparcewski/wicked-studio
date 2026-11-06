@@ -6,6 +6,7 @@ import { useRunEventStore } from '../src/store/events.js';
 import { resetTurnHoldReads } from '../src/editors/apps/turnHold.js';
 import { AppHostView } from '../src/components/editorHost/AppHostView.js';
 import { rulesHoldHeadline } from '../src/board/gateHeadline.js';
+import { plainGateQuestion } from '../src/board/deskWords.js';
 import { AppChat, aboutComponent, appComposerKey } from '../src/components/apps/AppChat.js';
 import { AppsPage } from '../src/components/apps/AppsPage.js';
 import { busyText, changeLine, endedLine, slugFrom, suggestionsFor, turnsOf } from '../src/editors/apps/appTurns.js';
@@ -244,6 +245,12 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     expect(rulesHoldHeadline([r('a', 'kept'), r('b', 'unchecked')])).toBe('The rule b needs your call before this step can go on');
     expect(rulesHoldHeadline([r('b', 'unchecked'), r('c', 'waived'), r('d', 'broken')])).toBe('2 steering rules need your call before this step can go on');
     expect(rulesHoldHeadline([])).toBe('A steering rule needs your call before this step can go on');
+    // The surfaces that have only the prompt (the toast, the Desk, the dock) say the same, from core's rules-hold prompt.
+    const prompt = (n: number, ids: string) => `Unit 3's steering rules are UNCHECKED or waived by your instruction — ${n} steering rule(s) need you: ${ids} (the judge did not answer for it, in its batch or asked alone). The work was not rejected.`;
+    expect(plainGateQuestion(prompt(1, 'learn-accessible unchecked'), 'escalation')).toBe('The rule learn-accessible needs your call before this step can go on');
+    expect(plainGateQuestion(prompt(2, 'a unchecked, b waived'), 'escalation')).toBe('2 steering rules need your call before this step can go on');
+    // A BROKEN rule is not a hold: its prompt keeps its own words.
+    expect(plainGateQuestion('Unit 3 BROKE steering rule(s): 1 steering rule(s) broken: learn-tests-with-fixes — no test', 'escalation')).not.toMatch(/needs your call/);
   });
 
   it('the app page\'s "Needs you" strip counts the hold the chat shows (one reading, one trail read)', async () => {

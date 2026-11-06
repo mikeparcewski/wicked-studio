@@ -4,7 +4,7 @@ import { isDeliverGate } from '../components/gateMoveModel.js';
 import { deliverAcceptance } from './checkState.js';
 import { choicesOf, type OpenGate } from '../store/gates.js';
 import { creatorSeatRefusal, isReduced, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
-import { governanceDenialHeadline, plainGateQuestion } from './deskWords.js';
+import { governanceDenialHeadline, plainGateQuestion, rulesHoldWords } from './deskWords.js';
 import type { GateRowModel } from './gateRowModel.js';
 import { isHelperSeat } from './responder.js';
 
@@ -104,10 +104,7 @@ export function openGateFromEvents(runId: string, events: readonly CoreEvent[], 
 
 /** (F22) A rules hold's headline: the rules that need the person's call (unchecked, waived by instruction, disputed). */
 export function rulesHoldHeadline(rows: readonly RuleRow[]): string {
-  const open = rows.filter((r) => r.status === 'unchecked' || r.status === 'waived' || r.status === 'disputed');
-  if (open.length === 1) return `The rule ${open[0]!.ruleId} needs your call before this step can go on`;
-  if (open.length > 1) return `${open.length} steering rules need your call before this step can go on`;
-  return 'A steering rule needs your call before this step can go on';
+  return rulesHoldWords(rows.filter((r) => r.status === 'unchecked' || r.status === 'waived' || r.status === 'disputed').map((r) => r.ruleId));
 }
 
 /** What the headline is made of (GateRow's derived lead reads the same facts). */
