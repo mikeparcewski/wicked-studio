@@ -12,6 +12,7 @@ import { RunQuestions } from '../session/ThreadQuestions.js';
 import { GateRow } from '../session/GateRow.js';
 import { useGateStore } from '../../store/gates.js';
 import { rulesHoldAt } from '../../board/assuranceModel.js';
+import { useRunEvents } from '../../hooks/useRunEvents.js';
 
 /**
  * THE APP'S CHAT (DES-APPS-001 §6.1-§6.2, §9.2; operator 2026-11-04: "I should be driving the changes mostly via chat"):
@@ -59,6 +60,10 @@ function dropDraft(slug: string): void {
   try { sessionStorage.removeItem(DRAFT_KEY(slug)); } catch { /* nothing kept */ }
 }
 
+/** The gate kinds crew stops a turn at (`apps/turns.ts` REFUSAL_GATES): a turn never lands through one, so the chat
+ *  shows no answers there, a rules hold excepted. */
+const REFUSAL_GATE_KINDS = new Set(['escalation', 'failure', 'triage']);
+
 function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed, pending }: {
   t: AppTurnRecord; view: SessionView | null; detail: AppDetail; onUndo: () => void; navigate: (p: string) => void; now: number; latestLanded: boolean;
   /** The person's own edits still saving: a turn's Undo waits (it would undo those instead). */
@@ -70,12 +75,18 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
     <a href={sessionPath(`run:${t.runId}`)} className="wk-link wk-appchat-job" data-testid="app-chat-job"
       onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${t.runId}`)); }}>See the job</a>
   );
-  // The run's open gate (the shell's runs poller late-joins it; a live frame sets it).
+  // The run's open gate (the shell's runs poller late-joins it; a live frame sets it), and the run's events while one
+  // is open (the same shared read the gate row makes).
   const gate = useGateStore((s) => s.gates[t.runId]);
+  const { events } = useRunEvents(t.runId, t.state === 'running' && gate !== undefined);
   if (t.state === 'running') {
     const busy = busyText(view);
-    // (F22) A step held on steering rules was not rejected: it shows as the step waiting on you, never as failed.
-    const heldOrd = view !== null && gate !== undefined && rulesHoldAt(null, view.units, gate.ord).held ? gate.ord : null;
+    // (F22) A step held on steering rules was not rejected: it shows as the step waiting on you, never as failed. Read
+    // as the gate row reads it (this attempt's structured record, else the unit's own).
+    const heldOrd = view !== null && gate !== undefined && rulesHoldAt(events, view.units, gate.ord).held ? gate.ord : null;
+    // Answered here: a rules hold, or a gate crew does not take for a refusal. A refused step's gate is crew's to stop
+    // (the turn cannot land through it), so the chat never offers to approve past it.
+    const answerable = gate !== undefined && (heldOrd !== null || !REFUSAL_GATE_KINDS.has(gate.gateKind ?? ''));
     return (
       <div className="wk-appchat-reply wk-appchat-reply--busy" data-testid="app-chat-busy" data-step={busy.step ?? ''} aria-live="polite">
         <p className="wk-appchat-busyline"><span className="wk-appchat-pulse" aria-hidden="true" />{busy.line}</p>
@@ -92,7 +103,7 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
         {view !== null && busy.ord !== null && !framed && <LiveActivity runId={t.runId} ord={busy.ord} seat={busy.seat} />}
         {view !== null && !framed && <RunQuestions view={view} />}
         {/* (F22) The gate, answered here as on the run page; never inside another page (no answers there). */}
-        {view !== null && gate !== undefined && !framed && (
+        {view !== null && gate !== undefined && answerable && !framed && (
           <div className="wk-appchat-gate" data-testid="app-chat-gate"><GateRow view={view} gate={gate} navigate={navigate} /></div>
         )}
         <p className="wk-appchat-meta">The app is read-only until this lands. Preview still works. · {job}</p>

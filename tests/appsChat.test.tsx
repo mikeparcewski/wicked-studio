@@ -222,6 +222,23 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'now']);
   });
 
+  it('a hold the log alone names (no unit denial) reads the same, and a refusal gate is not answered here', async () => {
+    mockFetch(() => null);
+    const bare = [{ ...runs[0]!, units: units.map((u) => (u.ord === 3 ? { ...u, denial: undefined } : u)) }] as unknown as SessionView[];
+    useRunEventStore.setState({ byRun: { [RUN]: events } });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const { unmount } = render(<AppChat slug="desk" detail={running()} runs={bare} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Re-check the rules'));
+    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'now']);
+    unmount();
+    // The reviewer refused (crew stops the run): no answers in the chat, the step reads failed.
+    const refused = [events[0]!, { ...(events[1] as unknown as Record<string, unknown>), denial: { source: 'evaluator_verdict', reason: 'FAIL' } }, { ...(events[2] as unknown as Record<string, unknown>), condition: 'verdict_not_pass', denialSource: 'evaluator_verdict' }] as unknown as CoreEvent[];
+    useRunEventStore.setState({ byRun: { [RUN]: refused } });
+    render(<AppChat slug="desk" detail={running()} runs={bare} framed={false} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
+    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+    expect(screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'))).toStrictEqual(['done', 'done', 'failed']);
+  });
+
   it('framed, or with no open gate, there is no gate here (a refused review still reads failed)', () => {
     mockFetch(() => null);
     useRunEventStore.setState({ byRun: { [RUN]: events } });
