@@ -105,6 +105,12 @@ npm publish dates. Every version listed here exists on
   before ($0.16)".
 - **A program's path is never shown as a helper.** A step crew runs on a binary (a node path) is crew's own step: it is
   not listed among the helpers, in the run's agents or in the receipt's "built by".
+### Fixed
+
+- **The app's chat answers a run gate in place (F22).** A turn whose run is parked on a gate shows the run page's own
+  gate row under its steps: a review held on steering rules no judge ruled on offers Re-check the rules and Confirm or
+  skip, as the run page does, and the held review reads as waiting on you, not failed. Not inside another page.
+  Needs crew with the matching fix (a held turn is no longer cancelled); on an older crew the turn ends refused as before.
 
 ## [0.15.0] — 2026-11-05
 
