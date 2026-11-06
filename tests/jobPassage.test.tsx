@@ -820,7 +820,7 @@ describe('follow-up (the passage)', () => {
   it('the held plan outlines each step’s detail, who it asks, and what this version added', async () => {
     team = { teamed: true, units: [], planRev: 2, rows: [
       { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build', instructions: 'Port reporting-api to .NET 8' }] } },
-      { event_id: 2, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build', instructions: 'Port reporting-api to .NET 8' }, { id: 'review', catalog: 'review', gate: { Human: {} } }] } },
+      { event_id: 2, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build', instructions: 'Port reporting-api to .NET 8' }, { id: 'review', catalog: 'review', gate: { human_confirm: { unconditional: true } } }] } },
       { event_id: 4, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 1, plan_rev: 2 } }] };
     useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 7, gateKind: 'plan_approval' } }, approaching: {} });
     page([run('awaiting_human', [u(0, 'done', 'pa-scope'), u(1, 'pending', 'build')])]);
@@ -855,5 +855,46 @@ describe('follow-up (the passage)', () => {
     page([run('cancelled', [u(0, 'done', 'pa-scope'), u(1, 'pending', 'build')])]);
     expect(await screen.findByTestId('job-passage-try-again')).toBeTruthy();
     expect(screen.queryByTestId('job-passage-fix-bug')).toBeNull();
+  });
+});
+
+describe('follow-up: ticks read as the job’s history', () => {
+  it('the passage sits after its ticks', async () => {
+    const RUN = 'run-1';
+    messages = [USER, SEAT, P1, { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } }];
+    team = { teamed: true, units: [], rows: [{ event_id: 2, emitted_at: T0 + 10, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } }] };
+    page([makeView({ id: RUN, status: 'executing' as never, unit_ix: 0, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, [makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'distributed' })])]);
+    await waitFor(() => expect(screen.getAllByTestId('job-tick')).toHaveLength(2));
+    const passage = screen.getByTestId('job-passage');
+    for (const t of screen.getAllByTestId('job-tick')) expect(t.compareDocumentPosition(passage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('follow-up review folds (the passage)', () => {
+  const RUN = 'run-1';
+  const decided = { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } };
+  const failedRun = () => makeView({ id: RUN, status: 'failed' as never, unit_ix: 1, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, [
+    makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'done', phase_ref: 'pa-scope' }), makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: 'rejected', phase_ref: 'build' })]);
+
+  it('a job with no repository is not handed to Bug', async () => {
+    messages = [USER, SEAT, { at: T0 + 2, turnId: 't1', kind: 'proposal', proposal: jobProposal({ repos: [], repoRefs: [] }) }, decided];
+    team = { teamed: true, units: [], rows: [] };
+    page([failedRun()]);
+    expect(await screen.findByTestId('job-passage-try-again')).toBeTruthy();
+    expect(screen.queryByTestId('job-passage-fix-bug')).toBeNull();
+  });
+
+  it('the job the person asked for takes the focus and is announced when it arrives', async () => {
+    messages = [USER, SEAT, P1, decided];
+    team = { teamed: true, units: [], rows: [] };
+    page([failedRun()]);
+    fireEvent.click(await screen.findByTestId('job-passage-try-again'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    const next = jobProposal({ pid: `${CHAT}:retry1`, turnId: 't9', lineage: `${CHAT}:retry1`, revises: null });
+    await frame({ at: T0 + 50, turnId: 't9', kind: 'proposal', proposal: next });
+    await waitFor(() => expect(screen.getAllByTestId('job-passage')).toHaveLength(2));
+    const fresh = screen.getAllByTestId('job-passage').find((p) => p.dataset['lineage'] === `${CHAT}:retry1`)!;
+    await waitFor(() => expect(fresh.contains(document.activeElement)).toBe(true));
+    expect(within(fresh).getByTestId('job-passage-live').textContent).toMatch(/^wicked proposes the next job/);
   });
 });

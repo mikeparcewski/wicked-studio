@@ -50,11 +50,12 @@ export function seenPlanRev(runId: string, decision: GateDecision & { plan?: unk
   const { byRun, readFor } = usePlanGateStore.getState();
   const view = byRun[runId];
   const promptRev = gate === undefined ? null : PROMPT_REV.exec(gate.prompt)?.[1] ?? null;
-  const isPlan = gate?.gateKind === 'plan_approval' || promptRev !== null || (view !== undefined && view !== null);
-  // A gate known to be another kind needs no revision; an unclassified one fails closed.
-  if (!isPlan && gate?.gateKind !== undefined) return undefined;
-  if (!isPlan && view === null) return undefined;
+  // The current gate's own classification comes first: a gate crew named another kind needs no revision, whatever an
+  // older plan read left cached.
+  if (gate?.gateKind !== undefined && gate.gateKind !== 'plan_approval' && promptRev === null) return undefined;
   if (promptRev !== null) return Number(promptRev);
+  // A plan gate (or one not classified yet): only a plan read made for THIS gate instance names the version. A failed,
+  // stale or empty read is not a classification: the answer is held unsent.
   if (view != null && planGateFresh(readFor[runId], gate) && (gate === undefined || gate.ord === view.ord)) return view.planRev;
   void loadPlanGate(runId);
   return null;

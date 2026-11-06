@@ -133,6 +133,15 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // One polite announcement of what changed, once (§2.8.6).
   const prevView = useRef<JobView | null>(null);
   const [announce, setAnnounce] = useState('');
+  // A job the person asked for from an ended one (Try again, Fix it as a bug): this new passage says so once and takes
+  // the focus (an explicit act's result; a passive arrival never moves focus).
+  const passageRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!takeHandOff(lineage.lineage)) return;
+    setAnnounce(`wicked proposes the next job: ${v.proposal.what.label}`);
+    queueMicrotask(() => (passageRef.current?.querySelector<HTMLElement>('[data-testid="job-passage-reply"]:not([disabled])') ?? passageRef.current)?.focus());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when this passage mounts
+  }, []);
   useEffect(() => {
     const said = announceOf(prevView.current, v);
     if (said !== null) setAnnounce(said);
@@ -247,21 +256,30 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const reshapeIds = useRef(new Map<string, string>());
   /** A hand-off after a stop or failure is being made (one at a time; a retry of a lost one reuses its request id). */
   const [handOff, setHandOff] = useState(false);
-  const handOffIds = useRef(new Map<string, string>());
+  /** An unresolved hand-off's request, kept whole: a retry resends exactly it (crew answers a repeat with the same
+   *  proposal); only a hand-off that landed frees its key for a new request. */
+  const handOffBodies = useRef(new Map<string, Parameters<typeof api.proposeInChat>[1]>());
   const handOffJob = (what: 'bug' | 'again'): void => {
     const p = v.proposal;
     if (run === null || handOff) return;
     const key = `${what}:${run.session.id}`;
-    const requestId = handOffIds.current.get(key) ?? newRequestId();
-    handOffIds.current.set(key, requestId);
-    const why = failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[]).plain;
-    // Bug: crew's Bug card, its intent the failed job and crew's own failure words. Again: the same shape and words.
-    const body = what === 'bug'
-      ? { card: 'bug', option: null, depth: null, words: `${p.what.title} failed: ${why}`, source: 'pick' as const, requestId }
-      : { card: p.shape!.card, option: p.shape!.option, depth: p.shape!.depth, ...(p.words !== undefined ? { words: p.words } : {}), source: 'pick' as const, requestId };
+    let body = handOffBodies.current.get(key);
+    if (body === undefined) {
+      const why = failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[]).plain;
+      // Bug: crew's Bug card, its intent the failed job and crew's own failure words. Again: the same shape and words.
+      body = what === 'bug'
+        ? { card: 'bug', option: null, depth: null, words: `${p.what.title} failed: ${why}`, source: 'pick', requestId: newRequestId() }
+        : { card: p.shape!.card, option: p.shape!.option, depth: p.shape!.depth, ...(p.words !== undefined ? { words: p.words } : {}), source: 'pick', requestId: newRequestId() };
+      handOffBodies.current.set(key, body);
+    }
     setError(null);
     setHandOff(true);
-    api.proposeInChat(chatId, body).then(() => onChanged()).catch((e: unknown) => setError(proposalRefusal(e).words))
+    api.proposeInChat(chatId, body).then(() => {
+      handOffBodies.current.delete(key);
+      // The person asked for the next job: its passage, when crew's record of it arrives, takes the focus and says so.
+      expectHandOff();
+      onChanged();
+    }).catch((e: unknown) => setError(proposalRefusal(e).words))
       .finally(() => setHandOff(false));
   };
   const bind = (reply: JobReply, label: string, placeholder: string, send: (text: string) => boolean): void => {
@@ -374,6 +392,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     );
   }
 
+  // A repository job (a run or a compose on a repository): the one a failure hands to Bug.
+  const repoJob = (v.proposal.launch === 'run' || v.proposal.launch === 'compose') && ((v.proposal.repoRefs ?? v.proposal.repos).length > 0);
   const tone = v.needsYou ? ' wk-pass--needs' : v.phase === 'delivered' ? ' wk-pass--ok' : v.phase === 'failed' || v.phase === 'stopped' ? ' wk-pass--bad'
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
   const replies = v.replies;
@@ -382,7 +402,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
 
   return (
     <section
-      role="region" aria-label={regionName(v)}
+      role="region" aria-label={regionName(v)} ref={passageRef} tabIndex={-1}
       data-testid="job-passage" data-phase={v.phase} data-version={v.version} data-lineage={lineage.lineage}
       {...(runId !== null ? { 'data-run-id': runId } : {})}
       className={`wk-pass${tone}`}
@@ -455,7 +475,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
                 <span className="l">
                   <b>{s.label}</b>
                   {s.detail !== null && <span className="d"> {s.detail}</span>}
-                  {s.asks && <em className="wk-pass-asks"> asks you</em>}
+                  {s.asks === 'always' && <em className="wk-pass-asks"> asks you</em>}
+                  {s.asks === 'if-fails' && <em className="wk-pass-asks"> asks you if its check fails</em>}
                   {s.floor && <em className="wk-pass-floor"> added for this risk</em>}
                   {s.added && <span className="wk-visually-hidden"> (new in this version)</span>}
                 </span>
@@ -512,26 +533,26 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {v.phase === 'stopped' && run !== null && (
         <p data-testid="job-passage-stopped" className="wk-pass-sub">Stopped. {progress !== null ? `${progress.done} of ${progress.total} steps had run.` : ''} {deliverySummary(run) ?? ''}</p>
       )}
-      {/* After a stop or a failure: the person's own next job, made in this chat by the existing person route
-          (POST /chats/:id/proposals) and run only by its Start. */}
-      {(v.phase === 'stopped' || v.phase === 'failed') && run !== null && (
-        <div role="group" aria-label="What next" data-testid="job-passage-after" className="wk-pass-acts">
-          {v.phase === 'failed' && v.proposal.launch !== 'document' && (
-            <button type="button" data-testid="job-passage-fix-bug" disabled={handOff} className="wk-pass-act wk-pass-act--go"
-              {...press.bind('fix-bug', `ended:${run.session.id}`, () => handOffJob('bug'), 'The job changed.')}>Fix it as a bug</button>
-          )}
-          {v.phase === 'failed' && v.proposal.launch !== 'document' && v.proposal.shape !== undefined && <span aria-hidden className="wk-pass-dot">·</span>}
-          {v.proposal.shape !== undefined && (
-            <button type="button" data-testid="job-passage-try-again" disabled={handOff} className={`wk-pass-act${v.phase === 'stopped' ? ' wk-pass-act--go' : ''}`}
-              {...press.bind('try-again', `ended:${run.session.id}`, () => handOffJob('again'), 'The job changed.')}>Try again</button>
-          )}
-        </div>
-      )}
       {v.phase === 'failed' && run !== null && (
         <p data-testid="job-passage-failed" className="wk-pass-sub">
           Failed. {failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[]).plain} {deliverySummary(run) ?? ''}{' '}
           <button type="button" className="wk-pass-inl" onClick={() => openSheet({ kind: 'session', sessionId: `run:${run.session.id}` })}>Look underneath</button>
         </p>
+      )}
+      {/* After a stop or a failure: the person's own next job, made in this chat by the existing person route
+          (POST /chats/:id/proposals) and run only by its Start. */}
+      {(v.phase === 'stopped' || v.phase === 'failed') && run !== null && (
+        <div role="group" aria-label="What next" data-testid="job-passage-after" className="wk-pass-acts">
+          {v.phase === 'failed' && repoJob && (
+            <button type="button" data-testid="job-passage-fix-bug" disabled={handOff} className="wk-pass-act wk-pass-act--go"
+              {...press.bind('fix-bug', `ended:${run.session.id}`, () => handOffJob('bug'), 'The job changed.')}>Fix it as a bug</button>
+          )}
+          {v.phase === 'failed' && repoJob && v.proposal.shape !== undefined && <span aria-hidden className="wk-pass-dot">·</span>}
+          {v.proposal.shape !== undefined && (
+            <button type="button" data-testid="job-passage-try-again" disabled={handOff} className={`wk-pass-act${v.phase === 'stopped' ? ' wk-pass-act--go' : ''}`}
+              {...press.bind('try-again', `ended:${run.session.id}`, () => handOffJob('again'), 'The job changed.')}>Try again</button>
+          )}
+        </div>
       )}
 
       {v.phase === 'planHeld' && v.plan === null && planRetry !== null && (
@@ -757,4 +778,15 @@ function PassageRunExtras({ run, sessionId, gateOpen }: { run: SessionView; sess
       <RunArtifacts view={run} composerKey={sessionId} chain={chain} only="made" frame={(_who, _suffix, cards) => <div className="wk-pass-made" data-testid="job-passage-made">{cards}</div>} />
     </Undocked>
   );
+}
+
+/** A hand-off the person just made: the next passage that mounts (a new lineage) is its result, within a short window. */
+let handOffAt: number | null = null;
+const handOffSeen = new Set<string>();
+function expectHandOff(): void { handOffAt = Date.now(); }
+function takeHandOff(lineage: string): boolean {
+  if (handOffAt === null || Date.now() - handOffAt > 30_000 || handOffSeen.has(lineage)) { handOffSeen.add(lineage); return false; }
+  handOffAt = null;
+  handOffSeen.add(lineage);
+  return true;
 }

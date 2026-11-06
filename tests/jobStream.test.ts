@@ -125,7 +125,7 @@ describe('jobView', () => {
     makeView({ id: 'run-1', status: status as never, unit_ix: ix }, units);
   const held = (over: Partial<JobRunInputs> = {}): JobRunInputs => ({
     ...NO_RUN, view: runView('awaiting_human'), gate: { ord: 1, receivedAt: 5, gateKind: 'plan_approval', prompt: '' },
-    plan: { ord: 1, planRev: 2, steps: ['Plan', 'Port', 'Deliver'].map((label) => ({ id: label, label, detail: null, asks: false, floor: false, added: false })), fresh: true }, ...over,
+    plan: { ord: 1, planRev: 2, steps: ['Plan', 'Port', 'Deliver'].map((label) => ({ id: label, label, detail: null, asks: null, floor: false, added: false })), fresh: true }, ...over,
   });
 
   it('Plan held: Approve names the plan version and is bound to run, ord and planRev; the margin says "plan v2"', () => {
@@ -282,21 +282,29 @@ describe('follow-up: plan outline, re-plan on record, ticks', () => {
   it('enriches the held plan from the record: detail, asks you, the floor, and what is new against the revision before', async () => {
     const { enrichPlan } = await import('../src/board/jobStream.js');
     const rows = [
-      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { asks: [], steps: [{ id: 'port', catalog: 'build', instructions: 'reporting-api to .NET 8\nmore' }, { id: 'cutover', catalog: 'cutover', gate: { Human: {} } }] } },
-      { event_id: 5, event_type: 'wicked.team.plan.proposed', payload: { asks: ['deliver'], steps: [{ id: 'port', catalog: 'build', instructions: 'reporting-api to .NET 8\nmore' }, { id: 'cutover', catalog: 'cutover', gate: { Human: {} } }, { id: 'rollback', catalog: 'build' }, { id: 'deliver', catalog: 'deliver' }, { id: 'review-floor', catalog: 'review', added_by: 'floor' }] } },
+      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { asks: [], steps: [{ id: 'port', catalog: 'build', instructions: 'reporting-api to .NET 8\nmore' }, { id: 'cutover', catalog: 'cutover', gate: { human_confirm: { unconditional: true } } }] } },
+      { event_id: 5, event_type: 'wicked.team.plan.proposed', payload: { asks: [], steps: [{ id: 'port', catalog: 'build', instructions: 'reporting-api to .NET 8\nmore', gate: 'auto' }, { id: 'cutover', catalog: 'cutover', gate: { human_confirm: { unconditional: true } } }, { id: 'rollback', catalog: 'build', gate: { human_confirm_if: 'verdict_not_pass' } }, { id: 'deliver', catalog: 'deliver', gate: 'consent_before' }, { id: 'review-floor', catalog: 'review', added_by: 'floor' }] } },
+      { event_id: 7, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 1, plan_rev: 2 } },
+      // A later proposal (a re-plan in flight, or one crew refused) never describes the plan held now.
+      { event_id: 9, event_type: 'wicked.team.plan.proposed', payload: { asks: [], steps: [{ id: 'port', catalog: 'build', instructions: 'Delete everything' }] } },
     ];
     const steps = [['port', 'build', 'Port'], ['cutover', 'cutover', 'Cut over'], ['rollback', 'build', 'Roll back if parity fails'], ['deliver', 'deliver', 'Deliver'], ['review-floor', 'review', 'Review']]
       .map(([id, catalog, label]) => ({ id: id!, catalog: catalog!, label: label! }));
     const p = enrichPlan(steps, rows, 2);
     expect(p.steps.map((s) => [s.label, s.detail, s.asks, s.floor, s.added])).toEqual([
-      ['Port', 'reporting-api to .NET 8', false, false, false],
-      ['Cut over', null, true, false, false],
-      ['Roll back if parity fails', null, false, false, true],
-      ['Deliver', null, true, false, true],
-      ['Review', null, false, true, true],
+      ['Port', 'reporting-api to .NET 8', null, false, false],
+      ['Cut over', null, 'always', false, false],
+      ['Roll back if parity fails', null, 'if-fails', false, true],
+      ['Deliver', null, 'always', false, true],
+      ['Review', null, null, true, true],
     ]);
     expect(p.changed).toBe('Plan v2: added Roll back if parity fails, Deliver, Review');
     expect(enrichPlan(steps.slice(0, 2), rows.slice(0, 1), 1).changed).toBeNull();
+    // A proposal crew refused never describes the plan either.
+    const refusedRows = [...rows.slice(0, 2),
+      { event_id: 6, event_type: 'wicked.team.plan.proposed', payload: { proposal_id: 'p3', asks: [], steps: [{ id: 'port', catalog: 'build', instructions: 'Delete everything' }] } },
+      { event_id: 6.5, event_type: 'wicked.team.plan.refused', payload: { proposal_id: 'p3' } }, rows[2]!];
+    expect(enrichPlan(steps, refusedRows, 2).steps[0]!.detail).toBe('reporting-api to .NET 8');
   });
 
   it('reads a re-plan from the record (a send-back in any tab) until crew accepts or holds a plan, or the work starts', async () => {
@@ -328,5 +336,36 @@ describe('follow-up: plan outline, re-plan on record, ticks', () => {
       [40, 'Codex’s plan, v2, is ready'],
       [50, 'You approved plan v2'],
     ]);
+  });
+});
+
+describe('follow-up review folds (records)', () => {
+  it('an amended decision keeps its own outcome: a later plan never rewrites "approved with your changes"', async () => {
+    const { jobTicks } = await import('../src/board/jobStream.js');
+    const l = foldJobLineages([rec(2, 'proposal', { proposal: jobProposal() }),
+      rec(10, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'go', result: { runId: 'run-1', artifactRef: null, adopted: false, stub: false } })])[0]!;
+    const rows = [
+      { event_id: 2, emitted_at: 20, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } },
+      { event_id: 3, emitted_at: 30, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g1', decision: 'human_amended' } },
+      { event_id: 4, emitted_at: 35, event_type: 'wicked.team.plan.accepted', payload: {} },
+      { event_id: 8, emitted_at: 80, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 3, plan_rev: 2 } },
+    ];
+    expect(jobTicks(l, rows, 'Codex').map((t) => t.text)).toContain('You approved plan v1 with your changes');
+  });
+  it('a recorded Start the test configuration took is no "started" tick', async () => {
+    const { jobTicks } = await import('../src/board/jobStream.js');
+    const l = foldJobLineages([rec(2, 'proposal', { proposal: jobProposal() }),
+      rec(10, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'go', result: { runId: 'run-1', artifactRef: null, adopted: false, stub: true } })])[0]!;
+    expect(jobTicks(l, [], 'Codex')).toEqual([]);
+  });
+  it('a reshape keeps the ticks of the job it replaced (each decision by its own pid, each run its own record)', async () => {
+    const { jobTicks } = await import('../src/board/jobStream.js');
+    const l = foldJobLineages([
+      rec(2, 'proposal', { proposal: jobProposal() }),
+      rec(10, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'go', result: { runId: 'run-1', artifactRef: null, adopted: false, stub: false } }),
+      rec(40, 'proposal', { proposal: v2({ reshapes: 'run-1' } as never) }, 't2'),
+    ])[0]!;
+    const rows = [{ event_id: 2, emitted_at: 20, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } }];
+    expect(jobTicks(l, [{ runId: 'run-1', rows }], 'Codex').map((t) => t.text)).toEqual(['You started the job, v1', 'Codex’s plan, v1, is ready']);
   });
 });
