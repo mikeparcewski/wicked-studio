@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 330,
-    "occurrences": 4927,
-    "static": 4145,
+    "occurrences": 4929,
+    "static": 4147,
     "dynamic": 177,
     "computed": 53
   },
@@ -8283,6 +8283,18 @@
     },
     {
       "testId": "job-passage-review-plan",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-review-plan-note",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-review-plan-toggle",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]

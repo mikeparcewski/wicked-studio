@@ -62,3 +62,49 @@ export function chatStartPower(powerCap: boolean, defaultOn: boolean, reviewPlan
   if (!powerCap) return null;
   return defaultOn ? !reviewPlan : false;
 }
+
+/** How long a Start waits for the daemon to say what it can do before it starts nothing. */
+export const START_LIMITS = { healthWaitMs: 15_000 };
+
+/** A job proposal can run as a power run (crew 0.196.0's rule): a workflow run on a repository. Crew also requires a
+ *  preset workflow and refuses otherwise (409 `power_unavailable`, its words shown), never runs it phased. */
+export function proposalPowerFits(p: { launch?: string | null; repoRefs?: readonly string[] | null }): boolean {
+  return (p.launch === 'run' || p.launch === undefined || p.launch === null) && (p.repoRefs?.length ?? 0) > 0;
+}
+
+/**
+ * (api-types 0.196.0) The `power` a chat job's Start sends, decided at the press like the `/` start's: the daemon's
+ * capabilities and the Power-mode setting are read NOW, and must be the ones the passage showed (`shownOn`: the Review
+ * plan choice was drawn). Review plan on sends `false` at once. A power run (Review plan off) is sent only when the
+ * fresh reads still say power mode is on: a setting or capability that changed since, a choice flipped meanwhile, or a
+ * read that fails starts nothing (the passage redraws with what was read). `undefined` = send no `power` (the job stops
+ * at its plan, as on an older daemon).
+ */
+export async function jobStartPower(shownOn: boolean, reviewAsked: boolean, reviewNow: () => boolean): Promise<boolean | undefined> {
+  if (!shownOn) return undefined;
+  // Review plan on: it stops at its plan whatever was changed since (`false` holds on every daemon that took the field).
+  if (reviewAsked) return false;
+  let caps: Record<string, unknown>;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const giveUp = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer in ${Math.round(START_LIMITS.healthWaitMs / 1000)} s`)), START_LIMITS.healthWaitMs); });
+    caps = ((await Promise.race([api.getHealth(), giveUp])) as unknown as { capabilities?: Record<string, unknown> }).capabilities ?? {};
+  } catch (e) {
+    throw new Error(`Not started: the daemon did not say what it can do (${e instanceof Error ? e.message : String(e)}). Press Start again.`);
+  } finally {
+    clearTimeout(timer);
+  }
+  const powerNow = caps['powerMode'] === true;
+  const fieldNow = caps['chatJobPower'] === true;
+  // What the passage draws from: a fresh answer that differs updates it, so the refusal's redraw shows what was read.
+  const s = useCapabilities.getState();
+  if (s.powerMode !== powerNow || s.chatJobPower !== fieldNow) useCapabilities.setState({ powerMode: powerNow, chatJobPower: fieldNow });
+  if (!powerNow || !fieldNow) throw new Error('Not started: power runs are off on this daemon now, so this job reviews its plan. Press Start again.');
+  let defaultNow: boolean;
+  try { defaultNow = await readPowerDefault({ fresh: true }); } catch (e) {
+    throw new Error(`Not started: the Power-mode setting could not be read (${e instanceof Error ? e.message : String(e)}). Press Start again.`);
+  }
+  if (!defaultNow) throw new Error('Not started: Power mode for new jobs is off now, so this job reviews its plan. Press Start again.');
+  if (reviewNow() !== reviewAsked) throw new Error('Not started: Review plan changed while the job was being checked. Press Start again.');
+  return true;
+}
