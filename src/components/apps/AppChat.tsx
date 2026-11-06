@@ -10,10 +10,7 @@ import { AppComposer } from './AppComposer.js';
 import { LiveActivity } from '../session/LiveActivity.js';
 import { RunQuestions } from '../session/ThreadQuestions.js';
 import { GateRow } from '../session/GateRow.js';
-import { useGateStore } from '../../store/gates.js';
-import { rulesHoldAt } from '../../board/assuranceModel.js';
-import { api } from '../../api/client.js';
-import { useRunEventStore } from '../../store/events.js';
+import { useTurnRulesHold } from '../../editors/apps/turnHold.js';
 
 /**
  * THE APP'S CHAT (DES-APPS-001 §6.1-§6.2, §9.2; operator 2026-11-04: "I should be driving the changes mostly via chat"):
@@ -72,47 +69,17 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
     <a href={sessionPath(`run:${t.runId}`)} className="wk-link wk-appchat-job" data-testid="app-chat-job"
       onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${t.runId}`)); }}>See the job</a>
   );
-  // The run's open gate (the shell's runs poller late-joins it; a live frame sets it), and the run's events while one
-  // is open (the same shared log the gate row reads).
-  const gate = useGateStore((s) => s.gates[t.runId]);
-  const live = t.state === 'running' && gate !== undefined;
-  // A framed studio answers nothing, so it reads nothing for it either.
-  const reading = live && !framed;
-  const events = useRunEventStore((s) => s.byRun[t.runId]) ?? null;
-  // (F22) Each gate the turn's run opens is read against the run's RECORDED trail once (merged into the shared log), so
-  // the hold is this attempt's, whatever the live buffer missed on a reconnect: a rules hold is answered here only then.
-  // A failed read is tried again a little later; See the job reaches the run page's gate meanwhile.
-  const gateKey = reading && gate !== undefined ? `${t.runId}:${gate.ord}:${gate.receivedAt}` : null;
-  const [readFor, setReadFor] = useState<string | null>(null);
-  const [retryTick, setRetryTick] = useState(0);
-  useEffect(() => {
-    if (gateKey === null) return undefined;
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    api.getRunEvents(t.runId).then(
-      ({ events: trail }) => {
-        useRunEventStore.getState().hydrate(t.runId, trail);
-        if (alive) setReadFor(gateKey);
-      },
-      () => {
-        if (alive) timer = setTimeout(() => setRetryTick((n) => n + 1), 5000);
-      },
-    );
-    return () => { alive = false; if (timer !== undefined) clearTimeout(timer); };
-  }, [gateKey, t.runId, retryTick]);
-  const verified = gateKey !== null && readFor === gateKey;
-  // Held: this attempt's structured record in the read trail (as the gate row reads it). Until the trail is read, the
-  // polled unit record only styles the step (never answers).
-  const heldNow = live && view !== null && rulesHoldAt(verified ? events : null, view.units, gate.ord).held;
-  const heldByLog = verified && heldNow;
+  // (F22) The one reading of a rules hold on this turn's run (the busy line, the gate and the app page's strip share it).
+  const hold = useTurnRulesHold(t.runId, view, { running: t.state === 'running', framed });
+  const gate = hold.gate;
   if (t.state === 'running') {
-    const busy = busyText(view);
+    const busy = busyText(view, hold.held);
     // The held step shows as the step waiting on you, never as failed.
-    const heldOrd = gate !== undefined && heldNow ? gate.ord : null;
+    const heldOrd = gate !== undefined && hold.heldNow ? gate.ord : null;
     // Answered here: only a rules hold this gate's recorded trail shows (so the row carries Re-check and Confirm or skip).
     // Every other gate an app turn can park on is a refusal crew stops (the turn cannot land through it), or one this
     // chat does not know: See the job reaches the run page's gate.
-    const answerable = heldByLog;
+    const answerable = hold.held;
     return (
       <div className="wk-appchat-reply wk-appchat-reply--busy" data-testid="app-chat-busy" data-step={busy.step ?? ''} aria-live="polite">
         <p className="wk-appchat-busyline"><span className="wk-appchat-pulse" aria-hidden="true" />{busy.line}</p>

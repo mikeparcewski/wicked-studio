@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4710,
-    "static": 3941,
+    "occurrences": 4712,
+    "static": 3943,
     "dynamic": 173,
     "computed": 53
   },
@@ -996,6 +996,18 @@
     },
     {
       "testId": "apps-dock",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-dock-count",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-dock-rules-hold",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
       ]

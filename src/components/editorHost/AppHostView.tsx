@@ -15,6 +15,7 @@ import { AppChat, appComposerKey } from '../apps/AppChat.js';
 import { AppProperties } from '../apps/AppProperties.js';
 import { AppSidePanel, readCollapsed, readSeen, writeSeen, type PanelTab } from '../apps/AppSidePanel.js';
 import { turnsOf } from '../../editors/apps/appTurns.js';
+import { useTurnRulesHold } from '../../editors/apps/turnHold.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 import { recordingPort } from '../../editors/apps/previewSnapshots.js';
 import { ShowOnReport } from '../apps/ShowOnReport.js';
@@ -389,7 +390,13 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const sideOn = kind?.store === 'crew' && slug !== null && detail !== null;
   const tab: PanelTab = chatOn ? panelTab : 'properties';
   const crumb = back ?? { path: '/apps', label: 'Apps' };
-  const idle = asking === null && link === null && outcome === null;
+  // (F22) A rules hold on the app's current turn waits on the person as well (the chat answers it): the same reading the
+  // chat uses (`useTurnRulesHold`), so the strip never says "nothing waiting" beside the chat's gate.
+  const turnRun = chatOn && detail?.turn != null ? detail.turn.runId : null;
+  const turnHold = useTurnRulesHold(turnRun, turnRun === null ? null : runs.find((v) => v.session.id === turnRun) ?? null, { running: turnRun !== null, framed });
+  const ruleHeld = turnHold.held;
+  const waitingCount = (asking !== null ? 1 : 0) + (link !== null ? 1 : 0) + (ruleHeld ? 1 : 0);
+  const idle = asking === null && link === null && outcome === null && !ruleHeld;
 
   return (
     <div className="wk-apps-host" data-testid="apps-host" data-mode={shown} data-framed={framed}>
@@ -438,7 +445,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             : <span className="wk-apps-line--note">{chatOn ? 'Select a component to ask the chat about just that one.' : 'Select a component to make it the subject of your next message.'}</span>}
         </p>
       )}
-      <div className="wk-apps-body" data-mode={shown} data-chat={sideOn} data-panel={sideOn && collapsed && asking === null && link === null ? 'collapsed' : 'open'}>
+      <div className="wk-apps-body" data-mode={shown} data-chat={sideOn} data-panel={sideOn && collapsed && waitingCount === 0 ? 'collapsed' : 'open'}>
         <div className="wk-apps-frame" ref={frameWrap}>
           {torn !== null && (
             <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-torn">{torn} · <button type="button" className="wk-btn wk-btn--link" onClick={() => setMountKey((k) => k + 1)}>Reload it</button></p>
@@ -446,8 +453,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           <div ref={frameBox} key={mountKey} className="wk-apps-frame-box" data-testid="apps-frame-box" />
         </div>
         {(() => { const dock = (
-        <aside className={`wk-apps-dock${narrow && asking === null && link === null ? ' wk-apps-dock--quiet' : ''}${sideOn && idle ? ' wk-apps-dock--idle' : ''}`} aria-label="Needs you" data-testid="apps-dock">
-          <h2 className="wk-apps-dock-title">Needs you <span className="wk-apps-dock-count">{asking !== null || link !== null ? '1 waiting' : 'nothing waiting'}</span></h2>
+        <aside className={`wk-apps-dock${narrow && waitingCount === 0 ? ' wk-apps-dock--quiet' : ''}${sideOn && idle ? ' wk-apps-dock--idle' : ''}`} aria-label="Needs you" data-testid="apps-dock">
+          <h2 className="wk-apps-dock-title">Needs you <span className="wk-apps-dock-count" data-testid="apps-dock-count">{waitingCount === 0 ? 'nothing waiting' : `${waitingCount} waiting`}</span></h2>
+          {ruleHeld && <p className="wk-apps-dock-hint" data-testid="apps-dock-rules-hold">A rule needs your call: answer it in the chat.</p>}
           {asking !== null && <ActionCardView asking={asking} onAnswer={answer} />}
           {link !== null && (
             <section className="wk-apps-card" data-testid="apps-link-confirm" role="dialog" aria-label="Open this link?">
@@ -461,7 +469,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             </section>
           )}
           {asking === null && link === null && outcome !== null && <p className="wk-apps-outcome" data-testid="apps-outcome">{outcome}</p>}
-          {asking === null && link === null && (
+          {asking === null && link === null && !ruleHeld && (
             <p className="wk-apps-dock-hint">
               {framed ? 'This page is inside another page, so the app cannot run actions here.'
                 : shown === 'edit' ? 'Actions run in Preview. Studio asks you here before each one.'
@@ -481,7 +489,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           const selectedId = chips.find((x) => x.anchor.kind === 'element')?.anchor;
           const selId = selectedId !== undefined && selectedId.kind === 'element' ? selectedId.id : null;
           // A card or a link question waiting opens the panel: it must never wait unseen.
-          const waiting = asking !== null || link !== null;
+          const waiting = asking !== null || link !== null || ruleHeld;
           return (
             <div className="wk-apps-side">
               <AppSidePanel slug={slug} tab={tab} setTab={setPanelTab} collapsed={collapsed && !waiting} setCollapsed={setCollapsed}

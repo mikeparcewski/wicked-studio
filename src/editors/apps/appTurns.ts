@@ -91,13 +91,17 @@ export function seatWord(key: string): string {
 const STEP_WORDS: Record<string, string> = { build: 'Building the change', check: 'Checking it against your data sources', review: 'Reviewing it' };
 
 /** The busy line while a turn's run works: which step, on which seat ("Building the change · Claude Code"). */
-export function busyText(view: SessionView | null): { line: string; step: string | null; ord: number | null; seat: string | null } {
+/** (F22) The busy line of a turn held on steering rules. */
+export const RULES_HOLD_LINE = 'Waiting on you: a rule needs your call';
+
+export function busyText(view: SessionView | null, rulesHeld = false): { line: string; step: string | null; ord: number | null; seat: string | null } {
   if (view === null) return { line: 'Starting the turn…', step: null, ord: null, seat: null };
   const units = [...view.units].sort((a, b) => a.ord - b.ord);
   const id = view.session.id;
   const phase = (u: { id: string }): string => (u.id.startsWith(`${id}:`) ? u.id.slice(id.length + 1) : u.id);
   const live = units.find((u) => u.status === 'distributed') ?? units.find((u) => u.status === 'pending') ?? null;
-  if (view.session.status === 'awaiting_human') return { line: 'Waiting on you: the run asks a question', step: live === null ? null : phase(live), ord: live?.ord ?? null, seat: null };
+  // (F22) A review held on steering rules (`useTurnRulesHold`) says so: it is a call on a rule, not a question.
+  if (view.session.status === 'awaiting_human') return { line: rulesHeld ? RULES_HOLD_LINE : 'Waiting on you: the run asks a question', step: live === null ? null : phase(live), ord: live?.ord ?? null, seat: null };
   if (live === null) return { line: 'Finishing up…', step: null, ord: null, seat: null };
   const step = phase(live);
   const seat = live.assigned_cli ?? null;
