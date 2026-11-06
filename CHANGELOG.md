@@ -107,10 +107,12 @@ npm publish dates. Every version listed here exists on
   not listed among the helpers, in the run's agents or in the receipt's "built by".
 ### Fixed
 
-- **The app's chat answers a run gate in place (F22).** A turn whose run is parked on a gate shows the run page's own
-  gate row under its steps: a review held on steering rules no judge ruled on offers Re-check the rules and Confirm or
-  skip, as the run page does, and the held review reads as waiting on you, not failed. Not inside another page.
-  Needs crew with the matching fix (a held turn is no longer cancelled); on an older crew the turn ends refused as before.
+- **The app's chat answers a rules hold in place (F22).** When an app turn's review is held on steering rules no judge
+  ruled on (unchecked, waived by instruction or disputed: "the work was not rejected"), the chat shows the run page's own
+  gate row under the turn's steps, with Re-check the rules and Confirm or skip, and the held review reads as waiting on
+  you, not failed. The chat first reads the run's recorded trail for that gate, so a live buffer that missed or outlived
+  an attempt never offers a stale answer; any other gate keeps See the job. Not inside another page. Needs crew with the
+  matching fix (wicked-crew#1385: a held turn is no longer cancelled); on an older crew the turn ends refused as before.
 
 ## [0.15.0] — 2026-11-05
 

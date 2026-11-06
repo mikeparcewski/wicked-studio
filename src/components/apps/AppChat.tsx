@@ -21,9 +21,9 @@ import { useRunEventStore } from '../../store/events.js';
  * change, crew checks it against the app's data sources, a different seat reviews it — and it lands as a new version
  * or says why it did not. The thread IS crew's record of the app's turns (`AppDetail.turns`), so a reload and a second
  * tab read the same thing; while a turn runs the reply shows which step it is on, the run's live activity and any
- * question it asks (studio's own run machinery: {@link LiveActivity}, {@link RunQuestions}). (F22) A gate the run
- * parks on is answered here with the run page's own {@link GateRow}: a review held on steering rules no judge ruled
- * on ("the work was not rejected") offers Re-check the rules and Confirm or skip, exactly as the run page does.
+ * question it asks (studio's own run machinery: {@link LiveActivity}, {@link RunQuestions}). (F22) A review held on
+ * steering rules no judge ruled on ("the work was not rejected") is answered here with the run page's own
+ * {@link GateRow}: Re-check the rules and Confirm or skip, exactly as the run page offers them.
  *
  * Selecting a component in Edit puts an "about:" chip on this composer (its words from the spec); the message names
  * the component by id and crew describes it to the builder from the spec, never from these words.
