@@ -38,6 +38,7 @@ import type {
 } from './types.js';
 
 import { ApiError, apiStatus } from './errors.js';
+import { useCapabilities } from '../store/capabilities.js';
 import type { GuidanceUpdate } from './guidance.js';
 import type { ElicitationAnswerBody } from './ask.js';
 import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
@@ -45,6 +46,17 @@ import type { ChatMessageContext, ChatProposalDecisionBody, ChatProposalDecision
 import type { PersonProposalBody, PersonProposalResponse, PersonRevisionBody, ReshapeRunBody, ReshapeRunResponse } from 'wicked-crew-api-types';
 
 export type * from './types.js';
+
+/**
+ * DES-CATALOG-002 §4.6 (api-types 0.192.0 `ChatOpenBody.accepts` / `ChatMessageBody.accepts`): what this client renders.
+ * Studio draws job proposals as wicked's passage, so it declares `accepts: ['job']` on a chat's open and on each
+ * message — crew makes a job proposal only for a chat whose newest declaration accepts it, and otherwise tells the seat
+ * to point at a command. ONLY where `GET /health.capabilities.chatJobProposals` is true: an older daemon's strict body
+ * would refuse the field, so it gets exactly today's request.
+ */
+function jobAccepts(): { accepts?: Array<'job'> } {
+  return useCapabilities.getState().chatJobProposals ? { accepts: ['job'] } : {};
+}
 export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
 export { ApiError, apiStatus, apiWire, isRouteAbsent, translateWireError } from './errors.js';
 
@@ -328,7 +340,7 @@ export const api = {
     apiFetch<ChatOpenResponse>(`/chats`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, ...jobAccepts() }),
     }),
   // `turnId` (api-types 0.38.0) is the daemon's id for the turn this send opened: every
   // `chatDelta` / `chatReply` / `chatCitations` frame that answers it is stamped with it, so a
@@ -347,6 +359,7 @@ export const api = {
         ...(targets !== undefined ? { targets } : {}),
         ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
         ...(context !== undefined && Object.keys(context).length > 0 ? { context } : {}),
+        ...jobAccepts(),
       }),
     }),
   /** F-W1-005: re-seat NAMED seats on a LIVE chat — the engine's per-seat `chat_ensure` with the
