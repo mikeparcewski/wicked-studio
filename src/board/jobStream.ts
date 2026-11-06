@@ -445,15 +445,19 @@ export function progressOf(view: SessionView, stepName: StepName, gateOrd: numbe
       : u.ord === nowOrd ? 'now' : 'todo';
     return { ord: u.ord, label: stepName(u), seat: u.assigned_cli ?? null, state };
   });
-  const finished = rows.filter((r) => r.state === 'done' || r.state === 'skipped' || r.state === 'failed');
+  // The counts and the last outcome are the units' recorded outcomes, whatever the rows show as current (a refused step
+  // a gate now waits at is still counted as failed).
+  const outcome = (u: SessionView['units'][number]): 'done' | 'skipped' | 'failed' | null =>
+    u.phase_status === 'skipped' ? 'skipped' : u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed' : null;
+  const finished = units.filter((u) => outcome(u) !== null);
   const current = rows.find((r) => r.state === 'now' || r.state === 'waiting') ?? null;
   const after = rows.filter((r) => r.state === 'todo' && (current === null || r.ord > current.ord));
   return {
     total: rows.length,
-    done: rows.filter((r) => r.state === 'done').length,
-    notNeeded: rows.filter((r) => r.state === 'skipped').length,
-    failed: rows.filter((r) => r.state === 'failed').length,
-    last: finished.length > 0 ? finished[finished.length - 1]!.label : null,
+    done: units.filter((u) => outcome(u) === 'done').length,
+    notNeeded: units.filter((u) => outcome(u) === 'skipped').length,
+    failed: units.filter((u) => outcome(u) === 'failed').length,
+    last: finished.length > 0 ? stepName(finished[finished.length - 1]!) : null,
     current,
     next: after[0] ?? null,
     more: Math.max(0, after.length - 1),
@@ -473,9 +477,12 @@ export function foldLine(p: JobProgress): string {
 function phaseOf(l: JobLineage, run: JobRunInputs, ui: { swapPending: string | null; starting: boolean }, now: number, startingMs: number): JobPhase {
   const p = l.head.proposal;
   if (l.state === 'superseded') return 'replaced';
+  // A run crew records as launched from THIS version is the job's state, whatever an older transcript read still says
+  // about the proposal (a refresh after Go that failed): no Start is offered over a launched run.
+  const launched = run.view !== null && (l.state === 'open' || l.state === 'revising');
   if (l.state === 'decided' && l.decision === 'not_now') return 'notStarted';
-  if (l.state === 'revising') return 'revising';
-  if (l.state === 'open') {
+  if (l.state === 'revising' && !launched) return 'revising';
+  if (l.state === 'open' && !launched) {
     if (ui.swapPending === l.head.pid) return 'swapPending';
     if (p.coming !== undefined) return 'coming';
     if (p.question !== undefined && p.question !== null) return 'asking';
@@ -710,7 +717,8 @@ export function announceOf(prev: JobView | null, next: JobView): string | null {
   }
   if (prev.plan?.planRev !== next.plan?.planRev && next.plan !== null) return `Plan version ${next.plan.planRev} is waiting for you`;
   if (prev.phase !== next.phase) return `The job is ${next.status}`;
-  if (next.offers.length > prev.offers.length) return `wicked offers: ${next.offers[next.offers.length - 1]!.text}`;
+  const newOffer = next.offers[next.offers.length - 1];
+  if (newOffer !== undefined && !prev.offers.some((o) => o.id === newOffer.id)) return `wicked offers: ${newOffer.text}`;
   if (proposalTarget(prev.proposal) !== proposalTarget(next.proposal) && next.tokensLive) return 'wicked updated what Start runs';
   return null;
 }

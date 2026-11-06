@@ -571,7 +571,7 @@ function StepTurn({ runId, step, who, checkWord, onOpen, answers, at, evaluator 
  * move that fixes it: Resume (`POST /runs/:id/resume`). The trail is read once here when nothing else
  * on the page has (a late join); a failed read is no verdict, so a bare run never claims an orphan.
  */
-function OrphanedRow({ view }: { view: RunView }): React.ReactElement | null {
+export function OrphanedRow({ view }: { view: RunView }): React.ReactElement | null {
   const id = view.session.id;
   const status = view.session.status;
   const frames = useRunEvents(id, status === 'executing').events ?? undefined;

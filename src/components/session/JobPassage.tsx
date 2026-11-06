@@ -30,6 +30,10 @@ import { useRunChain } from './ChainLine.js';
 import { proposalKindOf } from '../../board/proposalCard.js';
 import { LiveActivity } from './LiveActivity.js';
 import { RunQuestions } from './ThreadQuestions.js';
+import { OrphanedRow } from './RunConversation.js';
+import { RunArtifacts } from './RunArtifacts.js';
+import { PowerPauseCard } from './PowerMode.js';
+import { usePower } from '../../hooks/usePower.js';
 
 /**
  * WICKED'S PASSAGE (DES-CATALOG-002 rev 7 §2.8.1, the v4 "Ink" direction, mockup new-job-v5): the job, inline in the
@@ -73,7 +77,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [ticking]);
-  const { view: v, run, inputs, teamRetry } = useJobView(lineage, runs, now);
+  const { view: v, run, inputs, planRetry, runRetry } = useJobView(lineage, runs, now);
   const roster = useRoster();
   const press = usePressBinding();
   const local = useJobLocal();
@@ -471,12 +475,21 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         </p>
       )}
 
-      {v.phase === 'planHeld' && v.plan === null && teamRetry !== null && (
+      {v.phase === 'planHeld' && v.plan === null && planRetry !== null && (
         <p data-testid="job-passage-plan-unread" role="alert" className="wk-pass-sub wk-pass-error">
           The plan couldn’t be read, so nothing can be approved yet.{' '}
-          <button type="button" className="wk-pass-inl" onClick={teamRetry}>Retry</button>
+          <button type="button" className="wk-pass-inl" data-testid="job-passage-plan-retry" onClick={planRetry}>Retry</button>
         </p>
       )}
+      {v.phase === 'starting' && runRetry !== null && (
+        <p data-testid="job-passage-run-unread" role="alert" className="wk-pass-sub wk-pass-error">
+          The job’s run couldn’t be read.{' '}
+          <button type="button" className="wk-pass-inl" onClick={runRetry}>Retry</button>
+        </p>
+      )}
+      {/* What the run's block drew for it and the passage now holds: a restart's Resume, a power checkpoint's answer,
+          and what the run made (a document, a deck, a walkthrough, a demo video). */}
+      {run !== null && v.runId !== null && <PassageRunExtras run={run} sessionId={sessionId} gateOpen={gate !== undefined} />}
 
       {/* crew's offers at the plan held now (Lane D): only a press on one calls a route, bound to its version. */}
       {v.offers.filter((o) => !dismissed.has(o.id)).map((o) => (
@@ -655,5 +668,20 @@ function PassageGate({ run, gate, navigate }: { run: SessionView; gate: ReturnTy
         {deliver ? <ProposalCard view={run} chain={chain} variant="chat" /> : <GateRow view={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
       </Undocked>
     </div>
+  );
+}
+
+/** The run's other in-place renderers, unchanged: a daemon restart's Resume, a power checkpoint (not an engine gate:
+ *  the run stays executing), and what the run made, each growing inline → pane → full as on the run's block. */
+function PassageRunExtras({ run, sessionId, gateOpen }: { run: SessionView; sessionId: string; gateOpen: boolean }): React.ReactElement {
+  const { chain } = useRunChain(run);
+  const power = usePower(run);
+  const live = !['completed', 'cancelled', 'failed'].includes(run.session.status);
+  return (
+    <Undocked>
+      <OrphanedRow view={run} />
+      {power?.pause != null && live && !gateOpen && <div className="wk-pass-gate" data-testid="job-passage-power"><PowerPauseCard view={run} power={power} /></div>}
+      <RunArtifacts view={run} composerKey={sessionId} chain={chain} only="made" frame={(_who, _suffix, cards) => <div className="wk-pass-made" data-testid="job-passage-made">{cards}</div>} />
+    </Undocked>
   );
 }
