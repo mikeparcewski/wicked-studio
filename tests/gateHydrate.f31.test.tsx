@@ -3,11 +3,10 @@
  * `GET /runs/:id/gate` one run at a time, oldest first, over every parked run (98 on the rig), and the run's own
  * thread never read its gate. These pin:
  *  - a waiting run's thread reads its own gate when it opens, so the plan card shows without the runs list's pass;
- *  - the pass reads newest first, at most GATE_READS_IN_FLIGHT across passes, and a hung read gives its slot back;
- *  - a gate read that overlapped an answer, a live frame (gateDecided included), a prune or the ask reclassification
- *    never brings the old gate back; of two reads the later one wins; a read of the gate just answered is dropped;
- *  - one read per run and generation while it is on its way; a run whose read found no gate is not read again until
- *    something writes its gate.
+ *  - the pass reads newest first, at most GATE_READS_IN_FLIGHT across passes; a hung read ends at its deadline;
+ *  - a gate read that overlapped an answer, a live frame (gateDecided included), a prune or a reconnect never brings
+ *    the old gate back; of two reads the later one wins, whichever lands first;
+ *  - one read per run and generation while it is on its way.
  */
 import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,12 +14,12 @@ import * as client from '../src/api/client.js';
 import { ApiError } from '../src/api/errors.js';
 import type { CoreEvent, GateInfo, SessionView } from '../src/api/types.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
-import { GATE_READ_PATIENCE_MS, IDLE_GATE_ACTION, ensureGate, refreshGate, resetGateProbes, useGateActionStore } from '../src/board/gateActions.js';
+import { GATE_READ_DEADLINE_MS, IDLE_GATE_ACTION, ensureGate, refreshGate, useGateActionStore } from '../src/board/gateActions.js';
 import { RunBlock } from '../src/components/session/RunConversation.js';
 import { GATE_READS_IN_FLIGHT, inGateSlot, newestFirst, useRuns } from '../src/hooks/useRuns.js';
 import { useConnectionStore } from '../src/store/connection.js';
 import { useRunEventStore } from '../src/store/events.js';
-import { useGateStore, type OpenGate } from '../src/store/gates.js';
+import { invalidateGateReads, useGateStore, type OpenGate } from '../src/store/gates.js';
 import { makeView } from './factories.js';
 
 const NOW = 1_700_000_000_000;
@@ -57,7 +56,6 @@ const fresh = (tag: string): string => `r-f31-${tag}-${++n}`;
 beforeEach(() => {
   useGateStore.setState({ gates: {}, approaching: {} });
   useGateActionStore.setState({ byGate: {} });
-  resetGateProbes();
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -82,7 +80,7 @@ describe('a waiting run’s thread reads its own gate', () => {
     await waitFor(() => expect(screen.queryByTestId('session-proposal')).not.toBeNull());
     expect(screen.getAllByTestId('session-proposal-option').length).toBeGreaterThan(0);
     expect(getGate).toHaveBeenCalledTimes(1);
-    expect(getGate).toHaveBeenCalledWith(RUN);
+    expect(getGate).toHaveBeenCalledWith(RUN, expect.any(AbortSignal));
   });
 
   it('a run with its gate cached, or not waiting, reads nothing', async () => {
@@ -107,23 +105,6 @@ describe('a gate read that overlapped a newer write is dropped', () => {
     calls[0]!.resolve(planInfo(RUN));
     await read;
     expect(useGateStore.getState().gates[RUN]).toBeUndefined();
-  });
-
-  it('a remount right after an answer here: a fresh read of the answered gate (same ord) is dropped until crew says the run moved', async () => {
-    const RUN = fresh('remount');
-    const { calls } = heldGetGate();
-    useGateStore.getState().setGate(openGate(RUN, 2));
-    useGateStore.getState().clearGate(RUN); // answered here; the runs list still says awaiting_human
-    const read = ensureGate(RUN); // the thread mounts again
-    calls[0]!.resolve(planInfo(RUN, 2)); // crew still serves the answered gate for a moment
-    await read;
-    expect(useGateStore.getState().gates[RUN]).toBeUndefined();
-    // The run moved (resumed) and parked again at a new gate: that one is read and drawn.
-    useGateStore.getState().ingest({ type: 'resumed', session: RUN } as unknown as CoreEvent);
-    const again = ensureGate(RUN);
-    calls[1]!.resolve(planInfo(RUN, 4));
-    await again;
-    expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 4 });
   });
 
   it('the run moved on by a live frame (no gate cached): the late read does not open the old gate', async () => {
@@ -214,20 +195,6 @@ describe('one read per run, no re-read storm', () => {
     expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 6 });
   });
 
-  it('a run whose read found no gate (404) is not read again until something writes its gate', async () => {
-    const RUN = fresh('none');
-    const spy = vi.spyOn(client.api, 'getGate').mockRejectedValue(new ApiError(404, 'no open gate'));
-    await ensureGate(RUN);
-    await ensureGate(RUN);
-    expect(spy).toHaveBeenCalledTimes(1);
-    useGateStore.getState().ingest({ type: 'gateDecided', session: RUN, ord: 1 } as unknown as CoreEvent);
-    await ensureGate(RUN);
-    expect(spy).toHaveBeenCalledTimes(2);
-    resetGateProbes(); // a reconnect
-    await ensureGate(RUN);
-    expect(spy).toHaveBeenCalledTimes(3);
-  });
-
   it('a failed read (network) is tried again by the next caller', async () => {
     const RUN = fresh('neterr');
     const spy = vi.spyOn(client.api, 'getGate').mockRejectedValueOnce(new TypeError('fetch failed')).mockResolvedValueOnce(planInfo(RUN));
@@ -238,21 +205,42 @@ describe('one read per run, no re-read storm', () => {
     expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 2 });
   });
 
-  it('an overdue read no longer holds back a new one', async () => {
-    const RUN = fresh('overdue');
+  it('a reconnect makes every read begun before it obsolete: not applied, not joined', async () => {
+    const RUN = fresh('reconnect');
     const { calls, spy } = heldGetGate();
-    const t0 = Date.now();
-    const now = vi.spyOn(Date, 'now').mockReturnValue(t0);
-    void ensureGate(RUN);
-    now.mockReturnValue(t0 + GATE_READ_PATIENCE_MS + 1);
-    const second = ensureGate(RUN);
+    const before = ensureGate(RUN);
+    invalidateGateReads();
+    const after = ensureGate(RUN);
     expect(spy).toHaveBeenCalledTimes(2);
-    calls[1]!.resolve(planInfo(RUN));
-    await second;
-    expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 2 });
-    calls[0]!.resolve(planInfo(RUN, 1)); // the hung one lands at last: older, dropped
-    await new Promise((r) => setTimeout(r, 0));
-    expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 2 });
+    calls[0]!.resolve(planInfo(RUN, 2)); // answered for a state a missed frame may have moved past
+    await before;
+    expect(useGateStore.getState().gates[RUN]).toBeUndefined();
+    calls[1]!.resolve(planInfo(RUN, 7));
+    await after;
+    expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 7 });
+  });
+
+  it('a hung read ends at its deadline: nothing applied, and the next caller reads again', async () => {
+    const RUN = fresh('hung');
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      const spy = vi.spyOn(client.api, 'getGate').mockImplementation((_id: string, signal?: AbortSignal) => new Promise<GateInfo>((_res, rej) => {
+        signals.push(signal!);
+        signal!.addEventListener('abort', () => rej(signal!.reason));
+      }));
+      const first = ensureGate(RUN);
+      expect(signals[0]).toBeInstanceOf(AbortSignal);
+      await vi.advanceTimersByTimeAsync(GATE_READ_DEADLINE_MS + 1);
+      await first;
+      expect(signals[0]!.aborted).toBe(true);
+      expect(useGateStore.getState().gates[RUN]).toBeUndefined();
+      void ensureGate(RUN);
+      expect(spy).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(GATE_READ_DEADLINE_MS + 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -281,15 +269,24 @@ describe('the runs list’s late-join pass', () => {
     expect(peak).toBe(GATE_READS_IN_FLIGHT);
   });
 
-  it('an overdue read gives its slot back', async () => {
+  it('a slot is held until its read ends, and a hung gate read ends at its deadline', async () => {
     vi.useFakeTimers();
     try {
-      const hung = Array.from({ length: GATE_READS_IN_FLIGHT }, () => inGateSlot(() => new Promise<void>(() => {})));
+      let open = 0;
+      vi.spyOn(client.api, 'getGate').mockImplementation((_id: string, signal?: AbortSignal) => new Promise<GateInfo>((_res, rej) => {
+        open += 1;
+        signal!.addEventListener('abort', () => { open -= 1; rej(signal!.reason); });
+      }));
+      const hung = Array.from({ length: GATE_READS_IN_FLIGHT }, () => inGateSlot(() => ensureGate(fresh('slot'))));
       let ran = false;
       const next = inGateSlot(async () => { ran = true; });
-      await vi.advanceTimersByTimeAsync(GATE_READ_PATIENCE_MS + 1);
+      await vi.advanceTimersByTimeAsync(GATE_READ_DEADLINE_MS - 1);
+      expect(ran).toBe(false); // every slot is still held by a request on its way
+      expect(open).toBe(GATE_READS_IN_FLIGHT);
+      await vi.advanceTimersByTimeAsync(2);
       await next;
       expect(ran).toBe(true);
+      expect(open).toBe(0); // the hung requests were ended, not merely stopped waiting for
       await Promise.all(hung);
     } finally {
       vi.useRealTimers();
@@ -333,7 +330,7 @@ describe('the runs list’s late-join pass', () => {
       expect(Object.keys(useGateStore.getState().gates).length).toBe(14);
     }, { timeout: 4000 });
     expect(peak).toBe(GATE_READS_IN_FLIGHT);
-    expect(new Set(asked).size).toBe(14); // no run read twice
+    expect(asked).toHaveLength(14); // no run read twice
   });
 });
 

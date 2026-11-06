@@ -148,8 +148,8 @@ interface GateStore {
   clearGate: (runId: string) => void;
   /**
    * F31: apply one `GET /runs/:id/gate` read (`gate`, or `null` for crew's 404) begun with `beginGateRead`. Applied
-   * only if nothing wrote the run's gate since the read began and no read begun later has applied; a read of the
-   * gate just answered here (same ord) is dropped too. Returns whether it applied.
+   * only if nothing wrote the run's gate since the read began and no read begun later has applied. Returns whether
+   * it applied.
    */
   applyGateRead: (ticket: GateReadTicket, gate: OpenGate | null) => boolean;
   /** Fold one CoreEvent into the cache (awaitingHuman opens; terminal/resumed prune). */
@@ -171,9 +171,6 @@ interface GateStore {
 const generations: Record<string, number> = {};
 const readSeq: Record<string, number> = {};
 const appliedSeq: Record<string, number> = {};
-/** The ord of the gate answered here (`clearGate` on a cached gate), until a frame or a prune says the run moved:
- *  crew can still serve that gate for a moment after the answer, before its `resumed` lands. */
-const answeredOrd: Record<string, number> = {};
 function bump(runId: string): void {
   generations[runId] = (generations[runId] ?? 0) + 1;
 }
@@ -186,6 +183,10 @@ export interface GateReadTicket {
   runId: string;
   gen: number;
   seq: number;
+}
+/** A reconnect: frames may have been missed, so every read begun before it is obsolete (never applied, never joined). */
+export function invalidateGateReads(): void {
+  for (const id of Object.keys(readSeq)) bump(id);
 }
 /** Begin a gate read: take its ticket before the request goes out. */
 export function beginGateRead(runId: string): GateReadTicket {
@@ -216,14 +217,11 @@ export const useGateStore = create<GateStore>((set) => {
 
   setGate: (gate) => {
     bump(gate.runId);
-    delete answeredOrd[gate.runId];
     put(gate);
   },
 
   clearGate: (runId) => {
     bump(runId);
-    const cached = useGateStore.getState().gates[runId];
-    if (cached !== undefined) answeredOrd[runId] = cached.ord;
     set((s) => {
       if (!(runId in s.gates)) return s;
       const next = { ...s.gates };
@@ -236,7 +234,6 @@ export const useGateStore = create<GateStore>((set) => {
     const { runId } = ticket;
     if (gateGen(runId) !== ticket.gen || ticket.seq < (appliedSeq[runId] ?? 0)) return false;
     appliedSeq[runId] = ticket.seq;
-    if (gate !== null && answeredOrd[runId] === gate.ord) return false;
     if (gate !== null) { put(gate); return true; }
     set((s) => {
       if (!(runId in s.gates)) return s;
@@ -250,7 +247,7 @@ export const useGateStore = create<GateStore>((set) => {
   ingest: (event) => {
     const session = typeof event.session === 'string' ? event.session : undefined;
     if (session === undefined) return;
-    if (GATE_WRITES.has(event.type)) { bump(session); delete answeredOrd[session]; }
+    if (GATE_WRITES.has(event.type)) bump(session);
     set((s) => {
       // The approaching preview folds FIRST (slice BA): it opens on
       // `gateEscalated` and retires on any frame that supersedes it —
@@ -335,7 +332,7 @@ export const useGateStore = create<GateStore>((set) => {
     const keep = new Set(awaitingRunIds);
     // F31: a run read but not cached (a read still on its way) is pruned too: its read must not land after this.
     for (const id of Object.keys(readSeq)) {
-      if (!keep.has(id) && !isAwaitingPinned(id)) { bump(id); delete answeredOrd[id]; }
+      if (!keep.has(id) && !isAwaitingPinned(id)) bump(id);
     }
     set((s) => {
       const next: Record<string, OpenGate> = {};
@@ -345,7 +342,7 @@ export const useGateStore = create<GateStore>((set) => {
         // against (§11.5 — a chat-keyed gate is never in GET /runs); only a
         // real resolution (ingest/clearGate) may retire them.
         if (keep.has(id) || isAwaitingPinned(id)) next[id] = gate;
-        else { changed = true; bump(id); delete answeredOrd[id]; }
+        else { changed = true; bump(id); }
       }
       return changed ? { gates: next } : s;
     });

@@ -409,7 +409,8 @@ export const api = {
     ),
 
   /** The daemon-cached gate prompt for a paused run (late-join reconcile, §3.3). */
-  getGate: (id: string) => apiFetch<GateInfo>(`/runs/${encodeURIComponent(id)}/gate`),
+  // F31: a gate read passes a deadline (`AbortSignal.timeout`), so a hung request ends instead of holding its slot.
+  getGate: (id: string, signal?: AbortSignal) => apiFetch<GateInfo>(`/runs/${encodeURIComponent(id)}/gate`, signal !== undefined ? { signal } : undefined),
 
   /** The run's open elicitation, or null when there is none (404 -> null, DES-002). */
   getElicitation: async (id: string): Promise<ElicitationInfo | null> => {

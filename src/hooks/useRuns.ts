@@ -4,9 +4,9 @@ import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
-import { useGateStore } from '../store/gates.js';
+import { invalidateGateReads, useGateStore } from '../store/gates.js';
 import { answerShapeOf, askerOf, useElicitationStore } from '../store/elicitations.js';
-import { GATE_READ_PATIENCE_MS, ensureGate, rememberWorkTitles, resetGateProbes } from '../board/gateActions.js';
+import { ensureGate, rememberWorkTitles } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -44,8 +44,8 @@ export function newestFirst(views: readonly SessionView[]): string[] {
 
 /**
  * F31: the late-join passes' shared read slots. At most `GATE_READS_IN_FLIGHT` reads are on their way across every
- * pass (a refresh that replaces a pass does not add four more); a slot whose read is overdue
- * (`GATE_READ_PATIENCE_MS`) is given back, so a hung request cannot stall the passes after it.
+ * pass (a refresh that replaces a pass does not add four more). A slot is held until its read ends; a hydration read
+ * ends by its deadline at the latest (`GATE_READ_DEADLINE_MS`), so a hung request cannot stall the passes after it.
  */
 let slotsBusy = 0;
 const slotWaiters: Array<() => void> = [];
@@ -53,11 +53,9 @@ export async function inGateSlot(fn: () => Promise<void>): Promise<void> {
   // A freed slot is handed to the longest waiter (first in, first out), never taken by a newcomer.
   if (slotsBusy < GATE_READS_IN_FLIGHT) slotsBusy += 1;
   else await new Promise<void>((r) => slotWaiters.push(r));
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await Promise.race([fn(), new Promise<void>((r) => { timer = setTimeout(r, GATE_READ_PATIENCE_MS); })]);
+    await fn();
   } finally {
-    if (timer !== undefined) clearTimeout(timer);
     const next = slotWaiters.shift();
     if (next !== undefined) next();
     else slotsBusy -= 1;
@@ -132,7 +130,8 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
   }, []);
 
   // A (re)connect may have missed a question's live frame: every live run is read again (review r1).
-  useEffect(() => { if (status === 'connected') { resetElicitationProbes(); resetGateProbes(); } }, [status]);
+  // F31: so is every gate read begun before it (it may answer for a state a missed frame moved past).
+  useEffect(() => { if (status === 'connected') { resetElicitationProbes(); invalidateGateReads(); } }, [status]);
 
   useEffect(() => {
     if (status !== 'connected') return;
