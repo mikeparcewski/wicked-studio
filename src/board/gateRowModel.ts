@@ -855,8 +855,9 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     }
     if (deadSeat === null && deniedUnit) {
       coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
-    } else if (deadSeat === null && qeNoVerdict && !qeRedo) {
-      coreWithoutStop.push({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
+    } else if (deadSeat === null && qeNoVerdict) {
+      // studio#761: nothing was judged, so no Send back; with the engine's redo offered it IS the retry (fresh evidence).
+      if (!qeRedo) coreWithoutStop.push({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
     } else if (deadSeat === null && sendBackAccepted(units, gate.ord)) {
       coreWithoutStop.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with the reviewer\'s failing items.' });
     }
