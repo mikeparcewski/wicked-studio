@@ -84,6 +84,33 @@ describe('F23 — INCONCLUSIVE: redo the QE check first, named for what the revi
     expect(m.failing).toEqual([]);
   });
 
+  it('with only the gateEvaluated frame (no gateEscalated), the plain approve is still labelled as the person\'s judgment', () => {
+    const gate: OpenGate = { runId: RUN, ord: 6, prompt: INC_PROMPT(false), gateKind: 'escalation', lifecycle: 'open', receivedAt: NOW };
+    const evs = events(INCONCLUSIVE, 'qe_inconclusive', 'judge_unavailable', INC_PROMPT(false)).filter((e) => (e as { type: string }).type !== 'gateEscalated');
+    const m = sessionGateChoices({ runId: RUN, gate, units: units('inconclusive'), events: evs, pool: ['pi', 'claude'], roster: null })!;
+    expect(m.qe?.outcome).toBe('inconclusive');
+    const plain = all(m).filter((c) => c.decision !== null && c.decision.approve && (c.decision as { action?: string }).action === undefined);
+    expect(plain.length).toBeGreaterThan(0);
+    for (const c of plain) expect(c.label).toBe(OPERATOR_JUDGMENT_LABEL);
+  });
+
+  it('a late join (only the awaitingHuman frame): the engine\'s named redo is still offered first, and the plain approve is the judgment', () => {
+    const gate: OpenGate = { runId: RUN, ord: 6, prompt: INC_PROMPT(true), gateKind: 'escalation', lifecycle: 'open', receivedAt: NOW };
+    const evs = events(INCONCLUSIVE, 'qe_inconclusive', 'judge_unavailable', INC_PROMPT(true)).filter((e) => (e as { type: string }).type === 'awaitingHuman');
+    const m = sessionGateChoices({ runId: RUN, gate, units: units('inconclusive'), events: evs, pool: ['pi', 'claude'], roster: null })!;
+    expect(m.choices[0]).toMatchObject({ key: QE_REDO_KEY, decision: { approve: true, action: 'retry_qe' } });
+    expect(m.recommended).toBe(0);
+    for (const c of all(m).filter((c) => c.decision !== null && c.decision.approve && (c.decision as { action?: string }).action === undefined)) {
+      expect(c.label).toBe(OPERATOR_JUDGMENT_LABEL);
+    }
+  });
+
+  it('an older engine (no redo, no cap words) does not claim the check was redone', () => {
+    const prompt = INC_PROMPT(false).replace(' The QE check is not offered again: the QE check was already redone 2 times on this tree (the most is 2).', '');
+    const { m } = model(INCONCLUSIVE, 'qe_inconclusive', 'judge_unavailable', prompt, 'inconclusive');
+    expect(m.qe?.why).not.toMatch(/redone/);
+  });
+
   it('at the cap (the engine no longer names `retry_qe`) offers no redo and says the check was redone already', () => {
     const { m } = model(INCONCLUSIVE, 'qe_inconclusive', 'judge_unavailable', INC_PROMPT(false), 'inconclusive');
     expect(all(m).some((c) => c.key === QE_REDO_KEY)).toBe(false);
@@ -107,6 +134,7 @@ describe('F23 — every other non-verdict takes the redo too; a FAIL never does'
     const { m } = model(NOT_FOUND, 'qe_review', 'verdict_not_pass', NV_PROMPT(false), 'invalid');
     expect(m.qe?.lead).toBe('The QE check\'s evidence could not be found. Run the QE check again?');
     expect(m.qe?.lead).not.toMatch(/didn't record a verdict/);
+    expect(m.qe?.why).toBe('The evidence the QE check took could not be bound to this job, so no reviewer ran and nothing was judged.');
     // Without the engine's redo (an older engine), the plain retry is still the way.
     expect(m.choices[0]).toMatchObject({ key: 'retry', label: QE_RETRY_LABEL });
   });

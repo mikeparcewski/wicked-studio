@@ -553,7 +553,7 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   }
   return {
     ...base, overflow, consequence, source,
-    failing: qeNoVerdict || base.qe?.outcome === 'inconclusive' ? [] : rec?.items ?? [],
+    failing: qeNoVerdict || base.qe?.outcome === 'inconclusive' || base.qe?.outcome === 'unavailable' ? [] : rec?.items ?? [],
     reviewedOrd: verdict?.ord ?? null,
     ...(failingTests !== null ? { failingTests } : {}),
   };
@@ -821,7 +821,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // A gate no judge could rule on (`judge_unavailable`): its approve is the OPERATOR's judgment
     // of the work as it stands, said so on the button; the re-run of the judge is its own choice,
     // offered only when crew's gate read says a judge seat can rule now.
-    const judgeWait = waitsForJudge(events, gate.ord, gate.prompt);
+    // (e2e-1105 F23, review) An INCONCLUSIVE or no-reviewer QE record is the same judge-unavailable class even when this
+    // attempt's only frame is its `gateEvaluated` (no `gateEscalated`): its plain approve is the operator's judgment.
+    const judgeWait = waitsForJudge(events, gate.ord, gate.prompt) || qe?.outcome === 'inconclusive' || qe?.outcome === 'unavailable'
+      || /\bQE acceptance is INCONCLUSIVE\b/.test(gate.prompt);
     // A team member's step is the exception: the engine re-runs it on approve ("approve to re-run the
     // phase"), so neither the judgment label nor the re-judge applies there.
     const operatorJudgment = judgeWait && !/\bapprove to re-run the phase\b/i.test(gate.prompt);
@@ -837,7 +840,8 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // (e2e-1105 F23) A QE review that gave no verdict on the work (inconclusive, no reviewer, none bound): the REDO of the
     // QE check leads, where the engine's prompt names it (it drops it at the cap). It is never the person's verdict; their
     // own judgment stays a separate, labelled choice.
-    const qeRedo = deadSeat === null && qe !== null && qe.outcome !== 'fail' && offersQeRedo(gate.prompt);
+    // The engine names `retry_qe` only at a gate it takes it at: a late join with no denial frames still gets the offer.
+    const qeRedo = deadSeat === null && !deniedUnit && qe?.outcome !== 'fail' && offersQeRedo(gate.prompt);
     if (qeRedo) {
       coreWithoutStop.push({ key: QE_REDO_KEY, label: QE_REDO_LABEL, decision: { approve: true, action: QE_REDO_ACTION } as unknown as GateAnswer, needsNote: false, title: QE_REDO_TITLE });
     }

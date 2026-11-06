@@ -132,7 +132,9 @@ export function qeGateOf(events: readonly CoreEvent[] | null, units: readonly Wo
       lead: `The QE reviewer couldn't run its checks${what !== null ? ` (${what})` : ''}, so nothing was judged.${redo ? ' Redo the QE check?' : ''}`,
       why: redo
         ? 'No product failure was found and none was ruled out. Redo the QE check, or judge the evidence yourself (labelled as your judgment).'
-        : 'No product failure was found and none was ruled out. The QE check was already redone as often as it can be on this work: judge the evidence yourself (labelled as your judgment), send it back, or stop.',
+        : /already redone \d+ times/.test(prompt ?? '')
+          ? 'No product failure was found and none was ruled out. The QE check was already redone as often as it can be on this work: judge the evidence yourself (labelled as your judgment), send it back, or stop.'
+          : 'No product failure was found and none was ruled out. Judge the evidence yourself (labelled as your judgment), send it back, or stop.',
     };
   }
   if (source === 'qe_reviewer_unavailable' || recorded === 'unavailable') {
@@ -157,7 +159,9 @@ export function qeGateOf(events: readonly CoreEvent[] | null, units: readonly Wo
     return {
       outcome: 'no-verdict',
       lead: 'The QE check\'s evidence could not be found. Run the QE check again?',
-      why: noVerdictWhy(reason),
+      why: /named no evidence|no `?QE-EVIDENCE/i.test(reason)
+        ? 'The QE check named no evidence, so no reviewer ran and nothing was judged.'
+        : 'The evidence the QE check took could not be bound to this job, so no reviewer ran and nothing was judged.',
     };
   }
   return {
