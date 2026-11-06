@@ -37,7 +37,7 @@ import type { ReassignCandidate, RunBench } from '../components/gateVerdictModel
 import type { GateAnswer } from './gateActions.js';
 import { repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from './repeatProgress.js';
 import type { RerunOffer } from '../components/rerunModel.js';
-import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
+import { isInconclusiveQePrompt, offersQeRedo, qeGateOf, qeRecordedOutcome, QE_REDO_ACTION, QE_REDO_CONSEQUENCE, QE_REDO_KEY, QE_REDO_LABEL, QE_REDO_TITLE, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
 import { ruleHolds, rulesHoldAt, waitsForJudge, type RuleRow } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
@@ -510,6 +510,8 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   // studio#761: a QE review that recorded no verdict judged nothing — the retry's consequence is its
   // own, and there are no failing criteria to list beside the creator's claims.
   const qeNoVerdict = base.qe?.outcome === 'no-verdict';
+  // (e2e-1105 F23) The suggested redo of the QE check says what it does.
+  const qeRedoSuggested = base.recommended !== null && base.choices[base.recommended]?.key === QE_REDO_KEY;
   // rig 0.15.8: the failing tests on the face — this gate's own failed floor only (an earlier unit's
   // floor is not what this gate asks about).
   // A refused hand-over's failure is the deliver phase's own re-verify, which emits no gate verdict
@@ -524,7 +526,9 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   const freshCount = failingTests?.split !== undefined ? failingTests.split.fresh.length : null;
   const overrideSuggested = base.recommended !== null && base.choices[base.recommended]?.key === FLOOR_OVERRIDE_KEY;
   const namedBack = base.recommended !== null && base.choices[base.recommended]?.label === SEND_BACK_NAMED_LABEL ? base.choices[base.recommended]! : null;
-  const consequence = qeNoVerdict
+  const consequence = qeRedoSuggested
+    ? QE_REDO_CONSEQUENCE
+    : qeNoVerdict
     ? 'Only the QE check and its review run again; the earlier steps are kept'
     : namedBack !== null
     ? namedBack.title
@@ -549,7 +553,7 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   }
   return {
     ...base, overflow, consequence, source,
-    failing: qeNoVerdict ? [] : rec?.items ?? [],
+    failing: qeNoVerdict || base.qe?.outcome === 'inconclusive' || base.qe?.outcome === 'unavailable' ? [] : rec?.items ?? [],
     reviewedOrd: verdict?.ord ?? null,
     ...(failingTests !== null ? { failingTests } : {}),
   };
@@ -811,13 +815,16 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // studio#761: the QE review's gate. The engine's Approve re-dispatches the QE unit alone, so the
     // retry is named for what it does. When the reviewer recorded NO verdict nothing was judged:
     // there is no finding for the creator, so Send back (and the rewind behind it) is not offered.
-    const qe = qeGateOf(events, units, gate.ord);
+    const qe = qeGateOf(events, units, gate.ord, gate.prompt);
     const qeNoVerdict = qe?.outcome === 'no-verdict';
-    if (qeNoVerdict) noteDefault = '';
+    if (qeNoVerdict || qe?.outcome === 'inconclusive') noteDefault = '';
     // A gate no judge could rule on (`judge_unavailable`): its approve is the OPERATOR's judgment
     // of the work as it stands, said so on the button; the re-run of the judge is its own choice,
     // offered only when crew's gate read says a judge seat can rule now.
-    const judgeWait = waitsForJudge(events, gate.ord, gate.prompt);
+    // (e2e-1105 F23, review) An INCONCLUSIVE or no-reviewer QE record is the same judge-unavailable class even when this
+    // attempt's only frame is its `gateEvaluated` (no `gateEscalated`): its plain approve is the operator's judgment.
+    const judgeWait = waitsForJudge(events, gate.ord, gate.prompt) || qe?.outcome === 'inconclusive' || qe?.outcome === 'unavailable'
+      || isInconclusiveQePrompt(gate.prompt);
     // A team member's step is the exception: the engine re-runs it on approve ("approve to re-run the
     // phase"), so neither the judgment label nor the re-judge applies there.
     const operatorJudgment = judgeWait && !/\bapprove to re-run the phase\b/i.test(gate.prompt);
@@ -830,6 +837,19 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // in this job (Reassign), or Stop.
     const deadSeat = deadSeatOf(gate.prompt, events);
     const rejudgeOffered = deadSeat === null && operatorJudgment && input.rejudge?.available === true;
+    // (e2e-1105 F23) A QE review that gave no verdict on the work (inconclusive, no reviewer, none bound): the REDO of the
+    // QE check leads, where the engine's prompt names it (it drops it at the cap). It is never the person's verdict; their
+    // own judgment stays a separate, labelled choice.
+    // The engine names `retry_qe` only at a gate it takes it at. A late join with no denial frames still gets the offer when
+    // the gated unit's own QE record is a non-verdict (a quoted mention in a reason, or a recorded FAIL, never does).
+    const recordedQe = qeRecordedOutcome(units, gate.ord);
+    const recordedNonVerdict = recordedQe === 'inconclusive' || recordedQe === 'unavailable' || recordedQe === 'invalid';
+    const qeRedo = deadSeat === null && !deniedUnit && (qe !== null ? qe.outcome !== 'fail' && recordedQe !== 'fail' : recordedNonVerdict) && offersQeRedo(gate.prompt);
+    // studio#761 on a late join too: a redo at a record that bound no verdict judged nothing, so nothing is sent back.
+    const noVerdictGate = qeNoVerdict || (qe === null && qeRedo && recordedQe === 'invalid');
+    if (qeRedo) {
+      coreWithoutStop.push({ key: QE_REDO_KEY, label: QE_REDO_LABEL, decision: { approve: true, action: QE_REDO_ACTION } as unknown as GateAnswer, needsNote: false, title: QE_REDO_TITLE });
+    }
     // (DES-RULE-CHECK-001) The steering-rule actions, where the engine takes them ({@link ruleChoicesAt}): first when
     // a held rule is the gate's own cause, after Send back when another layer (or a broken rule) is.
     const rulesHold = rulesHoldAt(events, units, gate.ord);
@@ -840,8 +860,9 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     }
     if (deadSeat === null && deniedUnit) {
       coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
-    } else if (deadSeat === null && qeNoVerdict) {
-      coreWithoutStop.push({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
+    } else if (deadSeat === null && noVerdictGate) {
+      // studio#761: nothing was judged, so no Send back; with the engine's redo offered it IS the retry (fresh evidence).
+      if (!qeRedo) coreWithoutStop.push({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
     } else if (deadSeat === null && sendBackAccepted(units, gate.ord)) {
       coreWithoutStop.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with the reviewer\'s failing items.' });
     }
@@ -870,7 +891,8 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // studio#761: at a QE review's gate an approve with a note re-runs the QE unit WITH the note —
     // nothing is approved, so it is not called that. (The judge-unavailable QE gate keeps its
     // approve: there the operator's approve IS the judgment.)
-    const qeRetryNote = qe !== undefined && qe !== null && qe.outcome !== 'unavailable';
+    // (e2e-1105 F23) Nor at an INCONCLUSIVE one: its approve is the operator's judgment too, never a retry.
+    const qeRetryNote = qe !== undefined && qe !== null && qe.outcome !== 'unavailable' && qe.outcome !== 'inconclusive';
     // (DES-RULE-CHECK-001 rev 2 A.4) A capped review's landing counts the unit, which the engine refuses while a rule
     // layer stands (`rule_layers_open`): it is withheld, and the row says why, until the rule is re-checked or skipped.
     const landHeld = deadSeat === null && rulesHold.held && !floorFix && !qeRetryNote && !operatorJudgment && isReviewAdjudication(gate);
@@ -984,7 +1006,9 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       escInline[backAt] = { ...escInline[backAt]!, label: SEND_BACK_NAMED_LABEL,
         title: `Send ${n === 1 ? 'the test' : `the ${n} tests`} only this change fails back to the builder, named, so it fixes just ${n === 1 ? 'that' : 'those'}.` };
     }
+    const redoAt = qeRedo ? escInline.findIndex((c) => c.key === QE_REDO_KEY) : -1;
     const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null)
+      : redoAt >= 0 ? redoAt
       : qeNoVerdict ? 0
         : rejudgeOffered ? 0
           : backAt >= 0 ? backAt
@@ -994,7 +1018,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     if (backAt >= 0) noteDefault = namedSendBackNote(changeOnly!.slice(0, FACE_MAX * 2));
     // A retry with findings is taken with ITS note (a validator's failing checks are not "the
     // reviewer's"), so the note field opens on the move's own prefill.
-    if (!deniedUnit && !qeNoVerdict && !rejudgeOffered && !overridePath && backAt < 0 && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
+    if (!deniedUnit && !qeNoVerdict && !qeRedo && !rejudgeOffered && !overridePath && backAt < 0 && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
     return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(whyNot.length > 0 ? { whyNot } : {}), ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}), ...(withheld.length > 0 ? { withheldSeats: withheld } : {}) };

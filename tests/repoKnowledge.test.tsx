@@ -270,6 +270,10 @@ describe('the knowledge store: bounded reads and the minute', () => {
 
 describe('Repositories and a repository’s page: what we know', () => {
   beforeEach(() => {
+    // The fixtures are dated against NOW: on the real clock the onboarding run aged past the stale-index line on
+    // 2026-11-06 and the Code map column read "Index is 7 days old". Only Date is faked, so waits still run.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
     resetRepoKnowledge();
     resetRepoLanguages();
     mocks.listRepos.mockResolvedValue({ repos: [repo('crew'), repo('pi')] });
@@ -280,7 +284,7 @@ describe('Repositories and a repository’s page: what we know', () => {
       return { coverage: COV, graphBuild: { generation: 3, coverage: COV, behind: false } };
     });
   });
-  afterEach(() => cleanup());
+  afterEach(() => { vi.useRealTimers(); cleanup(); });
 
   it('each row’s Code map column carries the graph’s size from the same read', async () => {
     render(<RepositoriesPanel navigate={vi.fn()} />);

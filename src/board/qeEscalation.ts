@@ -5,7 +5,9 @@ import type { CoreEvent, WorkUnit } from '../api/types.js';
  *
  * wicked-core folds the isolated QE reviewer's record into the QE unit's gate
  * (DES-QE-EVERY-SEAT §3.4): `fail` and `invalid` deny it under the source `qe_review` (class
- * `verdict_not_pass`), `unavailable` under `qe_reviewer_unavailable` (class `judge_unavailable`).
+ * `verdict_not_pass`), `unavailable` under `qe_reviewer_unavailable` and (j4-gates) `inconclusive` under
+ * `qe_inconclusive` (both class `judge_unavailable`, whose plain approve is the operator's own judgment). (e2e-1105 F23)
+ * On every record that is no verdict the engine also takes `retry_qe`, the redo of the QE check ({@link QE_REDO_ACTION}).
  * The gate pauses ON the QE unit, so the engine's Approve ("confirm to retry the phase")
  * re-dispatches that unit alone: the QE check runs again (on the same tree it resumes its evidence)
  * and a fresh reviewer judges it. That is the retry an `invalid` record needs: the reviewer recorded
@@ -17,7 +19,7 @@ import type { CoreEvent, WorkUnit } from '../api/types.js';
  * (the unit wire carries it; the published contract does not type it yet, so it is read tolerantly).
  */
 
-export type QeGateOutcome = 'no-verdict' | 'fail' | 'unavailable';
+export type QeGateOutcome = 'no-verdict' | 'fail' | 'unavailable' | 'inconclusive';
 
 export interface QeGate {
   outcome: QeGateOutcome;
@@ -32,7 +34,50 @@ export const QE_RETRY_TITLE = 'Run the QE check and its review again on this ste
 export const QE_RETRY_NOTE_LABEL = 'Retry with a note';
 export const QE_RETRY_NOTE_TITLE = 'Run the QE check and its review again with your note. The earlier steps are kept.';
 
-const QE_SOURCES: ReadonlySet<string> = new Set(['qe_review', 'qe_reviewer_unavailable']);
+/** (e2e-1105 F23, wicked-core#1312, api-types 0.195.0) REDO THE QE CHECK: at a QE gate whose isolated reviewer gave no
+ *  verdict on the work (inconclusive, no reviewer, or no bound verdict) the engine runs the QE step again from fresh
+ *  evidence with a new reviewer session. Never a verdict: QE stays required and only that reviewer's PASS counts. At
+ *  most 2 per QE step and tree; offered only where the engine's prompt names the action. */
+export const QE_REDO_ACTION = 'retry_qe' as const;
+export const QE_REDO_KEY = 'redo-qe';
+export const QE_REDO_LABEL = 'Redo the QE check';
+export const QE_REDO_TITLE = 'Run the QE check again from fresh evidence, with a new reviewer session (on another reviewer seat when one can run). It is not a verdict: only that reviewer\'s pass counts.';
+export const QE_REDO_CONSEQUENCE = 'The QE check runs again from fresh evidence with a new reviewer; the earlier steps are kept';
+
+/** The engine's own offer clause (wicked-core#1312 `qe_redo_clause`): matched whole, so a reviewer's quoted words that
+ *  merely mention the action never read as the offer. */
+const QE_REDO_OFFER = ` Redo the QE check (action \`${QE_REDO_ACTION}\`): the QE step takes its evidence again`;
+
+/** Whether the engine's gate prompt offers the redo — it drops the offer at the cap. */
+export function offersQeRedo(prompt: string | undefined): boolean {
+  return prompt !== undefined && prompt.includes(QE_REDO_OFFER);
+}
+
+/** Whether the engine's prompt is its INCONCLUSIVE QE gate (its opening words, never a quote inside a reason). */
+export function isInconclusiveQePrompt(prompt: string | undefined): boolean {
+  return prompt !== undefined && /^Unit \d+'s QE acceptance is INCONCLUSIVE — /.test(prompt);
+}
+
+/** The unit's recorded QE outcome (`qe_review.outcome`), read even when no denial frame is in hand. */
+export function qeRecordedOutcome(units: readonly WorkUnit[], ord: number): string | null {
+  return unitOutcome(units, ord);
+}
+
+const QE_SOURCES: ReadonlySet<string> = new Set(['qe_review', 'qe_reviewer_unavailable', 'qe_inconclusive']);
+
+/** What an INCONCLUSIVE reviewer said it could not run (the engine's words after "could not run its checks:"), bounded. */
+function couldNotRun(reason: string): string | null {
+  const at = reason.indexOf('could not run its checks:');
+  if (at < 0) return null;
+  const what = reason.slice(at + 'could not run its checks:'.length).trim().replace(/\s+/g, ' ').replace(/[.\s]+$/, '');
+  if (what === '') return null;
+  return what.length > 140 ? `${what.slice(0, 139)}…` : what;
+}
+
+/** A binding failure: the QE check's evidence was never found, so no reviewer ran at all. */
+function evidenceNotFound(reason: string): boolean {
+  return /named no evidence|no `?QE-EVIDENCE|the QE evidence could not be bound/i.test(reason);
+}
 
 /** The unit's `qe_review.outcome` when the daemon serves it (untyped on the published contract). */
 function unitOutcome(units: readonly WorkUnit[], ord: number): string | null {
@@ -82,7 +127,7 @@ function noVerdictWhy(reason: string): string {
  * The QE gate for `ord`, or `null` when the gate did not open on the QE review. `fail` only when the
  * reviewer's verdict was recorded and was not PASS; any other `qe_review` denial is `no-verdict`.
  */
-export function qeGateOf(events: readonly CoreEvent[] | null, units: readonly WorkUnit[], ord: number | undefined): QeGate | null {
+export function qeGateOf(events: readonly CoreEvent[] | null, units: readonly WorkUnit[], ord: number | undefined, prompt?: string): QeGate | null {
   if (typeof ord !== 'number') return null;
   const log = events ?? [];
   const { escalated: esc, evaluated } = attemptDenial(log, ord);
@@ -91,11 +136,28 @@ export function qeGateOf(events: readonly CoreEvent[] | null, units: readonly Wo
   const reason = (esc?.summary || evaluated?.reason || '').replace(/^\s*QE acceptance:\s*/i, '');
   const recorded = unitOutcome(units, ord);
 
+  const redo = offersQeRedo(prompt);
+  // (F23) The reviewer ran and could not run its checks: an infrastructure miss, not a verdict. The headline names what
+  // it could not run and leads with the redo; the person's own judgment stays one of the choices, labelled as theirs.
+  if (source === 'qe_inconclusive' || recorded === 'inconclusive') {
+    const what = couldNotRun(reason);
+    return {
+      outcome: 'inconclusive',
+      lead: `The QE reviewer couldn't run its checks${what !== null ? ` (${what})` : ''}, so nothing was judged.${redo ? ' Redo the QE check?' : ''}`,
+      why: redo
+        ? 'No product failure was found and none was ruled out. Redo the QE check, or judge the evidence yourself (labelled as your judgment).'
+        : /already redone \d+ times/.test(prompt ?? '')
+          ? 'No product failure was found and none was ruled out. The QE check was already redone as often as it can be on this work: judge the evidence yourself (labelled as your judgment), send it back, or stop.'
+          : 'No product failure was found and none was ruled out. Judge the evidence yourself (labelled as your judgment), send it back, or stop.',
+    };
+  }
   if (source === 'qe_reviewer_unavailable' || recorded === 'unavailable') {
     return {
       outcome: 'unavailable',
-      lead: 'No helper could review the QE evidence on its own, so nothing was judged.',
-      why: 'Approve to judge the evidence yourself (it is labelled as your judgment), or stop the run.',
+      lead: `No helper could review the QE evidence on its own, so nothing was judged.${redo ? ' Redo the QE check?' : ''}`,
+      why: redo
+        ? 'Redo the QE check once a reviewer can run, or judge the evidence yourself (labelled as your judgment).'
+        : 'Approve to judge the evidence yourself (it is labelled as your judgment), or stop the run.',
     };
   }
   const failed = recorded === 'fail' || (recorded === null && /\brecorded\s+(?!no\b)[A-Z_]+\s+on QE run\b/.test(reason) && !/\brecorded PASS\b/.test(reason));
@@ -106,9 +168,19 @@ export function qeGateOf(events: readonly CoreEvent[] | null, units: readonly Wo
       why: 'The reviewer judged the QE evidence and recorded a fail. Send the work back to fix it, or run the QE review again.',
     };
   }
+  // (F23) A binding failure is no reviewer at all: the evidence was never found, so no reviewer ran to record anything.
+  if (evidenceNotFound(reason)) {
+    return {
+      outcome: 'no-verdict',
+      lead: 'The QE check\'s evidence could not be found. Run the QE check again?',
+      why: /named no evidence|no `?QE-EVIDENCE/i.test(reason)
+        ? 'The QE check named no evidence, so no reviewer ran and nothing was judged.'
+        : 'The evidence the QE check took could not be bound to this job, so no reviewer ran and nothing was judged.',
+    };
+  }
   return {
     outcome: 'no-verdict',
-    lead: 'The QE reviewer didn\'t record a verdict, so nothing was judged. Retry the QE review?',
+    lead: `The QE reviewer didn't record a verdict, so nothing was judged. ${redo ? 'Redo the QE check?' : 'Retry the QE review?'}`,
     why: noVerdictWhy(reason),
   };
 }

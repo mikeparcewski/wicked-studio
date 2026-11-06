@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+- **Redo the QE check (e2e-1105 F23; wicked-core#1312; pins wicked-crew-api-types 0.195.0).** When the isolated QE reviewer gave
+  no verdict on the work (it couldn't run its checks, no reviewer could run, or no verdict could be bound), the gate
+  row now leads with **Redo the QE check** (`retry_qe`), suggested. The QE step runs again from fresh evidence with a
+  new reviewer session. It is not a verdict: only that reviewer's pass counts. The row offers it only where the
+  engine's prompt names it, and the engine drops it after 2 redos on the same work. The headline names what the
+  reviewer couldn't run ("The QE reviewer couldn't run its checks (no macOS sandbox tool on the seat), so nothing was
+  judged. Redo the QE check?"). A binding failure, where no reviewer ran, now reads "The QE check's evidence could not
+  be found. Run the QE check again?" instead of "didn't record a verdict". **Approve as your own judgment** stays its
+  own labelled choice; an INCONCLUSIVE gate never labels that approve as a retry.
+
 ## [0.15.0] — 2026-11-05
 
 A feature release for crew 0.17.0: Apps by chat (K5) on the data sources sheet and panel (K3), Ask a question of a
