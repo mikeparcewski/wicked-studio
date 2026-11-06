@@ -498,8 +498,11 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
     }
   };
   useEffect(() => {
-    // "Replace token" on Jira opens on the account email (it comes first); GitHub's field takes the focus itself.
-    if (replacing && system === 'jira') emailRef.current?.focus();
+    // The field opening (Replace, or crew finding the token missing at a test) takes the focus: on Jira the account
+    // email, which comes first; on GitHub the token field.
+    if (!replacing) return;
+    if (system === 'jira') emailRef.current?.focus();
+    else box.current?.querySelector<HTMLInputElement>('[data-testid="pm-secret"]')?.focus();
   }, [replacing, system]);
 
   const tools: ToolReview[] | null = shownServer !== null && !isNew ? toolReviewsOf((shownServer as { tools?: unknown }).tools, true)

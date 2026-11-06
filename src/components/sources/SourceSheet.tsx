@@ -131,6 +131,8 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   const [replacing, setReplacing] = useState(false);
   /** What the last re-key did, for the status line (a rotation is Set before and after: this is what changes). */
   const [rekeyStatus, setRekeyStatus] = useState('');
+  /** How an earlier sheet's write ended badly, kept apart from the sheet's error (a Test connection clears that). */
+  const [rekeyWarn, setRekeyWarn] = useState('');
   /** The sheet is on the page: a write that settles after it closed runs no test here (a reopened sheet reads crew). */
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -354,7 +356,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
         onRekeyed?.(rekeyName);
         setRekeyStatus('The secret typed before this sheet was opened again was saved to your keychain.');
       } else {
-        setError(o === 'refused' ? 'The secret typed before this sheet was opened again was not saved: type it again.'
+        setRekeyWarn(o === 'refused' ? 'The secret typed before this sheet was opened again was not saved: type it again.'
           : `studio could not confirm the secret typed before this sheet was opened again was saved${testable ? ': Test connection shows whether it works.' : '.'}`);
       }
       onReread?.();
@@ -385,6 +387,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
     setBusy('rekey');
     setError(null);
     setRekeyStatus('');
+    setRekeyWarn('');
     // Any test still out is older than this write: its answer lands nowhere, and its lines go.
     testGen.current++;
     setTested(null);
@@ -588,7 +591,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   disabled={busy !== null}
                   rekey={isNew || !ownsKeychainEntry(saved) ? null : {
                     open: replacing,
-                    onOpen: (open) => { setReplacing(open); setError(null); setRekeyStatus(''); },
+                    onOpen: (open) => { setReplacing(open); setError(null); setRekeyStatus(''); setRekeyWarn(''); },
                     submit: () => void rekey(),
                     replace: isSqlKind(kind) ? 'Replace password' : 'Replace secret',
                     note: 'Type it again. Only the secret changes: the source, its Allow writes and agent access stay as they are.',
@@ -604,7 +607,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   <span className="wk-src-note" data-testid="source-rekey-note">{!hasSecret ? `Type the ${isSqlKind(kind) ? 'password' : 'secret'}` : saved.kind === 'sql' || saved.kind === 'graphql' ? 'Writes it to your keychain, then tests the connection.' : 'Writes it to your keychain.'}</span>
                 </div>
               )}
-              {!isNew && saved !== null && ownsKeychainEntry(saved) && saved.authState !== 'none' && <span role="status" className="wk-src-note wk-src-tone-ok" data-testid="source-rekey-status">{rekeyStatus}</span>}
+              {!isNew && saved !== null && ownsKeychainEntry(saved) && saved.authState !== 'none' && <span role="status" className={`wk-src-note ${rekeyWarn !== '' ? 'wk-src-tone-warn' : 'wk-src-tone-ok'}`} data-testid="source-rekey-status">{rekeyWarn !== '' ? rekeyWarn : rekeyStatus}</span>}
               {isSqlKind(kind) && isNew && (
                 <label className="wk-src-field"><span className="wk-src-label">TLS</span>
                   <select data-testid="source-tls" className="wk-field wk-src-input" disabled={frozen} value={form.tls} onChange={(e) => edit({ tls: e.target.value as SourceForm['tls'] })}>

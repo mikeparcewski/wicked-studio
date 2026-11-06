@@ -666,6 +666,34 @@ describe('review r2 folds (codex + pi)', () => {
     await waitFor(() => expect(screen.getByTestId('pm-email')).toBeEnabled());
   });
 
+  it('a refusal an earlier sheet’s write met stays said after the reopened sheet’s Test connection succeeds', async () => {
+    const out = deferred<unknown>();
+    secretAnswer = () => out.promise;
+    const first = render(<SourceSheet target={{ mode: 'saved', server: pgServer({ name: 'support-pg' }) }} existing={['support-pg']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('source-secret-replace'));
+    type(screen.getByTestId('source-secret'), TOKEN);
+    fireEvent.click(screen.getByTestId('source-rekey-save'));
+    first.unmount();
+    render(<SourceSheet target={{ mode: 'saved', server: pgServer({ name: 'support-pg' }) }} focus="test" existing={['support-pg']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    out.reject(new ApiError(400, 'no', { error: 'no', code: 'secret_in_ref' }));
+    const box = await screen.findByTestId('source-connection-test');
+    expect(box.getAttribute('data-ok')).toBe('yes');
+    expect(screen.getByTestId('source-rekey-status')).toHaveTextContent('The secret typed before this sheet was opened again was not saved: type it again.');
+  });
+
+  it('a GitHub token crew finds missing at a test: the field that opens takes the focus', async () => {
+    apiFetch.mockImplementation((path: string) => {
+      if (path === '/sources/github/trackers') return Promise.reject(new ApiError(503, 'x', { error: 'x', code: 'source_unavailable', cause: 'secret_missing' }));
+      if (path === '/projects?status=active') return Promise.resolve({ projects: [] });
+      if (path === '/sources/github/agent-queries') return Promise.resolve({ name: 'github', known: true, queries: [] });
+      return Promise.reject(new Error(`unexpected ${path}`));
+    });
+    render(<PmSourceSheet target={{ mode: 'saved', server: pmServer('github', { authState: 'set' }) as never }} existing={['github']} onSaved={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('pm-test-reach'));
+    await screen.findByTestId('pm-test-reach-error');
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('pm-secret')));
+  });
+
   it('a database test asked for while a write is out waits for it', async () => {
     const out = deferred<unknown>();
     secretAnswer = () => out.promise;
