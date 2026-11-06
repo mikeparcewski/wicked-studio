@@ -56,6 +56,21 @@ interface Props {
 
 const NO_RUNS: ReadonlySet<string> = new Set();
 
+/**
+ * F31: the toast's order, independent of the order gates reached the store (the late-join reads run newest first and
+ * in parallel). Gates read on a page load or a late join (`fromRead`) come first, by their runs' creation time, oldest
+ * first (a run not in the list, or with no `created_at`, after them); ties keep the store's order. Gates that arrived
+ * live follow in the store's order, which is their arrival order, so a live arrival queues behind the card on screen.
+ */
+export function leadCardOrder(gates: readonly OpenGate[], runs: readonly SessionView[]): OpenGate[] {
+  const created = new Map<string, number>();
+  for (const r of runs) if (typeof r.session.created_at === 'number') created.set(r.session.id, r.session.created_at);
+  const runAt = (g: OpenGate): number => created.get(g.runId) ?? Number.POSITIVE_INFINITY;
+  const read = gates.map((g, i) => ({ g, i })).filter(({ g }) => g.fromRead === true)
+    .sort((a, b) => (runAt(a.g) - runAt(b.g)) || a.i - b.i).map(({ g }) => g);
+  return [...read, ...gates.filter((g) => g.fromRead !== true)];
+}
+
 export function GateNotifications({ onSelect, runId, projectId = null, runs = [], hideRuns = NO_RUNS }: Props): React.ReactElement {
   const gates = useGateStore((s) => s.gates);
   // studio#441: the toast speaks the Desk's words (the plain question, the work's title), in its
@@ -76,7 +91,7 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
   // cards. DTO claim first (CREW-UX-2), membership mirror second; a gate we
   // genuinely cannot place (pre-0.8.0 daemon, no mirror row) still shows —
   // suppression requires KNOWING the gate is foreign, never assuming it.
-  const open = projectId === null || runId
+  const placed = projectId === null || runId
     ? scoped
     : scoped.filter((g) => {
         const run = runs.find((r) => r.session.id === g.runId);
@@ -84,6 +99,9 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
         const pid = claimed !== undefined ? claimed : projectIdByRun[g.runId];
         return pid === undefined || pid === projectId;
       });
+  // F31: on a page load the lead card is the oldest waiting run, not whichever gate's read landed first (the late-join
+  // reads run newest first and in parallel); a gate that arrives live still queues behind the card on screen.
+  const open = leadCardOrder(placed, runs);
 
   // First-paint stamping (idempotent — safe under StrictMode double render). A burst of gates is
   // ONE announcement: every member is stamped together, one card paints and the rest are its "+N",

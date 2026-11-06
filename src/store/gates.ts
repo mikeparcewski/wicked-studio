@@ -39,6 +39,9 @@ export interface OpenGate {
    * only ever PRESELECTS (S5): Enter still waits for the operator to move.
    */
   recommended?: number;
+  /** F31: set when the gate came from a `GET /runs/:id/gate` read (a page load, a late join), not a live frame. The
+   *  toast strip orders read gates by their runs' age and queues live ones after them in arrival order. */
+  fromRead?: true;
 }
 
 /** `recommended` off a gate payload: a non-negative integer, else absent. */
@@ -237,7 +240,7 @@ export const useGateStore = create<GateStore>((set) => {
     const { runId } = ticket;
     if (gateGen(runId) !== ticket.gen || ticket.seq < (appliedSeq[runId] ?? 0)) return false;
     appliedSeq[runId] = ticket.seq;
-    if (gate !== null) { put(gate); return true; }
+    if (gate !== null) { put({ ...gate, fromRead: true }); return true; }
     set((s) => {
       if (!(runId in s.gates)) return s;
       const next = { ...s.gates };

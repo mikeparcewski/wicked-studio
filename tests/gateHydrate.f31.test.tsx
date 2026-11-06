@@ -195,7 +195,8 @@ describe('one read per run, no re-read storm', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     calls[0]!.resolve(planInfo(RUN));
     await Promise.all([a, b]);
-    expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 2, gateKind: 'plan_approval' });
+    // A read gate is marked as read (the toast strip orders read gates by run age, live ones by arrival).
+    expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 2, gateKind: 'plan_approval', fromRead: true });
     await ensureGate(RUN);
     expect(spy).toHaveBeenCalledTimes(1);
   });
