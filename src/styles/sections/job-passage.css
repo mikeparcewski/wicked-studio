@@ -1,0 +1,164 @@
+/* WICKED'S PASSAGE (DES-CATALOG-002 rev 7 §2.8.1, mockup new-job-v5, the v4 "Ink" direction): the job inline in the
+ * thread, no box. A gold rule in the gutter, wicked's name, label and version in the margin, in a larger type than the
+ * seats. §2.8.6: the rule meets 3:1 against the page — dark keeps #c9a400 (7.84:1 on #121212); the light themes use
+ * #a77f00 (3.39:1 on #f5f5f4). "Needs you" is studio's own warm attention colour (operator 2026-11-01: no violet). */
+
+.wk-pass {
+  --wk-pass-rule: #c9a400;
+  --wk-pass-ink: #fff3b8;
+  --wk-pass-wash: #2a2508;
+  --wk-pass-chg: #4d4300;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 6px 22px;
+  margin: 4px 0 4px 112px;
+}
+[data-theme="light"] .wk-pass,
+[data-theme="wicked-light"] .wk-pass {
+  --wk-pass-rule: #a77f00;
+  --wk-pass-ink: var(--ink-high);
+  --wk-pass-wash: #fff6cc;
+  --wk-pass-chg: #ffe98a;
+}
+.wk-pass::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--wk-pass-rule);
+  transition: background-color 0.4s;
+}
+.wk-pass--needs::before { background: var(--status-gate); }
+.wk-pass--ok::before { background: var(--status-ok); }
+.wk-pass--bad::before { background: var(--status-fail); }
+/* One motion at a time (§2.7.3 rule 3): only the rule's thin moving segment while it updates, plans or re-plans. */
+.wk-pass--busy::before {
+  background: linear-gradient(var(--wk-pass-rule), var(--wk-pass-rule)) 0 0 / 100% 30% no-repeat, var(--border);
+  animation: wk-pass-flow 1.4s linear infinite;
+}
+@keyframes wk-pass-flow { from { background-position: 0 -40%; } to { background-position: 0 140%; } }
+
+.wk-pass-mg {
+  position: absolute;
+  left: -112px;
+  top: 4px;
+  width: 92px;
+  text-align: right;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink-high);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.wk-pass-mg-label { font-weight: 500; font-size: 11.5px; color: var(--ink-muted); }
+.wk-pass-mg-v { margin-top: 4px; font-weight: 700; color: var(--ink-high); border-bottom: 1.5px solid var(--wk-pass-rule); }
+
+.wk-pass-lede { margin: 0; font-size: 18px; line-height: 1.62; color: var(--ink-high); letter-spacing: -0.005em; transition: opacity 0.3s; }
+.wk-pass-lede--wet { opacity: 0.5; }
+.wk-pass-fact { font-weight: 600; color: var(--ink-high); }
+.wk-pass-tokwrap { position: relative; }
+.wk-pass-tok {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--wk-pass-ink);
+  border-bottom: 2px dotted var(--wk-pass-rule);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  border-radius: 2px;
+}
+.wk-pass-tok:focus-visible { outline: 2px solid var(--ink-high); outline-offset: 2px; border-radius: 4px; }
+.wk-pass-tok--chg { animation: wk-pass-chg 2.4s ease forwards; border-radius: 3px; }
+@keyframes wk-pass-chg { 0%, 55% { background: var(--wk-pass-chg); } 100% { background: transparent; } }
+.wk-pass-lock {
+  display: inline-block; width: 9px; height: 10px; margin: 0 2px 0 3px; position: relative; top: 1px;
+  border: 1.5px solid currentColor; border-radius: 2px; opacity: 0.75; color: var(--ink-muted);
+}
+.wk-pass-lock::before {
+  content: ''; position: absolute; left: 1px; right: 1px; top: -5px; height: 5px;
+  border: 1.5px solid currentColor; border-bottom: 0; border-radius: 4px 4px 0 0;
+}
+.wk-pass-swap {
+  position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; min-width: 220px;
+  list-style: none; margin: 0; padding: 4px; font-size: 14px; font-weight: 500; line-height: 1.4;
+  background: var(--surface-overlay, var(--surface-card)); color: var(--ink-high);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-overlay);
+}
+.wk-pass-swap li { padding: 6px 10px; border-radius: 7px; cursor: pointer; }
+.wk-pass-swap li[aria-selected="true"], .wk-pass-swap li:hover { background: var(--accent-wash); }
+.wk-pass-swap li:focus-visible { outline: 2px solid var(--ink-high); outline-offset: -2px; }
+
+.wk-pass-aside { margin: 0; font-size: 14px; color: var(--ink-high); font-style: italic; padding-left: 10px; border-left: 2px solid var(--wk-pass-rule); }
+.wk-pass-sub { margin: 0; font-size: 14px; line-height: 1.6; color: var(--ink-body); }
+.wk-pass-grey { color: var(--ink-muted); }
+.wk-pass-error { color: var(--status-fail); }
+.wk-pass-then { margin: 0; font-size: 13px; color: var(--ink-muted); line-height: 1.7; }
+.wk-pass-then span { font-weight: 700; margin-right: 4px; }
+.wk-pass-then b { font-weight: 500; color: var(--ink-body); }
+.wk-pass-then em, .wk-pass-asks { font-style: normal; font-size: 12px; color: var(--status-gate); }
+.wk-pass-then i { font-style: normal; color: var(--border-strong); }
+
+.wk-pass-ask { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 2px; padding: 8px 0 4px 14px; border-left: 2px solid var(--status-gate); }
+.wk-pass-ask-who { font-size: 12px; font-weight: 600; color: var(--status-gate); }
+.wk-pass-ask p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ink-high); }
+
+.wk-pass-ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.wk-pass-ol li { display: flex; gap: 10px; font-size: 14px; line-height: 1.5; color: var(--ink-high); }
+.wk-pass-ol .n, .wk-pass-now .n { width: 16px; text-align: right; color: var(--ink-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.wk-pass-ol--ghost li, .wk-pass-ol--dim li { opacity: 0.45; }
+
+.wk-pass-fold { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink-body); }
+.wk-pass-ok { color: var(--status-ok); }
+.wk-pass-now { display: flex; flex-direction: column; gap: 4px; }
+.wk-pass-now > p { margin: 0; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 14.5px; color: var(--ink-high); }
+.wk-pass-report { font-size: 14px; color: var(--ink-muted); }
+.wk-pass-report--clamp { max-height: 3.2em; overflow: hidden; }
+.wk-pass-gate { margin-top: 4px; }
+.wk-pass-next { margin: 0; font-size: 13px; color: var(--ink-muted); }
+.wk-pass-next span { font-weight: 700; margin-right: 4px; }
+.wk-pass-checks { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-high); }
+.wk-pass-ck { font-weight: 700; margin-right: 2px; color: var(--ink-dim); }
+
+.wk-pass-acts { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 15px; }
+.wk-pass-dot { color: var(--border-strong); }
+.wk-pass-why { font-size: 12.5px; color: var(--ink-dim); }
+.wk-pass-act {
+  font: inherit; font-weight: 600; color: var(--ink-high); background: none; border: 0; padding: 2px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1.5px; white-space: nowrap;
+}
+.wk-pass-act--go { text-decoration-color: var(--wk-pass-rule); }
+.wk-pass-act--quiet { font-weight: 500; color: var(--ink-muted); text-decoration-color: var(--border-strong); }
+.wk-pass-act[disabled] { color: var(--ink-dim); text-decoration-style: dotted; cursor: default; }
+.wk-pass-act:focus-visible, .wk-pass-inl:focus-visible { outline: 2px solid var(--ink-high); outline-offset: 2px; border-radius: 4px; }
+.wk-pass-inl {
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-high); background: none; border: 0; padding: 0; cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--wk-pass-rule); text-underline-offset: 3px; white-space: nowrap;
+}
+.wk-pass-receipt { margin: 0; font-size: 13px; color: var(--ink-high); padding: 6px 10px; background: var(--wk-pass-wash); border-radius: 8px; }
+.wk-pass-done { display: flex; flex-direction: column; gap: 6px; }
+.wk-pass-settled { margin: 0; font-size: 13.5px; color: var(--ink-muted); }
+.wk-pass--settled { gap: 0; }
+
+/* The change mark under the person's words (rev 6 §2.7.1). */
+.wk-pass-mark { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-muted); text-align: right; }
+
+/* Below the wide layout the margin is one line above the sentence. */
+@media (max-width: 1199px) {
+  .wk-pass { margin-left: 0; }
+  .wk-pass-mg { position: static; width: auto; text-align: left; flex-direction: row; gap: 6px; align-items: baseline; }
+  .wk-pass-mg-v { margin-top: 0; }
+}
+@media (max-width: 600px) {
+  .wk-pass-lede { font-size: 16.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-pass::before, .wk-pass-lede, .wk-pass--busy::before { animation: none; transition: none; }
+  /* The wash is static and clears when the person next interacts with the passage. */
+  .wk-pass-tok--chg { animation: none; background: var(--wk-pass-chg); }
+}

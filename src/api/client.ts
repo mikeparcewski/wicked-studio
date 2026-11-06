@@ -42,6 +42,7 @@ import type { GuidanceUpdate } from './guidance.js';
 import type { ElicitationAnswerBody } from './ask.js';
 import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
 import type { ChatMessageContext, ChatProposalDecisionBody, ChatProposalDecisionResponse } from './chatArtifacts-wire.js';
+import type { PersonProposalResponse, PersonRevisionBody, ReshapeRunBody, ReshapeRunResponse } from 'wicked-crew-api-types';
 
 export type * from './types.js';
 export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
@@ -377,6 +378,21 @@ export const api = {
    *  repeat of the same decision answers the stored result again, so a retry after a lost response is safe. */
   decideChatProposal: (chatId: string, pid: string, body: ChatProposalDecisionBody) =>
     apiFetch<ChatProposalDecisionResponse>(`/chats/${encodeURIComponent(chatId)}/proposals/${encodeURIComponent(pid)}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /** (api-types 0.192.0, DES-CATALOG-002 §4.6; `capabilities.chatJobProposals`) A person's revision of the open job
+   *  proposal (a token swap, a suggestion, a question's choice): crew merges it and writes a new proposal superseding
+   *  the parent. 409 `proposal_stale` / `proposal_revising` / `catalog_changed`, 400 `edits_invalid`. */
+  reviseChatProposal: (chatId: string, body: PersonRevisionBody) =>
+    apiFetch<PersonProposalResponse>(`/chats/${encodeURIComponent(chatId)}/proposals`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /** (api-types 0.192.0/0.194.0, DES-CATALOG-002 §2.5; `capabilities.reshapeRun`) Start a run held at its first
+   *  work-plan approval again as another shape, bound to the plan version it was offered on (`ord` + `planRev`). */
+  reshapeRun: (runId: string, body: ReshapeRunBody) =>
+    apiFetch<ReshapeRunResponse>(`/runs/${encodeURIComponent(runId)}/reshape`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
