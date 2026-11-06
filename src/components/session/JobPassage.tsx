@@ -16,6 +16,7 @@ import { isQueued, takeRestoredNote, undoDecision, useUndoQueue } from '../../bo
 import { jobRunId, useJobLocal, useJobView } from '../../hooks/useJobStream.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import { Undocked } from './DecisionDock.js';
+import { usePowerDefaultOn } from '../../store/reviewPlan.js';
 import { usePressBinding } from '../../hooks/usePressBinding.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -81,6 +82,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   }, [ticking]);
   const { view: v, run, inputs, planRetry, runRetry } = useJobView(lineage, runs, now);
   const roster = useRoster();
+  const powerDefaultOn = usePowerDefaultOn();
   const press = usePressBinding();
   const local = useJobLocal();
   const swapToken = useJobLocal((s) => s.swapToken[lineage.lineage] ?? null);
@@ -451,6 +453,11 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           <span className="wk-pass-ask-who">{v.question.kind === 'lost_check' ? 'wicked asks · only your press changes the checks' : 'wicked asks'}</span>
           <p>{v.question.text}</p>
         </div>
+      )}
+      {/* Power mode for new jobs is on (operator ruling 2026-11-06): say plainly that this start still reviews its plan —
+          crew launches a job proposed in the chat held at its plan, and its Start carries no power choice yet. */}
+      {powerDefaultOn === true && (v.phase === 'proposed' || v.phase === 'asking' || v.phase === 'revising' || v.phase === 'swapPending') && (
+        <p data-testid="job-passage-review-plan" className="wk-pass-sub wk-pass-grey">You’ll review the plan first: a job proposed in the chat always stops at its plan.</p>
       )}
       {(v.phase === 'revising' || v.phase === 'swapPending') && (
         <p data-testid="job-passage-updating" className="wk-pass-sub wk-pass-grey">Updating from your {v.phase === 'revising' ? 'message' : 'change'}… Start waits until it settles.</p>

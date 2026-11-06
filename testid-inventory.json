@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 326,
-    "occurrences": 4776,
-    "static": 4004,
+    "occurrences": 4779,
+    "static": 4007,
     "dynamic": 173,
     "computed": 53
   },
@@ -3328,6 +3328,18 @@
     },
     {
       "testId": "composer-start-retry",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-review-plan",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-review-plan-toggle",
       "files": [
         "src/components/session/InlineStart.tsx"
       ]
@@ -7881,6 +7893,12 @@
     },
     {
       "testId": "job-passage-retry",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-review-plan",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
