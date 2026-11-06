@@ -839,7 +839,7 @@ describe('follow-up (the passage)', () => {
       { event_id: 2, emitted_at: T0 + 10, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 1, plan_rev: 1 } },
       { event_id: 3, emitted_at: T0 + 20, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g1', decision: 'human_approved' } }] };
     page([run('executing', [u(0, 'done', 'pa-scope'), u(1, 'distributed', 'build')])]);
-    await waitFor(() => expect(screen.getAllByTestId('job-tick').map((t) => t.textContent?.split(' · ')[0])).toEqual(['You started the job, v1', 'Codex’s plan, v1, is ready', 'You approved plan v1']));
+    await waitFor(() => expect(screen.getAllByTestId('job-tick').map((t) => t.textContent?.split(' · ')[0])).toEqual(['You started the job', 'Codex’s plan, v1, is ready', 'You approved plan v1']));
   });
 
   it('a failed job offers Fix it as a bug and Try again, each a person-made proposal in this chat', async () => {
@@ -944,5 +944,23 @@ describe('follow-up round 2 folds: the hand-off is bound to the job crew made', 
     expect(fresh.contains(document.activeElement)).toBe(false);
     await act(async () => { answer(ok({ view: { proposal: { pid: `${CHAT}:retry1`, lineage: `${CHAT}:retry1` }, state: 'open' } }, 201)); await Promise.resolve(); });
     await waitFor(() => expect(fresh.contains(document.activeElement)).toBe(true));
+  });
+});
+
+describe('round 3 (coordinator): one step, one name', () => {
+  it('the failure sentence names the stopped step as the progress line does, whatever the unit id', async () => {
+    const RUN = 'run-1';
+    messages = [USER, SEAT, P1, { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } }];
+    team = { teamed: true, units: [], rows: [] };
+    // Unit ids carry no phase key (`<run>:u<n>`) and the stopped unit's stage is `recon`: the progress line reads its
+    // phase (`test` → "Test"), and so must the failure sentence (never "the research step").
+    page([makeView({ id: RUN, status: 'failed' as never, unit_ix: 1, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, [
+      makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'done', phase_ref: 'pa-scope' }),
+      makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: 'rejected', phase_ref: 'test', stage: 'recon' }),
+    ])]);
+    const failed = await screen.findByTestId('job-passage-failed');
+    expect(screen.getByTestId('job-passage-fold').textContent).toContain('last: Test');
+    expect(failed.textContent).toContain('A check stopped the test step.');
+    expect(failed.textContent).not.toContain('research');
   });
 });

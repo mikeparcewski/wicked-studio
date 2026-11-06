@@ -28,12 +28,16 @@ const KIND_WORDS: Readonly<Record<string, (step: string) => string>> = {
 /** What Retry does on the Desk: a prefill, never a hidden relaunch. */
 export const RETRY_WORDS = 'Retry opens a new job with the same words and settings. Nothing starts until you launch it.';
 
-export function failureWhy(view: SessionView, frames: readonly Record<string, unknown>[]): FailureWhyWords {
+export function failureWhy(view: SessionView, frames: readonly Record<string, unknown>[],
+  /** Name the stopped step as the caller's own step list names it (the job passage's progress line), so one surface
+   *  never calls one step two names. Absent: the unit's phase key, as before. */
+  stepName?: (u: SessionView['units'][number]) => string): FailureWhyWords {
   const s = view.session;
   const units = [...(view.units ?? [])].sort((a, b) => a.ord - b.ord);
   const stopped = units.find((u) => u.status === 'rejected') ?? units.find((u) => u.ord === s.unit_ix) ?? null;
   const ord = stopped?.ord ?? (typeof frames[0]?.['ord'] === 'number' ? (frames[0]['ord'] as number) : null);
-  const step = ord === null ? 'last' : stepNoun(phaseLabel(s.id, units, ord));
+  const named = stepName !== undefined && stopped !== null ? stepName(stopped).trim() : '';
+  const step = ord === null ? 'last' : named !== '' ? named.replace(/^\p{Lu}(?!\p{Lu})/u, (c) => c.toLowerCase()) : stepNoun(phaseLabel(s.id, units, ord));
   const mine = frames.filter((f) => f['type'] === 'stepFailed' && (ord === null || f['ord'] === ord));
   const last = mine[mine.length - 1];
   const kind = typeof last?.['failureKind'] === 'string' ? (last['failureKind'] as string) : null;

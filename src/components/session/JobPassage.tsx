@@ -29,6 +29,7 @@ import { GateRow } from './GateRow.js';
 import { ProposalCard } from './ProposalCard.js';
 import { useRunChain } from './ChainLine.js';
 import { proposalKindOf } from '../../board/proposalCard.js';
+import { unitStepName } from '../../board/chainModel.js';
 import { LiveActivity } from './LiveActivity.js';
 import { RunQuestions } from './ThreadQuestions.js';
 import { OrphanedRow } from './RunConversation.js';
@@ -270,7 +271,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     const key = `${what}:${run.session.id}`;
     let body = handOffBodies.current.get(key);
     if (body === undefined) {
-      const why = failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[]).plain;
+      const why = failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[], unitStepName).plain;
       // Bug: crew's Bug card, its intent the failed job and crew's own failure words. Again: the same shape and words.
       body = what === 'bug'
         ? { card: 'bug', option: null, depth: null, words: `${p.what.title} failed: ${why}`, source: 'pick', requestId: newRequestId() }
@@ -543,7 +544,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       )}
       {v.phase === 'failed' && run !== null && (
         <p data-testid="job-passage-failed" className="wk-pass-sub">
-          Failed. {failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[]).plain} {deliverySummary(run) ?? ''}{' '}
+          Failed. {failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[], unitStepName).plain} {deliverySummary(run) ?? ''}{' '}
           <button type="button" className="wk-pass-inl" onClick={() => openSheet({ kind: 'session', sessionId: `run:${run.session.id}` })}>Look underneath</button>
         </p>
       )}
