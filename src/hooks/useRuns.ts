@@ -130,8 +130,9 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
   }, []);
 
   // A (re)connect may have missed a question's live frame: every live run is read again (review r1).
-  // F31: so is every gate read begun before it (it may answer for a state a missed frame moved past).
-  useEffect(() => { if (status === 'connected') { resetElicitationProbes(); invalidateGateReads(); } }, [status]);
+  // F31: a drop or a reconnect makes every gate read begun before it obsolete (it may answer for a state a missed frame
+  // moved past); a read landing while disconnected is dropped too.
+  useEffect(() => { invalidateGateReads(); if (status === 'connected') resetElicitationProbes(); }, [status]);
 
   useEffect(() => {
     if (status !== 'connected') return;
