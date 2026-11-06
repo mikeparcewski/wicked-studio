@@ -572,3 +572,48 @@ describe('review round 2 folds', () => {
     expect(posts.map((x) => x.path)).toEqual([`/runs/${RUN}/gate`]);
   });
 });
+
+describe('review round 3 folds (the passage)', () => {
+  const RUN = 'run-1';
+  const decided = { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } };
+  const run = (status = 'awaiting_human') => makeView({ id: RUN, status: status as never, unit_ix: 1, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, [
+    makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'done', phase_ref: 'pa-scope' }),
+    makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: 'pending', phase_ref: 'build' }),
+  ]);
+  it('Retry after a failed plan read reloads the plan, and Approve opens once it is read', async () => {
+    messages = [USER, SEAT, P1, decided];
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 7, gateKind: 'plan_approval' } }, approaching: {} });
+    let fail = true;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') { posts.push({ path, body: {} }); return Promise.resolve(ok({})); }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      if (path.endsWith('/team')) return Promise.resolve(fail ? new Response('{"error":"down"}', { status: 500 }) : ok({ teamed: true, units: [], planRev: 2, rows: [
+        { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build' }] } },
+        { event_id: 4, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 1, plan_rev: 2 } }] }));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page([run()]);
+    const retry = await screen.findByTestId('job-passage-plan-retry');
+    expect(reply('approve').disabled).toBe(true);
+    fail = false;
+    fireEvent.click(retry);
+    await waitFor(() => expect(reply('approve').disabled).toBe(false));
+    expect(reply('approve').textContent).toBe('Approve plan v2');
+  });
+
+  it('a run the daemon restart orphaned offers its Resume in the passage', async () => {
+    messages = [USER, SEAT, P1, decided];
+    team = { teamed: true, rows: [{ event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } }], units: [] };
+    const { useRunEventStore } = await import('../src/store/events.js');
+    act(() => { useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [RUN]: [{ type: 'runOrphaned', session: RUN, ord: 1, ts: T0 } as never] } })); });
+    page([run('executing')]);
+    expect(await screen.findByTestId('session-orphaned-resume')).toBeTruthy();
+  });
+
+  it('a known run the index lacks, whose read failed, says so with Retry (never "starting" forever)', async () => {
+    messages = [USER, SEAT, P1, decided];
+    page([]);
+    expect(await screen.findByTestId('job-passage-run-unread')).toBeTruthy();
+  });
+});

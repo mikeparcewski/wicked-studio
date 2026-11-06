@@ -249,3 +249,31 @@ describe('review round 1 folds', () => {
     expect(jobView(accepting, { ...NO_RUN, view: run('executing') }, { ...NAME, now: 10 }).phase).toBe('planning');
   });
 });
+
+describe('review round 3 folds', () => {
+  const lineage = (records: unknown[]) => foldJobLineages(records)[0]!;
+  it('a run launched from the version drawn is the job’s state, even while an older read says the proposal is open', () => {
+    const open = lineage([rec(2, 'proposal', { proposal: jobProposal() })]);
+    const run = makeView({ id: 'run-1', status: 'executing', unit_ix: 0 }, [makeUnit({ ord: 0, status: 'distributed' })]);
+    const v = jobView(open, { ...NO_RUN, view: run }, NAME);
+    expect(v.phase).toBe('planning');
+    expect(v.replies.some((r) => r.id === 'start')).toBe(false);
+  });
+  it('a refused step a gate waits at is still counted as failed', () => {
+    const view = makeView({ id: 'run-1', status: 'awaiting_human', unit_ix: 1 }, [makeUnit({ ord: 0, status: 'done', phase_ref: 'plan' }), makeUnit({ ord: 1, status: 'rejected', phase_ref: 'build' })]);
+    const p = progressOf(view, unitStepName, 1);
+    expect(p.current?.ord).toBe(1);
+    expect([p.done, p.failed]).toEqual([1, 1]);
+  });
+  it('a replacement offer on the same plan is announced once', async () => {
+    const { announceOf } = await import('../src/board/jobStream.js');
+    const mk = (id: string) => ({ id, kind: 'send_back', runId: 'run-1', pid: `${CHAT}:t1`, ord: 1, planRev: 2, text: `offer ${id}`, note: 'n', choices: [{ label: 'Send it back', action: 'send_back' }] });
+    const base = (o: unknown) => foldJobLineages([rec(2, 'proposal', { proposal: jobProposal() }), rec(3, 'plan_offer', { offer: o }),
+      rec(4, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'go', result: { runId: 'run-1', artifactRef: null, adopted: false, stub: false } })])[0]!;
+    const inputs = { ...NO_RUN, view: makeView({ id: 'run-1', status: 'awaiting_human', unit_ix: 1 }, [makeUnit({ ord: 0, status: 'done' }), makeUnit({ ord: 1, status: 'pending' })]),
+      gate: { ord: 1, receivedAt: 1, gateKind: 'plan_approval', prompt: '' }, plan: { ord: 1, planRev: 2, steps: [], fresh: true } };
+    const a = jobView(base(mk('o1')), inputs, NAME);
+    const b = jobView(base(mk('o2')), inputs, NAME);
+    expect(announceOf(a, b)).toBe('wicked offers: offer o2');
+  });
+});

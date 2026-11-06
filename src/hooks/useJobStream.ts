@@ -9,7 +9,7 @@ import { planStepLabel, unitStepName } from '../board/chainModel.js';
 import { useUndoQueue } from '../board/undoQueue.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { useGateStore } from '../store/gates.js';
-import { usePlanGate } from '../store/planGates.js';
+import { loadPlanGate, usePlanGate } from '../store/planGates.js';
 import { useTeamFold } from './useTeamFold.js';
 
 /**
@@ -68,17 +68,26 @@ export function jobRunId(lineage: JobLineage, runs: readonly SessionView[]): str
   return runs.find((r) => (r.session as { from_proposal?: unknown }).from_proposal === head)?.session.id ?? null;
 }
 
-export function useJobView(lineage: JobLineage, runs: readonly SessionView[], now: number): { view: JobView; run: SessionView | null; inputs: JobRunInputs; teamRetry: (() => void) | null } {
+export function useJobView(lineage: JobLineage, runs: readonly SessionView[], now: number): {
+  view: JobView; run: SessionView | null; inputs: JobRunInputs;
+  /** The plan read failed (the team route or the plan gate's own read): reloads both. */
+  planRetry: (() => void) | null;
+  /** The run's own read by id failed (it is not in the runs index): reads it again. */
+  runRetry: (() => void) | null;
+} {
   const runId = jobRunId(lineage, runs);
   const listed = runId === null ? null : runs.find((r) => r.session.id === runId) ?? null;
   // A known run the runs index lacks (archived, or not listed yet) is read once by id, so its delivery still shows.
-  const [read, setRead] = useState<{ id: string; run: SessionView | null } | null>(null);
+  const [read, setRead] = useState<{ id: string; run: SessionView | null; failed: boolean } | null>(null);
+  const [readTry, setReadTry] = useState(0);
   useEffect(() => {
     if (runId === null || listed !== null) return undefined;
     let cancelled = false;
-    api.getRun(runId).then(({ run: r }) => { if (!cancelled) setRead({ id: runId, run: r }); }).catch(() => { if (!cancelled) setRead({ id: runId, run: null }); });
+    api.getRun(runId).then(({ run: r }) => { if (!cancelled) setRead({ id: runId, run: r, failed: false }); })
+      .catch(() => { if (!cancelled) setRead({ id: runId, run: null, failed: true }); });
     return () => { cancelled = true; };
-  }, [runId, listed]);
+  }, [runId, listed, readTry]);
+  const runReadFailed = listed === null && read !== null && read.id === runId && read.failed;
   const run = listed ?? (read !== null && read.id === runId ? read.run : null);
   const gate = useGateStore((s) => (runId === null ? undefined : s.gates[runId]));
   const waiting = run?.session.status === 'awaiting_human';
@@ -137,5 +146,8 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   }, [run, gate, plan.view, plan.fresh, plan.reading, waiting, classified, answering, reshapeOn, planDecided, sentBackRaw, question, pending]);
   const view = useMemo(() => jobView(lineage, inputs, { stepName: unitStepName, swapPending, deciding, starting: deciding, now }),
     [lineage, inputs, swapPending, deciding, now]);
-  return { view, run, inputs, teamRetry: teamError !== null ? teamRetry : null };
+  // The plan gate is held but nothing readable came back for it: a failed read (either reader), not "still reading".
+  const planUnread = waiting && (teamError !== null || (plan.view === null && !plan.pending && !plan.reading && (gate?.gateKind === 'plan_approval' || !classified)));
+  const planRetry = planUnread && runId !== null ? () => { teamRetry(); void loadPlanGate(runId); } : null;
+  return { view, run, inputs, planRetry, runRetry: runReadFailed ? () => setReadTry((n) => n + 1) : null };
 }
