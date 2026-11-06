@@ -240,6 +240,26 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     expect(screen.getByTestId('session-gate-question').textContent).toBe('The rule learn-accessible needs your call before this step can go on');
   });
 
+  it('a remount reads the trail again: a hold the engine has since judged BROKEN is not answered from the old read (codex r7)', async () => {
+    serve(holdTrail);
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const first = show(runs);
+    await waitFor(() => expect(screen.getByTestId('app-chat-gate')).toBeTruthy());
+    first.unmount();
+    // Away from the app, a re-check found the rule broken; the gate record (same receivedAt) was kept by the reconcile.
+    const { calls } = serve(brokenTrail);
+    show(bareRuns({ source: 'rule_check', reason: 'broken' }));
+    await waitFor(() => expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(1));
+    await waitFor(() => expect(steps()).toStrictEqual(['done', 'done', 'failed']));
+    expect(screen.queryByTestId('app-chat-gate')).toBeNull();
+  });
+
+  it('a verified hold wins the busy line over a runs snapshot that has not caught up', () => {
+    const lagging = { session: { id: RUN, status: 'executing' }, units: [{ id: `${RUN}:review`, ord: 3, status: 'rejected' }] } as unknown as SessionView;
+    expect(busyText(lagging, true).line).toBe('Waiting on you: a rule needs your call');
+    expect(busyText({ ...lagging, session: { id: RUN, status: 'awaiting_human' } } as unknown as SessionView, false).line).toBe('Waiting on you: the run asks a question');
+  });
+
   it('the rules-hold headline names the rule, or counts them', () => {
     const r = (ruleId: string, status: string) => ({ ruleId, status, how: 'none', reason: '', cite: null }) as never;
     expect(rulesHoldHeadline([r('a', 'kept'), r('b', 'unchecked')])).toBe('The rule b needs your call before this step can go on');
