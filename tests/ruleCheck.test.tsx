@@ -84,7 +84,9 @@ describe('the gate held on rules offers the re-check and the confirm-or-skip', (
   });
 
   it('any other gate offers neither', () => {
-    const other = [events[0]!, { ...(events[1] as unknown as Record<string, unknown>), denial: { source: 'evaluator_verdict', reason: 'x', claimId: null, ruleIds: [], deniedTool: null, phase: 'unit-5' } }] as unknown as CoreEvent[];
+    // (rev 2) Another layer denied and no rule holds: nothing to re-check or skip. (A held rule behind another
+    // denial IS offered: see "a dispute behind the reviewer's FAIL".)
+    const other = [events[0]!, { ...(events[1] as unknown as Record<string, unknown>), denial: { source: 'evaluator_verdict', reason: 'x', claimId: null, ruleIds: [], deniedTool: null, phase: 'unit-5' }, assurance: { ...base, rules: [row('learn-tests-with-fixes', 'kept'), row('DEV-TINYMATH-2', 'kept')] } }] as unknown as CoreEvent[];
     const m = sessionGateChoices({ runId: RUN, gate: { ...gate, prompt: 'Unit 5 verdict is NOT PASS — confirm to retry the phase, or reject to cancel the run' }, units, events: other, pool: ['pi'], roster: null })!;
     const all = [...m.choices, ...(m.overflow ?? [])] as Array<{ key: string }>;
     expect(all.some((c) => c.key === 'retry-rules' || c.key === 'skip-rules')).toBe(false);
@@ -384,4 +386,169 @@ it('(s4-ui-fix r3) the undo notice says what a rule re-check and a rule skip do'
   expect(retry.preview).toMatch(/rule check runs again/);
   expect(retry.preview).not.toMatch(/resumes/);
   expect(describeDecision({ approve: true, action: 'skip_rules', skipRules: [{ id: 'U', reason: 'r' }] } as never).preview).toMatch(/skipped with your reason/);
+});
+
+/**
+ * DES-RULE-CHECK-001 rev 2 (rules-council-ui): a rule the rule judge and the reviewer disagreed on is "disputed: you
+ * decide" with both readings; a council's ruling says its vote and its own seats (never the rule judge's); a process
+ * rule is reported apart and never counted against the gate; and a dispute behind another denial (the reviewer's
+ * FAIL, a capped review's adjudication) can still be re-checked, or confirmed or skipped with a reason.
+ */
+describe('(rev 2) disputed rules, council rulings and process rules', () => {
+  const judgePos = { by: 'rule_judge', seat: 'claude', status: 'broken', cite: 'src/math.js:3 changes sum() and no test exercises it' };
+  const reviewerPos = { by: 'reviewer', seat: 'codex', status: 'kept', cite: 'src/math.test.js:12 covers sum()' };
+  const disputed = (id = 'DEV-TINYMATH-2'): Record<string, unknown> => ({
+    ruleId: id, status: 'disputed', how: 'council', ruleKey: 'k', judge: 'claude', origin: 'judge',
+    reason: 'the council reached no ruling (1 of 3 answered): no_quorum: the counted votes reached no majority (1 of 3 counted)',
+    reviewer: reviewerPos,
+    council: { taskId: 't-1', positions: [judgePos, reviewerPos], votes: [{ seat: 'agy', status: 'broken', counted: true }, { seat: 'pi', counted: false, whyNot: 'no answer' }, { seat: 'opencode', counted: false, whyNot: 'no answer' }], seated: 3, returned: 1, agreementPct: 100, consensus: false, seed: 7, eligible: ['agy', 'pi', 'opencode'], reason: 'no_quorum: the counted votes reached no majority (1 of 3 counted)' },
+  });
+  const settled = (how = 'council'): Record<string, unknown> => ({
+    ruleId: 'DEV-TINYMATH-2', status: 'broken', how, ruleKey: 'k', judge: 'claude', origin: 'council',
+    reason: 'settled by council 2-1: sum() changed with no test', cite: 'sum() changed with no test',
+    council: { taskId: 't-2', positions: [judgePos, reviewerPos], ruling: 'broken', votes: [{ seat: 'agy', status: 'broken', counted: true }, { seat: 'pi', status: 'broken', counted: true }, { seat: 'opencode', status: 'kept', counted: true }], seated: 3, returned: 3, agreementPct: 67, consensus: true, seed: 9, eligible: ['agy', 'pi', 'opencode'] },
+  });
+  const proc = (id: string, status: string, party: string): Record<string, unknown> => ({ ruleId: id, status, how: 'judge', ruleKey: 'k', judge: 'claude', origin: 'judge', reason: 'from the engine record', party, blocking: false });
+
+  it('parses disputed (not unchecked), the council and the process fields', () => {
+    const r = receiptOf({ ...base, rules: [disputed(), settled(), proc('RVWL-1001', 'broken', 'reviewer')] })!.rules!;
+    expect(r.map((x) => x.status)).toEqual(['disputed', 'broken', 'broken']);
+    expect(r[0]!.council?.positions.map((p) => [p.by, p.seat, p.status])).toEqual([['rule_judge', 'claude', 'broken'], ['reviewer', 'codex', 'kept']]);
+    expect(r[1]!.origin).toBe('council');
+    expect(r[2]).toMatchObject({ blocking: false, party: 'reviewer' });
+    // Only an explicit false is a process row: an older engine's row blocks.
+    expect(receiptOf({ ...base, rules: [row('A', 'kept')] })!.rules![0]!.blocking).toBe(true);
+  });
+
+  it('the line says disputed and settled by council, and leaves process rows out of the gate counts', () => {
+    const r = receiptOf({ ...base, rules: [row('A', 'kept'), disputed('D'), settled(), proc('RVWL-1001', 'broken', 'reviewer'), proc('RVWL-1003', 'kept', 'engine')] })!.rules!;
+    const s = rulesSummary(r);
+    expect(s.line).toBe('3 rules checked: 1 kept, 1 broken, 0 not applicable, 1 disputed (you decide), 1 settled by council; 2 process rules reported (do not block): 1 kept, 1 broken, 0 not applicable');
+    expect(s.disputed).toBe(1);
+    // Negative control: a broken process row is never counted in the gate's broken.
+    expect(rulesSummary(receiptOf({ ...base, rules: [row('A', 'kept'), proc('RVWL-1001', 'broken', 'reviewer')] })!.rules!)).toMatchObject({ broken: 0, line: '1 rule checked: 1 kept, 0 broken, 0 not applicable; 1 process rule reported (do not block): 0 kept, 1 broken, 0 not applicable' });
+  });
+
+  it('a disputed row says "you decide" with both readings and why no council ruled, open on its own', () => {
+    const r = receiptOf({ ...base, rules: [row('A', 'kept'), disputed()] })!;
+    render(<ReceiptView receipt={r} passed={false} />);
+    expect(screen.getByTestId('assurance-rules').hasAttribute('open')).toBe(true);
+    const li = screen.getAllByTestId('assurance-rule').find((x) => x.getAttribute('data-status') === 'disputed')!;
+    expect(li.textContent).toContain('disputed: you decide DEV-TINYMATH-2');
+    expect(li.textContent).not.toMatch(/\bunchecked\b|no_quorum/);
+    expect(li.textContent).toContain('the council reached no ruling (1 of 3 answered): the counted votes reached no majority');
+    const pos = screen.getAllByTestId('assurance-rule-position').map((x) => x.textContent);
+    expect(pos[0]).toContain('Rule judge (claude): broken, ');
+    expect(pos[0]).toContain('no test exercises it');
+    expect(pos[1]).toContain('Reviewer (codex): kept, ');
+    expect(screen.getByTestId('assurance-rule-votes').textContent).toBe('Council votes: agy broken · pi named no position (not counted: no answer) · opencode named no position (not counted: no answer)');
+  });
+
+  it('a council ruling says its vote and its own seats, never the rule judge as the council', () => {
+    for (const how of ['council', 'cache']) {
+      const r = receiptOf({ ...base, rules: [settled(how)] })!;
+      const { unmount } = render(<ReceiptView receipt={r} passed={false} />);
+      fireEvent.click(screen.getByTestId('assurance-rules-line'));
+      const said = screen.getByTestId('assurance-rule-how').textContent!;
+      expect(said).toBe(` settled by council 2-1 (agy, pi, opencode)${how === 'cache' ? ', unchanged since' : ''}`);
+      // Negative control: the row's judge (the rule judge, claude) is not named as who settled it.
+      expect(said).not.toContain('claude');
+      expect(screen.getByTestId('assurance-rule').textContent).toContain(': sum() changed with no test');
+      expect(screen.getAllByTestId('assurance-rule-position').map((x) => x.getAttribute('data-by'))).toEqual(['rule_judge', 'reviewer']);
+      expect(screen.getAllByTestId('assurance-rule-vote').map((x) => x.textContent)).toEqual(['agy broken', ' · pi broken', ' · opencode kept']);
+      unmount();
+    }
+    // A council row whose ruling it does not carry is never "by a judge (claude)" either.
+    const odd = receiptOf({ ...base, rules: [{ ...settled(), council: null }] })!;
+    render(<RulesChecked rows={odd.rules!} />);
+    expect(screen.getByTestId('assurance-rule-how').textContent).toBe(' by council');
+  });
+
+  it('a process row sits in its own group, with its party, said not to block', () => {
+    const r = receiptOf({ ...base, rules: [row('A', 'kept'), proc('RVWL-1001', 'broken', 'reviewer')] })!;
+    render(<RulesChecked rows={r.rules!} />);
+    const group = screen.getByTestId('assurance-rules-process');
+    expect(group.textContent).toContain('Process rules: reported, they do not block this gate');
+    expect(group.textContent).toContain("broken RVWL-1001 the reviewer's conduct, reported, does not block");
+    expect(screen.getByTestId('assurance-rules').getAttribute('data-tone')).toBe('ok');
+  });
+
+  describe("a dispute behind the reviewer's FAIL", () => {
+    const RUN = 'r-dispute';
+    const FAIL = 'Unit 5 verdict is NOT PASS — Request changes to send it back for rework, approve to run the step again, or reject to cancel the run';
+    const ADJ = "Unit 5 verdict is NOT PASS again — round 3, after 2 send-backs to unit 4 (the rework cap is 2), so this gate adjudicates instead of sending it back. Items — none. Approve = LAND WITH CARRIED ITEMS: the creator's work counts. Request changes = ONE MORE ROUND. Reject = STOP the run";
+    const units = [
+      makeUnit({ id: `${RUN}:fix`, session_id: RUN, ord: 4, role: 'creator', status: 'done', assigned_cli: 'pi' }),
+      makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 5, role: 'evaluator', status: 'rejected', assigned_cli: 'codex' }),
+    ] as WorkUnit[];
+    const log = (rules: unknown[]): CoreEvent[] => [
+      { type: 'unitDispatched', session: RUN, ord: 5, ts: 1 },
+      { type: 'gateEvaluated', session: RUN, ord: 5, ts: 2, combined: false, denial: { source: 'evaluator_verdict', reason: 'FAIL', ruleIds: [] }, assurance: { ...base, rules } },
+      { type: 'gateEscalated', session: RUN, ord: 5, ts: 3, attempt: 1, condition: 'verdict_not_pass', denialSource: 'evaluator_verdict', verdictSummary: 'FAIL' },
+    ] as unknown as CoreEvent[];
+    const offered = (events: CoreEvent[], prompt = FAIL, gateKind: OpenGate['gateKind'] = 'escalation', u: WorkUnit[] = units) => {
+      const g = { runId: RUN, ord: 5, prompt, gateKind, lifecycle: 'open', receivedAt: 1 } as OpenGate;
+      const m = sessionGateChoices({ runId: RUN, gate: g, units: u, events, pool: ['pi', 'codex'], roster: null })!;
+      return [...m.choices, ...(m.overflow ?? [])] as Array<{ key: string; skipRuleIds?: string[]; decision: unknown }>;
+    };
+
+    it('offers the re-check and the confirm-or-skip of the disputed rule only, after Send back', () => {
+      const all = offered(log([row('A', 'kept'), row('B', 'broken'), disputed(), proc('RVWL-1002', 'unchecked', 'engine')]));
+      const keys = all.map((c) => c.key);
+      expect(keys).toEqual(expect.arrayContaining(['send-back', 'retry-rules', 'skip-rules']));
+      expect(keys.indexOf('send-back')).toBeLessThan(keys.indexOf('retry-rules'));
+      // Never the broken row, never a process row.
+      expect(all.find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['DEV-TINYMATH-2']);
+      expect(all.find((c) => c.key === 'skip-rules')?.decision).toEqual({ approve: true, action: 'skip_rules' });
+    });
+
+    it("at a capped review's adjudication too", () => {
+      const all = offered(log([disputed()]), ADJ, 'review_adjudication');
+      expect(all.map((c) => c.key)).toEqual(expect.arrayContaining(['retry-rules', 'skip-rules']));
+    });
+
+    it('negative controls: no rule held behind it (broken, kept, process only) offers neither; a dispatch after it voids it', () => {
+      for (const rules of [[row('B', 'broken')], [row('A', 'kept')], [proc('RVWL-1002', 'unchecked', 'engine'), proc('RVWL-1001', 'broken', 'reviewer')]]) {
+        const keys = offered(log(rules)).map((c) => c.key);
+        expect(keys.some((k) => k === 'retry-rules' || k === 'skip-rules'), JSON.stringify(rules)).toBe(false);
+      }
+      const later = [...log([disputed()]), { type: 'unitDispatched', session: RUN, ord: 5, ts: 4 }] as unknown as CoreEvent[];
+      expect(offered(later).some((c) => c.key === 'retry-rules')).toBe(false);
+    });
+
+    it("no log in hand: the unit record's denials_behind decides", () => {
+      const rec = (behind: unknown[], rules: unknown[] = [row('A', 'kept')]) => units.map((u) => (u.ord === 5 ? { ...u, denial: { source: 'evaluator_verdict', reason: 'FAIL' }, denials_behind: behind, assurance: { ...base, rules } } : u)) as unknown as WorkUnit[];
+      expect(offered([], FAIL, 'escalation', rec([{ source: 'evaluator_verdict', reason: 'x' }, { source: 'rules_unchecked', reason: 'y' }])).some((c) => c.key === 'retry-rules')).toBe(true);
+      expect(offered([], FAIL, 'escalation', rec([{ source: 'evaluator_verdict', reason: 'x' }])).some((c) => c.key === 'retry-rules')).toBe(false);
+      expect(offered([], FAIL, 'escalation', rec([], [disputed()])).find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['DEV-TINYMATH-2']);
+    });
+
+    it('the gate card says the dispute, both readings and the offer', async () => {
+      const client = await import('../src/api/client.js');
+      vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '' } as never);
+      const { GateRow } = await import('../src/components/session/GateRow.js');
+      const { useRunEventStore } = await import('../src/store/events.js');
+      useRunEventStore.setState({ byRun: { [RUN]: log([row('A', 'kept'), disputed()]) } });
+      const g: OpenGate = { runId: RUN, ord: 5, prompt: FAIL, lifecycle: 'open', receivedAt: 1, gateKind: 'escalation' };
+      render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, units)} gate={g} />);
+      expect(screen.getByTestId('session-gate-rules-line').textContent).toBe('2 rules checked: 1 kept, 0 broken, 0 not applicable, 1 disputed (you decide)');
+      expect(screen.getAllByTestId('assurance-rule-position')).toHaveLength(2);
+      expect(document.querySelector('[data-ask-option="skip-rules"]')).not.toBeNull();
+    });
+  });
+
+  it('the delivery says a council ruling and a skipped dispute', () => {
+    const RUN = 'r-deliver-council';
+    const units = [makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, role: 'evaluator', status: 'done' })] as WorkUnit[];
+    // The engine's skip row is a fresh row (no judge, no council): core rule_check.rs `row(Skipped, Operator, …)`.
+    const skippedDispute = { ruleId: 'D2', status: 'skipped', how: 'operator', origin: 'operator', ruleKey: 'k', reason: 'skipped by you: the reviewer is right, the test covers it' };
+    const events = [{ type: 'gateEvaluated', session: RUN, ord: 2, ts: 1, assurance: { ...base, rules: [settled(), skippedDispute] } }] as unknown as CoreEvent[];
+    const d = deliveryReceiptOf(makeView({ id: RUN, status: 'completed' } as never, units), events, null)!;
+    render(<ReceiptView receipt={d} passed />);
+    expect(screen.getByTestId('assurance-rules-line').textContent).toBe('2 rules checked: 0 kept, 1 broken, 0 not applicable, 1 skipped by the operator, 1 settled by council');
+    fireEvent.click(screen.getByTestId('assurance-rules-line'));
+    const rows = screen.getAllByTestId('assurance-rule');
+    expect(rows[0]!.textContent).toContain('settled by council 2-1 (agy, pi, opencode)');
+    expect(rows[1]!.textContent).toContain('skipped D2 by the operator: skipped by you: the reviewer is right');
+  });
 });

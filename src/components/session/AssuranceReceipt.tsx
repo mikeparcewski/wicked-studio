@@ -1,6 +1,7 @@
 import { actorWords } from '../../board/actorWords.js';
 import type { SessionView } from '../../api/types.js';
-import { rulesSummary, type RuleRow } from '../../board/assuranceModel.js';
+import { councilRulingOf, rulesSummary, type RuleRow } from '../../board/assuranceModel.js';
+import type { RulePosition } from '../../api/types.js';
 import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL, REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, qeSkippedText, qeWords, sessionQe, unverifiedDeliveryLine, type DeliveryAssuranceView, type QeDecision, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
@@ -113,33 +114,104 @@ export function AssuranceReceiptTech({ receipt, passed = null, testId }: { recei
   );
 }
 
-const RULE_WORD: Record<string, string> = { kept: 'kept', broken: 'broken', n_a: 'not applicable', unchecked: 'unchecked', skipped: 'skipped', waived: 'waived by your instruction', deferred: 'deferred to delivery' };
-const HOW_WORD: Record<string, string> = { fact: 'by fact', judge: 'by a judge', machine: 'by the engine', cache: 'unchanged since last check', operator: 'by the operator', none: 'nobody could rule' };
+const RULE_WORD: Record<string, string> = { kept: 'kept', broken: 'broken', n_a: 'not applicable', unchecked: 'unchecked', skipped: 'skipped', waived: 'waived by your instruction', deferred: 'deferred to delivery', disputed: 'disputed: you decide' };
+const HOW_WORD: Record<string, string> = { fact: 'by fact', judge: 'by a judge', machine: 'by the engine', cache: 'unchanged since last check', operator: 'by the operator', council: 'by council', none: 'nobody could rule' };
+/** Who each side of a dispute is (`RulePosition.by`). */
+const BY_WORD: Record<string, string> = { rule_judge: 'Rule judge', reviewer: 'Reviewer' };
+/** A process rule's party (`RuleRow.party`): whose conduct it is about. */
+const PARTY_WORD: Record<string, string> = { reviewer: "the reviewer's conduct", engine: 'the engine', person: 'your intent' };
+/** The engine's no-ruling codes (`RuleCouncilRecord.reason`) lead its detail; the detail says it in words. */
+const NO_RULING_CODE = /\b(?:no_quorum|timeout|seats_benched|cap|error|incomplete_evidence|identity_unknown):\s*/g;
+
+/** How a row's verdict was reached, in words. A council's ruling names the council's own seats and its vote; the
+ *  row's `judge` is the RULE JUDGE's seat (the engine keeps it on a council row), so it is never shown as the
+ *  council's. A disputed row says nothing here: its reason says why no ruling stands. */
+function howWords(r: RuleRow): string {
+  const ruled = councilRulingOf(r);
+  if (ruled !== null) {
+    const seats = ruled.seats.length > 0 ? ` (${ruled.seats.join(', ')})` : '';
+    return `settled by council ${ruled.tally}${seats}${r.how === 'cache' ? ', unchanged since' : ''}`;
+  }
+  if (r.status === 'disputed') return '';
+  // A council row with no ruling it carries is never "by a judge (<the rule judge>)".
+  if (r.how === 'council' || r.origin === 'council') return HOW_WORD['council']!;
+  // A skip is the operator's, never a seat's.
+  return `${HOW_WORD[r.how] ?? r.how}${r.judge !== null && r.how !== 'operator' ? ` (${r.judge})` : ''}`;
+}
+
+/** One side's reading: "Rule judge (claude): broken, “…”". */
+function positionWords(p: RulePosition): string {
+  return `${BY_WORD[p.by] ?? p.by} (${p.seat !== '' ? p.seat : 'unknown seat'}): ${RULE_WORD[p.status] ?? p.status}`;
+}
+
+/** One rule's row: its verdict, how it was reached and why; a dispute's two readings and a council's votes under it. */
+function RuleItem({ r }: { r: RuleRow }): React.ReactElement {
+  const showText = useDisplayText();
+  const ruled = councilRulingOf(r);
+  // Why: a council ruling's winning rationale (its reason repeats the tally); else the engine's reason (the fact,
+  // the cite in words, the skip's reason, why no council ruled), else the bare cite.
+  const why = (ruled !== null && r.cite !== null ? r.cite : r.reason !== '' ? r.reason : r.cite ?? '').replace(NO_RULING_CODE, '');
+  const how = howWords(r);
+  const c = r.council;
+  // The reviewer's own reading, when it differs from the row and no council record already says it.
+  const reviewerApart = c === null && r.reviewer !== null && r.reviewer.status !== r.status ? r.reviewer : null;
+  return (
+    <li data-testid="assurance-rule" data-status={r.status} data-origin={r.origin ?? undefined} className="wk-assurance-rule">
+      <span className={`wk-assurance-rule-status wk-assurance-rule-status--${r.status}`}>{RULE_WORD[r.status] ?? r.status}</span>
+      {' '}<code className="wk-assurance-rule-id">{r.ruleId}</code>
+      {!r.blocking && <span data-testid="assurance-rule-party" className="wk-assurance-rule-how"> {PARTY_WORD[r.party ?? ''] ?? r.party ?? 'process'}, reported, does not block</span>}
+      {how !== '' && <span data-testid="assurance-rule-how" className="wk-assurance-rule-how"> {how}</span>}
+      {why !== '' && <span className="wk-assurance-rule-why">: {showText(why)}</span>}
+      {c !== null && (
+        <ul data-testid="assurance-rule-council" className="wk-assurance-rule-council">
+          {c.positions.map((p, i) => (
+            <li key={`p${i}`} data-testid="assurance-rule-position" data-by={p.by}>
+              {positionWords(p)}{p.cite !== '' && <>, <q>{showText(p.cite)}</q></>}
+            </li>
+          ))}
+          {c.votes.length > 0 && (
+            <li data-testid="assurance-rule-votes">
+              Council votes: {c.votes.map((v, i) => (
+                <span key={`v${i}`} data-testid="assurance-rule-vote" data-counted={v.counted ? 'true' : 'false'}>
+                  {i > 0 ? ' · ' : ''}{v.seat} {v.status !== undefined ? RULE_WORD[v.status] ?? v.status : 'named no position'}
+                  {!v.counted && ` (not counted${v.whyNot !== undefined ? `: ${showText(v.whyNot)}` : ''})`}
+                </span>
+              ))}
+            </li>
+          )}
+        </ul>
+      )}
+      {reviewerApart !== null && (
+        <span data-testid="assurance-rule-reviewer" className="wk-assurance-rule-why">. {positionWords(reviewerApart)}{reviewerApart.cite !== '' && <>, <q>{showText(reviewerApart.cite)}</q></>}</span>
+      )}
+    </li>
+  );
+}
 
 /** (DES-RULE-CHECK-001) "N rules checked: K kept, B broken, X not applicable", expandable to every rule's
- *  row: its verdict, how it was reached, and why (the cite, the fact, or the operator's skip reason).
+ *  row: its verdict, how it was reached, and why (the cite, the fact, or the operator's skip reason). A disputed rule
+ *  says "disputed: you decide" with both readings, and a council's ruling its vote and seats; the list opens on its
+ *  own while a dispute waits for you. Process rules (`blocking: false`) are listed apart, said not to block.
  *  `soFar`: a run still going says "So far, …" (its later gates may still rule). A reason's home paths
  *  are redacted unless technical details are on, as every other free text studio shows. */
 export function RulesChecked({ rows, testId = 'assurance-rules', soFar = false }: { rows: readonly RuleRow[]; testId?: string; soFar?: boolean }): React.ReactElement {
-  const showText = useDisplayText();
   const s = rulesSummary(rows);
-  const tone = s.broken > 0 ? 'broken' : s.unchecked + s.waived > 0 ? 'unchecked' : 'ok';
+  const tone = s.broken > 0 ? 'broken' : s.unchecked + s.waived + s.disputed > 0 ? 'unchecked' : 'ok';
+  const gate = rows.filter((r) => r.blocking);
+  const process = rows.filter((r) => !r.blocking);
   return (
-    <details data-testid={testId} data-tone={tone} className="wk-assurance-rules">
+    <details data-testid={testId} data-tone={tone} className="wk-assurance-rules" open={s.disputed > 0 ? true : undefined}>
       <summary data-testid={`${testId}-line`} className="wk-assurance-line wk-assurance-rules-summary">{soFar ? `So far, ${s.line}` : s.line}</summary>
       <ul className="wk-assurance-list wk-assurance-rules-list">
-        {rows.map((r) => {
-          // Why: the engine's reason (the fact, the cite in words, the skip's reason), else the bare cite.
-          const why = r.reason !== '' ? r.reason : r.cite ?? '';
-          return (
-            <li key={r.ruleId} data-testid="assurance-rule" data-status={r.status} className="wk-assurance-rule">
-              <span className={`wk-assurance-rule-status wk-assurance-rule-status--${r.status}`}>{RULE_WORD[r.status] ?? r.status}</span>
-              {' '}<code className="wk-assurance-rule-id">{r.ruleId}</code>
-              <span className="wk-assurance-rule-how"> {HOW_WORD[r.how] ?? r.how}{r.judge !== null ? ` (${r.judge})` : ''}</span>
-              {why !== '' && <span className="wk-assurance-rule-why">: {showText(why)}</span>}
-            </li>
-          );
-        })}
+        {gate.map((r) => <RuleItem key={r.ruleId} r={r} />)}
+        {process.length > 0 && (
+          <li data-testid={`${testId}-process`} className="wk-assurance-rules-process">
+            <span className="wk-assurance-rules-process-head">Process rules: reported, they do not block this gate</span>
+            <ul className="wk-assurance-list">
+              {process.map((r) => <RuleItem key={r.ruleId} r={r} />)}
+            </ul>
+          </li>
+        )}
       </ul>
     </details>
   );

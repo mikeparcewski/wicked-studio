@@ -38,7 +38,7 @@ import type { GateAnswer } from './gateActions.js';
 import { repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from './repeatProgress.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
-import { rulesHoldAt, waitsForJudge } from './assuranceModel.js';
+import { ruleHolds, rulesHoldAt, waitsForJudge } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
 import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
@@ -830,24 +830,30 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // in this job (Reassign), or Stop.
     const deadSeat = deadSeatOf(gate.prompt, events);
     const rejudgeOffered = deadSeat === null && operatorJudgment && input.rejudge?.available === true;
-    // (DES-RULE-CHECK-001) Steering rules no judge ruled on hold the gate: re-check them on the same work, or
-    // skip the unchecked ones with a written reason (labelled on the run, the gate and the delivery). Offered
-    // only where the engine takes them: a gate held `rules_unchecked` on the wire, never a phrase in the prompt.
+    // (DES-RULE-CHECK-001) Steering rules no judge ruled on, or a dispute no council settled, hold the gate: re-check
+    // them on the same work, or confirm or skip the held ones with a written reason (labelled on the run, the gate
+    // and the delivery). Offered only where the engine takes them: a rule layer in the unit's denial record on the
+    // wire, never a phrase in the prompt. That is the winning denial, or (core-ts 0.15.30, rev 2 A.4) a layer behind
+    // another one: a disputed rule behind the reviewer's FAIL, at a capped review's adjudication too. Behind another
+    // denial they follow Send back (the gate's own cause comes first), and a skip resolves only those rules.
     const rulesHold = rulesHoldAt(events, units, gate.ord);
+    const ruleChoices: GateRowChoice[] = [];
     if (deadSeat === null && rulesHold.held) {
-      coreWithoutStop.push({ key: 'retry-rules', label: RETRY_RULES_LABEL, decision: { approve: true, action: 'retry_rules' } as unknown as GateAnswer, needsNote: false, title: 'Run the steering-rule check again on the same work. The step does not run again, and every verdict on an unchanged rule is kept.' });
-      const unchecked = rulesHold.rows.filter((r) => r.status === 'unchecked' || r.status === 'waived').map((r) => r.ruleId);
-      if (unchecked.length > 0) {
-        coreWithoutStop.push({
+      ruleChoices.push({ key: 'retry-rules', label: RETRY_RULES_LABEL, decision: { approve: true, action: 'retry_rules' } as unknown as GateAnswer, needsNote: false, title: 'Run the steering-rule check again on the same work (a disputed rule goes to the council again). The step does not run again, and every verdict on an unchanged rule is kept.' });
+      // Never a broken row (the engine refuses it) or a process row (it holds nothing).
+      const held = rulesHold.rows.filter(ruleHolds).map((r) => r.ruleId);
+      if (held.length > 0) {
+        ruleChoices.push({
           key: 'skip-rules',
-          label: unchecked.length === 1 ? `Confirm or skip ${unchecked[0]!}` : `Confirm or skip ${unchecked.length} rules`,
+          label: held.length === 1 ? `Confirm or skip ${held[0]!}` : `Confirm or skip ${held.length} rules`,
           decision: { approve: true, action: 'skip_rules' } as unknown as GateAnswer,
           needsNote: true,
-          skipRuleIds: unchecked,
-          title: `Skip ${unchecked.join(', ')} with your written reason. The skip is labelled on the run, the gate and the delivery; a broken rule cannot be skipped.`,
+          skipRuleIds: held,
+          title: `Skip ${held.join(', ')} with your written reason. The skip is labelled on the run, the gate and the delivery; a broken rule cannot be skipped.${rulesHold.behind ? ' Every other reason this step was stopped still stands.' : ''}`,
         });
       }
     }
+    if (!rulesHold.behind) coreWithoutStop.push(...ruleChoices);
     if (rejudgeOffered) {
       coreWithoutStop.push({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, needsNote: false, title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
     }
@@ -858,6 +864,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     } else if (deadSeat === null && sendBackAccepted(units, gate.ord)) {
       coreWithoutStop.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with the reviewer\'s failing items.' });
     }
+    if (rulesHold.behind) coreWithoutStop.push(...ruleChoices);
     // A QE FAIL keeps Send back first (the work is what failed), and offers the review again beside it.
     if (qe?.outcome === 'fail') {
       coreWithoutStop.push({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
