@@ -38,7 +38,7 @@ import type { GateAnswer } from './gateActions.js';
 import { repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from './repeatProgress.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { qeGateOf, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
-import { ruleHolds, rulesHoldAt, waitsForJudge } from './assuranceModel.js';
+import { ruleHolds, rulesHoldAt, waitsForJudge, type RuleRow } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
 import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
@@ -830,29 +830,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // in this job (Reassign), or Stop.
     const deadSeat = deadSeatOf(gate.prompt, events);
     const rejudgeOffered = deadSeat === null && operatorJudgment && input.rejudge?.available === true;
-    // (DES-RULE-CHECK-001) Steering rules no judge ruled on, or a dispute no council settled, hold the gate: re-check
-    // them on the same work, or confirm or skip the held ones with a written reason (labelled on the run, the gate
-    // and the delivery). Offered only where the engine takes them: a rule layer in the unit's denial record on the
-    // wire, never a phrase in the prompt. That is the winning denial, or (core-ts 0.15.30, rev 2 A.4) a layer behind
-    // another one: a disputed rule behind the reviewer's FAIL, at a capped review's adjudication too. Behind another
-    // denial they follow Send back (the gate's own cause comes first), and a skip resolves only those rules.
+    // (DES-RULE-CHECK-001) The steering-rule actions, where the engine takes them ({@link ruleChoicesAt}): first when
+    // a held rule is the gate's own cause, after Send back when another layer (or a broken rule) is.
     const rulesHold = rulesHoldAt(events, units, gate.ord);
-    const ruleChoices: GateRowChoice[] = [];
-    if (deadSeat === null && rulesHold.held) {
-      ruleChoices.push({ key: 'retry-rules', label: RETRY_RULES_LABEL, decision: { approve: true, action: 'retry_rules' } as unknown as GateAnswer, needsNote: false, title: 'Run the steering-rule check again on the same work (a disputed rule goes to the council again). The step does not run again, and every verdict on an unchanged rule is kept.' });
-      // Never a broken row (the engine refuses it) or a process row (it holds nothing).
-      const held = rulesHold.rows.filter(ruleHolds).map((r) => r.ruleId);
-      if (held.length > 0) {
-        ruleChoices.push({
-          key: 'skip-rules',
-          label: held.length === 1 ? `Confirm or skip ${held[0]!}` : `Confirm or skip ${held.length} rules`,
-          decision: { approve: true, action: 'skip_rules' } as unknown as GateAnswer,
-          needsNote: true,
-          skipRuleIds: held,
-          title: `Skip ${held.join(', ')} with your written reason. The skip is labelled on the run, the gate and the delivery; a broken rule cannot be skipped.${rulesHold.behind ? ' Every other reason this step was stopped still stands.' : ''}`,
-        });
-      }
-    }
+    const ruleChoices = deadSeat === null ? ruleChoicesAt(rulesHold) : [];
     if (!rulesHold.behind) coreWithoutStop.push(...ruleChoices);
     if (rejudgeOffered) {
       coreWithoutStop.push({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, needsNote: false, title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
@@ -1018,6 +999,8 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     for (const offer of escalationOffers(verdict, gate.ord, units, runId)) {
       choices.push({ key: `offer:${offer.action}`, label: offer.label, title: offer.consequence, decision: { approve: true, action: offer.action } as unknown as GateAnswer, needsNote: false });
     }
+    // A rule layer behind the restored-tree denial: its re-check and confirm-or-skip, after the gate's own arms.
+    choices.push(...ruleChoicesAt(rulesHoldAt(events, units, gate.ord)));
     const failedCli = failedSeatOf(units, gate.ord);
     const retryOverflow: GateRowChoice[] = [];
     const retryWithheld: ReassignCandidate[] = [];
@@ -1076,6 +1059,30 @@ export function gateFloorSplit(events: readonly CoreEvent[], gate: Pick<OpenGate
 /** The note a named send-back opens with: the tests only this change has, and nothing else. */
 export function namedSendBackNote(fresh: readonly string[]): string {
   return `Fix only the test${fresh.length === 1 ? '' : 's'} this change broke (the others fail on the base too): ${fresh.join(', ')}`;
+}
+
+/**
+ * (DES-RULE-CHECK-001) The steering-rule actions at a gate whose denial record holds a rule layer
+ * ({@link rulesHoldAt}): "Re-check the rules" (`retry_rules`; a disputed rule goes to the council again), and
+ * "Confirm or skip" (`skip_rules`, each with the person's reason) for the rows that hold — a blocking unchecked,
+ * waived or disputed row, never a broken row (the engine refuses it) or a process row (it holds nothing). None where
+ * no rule layer is in the record.
+ */
+function ruleChoicesAt(hold: { held: boolean; rows: readonly RuleRow[]; behind: boolean }): GateRowChoice[] {
+  if (!hold.held) return [];
+  const out: GateRowChoice[] = [{ key: 'retry-rules', label: RETRY_RULES_LABEL, decision: { approve: true, action: 'retry_rules' } as unknown as GateAnswer, needsNote: false, title: 'Run the steering-rule check again on the same work (a disputed rule goes to the council again). The step does not run again, and every verdict on an unchanged rule and evidence is kept.' }];
+  const held = hold.rows.filter(ruleHolds).map((r) => r.ruleId);
+  if (held.length > 0) {
+    out.push({
+      key: 'skip-rules',
+      label: held.length === 1 ? `Confirm or skip ${held[0]!}` : `Confirm or skip ${held.length} rules`,
+      decision: { approve: true, action: 'skip_rules' } as unknown as GateAnswer,
+      needsNote: true,
+      skipRuleIds: held,
+      title: `Skip ${held.join(', ')} with your written reason. The skip is labelled on the run, the gate and the delivery; a broken rule cannot be skipped.${hold.behind ? ' Every other reason this step was stopped still stands.' : ''}`,
+    });
+  }
+  return out;
 }
 
 export const RETRY_RULES_LABEL = 'Re-check the rules';

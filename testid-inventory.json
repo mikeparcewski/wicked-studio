@@ -12,9 +12,9 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 327,
-    "occurrences": 4815,
-    "static": 4040,
-    "dynamic": 176,
+    "occurrences": 4823,
+    "static": 4047,
+    "dynamic": 177,
     "computed": 53
   },
   "static": [
@@ -2313,6 +2313,48 @@
     },
     {
       "testId": "assurance-rule",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rule-council",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rule-how",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rule-party",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rule-position",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rule-reviewer",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rule-vote",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-rule-votes",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
       ]
@@ -24679,6 +24721,12 @@
       "pattern": "*-options",
       "files": [
         "src/components/FacetAutocomplete.tsx"
+      ]
+    },
+    {
+      "pattern": "*-process",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {
