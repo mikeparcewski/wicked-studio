@@ -693,3 +693,64 @@ describe('review round 4 folds', () => {
     expect(document.activeElement?.getAttribute('data-token')).not.toBe('repo');
   });
 });
+
+describe('review round 5 folds', () => {
+  const RUN = 'run-1';
+  const decided = { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } };
+  const run = () => makeView({ id: RUN, status: 'awaiting_human' as never, unit_ix: 1, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, [
+    makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'done', phase_ref: 'pa-scope' }),
+    makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: 'pending', phase_ref: 'build' }),
+  ]);
+  const held = () => {
+    messages = [USER, SEAT, P1, decided];
+    team = { teamed: true, units: [], planRev: 2, rows: [
+      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build' }] } },
+      { event_id: 4, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 1, plan_rev: 2 } }] };
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 7, gateKind: 'plan_approval' } }, approaching: {} });
+  };
+
+  it('a bound box takes `/` as the answer’s words: no command menu dispatches, Send answers the plan', async () => {
+    held();
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: '/test' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts.map((x) => [x.path, x.body['amend']])).toEqual([[`/runs/${RUN}/gate`, '/test']]);
+  });
+
+  it('a workflow waiting in the box never disables the bound Send button', async () => {
+    held();
+    const { useComposerChips } = await import('../src/store/composerChips.js');
+    act(() => { useComposerChips.setState({ byComposer: { [CHAT]: [{ kind: 'workflow', key: 'w:bug', label: 'Fix a bug', workflowId: 'bug' }] } }); });
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    fireEvent.change(screen.getByTestId('session-composer-input'), { target: { value: 'add a rollback step' } });
+    const send = screen.getByTestId('session-composer-send') as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+    expect(send.getAttribute('aria-label')).toBe('Send');
+    fireEvent.click(send);
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts.map((x) => x.path)).toEqual([`/runs/${RUN}/gate`]);
+  });
+
+  it('a typed answer to wicked’s question that crew refuses comes back to the box', async () => {
+    const q = { kind: 'lost_check', text: 'Skip QE acceptance?', choices: [{ label: 'Skip it, with a reason…', edit: { skipQe: { reason: '' }, confirmLoss: true } }, { label: 'Keep QE', edit: { restoreQe: true } }],
+      lost: ['qe-acceptance'], input: { kind: 'text', label: 'Why skip QE acceptance', edit: 'skipQe.reason' } };
+    messages = [USER, SEAT, { at: T0 + 2, turnId: 't1', kind: 'proposal', proposal: jobProposal({ question: q as never }) }];
+    reviseAnswer = () => ok({ error: 'That parent was replaced', code: 'proposal_stale' }, 409);
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(reply('choice:0'));
+    expect(screen.getByTestId('job-binding-label').textContent).toBe('Answering: Why skip QE acceptance');
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'a prototype nobody uses' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(posts[0]?.body).toMatchObject({ edits: { skipQe: { reason: 'a prototype nobody uses' }, confirmLoss: true }, source: 'question' }));
+    await screen.findByTestId('job-passage-error');
+    await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('a prototype nobody uses'));
+  });
+});

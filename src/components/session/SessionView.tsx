@@ -1454,12 +1454,13 @@ function JobBoundComposer({ binding, composerProps, className }: {
   const leave = (): void => { useJobBinding.getState().clear(); setRefused(null); };
   // A binding is made by a press in the passage: the box it becomes takes the caret (it is a new box).
   const box = useRef<HTMLTextAreaElement | null>(null);
-  useEffect(() => { box.current?.focus(); }, [binding.replyKey]);
+  useEffect(() => { box.current?.focus(); setRefused(null); }, [binding.replyKey]);
   return (
     <Composer {...composerProps} inputRef={box} answerOnly placeholder={binding.placeholder}
       footer={(
         <p data-testid="job-binding" role="note" className="wk-composer-hint wk-reply-switch">
-          {refused !== null && <span data-testid="job-binding-moved" className="wk-reply-why">{refused} · </span>}
+          {/* One stable polite region: a refused Send is announced, not only drawn. */}
+          <span role="status" aria-live="polite" className="wk-reply-why">{refused !== null && <span data-testid="job-binding-moved">{refused} · </span>}</span>
           <span data-testid="job-binding-label">{binding.label}</span>{' '}
           <button type="button" data-testid="job-binding-leave" aria-label="Stop answering the job" onClick={leave} className="wk-reply-flip">×</button>
         </p>
