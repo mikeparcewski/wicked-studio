@@ -13,7 +13,7 @@ import {
   resetToastLedger,
   TOAST_DWELL_MS,
 } from '../src/components/GateNotifications.js';
-import { useGateStore } from '../src/store/gates.js';
+import { beginGateRead, useGateStore } from '../src/store/gates.js';
 import type { OpenGate } from '../src/store/gates.js';
 import { useMembershipStore } from '../src/store/membership.js';
 import { makeView } from './factories.js';
@@ -271,6 +271,24 @@ describe('GateNotifications lead card (F31)', () => {
       expect(lead(), `live at ${liveAt - T}`).toBe('run-new');
       vi.useRealTimers();
     }
+  });
+
+  it('a live frame for the gate a read put there (same ord) keeps its place; a refresh never promotes a live gate', async () => {
+    // Read: run-old leads, run-new waits in "+1".
+    useGateStore.getState().applyGateRead(beginGateRead('run-new'), gate('run-new', { ord: 2, receivedAt: T }));
+    useGateStore.getState().applyGateRead(beginGateRead('run-old'), gate('run-old', { ord: 2, receivedAt: T }));
+    const { rerender } = render(<GateNotifications onSelect={() => {}} runs={runs} />);
+    expect(lead()).toBe('run-old');
+    // The same gate arrives live (a replayed frame): it stays the lead.
+    act(() => { useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'run-old', ord: 2, prompt: 'gate for run-old' } as never); });
+    rerender(<GateNotifications onSelect={() => {}} runs={runs} />);
+    expect(lead()).toBe('run-old');
+    expect(useGateStore.getState().gates['run-old']).toMatchObject({ fromRead: true });
+    // A live gate queued behind a read lead is re-read (a refresh after a 409): it stays live, behind.
+    act(() => { useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'run-live', ord: 1, prompt: 'gate for run-live' } as never); });
+    act(() => { useGateStore.getState().applyGateRead(beginGateRead('run-live'), gate('run-live', { ord: 1, receivedAt: T })); });
+    expect(useGateStore.getState().gates['run-live']?.fromRead).toBeUndefined();
+    expect(leadCardOrder(Object.values(useGateStore.getState().gates), runs).map((g) => g.runId)).toStrictEqual(['run-old', 'run-new', 'run-live']);
   });
 
   it('leadCardOrder: read gates by run age (unlisted after, ties in store order), then live gates in store order', () => {

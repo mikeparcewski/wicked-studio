@@ -57,10 +57,11 @@ interface Props {
 const NO_RUNS: ReadonlySet<string> = new Set();
 
 /**
- * F31: the toast's order, independent of the order gates reached the store (the late-join reads run newest first and
- * in parallel). Gates read on a page load or a late join (`fromRead`) come first, by their runs' creation time, oldest
- * first (a run not in the list, or with no `created_at`, after them); ties keep the store's order. Gates that arrived
- * live follow in the store's order, which is their arrival order, so a live arrival queues behind the card on screen.
+ * F31: the toast's order, independent of which late-join read landed first (they run a few at a time now, in the
+ * list's order). Gates read on a page load or a late join (`fromRead`) come first, by their runs' creation time,
+ * oldest first (a run not in the list, or with no `created_at`, after them); ties keep the store's order. Gates that
+ * arrived live follow in the store's order, so a live arrival queues behind the card on screen. A read or a live
+ * frame for a gate already cached keeps its group (`applyGateRead`, `ingest`).
  */
 export function leadCardOrder(gates: readonly OpenGate[], runs: readonly SessionView[]): OpenGate[] {
   const created = new Map<string, number>();
@@ -99,8 +100,8 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
         const pid = claimed !== undefined ? claimed : projectIdByRun[g.runId];
         return pid === undefined || pid === projectId;
       });
-  // F31: on a page load the lead card is the oldest waiting run, not whichever gate's read landed first (the late-join
-  // reads run newest first and in parallel); a gate that arrives live still queues behind the card on screen.
+  // F31: on a page load the lead card is the oldest waiting run, not whichever of the parallel late-join reads landed
+  // first; a gate that arrives live still queues behind the card on screen.
   const open = leadCardOrder(placed, runs);
 
   // First-paint stamping (idempotent — safe under StrictMode double render). A burst of gates is

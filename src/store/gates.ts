@@ -240,7 +240,13 @@ export const useGateStore = create<GateStore>((set) => {
     const { runId } = ticket;
     if (gateGen(runId) !== ticket.gen || ticket.seq < (appliedSeq[runId] ?? 0)) return false;
     appliedSeq[runId] = ticket.seq;
-    if (gate !== null) { put({ ...gate, fromRead: true }); return true; }
+    if (gate !== null) {
+      // A read keeps the toast place of a gate already cached for the run (a refresh never promotes a live gate); only
+      // a gate the store did not hold yet is marked as read.
+      const prev = useGateStore.getState().gates[runId];
+      put(prev === undefined || prev.fromRead === true ? { ...gate, fromRead: true } : gate);
+      return true;
+    }
     set((s) => {
       if (!(runId in s.gates)) return s;
       const next = { ...s.gates };
@@ -304,6 +310,8 @@ export const useGateStore = create<GateStore>((set) => {
                   ...(choices !== undefined ? { choices } : {}),
                   ...gateKindOf(event),
                   ...recommendedField(event as unknown as Record<string, unknown>),
+                  // F31: the same gate (same ord) a read put here keeps its toast place.
+                  ...(s.gates[session]?.fromRead === true && s.gates[session]?.ord === event.ord ? { fromRead: true as const } : {}),
                 },
               },
             };

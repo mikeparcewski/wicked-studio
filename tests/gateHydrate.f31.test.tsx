@@ -3,7 +3,7 @@
  * `GET /runs/:id/gate` one run at a time, oldest first, over every parked run (98 on the rig), and the run's own
  * thread never read its gate. These pin:
  *  - a waiting run's thread reads its own gate when it opens, so the plan card shows without the runs list's pass;
- *  - the pass reads newest first, at most GATE_READS_IN_FLIGHT across passes; a hung read ends at its deadline;
+ *  - the pass reads in the list's order, at most GATE_READS_IN_FLIGHT across passes; a hung read ends at its deadline;
  *  - a gate read that overlapped an answer, a live frame (gateDecided included), a prune or a reconnect never brings
  *    the old gate back; of two reads the later one wins, whichever lands first;
  *  - one read per run and generation while it is on its way.
@@ -16,7 +16,7 @@ import type { CoreEvent, GateInfo, SessionView } from '../src/api/types.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
 import { GATE_READ_DEADLINE_MS, IDLE_GATE_ACTION, ensureGate, refreshGate, useGateActionStore } from '../src/board/gateActions.js';
 import { RunBlock } from '../src/components/session/RunConversation.js';
-import { GATE_READS_IN_FLIGHT, inGateSlot, newestFirst, useRuns } from '../src/hooks/useRuns.js';
+import { GATE_READS_IN_FLIGHT, inGateSlot, useRuns } from '../src/hooks/useRuns.js';
 import { useConnectionStore } from '../src/store/connection.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { invalidateGateReads, useGateStore, type OpenGate } from '../src/store/gates.js';
@@ -275,16 +275,6 @@ describe('one read per run, no re-read storm', () => {
 });
 
 describe('the runs list’s late-join pass', () => {
-  it('orders waiting runs newest first; a run with no created_at goes last', () => {
-    const views = [
-      makeView({ id: 'old', created_at: 100 } as never),
-      makeView({ id: 'none', created_at: undefined } as never),
-      makeView({ id: 'new', created_at: 300 } as never),
-      makeView({ id: 'mid', created_at: 200 } as never),
-    ];
-    expect(newestFirst(views)).toStrictEqual(['new', 'mid', 'old', 'none']);
-  });
-
   it('the shared slots keep at most GATE_READS_IN_FLIGHT on their way across callers, first in first served', async () => {
     let open = 0;
     let peak = 0;
@@ -323,8 +313,9 @@ describe('the runs list’s late-join pass', () => {
     }
   });
 
-  it('reads the newest parked runs first, at most GATE_READS_IN_FLIGHT at once even when a refresh replaces the pass, and every gate lands', async () => {
-    // The daemon lists the oldest first, as the rig did (98 parked; the run just launched was last).
+  it('reads parked runs in the list’s order, at most GATE_READS_IN_FLIGHT at once even when a refresh replaces the pass, and every gate lands', async () => {
+    // The daemon lists the oldest first, as the rig did (98 parked; the run just launched was last). The run a person is
+    // looking at reads its own gate (RunBlock); the pass keeps main's order, a few at a time.
     let views: SessionView[] = Array.from({ length: 10 }, (_, i) =>
       makeView({ id: `p${i + 1}`, status: 'awaiting_human', created_at: 1_000 + i } as never));
     const pending = new Map<string, () => void>();
@@ -348,7 +339,7 @@ describe('the runs list’s late-join pass', () => {
     }));
     const { result } = renderHook(() => useRuns());
     await waitFor(() => expect(asked.length).toBe(GATE_READS_IN_FLIGHT));
-    expect(asked).toStrictEqual(['p10', 'p9', 'p8', 'p7']);
+    expect(asked).toStrictEqual(['p1', 'p2', 'p3', 'p4']);
     // Four more runs park and a refresh replaces the pass while the first four reads are still on their way.
     views = [...views, ...Array.from({ length: 4 }, (_, i) => makeView({ id: `q${i + 1}`, status: 'awaiting_human', created_at: 2_000 + i } as never))];
     act(() => { result.current.refresh(); });

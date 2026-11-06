@@ -36,12 +36,6 @@ const answeredNone = new Map<string, string>();
 /** F31: how many late-join gate reads are on their way at once (98 parked runs read one by one took ~28 s on the rig). */
 export const GATE_READS_IN_FLIGHT = 4;
 
-/** F31: waiting runs' ids, newest first (`created_at` descending; a run with none goes last, in list order). */
-export function newestFirst(views: readonly SessionView[]): string[] {
-  const at = (v: SessionView): number => (typeof v.session.created_at === 'number' ? v.session.created_at : Number.NEGATIVE_INFINITY);
-  return views.map((v, i) => ({ v, i })).sort((a, b) => at(b.v) - at(a.v) || a.i - b.i).map(({ v }) => v.session.id);
-}
-
 /**
  * F31: the late-join passes' shared read slots. At most `GATE_READS_IN_FLIGHT` reads are on their way across every
  * pass (a refresh that replaces a pass does not add four more). A slot is held until its read ends; a hydration read
@@ -178,11 +172,12 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       // cleared for a broken daemon).
       void hydrateElicitations(fetched, () => cancelled);
 
-      // F31: the newest waiting runs first (the ones a person just launched and is looking at), a few reads at a
-      // time across passes (`inGateSlot`). A refresh that cancels this pass stops its new reads; a read that lands
-      // still applies, because `applyGateRead` drops it if the run's gate moved meanwhile. A failed read leaves the
-      // id-only gate working and is tried again on the next pass.
-      await Promise.all(newestFirst(fetched.filter((v) => v.session.status === 'awaiting_human')).map((id) => inGateSlot(async () => {
+      // F31: in the list's order, as before (so the toast strip leads as it did), but a few reads at a time across passes
+      // (`inGateSlot`) instead of one by one; the run a person is looking at reads its own gate first (RunBlock). A
+      // refresh that cancels this pass stops its new reads; a read that lands still applies, because `applyGateRead`
+      // drops it if the run's gate moved meanwhile. A failed read leaves the id-only gate working and is tried again on
+      // the next pass.
+      await Promise.all(awaiting.map((id) => inGateSlot(async () => {
         if (cancelled || useGateStore.getState().gates[id] !== undefined) return;
         await ensureGate(id);
       })));
