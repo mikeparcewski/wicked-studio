@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import { deliveryReceiptOf, receiptOf, rulesSummary, worstRules, type RuleRow } from '../src/board/assuranceModel.js';
-import { sessionGateChoices, RETRY_RULES_LABEL } from '../src/board/gateRowModel.js';
+import { sessionGateChoices, LAND_NOTE_LABEL, RETRY_RULES_LABEL } from '../src/board/gateRowModel.js';
 import { AssuranceReceipt as ReceiptView, RulesChecked } from '../src/components/session/AssuranceReceipt.js';
 import type { OpenGate } from '../src/store/gates.js';
 import { makeUnit, makeView } from './factories.js';
@@ -450,7 +450,7 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
       const { unmount } = render(<ReceiptView receipt={r} passed={false} />);
       fireEvent.click(screen.getByTestId('assurance-rules-line'));
       const said = screen.getByTestId('assurance-rule-how').textContent!;
-      expect(said).toBe(` settled by council 2-1 (agy, pi, opencode)${how === 'cache' ? ', unchanged since the last check' : ''}`);
+      expect(said).toBe(` settled by council 2-1 (agy, pi, opencode)${how === 'cache' ? ', unchanged since last check' : ''}`);
       // Negative control: the row's judge (the rule judge, claude) is not named as who settled it.
       expect(said).not.toContain('claude');
       expect(screen.getByTestId('assurance-rule').textContent).toContain(': sum() changed with no test');
@@ -483,6 +483,12 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
     expect(worstRules([k, d])[0]!.status).toBe('disputed');
     expect(worstRules([d, k])[0]!.status).toBe('disputed');
     expect(worstRules([d, b])[0]!.status).toBe('broken');
+  });
+
+  it("a person's reason or a cite is shown as written; only a disputed row's no-ruling code is dropped", () => {
+    const rows = receiptOf({ ...base, rules: [{ ruleId: 'S', status: 'skipped', how: 'operator', origin: 'operator', ruleKey: 'k', reason: 'skipped by you: expected timeout: the test raises error: bad input' }] })!.rules!;
+    render(<RulesChecked rows={rows} />);
+    expect(screen.getByTestId('assurance-rule').textContent).toContain('skipped by you: expected timeout: the test raises error: bad input');
   });
 
   it('a process row sits in its own group, with its party, said not to block', () => {
@@ -523,9 +529,35 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
       expect(all.find((c) => c.key === 'skip-rules')?.decision).toEqual({ approve: true, action: 'skip_rules' });
     });
 
-    it("at a capped review's adjudication too", () => {
-      const all = offered(log([disputed()]), ADJ, 'review_adjudication');
-      expect(all.map((c) => c.key)).toEqual(expect.arrayContaining(['retry-rules', 'skip-rules']));
+    it('a council-settled broken rule behind it gets the re-check, never the skip', () => {
+      const keys = offered(log([row('A', 'kept'), settled()])).map((c) => c.key);
+      expect(keys).toContain('retry-rules');
+      expect(keys).not.toContain('skip-rules');
+    });
+
+    it("at a capped review's adjudication too, where landing waits until the rule is resolved", () => {
+      const g = { runId: RUN, ord: 5, prompt: ADJ, gateKind: 'review_adjudication', lifecycle: 'open', receivedAt: 1 } as OpenGate;
+      const m = sessionGateChoices({ runId: RUN, gate: g, units, events: log([disputed()]), pool: ['pi', 'codex'], roster: null })!;
+      const keys = [...m.choices, ...m.overflow].map((c) => c.key);
+      expect(keys).toEqual(expect.arrayContaining(['retry-rules', 'skip-rules']));
+      // The engine refuses to count the unit while a rule layer stands: no landing, and the row says why.
+      expect(keys).not.toContain('steer');
+      expect(m.whyNot?.join(' ')).toMatch(/Landing with carried items isn.t offered while a steering rule is open/);
+      // Negative control: nothing open, the landing is there.
+      const clean = sessionGateChoices({ runId: RUN, gate: g, units, events: log([row('A', 'kept')]), pool: ['pi', 'codex'], roster: null })!;
+      expect([...clean.choices, ...clean.overflow].find((c) => c.key === 'steer')?.label).toBe(LAND_NOTE_LABEL);
+      expect(clean.whyNot ?? []).toEqual([]);
+    });
+
+    it('an escalation older than the newest evaluation (a re-check re-evaluates) never decides', () => {
+      const evalOf = (denial: string, rules: unknown[]) => ({ type: 'gateEvaluated', session: RUN, ord: 5, ts: 3, combined: false, denial: { source: denial, reason: 'x' }, assurance: { ...base, attempt: 1, rules } });
+      const esc = (source: string) => ({ type: 'gateEscalated', session: RUN, ord: 5, ts: 2, attempt: 1, condition: source, denialSource: source, verdictSummary: 'x' });
+      // An older FAIL escalation, then a newer evaluation holding a dispute behind the FAIL: offered.
+      const a = offered([esc('evaluator_verdict'), evalOf('evaluator_verdict', [disputed()])] as unknown as CoreEvent[]);
+      expect(a.find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['DEV-TINYMATH-2']);
+      // An older rules hold, then a newer evaluation whose rules are all kept: nothing offered.
+      const b = offered([esc('rules_unchecked'), evalOf('evaluator_verdict', [row('DEV-TINYMATH-2', 'kept')])] as unknown as CoreEvent[]);
+      expect(b.some((c) => c.key === 'retry-rules' || c.key === 'skip-rules')).toBe(false);
     });
 
     it('negative controls: no rule layer behind it (kept, process only) offers neither; a broken one only the re-check; a dispatch after it voids it', () => {
@@ -592,6 +624,22 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
       // Published WorkUnit fields only (no `denial`): a rule layer in denials_behind is enough.
       const published = units.map((u) => (u.ord === 5 ? { ...u, denials_behind: [{ source: 'evaluator_verdict', reason: 'x' }, { source: 'rules_unchecked', reason: 'y' }], assurance: { ...base, rules: [disputed()] } } : u)) as unknown as WorkUnit[];
       expect(offered([], FAIL, 'escalation', published).find((c) => c.key === 'skip-rules')?.skipRuleIds).toEqual(['DEV-TINYMATH-2']);
+    });
+
+    it('the gate card says the rows its offer acts on (this attempt\'s), not an earlier evaluation\'s', async () => {
+      const client = await import('../src/api/client.js');
+      vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '' } as never);
+      const { GateRow } = await import('../src/components/session/GateRow.js');
+      const { useRunEventStore } = await import('../src/store/events.js');
+      useRunEventStore.setState({ byRun: { [RUN]: [
+        { type: 'gateEvaluated', session: RUN, ord: 5, ts: 2, combined: false, denial: { source: 'evaluator_verdict', reason: 'FAIL' }, assurance: { ...base, attempt: 1, rules: [row('DEV-TINYMATH-2', 'kept')] } },
+        { type: 'gateEscalated', session: RUN, ord: 5, ts: 3, attempt: 2, condition: 'verdict_not_pass', denialSource: 'evaluator_verdict', verdictSummary: 'FAIL' },
+      ] as unknown as CoreEvent[] } });
+      const u2 = units.map((u) => (u.ord === 5 ? { ...u, denials_behind: [{ source: 'evaluator_verdict', reason: 'x' }, { source: 'rules_unchecked', reason: 'y' }], assurance: { ...base, attempt: 2, rules: [disputed()] } } : u)) as unknown as WorkUnit[];
+      const g: OpenGate = { runId: RUN, ord: 5, prompt: FAIL, lifecycle: 'open', receivedAt: 1, gateKind: 'escalation' };
+      render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, u2)} gate={g} />);
+      expect(screen.getByTestId('session-gate-rules-line').textContent).toBe('1 rule checked: 0 kept, 0 broken, 0 not applicable, 1 disputed (you decide)');
+      expect(document.querySelector('[data-ask-option="skip-rules"]')).not.toBeNull();
     });
 
     it('the gate card says the dispute, both readings and the offer', async () => {

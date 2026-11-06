@@ -951,11 +951,13 @@ export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly
   let evaluated: { rows: RuleRow[] | null; denied: boolean; attempt: number | null } | null = null;
   let attempt: number | null = null;
   let mentioned = false;
-  for (let i = log.length - 1; i >= 0 && (!escalated || evaluated === null); i--) {
+  for (let i = log.length - 1; i >= 0 && evaluated === null; i--) {
     const e = log[i]! as Record<string, unknown>;
     if (e['ord'] !== ord) continue;
     if (e['type'] === 'unitDispatched') { mentioned = true; break; }
-    if (e['type'] === 'gateEscalated' && !escalated) {
+    // An escalation OLDER than the newest evaluation (a re-check re-evaluates without a dispatch) is an earlier
+    // fold's: the newest evaluation's denial decides.
+    if (e['type'] === 'gateEscalated' && !escalated && evaluated === null) {
       mentioned = true;
       escalated = true;
       if (typeof e['attempt'] === 'number') attempt = e['attempt'];

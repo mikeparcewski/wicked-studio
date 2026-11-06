@@ -231,7 +231,10 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const receipt = gateReceiptFor(events, view.units, receiptOrd);
   // (DES-RULE-CHECK-001) The rule line: the receipt's rows, else (a log holding no verdict for this unit) the rows
   // the rules hold reads, the same ones its re-check and skip act on.
-  const ruleRows = receipt?.rules ?? (gate !== undefined && model?.reason === 'escalation' ? rulesHoldAt(events, view.units, gate.ord).rows : []);
+  // (rev 2) Where a rule layer holds, the rows its re-check and skip act on (this attempt's), so the line and the
+  // offer never disagree; at a retry gate too.
+  const hold = gate !== undefined && (model?.reason === 'escalation' || model?.reason === 'retry') ? rulesHoldAt(events, view.units, gate.ord) : null;
+  const ruleRows = hold !== null && hold.held && hold.rows.length > 0 ? hold.rows : receipt?.rules ?? hold?.rows ?? [];
   const reduced = isReduced(sessionAssurance(view, events));
   // QE-IN-APP-WORKFLOWS: the run's current QE decision on every gate (a plan gate has no receipt yet;
   // a receipt that carries its own decision says it there).

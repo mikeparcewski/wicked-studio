@@ -871,7 +871,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // nothing is approved, so it is not called that. (The judge-unavailable QE gate keeps its
     // approve: there the operator's approve IS the judgment.)
     const qeRetryNote = qe !== undefined && qe !== null && qe.outcome !== 'unavailable';
-    if (deadSeat === null) coreWithoutStop.push(floorFix
+    // (DES-RULE-CHECK-001 rev 2 A.4) A capped review's landing counts the unit, which the engine refuses while a rule
+    // layer stands (`rule_layers_open`): it is withheld, and the row says why, until the rule is re-checked or skipped.
+    const landHeld = deadSeat === null && rulesHold.held && !floorFix && !qeRetryNote && !operatorJudgment && isReviewAdjudication(gate);
+    if (deadSeat === null && !landHeld) coreWithoutStop.push(floorFix
       ? { key: 'steer', label: FLOOR_FIX_LABEL, decision: { approve: true }, needsNote: true, title: FLOOR_FIX_TITLE }
       : qeRetryNote
         ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
@@ -913,6 +916,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
         : 'Your own judgment isn’t offered here: the job takes it only when the failed checks are all that stop this step.');
     }
     if (skipQeAtDelivery(gate.prompt)) whyNot.push('Skipping QE is offered at the hand-over, not here.');
+    if (landHeld) whyNot.push('Landing with carried items isn’t offered while a steering rule is open: re-check it, or confirm or skip it, first.');
 
     // Cap at 3 (stop always occupies the 4th inline slot); excess goes to overflow.
     const escInline = coreWithoutStop.slice(0, 3);
