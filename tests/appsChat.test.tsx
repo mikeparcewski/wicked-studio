@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppDetail, AppSpec, CoreEvent, SessionView } from '../src/api/types.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import { useRunEventStore } from '../src/store/events.js';
+import { resetTurnHoldReads } from '../src/editors/apps/turnHold.js';
+import { AppHostView } from '../src/components/editorHost/AppHostView.js';
+import { rulesHoldHeadline } from '../src/board/gateHeadline.js';
 import { AppChat, aboutComponent, appComposerKey } from '../src/components/apps/AppChat.js';
 import { AppsPage } from '../src/components/apps/AppsPage.js';
 import { busyText, changeLine, endedLine, slugFrom, suggestionsFor, turnsOf } from '../src/editors/apps/appTurns.js';
@@ -220,7 +223,7 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
   const running = () => detail({ turn: { runId: RUN, startedAt: 1, base: 3, actor: 'local' }, turns: [turn({ runId: RUN, state: 'running', endedAt: null, version: null })] });
   const show = (r: SessionView[], framed = false) => render(<AppChat slug="desk" detail={running()} runs={r} framed={framed} navigate={vi.fn()} onSent={vi.fn()} onUndo={vi.fn()} />);
   const steps = () => screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'));
-  afterEach(() => { useGateStore.setState({ gates: {} }); useRunEventStore.setState({ byRun: {} }); });
+  afterEach(() => { useGateStore.setState({ gates: {} }); useRunEventStore.setState({ byRun: {} }); resetTurnHoldReads(); });
 
   it('reads the run\'s trail, then shows the run page\'s gate with Re-check the rules and Confirm or skip; the held review reads waiting, not failed', async () => {
     const { calls } = serve(holdTrail);
@@ -229,6 +232,30 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     expect(steps()).toStrictEqual(['done', 'done', 'now']);
     await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Re-check the rules'));
     expect(screen.getByTestId('app-chat-gate').textContent).toContain('Confirm or skip learn-accessible');
+    expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(1);
+    // The busy line and the gate's heading say it is a call on a rule, in plain words (not "asks a question", not
+    // "The step was escalated").
+    expect(screen.getByTestId('app-chat-busy').querySelector('.wk-appchat-busyline')!.textContent).toBe('Waiting on you: a rule needs your call');
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('The rule learn-accessible needs your call before this step can go on');
+  });
+
+  it('the rules-hold headline names the rule, or counts them', () => {
+    const r = (ruleId: string, status: string) => ({ ruleId, status, how: 'none', reason: '', cite: null }) as never;
+    expect(rulesHoldHeadline([r('a', 'kept'), r('b', 'unchecked')])).toBe('The rule b needs your call before this step can go on');
+    expect(rulesHoldHeadline([r('b', 'unchecked'), r('c', 'waived'), r('d', 'broken')])).toBe('2 steering rules need your call before this step can go on');
+    expect(rulesHoldHeadline([])).toBe('A steering rule needs your call before this step can go on');
+  });
+
+  it('the app page\'s "Needs you" strip counts the hold the chat shows (one reading, one trail read)', async () => {
+    const app = { ...running(), slug: 'desk' };
+    const { calls } = mockFetch((path) => (path === `/runs/${RUN}/events` ? { body: { events: holdTrail } }
+      : path === '/apps/desk' ? { body: { app } } : path === '/editors' ? { body: { editors: [] } } : path === '/mcp/servers' ? { body: { servers: [], discovered: [] } } : null));
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const caps = { apps: { query: true, actions: true, turns: true, publish: false, uploads: false, sourceCheck: true } } as never;
+    render(<AppHostView editor="wicked-apps" version="0.13.0" sha={'a'.repeat(64)} app="desk" sample={null} caps={caps} runs={runs} navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('apps-dock-count').textContent).toBe('1 waiting'), { timeout: 4000 });
+    expect(screen.getByTestId('apps-dock-rules-hold').textContent).toBe('A rule needs your call: answer it in the chat.');
+    await waitFor(() => expect(screen.getByTestId('app-chat-gate')).toBeTruthy());
     expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(1);
   });
 

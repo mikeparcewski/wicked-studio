@@ -1049,6 +1049,18 @@
       ]
     },
     {
+      "testId": "apps-dock-count",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-dock-rules-hold",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
       "testId": "apps-edit-hint",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
