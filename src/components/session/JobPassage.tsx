@@ -1,17 +1,20 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ChatPlanOffer, ProposalRevisionEdits, ProposalToken, SessionView } from '../../api/types.js';
+import { ApiError } from '../../api/errors.js';
 import { proposalRefusal } from '../../board/artifactProposal.js';
 import { commitGateDecision, type GateAnswer } from '../../board/gateActions.js';
 import {
-  announceOf, changedTokenIds, foldLine, jobSettled, needsWords, regionName, sentenceParts, settledLine, withWords,
+  announceOf, changedTokenIds, foldLine, jobSettled, needsWords, proposalTarget, regionName, sentenceParts, settledLine, withWords,
   type JobLineage, type JobReply, type JobView,
 } from '../../board/jobStream.js';
 import { newRequestId } from '../../board/planModel.js';
 import { deliverySummary, handedOf, outcomeLine } from '../../board/proposalCard.js';
 import { seatResponder } from '../../board/responder.js';
-import { undoDecision, useUndoQueue } from '../../board/undoQueue.js';
-import { useJobLocal, useJobView } from '../../hooks/useJobStream.js';
+import { isQueued, takeRestoredNote, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
+import { jobRunId, useJobLocal, useJobView } from '../../hooks/useJobStream.js';
+import { useSessionDrafts } from '../../store/sessionDrafts.js';
+import { Undocked } from './DecisionDock.js';
 import { usePressBinding } from '../../hooks/usePressBinding.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -58,7 +61,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
 }): React.ReactElement {
   // The clock: a queued answer's countdown (from the queue's own deadline) and a fresh Go's starting window.
   const [now, setNow] = useState(() => Date.now());
-  const ticking = useJobTicking(lineage);
+  const ticking = useJobTicking(lineage, runs);
   useEffect(() => {
     if (!ticking) return undefined;
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -72,7 +75,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const binding = useJobBinding((s) => s.binding);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
-  const [confirmStop, setConfirmStop] = useState(false);
+  /** The run the open "Stop the job?" confirm was made for: it never stops another run. */
+  const [confirmStop, setConfirmStop] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [openSwap, setOpenSwap] = useState<string | null>(null);
   const [explain, setExplain] = useState(false);
@@ -81,12 +85,23 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const runId = run?.session.id ?? lineage.runId;
   const gate = useGateStore((st) => (runId === null ? undefined : st.gates[runId]));
   const runEvents = useRunEventStore((st) => (runId === null ? undefined : st.byRun[runId]));
+  const pt = proposalTarget(head.proposal);
+  // A confirm made for one run closes when the job's run is another.
+  useEffect(() => { if (confirmStop !== null && confirmStop !== runId) setConfirmStop(null); }, [confirmStop, runId]);
+  // A swap listbox open on one version closes when crew's next version lands; a press note about an old version goes.
+  const clearNote = press.clearNote;
+  useEffect(() => { setOpenSwap(null); clearNote(); }, [pt, v.plan?.planRev, clearNote]);
+  // Leaving the passage leaves no binding behind it (a binding answers only what this passage drew).
+  useEffect(() => () => { const b = useJobBinding.getState().binding; if (b !== null && b.replyKey.startsWith(`${lineage.lineage}:`)) useJobBinding.getState().clear(b.replyKey); }, [lineage.lineage]);
 
   // A swap this tab sent is answered once crew's newer version lands (or its refusal clears it): Swap pending ends.
   const swapPending = useJobLocal((s) => s.swapPending[lineage.lineage] ?? null);
   useEffect(() => {
     if (swapPending !== null && swapPending !== pid) local.setSwap(lineage.lineage, null);
   }, [swapPending, pid, lineage.lineage, local]);
+  /** A revision whose answer never came (the connection dropped): its hold stays until crew's next version, and
+   *  "Try again" re-sends it under the same request id (crew answers a repeat with the same proposal). */
+  const [lost, setLost] = useState<{ body: Parameters<typeof api.reviseChatProposal>[1]; token: string | null } | null>(null);
 
   // Only what changed moves (§2.7.3 rule 1): tokens whose label changed since the version seen when this passage
   // mounted wash; a page that opens on v2 washes nothing. Under reduced motion the wash is static and clears when the
@@ -123,17 +138,27 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       .catch((e: unknown) => { setError(proposalRefusal(e).words); onChanged(); })
       .finally(() => local.setDeciding(lineage.lineage, false));
   };
-  const revise = (edits: ProposalRevisionEdits, source: 'swap' | 'suggestion' | 'question', words?: string, token: string | null = null): void => {
+  const sendRevision = (body: Parameters<typeof api.reviseChatProposal>[1], token: string | null): void => {
     setError(null);
-    local.setSwap(lineage.lineage, pid, token);
-    api.reviseChatProposal(chatId, { revises: pid, edits, source, requestId: newRequestId(), ...(words !== undefined ? { words } : {}) })
+    setLost(null);
+    local.setSwap(lineage.lineage, body.revises, token, body.requestId);
+    api.reviseChatProposal(chatId, body)
       .then(() => onChanged())
       .catch((e: unknown) => {
-        // A refusal restores the unchanged proposal: Swap pending ends and crew's words say why.
-        local.setSwap(lineage.lineage, null);
+        if (!(e instanceof ApiError) || e.status === 0) {
+          // No answer from crew: it may have taken the change. The hold stays; the next version or a retry ends it.
+          setLost({ body, token });
+          onChanged();
+          return;
+        }
+        // Crew's refusal restores the unchanged proposal: this request's hold ends (never a newer one's).
+        local.endSwap(lineage.lineage, body.requestId);
         setError(proposalRefusal(e).words);
         onChanged();
       });
+  };
+  const revise = (edits: ProposalRevisionEdits, source: 'swap' | 'suggestion' | 'question', words?: string, token: string | null = null): void => {
+    sendRevision({ revises: pid, edits, source, requestId: newRequestId(), ...(words !== undefined ? { words } : {}) }, token);
   };
   const gateExpect = (): { ord: number; receivedAt: number } | null => {
     if (runId === null || inputs.plan === null) return null;
@@ -151,27 +176,39 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       receipt: { kind: 'plan', chosenLabel: `Approve plan v${p.planRev}` },
     }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   };
-  const sendBack = (words: string, planRev: number): void => {
+  const sendBack = (words: string, planRev: number, rebind: JobReply | null): boolean => {
     const text = words.trim();
     const expect = gateExpect();
-    if (text === '' || runId === null || expect === null || inputs.plan?.planRev !== planRev) { setError('The plan moved on. Nothing was sent.'); return; }
+    if (text === '' || runId === null || expect === null || inputs.plan?.planRev !== planRev || isQueued(runId)) { setError('The plan moved on, or an answer is already queued. Nothing was sent.'); return false; }
     setError(null);
-    commitGateDecision(runId, { approve: false, action: 'request_changes', amend: text, planRev } as GateAnswer, {
+    const run0 = runId;
+    commitGateDecision(run0, { approve: false, action: 'request_changes', amend: text, planRev } as GateAnswer, {
       expect,
       notice: { preview: `Sends plan v${planRev} back with your words; nothing runs until you approve a new version.`, sent: `Sent plan v${planRev} back with your words.` },
       receipt: { kind: 'plan', chosenLabel: 'Change' },
-    }).then((outcome) => { if (outcome === 'sent') local.setSentBack(runId, planRev); })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    }).then((outcome) => {
+      if (outcome === 'sent') local.setSentBack(run0, planRev);
+      // Undo hands the words back to the box, bound again to the SAME plan version (never a newer one), and only into an
+      // empty box (a newer draft is never overwritten).
+      if (outcome === 'undone') {
+        const back = takeRestoredNote(run0);
+        const drafts = useSessionDrafts.getState();
+        if (back !== '' && (drafts.drafts[sessionId] ?? '').trim() === '') drafts.setDraft(sessionId, back);
+        if (rebind !== null && currentTarget.current.get(rebind.id) === rebind.target) bindChange(rebind, planRev);
+      }
+    }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    return true;
   };
   const reshape = (o: ChatPlanOffer): void => {
     const r = o.reshape;
-    if (r === undefined || runId === null) return;
+    // Never beside an answer already queued or being sent for this plan (the reshape answers the same plan).
+    if (r === undefined || runId === null || isQueued(runId) || v.offerHeld !== null || v.reshapeHeld !== null) return;
     setError(null);
     api.reshapeRun(runId, {
       card: r.card, option: r.option, depth: r.depth, requestId: newRequestId(), confirmLoss: [...r.lost, ...r.lostSeats], ord: o.ord, planRev: o.planRev,
     }).then(() => onChanged()).catch((e: unknown) => { setError(proposalRefusal(e).words); onChanged(); });
   };
-  const bind = (reply: JobReply, label: string, placeholder: string, send: (text: string) => void): void => {
+  const bind = (reply: JobReply, label: string, placeholder: string, send: (text: string) => boolean): void => {
     const target = reply.target;
     useJobBinding.getState().bind({
       sessionId, replyKey: `${lineage.lineage}:${reply.id}`, label, placeholder, instance: target,
@@ -182,7 +219,11 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   };
   // The targets the replies have NOW, for a binding's Send (a binding never answers another version).
   const currentTarget = useRef(new Map<string, string>());
-  currentTarget.current = new Map(v.replies.map((r) => [r.id, r.target]));
+  // Only replies that can be pressed now: a binding to a held reply (an answer queued) sends nothing.
+  currentTarget.current = new Map(v.replies.filter((r) => r.enabled).map((r) => [r.id, r.target]));
+  const bindChange = (r: JobReply, rev: number): void => {
+    bind(r, `Answering: what should change in plan v${rev}`, `Tell ${leadName} what to change in plan v${rev}…`, (t) => sendBack(t, rev, r));
+  };
 
   const act = (r: JobReply): void => {
     if (r.id === 'start' || r.id === 'go_again') decide('go');
@@ -194,28 +235,40 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       const q = head.proposal.question;
       const c = q?.choices[Number(r.id.slice('choice:'.length))];
       if (q == null || c === undefined) return;
-      if (needsWords(q, c.edit)) bind(r, `Answering: ${q.input?.label ?? q.text}`, q.input?.label ?? 'Say why…', (t) => revise(withWords(q, c.edit, t), 'question'));
+      if (needsWords(q, c.edit)) {
+        bind(r, `Answering: ${q.input?.label ?? q.text}`, q.input?.label ?? 'Say why…', (t) => {
+          if (t.trim() === '') return false;
+          revise(withWords(q, c.edit, t), 'question');
+          return true;
+        });
+      }
       else revise(c.edit, 'question');
     } else if (r.id === 'approve') approve();
     else if (r.id === 'change') {
       const rev = inputs.plan?.planRev;
       if (rev === undefined) return;
-      bind(r, `Answering: what should change in plan v${rev}`, `Tell ${leadName} what to change in plan v${rev}…`, (t) => sendBack(t, rev));
-    } else if (r.id === 'stop') setConfirmStop(true);
+      bindChange(r, rev);
+    } else if (r.id === 'stop' && runId !== null) setConfirmStop(runId);
   };
   const changedWords = v.plan !== null ? `Plan changed to v${v.plan.planRev}. Read it, then approve.` : `The job changed to v${v.version}. Read it, then press again.`;
 
   // ── the sentence ──────────────────────────────────────────────────────────────────────────────────────────────────
   const sentence = v.proposal.sentence;
   const parts = sentence === undefined ? [] : sentenceParts(sentence.text, sentence.tokens);
+  /** The version the open listbox was opened on: a pick counts only for it (§2.7.3 rule 6). */
+  const swapOpenedOn = useRef<string | null>(null);
+  const tokenRefs = useRef(new Map<string, HTMLSpanElement | null>());
   const pickSwap = (t: ProposalToken, i: number | 'else'): void => {
     setOpenSwap(null);
+    // Focus stays on the token the person was changing (it stays focusable while the change is in flight).
+    queueMicrotask(() => tokenRefs.current.get(t.id)?.focus());
+    if (swapOpenedOn.current !== pt) { press.say('The job changed while you picked. Nothing was sent.'); return; }
     if (i === 'else') {
       // Something else…: the composer, with the token named (a typed correction is the seat's revision).
       useJobBinding.getState().bind({
         sessionId, replyKey: `${lineage.lineage}:token:${t.id}`, label: `Answering: something else for “${t.label}”`,
-        placeholder: `Say what to change about ${TOKEN_KIND[t.kind]}…`, instance: pid,
-        current: () => lineageHead.current, send: (text) => say(text),
+        placeholder: `Say what to change about ${TOKEN_KIND[t.kind]}…`, instance: pt,
+        current: () => lineageHead.current, send: (text) => { if (text.trim() === '') return false; say(text); return true; },
       });
       focusSessionComposer();
       return;
@@ -223,8 +276,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     const c = t.swap?.choices[i];
     if (c !== undefined) revise(c.edit, 'swap', undefined, t.id);
   };
-  const lineageHead = useRef(pid);
-  lineageHead.current = pid;
+  const lineageHead = useRef<string | null>(pt);
+  lineageHead.current = v.tokensLive && !v.tokensHeld ? pt : null;
   const lede = (
     <p data-testid="job-passage-sentence" className={`wk-pass-lede${v.phase === 'revising' || v.phase === 'swapPending' ? ' wk-pass-lede--wet' : ''}`}>
       {parts.map((x, i) => {
@@ -237,8 +290,14 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           return <b key={i} data-testid="job-passage-fact" data-token={t.id} className={`wk-pass-fact${wash}`}>{label}{t.kind === 'checks' && <span aria-hidden className="wk-pass-lock" />}</b>;
         }
         return (
-          <TokenButton key={i} token={t} label={label} wash={wash} open={openSwap === t.id}
-            onOpen={() => (t.kind === 'checks' ? setExplain((e) => !e) : setOpenSwap((o) => (o === t.id ? null : t.id)))}
+          <TokenButton key={i} token={t} label={label} wash={wash} open={openSwap === t.id} held={v.tokensHeld}
+            tokenRef={(el) => { tokenRefs.current.set(t.id, el); }} explainId={`${lineage.lineage}-why`}
+            onOpen={() => {
+              if (v.tokensHeld) return;
+              if (t.kind === 'checks') { setExplain((e) => !e); return; }
+              swapOpenedOn.current = pt;
+              setOpenSwap((o) => (o === t.id ? null : t.id));
+            }}
             onPick={(c) => pickSwap(t, c)} onClose={() => setOpenSwap(null)} expanded={t.kind === 'checks' ? explain : openSwap === t.id} />
         );
       })}
@@ -255,6 +314,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           {settledLine(v, { pr })}
           {runId !== null && <> · <button type="button" className="wk-pass-inl" data-testid="job-passage-details" onClick={() => openSheet({ kind: 'session', sessionId: `run:${runId}` })}>Details ›</button></>}
         </p>
+        <div aria-live="polite" className="wk-visually-hidden" data-testid="job-passage-live">{announce}</div>
       </section>
     );
   }
@@ -272,6 +332,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {...(runId !== null ? { 'data-run-id': runId } : {})}
       className={`wk-pass${tone}`}
       onPointerDown={() => setWashFrom(null)}
+      onKeyDownCapture={() => setWashFrom(null)}
       onKeyDown={(e) => { if (e.key === 'Escape') { setOpenSwap(null); setExplain(false); } }}
     >
       {/* wicked's mark: the name, the label and the version, read first (§2.8.6); the authority is in the words. */}
@@ -284,7 +345,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {lede}
       {v.notes.map((n, i) => <p key={i} data-testid="job-passage-note" className="wk-pass-aside">{n}</p>)}
       {explain && (
-        <p data-testid="job-passage-checks-why" role="note" className="wk-pass-sub">
+        <p id={`${lineage.lineage}-why`} data-testid="job-passage-checks-why" role="note" className="wk-pass-sub">
           These checks are the job’s own and stay with it: words in the chat can’t remove them. Only your press on wicked’s question changes them.
         </p>
       )}
@@ -354,13 +415,16 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
                   <LiveActivity runId={run.session.id} ord={progress.current.ord} kind="step" seat={progress.current.seat} label="this step" />
                 </div>
               )}
-              {v.phase === 'running' && (
+              {v.phase === 'running' && (runEvents?.length ?? 0) > 0 && (
                 <button type="button" className="wk-pass-inl" data-testid="job-passage-more" aria-expanded={moreOpen} onClick={() => setMoreOpen((m) => !m)}>{moreOpen ? 'Less' : 'More'}</button>
               )}
               {/* A gate unfolds under its step: the existing gate renderer, its replies and its 10 s undo unchanged. */}
-              {v.phase === 'gate' && <div className="wk-pass-gate" data-testid="job-passage-gate"><GateRow view={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} /></div>}
-              {v.phase === 'runQuestion' && <div className="wk-pass-gate" data-testid="job-passage-run-question"><RunQuestions view={run} /></div>}
+              {v.phase === 'gate' && <div className="wk-pass-gate" data-testid="job-passage-gate"><Undocked><GateRow view={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} /></Undocked></div>}
             </div>
+          )}
+          {/* A run's question (and a stalled step handed to you), answered here: never only a marker for a dock it isn't in. */}
+          {run !== null && (v.phase === 'running' || v.phase === 'gate' || v.phase === 'runQuestion') && (
+            <div className="wk-pass-gate" data-testid="job-passage-run-question"><Undocked><RunQuestions view={run} /></Undocked></div>
           )}
           {progress.next !== null && (v.phase === 'running' || v.phase === 'gate' || v.phase === 'runQuestion') && (
             <p data-testid="job-passage-next" className="wk-pass-next"><span>next</span> {progress.next.label}{progress.more > 0 && ` · ${progress.more} more`}</p>
@@ -368,18 +432,21 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         </>
       )}
       {v.checks.length > 0 && (v.phase === 'running' || v.phase === 'gate' || v.phase === 'runQuestion' || v.phase === 'planHeld') && (
-        <p data-testid="job-passage-checks" className="wk-pass-checks" aria-label="The job's checks, fixed to the job">
-          {v.checks.map((c) => <span key={c.id}><span aria-hidden className="wk-pass-ck">○</span> {c.label}<span aria-hidden className="wk-pass-lock" /> <span className="wk-pass-grey">not run yet</span></span>)}
+        <p data-testid="job-passage-checks" className="wk-pass-checks">
+          {/* The checks the job carries, by name and fixed to it. Their results are their records' (Details): none is
+              claimed here, passed or not run. */}
+          <span className="wk-pass-grey">checked by</span>
+          {v.checks.map((c) => <span key={c.id}>{c.label}<span aria-hidden className="wk-pass-lock" /></span>)}
         </p>
       )}
 
       {v.phase === 'delivered' && run !== null && <Delivered run={run} />}
       {v.phase === 'stopped' && run !== null && (
-        <p data-testid="job-passage-stopped" className="wk-pass-sub">Stopped. {progress !== null ? `${progress.done} of ${progress.total} steps had run.` : ''} Nothing more was delivered.</p>
+        <p data-testid="job-passage-stopped" className="wk-pass-sub">Stopped. {progress !== null ? `${progress.done} of ${progress.total} steps had run.` : ''} {deliverySummary(run) ?? ''}</p>
       )}
       {v.phase === 'failed' && run !== null && (
         <p data-testid="job-passage-failed" className="wk-pass-sub">
-          Failed. {failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[]).plain} Nothing was delivered.{' '}
+          Failed. {failureWhy(run, (runEvents ?? []) as unknown as Record<string, unknown>[]).plain} {deliverySummary(run) ?? ''}{' '}
           <button type="button" className="wk-pass-inl" onClick={() => openSheet({ kind: 'session', sessionId: `run:${run.session.id}` })}>Look underneath</button>
         </p>
       )}
@@ -393,10 +460,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
             {o.choices.map((c, i) => {
               const id = `offer:${o.id}:${c.action}` as const;
               const target = `offer:${o.id}:${o.ord}:${o.planRev}`;
-              const reshapeHeld = c.action === 'reshape' && (o.reshape?.needs.length ?? 0) > 0 ? `it needs ${o.reshape!.needs.join(', ')}: say it in the chat` : null;
+              const reshapeHeld = c.action === 'dismiss' ? null : v.offerHeld !== null ? v.offerHeld
+                : c.action === 'reshape' && v.reshapeHeld !== null ? v.reshapeHeld
+                : c.action === 'reshape' && (o.reshape?.needs.length ?? 0) > 0 ? `it needs ${o.reshape!.needs.join(', ')}: say it in the chat` : null;
               const go = (): void => {
                 if (c.action === 'dismiss') setDismissed((d) => new Set([...d, o.id]));
-                else if (c.action === 'send_back') sendBack(o.note ?? '', o.planRev);
+                else if (c.action === 'send_back') sendBack(o.note ?? '', o.planRev, null);
                 else reshape(o);
               };
               return (
@@ -414,13 +483,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
 
       {/* studio's own receipt for an answer in its undo window: never a tick, until crew records it (rev 6 §2.7.1). */}
       {queued !== null && (v.phase === 'planHeld' || v.phase === 'replanning') && (
-        <p data-testid="job-passage-queued" role="status" className="wk-pass-receipt">
+        <p data-testid="job-passage-queued" className="wk-pass-receipt">
           {queued.verb === 'request-changes' ? 'Send back' : 'Approve'}: queued, not sent yet · sends in {Math.max(0, Math.ceil((queued.dueAt - Math.max(now, queued.queuedAt)) / 1000))} s ·{' '}
-          <button type="button" data-testid="job-passage-undo" className="wk-pass-act" onClick={() => undoDecision(queued.id)}>Undo</button>
+          <button type="button" data-testid="job-passage-undo" className="wk-pass-act" {...press.bind('undo', `queued:${queued.id}`, () => undoDecision(queued.id), 'That answer was replaced.')}>Undo</button>
         </p>
       )}
 
-      {replies.length > 0 && !confirmStop && (
+      {replies.length > 0 && confirmStop === null && (
         <div role="group" aria-label={`Replies to the job, ${v.versionLabel}`} data-testid="job-passage-replies" className="wk-pass-acts">
           {replies.map((r, i) => {
             const binds = bound !== null && bound.replyKey === `${lineage.lineage}:${r.id}`;
@@ -438,16 +507,22 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           {(v.phase === 'proposed') && <span className="wk-pass-why">or just say what to change</span>}
         </div>
       )}
-      {confirmStop && runId !== null && (
+      {confirmStop !== null && confirmStop === runId && (
         <div role="group" aria-label="Stop the job?" className="wk-pass-acts" data-testid="job-passage-stop-confirm">
           <span className="wk-pass-why">Stop the job? What it did so far is kept, and you have 10 s to undo.</span>
           <button type="button" className="wk-pass-act wk-pass-act--go" data-testid="job-passage-stop-yes"
-            onClick={() => { setConfirmStop(false); stopRun([runId], `“${v.proposal.what.label}”`); }}>Stop the job</button>
+            {...press.bind('stop-yes', `stop:${confirmStop}`, () => { const id = confirmStop; setConfirmStop(null); stopRun([id], `“${v.proposal.what.label}”`); }, 'The job’s run changed.')}>Stop the job</button>
           <span aria-hidden className="wk-pass-dot">·</span>
-          <button type="button" className="wk-pass-act" onClick={() => setConfirmStop(false)}>Keep going</button>
+          <button type="button" className="wk-pass-act" onClick={() => setConfirmStop(null)}>Keep going</button>
         </div>
       )}
       {press.note !== null && <p data-testid="job-passage-press-note" role="status" className="wk-pass-why">{press.note.text}</p>}
+      {lost !== null && v.phase === 'swapPending' && (
+        <p data-testid="job-passage-lost" role="alert" className="wk-pass-sub wk-pass-error">
+          Studio’s service didn’t answer, so your change may or may not have landed. Start waits until it does.{' '}
+          <button type="button" className="wk-pass-inl" data-testid="job-passage-retry" onClick={() => sendRevision(lost.body, lost.token)}>Try again</button>
+        </p>
+      )}
       {error !== null && <p data-testid="job-passage-error" role="alert" className="wk-pass-sub wk-pass-error">{error}</p>}
       <div aria-live="polite" className="wk-visually-hidden" data-testid="job-passage-live">{announce}</div>
     </section>
@@ -456,8 +531,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
 
 /** A swappable token: an inline `role="button"` (a native button cannot break across lines, §8.7) opening a listbox
  *  of crew's choices plus "Something else…". The checks token opens an explanation instead. */
-function TokenButton({ token, label, wash, open, expanded, onOpen, onPick, onClose }: {
+function TokenButton({ token, label, wash, open, expanded, held, tokenRef, explainId, onOpen, onPick, onClose }: {
   token: ProposalToken; label: string; wash: string; open: boolean; expanded: boolean;
+  /** A change is in flight: the token stays focusable, says it is held, and opens nothing. */
+  held: boolean;
+  tokenRef: (el: HTMLSpanElement | null) => void;
+  /** The checks explanation's id (a disclosure, not a dialog). */
+  explainId: string;
   onOpen: () => void; onPick: (i: number | 'else') => void; onClose: () => void;
 }): React.ReactElement {
   const ref = useRef<HTMLSpanElement | null>(null);
@@ -472,8 +552,9 @@ function TokenButton({ token, label, wash, open, expanded, onOpen, onPick, onClo
   return (
     <span className="wk-pass-tokwrap">
       <span
-        ref={ref} role="button" tabIndex={0} data-testid="job-passage-token" data-token={token.id} data-kind={token.kind}
-        aria-haspopup={checks ? 'dialog' : 'listbox'} aria-expanded={expanded} {...(open ? { 'aria-controls': listId } : {})}
+        ref={(el) => { ref.current = el; tokenRef(el); }} role="button" tabIndex={0} data-testid="job-passage-token" data-token={token.id} data-kind={token.kind}
+        {...(held ? { 'aria-disabled': true } : {})}
+        {...(checks ? { 'aria-controls': explainId } : { 'aria-haspopup': 'listbox' as const })} aria-expanded={expanded} {...(open ? { 'aria-controls': listId } : {})}
         aria-label={`${label}, ${TOKEN_KIND[token.kind]}`} aria-description={checks ? 'Why these checks stay' : 'Change it'}
         className={`wk-pass-tok${checks ? ' wk-pass-tok--chk' : ''}${wash}`}
         onClick={onOpen}
@@ -519,8 +600,8 @@ function Delivered({ run }: { run: SessionView }): React.ReactElement {
 }
 
 /** Whether the passage needs a clock: an answer of this job waits in its undo window, or a Go is starting. */
-function useJobTicking(lineage: JobLineage): boolean {
-  const run = lineage.runId;
+function useJobTicking(lineage: JobLineage, runs: readonly SessionView[]): boolean {
+  const run = jobRunId(lineage, runs);
   const queued = useUndoQueue((s) => run !== null && s.pending.some((p) => p.runIds.includes(run)));
   return queued || lineage.state === 'accepting';
 }

@@ -22,6 +22,7 @@ import { ProposalCard } from './ProposalCard.js';
 import { ArtifactProposalCard } from '../chat/ArtifactProposalCard.js';
 import { JobPassage } from './JobPassage.js';
 import { foldJobLineages, type JobLineage } from '../../board/jobStream.js';
+import { jobRunId } from '../../hooks/useJobStream.js';
 import { useJobBinding } from '../../store/jobBinding.js';
 import { foldChatProposals, reconcileProposals, type ProposalEntry } from '../../board/artifactProposal.js';
 import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
@@ -179,7 +180,7 @@ const OPERATOR_SCROLL_MS = 1000;
 /** How long a jump's smooth scroll is the thread's own (its scroll events are not the operator's). */
 const GLIDE_MS = 700;
 /** DES-CHAT-NATIVE-RUN: the message inside a run's conversation that asks the operator something. */
-const ASKING_SELECTOR = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"], [data-testid="decision-marker"]';
+const ASKING_SELECTOR = '[data-testid="chat-plan"][data-open="true"], [data-testid="chat-gate"], [data-testid="chat-final"][data-kind="deliver"], [data-testid="decision-marker"], [data-testid="job-passage-gate"], [data-testid="job-passage-replies"]';
 
 export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onRetryRuns, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane', artifactVersion = null }: {
   /** The runs read's failure (App's `useRuns`): said with Retry, never an endless skeleton. */
@@ -353,16 +354,16 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   useEffect(() => { if (ref.kind === 'chat') lastJobs.current = { chatId: ref.chatId, lineages: jobLineages }; }, [ref, jobLineages]);
   // The runs the passages hold: their block, working line and dock item are the passage's (§2.8.1).
   const jobRunIds = useMemo(() => {
+    // Only the run each job's CURRENT version launched: a run a reshape replaced keeps its own block as history.
     const out = new Set<string>();
-    if (jobLineages.length === 0) return out;
-    const pids = new Set(jobLineages.flatMap((l) => l.versions.map((v) => v.pid)));
-    for (const l of jobLineages) if (l.runId !== null) out.add(l.runId);
-    for (const v of mine) {
-      const from = (v.session as { from_proposal?: unknown }).from_proposal;
-      if (typeof from === 'string' && pids.has(from)) out.add(v.session.id);
+    for (const l of jobLineages) {
+      const id = jobRunId(l, mine);
+      if (id !== null) out.add(id);
     }
     return out;
   }, [jobLineages, mine]);
+  // The proposals a passage owns: never drawn again as a card.
+  const jobPids = useMemo(() => new Set(jobLineages.flatMap((l) => l.versions.map((v) => v.pid))), [jobLineages]);
   // The change marks under the person's messages (rev 6 §2.7.1): "↳ Changed the job to v2: a move".
   const jobMarks = useMemo(() => {
     const out = new Map<string, string[]>();
@@ -679,7 +680,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // A2: each proposal card sits where crew recorded it (after the reply that carried its block).
     for (const p of proposalEntries) {
       // A v2 proposal (it carries wicked's sentence) is the passage's, never a second card.
-      if (jobsOn && (p.proposal as { sentence?: unknown }).sentence !== undefined) continue;
+      if (jobPids.has(p.pid)) continue;
       out.push({ kind: 'artifact', key: `ap:${p.pid}`, at: p.at, entry: p });
     }
     jobLineages.forEach((l, i) => out.push({ kind: 'job', key: `job:${l.lineage}`, at: l.at, lineage: l, settled: i < jobLineages.length - 1 }));
@@ -699,7 +700,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       }
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses, proposalEntries, jobsOn, jobLineages, jobRunIds]);
+  }, [messages, conversation, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal, askAnswers, pauses, proposalEntries, jobPids, jobLineages, jobRunIds]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -918,7 +919,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     if (!ready || gatedRunId === null || el === null) return;
     const key = `${sessionId}:${gatedRunId}`;
     if (shownGate.current === key || useSessionDrafts.getState().scroll[sessionId] !== undefined) return;
-    const block = [...el.querySelectorAll<HTMLElement>('[data-testid="session-run"]')].find((b) => b.dataset['runId'] === gatedRunId);
+    const block = [...el.querySelectorAll<HTMLElement>('[data-testid="session-run"], [data-testid="job-passage"]')].find((b) => b.dataset['runId'] === gatedRunId);
     if (block === undefined) return;
     shownGate.current = key;
     nearBottom.current = false;
@@ -1484,9 +1485,15 @@ function DockedComposer({ reply, docked, composerProps, who }: {
             queueMicrotask(() => composerProps.setText?.(keep));
             return;
           }
+          // The job takes the words only when the reply is still open (not queued, not moved): else they stay here.
+          const keep = composerProps.text ?? text;
+          if (!jobBinding.send(text)) {
+            setJobMoved('Not sent: the job can’t take this answer now. Read it, then answer again, or leave with ×');
+            queueMicrotask(() => composerProps.setText?.(keep));
+            return;
+          }
           setJobMoved(null);
-          useJobBinding.getState().clear();
-          jobBinding.send(text);
+          useJobBinding.getState().clear(jobBinding.replyKey);
         }}
         className="wk-session-composer" />
     );

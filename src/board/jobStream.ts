@@ -78,6 +78,12 @@ function isToken(t: unknown): t is ProposalToken {
 export function isJobProposal(p: unknown): p is JobProposal {
   if (!isObj(p) || !str(p['pid']) || !str(p['chatId']) || !str(p['seat'])) return false;
   if (p['kind'] !== 'job' && p['kind'] !== 'create') return false;
+  const what = p['what'];
+  if (!isObj(what) || !str(what['label']) || !str(what['title'])) return false;
+  const gate = p['gate'];
+  if (gate !== undefined && (!Array.isArray(gate) || !gate.every(str))) return false;
+  const seats = p['seats'];
+  if (seats !== undefined && (!isObj(seats) || !(seats['lead'] === null || str(seats['lead'])))) return false;
   const s = p['sentence'];
   if (!isObj(s) || !str(s['text']) || !Array.isArray(s['tokens']) || !s['tokens'].every(isToken)) return false;
   if (!Array.isArray(s['notes']) || !s['notes'].every(str) || !(s['ask'] === null || str(s['ask']))) return false;
@@ -88,6 +94,10 @@ export function isJobProposal(p: unknown): p is JobProposal {
   if (sk !== undefined && (!isObj(sk) || !Array.isArray(sk['steps']) || !sk['steps'].every((x) => isObj(x) && str(x['label']) && typeof x['asks'] === 'boolean'))) return false;
   const q = p['question'];
   if (q !== undefined && q !== null && (!isObj(q) || !str(q['text']) || !Array.isArray(q['choices']) || !q['choices'].every((c) => isObj(c) && str(c['label']) && isObj(c['edit'])))) return false;
+  if (isObj(q) && q['input'] !== undefined) {
+    const input = q['input'];
+    if (!isObj(input) || !str(input['label']) || !str(input['edit']) || !(input['edit'] === 'skipQe.reason' || input['edit'].startsWith('inputs.'))) return false;
+  }
   const sg = p['suggestions'];
   return sg === undefined || (Array.isArray(sg) && sg.every((x) => isObj(x) && str(x['label']) && isObj(x['edit'])));
 }
@@ -148,6 +158,8 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
       const pid = p['pid'];
       const known = byPid.get(pid);
       if (!isJobProposal(p)) {
+        // A malformed job record is skipped whole: it never supersedes the job that is drawn.
+        if (p['kind'] === 'job' || p['sentence'] !== undefined) continue;
         // Another kind (a document card): it still takes the chat's one open slot (crew's rule).
         if (known === undefined) { order.push(pid); byPid.set(pid, { lineage: '', state: 'open' }); supersedeOthers(pid); }
         continue;
@@ -167,7 +179,9 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
         l.at = Math.max(l.at, at);
         continue;
       }
-      const lineageId = str(p.lineage) ? p.lineage : pid;
+      // The lineage's root: crew's `lineage`, else the parent's lineage through `revises`, else this pid (a root).
+      const parent = str(p.revises) ? byPid.get(p.revises) : undefined;
+      const lineageId = str(p.lineage) ? p.lineage : parent !== undefined && parent.lineage !== '' ? parent.lineage : pid;
       order.push(pid);
       byPid.set(pid, { lineage: lineageId, state: 'open' });
       supersedeOthers(pid);
@@ -190,6 +204,8 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
         held.accepted = null;
         held.acceptingAt = null;
         held.decidedAt = null;
+        // A new version has launched nothing yet: a reshape's replacement is not its predecessor's run.
+        held.runId = null;
         held.at = Math.max(held.at, at);
         if (str(p.answers) && p.answers !== '') {
           const n = held.versions.length;
@@ -217,10 +233,12 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
         l.revisingTurn = null;
         const note = str(r['note']) ? r['note'] : null;
         l.note = note;
+        // The hold's end changed what the passage says (its note): it sits after the reply that ended it.
+        l.at = Math.max(l.at, at);
         // The hold ended without a new version: the person's message changed nothing (a revision that was published
         // supersedes the parent first, so its mark is the "changed" one above).
         if (turnId !== '' && !l.marks.some((m) => m.turnId === turnId)) {
-          l.marks.push({ turnId, at, kind: 'unchanged', version: l.versions.length, text: note !== null ? `Nothing changed: ${note}` : 'Nothing changed' });
+          l.marks.push({ turnId, at, kind: 'unchanged', version: l.versions.length, text: note ?? 'Nothing changed' });
         }
       }
     } else if (r['kind'] === 'proposal_accepting') {
@@ -279,6 +297,13 @@ export interface JobRunInputs {
   plan: { ord: number; planRev: number; steps: string[]; fresh: boolean } | null;
   /** The plan gate is known open but its read for this instance is still on its way. */
   planReading: boolean;
+  /** The open gate's kind is not known yet (no live frame named it, the team read has not answered): a run launched
+   *  from a proposal fails CLOSED here, as a plan still being read, never as a gate answered without `planRev`. */
+  planUnknown: boolean;
+  /** An answer to this run's gate is being sent or was just sent (the shared gate-action state). */
+  answering: boolean;
+  /** `capabilities.reshapeRun`: a plan offer's Start again can be sent. */
+  reshapeOn: boolean;
   /** A plan approval has been decided on this run (the team rows): the work is past its plan. */
   planDecided: boolean;
   /** This tab sent the plan of this revision back (a send-back); `null` = none known. */
@@ -289,7 +314,7 @@ export interface JobRunInputs {
   pending: { id: number; queuedAt: number; dueAt: number; verb: string } | null;
 }
 
-export const NO_RUN: JobRunInputs = { view: null, gate: null, plan: null, planReading: false, planDecided: false, sentBack: null, question: false, pending: null };
+export const NO_RUN: JobRunInputs = { view: null, gate: null, plan: null, planReading: false, planUnknown: false, answering: false, reshapeOn: true, planDecided: false, sentBack: null, question: false, pending: null };
 
 /** The press target a reply is bound to (§2.7.3 rule 6): a press counts only for what it began on. */
 export type JobReplyId = 'start' | 'not_now' | 'go_again' | `suggestion:${number}` | `choice:${number}` | 'approve' | 'change' | 'stop'
@@ -344,20 +369,46 @@ export interface JobView {
   sketchAsks: boolean[];
   question: ProposalQuestion | null;
   suggestions: ProposalSuggestion[];
-  /** The tokens can be swapped (proposal phases only; a started job's tokens are plain facts). */
+  /** The tokens are drawn as tokens (proposal phases only; a started job's tokens are plain facts). */
   tokensLive: boolean;
+  /** The tokens are held (a change is in flight): focusable, but nothing opens. */
+  tokensHeld: boolean;
   plan: { ord: number; planRev: number; steps: string[] } | null;
   progress: JobProgress | null;
   /** The run the job launched. */
   runId: string | null;
   /** Plan offers that answer the plan held now (same ord + planRev). */
   offers: ChatPlanOffer[];
+  /** Why an offer's choices can't be pressed now (the same holds as Approve), or `null`. */
+  offerHeld: string | null;
+  /** Why Start again can't be sent (no reshape route), or `null`. */
+  reshapeHeld: string | null;
   replies: JobReply[];
   /** The headline of the state, for the region's name and the live region. */
   status: string;
   /** Needs the person now (the needs-you colour). */
   needsYou: boolean;
   checks: Array<{ id: string; label: string }>;
+}
+
+/** Why the held plan's answers are held now, or `undefined` when they can be pressed. */
+function planHold(run: JobRunInputs): string | undefined {
+  if (run.pending !== null) return 'your answer is queued';
+  if (run.answering) return 'your answer is being sent';
+  if (run.plan === null || !run.plan.fresh || run.planReading || run.planUnknown) return 'reading the plan…';
+  return undefined;
+}
+
+/** A short digest of a string (FNV-1a), for press targets: equal text, equal digest. */
+function digest(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+
+/** The press target of a proposal: its pid and a digest of everything a press on it answers. */
+export function proposalTarget(p: JobProposal): string {
+  return `${p.pid}#${digest(JSON.stringify([p.sentence, p.question ?? null, p.suggestions ?? [], p.blocked, p.sketch ?? null, p.gate ?? null]))}`;
 }
 
 /** The plain words of the catalog's check ids. */
@@ -428,10 +479,11 @@ function phaseOf(l: JobLineage, run: JobRunInputs, ui: { swapPending: string | n
     if (p.question !== undefined && p.question !== null) return 'asking';
     return 'proposed';
   }
-  if (l.state === 'accepting') {
+  // Accepting with no run on record yet: starting, or interrupted once the window passed. Once crew's run record shows
+  // the launch, the run is drawn even before the decided record lands.
+  if (l.state === 'accepting' && run.view === null) {
     return ui.starting || (l.acceptingAt !== null && now - l.acceptingAt < startingMs) ? 'starting' : 'interrupted';
   }
-  // decided: go
   if (l.result?.stub === true) return 'stub';
   const v = run.view;
   if (v === null) return 'starting';
@@ -439,7 +491,7 @@ function phaseOf(l: JobLineage, run: JobRunInputs, ui: { swapPending: string | n
   if (status === 'completed') return 'delivered';
   if (status === 'cancelled') return 'stopped';
   if (status === 'failed') return 'failed';
-  const planGate = run.plan !== null || run.gate?.gateKind === 'plan_approval';
+  const planGate = run.plan !== null || run.gate?.gateKind === 'plan_approval' || run.planUnknown;
   if (status === 'awaiting_human') {
     if (planGate) {
       const rev = run.plan?.planRev ?? null;
@@ -449,7 +501,9 @@ function phaseOf(l: JobLineage, run: JobRunInputs, ui: { swapPending: string | n
     return 'gate';
   }
   if (run.question) return 'runQuestion';
-  if (!run.planDecided) return run.sentBack !== null ? 'replanning' : 'planning';
+  // A send-back is recorded as an amended plan decision: until a newer revision is held, the lead is re-planning.
+  if (run.sentBack !== null) return 'replanning';
+  if (!run.planDecided) return 'planning';
   return 'running';
 }
 
@@ -497,38 +551,38 @@ export function jobView(l: JobLineage, run: JobRunInputs, opts: {
   const plan = run.plan !== null && (phase === 'planHeld' || phase === 'replanning') ? { ord: run.plan.ord, planRev: run.plan.planRev, steps: run.plan.steps } : null;
   const progress = run.view !== null && (phase === 'running' || phase === 'gate' || phase === 'runQuestion' || phase === 'delivered' || phase === 'stopped' || phase === 'failed')
     ? progressOf(run.view, opts.stepName, phase === 'gate' && run.gate !== null ? run.gate.ord : null) : null;
-  const pid = l.head.pid;
+  // The proposal's target is its pid AND what it says: a re-resolution under the same pid (crew changed the sentence,
+  // the question or the suggestions in place) is another target, so a press or a binding made on it never answers it.
+  const pt = proposalTarget(head);
   const busy = opts.deciding === true;
   const replies: JobReply[] = [];
   const updating = 'waiting for your change to settle';
   if (phase === 'proposed') {
     const blocked = head.blocked;
     replies.push(blocked !== null
-      ? { id: 'start', label: `Start v${version}`, target: pid, enabled: false, held: blocked, tone: 'go' }
-      : { id: 'start', label: `Start v${version}`, target: pid, enabled: !busy, ...(busy ? { held: 'sending…' } : {}), tone: 'go' });
-    replies.push({ id: 'not_now', label: 'Not now', target: pid, enabled: !busy, tone: 'plain' });
-    (head.suggestions ?? []).slice(0, 2).forEach((s, i) => replies.push({ id: `suggestion:${i}`, label: s.label, target: pid, enabled: !busy, tone: 'quiet' }));
+      ? { id: 'start', label: `Start v${version}`, target: pt, enabled: false, held: blocked, tone: 'go' }
+      : { id: 'start', label: `Start v${version}`, target: pt, enabled: !busy, ...(busy ? { held: 'sending…' } : {}), tone: 'go' });
+    replies.push({ id: 'not_now', label: 'Not now', target: pt, enabled: !busy, tone: 'plain' });
+    (head.suggestions ?? []).slice(0, 2).forEach((s, i) => replies.push({ id: `suggestion:${i}`, label: s.label, target: `${pt}:s${i}`, enabled: !busy, tone: 'quiet' }));
   } else if (phase === 'asking') {
-    (head.question?.choices ?? []).forEach((c, i) => replies.push({ id: `choice:${i}`, label: c.label, target: pid, enabled: !busy, tone: i === 0 ? 'go' : 'plain', ...(needsWords(head.question!, c.edit) ? { binds: true as const } : {}) }));
-    replies.push({ id: 'not_now', label: 'Not now', target: pid, enabled: !busy, tone: 'quiet' });
+    (head.question?.choices ?? []).forEach((c, i) => replies.push({ id: `choice:${i}`, label: c.label, target: `${pt}:c${i}`, enabled: !busy, tone: i === 0 ? 'go' : 'plain', ...(needsWords(head.question!, c.edit) ? { binds: true as const } : {}) }));
+    replies.push({ id: 'not_now', label: 'Not now', target: pt, enabled: !busy, tone: 'quiet' });
   } else if (phase === 'revising' || phase === 'swapPending') {
-    replies.push({ id: 'start', label: 'Updating…', target: pid, enabled: false, held: updating, tone: 'go' });
-    replies.push({ id: 'not_now', label: 'Not now', target: pid, enabled: !busy, tone: 'plain' });
+    replies.push({ id: 'start', label: 'Updating…', target: pt, enabled: false, held: updating, tone: 'go' });
+    replies.push({ id: 'not_now', label: 'Not now', target: pt, enabled: !busy, tone: 'plain' });
   } else if (phase === 'coming') {
-    replies.push({ id: 'not_now', label: 'Not now', target: pid, enabled: !busy, tone: 'plain' });
+    replies.push({ id: 'not_now', label: 'Not now', target: pt, enabled: !busy, tone: 'plain' });
   } else if (phase === 'interrupted') {
-    replies.push({ id: 'go_again', label: 'Go again', target: pid, enabled: !busy, tone: 'go' });
-  } else if (phase === 'planHeld' && run.plan !== null && run.view !== null) {
-    const key = `plan:${run.view.session.id}:${run.plan.ord}:${run.plan.planRev}`;
-    const n = run.plan.planRev;
-    const queued = run.pending !== null;
-    const reading = !run.plan.fresh || run.planReading;
-    const held = queued ? 'your answer is queued' : reading ? 'reading the plan…' : undefined;
-    replies.push({ id: 'approve', label: `Approve plan v${n}`, target: key, enabled: held === undefined, ...(held !== undefined ? { held } : {}), tone: 'go' });
+    replies.push({ id: 'go_again', label: 'Go again', target: pt, enabled: !busy, tone: 'go' });
+  } else if (phase === 'planHeld' && run.view !== null) {
+    const p = run.plan;
+    const key = p === null ? `plan:${run.view.session.id}:?` : `plan:${run.view.session.id}:${p.ord}:${p.planRev}`;
+    const held = planHold(run);
+    replies.push({ id: 'approve', label: p === null ? 'Approve plan' : `Approve plan v${p.planRev}`, target: key, enabled: held === undefined, ...(held !== undefined ? { held } : {}), tone: 'go' });
     replies.push({ id: 'change', label: 'Change', target: key, enabled: held === undefined, ...(held !== undefined ? { held } : {}), tone: 'plain', binds: true });
   } else if (phase === 'replanning') {
     const n = run.plan?.planRev ?? run.sentBack ?? 0;
-    const key = run.view === null ? pid : `plan:${run.view.session.id}:${run.plan?.ord ?? -1}:${n}`;
+    const key = run.view === null ? pt : `plan:${run.view.session.id}:${run.plan?.ord ?? -1}:${n}`;
     replies.push({ id: 'approve', label: `Approve plan v${n}`, target: key, enabled: false, held: 'no version can be approved while it re-plans', tone: 'go' });
     replies.push({ id: 'change', label: 'Change', target: key, enabled: false, tone: 'plain' });
   } else if ((phase === 'planning' || phase === 'running') && run.view !== null) {
@@ -537,6 +591,8 @@ export function jobView(l: JobLineage, run: JobRunInputs, opts: {
   // Offers answer only the plan held now: the same ord and planRev (an offer for another version is never pressable).
   const offers = phase === 'planHeld' && run.plan !== null
     ? l.offers.filter((o) => o.runId === run.view?.session.id && o.ord === run.plan!.ord && o.planRev === run.plan!.planRev) : [];
+  // An offer's choices are held exactly as Approve is (a queued answer, a read not made for this gate).
+  const offerHeld = phase === 'planHeld' ? planHold(run) ?? null : 'the plan isn’t held now';
   const runId = l.runId;
   const status = phase === 'planHeld' && run.plan !== null ? `plan v${run.plan.planRev} waiting for you` : STATUS[phase];
   return {
@@ -552,11 +608,14 @@ export function jobView(l: JobLineage, run: JobRunInputs, opts: {
     sketchAsks: shown.sketch !== undefined ? shown.sketch.steps.map((s) => s.asks) : [],
     question: phase === 'asking' ? head.question ?? null : null,
     suggestions: phase === 'proposed' ? (head.suggestions ?? []).slice(0, 2) : [],
-    tokensLive: phase === 'proposed' || phase === 'asking',
+    tokensLive: phase === 'proposed' || phase === 'asking' || phase === 'swapPending' || phase === 'revising',
+    tokensHeld: phase === 'swapPending' || phase === 'revising',
     plan,
     progress,
     runId,
     offers,
+    offerHeld,
+    reshapeHeld: run.reshapeOn ? null : 'this version of Studio’s service can’t start it again as another job',
     replies,
     status,
     needsYou: phase === 'asking' || phase === 'planHeld' || phase === 'gate' || phase === 'runQuestion' || phase === 'interrupted',
@@ -627,8 +686,8 @@ export function settledLine(v: JobView, delivered: { pr: string | null } | null)
   const what = v.proposal.what.label;
   switch (v.phase) {
     case 'delivered': return `Done. ${what}${delivered?.pr != null ? ` · ${delivered.pr}` : ''}`;
-    case 'stopped': return `Stopped. ${what} · nothing more was delivered`;
-    case 'failed': return `Failed. ${what} · nothing was delivered`;
+    case 'stopped': return `Stopped. ${what}${delivered?.pr != null ? ` · ${delivered.pr}` : ''}`;
+    case 'failed': return `Failed. ${what}${delivered?.pr != null ? ` · ${delivered.pr}` : ''}`;
     case 'notStarted': return `Not started: ${what}`;
     case 'replaced': return `Replaced by a newer proposal: ${what} · nothing was started`;
     default: return `${what} · ${v.status}`;
@@ -649,5 +708,7 @@ export function announceOf(prev: JobView | null, next: JobView): string | null {
   }
   if (prev.plan?.planRev !== next.plan?.planRev && next.plan !== null) return `Plan version ${next.plan.planRev} is waiting for you`;
   if (prev.phase !== next.phase) return `The job is ${next.status}`;
+  if (next.offers.length > prev.offers.length) return `wicked offers: ${next.offers[next.offers.length - 1]!.text}`;
+  if (proposalTarget(prev.proposal) !== proposalTarget(next.proposal) && next.tokensLive) return 'wicked updated what Start runs';
   return null;
 }

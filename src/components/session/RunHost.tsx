@@ -48,7 +48,7 @@ export function GateButtons({ runId }: { runId: string }): React.ReactElement | 
   const toThread = (): void => {
     useHostChrome.getState().exitFull();
     // The gate card leads its run's block in the thread (run clarity): bring it into view and focus it.
-    const block = [...document.querySelectorAll<HTMLElement>('[data-testid="session-run"]')].find((b) => b.dataset['runId'] === runId);
+    const block = [...document.querySelectorAll<HTMLElement>('[data-testid="session-run"], [data-testid="job-passage"]')].find((b) => b.dataset['runId'] === runId);
     block?.scrollIntoView({ block: 'start' });
     block?.querySelector<HTMLElement>('button, textarea')?.focus();
   };

@@ -48,7 +48,7 @@ describe('foldJobLineages', () => {
     expect(l!.state).toBe('open');
     expect(l!.versions).toHaveLength(1);
     expect(l!.note).toBe('parity stays');
-    expect(l!.marks[0]).toMatchObject({ turnId: 't3', kind: 'unchanged', text: 'Nothing changed: parity stays' });
+    expect(l!.marks[0]).toMatchObject({ turnId: 't3', kind: 'unchanged', text: 'parity stays' });
   });
 
   it('another proposal of the chat supersedes an open job (crew’s one open slot); a decided one stays decided', () => {
@@ -195,5 +195,57 @@ describe('words', () => {
   it('the settled line never claims more than the record', () => {
     const l = foldJobLineages([rec(2, 'proposal', { proposal: jobProposal() }), rec(3, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'not_now', result: null })])[0]!;
     expect(settledLine(jobView(l, NO_RUN, NAME), null)).toBe('Not started: Migrate · Upgrade');
+  });
+});
+
+describe('review round 1 folds', () => {
+  const lineage = (records: unknown[]) => foldJobLineages(records)[0]!;
+  it('a same-pid re-resolution is another press target (a press or binding on it never answers it)', () => {
+    const a = jobView(lineage([rec(2, 'proposal', { proposal: jobProposal() })]), NO_RUN, NAME);
+    const b = jobView(lineage([rec(2, 'proposal', { proposal: jobProposal() }), rec(3, 'proposal', { proposal: jobProposal({ blocked: null, suggestions: [] }) })]), NO_RUN, NAME);
+    expect(a.replies[0]!.target).not.toBe(b.replies[0]!.target);
+    expect(a.replies[0]!.target.startsWith(`${CHAT}:t1#`)).toBe(true);
+  });
+  it('a child with `revises` and no `lineage` joins its parent’s lineage; a new version launched nothing yet', () => {
+    const ls = foldJobLineages([
+      rec(2, 'proposal', { proposal: jobProposal() }),
+      rec(3, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'go', result: { runId: 'run-1', artifactRef: null, adopted: false, stub: false } }),
+      rec(4, 'proposal', { proposal: { ...v2(), lineage: undefined } }, 't2'),
+    ]);
+    expect(ls).toHaveLength(1);
+    expect(ls[0]!.runId).toBeNull();
+  });
+  it('a malformed job record never supersedes the job drawn', () => {
+    const [l] = foldJobLineages([rec(2, 'proposal', { proposal: jobProposal() }), rec(3, 'proposal', { proposal: { ...jobProposal({ pid: `${CHAT}:t9` }), what: null } }, 't9')]);
+    expect(l!.state).toBe('open');
+  });
+  const started = lineage([
+    rec(2, 'proposal', { proposal: jobProposal() }),
+    rec(4, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'go', result: { runId: 'run-1', artifactRef: null, adopted: false, stub: false } }),
+  ]);
+  const run = (status: string) => makeView({ id: 'run-1', status: status as never, unit_ix: 1 }, [makeUnit({ ord: 0, status: 'done' }), makeUnit({ ord: 1, status: 'pending' })]);
+  it('after a send-back (recorded as an amended decision) the executing run is re-planning, not running', () => {
+    const v = jobView(started, { ...NO_RUN, view: run('executing'), planDecided: true, sentBack: 2 }, NAME);
+    expect(v.phase).toBe('replanning');
+    expect(v.replies.every((r) => !r.enabled)).toBe(true);
+  });
+  it('a waiting run whose gate kind is not known yet fails closed as a plan being read (never a gate without planRev)', () => {
+    const v = jobView(started, { ...NO_RUN, view: run('awaiting_human'), gate: { ord: 1, receivedAt: 1, prompt: '' }, planUnknown: true }, NAME);
+    expect(v.phase).toBe('planHeld');
+    expect(v.replies[0]).toMatchObject({ id: 'approve', enabled: false, held: 'reading the plan…' });
+  });
+  it('an answer being sent holds the plan and every offer', () => {
+    const offer = { id: 'o2', kind: 'reshape', runId: 'run-1', pid: `${CHAT}:t1`, ord: 1, planRev: 2, text: 'Start again as a move?', choices: [{ label: 'Start again', action: 'reshape' }] };
+    const l = lineage([rec(2, 'proposal', { proposal: jobProposal() }), rec(3, 'plan_offer', { offer }),
+      rec(4, 'proposal_decided', { pid: `${CHAT}:t1`, decision: 'go', result: { runId: 'run-1', artifactRef: null, adopted: false, stub: false } })]);
+    const inputs = { ...NO_RUN, view: run('awaiting_human'), gate: { ord: 1, receivedAt: 1, gateKind: 'plan_approval', prompt: '' }, plan: { ord: 1, planRev: 2, steps: [], fresh: true } };
+    expect(jobView(l, inputs, NAME).offerHeld).toBeNull();
+    expect(jobView(l, { ...inputs, answering: true }, NAME).offerHeld).toBe('your answer is being sent');
+    expect(jobView(l, { ...inputs, pending: { id: 1, queuedAt: 0, dueAt: 1, verb: 'approve' } }, NAME).offerHeld).toBe('your answer is queued');
+    expect(jobView(l, { ...inputs, reshapeOn: false }, NAME).reshapeHeld).not.toBeNull();
+  });
+  it('a launch crew recorded is drawn even while the proposal still reads accepting', () => {
+    const accepting = lineage([rec(2, 'proposal', { proposal: jobProposal() }), rec(3, 'proposal_accepting', { pid: `${CHAT}:t1`, resolution: jobProposal(), identity: { runId: 'run-1', artifactRef: null } })]);
+    expect(jobView(accepting, { ...NO_RUN, view: run('executing') }, { ...NAME, now: 10 }).phase).toBe('planning');
   });
 });
