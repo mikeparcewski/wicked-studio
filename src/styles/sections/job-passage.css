@@ -161,3 +161,5 @@
 /* A tick (rev 6 §2.7.1): one dim line for a state the job reached or the person's act, from its record. */
 .wk-pass-tick { margin: 2px 0; padding-left: 32px; font-size: var(--text-caption); color: var(--ink-muted); display: flex; gap: 8px; align-items: baseline; }
 .wk-pass-tick::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--wk-pass-rule); transform: translateY(-2px); flex-shrink: 0; }
+/* Consecutive ticks read as one short history, not as separate messages. */
+.wk-pass-tick + .wk-pass-tick { margin-top: -16px; }

@@ -135,3 +135,31 @@ describe('full screen’s chat drawer', () => {
     expect((within(drawer).getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('add a rollback step');
   });
 });
+
+describe('full screen’s chat drawer: a moved plan', () => {
+  it('a Change bound to plan v2 sends nothing once plan v3 is held, and keeps the words', async () => {
+    const RUN = 'run-1';
+    messages = [USER, SEAT, P1, { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } }];
+    const planTeam = (rev: number) => ({ teamed: true, units: [], planRev: rev, rows: [
+      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ id: 'build', catalog: 'build' }] } },
+      { event_id: 2 + rev, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: `g${rev}`, ord: 1, plan_rev: rev } }] });
+    team = planTeam(2);
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 7, gateKind: 'plan_approval' } }, approaching: {} });
+    page([makeView({ id: RUN, status: 'awaiting_human' as never, unit_ix: 1, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000 } as never, [
+      makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, status: 'done', phase_ref: 'pa-scope' }), makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, status: 'pending', phase_ref: 'build' })])]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    // Plan v3 is held now (a new gate instance and its read).
+    team = planTeam(3);
+    act(() => { useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: 9, gateKind: 'plan_approval' } }, approaching: {} }); });
+    await waitFor(() => expect(reply('approve').textContent).toBe('Approve plan v3'));
+    const drawer = screen.getByTestId('run-chat-drawer');
+    const box = within(drawer).getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'add a rollback step' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts).toEqual([]);
+    expect(await within(drawer).findByTestId('job-binding-moved')).toBeTruthy();
+    expect((within(drawer).getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('add a rollback step');
+  });
+});

@@ -9,6 +9,7 @@ export function jobProposal(over: Partial<JobProposal> = {}): JobProposal {
     brief: null, reason: null, sources: [], repos: ['reporting-api'], helpers: null, time: null, stops: null,
     filedIn: { projectId: null, label: 'Not in a project' }, blocked: null,
     shape: { card: 'migrate', option: 'upgrade', depth: null, by: 'detected', source: 'chat' },
+    launch: 'run',
     gate: ['qe-acceptance', 'parity'],
     seats: { lead: 'codex', keys: ['codex', 'claude'], label: 'Codex and Claude' },
     sentence: {

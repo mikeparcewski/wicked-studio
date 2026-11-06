@@ -371,10 +371,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // passage folds), in time order among the messages.
   const teamByRun = useTeamPlanStore((s) => s.byRun);
   const rosterForTicks = useRoster();
+  // Every run a lineage launched (a reshape's predecessor included): their team records are kept while this page shows them.
+  const tickRuns = useMemo(() => [...new Set(jobLineages.flatMap((l) => [...l.decisions.map((d) => d.runId), jobRunId(l, mine)]).filter((x): x is string => x !== null))], [jobLineages, mine]);
   const ticks = useMemo<JobTick[]>(() => jobLineages.flatMap((l) => {
-    const id = jobRunId(l, mine);
+    const ids = [...new Set([...l.decisions.map((d) => d.runId), jobRunId(l, mine)].filter((x): x is string => x !== null))];
     const lead = l.head.proposal.seats?.lead ?? null;
-    return jobTicks(l, id === null ? [] : teamByRun[id]?.rows ?? [], lead !== null ? seatResponder(lead, rosterForTicks).name : 'The lead');
+    return jobTicks(l, ids.map((runId) => ({ runId, rows: teamByRun[runId]?.rows ?? [] })), lead !== null ? seatResponder(lead, rosterForTicks).name : 'The lead');
   }), [jobLineages, mine, teamByRun, rosterForTicks]);
   // The change marks under the person's messages (rev 6 §2.7.1): "↳ Changed the job to v2: a move".
   const jobMarks = useMemo(() => {
@@ -695,7 +697,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       if (jobPids.has(p.pid) || (jobsOn && (p.proposal as { sentence?: unknown }).sentence !== undefined)) continue;
       out.push({ kind: 'artifact', key: `ap:${p.pid}`, at: p.at, entry: p });
     }
-    jobLineages.forEach((l, i) => out.push({ kind: 'job', key: `job:${l.lineage}`, at: l.at, lineage: l, settled: i < jobLineages.length - 1 }));
+    // A job's ticks read as its history: the passage sits after the newest of them (and after the newest message that
+    // changed it), so its own story is above it and the conversation continues below.
+    jobLineages.forEach((l, i) => {
+      const own = ticks.filter((t) => t.key.startsWith(`${l.lineage}:`)).reduce((m, t) => Math.max(m, t.at), 0);
+      out.push({ kind: 'job', key: `job:${l.lineage}`, at: Math.max(l.at, own + 1), lineage: l, settled: i < jobLineages.length - 1 });
+    });
     for (const t of ticks) out.push({ kind: 'tick', key: `tick:${t.key}`, at: t.at, text: t.text });
     // Something visible while a helper works: a step executing (and not held by Needs you) gets a
     // live line at the thread's foot, so nobody types again or clicks because nothing seems to move.
@@ -1368,6 +1375,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           {keptError !== null && (
             <StateBanner data-testid="artifact-proposals-read-error" kind={readErrorKind(keptError)} what="this chat's proposals" error={keptError} onRetry={() => setChatTry((n) => n + 1)} />
           )}
+          {/* The team records the ticks read, kept for every run a job launched (nothing is drawn by these). */}
+          {tickRuns.map((id) => <TrackTeamFold key={id} runId={id} />)}
           {/* S16a-4g: the chat's own question and gate (keyed by the chat id) at the thread's foot. */}
           {ref.kind === 'chat' && <ChatQuestions chatId={ref.chatId} />}
         </div>
@@ -1455,6 +1464,12 @@ export { RunBlock };
  * its note choice, or asks a separate question — the draft's intent picks which (the platform's prompt routing; none
  * on today's crew, so it replies, and says so), and one click on the switch overrides it for that draft.
  */
+/** Keeps one run's team record folded while the thread shows the job it belongs to (its ticks read it). */
+function TrackTeamFold({ runId }: { runId: string }): null {
+  useTeamFold(runId);
+  return null;
+}
+
 /**
  * The composer while a job's reply binds it (the thread's and full screen's chat drawer alike): "Answering: …" with ×,
  * and Send hands the typed words alone to the job, only while its target is what the binding was made on and its

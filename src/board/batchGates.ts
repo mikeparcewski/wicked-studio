@@ -39,6 +39,10 @@ export interface BatchFailure {
   error: string;
 }
 
+/** What the last fan-out sent to each run (its plan revision and gate included), so a retry answers exactly that
+ *  target. Module state beside the store: the store's shape is the bar's. */
+const sentByRun = new Map<string, { decision: GateDecision; ord: number | undefined }>();
+
 interface BatchGateStore {
   /** Selected run ids, in selection order — the fan-out order. */
   selected: string[];
@@ -184,7 +188,9 @@ async function fanOut(ids: string[], decision: GateDecision, ords: Record<string
   });
   for (const runId of ids) {
     const rev = revs[runId];
-    const error = await decideOne(runId, rev !== undefined ? { ...decision, planRev: rev } : decision, ords[runId]);
+    const sent = rev !== undefined ? { ...decision, planRev: rev } : decision;
+    sentByRun.set(runId, { decision: sent, ord: ords[runId] });
+    const error = await decideOne(runId, sent, ords[runId]);
     useBatchGateStore.setState((cur) => ({
       done: cur.done + 1,
       // Success leaves the selection (its answered state now shows on the
@@ -201,12 +207,17 @@ export async function retryBatchOne(runId: string): Promise<void> {
   const s = useBatchGateStore.getState();
   if (s.running || s.lastDecision === null) return;
   if (!s.failures.some((f) => f.runId === runId)) return;
-  // A retry is a fresh press on the gate shown now: a plan answer names the revision it shows, or is not sent.
-  const rev = seenPlanRev(runId, s.lastDecision);
-  if (rev === null) { reportDecision('not-sent', PLAN_UNSEEN_TEXT); return; }
-  const decision = rev === undefined ? s.lastDecision : { ...s.lastDecision, planRev: rev };
+  // A retry answers exactly the target the batch decided on: the same decision, its plan revision and its gate. A plan
+  // that changed since is never approved by it (the person reviews the new one and decides again).
+  const sentBefore = sentByRun.get(runId);
+  const decision = sentBefore?.decision ?? s.lastDecision;
+  const sentRev = (decision as { planRev?: number }).planRev;
+  if (sentRev !== undefined) {
+    const now = seenPlanRev(runId, s.lastDecision);
+    if (now !== sentRev) { reportDecision('not-sent', 'Not sent: this job’s plan changed since the batch answered it. Read the new plan and decide again.'); return; }
+  }
   useBatchGateStore.setState({ running: true });
-  const error = await decideOne(runId, decision);
+  const error = await decideOne(runId, decision, sentBefore?.ord);
   useBatchGateStore.setState((cur) => ({
     running: false,
     selected: error === null ? cur.selected.filter((id) => id !== runId) : cur.selected,

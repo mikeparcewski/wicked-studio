@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const { decideGate, commitGateDecision } = await import('../src/board/gateActions.js');
-const { runBatchDecision, toggleBatchSelect, useBatchGateStore } = await import('../src/board/batchGates.js');
+const { retryBatchOne, runBatchDecision, toggleBatchSelect, useBatchGateStore } = await import('../src/board/batchGates.js');
 const { flushDecisionsForTest, resetDecisionsForTest, useUndoQueue } = await import('../src/board/undoQueue.js');
 const { useGateStore } = await import('../src/store/gates.js');
 const { usePlanGateStore } = await import('../src/store/planGates.js');
@@ -80,5 +80,43 @@ describe('planRev on every approve path', () => {
     await flushDecisionsForTest();
     await done;
     expect(posts).toEqual([{ path: '/runs/r-job/gate', body: { approve: true, planRev: 2, ord: 1 } }]);
+  });
+  it('a gate crew classified as another kind needs no revision, whatever plan read is cached', () => {
+    gate('r-job', 'Deliver?', 'deliver');
+    usePlanGateStore.setState({ byRun: { 'r-job': { gateId: 'g', ord: 1, planRev: 4, band: '', highRisk: false, reason: '', score: null, reasons: [], floorAdded: [], editSeed: [], planSteps: [] } }, readFor: { 'r-job': '0:1' } });
+    expect(seenPlanRev('r-job', { approve: true })).toBeUndefined();
+  });
+
+  it('an unclassified gate with an empty (failed or stale) read is held unsent', () => {
+    gate('r-job', 'Approve?');
+    usePlanGateStore.setState({ byRun: { 'r-job': null }, readFor: { 'r-job': '1:5' } });
+    expect(seenPlanRev('r-job', { approve: true })).toBeNull();
+  });
+
+  it('a batch retry answers only the plan version the batch decided on', async () => {
+    gate('r-job', 'Approve plan rev 2 before unit 2 runs', 'plan_approval');
+    let fail = true;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return Promise.resolve(fail ? new Response('{"error":"down"}', { status: 500 }) : ok({ status: 'ok' }));
+      }
+      return Promise.resolve(ok({}));
+    }));
+    toggleBatchSelect('r-job');
+    const done = runBatchDecision({ approve: true });
+    await flushDecisionsForTest();
+    await done;
+    expect(useBatchGateStore.getState().failures.map((f) => f.runId)).toEqual(['r-job']);
+    // The plan was revised meanwhile: the retry is refused, never sent as an approve of v3.
+    gate('r-job', 'Approve plan rev 3 before unit 2 runs', 'plan_approval');
+    fail = false;
+    await retryBatchOne('r-job');
+    expect(posts.map((x) => x.body['planRev'])).toEqual([2]);
+    // Back on v2 (the same plan), the retry sends exactly what the batch sent.
+    gate('r-job', 'Approve plan rev 2 before unit 2 runs', 'plan_approval');
+    await retryBatchOne('r-job');
+    expect(posts.map((x) => x.body['planRev'])).toEqual([2, 2]);
   });
 });

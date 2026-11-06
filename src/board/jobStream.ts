@@ -55,6 +55,8 @@ export interface JobLineage {
   runId: string | null;
   /** The plan offers crew made at this job's held plan: the newest per run. */
   offers: ChatPlanOffer[];
+  /** Every decision recorded on the lineage's versions, in order (a reshape's replacement keeps its predecessor's). */
+  decisions: Array<{ pid: string; version: number; decision: 'go' | 'not_now'; at: number; runId: string | null; stub: boolean }>;
   marks: JobMark[];
   /** Where the passage sits in the thread: the newest record that changed it (§2.8.1). */
   at: number;
@@ -190,7 +192,7 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
       if (held === undefined) {
         lineages.set(lineageId, {
           lineage: lineageId, versions: [v], head: v, state: 'open', revisingTurn: null, note: null, decision: null,
-          result: null, accepted: null, acceptingAt: null, decidedAt: null, runId: null, offers: [], marks: [], at,
+          result: null, accepted: null, acceptingAt: null, decidedAt: null, runId: null, offers: [], decisions: [], marks: [], at,
         });
       } else {
         const prev = held.head.proposal;
@@ -266,6 +268,7 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
       l.result = (r['result'] ?? null) as ProposalResult | null;
       l.decidedAt = at;
       if (l.result !== null && !l.result.stub) l.runId = l.result.runId;
+      l.decisions.push({ pid: String(pid), version: l.versions.findIndex((x) => x.pid === pid) + 1, decision: l.decision!, at, runId: l.result !== null && !l.result.stub ? l.result.runId : null, stub: l.result?.stub === true });
     } else if (r['kind'] === 'plan_offer') {
       const o = r['offer'];
       if (!isOffer(o)) continue;
@@ -322,8 +325,9 @@ export interface JobPlanStep {
   label: string;
   /** The step's own instructions, first line (crew's plan record), or `null`. */
   detail: string | null;
-  /** The step raises a gate: it asks the person. */
-  asks: boolean;
+  /** The step raises a human gate: it asks the person always, or only if its check fails (`GateSpec`); `null` = never
+   *  (an automatic gate, or none). */
+  asks: 'always' | 'if-fails' | null;
   /** The floor added it for this risk (not the lead). */
   floor: boolean;
   /** New in this revision (not in the revision before it): washed, "what changed". */
@@ -333,6 +337,16 @@ export interface JobPlanStep {
 type Row = { event_id: number; event_type: string; payload: Record<string, unknown>; emitted_at?: number };
 const strOf = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 
+/** What a step's raised gate asks of the person (`GateSpec`): `auto` asks nothing. */
+function asksOf(gate: unknown): JobPlanStep['asks'] {
+  if (gate === 'consent_before') return 'always';
+  if (typeof gate === 'object' && gate !== null) {
+    if ('human_confirm' in gate) return 'always';
+    if ('human_confirm_if' in gate) return 'if-fails';
+  }
+  return null;
+}
+
 /**
  * The held plan's steps, enriched from the team record (`plan.proposed`): the step's instructions as its detail, a
  * raised gate as "asks you", a floor step as such, and what is new against the revision before it ("Plan v2: added
@@ -340,11 +354,16 @@ const strOf = (v: unknown): string | null => (typeof v === 'string' && v !== '' 
  * a step the record cannot describe keeps its name only.
  */
 export function enrichPlan(steps: ReadonlyArray<{ id: string | null; catalog: string | null; label: string }>, rows: readonly Row[], planRev: number, floorAdded: readonly string[] = []): { steps: JobPlanStep[]; changed: string | null } {
-  const proposed = rows.filter((r) => r.event_type === 'wicked.team.plan.proposed').sort((a, b) => a.event_id - b.event_id);
+  // The proposal the held gate holds: the newest `plan.proposed` recorded before the gate for THIS revision opened, and
+  // never one crew refused; its predecessor the one before it. A later or refused proposal never describes this plan.
+  const gateRow = [...rows].filter((r) => r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval' && r.payload['plan_rev'] === planRev)
+    .sort((a, b) => a.event_id - b.event_id).pop();
+  const refused = new Set(rows.filter((r) => r.event_type === 'wicked.team.plan.refused').map((r) => String(r.payload['proposal_id'])));
+  const proposed = rows.filter((r) => r.event_type === 'wicked.team.plan.proposed' && (gateRow === undefined || r.event_id < gateRow.event_id)
+    && !(typeof r.payload['proposal_id'] === 'string' && refused.has(r.payload['proposal_id']))).sort((a, b) => a.event_id - b.event_id);
   const stepsOf = (r: Row | undefined): Array<Record<string, unknown>> => (Array.isArray(r?.payload['steps']) ? (r!.payload['steps'] as unknown[]).filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null) : []);
   const held = proposed[proposed.length - 1];
   const before = proposed.length > 1 ? proposed[proposed.length - 2] : undefined;
-  const asksIds = new Set(Array.isArray(held?.payload['asks']) ? (held!.payload['asks'] as unknown[]).filter((x): x is string => typeof x === 'string') : []);
   const byId = new Map(stepsOf(held).map((st) => [strOf(st['id']) ?? strOf(st['catalog']) ?? '', st]));
   const prevIds = before === undefined ? null : new Set(stepsOf(before).map((st) => strOf(st['id']) ?? strOf(st['catalog']) ?? ''));
   const out = steps.map((s): JobPlanStep => {
@@ -355,7 +374,7 @@ export function enrichPlan(steps: ReadonlyArray<{ id: string | null; catalog: st
       id: s.id,
       label: s.label,
       detail: first === null || first === '' ? null : first.length > 90 ? `${first.slice(0, 89).trimEnd()}…` : first,
-      asks: rec !== undefined && ((rec['gate'] !== undefined && rec['gate'] !== null) || (s.id !== null && asksIds.has(s.id))),
+      asks: asksOf(rec?.['gate']),
       floor: rec?.['added_by'] === 'floor' || (s.catalog !== null && floorAdded.includes(s.catalog) && rec === undefined),
       added: prevIds !== null && planRev > 1 && s.id !== null && !prevIds.has(s.id),
     };
@@ -401,12 +420,26 @@ export interface JobTick { key: string; at: number; text: string }
  * v2", "You sent plan v1 back", "You stopped the job at plan v1"). A queued answer in its undo window is never a tick:
  * it has no record until it is sent.
  */
-export function jobTicks(l: JobLineage, rows: readonly Row[], lead: string): JobTick[] {
+export function jobTicks(l: JobLineage, rows: readonly Row[] | ReadonlyArray<{ runId: string; rows: readonly Row[] }>, lead: string): JobTick[] {
+  // Each run the lineage launched has its own team record (a reshape replaces the run): ticks from each, kept apart.
+  const runs = rows.length > 0 && 'runId' in (rows[0] as object) ? rows as ReadonlyArray<{ runId: string; rows: readonly Row[] }> : [{ runId: '', rows: rows as readonly Row[] }];
+  const out = jobDecisionTicks(l);
+  for (const run of runs) out.push(...runTicks(l.lineage, run.runId, run.rows, lead));
+  return out.sort((a, b) => a.at - b.at);
+}
+
+function jobDecisionTicks(l: JobLineage): JobTick[] {
   const out: JobTick[] = [];
-  if (l.state === 'decided' && l.decidedAt !== null) {
-    if (l.decision === 'go') out.push({ key: `${l.lineage}:go`, at: l.decidedAt, text: `You started the job, v${l.versions.length}` });
-    else if (l.decision === 'not_now') out.push({ key: `${l.lineage}:not-now`, at: l.decidedAt, text: 'You chose Not now' });
+  // Every decision the lineage recorded (a reshape's replacement keeps its predecessor's), keyed by its own pid.
+  for (const d of l.decisions) {
+    if (d.decision === 'go' && d.stub) continue; // the test configuration started nothing: no "started" tick
+    out.push({ key: `${l.lineage}:${d.decision}:${d.pid}`, at: d.at, text: d.decision === 'go' ? `You started the job, v${d.version}` : 'You chose Not now' });
   }
+  return out;
+}
+
+function runTicks(lineage: string, runId: string, rows: readonly Row[], lead: string): JobTick[] {
+  const out: JobTick[] = [];
   const sorted = [...rows].sort((a, b) => a.event_id - b.event_id);
   const revOf = new Map<string, number>();
   for (const r of sorted) {
@@ -417,17 +450,19 @@ export function jobTicks(l: JobLineage, rows: readonly Row[], lead: string): Job
       const rev = typeof r.payload['plan_rev'] === 'number' ? r.payload['plan_rev'] : null;
       if (rev === null) continue;
       revOf.set(String(r.payload['gate_id']), rev);
-      out.push({ key: `${l.lineage}:plan:${rev}:${r.event_id}`, at, text: `${lead}’s plan, v${rev}, is ready` });
+      out.push({ key: `${lineage}:${runId}:plan:${rev}:${r.event_id}`, at, text: `${lead}’s plan, v${rev}, is ready` });
     } else if (r.event_type === 'wicked.team.gate.decided') {
       const rev = revOf.get(String(r.payload['gate_id']));
       if (rev === undefined) continue;
       const d = r.payload['decision'];
-      const later = sorted.some((x) => x.event_id > r.event_id && x.event_type === 'wicked.team.gate.opened' && x.payload['kind'] === 'plan_approval');
-      const accepted = sorted.some((x) => x.event_id > r.event_id && x.event_type === 'wicked.team.plan.accepted');
+      // An amended decision's own outcome: whichever came FIRST after it, an acceptance (approved with changes) or a new
+      // plan gate (sent back). Later history never rewrites it.
+      const next = sorted.find((x) => x.event_id > r.event_id && (x.event_type === 'wicked.team.plan.accepted'
+        || (x.event_type === 'wicked.team.gate.opened' && x.payload['kind'] === 'plan_approval')));
       const text = d === 'human_approved' || d === 'allow' ? `You approved plan v${rev}`
-        : d === 'human_amended' ? (accepted && !later ? `You approved plan v${rev} with your changes` : `You sent plan v${rev} back`)
+        : d === 'human_amended' ? (next?.event_type === 'wicked.team.plan.accepted' ? `You approved plan v${rev} with your changes` : `You sent plan v${rev} back`)
           : d === 'human_rejected' || d === 'deny' ? `You stopped the job at plan v${rev}` : null;
-      if (text !== null) out.push({ key: `${l.lineage}:answer:${rev}:${r.event_id}`, at, text });
+      if (text !== null) out.push({ key: `${lineage}:${runId}:answer:${rev}:${r.event_id}`, at, text });
     }
   }
   return out;
