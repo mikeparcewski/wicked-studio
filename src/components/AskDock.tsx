@@ -48,7 +48,8 @@ import { PAGE_CHAT_SPECS, pageChatRules, pageChatSessionKey, type PageChatKind, 
 import { pageChatEpoch } from '../store/pageChat.js';
 import { focusPack } from './askContext.js';
 import { CHAT_ATTACHMENT_LIMITS, type ChatAttachmentError, type ChatStartedOn } from '../api/chatHistory-wire.js';
-import { artifactRefOf, CONTEXT_PAGE_MAX, parseArtifactRef, type ChatMessageContext } from '../api/chatArtifacts-wire.js';
+import { artifactRefOf, CONTEXT_PAGE_MAX, parseArtifactRef, type ChatContextAppearance, type ChatMessageContext } from '../api/chatArtifacts-wire.js';
+import { effectiveAppearance, useAppearanceStore } from '../theming/appearance.js';
 import { artifactContext, FLUSH_WAIT_MS, inViewAnywhere, peekAskAboutSeed, shownForRef, takeAskAboutSeed, type AskAboutSeed } from '../store/artifactInView.js';
 
 /**
@@ -98,6 +99,17 @@ function deposit(chatId: string, typed: string, res: { turnId?: string; runId?: 
 function postMessage(chatId: string, message: string, ids: string[] | undefined, context: ChatMessageContext | undefined) {
   if (context !== undefined) return api.sendChatMessage(chatId, message, undefined, ids, context);
   return ids === undefined ? api.sendChatMessage(chatId, message) : api.sendChatMessage(chatId, message, undefined, ids);
+}
+
+/** `context.appearance`: the five scalars the tab shows (a theme preview included), and the preview's name. */
+export function appearanceContext(): ChatContextAppearance {
+  const st = useAppearanceStore.getState();
+  const a = effectiveAppearance(st);
+  return {
+    theme: a.theme, accent_h: a.accent_h, accent_s: a.accent_s, accent_l: a.accent_l,
+    ambient: a.ambient === true, ambient_still: a.ambient_still === true,
+    ...(st.preview !== null ? { previewOf: st.preview.name.slice(0, 120) } : {}),
+  };
 }
 
 /** The page summary as `context.page`, within crew's cap (cut, and said to be cut, rather than refused). */
@@ -603,8 +615,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     // A handed-over message that fails keeps the version it was about, for a retry after its card has closed.
     if (artifact !== null && handoffOwed.current && handoffArtifact.current !== null && handoffArtifact.current.ref === artifact.ref) handoffArtifact.current.lastVersion = artifact.version;
     const pageText = pageField(page);
-    if (artifact === null && pageText === undefined) return undefined;
-    return { ...(artifact !== null ? { artifact } : {}), ...(pageText !== undefined ? { page: pageText } : {}) };
+    // DES-CHAT-ARTIFACTS-001 §9 (A7): the tab's effective appearance (with an active preview) rides every message, so a
+    // theme proposal is a patch on what the person sees: a key it doesn't name keeps their value.
+    const appearance = appearanceContext();
+    return { ...(artifact !== null ? { artifact } : {}), ...(pageText !== undefined ? { page: pageText } : {}), appearance };
   }, []);
 
   /** A message landed: the pack it carried is what the chat has seen. */

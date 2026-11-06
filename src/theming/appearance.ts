@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
+import { measureTheme } from './themeContrast.js';
 
 /**
  * Per-install appearance (DES-VISION-001 §3.3): the three accent primitives,
@@ -160,8 +161,9 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
  * theme id: `light`, `wicked-light`, `wicked-dark`). The Desk's face and radii are the
  * stylesheet's own tokens (styles/tokens.css, S18c) — nothing skin-shaped is stamped (S18d).
  */
-export function applyAppearance(a: StudioAppearance): void {
-  writeCachedAppearance(a);
+export function applyAppearance(a: StudioAppearance, o: { cache?: boolean } = {}): void {
+  // A theme preview is painted, never cached: a reload drops it (DES-CHAT-ARTIFACTS-001 §9).
+  if (o.cache !== false) writeCachedAppearance(a);
   const root = document.documentElement;
   root.style.setProperty('--_accent-h', String(a.accent_h));
   root.style.setProperty('--_accent-s', `${a.accent_s}%`);
@@ -178,6 +180,73 @@ export function applyAppearance(a: StudioAppearance): void {
   else root.removeAttribute('data-ambient-still');
   if (hasCustomAccent(a)) root.setAttribute('data-accent', 'custom');
   else root.removeAttribute('data-accent');
+}
+
+// ── Theme proposals from a chat (DES-CHAT-ARTIFACTS-001 §9, slice A7) ────────────────────────────────────────────
+
+/** The keys a theme proposal may change: light or dark, the action colour and Ambient (fonts and spacing are fixed). */
+export const THEME_PATCH_KEYS = ['theme', 'accent_h', 'accent_s', 'accent_l', 'ambient', 'ambient_still'] as const;
+export type ThemePatchKey = (typeof THEME_PATCH_KEYS)[number];
+export type ThemePatch = Partial<Pick<StudioAppearance, ThemePatchKey>>;
+
+/** A proposal's patch as studio can apply it: only the known keys with the right types (crew checked them already;
+ *  this never trusts the wire). A hue of 360 is 0. */
+export function themePatchOf(raw: Readonly<Record<string, unknown>> | undefined | null): ThemePatch {
+  const out: ThemePatch = {};
+  if (raw === undefined || raw === null) return out;
+  if (isThemeId(raw['theme'])) out.theme = raw['theme'];
+  for (const k of ['accent_h', 'accent_s', 'accent_l'] as const) {
+    const v = raw[k];
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = k === 'accent_h' ? Math.round(v) % 360 : v;
+  }
+  for (const k of ['ambient', 'ambient_still'] as const) if (typeof raw[k] === 'boolean') out[k] = raw[k] as boolean;
+  return out;
+}
+
+/** The value of a patch key on an appearance (an absent Ambient flag is off). */
+export function patchValue(a: StudioAppearance, k: ThemePatchKey): string | number | boolean {
+  return k === 'ambient' || k === 'ambient_still' ? a[k] === true : a[k];
+}
+
+/** The exact result of laying a patch over an appearance, through the stored shape's own rules. */
+export function mergedAppearance(base: StudioAppearance, delta: ThemePatch): StudioAppearance {
+  return sanitizeAppearance({ ...base, ...delta });
+}
+
+/** The one tab-local preview: never persisted, dropped by a reload. `delta` accumulates every previewed patch. */
+export interface ThemePreview {
+  name: string;
+  seat: string;
+  chatId: string;
+  /** The proposal the Apply answers (the newest one previewed). */
+  pid: string;
+  delta: ThemePatch;
+}
+
+/** What Apply did: Saving…, Saved (with a 10 s Undo of the patch keys), or the failure with Retry. */
+export interface ThemeSave {
+  state: 'idle' | 'saving' | 'saved' | 'failed';
+  name: string | null;
+  error?: string;
+  /** The patch keys' values before Apply, and what Apply set; Undo restores a key only while it still holds the latter. */
+  undo?: { prior: ThemePatch; applied: ThemePatch; until: number };
+  /** Recording the Apply on the proposal failed (the theme is saved either way). */
+  recordError?: string;
+}
+
+export const THEME_UNDO_MS = 10_000;
+
+const IDLE: ThemeSave = { state: 'idle', name: null };
+
+function pick(a: StudioAppearance, keys: readonly ThemePatchKey[]): ThemePatch {
+  const out: Record<string, unknown> = {};
+  for (const k of keys) out[k] = patchValue(a, k);
+  return out as ThemePatch;
+}
+
+/** What the tab shows: the stored appearance, with the preview's delta laid over it. */
+export function effectiveAppearance(s: { appearance: StudioAppearance; preview: ThemePreview | null }): StudioAppearance {
+  return s.preview === null ? s.appearance : mergedAppearance(s.appearance, s.preview.delta);
 }
 
 interface AppearanceStore {
@@ -197,6 +266,22 @@ interface AppearanceStore {
   resetAccent: () => void;
   /** §3.5 reset 2: back to the default wicked mark — the accent is independent. */
   removeLogo: () => void;
+  /** (A7) The tab-local theme preview, or `null`. */
+  preview: ThemePreview | null;
+  save: ThemeSave;
+  /** Preview a proposal on this tab: a second one while one is on adds its patch to the delta. */
+  startPreview: (p: { name: string; seat: string; chatId: string; pid: string; patch: ThemePatch }) => void;
+  /** A Theme-page control moved while previewing: it moves the preview, not the saved appearance. */
+  adjustPreview: (patch: ThemePatch) => void;
+  /** Back to mine / Discard: the saved appearance again. */
+  endPreview: () => void;
+  /** Merge only the delta's keys into the saved appearance, after re-measuring the exact result, and record it on the
+   *  proposal. Resolves whether it was saved. */
+  applyPreview: () => Promise<boolean>;
+  /** Within 10 s of Apply: restore the patch keys that still hold what Apply set. */
+  undoApply: () => void;
+  /** Hide the save status. */
+  clearSave: () => void;
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -243,6 +328,9 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
     const appearance = { ...get().appearance, ...patch };
     applyAppearance(appearance);
     set({ appearance });
+    // A preview stays on screen over a saved change (a ⌘K theme toggle while previewing).
+    const preview = get().preview;
+    if (preview !== null) applyAppearance(mergedAppearance(appearance, preview.delta), { cache: false });
     persistSoon(() => get().appearance);
   },
 
@@ -252,4 +340,82 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
   resetAccent: () => get().update({ ...HARBOR_ACCENT }),
 
   removeLogo: () => get().update({ logo_url: null }),
+
+  preview: null,
+  save: IDLE,
+
+  startPreview: ({ name, seat, chatId, pid, patch }) => {
+    const was = get().preview;
+    const preview: ThemePreview = { name, seat, chatId, pid, delta: { ...(was?.delta ?? {}), ...patch } };
+    applyAppearance(mergedAppearance(get().appearance, preview.delta), { cache: false });
+    set({ preview, save: IDLE });
+  },
+
+  adjustPreview: (patch) => {
+    const was = get().preview;
+    if (was === null) return;
+    const preview: ThemePreview = { ...was, delta: { ...was.delta, ...patch } };
+    applyAppearance(mergedAppearance(get().appearance, preview.delta), { cache: false });
+    set({ preview });
+  },
+
+  endPreview: () => {
+    if (get().preview === null) return;
+    applyAppearance(get().appearance);
+    set({ preview: null, save: get().save.state === 'failed' ? IDLE : get().save });
+  },
+
+  applyPreview: async () => {
+    const pv = get().preview;
+    if (pv === null || get().save.state === 'saving') return false;
+    const base = get().appearance;
+    const merged = mergedAppearance(base, pv.delta);
+    // §9: measured again on the exact merged result (the saved appearance may have moved since the card was drawn).
+    const check = measureTheme(merged);
+    if (!check.ok) {
+      set({ save: { state: 'failed', name: pv.name, error: `Not applied: ${check.failing.join('; ')}.` } });
+      return false;
+    }
+    set({ save: { state: 'saving', name: pv.name } });
+    try {
+      await api.putAppearanceSettings(merged);
+    } catch (err) {
+      set({ save: { state: 'failed', name: pv.name, error: err instanceof Error && err.message !== '' ? err.message : 'Studio’s service did not save it.' } });
+      return false;
+    }
+    // Saved: only now does the stored appearance change, by the delta's keys alone.
+    const keys = THEME_PATCH_KEYS.filter((k) => k in pv.delta);
+    const now = get().appearance;
+    const after = mergedAppearance(now, pv.delta);
+    applyAppearance(after);
+    set({
+      appearance: after,
+      preview: null,
+      save: { state: 'saved', name: pv.name, undo: { prior: pick(base, keys), applied: pick(after, keys), until: Date.now() + THEME_UNDO_MS } },
+    });
+    // A slider moved during the save is persisted with the result.
+    if (JSON.stringify(now) !== JSON.stringify(base)) persistSoon(() => get().appearance);
+    try {
+      await api.decideChatProposal(pv.chatId, pv.pid, { decision: 'go', edits: { name: pv.name, patch: pv.delta } });
+    } catch (err) {
+      const words = err instanceof Error && err.message !== '' ? err.message : 'the chat did not take the answer';
+      if (get().save.state === 'saved') set({ save: { ...get().save, recordError: `Saved, but the chat did not record it: ${words}` } });
+    }
+    return true;
+  },
+
+  undoApply: () => {
+    const u = get().save.undo;
+    if (u === undefined || Date.now() > u.until) return;
+    const cur = get().appearance;
+    const back: Record<string, unknown> = {};
+    for (const k of Object.keys(u.applied) as ThemePatchKey[]) {
+      // A key moved since Apply (a slider) is the person's now: left alone (§13.2 #7).
+      if (patchValue(cur, k) === u.applied[k]) back[k] = u.prior[k];
+    }
+    set({ save: IDLE });
+    if (Object.keys(back).length > 0) get().update(back as Partial<StudioAppearance>);
+  },
+
+  clearSave: () => set({ save: IDLE }),
 }));

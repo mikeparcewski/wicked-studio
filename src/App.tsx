@@ -44,6 +44,7 @@ import { UndoToasts } from './components/UndoToasts.js';
 import { VoiceRoot } from './components/voice/VoiceRoot.js';
 import { LaunchWizard } from './components/launch/LaunchWizard.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
+import { ThemePreviewBar } from './components/ThemePreviewBar.js';
 import { SettingsPage } from './components/SettingsPage.js';
 import { SETTINGS_THEME_PATH } from './board/settingsTabs.js';
 import { NerveCenterPage } from './components/nerve/NerveCenterPage.js';
@@ -954,6 +955,8 @@ export function App(): React.ReactElement {
 
       {/* The lost-connection banner (crew#551): names the one-line fix while /ws is down. */}
       <ConnectionStatus />
+      {/* DES-CHAT-ARTIFACTS-001 §9 (A7): a theme proposal previewed on this tab — Apply, Back to mine, Saved · Undo. */}
+      <ThemePreviewBar />
 
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (

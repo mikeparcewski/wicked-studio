@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { DEFAULT_SITE_NAME, THEMES, useAppearanceStore } from '../theming/appearance.js';
+import { DEFAULT_SITE_NAME, effectiveAppearance, HARBOR_ACCENT, THEMES, useAppearanceStore, type StudioAppearance, type ThemePatch } from '../theming/appearance.js';
 import { SectionTitle } from './ui/PageFrame.js';
 import { Segmented } from './ui/Segmented.js';
 import { Switch } from './ui/Switch.js';
@@ -118,9 +118,20 @@ function PreviewStrip(): React.ReactElement {
 const MAX_UPLOAD_BYTES = 256 * 1024;
 
 export function AppearanceSettings(): React.ReactElement {
-  const appearance = useAppearanceStore((s) => s.appearance);
-  const update = useAppearanceStore((s) => s.update);
-  const resetAccent = useAppearanceStore((s) => s.resetAccent);
+  const stored = useAppearanceStore((s) => s.appearance);
+  const preview = useAppearanceStore((s) => s.preview);
+  const storeUpdate = useAppearanceStore((s) => s.update);
+  // A7: while a theme proposal is previewed, the theme, Ambient and accent controls show and move the PREVIEW (its
+  // delta); the logo and site name stay the saved appearance's.
+  const appearance = preview === null ? stored : effectiveAppearance({ appearance: stored, preview });
+  const update = (patch: Partial<StudioAppearance>): void => {
+    if (preview === null) { storeUpdate(patch); return; }
+    const { logo_url, site_name, ...themeKeys } = patch;
+    if (logo_url !== undefined || site_name !== undefined) storeUpdate({ ...(logo_url !== undefined ? { logo_url } : {}), ...(site_name !== undefined ? { site_name } : {}) });
+    if (Object.keys(themeKeys).length > 0) useAppearanceStore.getState().adjustPreview(themeKeys as ThemePatch);
+  };
+  const storeReset = useAppearanceStore((s) => s.resetAccent);
+  const resetAccent = (): void => { if (preview === null) storeReset(); else update({ ...HARBOR_ACCENT }); };
   const removeLogo = useAppearanceStore((s) => s.removeLogo);
   const [logoDraft, setLogoDraft] = useState('');
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -151,7 +162,8 @@ export function AppearanceSettings(): React.ReactElement {
     reader.readAsDataURL(file);
   }
 
-  const chooseTheme = useAppearanceStore((s) => s.chooseTheme);
+  const storeChoose = useAppearanceStore((s) => s.chooseTheme);
+  const chooseTheme = (theme: StudioAppearance['theme']): void => { if (preview === null) storeChoose(theme); else update({ theme }); };
 
   return (
     <section data-testid="appearance-settings" className="wk-card wk-pg-set-stack" ref={(root) => {
@@ -192,6 +204,7 @@ export function AppearanceSettings(): React.ReactElement {
       <div className="wk-pg-set-stack">
         <SectionTitle>Theme</SectionTitle>
         <p className="wk-field-note">Choose a light or dark appearance; the Wicked themes also set the accent color.</p>
+        {preview !== null && <p className="wk-field-note" data-testid="appearance-previewing">Showing the preview of {preview.name}: changes to the theme, Ambient and accent here adjust it until you apply it.</p>}
         {/* Ambient (operator 2026-11-01): a third choice; it keeps a ground of its own (Dark / Light) under it. */}
         <Segmented label="Theme" data-testid="theme-picker" value={appearance.ambient === true ? 'ambient' : appearance.theme}
           options={[...THEMES.map((t) => ({ value: t.id as string, label: t.label as string, testId: `theme-${t.id}` })), { value: 'ambient', label: 'Ambient', testId: 'theme-ambient' }]}
