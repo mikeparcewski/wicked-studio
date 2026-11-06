@@ -964,3 +964,21 @@ describe('round 3 (coordinator): one step, one name', () => {
     expect(failed.textContent).not.toContain('research');
   });
 });
+
+describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
+  it('a proposal’s Start says it reviews the plan first (crew holds a chat-proposed job at its plan)', async () => {
+    const { resetPowerDefault } = await import('../src/store/reviewPlan.js');
+    resetPowerDefault();
+    useCapabilities.setState({ powerMode: true });
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (path === '/settings') return Promise.resolve(ok({ settings: { powerModeDefault: true } }));
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page();
+    expect((await screen.findByTestId('job-passage-review-plan')).textContent).toMatch(/^You’ll review the plan first/);
+    useCapabilities.setState({ powerMode: false });
+    resetPowerDefault();
+  });
+});
