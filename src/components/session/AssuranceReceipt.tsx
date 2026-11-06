@@ -132,7 +132,7 @@ function howWords(r: RuleRow): string {
     const who = [ruled.seats.join(', '), ...(ruled.uncounted.length > 0 ? [`${ruled.uncounted.join(', ')} not counted`] : [])].filter((x) => x !== '').join('; ');
     const seats = who !== '' ? ` (${who})` : '';
     const lead = ruled.ruling === 'waived' ? `the council kept it only on your instruction, ${ruled.tally}${seats}: confirm or skip it` : `settled by council ${ruled.tally}${seats}`;
-    return `${lead}${r.how === 'cache' ? ', unchanged since the last check' : ''}`;
+    return `${lead}${r.how === 'cache' ? ', unchanged since last check' : ''}`;
   }
   if (r.status === 'disputed') return '';
   // A council row with no ruling it carries is never "by a judge (<the rule judge>)".
@@ -152,7 +152,9 @@ function RuleItem({ r }: { r: RuleRow }): React.ReactElement {
   const ruled = councilRulingOf(r);
   // Why: a council ruling's winning rationale (its reason repeats the tally); else the engine's reason (the fact,
   // the cite in words, the skip's reason, why no council ruled), else the bare cite.
-  const why = (ruled !== null && r.cite !== null ? r.cite : r.reason !== '' ? r.reason : r.cite ?? '').replace(NO_RULING_CODE, '');
+  const why0 = ruled !== null && r.cite !== null ? r.cite : r.reason !== '' ? r.reason : r.cite ?? '';
+  // Only the engine's own no-ruling sentence carries its codes; a cite or a person's reason is shown as written.
+  const why = r.status === 'disputed' ? why0.replace(NO_RULING_CODE, '') : why0;
   const how = howWords(r);
   const c = r.council;
   // The reviewer's own reading, when it differs from the row and no council record already says it.

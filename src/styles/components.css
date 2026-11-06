@@ -1223,6 +1223,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-assurance-rule-council > li { margin: 1px 0; }
 .wk-assurance-rules-process { margin-top: 6px; }
 .wk-assurance-rules-process-head { font-size: var(--text-xs); color: var(--ink-dim); }
+/* A process rule never decides the gate: its verdict word is not drawn as a warning. */
+.wk-assurance-rules-process .wk-assurance-rule-status { color: var(--ink-high); }
 .wk-assurance-rules-process > .wk-assurance-list { margin: 2px 0 0 0; padding: 0; list-style: none; }
 .wk-assurance-rule-status--n_a { color: var(--ink-muted); font-weight: var(--weight-regular); }
 .wk-assurance-rule-id { font-size: var(--text-2xs); color: var(--ink-body); }
