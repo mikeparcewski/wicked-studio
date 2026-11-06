@@ -916,7 +916,11 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
         : 'Your own judgment isn’t offered here: the job takes it only when the failed checks are all that stop this step.');
     }
     if (skipQeAtDelivery(gate.prompt)) whyNot.push('Skipping QE is offered at the hand-over, not here.');
-    if (landHeld) whyNot.push('Landing with carried items isn’t offered while a steering rule is open: re-check it, or confirm or skip it, first.');
+    if (landHeld) {
+      whyNot.push(rulesHold.rows.some(ruleHolds)
+        ? 'Landing with carried items isn’t offered while a steering rule is open: re-check it, or confirm or skip it, first.'
+        : 'Landing with carried items isn’t offered while a steering rule is broken: re-check the rules, or send the work back.');
+    }
 
     // Cap at 3 (stop always occupies the 4th inline slot); excess goes to overflow.
     const escInline = coreWithoutStop.slice(0, 3);

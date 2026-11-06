@@ -543,6 +543,14 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
       // The engine refuses to count the unit while a rule layer stands: no landing, and the row says why.
       expect(keys).not.toContain('steer');
       expect(m.whyNot?.join(' ')).toMatch(/Landing with carried items isn.t offered while a steering rule is open/);
+      // A broken rule behind it: no landing either, and the why-not never points at a skip the gate does not offer.
+      const brk = sessionGateChoices({ runId: RUN, gate: g, units, events: log([row('B', 'broken')]), pool: ['pi', 'codex'], roster: null })!;
+      const bk = [...brk.choices, ...brk.overflow].map((c) => c.key);
+      expect(bk).toContain('retry-rules');
+      expect(bk).not.toContain('skip-rules');
+      expect(bk).not.toContain('steer');
+      expect(brk.whyNot?.join(' ')).toMatch(/a steering rule is broken: re-check the rules, or send the work back/);
+      expect(brk.whyNot?.join(' ')).not.toMatch(/skip/);
       // Negative control: nothing open, the landing is there.
       const clean = sessionGateChoices({ runId: RUN, gate: g, units, events: log([row('A', 'kept')]), pool: ['pi', 'codex'], roster: null })!;
       expect([...clean.choices, ...clean.overflow].find((c) => c.key === 'steer')?.label).toBe(LAND_NOTE_LABEL);
