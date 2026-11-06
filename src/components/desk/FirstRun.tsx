@@ -103,7 +103,9 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
         await record(key, { line, done: a.option !== 'later', words: a.option === 'later' ? 'later · Learn keeps a reminder' : opt?.label ?? '' });
         if (a.option === 'pick') navigate(learnPath('style'));
       } else if (key === 'rules') {
-        for (const s of STARTER_RULES.filter((x) => picked.includes(x.id))) await api.upsertConformanceRule(starterRule(s));
+        // A starter already in force is the team's copy (maybe edited): first run never rewrites it (F21).
+        const inForce = new Set((await api.listConformanceRules()).rules.filter((r) => r.retired !== true).map((r) => r.id));
+        for (const s of STARTER_RULES.filter((x) => picked.includes(x.id) && !inForce.has(x.id))) await api.upsertConformanceRule(starterRule(s));
         if (picked.length > 0) void useFirstRun.getState().markLearnUsed();
         await record(key, { line, done: picked.length > 0, words: picked.length === 0 ? 'none picked' : `${picked.length} picked` });
       } else if (key === 'persona') {

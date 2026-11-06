@@ -6,7 +6,7 @@ import { STEERING_TYPE_LABELS, steeringTypeOf } from '../../api/steering.js';
 import { rulePath } from '../../api/decisions.js';
 import { DESK_VIEW_PATH } from '../../board/navModel.js';
 import type { ConformanceRule } from '../../api/types.js';
-import { rulesYouCareAbout, STARTER_RULES, starterRule, type StarterRule } from '../../board/learnHub.js';
+import { rulesYouCareAbout, STARTER_RULES, starterRule, starterUpdate, type StarterRule } from '../../board/learnHub.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useFirstRun } from '../../store/firstRun.js';
 import { AuthorPanel } from '../SteeringAuthorPanel.js';
@@ -56,9 +56,35 @@ export function RulesTab({ navigate }: { navigate: Navigate }): React.ReactEleme
     }
   };
 
+  // (F21, operator Q3) An adopted starter whose text changed is offered the update; nothing is written without the
+  // click. The offer is re-derived from a fresh read at the click, so a copy edited meanwhile is never overwritten.
+  const update = async (s: StarterRule): Promise<void> => {
+    if (busy !== null) return;
+    setBusy(s.id);
+    setNote(null);
+    try {
+      const next = starterUpdate(s, (await api.listConformanceRules()).rules);
+      if (next === null) {
+        setNote({ tone: 'fail', text: `Your “${s.title}” changed since this page loaded, so it was left as it is.` });
+      } else {
+        await api.upsertConformanceRule(next);
+        setNote({ tone: 'ok', text: `“${s.title}” now reads the new starter text.` });
+      }
+      load();
+    } catch (e) {
+      setNote({ tone: 'fail', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (error !== null) return <StateBanner kind={readErrorKind(error)} what="your rules" error={error instanceof Error ? error.message : String(error)} onRetry={load} data-testid="learn-rules-error" />;
   if (rules === null) return <Skeleton rows={4} data-testid="learn-rules-loading" />;
   const mine = rulesYouCareAbout(rules);
+  const changed = STARTER_RULES.flatMap((s) => {
+    const copy = starterUpdate(s, rules) === null ? undefined : rules.find((r) => r.id === s.id);
+    return copy === undefined ? [] : [{ s, yours: copy.statement }];
+  });
 
   return (
     <div data-testid="learn-rules" ref={pageRef}>
@@ -77,6 +103,20 @@ export function RulesTab({ navigate }: { navigate: Navigate }): React.ReactEleme
           );
         })}
       </div>
+      {changed.map(({ s, yours }) => (
+        <section key={s.id} className="wk-learn-changed" aria-label={`This starter changed: ${s.title}`} data-testid="learn-starter-changed" data-starter={s.id}>
+          <div className="wk-learn-changed-t">
+            <b>This starter changed: {s.title}</b>
+            {s.changed !== undefined && <span>{s.changed}</span>}
+            <dl className="wk-learn-changed-dl">
+              <dt>Yours</dt><dd data-testid="learn-starter-yours">{yours}</dd>
+              <dt>Now</dt><dd data-testid="learn-starter-now">{s.statement}</dd>
+            </dl>
+          </div>
+          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="learn-starter-update" disabled={busy !== null}
+            onClick={() => void update(s)}>Update</button>
+        </section>
+      ))}
       {note !== null && <p className={`wk-learn-quiet${note.tone === 'fail' ? ' wk-learn-bad' : ''}`} role="status" data-testid="learn-rules-note">{note.text}</p>}
       <div className="wk-learn-res-head">
         <h2 className="wk-learn-h2">In force for you <span className="wk-learn-quiet" data-testid="learn-rules-count">· {mine.length}</span></h2>
