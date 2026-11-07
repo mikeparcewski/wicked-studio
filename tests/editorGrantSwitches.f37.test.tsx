@@ -163,16 +163,38 @@ describe('F37 review r1: the switch only ever acts on, and shows, the build the 
   it('one press at a time: while it is in flight every switch of the editor is disabled', async () => {
     let release = (): void => undefined;
     const hold = new Promise<void>((r) => { release = r; });
-    crew({ holdPost: hold });
+    const c = crew({ holdPost: hold });
     render(<PluginsPage navigate={() => undefined} />);
     await openDetails('e2e-checklist');
     await waitFor(() => switchOf('checks.read'));
     fireEvent.click(switchOf('artifact.write'));
-    await waitFor(() => expect((switchOf('checks.read') as HTMLButtonElement).disabled).toBe(true));
-    expect((switchOf('artifact.write') as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(switchOf('checks.read').getAttribute('aria-disabled')).toBe('true'));
+    expect(switchOf('artifact.write').getAttribute('aria-disabled')).toBe('true');
+    // A second press while the first is in flight sends nothing.
+    fireEvent.click(switchOf('checks.read'));
+    // The pressed switch keeps the keyboard (pi r1: a disabled button would drop it).
+    switchOf('artifact.write').focus();
     release();
     await waitFor(() => expect(switchOf('artifact.write').getAttribute('aria-checked')).toBe('true'));
-    expect((switchOf('checks.read') as HTMLButtonElement).disabled).toBe(false);
+    expect(switchOf('checks.read').getAttribute('aria-disabled')).toBe('false');
+    expect(document.activeElement).toBe(switchOf('artifact.write'));
+    expect(posts(c.fetch)).toHaveLength(1);
+  });
+
+  it('an answer that lands after another card was opened changes nothing on that card', async () => {
+    let release = (): void => undefined;
+    const hold = new Promise<void>((r) => { release = r; });
+    crew({ holdPost: hold });
+    render(<PluginsPage navigate={() => undefined} />);
+    await openDetails('e2e-checklist');
+    await waitFor(() => switchOf('artifact.write'));
+    fireEvent.click(switchOf('artifact.write'));
+    await openDetails('wicked-page');
+    await waitFor(() => expect(screen.getByTestId('plugin-details-title').textContent).toBe('Page editor'));
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByTestId('plugin-details').dataset['plugin']).toBe('wicked-page');
+    expect(screen.queryAllByTestId('plugin-grant-row')).toHaveLength(0);
   });
 
   it('a press whose answer is lost re-reads crew instead of claiming "Not changed"', async () => {
@@ -204,7 +226,7 @@ describe('F37: the host note goes straight to the switch', () => {
     expect(got.allow).toEqual({ href: '/plugins?editor=e2e-checklist&allow=artifact.write', permission: 'artifact.write' });
     const go = vi.fn();
     render(<p data-testid="note">{grantNote(got, go)}</p>);
-    expect(screen.getByTestId('note').textContent).toBe('This editor asks to change it (you can undo) and see the checks. Allow it in Plugins');
+    expect(screen.getByTestId('note').textContent).toBe('This editor asks to change it (you can undo) and see the checks. Allow it in Plugins.');
     const a = screen.getByTestId('editor-grants-allow');
     expect(a.getAttribute('href')).toBe('/plugins?editor=e2e-checklist&allow=artifact.write');
     fireEvent.click(a);

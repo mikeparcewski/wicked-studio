@@ -151,6 +151,7 @@ export function EditorGrantSwitches({ editor, title, grants, focus }: {
           );
         }
         const on = r.state === 'on';
+        // aria-disabled, not disabled, while a press is in flight (pi r1): a disabled button drops the keyboard focus.
         return (
           <div key={r.permission} style={{ marginBottom: 6 }}>
             <div className="wk-plugdetail-switch" data-testid="plugin-grant-row" data-permission={r.permission} data-state={r.state}>
@@ -158,7 +159,7 @@ export function EditorGrantSwitches({ editor, title, grants, focus }: {
                 <b>{label}</b><br />
                 <span className="wk-plugdetail-muted">{on ? 'Allowed by you for this version. ' : 'Off: it asks. '}Takes effect where it opens next. Only you can change this.</span>
               </span>
-              <button type="button" role="switch" aria-checked={on} data-testid="plugin-grant-switch" data-editor={editor.id} data-permission={r.permission} disabled={busy !== null}
+              <button type="button" role="switch" aria-checked={on} data-testid="plugin-grant-switch" data-editor={editor.id} data-permission={r.permission} aria-disabled={busy !== null}
                 aria-label={`${title}: ${label.toLowerCase()}, ${on ? 'allowed' : 'off'}`} className="wk-switch" onClick={() => press(r.permission, !on)}>
                 <span aria-hidden className="wk-switch-track"><span className="wk-switch-thumb" /></span>
               </button>

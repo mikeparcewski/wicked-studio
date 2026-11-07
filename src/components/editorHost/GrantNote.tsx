@@ -21,7 +21,7 @@ export function grantNote(decided: Pick<DecidedGrants, 'note' | 'allow'>, naviga
       <a href={allow.href} data-testid="editor-grants-allow" data-permission={allow.permission} className="wk-link"
         onClick={(ev) => { ev.preventDefault(); navigate(allow.href); }}>
         Allow it in Plugins
-      </a>
+      </a>.
     </>
   );
 }
