@@ -856,6 +856,9 @@ export function App(): React.ReactElement {
       {/* studio#722: the gate notice is a strip IN the main column's flow, above the page — it pushes
           the page down instead of covering its composer, cards or thread. */}
       <div id="main" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ outline: 'none' }}>
+        {/* DES-CHAT-ARTIFACTS-001 §9 (A7, mockup e): a theme previewed on this tab — Apply, Back to mine, Saved · Undo —
+            a strip in the main column's flow, so it never covers a composer, a card or a page's controls. */}
+        <ThemePreviewBar />
         {panel !== 'home' && (
           <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={shownRuns} hideRuns={viewedRunIds} />
         )}
@@ -953,8 +956,6 @@ export function App(): React.ReactElement {
 
       {/* The lost-connection banner (crew#551): names the one-line fix while /ws is down. */}
       <ConnectionStatus />
-      {/* DES-CHAT-ARTIFACTS-001 §9 (A7): a theme proposal previewed on this tab — Apply, Back to mine, Saved · Undo. */}
-      <ThemePreviewBar />
 
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (

@@ -64,6 +64,8 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   if (target !== undefined && (!isObj(target) || !str(target['title']) || typeof target['base'] !== 'number')) return false;
   const theme = p['theme'];
   if (theme !== undefined && (!isObj(theme) || !Array.isArray(theme['changes']) || !theme['changes'].every(str))) return false;
+  // (A7) A theme is previewed and applied from its name and patch: both must be there and well formed.
+  if (p['kind'] === 'theme' && (!isObj(theme) || !str(theme['name']) || theme['name'].trim() === '' || theme['name'].length > 60 || !isObj(theme['patch']))) return false;
   const demo = p['demo'];
   if (demo !== undefined && (!isObj(demo) || !str(demo['url']) || !strOrNull(demo['audience']) || !strOrNull(demo['show']))) return false;
   const touches = p['touches'];
@@ -314,7 +316,8 @@ export function themeChangeWords(current: StudioAppearance, patch: ThemePatch): 
   if (has('ambient') || has('ambient_still')) {
     const on = has('ambient') ? patch.ambient === true : current.ambient === true;
     const still = has('ambient_still') ? patch.ambient_still === true : current.ambient_still === true;
-    out.push(on ? `Ambient on${still ? ', still' : ''}` : 'Ambient off');
+    // The still flag is its own key: said whenever the patch names it, even with Ambient off.
+    out.push(on ? `Ambient on${still ? ', still' : ''}` : has('ambient_still') ? `Ambient off (${still ? 'still' : 'moving'} when on)` : 'Ambient off');
   }
   return out;
 }

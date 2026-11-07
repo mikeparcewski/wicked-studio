@@ -102,20 +102,43 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   // A7: a theme proposal is previewed on this tab, measured on the exact merged result, and applied from the preview.
   const stored = useAppearanceStore((s) => s.appearance);
   const preview = useAppearanceStore((s) => s.preview);
-  const saving = useAppearanceStore((s) => s.save.state === 'saving');
+  const save = useAppearanceStore((s) => s.save);
+  const saving = save.state === 'saving';
+  const previewingThis = preview !== null && preview.chatId === chatId && preview.pid === entry.pid;
   const themeFacts = useMemo<ThemeFacts | null>(() => {
     if (p.kind !== 'theme' || p.theme === undefined) return null;
+    // The preview of THIS card is what Apply saves: the whole accumulated delta (with any Theme-page moves) against the
+    // saved appearance. Any other card shows what its Preview would show: its patch over what the tab shows now.
+    if (previewingThis && preview !== null) {
+      return { changes: themeChangeWords(stored, preview.delta), check: measureTheme(effectiveAppearance({ appearance: stored, preview })), seatName };
+    }
     const patch = themePatchOf(p.theme.patch);
     const current = effectiveAppearance({ appearance: stored, preview });
-    // A refine of an active preview builds on it: the card measures what Preview would show.
+    if (Object.keys(patch).length === 0) return { changes: [], check: { ratios: null, colors: null, ok: false, failing: ['this proposal names nothing studio can change'] }, seatName };
     return { changes: themeChangeWords(current, patch), check: measureTheme(mergedAppearance(current, patch)), seatName };
-  }, [p, stored, preview, seatName]);
-  const previewingThis = preview !== null && preview.chatId === chatId && preview.pid === entry.pid;
+  }, [p, stored, preview, previewingThis, seatName]);
   const themeRefused = themeFacts === null || themeFacts.check.ok ? null : `Can’t preview: ${themeFacts.check.failing.join('; ')}`;
   const startThemePreview = (): void => {
     if (p.theme === undefined || themeRefused !== null) return;
     useAppearanceStore.getState().startPreview({ name: p.theme.name, seat: seatName, chatId, pid: entry.pid, patch: themePatchOf(p.theme.patch) });
   };
+  // An Apply of this card's preview from the bar or the Theme page: re-read the chat, so the card shows it answered
+  // even without the live frame.
+  const savedThis = save.state === 'saved' && save.pid === entry.pid;
+  useEffect(() => {
+    if (savedThis) onChanged();
+  }, [savedThis]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Focus follows the controls a keyboard used: Preview → the preview's Apply; Back to mine → Preview again.
+  const themeFocus = useRef<'apply' | 'go' | null>(null);
+  useEffect(() => {
+    const want = themeFocus.current;
+    if (want === null) return;
+    themeFocus.current = null;
+    const el = want === 'apply'
+      ? sectionRef.current?.querySelector<HTMLElement>('[data-testid="artifact-proposal-theme-apply"]')
+      : sectionRef.current?.querySelector<HTMLElement>('[data-ask-option="go"]');
+    el?.focus();
+  }, [previewingThis]);
   const detailsId = useId();
   // A card that settles drops the note it showed while it was open.
   useEffect(() => {
@@ -173,7 +196,10 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   };
   const onAnswer = (a: AskAnswer): void => {
     // A7: Preview records nothing (the Apply does); Not now ends this card's preview.
-    if (a.option === 'go' && p.kind === 'theme') startThemePreview();
+    if (a.option === 'go' && p.kind === 'theme') {
+      if (sectionRef.current?.contains(document.activeElement) === true) themeFocus.current = 'apply';
+      startThemePreview();
+    }
     else if (a.option === 'go' || a.option === 'not_now') {
       if (a.option === 'not_now' && previewingThis) useAppearanceStore.getState().endPreview();
       decide(a.option);
@@ -187,9 +213,8 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
       } else setNote(route.note);
     }
   };
-  const applyTheme = (): void => {
-    void useAppearanceStore.getState().applyPreview().then((saved) => { if (saved) onChanged(); });
-  };
+  // A saved Apply re-reads the chat through `savedThis` (whichever surface applied it).
+  const applyTheme = (): void => { void useAppearanceStore.getState().applyPreview(); };
 
   // A3: a real Go takes seconds; while it starts (this tab's request, or a Go recorded moments ago in another tab) the
   // card says so instead of "Interrupted · Go again".
@@ -245,7 +270,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
         <div className="wk-proposal-again" data-testid="artifact-proposal-previewing" role="group" aria-label={`Previewing ${p.theme?.name ?? 'the theme'}`}>
           <AskRecord line={`Previewing ${p.theme?.name ?? 'the theme'} on this tab only`} testId="artifact-proposal-record" />
           <button type="button" data-testid="artifact-proposal-theme-apply" className="wk-btn wk-btn--primary wk-btn--sm" disabled={busy || saving} onClick={applyTheme}>{saving ? 'Saving…' : 'Apply'}</button>
-          <button type="button" data-testid="artifact-proposal-theme-back" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={saving} onClick={() => useAppearanceStore.getState().endPreview()}>Back to mine</button>
+          <button type="button" data-testid="artifact-proposal-theme-back" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={saving} onClick={() => { themeFocus.current = 'go'; useAppearanceStore.getState().endPreview(); }}>Back to mine</button>
           <button type="button" data-testid="artifact-proposal-theme-open" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => goTo(SETTINGS_THEME_PATH)}>Open in Theme</button>
         </div>
       ) : open && answering ? null : open ? (

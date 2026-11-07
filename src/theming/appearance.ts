@@ -227,6 +227,8 @@ export interface ThemePreview {
 export interface ThemeSave {
   state: 'idle' | 'saving' | 'saved' | 'failed';
   name: string | null;
+  /** The proposal this save answers. */
+  pid?: string;
   error?: string;
   /** The patch keys' values before Apply, and what Apply set; Undo restores a key only while it still holds the latter. */
   undo?: { prior: ThemePatch; applied: ThemePatch; until: number };
@@ -285,6 +287,7 @@ interface AppearanceStore {
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 function persistSoon(read: () => StudioAppearance): void {
   if (persistTimer !== null) clearTimeout(persistTimer);
@@ -293,11 +296,19 @@ function persistSoon(read: () => StudioAppearance): void {
     // Fire-and-forget with ONE silent retry (§3.3); the retry re-reads the
     // store so a newer edit is never clobbered by a stale snapshot.
     api.putAppearanceSettings(sanitizeAppearance(read())).catch(() => {
-      setTimeout(() => {
+      if (retryTimer !== null) clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
         api.putAppearanceSettings(sanitizeAppearance(read())).catch(() => { /* stay silent (§3.3) */ });
       }, RETRY_MS);
     });
   }, PERSIST_DEBOUNCE_MS);
+}
+
+/** (A7) Apply's own awaited write supersedes a pending debounced one: its body already holds every saved edit. */
+function cancelPendingPersist(): void {
+  if (persistTimer !== null) { clearTimeout(persistTimer); persistTimer = null; }
+  if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
 }
 
 /** The starting state: the cached appearance when this client has one, applied before the first
@@ -317,6 +328,9 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
       const appearance = sanitizeAppearance(stored);
       applyAppearance(appearance);
       set({ appearance, loaded: true });
+      // A preview started before this read answered stays on screen (it is tab-local, never the stored record).
+      const preview = get().preview;
+      if (preview !== null) applyAppearance(mergedAppearance(appearance, preview.delta), { cache: false });
     } catch {
       // No settings surface, or the daemon is unreachable: what this client last applied stands
       // (the cache, already applied at start) — else the tokens.css defaults.
@@ -345,7 +359,10 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
   save: IDLE,
 
   startPreview: ({ name, seat, chatId, pid, patch }) => {
-    const was = get().preview;
+    // While an Apply is saving, the preview it is saving is frozen.
+    if (get().save.state === 'saving') return;
+    // A refine in the same chat builds on its preview; a proposal from another chat starts a fresh one.
+    const was = get().preview?.chatId === chatId ? get().preview : null;
     const preview: ThemePreview = { name, seat, chatId, pid, delta: { ...(was?.delta ?? {}), ...patch } };
     applyAppearance(mergedAppearance(get().appearance, preview.delta), { cache: false });
     set({ preview, save: IDLE });
@@ -353,14 +370,14 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
 
   adjustPreview: (patch) => {
     const was = get().preview;
-    if (was === null) return;
+    if (was === null || get().save.state === 'saving') return;
     const preview: ThemePreview = { ...was, delta: { ...was.delta, ...patch } };
     applyAppearance(mergedAppearance(get().appearance, preview.delta), { cache: false });
     set({ preview });
   },
 
   endPreview: () => {
-    if (get().preview === null) return;
+    if (get().preview === null || get().save.state === 'saving') return;
     applyAppearance(get().appearance);
     set({ preview: null, save: get().save.state === 'failed' ? IDLE : get().save });
   },
@@ -370,36 +387,40 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
     if (pv === null || get().save.state === 'saving') return false;
     const base = get().appearance;
     const merged = mergedAppearance(base, pv.delta);
+    const keys = THEME_PATCH_KEYS.filter((k) => k in pv.delta);
+    // What Apply sets, as studio stores it (rounded, clamped): the one delta saved, recorded and undone.
+    const applied = pick(merged, keys);
     // §9: measured again on the exact merged result (the saved appearance may have moved since the card was drawn).
     const check = measureTheme(merged);
     if (!check.ok) {
-      set({ save: { state: 'failed', name: pv.name, error: `Not applied: ${check.failing.join('; ')}.` } });
+      set({ save: { state: 'failed', name: pv.name, pid: pv.pid, error: `Not applied: ${check.failing.join('; ')}.` } });
       return false;
     }
-    set({ save: { state: 'saving', name: pv.name } });
+    set({ save: { state: 'saving', name: pv.name, pid: pv.pid } });
+    // Every saved edit is in `merged`: a pending debounced write would only race it.
+    cancelPendingPersist();
     try {
       await api.putAppearanceSettings(merged);
     } catch (err) {
-      set({ save: { state: 'failed', name: pv.name, error: err instanceof Error && err.message !== '' ? err.message : 'Studio’s service did not save it.' } });
+      set({ save: { state: 'failed', name: pv.name, pid: pv.pid, error: err instanceof Error && err.message !== '' ? err.message : 'Studio’s service did not save it.' } });
       return false;
     }
-    // Saved: only now does the stored appearance change, by the delta's keys alone.
-    const keys = THEME_PATCH_KEYS.filter((k) => k in pv.delta);
-    const now = get().appearance;
-    const after = mergedAppearance(now, pv.delta);
-    applyAppearance(after);
+    // Saved: exactly what was measured and acknowledged becomes the stored appearance (by the delta's keys alone).
+    applyAppearance(merged);
     set({
-      appearance: after,
+      appearance: merged,
       preview: null,
-      save: { state: 'saved', name: pv.name, undo: { prior: pick(base, keys), applied: pick(after, keys), until: Date.now() + THEME_UNDO_MS } },
+      save: { state: 'saved', name: pv.name, pid: pv.pid, undo: { prior: pick(base, keys), applied, until: Date.now() + THEME_UNDO_MS } },
     });
-    // A slider moved during the save is persisted with the result.
-    if (JSON.stringify(now) !== JSON.stringify(base)) persistSoon(() => get().appearance);
     try {
-      await api.decideChatProposal(pv.chatId, pv.pid, { decision: 'go', edits: { name: pv.name, patch: pv.delta } });
+      await api.decideChatProposal(pv.chatId, pv.pid, { decision: 'go', edits: { name: pv.name, patch: applied } });
     } catch (err) {
-      const words = err instanceof Error && err.message !== '' ? err.message : 'the chat did not take the answer';
-      if (get().save.state === 'saved') set({ save: { ...get().save, recordError: `Saved, but the chat did not record it: ${words}` } });
+      const code = (err as { body?: { code?: unknown } } | null)?.body?.code;
+      const words = code === 'proposal_superseded'
+        ? 'a newer proposal in that chat replaced this one, so the chat shows it as not applied'
+        : err instanceof Error && err.message !== '' ? err.message : 'the chat did not take the answer';
+      const now = get().save;
+      if (now.state === 'saved' && now.pid === pv.pid) set({ save: { ...now, recordError: `Saved, but the chat did not record it: ${words}.` } });
     }
     return true;
   },
