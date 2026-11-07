@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 330,
-    "occurrences": 4929,
-    "static": 4147,
+    "occurrences": 4933,
+    "static": 4149,
     "dynamic": 177,
     "computed": 53
   },
@@ -3453,6 +3453,12 @@
       ]
     },
     {
+      "testId": "composer-job-line",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-menu",
       "files": [
         "src/components/session/SlashMenu.tsx"
@@ -3534,6 +3540,12 @@
       "testId": "composer-start-more",
       "files": [
         "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-note",
+      "files": [
+        "src/components/session/Composer.tsx"
       ]
     },
     {

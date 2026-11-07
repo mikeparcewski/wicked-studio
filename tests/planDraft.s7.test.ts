@@ -4,7 +4,7 @@ import {
   draftLine, draftTarget, dropToken, gateDraftPlan, menuToken, midRunPlan, slashItems, type DraftRunState,
 } from '../src/board/planDraft.js';
 import { addChip, backspaceChips, chipText, messageWithAbout, quoteLabel, type AboutChip } from '../src/board/aboutChips.js';
-import { composerSendRefusal, detectWorkflow, launchNeedsRepo, launchSubmit, NO_REPO_REASON, readyLead, workflowLaunchState } from '../src/board/launchModel.js';
+import { composerSendRefusal, launchNeedsRepo, launchSubmit, NO_REPO_REASON, readyLead, workflowLaunchState } from '../src/board/launchModel.js';
 import type { RosterSeat } from '../src/api/types.js';
 
 /** S7 (DES-STUDIO-REBUILD-001 §5.7): plan drafts, about-chips and the extracted launch rules — pure. */
@@ -99,11 +99,9 @@ describe('the launch rules, extracted (launchModel)', () => {
     expect(composerSendRefusal(null, false)).toBeNull();
     expect(composerSendRefusal([], false)).toMatch(/No helper is set up/);
   });
-  it('reads the workflow off the words as ChatInput did', () => {
-    expect(detectWorkflow('fix the crash')).toBe('bug');
-    expect(detectWorkflow('add a button')).toBe('feature');
-    expect(detectWorkflow('migrate the tables')).toBe('migration');
-    expect(detectWorkflow('hello')).toBeNull();
+  it('DES-CATALOG-002 §8.6: studio no longer reads a workflow off the words (detectWorkflow is deleted)', async () => {
+    const mod = await import('../src/board/launchModel.js');
+    expect('detectWorkflow' in mod).toBe(false);
   });
   it('S19a: the no-repo preflight and the launch-confirm lead are the SAME rules the composer reads', () => {
     expect(launchNeedsRepo(true, true)).toBe(true);

@@ -1079,6 +1079,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const composerProps = {
     suggestions,
     composerKey: sessionId,
+    // DES-CATALOG-002 §4.6 (Lane E2): a job picked here is posted into this chat while it is live on the daemon; a fresh
+    // chat's page (nothing opened yet) seeds a new chat instead.
+    jobChatId: ref.kind === 'chat' && (conversation === 'live' || awaitingOpenRead) ? ref.chatId : null,
     // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
     footer: scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null,
     text: draft,

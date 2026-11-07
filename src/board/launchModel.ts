@@ -9,19 +9,6 @@ import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictMod
  * Pure: no React, no store.
  */
 
-/** The workflow a free-text intent reads as (`bug`, `feature`, `migration`), or `null`. */
-export function detectWorkflow(text: string): string | null {
-  const lower = text.toLowerCase();
-  if (/\b(bug|fix|broken|error|crash|issue)\b/.test(lower)) return 'bug';
-  if (
-    /\b(feature|implement|add|create)\b/.test(lower) &&
-    !/\b(bug|fix|broken|error|crash|issue)\b/.test(lower)
-  )
-    return 'feature';
-  if (/\b(migrate|upgrade|migration|move)\b/.test(lower)) return 'migration';
-  return null;
-}
-
 /** What the launch form's Send needs, all of it read by the caller. */
 export interface LaunchSubmitInput {
   problem: string;

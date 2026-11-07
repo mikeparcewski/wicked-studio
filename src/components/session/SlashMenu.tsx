@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 import { usePhone } from '../../hooks/usePhone.js';
 import { WORKFLOWS_EMPTY_LINE, WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
-import type { CatalogRow } from '../../board/slashCatalog.js';
+import type { CatalogRow, CommandRow } from '../../board/slashCatalog.js';
 import type { SlashItem } from '../../board/planDraft.js';
 
 /** One `@` row: a project (a destination) or a helper (a subject). */
@@ -25,6 +25,17 @@ function sectionsOf(rows: readonly CatalogRow[]): Array<{ key: string; group: st
   return out;
 }
 
+/** The v2 rows in runs of one group (verbs, Matches, Looks like, Yours), each with its first option index. */
+function commandSections(rows: readonly CommandRow[]): Array<{ key: string; group: string; title: string; first: number; rows: CommandRow[] }> {
+  const out: Array<{ key: string; group: string; title: string; first: number; rows: CommandRow[] }> = [];
+  rows.forEach((r, i) => {
+    const last = out[out.length - 1];
+    if (last !== undefined && last.group === r.group) last.rows.push(r);
+    else out.push({ key: out.some((x) => x.group === r.group) ? `${r.group}-${i}` : r.group, group: r.group, title: r.groupTitle, first: i, rows: [r] });
+  });
+  return out;
+}
+
 /**
  * THE `/` AND `@` MENU (DES-STUDIO-REBUILD-001 §5.5/§5.7; extracted from the composer in S19b) — one
  * listbox for every box that takes the grammar: the Desk's and a session's composer, and the launch
@@ -40,7 +51,12 @@ function sectionsOf(rows: readonly CatalogRow[]): Array<{ key: string; group: st
 export function SlashMenu({
   menuKey, trigger, startCommands, catalogState, anyWorkflows, wf, slash = [], ats = [], active, head, ariaLabel,
   helpersHead = 'Helpers · the message is about the one you pick', atLoading = false, onPickWorkflow, onPickSlash, onPickAt,
+  cmds, onPickCommand,
 }: {
+  /** DES-CATALOG-002 §8.4 (Lane E2): the v2 command list's rows, in place of `wf` (a daemon with the v2 catalog):
+   *  verbs as headings, each card's command, title and line, its variants indented under it, Looks like first. */
+  cmds?: readonly CommandRow[];
+  onPickCommand?: (it: CommandRow) => void;
   /** The box's key (`desk`, a session id, `launch`): the listbox and option ids carry it. */
   menuKey: string;
   trigger: '/' | '@';
@@ -66,7 +82,8 @@ export function SlashMenu({
   onPickSlash?: (it: SlashItem) => void;
   onPickAt?: (it: AtItem) => void;
 }): React.ReactElement {
-  const count = trigger === '/' ? wf.length + slash.length : ats.length;
+  const lead = cmds !== undefined ? cmds.length : wf.length;
+  const count = trigger === '/' ? lead + slash.length : ats.length;
   const headLine = head ?? (trigger === '/' ? (startCommands ? 'Start work, or add a step' : 'Add a step to this session') : 'Name a project or a helper');
   // A phone has no arrow keys to name: the head says only what to pick (S3 UX gate r3).
   const phone = usePhone();
@@ -111,13 +128,46 @@ export function SlashMenu({
     <div ref={menuRef} data-testid="composer-menu" id={`composer-menu-list-${menuKey}`} data-trigger={trigger} role="listbox" aria-label={ariaLabel ?? (trigger === '/' ? 'Add a step' : 'Name a project or a helper')} className="wk-composer-menu">
       <p className="wk-composer-menu-head">{phone ? (trigger === '@' && head === undefined ? 'Tap a project or a helper' : headLine) : `${headLine} · ↑↓ Enter`}</p>
       {/* The catalog's own states, said once while nothing else is listed (an "Add a step" row may still be). */}
-      {startCommands && wf.length === 0 && catalogState === 'loading' && <p data-testid="composer-menu-empty" data-state="loading" className="wk-composer-menu-empty">{WORKFLOWS_LOADING_LINE}</p>}
-      {startCommands && wf.length === 0 && catalogState === 'error' && <p data-testid="composer-menu-empty" data-state="failed" role="alert" className="wk-composer-menu-empty">{WORKFLOWS_FAILED_LINE}</p>}
-      {startCommands && wf.length === 0 && catalogState === 'ready' && !anyWorkflows && <p data-testid="composer-menu-empty" data-state="empty" className="wk-composer-menu-empty">{WORKFLOWS_EMPTY_LINE}</p>}
+      {startCommands && lead === 0 && catalogState === 'loading' && <p data-testid="composer-menu-empty" data-state="loading" className="wk-composer-menu-empty">{WORKFLOWS_LOADING_LINE}</p>}
+      {startCommands && lead === 0 && catalogState === 'error' && <p data-testid="composer-menu-empty" data-state="failed" role="alert" className="wk-composer-menu-empty">{WORKFLOWS_FAILED_LINE}</p>}
+      {startCommands && lead === 0 && catalogState === 'ready' && !anyWorkflows && <p data-testid="composer-menu-empty" data-state="empty" className="wk-composer-menu-empty">{WORKFLOWS_EMPTY_LINE}</p>}
       {count === 0 && trigger === '@' && atLoading && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">Reading your helpers and projects…</p>}
       {count === 0 && !(trigger === '@' && atLoading) && !(startCommands && (catalogState !== 'ready' || !anyWorkflows)) && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">Nothing matches.</p>}
       {/* New job's grouping: "Your top", then each category (an older daemon: one list), each a named group. */}
-      {trigger === '/' && sectionsOf(wf).map(({ key, group, title, first, rows }) => (
+      {trigger === '/' && cmds !== undefined && commandSections(cmds).map(({ key, group, title, first, rows }) => (
+        <div key={key} role="group" aria-labelledby={`composer-menu-group-${menuKey}-${key}`} className="wk-composer-menu-section">
+          <p role="presentation" id={`composer-menu-group-${menuKey}-${key}`} data-testid="composer-menu-group" data-group="start-work" data-category={group} className="wk-composer-menu-group">{title}</p>
+          {rows.map((it, j) => {
+            const i = first + j;
+            const sub = it.kind === 'option' || (it.kind === 'alias' && it.option !== null);
+            return (
+              <button
+                key={it.key}
+                type="button"
+                id={`composer-menu-option-${menuKey}-${i}`}
+                role="option"
+                aria-selected={i === active}
+                data-testid="composer-menu-item"
+                data-group="start-work"
+                data-kind={it.kind}
+                data-card={it.card}
+                data-option={it.option ?? ''}
+                {...(it.command !== null ? { 'data-cmd': it.command } : {})}
+                title={it.line}
+                onMouseDown={(e) => { e.preventDefault(); onPickCommand?.(it); }}
+                className={`wk-composer-menu-item wk-composer-menu-item--cmd${sub ? ' wk-composer-menu-item--sub' : ''}${i === active ? ' wk-composer-menu-item--on' : ''}`}
+              >
+                <span className="wk-composer-cmd wk-composer-cmd--v2">
+                  {it.command !== null && <code className="wk-composer-cmd-name">{it.command}</code>}
+                  <b className="wk-composer-cmd-title">{it.kind === 'option' ? it.title.slice(it.title.indexOf(' · ') + 3) : it.title}</b>
+                </span>
+                <small className="wk-composer-cmd-desc">{it.line}</small>
+              </button>
+            );
+          })}
+        </div>
+      ))}
+      {trigger === '/' && cmds === undefined && sectionsOf(wf).map(({ key, group, title, first, rows }) => (
         <div key={key} role="group" aria-labelledby={`composer-menu-group-${menuKey}-${key}`} className="wk-composer-menu-section">
           <p role="presentation" id={`composer-menu-group-${menuKey}-${key}`} data-testid="composer-menu-group" data-group="start-work" data-category={group} className="wk-composer-menu-group">{title}</p>
           {rows.map((it, j) => {
@@ -150,16 +200,16 @@ export function SlashMenu({
           })}
         </div>
       ))}
-      {trigger === '/' && (wf.length > 0 && slash.length > 0) && (
+      {trigger === '/' && (lead > 0 && slash.length > 0) && (
         <p data-testid="composer-menu-group" data-group="add-step" className="wk-composer-menu-group">Add a step</p>
       )}
       {trigger === '/' && slash.map((it, i) => (
         <button
           key={it.command.cmd}
           type="button"
-          id={`composer-menu-option-${menuKey}-${wf.length + i}`}
+          id={`composer-menu-option-${menuKey}-${lead + i}`}
           role="option"
-          aria-selected={wf.length + i === active}
+          aria-selected={lead + i === active}
           aria-disabled={it.refused !== null}
           data-testid="composer-menu-item"
           data-cmd={it.command.cmd}
@@ -167,7 +217,7 @@ export function SlashMenu({
           data-refused={it.refused !== null ? 'true' : 'false'}
           title={it.refused ?? it.command.line}
           onMouseDown={(e) => { e.preventDefault(); onPickSlash?.(it); }}
-          className={`wk-composer-menu-item${wf.length + i === active ? ' wk-composer-menu-item--on' : ''}${it.refused !== null ? ' wk-composer-menu-item--off' : ''}`}
+          className={`wk-composer-menu-item${lead + i === active ? ' wk-composer-menu-item--on' : ''}${it.refused !== null ? ' wk-composer-menu-item--off' : ''}`}
         >
           <span className="wk-composer-cmd"><span className="wk-composer-cmd-pfx">/</span><b>{it.command.cmd}</b></span>
           <small className="wk-composer-cmd-desc">{it.refused ?? it.command.line}</small>
