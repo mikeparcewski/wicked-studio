@@ -81,10 +81,11 @@
   .notes textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
   body[data-size="pane"] .notes textarea { min-height: 40px; }
   /* A phone (plugins-complete G14): this frame narrower than 600 px stacks the filmstrip above the slide as one
-     scrolling row of small thumbnails, so the slide takes the frame's full width. */
+     scrolling row of small thumbnails, so the slide takes the frame's full width. The strip rules below touch only the
+     strip, which is [hidden] wherever it does not show. */
   @media (max-width: 599px) {
-    .deck { grid-template-columns: minmax(0, 1fr); }
-    body:not([data-size="inline"]):not([data-present="true"]):not([data-surface="options"]) .deck { grid-template-rows: auto minmax(0, 1fr); }
+    /* Only where the filmstrip shows (pane and full): inline, present and the options surface hide it (plugin.ts). */
+    .deck:has(> .strip:not([hidden])) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
     .strip { overflow-x: auto; overflow-y: hidden; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--border); }
     .strip ol { flex-direction: row; }
     .thumb { grid-template-columns: 80px; width: auto; flex: 0 0 auto; }

@@ -135,4 +135,4 @@
 
 /* A plugin's own notes (checks.contribute, plugins-complete G25): folded under the card, labelled advisory. */
 .wk-pcard-advisory summary { cursor: pointer; }
-.wk-pcard-advisory ul { margin: var(--space-1) 0 0; padding-left: 18px; }
+.wk-pcard-advisory ul { max-height: 160px; overflow: auto; margin: var(--space-1) 0 0; padding-left: 18px; }

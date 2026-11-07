@@ -11,9 +11,12 @@ import { useHostChrome } from '../../editors/hostApi.js';
  * from the same declared actions, so opening full screen never takes a verb away. Below 600 px the header wraps
  * (tag, title and Esc on the first row) and the chat drawer lies over the artifact (G14).
  */
-export function FullShell({ open, tag, title, phase, modes, mode, onMode, gateActions, actions, chat, onExit, children }: FullShellProps & {
+export function FullShell({ open, tag, title, phase, modes, mode, onMode, gateActions, actions, chat, onExit, onEscape, children }: FullShellProps & {
   /** The card's actions (its declared verbs and Options), in the header. */
   actions?: ReactNode;
+  /** What the Esc KEY does (default: leave, as the Esc button does). The card closes its options over the full screen
+   *  first (G24). */
+  onEscape?: () => void;
 }): React.ReactElement {
   const chatOpen = useHostChrome((s) => s.chatOpen);
   const setChatOpen = useHostChrome((s) => s.setChatOpen);
@@ -42,11 +45,11 @@ export function FullShell({ open, tag, title, phase, modes, mode, onMode, gateAc
       const t = e.target as HTMLElement | null;
       if (t !== null && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       e.preventDefault(); // this Esc is spent: nothing around the shell (a Made list's card) acts on it too
-      onExit();
+      (onEscape ?? onExit)();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onExit]);
+  }, [open, onExit, onEscape]);
 
   useEffect(() => { if (open) exitBtn.current?.focus(); }, [open]);
 
@@ -90,4 +93,9 @@ export function FullShell({ open, tag, title, phase, modes, mode, onMode, gateAc
       </div>
     </div>
   );
+}
+
+/** The focus back on the open full screen's Options (after the options over it close, G24). */
+export function focusFullOptions(): void {
+  document.querySelector<HTMLButtonElement>('[data-testid="full-shell-actions"] [data-testid="plugin-card-options"]')?.focus();
 }

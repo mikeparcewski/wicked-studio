@@ -6,8 +6,8 @@ import type { PermissionId } from '../src/editors/protocol.js';
 
 /**
  * plugins-complete G25: the host delivers every function it grants an installed editor.
- *  - `export.request` reaches the data plane's own export (`exportFile`) when the adapter has no `exportAs`, and only
- *    under a click in the frame;
+ *  - `export.request` for a format the host's own export makes becomes a host offer (the operator's press makes the
+ *    file); an adapter's own `exportAs` still needs a click in the frame;
  *  - `checks.contribute` notes reach the host's UI as the plugin's advisory notes, not only their count;
  *  - `sources.read` is never announced for an adapter that cannot serve `artifact.sources`.
  */
@@ -27,7 +27,7 @@ function makeHost(adapter: FakeDocAdapter, grants: PermissionId[], clicked: () =
   const ui: HostUi = {
     chips: vi.fn(), draft: vi.fn(), typed: vi.fn(), key: vi.fn(), morph: vi.fn(), status: vi.fn(), notes: vi.fn(),
     thread: vi.fn(), fullscreen: vi.fn(async () => true), torn: vi.fn(), log: () => undefined,
-    advisory: vi.fn(), exportLine: vi.fn(),
+    advisory: vi.fn(), exportOffer: vi.fn(),
   };
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -51,33 +51,45 @@ function makeHost(adapter: FakeDocAdapter, grants: PermissionId[], clicked: () =
 
 afterEach(() => { document.body.innerHTML = ''; });
 
-describe('G25: export.request reaches the host’s own export', () => {
-  it('a format the adapter offers is made for the head, with the host’s working line and Download outcome', async () => {
+describe('G25: export.request reaches the host’s own export, as an offer the operator presses', () => {
+  it('a format the adapter makes becomes a host offer; no file is made on the plugin’s say-so', async () => {
+    const adapter = new ExportingAdapter();
+    const { host, ui, port, replies } = makeHost(adapter, ['artifact.read', 'artifact.export'], () => false);
+    port.postMessage(env('export.request', { format: 'pdf' }, 'e1'));
+    await vi.waitFor(() => expect(replies.find((r) => r.re === 'e1')).toMatchObject({ ok: true, payload: { offered: true } }));
+    expect(ui.exportOffer).toHaveBeenCalledWith({ format: 'pdf', label: 'PDF' });
+    expect(adapter.calls).toStrictEqual([]);
+    host.teardown('done');
+  });
+
+  it('a format the adapter does not make is unsupported, and nothing is offered', async () => {
     const adapter = new ExportingAdapter();
     const { host, ui, port, replies } = makeHost(adapter, ['artifact.read', 'artifact.export']);
-    port.postMessage(env('export.request', { format: 'pdf' }, 'e1'));
-    await vi.waitFor(() => expect(replies.find((r) => r.re === 'e1')).toMatchObject({ ok: true, payload: { started: true, version: 1, file: 'page-v1.pdf' } }));
-    expect(adapter.calls).toStrictEqual([{ format: 'pdf', version: 1 }]);
-    expect(ui.exportLine).toHaveBeenNthCalledWith(1, { working: 'Making the PDF of version 1…' });
-    expect(ui.exportLine).toHaveBeenNthCalledWith(2, { out: { ok: true, text: 'The PDF is ready.', href: '/x/page-v1.pdf', file: 'page-v1.pdf' } });
-    host.teardown('done');
-  });
-
-  it('a format the adapter does not offer is unsupported, and nothing is made', async () => {
-    const adapter = new ExportingAdapter();
-    const { host, port, replies } = makeHost(adapter, ['artifact.read', 'artifact.export']);
     port.postMessage(env('export.request', { format: 'pptx' }, 'e2'));
     await vi.waitFor(() => expect(replies.find((r) => r.re === 'e2')).toMatchObject({ ok: false, error: { code: 'unsupported' } }));
-    expect(adapter.calls).toStrictEqual([]);
+    expect(ui.exportOffer).not.toHaveBeenCalled();
     host.teardown('done');
   });
 
-  it('without a click in the frame, no file is made', async () => {
+  it('a surface that draws no offer (an options instance) answers unsupported', async () => {
     const adapter = new ExportingAdapter();
-    const { host, port, replies } = makeHost(adapter, ['artifact.read', 'artifact.export'], () => false);
+    const { host, ui, port, replies } = makeHost(adapter, ['artifact.read', 'artifact.export']);
+    delete ui.exportOffer;
     port.postMessage(env('export.request', { format: 'pdf' }, 'e3'));
-    await vi.waitFor(() => expect(replies.find((r) => r.re === 'e3')).toMatchObject({ ok: false, error: { code: 'refused' } }));
-    expect(adapter.calls).toStrictEqual([]);
+    await vi.waitFor(() => expect(replies.find((r) => r.re === 'e3')).toMatchObject({ ok: false, error: { code: 'unsupported' } }));
+    host.teardown('done');
+  });
+
+  it('an adapter’s own exportAs (a cut downloads in the browser) still needs a click in the frame', async () => {
+    class CutAdapter extends FakeDocAdapter {
+      made = 0;
+      async exportAs() { this.made += 1; return { started: true as const }; }
+    }
+    const adapter = new CutAdapter();
+    const { host, port, replies } = makeHost(adapter, ['artifact.read', 'artifact.export'], () => false);
+    port.postMessage(env('export.request', { format: 'mp4' }, 'e4'));
+    await vi.waitFor(() => expect(replies.find((r) => r.re === 'e4')).toMatchObject({ ok: false, error: { code: 'refused' } }));
+    expect(adapter.made).toBe(0);
     host.teardown('done');
   });
 });

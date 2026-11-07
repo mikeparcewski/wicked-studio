@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getDocChecks, type ChecksRead } from '../../api/docChecks.js';
 import { postEvent } from '../../api/interactive.js';
 import { checkRows, checksSummary, reviewLanded, reviewRequestOf } from '../../board/checksPanel.js';
@@ -7,7 +7,8 @@ import { checkRows, checksSummary, reviewLanded, reviewRequestOf } from '../../b
 export const REVIEW_POLL_MS = 10_000;
 export const REVIEW_POLL_FOR_MS = 15 * 60_000;
 
-type Asked = { version: number; state: 'sending' | 'asked' | 'landed' | 'late' | 'failed'; why?: string; at: number };
+/** One ask, by generation: an answer for an older ask (another version, another press) never changes a newer one. */
+type Asked = { gen: number; version: number; state: 'sending' | 'asked' | 'landed' | 'late' | 'failed'; already?: boolean; why?: string; at: number };
 
 /**
  * EP-P3 — the checks panel the HOST draws under a page at pane and full size (DES-EDITOR-PLUGINS-001
@@ -16,8 +17,9 @@ type Asked = { version: number; state: 'sending' | 'asked' | 'landed' | 'late' |
  * An older daemon without the read draws no panel; a read that failed says why.
  *
  * "Review this version" (plugins-complete G21) asks for the four reviews again after a hand edit: it posts
- * `wicked.interactive.review.requested` for the version on screen, then re-reads until every reviewer has a verdict on
- * that version (or 15 minutes pass).
+ * `wicked.interactive.review.requested` for the version on screen, then re-reads (one read at a time, the next 10 s
+ * after the last settled) until every reviewer has a verdict on that version, or 15 minutes pass. Another document or
+ * version on screen drops the ask, and any answer still coming for it.
  */
 export function ChecksPanel({ projectId, docId, head, pointAt }: {
   projectId: string;
@@ -37,29 +39,32 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
     return () => { cancelled = true; };
   }, [projectId, docId, head, asks]);
 
-  // A review asked for this version: re-read until its verdicts land. Another version on screen drops the ask.
-  const waiting = asked !== null && asked.version === head && asked.state === 'asked';
+  const gen = useRef(0);
+  useEffect(() => { gen.current += 1; setAsked(null); }, [projectId, docId, head]);
+  // While an ask runs: when a read settles, it either shows every verdict on the version (landed), or the next read
+  // starts 10 s later. A late ask still lands on a later read ("Read again").
+  const pending = asked !== null && (asked.state === 'asked' || asked.state === 'late');
   useEffect(() => {
-    if (!waiting) return undefined;
-    const t = setInterval(() => {
-      if (Date.now() - asked.at > REVIEW_POLL_FOR_MS) { setAsked((a) => (a === null ? a : { ...a, state: 'late' })); return; }
-      setAsks((n) => n + 1);
-    }, REVIEW_POLL_MS);
-    return () => clearInterval(t);
-  }, [waiting, asked]);
-  useEffect(() => {
-    if (waiting && read?.state === 'ok' && reviewLanded(read.checks, head)) setAsked((a) => (a === null ? a : { ...a, state: 'landed' }));
-  }, [waiting, read, head]);
+    if (!pending || asked === null || read === null) return undefined;
+    if (read.state === 'ok' && reviewLanded(read.checks, asked.version)) { setAsked((a) => (a?.gen === asked.gen ? { ...a, state: 'landed' } : a)); return undefined; }
+    if (asked.state === 'late') return undefined;
+    if (Date.now() - asked.at > REVIEW_POLL_FOR_MS) { setAsked((a) => (a?.gen === asked.gen ? { ...a, state: 'late' } : a)); return undefined; }
+    const t = setTimeout(() => setAsks((n) => n + 1), REVIEW_POLL_MS);
+    return () => clearTimeout(t);
+  }, [pending, asked, read]);
   const askReview = useCallback(async () => {
+    const my = ++gen.current;
     const version = head;
-    setAsked({ version, state: 'sending', at: Date.now() });
+    // Every reviewer already has a verdict on this version: crew answers a repeat ask from that record.
+    const already = read?.state === 'ok' && reviewLanded(read.checks, version);
+    setAsked({ gen: my, version, state: 'sending', at: Date.now() });
     try {
       await postEvent(projectId, reviewRequestOf(docId, version));
-      setAsked((a) => (a?.version === version ? { version, state: 'asked', at: Date.now() } : a));
+      if (gen.current === my) setAsked({ gen: my, version, state: already ? 'landed' : 'asked', already, at: Date.now() });
     } catch (e) {
-      setAsked((a) => (a?.version === version ? { version, state: 'failed', why: e instanceof Error ? e.message : String(e), at: Date.now() } : a));
+      if (gen.current === my) setAsked({ gen: my, version, state: 'failed', why: e instanceof Error ? e.message : String(e), at: Date.now() });
     }
-  }, [projectId, docId, head]);
+  }, [projectId, docId, head, read]);
 
   const point = useCallback(async (wid: string, where: string) => {
     const ok = await pointAt(wid);
@@ -84,10 +89,10 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
         <button type="button" data-testid="artifact-checks-review" disabled={mine?.state === 'sending' || mine?.state === 'asked'}
           onClick={() => void askReview()} className="wk-host-btn">Review this version</button>
         {mine !== null && (
-          <span data-testid="artifact-checks-review-state" data-state={mine.state} role="status" className={mine.state === 'failed' ? ' wk-artifact-line--bad' : undefined}>
+          <span data-testid="artifact-checks-review-state" data-state={mine.state} role="status" className={mine.state === 'failed' ? 'wk-artifact-line--bad' : undefined}>
             {' '}{mine.state === 'sending' ? 'Asking…'
               : mine.state === 'asked' ? `Asked for version ${mine.version}: four reviewers read it in a review run. Their verdicts show here when it finishes.`
-              : mine.state === 'landed' ? `Version ${mine.version} is reviewed.`
+              : mine.state === 'landed' ? (mine.already === true ? `Version ${mine.version} already has its four reviews.` : `Version ${mine.version} is reviewed.`)
               : mine.state === 'late' ? `No verdicts on version ${mine.version} after 15 minutes. Read again to look later.`
               : `The review was not asked for: ${mine.why ?? 'no answer'}`}
           </span>

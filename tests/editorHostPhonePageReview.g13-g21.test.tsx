@@ -43,11 +43,17 @@ describe('G14: full screen on a phone', () => {
   it('the chat drawer lies over the artifact instead of a 360 px column', () => {
     expect(phone).toMatch(/\.wk-full-drawer \{[^}]*position: absolute; inset: 0/u);
   });
-  it('the deck stacks its filmstrip above the slide in a narrow frame', () => {
+  it('the deck stacks its filmstrip above the slide in a narrow frame, only where the filmstrip shows', () => {
     const deck = read('../src/plugins/wicked-deck/template.html');
-    const narrow = deck.slice(deck.indexOf('@media (max-width: 599px)'));
-    expect(narrow).toMatch(/grid-template-rows: auto minmax\(0, 1fr\)/u);
-    expect(narrow).toMatch(/\.strip ol \{ flex-direction: row; \}/u);
+    const narrow = deck.slice(deck.indexOf('@media (max-width: 599px)'), deck.indexOf('@media (prefers-reduced-motion'));
+    // The one rule that changes the deck's layout is keyed on a visible strip (inline, present and options hide it).
+    const layout = narrow.split('\n').filter((l) => /^\s*\.deck/u.test(l));
+    expect(layout).toHaveLength(1);
+    expect(layout[0]).toMatch(/^\s*\.deck:has\(> \.strip:not\(\[hidden\]\)\) \{ grid-template-columns: minmax\(0, 1fr\); grid-template-rows: auto minmax\(0, 1fr\); \}/u);
+    // Every other phone rule styles only the strip and its thumbnails.
+    for (const l of narrow.split('\n').filter((x) => /\{/u.test(x) && !/@media|^\s*\.deck/u.test(x))) expect(l.trim()).toMatch(/^\.(strip|thumb)\b/u);
+    // ... and the strip is hidden by the plugin where it must not show.
+    expect(read('../src/plugins/wicked-deck/plugin.ts')).toContain("strip.hidden = size === 'inline' || present || options;");
   });
 });
 
@@ -86,6 +92,60 @@ describe('G21: Review this version', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(REVIEW_POLL_MS + 10); });
     await waitFor(() => expect(screen.getByTestId('artifact-checks-review-state').dataset['state']).toBe('landed'));
     expect(screen.getByTestId('artifact-checks-review-state').textContent).toContain('Version 3 is reviewed.');
+  });
+
+  it('one read at a time: the next starts 10 s after the last settles, however long a read takes', async () => {
+    let inFlight = 0; let most = 0; let gets = 0;
+    const release: (() => void)[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Response(JSON.stringify({ ok: true, event_id: 'e', correlation_id: 'c' }), { status: 200 });
+      gets += 1; inFlight += 1; most = Math.max(most, inFlight);
+      if (gets > 1) await new Promise<void>((r) => release.push(r));
+      inFlight -= 1;
+      return new Response(JSON.stringify({ document_id: 'launch', version: 3, checks: [] }), { status: 200 });
+    }));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(<ChecksPanel projectId="notes" docId="launch" head={3} pointAt={async () => true} />);
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-review')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('artifact-checks-review'));
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-review-state').dataset['state']).toBe('asked'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(REVIEW_POLL_MS + 10); });
+    expect(gets).toBe(2);
+    // The second read hangs for a minute: no third starts meanwhile.
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(gets).toBe(2);
+    expect(most).toBe(1);
+    await act(async () => { release.shift()!(); await vi.advanceTimersByTimeAsync(50); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(REVIEW_POLL_MS + 10); });
+    await waitFor(() => expect(gets).toBe(3));
+  });
+
+  it('an answer for an ask on another version changes nothing on the version now shown', async () => {
+    let answer: (() => void) | null = null;
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+      if (init?.method === 'POST') { await new Promise<void>((r) => { answer = r; }); return new Response(JSON.stringify({ ok: true, event_id: 'e', correlation_id: 'c' }), { status: 200 }); }
+      return new Response(JSON.stringify({ document_id: 'launch', version: 3, checks: [] }), { status: 200 });
+    }));
+    const view = render(<ChecksPanel projectId="notes" docId="launch" head={3} pointAt={async () => true} />);
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-review')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('artifact-checks-review'));
+    await waitFor(() => expect(answer).not.toBeNull());
+    view.rerender(<ChecksPanel projectId="notes" docId="launch" head={4} pointAt={async () => true} />);
+    await waitFor(() => expect(screen.queryByTestId('artifact-checks-review-state')).toBeNull());
+    await act(async () => { answer!(); await Promise.resolve(); });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('artifact-checks-review-state')).toBeNull();
+    expect((screen.getByTestId('artifact-checks-review') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('a version that already has its four reviews says so', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => (init?.method === 'POST'
+      ? new Response(JSON.stringify({ ok: true, event_id: 'e', correlation_id: 'c' }), { status: 200 })
+      : new Response(JSON.stringify({ document_id: 'launch', version: 3, checks: (['match', 'a11y', 'copy', 'qe'] as const).map((r) => check(r, 3)) }), { status: 200 }))));
+    render(<ChecksPanel projectId="notes" docId="launch" head={3} pointAt={async () => true} />);
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-review')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('artifact-checks-review'));
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-review-state').textContent).toContain('already has its four reviews'));
   });
 
   it('a refused ask says why, and the button comes back', async () => {

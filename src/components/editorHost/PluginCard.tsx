@@ -5,7 +5,7 @@ import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, t
 import { adapterWritesSettled, EditorHost, type HostLogEntry, type HostUi } from '../../editors/host.js';
 import {
   LIVE_FRAME_CAP, PANEL_RIBBON_BELOW_PX, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, replayGroupSelection, touchLive, useGroupShown, useHostChrome, useHostPanel, useLiveCards,
-  type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
+  type ArtifactBinding, type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import type { PermissionId } from '../../editors/protocol.js';
@@ -22,7 +22,7 @@ import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge
 import { askAbout } from '../../board/askAbout.js';
 import { artifactRefOf } from '../../api/chatArtifacts-wire.js';
 import { noteShown, noteWritten, placementEntry, registerInView } from '../../store/artifactInView.js';
-import { FullShell } from './FullShell.js';
+import { FullShell, focusFullOptions } from './FullShell.js';
 import { useRunHost } from './RunHostContext.js';
 
 /**
@@ -165,6 +165,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const [exportOpen, setExportOpen] = useState(false);
   /** The plugin asked to grow: a host button offers it; nothing grows until the operator presses it. */
   const [offer, setOffer] = useState<'full' | 'options' | null>(null);
+  /** The plugin asked for an export the host makes: offered the same way (plugins-complete G25). */
+  const [exportOffer, setExportOffer] = useState<{ format: string; label: string } | null>(null);
+  /** An Ask pressed in full screen, run once the screen it needs (the drawer, or the card) has rendered (G24). */
+  const [pendingAsk, setPendingAsk] = useState<ArtifactBinding | null>(null);
   const [, bump] = useState(0);
   const loaded = useRef<{ src: string; grants: readonly PermissionId[] } | null>(null);
   const live = useRef(true);
@@ -302,13 +306,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           status: (l) => { if (live.current) setLine({ kind: 'status', text: l }); },
           notes: () => undefined,
           advisory: (notes) => setAdvisoryNotes(group, notes),
-          // A plugin's export.request, carried out by the host's own export: the same line and Download as the menu.
-          exportLine: (l) => {
-            if (!live.current) return;
-            if ('working' in l) { setLine({ kind: 'working', text: l.working }); return; }
-            setLine({ kind: 'export', out: l.out });
-            if (l.out.ok) setDiskReads((n) => n + 1);
-          },
+          // A plugin's export.request becomes a host offer; the operator's press makes the file (G25).
+          exportOffer: (o) => { if (live.current) setExportOffer(o); },
           // `written` owns the structured line and the group announcement.
           thread: () => undefined,
           written,
@@ -437,6 +436,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   // The address says "pane" exactly while this card's Options group is open (operator: it said pane with nothing open):
   // the Options button pushes it, closing the group (×) takes it back.
   const pressOptions = (): void => {
+    // Over full screen the options are the host's overlay, which the browser's own fullscreen of this card would cover
+    // ("Whole display"): that gives way first, and the app's full screen stays (G24).
+    if (fullRef.current && document.fullscreenElement) void document.exitFullscreen?.().catch(() => undefined);
     openOptions();
     if (address !== null && address.routeKey !== key && !fullRef.current) address.write(key, 'inline', 'pane');
   };
@@ -561,13 +563,19 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   /** Ask about this from the card or from full screen (plugins-complete G24). Full screen covers the page's composer
    *  and the chat window, so: with the run's chat drawer, the drawer opens and its composer (the same key) takes the
    *  chip; with none (a document Made opened on its own), full screen gives way to the card and the chat opens beside
-   *  it. Either way the ask runs after the screen has changed, so the composer it finds is the one on screen. */
+   *  it. Either way the ask runs in an effect once that render has committed, for the binding pressed; a card that
+   *  goes away first asks nothing. */
   const askFrom = (inFull: boolean): void => {
     if (!inFull) { void askAbout(binding); return; }
     if (run?.renderChat !== undefined) useHostChrome.getState().setChatOpen(true);
     else leaveFull();
-    setTimeout(() => { void askAbout(bindingRef.current); }, 0);
+    setPendingAsk(binding);
   };
+  useEffect(() => {
+    if (pendingAsk === null) return;
+    setPendingAsk(null);
+    void askAbout(pendingAsk);
+  }, [pendingAsk]);
 
   const hostTabs = adapter === null ? [] : hostTabsFor(adapter);
   const hasOptions = (decl?.options?.tabs.length ?? 0) > 0 || hostTabs.length > 0;
@@ -578,6 +586,13 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const actions = decl?.card.actions ?? [];
   const gate = run?.gateActions?.(binding) ?? null;
   const onExit = leaveFull;
+  /** Esc in full screen with this card's options open over it closes those options first, and the focus goes back to
+   *  the full screen's Options (G24). */
+  const onEscape = useCallback((): void => {
+    if (useHostPanel.getState().group?.key !== group) { leaveFull(); return; }
+    useHostPanel.getState().closeGroup();
+    queueMicrotask(focusFullOptions);
+  }, [group, leaveFull]);
 
   /** The card's declared actions, drawn the same way in its footer and in the full-screen header (G24). */
   const actionButtons = (
@@ -647,6 +662,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         actions={full ? <>{actionButtons}{optionsButton}</> : null}
         chat={run?.renderChat?.()}
         onExit={onExit}
+        onEscape={onEscape}
       >
         <div className="wk-pcard-frame" data-testid="plugin-card-frame" data-interactive={interactive ? 'true' : 'false'} style={frameStyle}>
           {/* Under the read-only lens the live editor is inert: no Tab or typing reaches it (codex h2-r19 P2). */}
@@ -703,8 +719,16 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           <button type="button" className="wk-since-toggle" onClick={() => setOffer(null)}>Not now</button>
         </p>
       )}
+      {exportOffer !== null && exportGranted && (
+        <p data-testid="plugin-card-export-offer" className="wk-artifact-line">
+          {editor.title} asks to export this as {exportOffer.label}.{' '}
+          <button type="button" data-testid="plugin-card-export-offer-accept" className="wk-host-btn wk-host-btn--primary" disabled={head < 1}
+            onClick={() => { const f = exportOffer.format; setExportOffer(null); void exportAs(f); }}>Make the {exportOffer.label}</button>{' '}
+          <button type="button" className="wk-since-toggle" onClick={() => setExportOffer(null)}>Not now</button>
+        </p>
+      )}
       {torn === null && note !== null && <p data-testid="plugin-card-note" className="wk-host-note">{note}</p>}
-      {advisory !== undefined && advisory.length > 0 && (
+      {!full && advisory !== undefined && advisory.length > 0 && (
         // plugins-complete G25: the plugin's own notes, said to be its own and advisory — not a review, not a check.
         <details data-testid="plugin-card-advisory" className="wk-host-note wk-pcard-advisory">
           <summary>{editor.title}’s own notes ({advisory.length}) · advisory, not a review</summary>
