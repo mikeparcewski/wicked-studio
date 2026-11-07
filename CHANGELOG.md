@@ -53,6 +53,9 @@ npm publish dates. Every version listed here exists on
   typed whole, or an old `/workflow-…` command, does the same; `/workflow-test-analysis` reaches its own job. Only jobs
   that can start here are listed. New job, ⌘K New job and the named openers (Create an editor plugin, Learn, New demo
   video, Draft epics, Write tests) open in a chat instead of the New job window. An older daemon keeps today's flow.
+- **A job that needs a project asks which, with chips (F39).** "Generate it" on a repository's Requirements files its
+  Analyze a codebase · Domain job in the project that holds the repository. When none (or several) do, the job's
+  "Project?" offers the projects as chips; a pick puts the same job in a new chat in that project, with Start.
 
 ### Removed
 - Studio's own guess of a workflow from a launch's words (`detectWorkflow`): reading what words ask for is crew's.

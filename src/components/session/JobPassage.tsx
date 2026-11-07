@@ -37,6 +37,7 @@ import { LiveActivity } from './LiveActivity.js';
 import { RunQuestions } from './ThreadQuestions.js';
 import { OrphanedRow } from './RunConversation.js';
 import { RunArtifacts } from './RunArtifacts.js';
+import { asksForProject, JobProjectChoices } from './JobProjectChoices.js';
 import { PowerPauseCard } from './PowerMode.js';
 import { usePower } from '../../hooks/usePower.js';
 
@@ -489,6 +490,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         <div data-testid="job-passage-question" className="wk-pass-ask">
           <span className="wk-pass-ask-who">{v.question.kind === 'lost_check' ? 'wicked asks · only your press changes the checks' : 'wicked asks'}</span>
           <p>{v.question.text}</p>
+          {/* F39: crew asks for the project with nothing to press; the passage offers the projects (a new chat there). */}
+          {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
         </div>
       )}
       {/* Power mode for new jobs is on (operator ruling 2026-11-06): the Start's choice, shown before Start; where crew

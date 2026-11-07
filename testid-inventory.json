@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 330,
-    "occurrences": 4933,
-    "static": 4149,
+    "files": 331,
+    "occurrences": 4938,
+    "static": 4152,
     "dynamic": 177,
     "computed": 53
   },
@@ -8255,6 +8255,24 @@
       "testId": "job-passage-press-note",
       "files": [
         "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-project",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-more",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
       ]
     },
     {

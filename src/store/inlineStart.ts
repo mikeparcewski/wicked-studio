@@ -5,6 +5,7 @@ import { UNFILED_MOUNT } from '../api/interactive.js';
 import type { AboutChip } from '../board/aboutChips.js';
 import { cardForWorkflow, refusalOf } from '../board/slashCatalog.js';
 import { catalogV2Now } from './catalogV2.js';
+import { projectsForRepo } from './repoProjects.js';
 import type { CatalogEntry } from '../board/workflowCatalog.js';
 import { createByChat } from '../editors/apps/appTurns.js';
 import { stashDraft } from '../components/apps/AppChat.js';
@@ -216,7 +217,16 @@ export async function startInChat(s: StartInChat, stillOpen: () => boolean = () 
   // catalog is read or the seed is out, makes every later step (post, refusal, fallback, navigation) do nothing (codex r3).
   const here = placeToken();
   const stillWanted = (): boolean => stillOpen() && placeToken() === here;
-  const projectId = s.projectId ?? null;
+  // An opener that names only the repository (the Requirements page's "Generate it") files the job in the project that
+  // holds it, when exactly one does (F39); with none or several, the job passage asks which, with chips.
+  let projectId = s.projectId ?? null;
+  if (projectId === null && s.repoRef != null && s.repoRef !== '') {
+    try {
+      const { holding } = await projectsForRepo(s.repoRef);
+      if (holding.length === 1) projectId = holding[0]!.id;
+    } catch { /* the projects could not be read: the passage asks */ }
+    if (!stillWanted()) return true;
+  }
   const load = await catalogV2Now(projectId === UNFILED_MOUNT ? null : projectId);
   if (!stillWanted()) return true;
   const words = s.words ?? '';

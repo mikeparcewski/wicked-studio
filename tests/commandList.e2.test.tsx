@@ -56,6 +56,9 @@ let proposalGate: Promise<void> = Promise.resolve();
 let seedGate: Promise<void> = Promise.resolve();
 /** Extra fields on a seed's answer. */
 let seedExtra: Record<string, unknown> = {};
+/** The projects, and each one's members (F39: a repository's project). */
+let projectList: Array<{ id: string; name: string }> = [];
+let projectMembers: Record<string, Array<{ member_kind: string; member_ref: string }>> = {};
 const nonGets = (): Array<{ method: string; path: string; body: Record<string, unknown> | null }> => calls.filter((c) => c.method !== 'GET');
 
 function stubWire(): void {
@@ -78,6 +81,9 @@ function stubWire(): void {
       return seedGate.then(() => st >= 400 ? json({ code: 'boom', error: 'the daemon said no' }, st) : json({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } }, ...seedExtra }, 201));
     }
     if (method !== 'GET') return json({ ok: true });
+    const pm = /^\/projects\/([^/]+)\/members$/.exec(path);
+    if (pm !== null) return json({ members: projectMembers[pm[1]!] ?? [] });
+    if (path === '/projects') return json({ projects: projectList });
     if (path === '/health') return healthGate.then(() => json({ status: 'ok', capabilities: healthCaps }));
     if (path === '/workflows/catalog') return u.searchParams.get('v') === '2' ? v2Gate.then(() => json(v2)) : json(rigV1);
     return json(path === '/workflows' ? { workflows: WF } : path === '/roster' ? { roster: [SEAT] } : path === '/repos' ? { repos: [REPO] }
@@ -130,6 +136,8 @@ beforeEach(() => {
   proposalGate = Promise.resolve();
   seedGate = Promise.resolve();
   seedExtra = {};
+  projectList = [];
+  projectMembers = {};
   detect = () => new Promise(() => {});
   stubWire();
   capable();
@@ -800,3 +808,27 @@ describe('review folds (r3)', () => {
     expect(commandList(sub, '/rules and memories from our past runs', { ...guess, option: null }).open && (commandList(sub, '/rules and memories from our past runs', { ...guess, option: null }) as { rows: Array<{ kind: string }> }).rows.some((r) => r.kind === 'looks')).toBe(false);
   });
 });
+
+describe('F39: the Requirements page’s "Generate it" files its job in the repository’s project', () => {
+  const generate = (): void => act(() => openLaunchWizard({
+    workflowId: 'domain-extraction', intent: 'Map the domain of svc', contextRepo: 'repo-1', composerKey: 'repo:repo-1',
+  }));
+  it('opens Analyze a codebase · Domain (its old command), the design’s card for mapping a repository’s domain', () => {
+    expect(cardForWorkflow(V2, 'domain-extraction')).toMatchObject({ wireCard: '/workflow-domain-extraction', card: { id: 'analyze-codebase' }, option: 'domain' });
+  });
+  it('a repository in one project: the seed names that project', async () => {
+    projectList = [{ id: 'default', name: 'Unfiled' }, { id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }];
+    projectMembers = { p1: [{ member_kind: 'crew.repo', member_ref: 'repo-1' }] };
+    generate();
+    await waitFor(() => expect(nonGets().find((c) => c.path === '/chats')).toBeDefined());
+    expect(nonGets().find((c) => c.path === '/chats')!.body).toMatchObject({ seed: { card: '/workflow-domain-extraction', option: 'domain' }, projectId: 'p1', repoRefs: ['repo-1'] });
+  });
+  it('a repository in no project (or in several): the seed names none, and the passage asks with chips', async () => {
+    projectList = [{ id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }];
+    projectMembers = { p1: [{ member_kind: 'crew.repo', member_ref: 'repo-1' }], p2: [{ member_kind: 'crew.repo', member_ref: 'repo-1' }] };
+    generate();
+    await waitFor(() => expect(nonGets().find((c) => c.path === '/chats')).toBeDefined());
+    expect(nonGets().find((c) => c.path === '/chats')!.body!.projectId).toBeUndefined();
+  });
+});
+
