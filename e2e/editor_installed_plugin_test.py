@@ -50,6 +50,7 @@ W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 FIX = REPO / "e2e" / "editor-fixtures"
 EDITOR = "mpx-changelog-entry"
+FIXED_NOW = "2026-11-06T12:00:00Z"
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -109,6 +110,8 @@ with sync_playwright() as p:
     for theme in ("dark", "light"):
         set_fixture(origin, appearance={**DEFAULT_APPEARANCE, "theme": theme})
         page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+        # One date for the whole run, in the editor's frame too (a run across UTC midnight never splits an entry).
+        page.clock.set_fixed_time(FIXED_NOW)
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.add_init_script(
             "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
@@ -161,6 +164,7 @@ with sync_playwright() as p:
               and actions == WANT_ACTIONS,
               url=page.url, src=src[:160], actions=actions, want=WANT_ACTIONS)
         today = frame.locator("body").evaluate("() => new Date().toISOString().slice(0, 10)")
+        check(f"{theme}-the-editor-sees-the-fixed-date", today == FIXED_NOW[:10], today=today)
         check(f"{theme}-starts-with-the-prompt", out(frame) == f"### Changed ({today})\nAdd a summary to see the entry line."
               and frame.locator("#add").is_disabled(), out=out(frame))
 
