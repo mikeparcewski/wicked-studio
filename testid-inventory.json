@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 326,
-    "occurrences": 4773,
-    "static": 3999,
+    "occurrences": 4782,
+    "static": 4008,
     "dynamic": 176,
     "computed": 53
   },
@@ -16103,6 +16103,12 @@
       ]
     },
     {
+      "testId": "requirement-code-mismatch",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirement-corroboration",
       "files": [
         "src/components/RequirementsModal.tsx"
@@ -16154,6 +16160,12 @@
       "testId": "requirements-browser",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-code-age",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -16217,6 +16229,42 @@
       ]
     },
     {
+      "testId": "requirements-minimum",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-minimum-change",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-minimum-clear",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-minimum-input",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-minimum-save",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-mismatch-filter",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirements-next",
       "files": [
         "src/components/product/RequirementsBrowser.tsx"
@@ -16248,6 +16296,12 @@
     },
     {
       "testId": "requirements-real-share",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirements-refresh-map",
       "files": [
         "src/components/RequirementsModal.tsx"
       ]
