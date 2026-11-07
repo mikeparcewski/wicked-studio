@@ -5,7 +5,7 @@
     3
   ],
   "inline": "run-thread",
-  "description": "One section per phase in a job’s Details: what is happening, checks, rigor and the working document.",
+  "description": "One section per phase in a job’s Details: what is happening, checks, rigor and the context document.",
   "panels": [
     {
       "slot": "run.details",
@@ -71,7 +71,7 @@
   "permissions": [
     {
       "id": "doc.read",
-      "why": "to show the job's working document and who changed what"
+      "why": "to show the job's context document and who changed what"
     },
     {
       "id": "doc.propose_edit",

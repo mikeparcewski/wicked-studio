@@ -62,12 +62,15 @@
   .rg-arrow { color: var(--ink-muted); }
   .rg-chip { display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-body); font-weight: 600; font-size: 11px; }
   .rg-chip.rg-high, .rg-chip.rg-highest { color: var(--status-warn, #d29922); border-color: color-mix(in srgb, var(--status-warn, #d29922) 55%, transparent); }
-  /* The working document (spike 3) */
+  /* The context document (spike 3; context-doc-switch) */
   #wd { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); padding: 10px 12px 12px; margin: 0 0 8px; }
   .wd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
   .wd-title { margin: 0; font-size: 14px; color: var(--ink-high); }
   .wd-ver { font-size: 12px; color: var(--ink-muted); }
   .wd-note { margin: 2px 0 8px; font-size: 12px; color: var(--ink-muted); }
+  .wd-ctx { margin: 0 0 4px; font-size: 12px; color: var(--ink-body); }
+  .wd-ctx.bad { color: var(--status-fail); }
+  .wd-seen { margin: 0 0 8px; font-size: 12px; color: var(--ink-muted); }
   .wd-sec { padding: 6px 0; border-top: 1px solid var(--border); }
   .wd-sec h4 { margin: 0 0 3px; display: flex; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
   .wd-who { font-weight: 400; letter-spacing: 0; text-transform: none; }
@@ -95,7 +98,7 @@
     <span class="dot" id="dot" aria-hidden="true"></span><span class="sum-text" id="sum-text">Reading the job’s events…</span>
   </button>
   <section id="dash" class="dash" hidden aria-label="Phase report"></section>
-  <section id="wd" hidden aria-label="Working document"></section>
+  <section id="wd" hidden aria-label="Context document"></section>
 </main>
 <script>__PLUGIN__</script>
 </body>

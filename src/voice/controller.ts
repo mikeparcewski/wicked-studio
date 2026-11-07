@@ -166,9 +166,9 @@ const defaults = (): VoiceDeps => ({
   editDoc: async (runId, section, text) => {
     for (let attempt = 0; attempt < 2; attempt++) {
       let view = await getWorkingDoc(runId);
-      if (view === null) throw new Error('This version of studio’s service has no working documents.');
+      if (view === null) throw new Error('This version of studio’s service has no context documents.');
       if (view.doc === null) view = await ensureWorkingDoc(runId);
-      if (view.doc === null || view.sections === null) throw new Error('The job’s working document could not be made.');
+      if (view.doc === null || view.sections === null) throw new Error('The job’s context document could not be made.');
       const now = view.sections[section as WorkingDocSectionId].trim();
       try {
         await proposeWorkingDoc(runId, { base: view.doc.head, author: 'operator', input: 'voice', sections: { [section]: now === '' ? text : `${now}\n${text}` } });
@@ -706,7 +706,7 @@ async function proposeJobAction(job: JobRef, action: JobAction, heard: string): 
   await say(`${w.prompt} Say confirm, or not that.`);
 }
 
-const ACTION_LABEL: Record<JobAction['kind'], string> = { steer: 'Steer', doc: 'Working document', stop: 'Stop', rigor: 'Rigor', gate: 'Decision', check: 'Check on it' };
+const ACTION_LABEL: Record<JobAction['kind'], string> = { steer: 'Steer', doc: 'Context document', stop: 'Stop', rigor: 'Rigor', gate: 'Decision', check: 'Check on it' };
 
 /** A confirmed job action, sent. Resolves with the record line. */
 async function runJobAction(lineIdOf: number, ctx: Extract<VoiceAskContext, { kind: 'job' }>): Promise<void> {
@@ -719,7 +719,7 @@ async function runJobAction(lineIdOf: number, ctx: Extract<VoiceAskContext, { ki
       try { await deps.steer(runId, action.note); done(`Sent to ${title} · by voice`); void say('Sent.'); } catch (e) { fail(e); }
       return;
     case 'doc':
-      done(`Adding to ${title}’s working document…`);
+      done(`Adding to ${title}’s context document…`);
       try { await deps.editDoc(runId, action.section, action.text); done(actionWords(action, title).record); void say('Added.'); } catch (e) { fail(e); }
       return;
     case 'stop':

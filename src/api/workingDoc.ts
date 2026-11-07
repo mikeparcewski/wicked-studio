@@ -50,6 +50,23 @@ export interface WorkingDocView {
   /** True when crew itself writes the event-derived Decisions / Open questions / Next lines (engine-gaps); absent on an
    *  older crew, whose lines the phase report plugin writes. */
   eventLines?: boolean;
+  /** (crew api-types 0.197.0, context-doc-switch) The engine's context block: the person's Goal, Approach and
+   *  Constraints in every agent the job starts. Absent on an older crew or an engine with no block. */
+  context?: WorkingDocContext;
+}
+
+/** One seat the engine handed the block to. */
+export interface WorkingDocContextRecipient { recipient: string; cli: string; ord: number }
+
+/** What crew says about the engine's context block (crew api-types `WorkingDocContext`). */
+export interface WorkingDocContext {
+  engine: boolean;
+  version: number | null;
+  sections: WorkingDocSectionId[];
+  cut: WorkingDocSectionId[];
+  at: number | null;
+  error: { version: number; reason: string; at: number; cleared: boolean } | null;
+  seenBy: WorkingDocContextRecipient[];
 }
 
 export interface ProposeWorkingDoc {

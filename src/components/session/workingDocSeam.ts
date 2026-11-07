@@ -30,7 +30,7 @@ export function workingDocSeam(d: SeamDeps): HostDoc & { appendToNext(text: stri
       const mine = ++seq;
       try {
         const view = await api.get(runId);
-        if (view === null) return { error: 'unsupported', message: 'this version of studio’s service keeps no working document' };
+        if (view === null) return { error: 'unsupported', message: 'this version of studio’s service keeps no context document' };
         landIfNewest(mine, runId, view);
         return { view };
       } catch (e) {
@@ -43,7 +43,7 @@ export function workingDocSeam(d: SeamDeps): HostDoc & { appendToNext(text: stri
       try {
         let base = edit.base;
         if (base < 0) {
-          if (by === 'plugin') return { error: 'refused', message: 'this job has no working document yet' };
+          if (by === 'plugin') return { error: 'refused', message: 'this job has no context document yet' };
           await api.ensure(runId);
           base = 0;
         }
@@ -51,7 +51,7 @@ export function workingDocSeam(d: SeamDeps): HostDoc & { appendToNext(text: stri
         landIfNewest(mine, runId, r.view);
         return { version: r.version, unchanged: r.unchanged, by };
       } catch (e) {
-        if (e instanceof ApiError && e.status === 409) return { error: 'head_moved', message: 'the working document changed since' };
+        if (e instanceof ApiError && e.status === 409) return { error: 'head_moved', message: 'the context document changed since' };
         if (e instanceof ApiError && (e.status === 403 || e.status === 400)) return { error: 'refused', message: e.message };
         return { error: 'unavailable', message: e instanceof Error ? e.message : String(e) };
       }

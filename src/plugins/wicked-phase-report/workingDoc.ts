@@ -1,5 +1,6 @@
 /**
- * The phase report's WORKING DOCUMENT words (power mode spike 3): who wrote a section, the version trail, and the
+ * The phase report's CONTEXT DOCUMENT words (called the working document before the engine kept a context block; power
+ * mode spike 3, context-doc-switch): who wrote a section, the version trail, and the
  * Decisions lines the plugin writes as itself. Pure; the plugin and the tests use it.
  */
 
@@ -14,7 +15,7 @@ export const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
   questions: 'Open questions', next: 'Next and trailing work',
 };
 
-/** What saving a section does, said under its editor. */
+/** What saving a section does, said under its editor (an engine with no context block: crew's notes). */
 export const SECTION_EFFECT: Readonly<Record<SectionId, string>> = {
   goal: 'Saving tells the next step.',
   approach: 'Saving tells the next step.',
@@ -26,11 +27,44 @@ export const SECTION_EFFECT: Readonly<Record<SectionId, string>> = {
 
 export const STEER_NOTE = 'Edits steer the next step. They can raise rigor, never lower it.';
 
+/** (context-doc-switch) With the engine's context block: Goal, Approach and Constraints reach every agent of the job. */
+export const SECTION_EFFECT_BLOCK: Readonly<Record<SectionId, string>> = {
+  goal: 'Saving puts it in every agent’s context for this job.',
+  approach: 'Saving puts it in every agent’s context for this job.',
+  constraints: 'Saving puts it in every agent’s context for this job.',
+  next: 'Saving tells the next step.',
+  decisions: 'Recorded here. Not sent to a step.',
+  questions: 'Recorded here. Not sent to a step.',
+};
+export const STEER_NOTE_BLOCK = 'Your Goal, Approach and Constraints are in the context of every agent this job starts: builders, reviewers, judges and QE. They add to what is checked, never skip a check.';
+
+/** What saving a section does, for this document. */
+export function sectionEffect(view: Pick<DocView, 'context'> | null, id: SectionId): string {
+  return view?.context?.engine === true ? SECTION_EFFECT_BLOCK[id] : SECTION_EFFECT[id];
+}
+
+/** The line under the heading. */
+export function steerNote(view: Pick<DocView, 'context'> | null): string {
+  return view?.context?.engine === true ? STEER_NOTE_BLOCK : STEER_NOTE;
+}
+
 /** Who wrote a version: a person, a plugin, crew (the job's request), or an AGENT — the orchestrator's own Approach and
  *  Decisions, written by crew as `agent:<seat>` (power-mode-engine's contract). Only a person's edit steers. */
 export interface Author { kind: 'human' | 'plugin' | 'system' | 'agent'; id: string }
 export interface TrailEntry { version: number; author: Author; surface: string | null; sections: SectionId[]; at: number; steerId: string | null }
 export interface Steer { id: string; kind: 'next' | 'standing'; pickedUp: { ord: number | null; step: string | null; at: number } | null; queuedAt: number | null; error: string | null }
+/** One seat the engine handed the context block to (crew, from the engine's `runContextDelivered`). */
+export interface ContextRecipient { recipient: string; cli: string; ord: number }
+/** (context-doc-switch) The engine's context block, as crew fed it. */
+export interface DocContext {
+  engine: boolean;
+  version: number | null;
+  sections: SectionId[];
+  cut: SectionId[];
+  at: number | null;
+  error: { version: number; reason: string; at: number; cleared: boolean } | null;
+  seenBy: ContextRecipient[];
+}
 export interface DocView {
   doc: { head: number } | null;
   sections: Record<SectionId, string> | null;
@@ -39,6 +73,8 @@ export interface DocView {
   /** Crew writes the event-derived Decisions, Open questions and Next lines itself (engine-gaps, 2026-10-30), so a run
    *  nobody views gets them too. Then this plugin writes none: it renders the document and saves a person's edits. */
   eventLines?: boolean;
+  /** (context-doc-switch) Absent on an older crew or an engine with no context block. */
+  context?: DocContext;
 }
 
 /** The plugin writes its own lines only while crew does not (an older crew: absent). */
@@ -104,15 +140,58 @@ export function steerWords(s: Steer | undefined, stepOfOrd?: (ord: number) => st
   return 'waiting for the next step';
 }
 
+const RECIPIENT_WORDS: Readonly<Record<string, string>> = {
+  judge: 'judge', triage: 'failure triage', council: 'council', team_member: 'team member', qe: 'QE', team_review: 'team review',
+  send_back: 'plan send-back',
+};
+
+const listWords = (xs: readonly string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)!}`);
+
+/** "Seen by: Fix (Claude Code), judge (Codex) and QE (Pi CLI)": the seats the engine handed the block in force to, one
+ *  name per step or role and seat. Null when none yet. */
+export function seenByWords(c: DocContext | undefined, stepOfOrd: (ord: number) => string | null = () => null): string | null {
+  if (c === undefined || c.seenBy.length === 0) return null;
+  const names: string[] = [];
+  for (const r of c.seenBy) {
+    const role = r.recipient === 'unit' ? (stepOfOrd(r.ord) ?? `step ${r.ord}`) : (RECIPIENT_WORDS[r.recipient] ?? r.recipient.replace(/_/gu, ' '));
+    const seat = r.cli !== '' ? ` (${SEAT_NAMES[r.cli] ?? r.cli})` : '';
+    const name = `${role}${seat}`;
+    if (!names.includes(name)) names.push(name);
+  }
+  return `Seen by: ${listWords(names)}.`;
+}
+
+/** What the document says about the engine's context block, or null (no block engine, nothing to say). */
+export function contextWords(c: DocContext | undefined): { text: string; bad: boolean } | null {
+  if (c === undefined || !c.engine) return null;
+  if (c.error !== null && (c.version === null || c.error.version >= c.version)) {
+    const tail = c.error.cleared ? ' The earlier context was taken out, so agents do not follow words you replaced.' : '';
+    const fix = /too long|renders to|characters; at most/iu.test(c.error.reason) ? ' Shorten Goal, Approach or Constraints and save again.' : '';
+    return { text: `Version ${c.error.version} is not in agents’ context: ${c.error.reason.replace(/[.\s]+$/u, '')}.${tail}${fix}`, bad: true };
+  }
+  if (c.version === null || c.sections.length === 0) return { text: 'Nothing of yours is in agents’ context yet. Write a Goal, Approach or Constraints to add it.', bad: false };
+  const cut = c.cut.length > 0 ? ` ${listWords(c.cut.map((x) => SECTION_LABELS[x]))} ${c.cut.length === 1 ? 'was' : 'were'} cut to fit; the text says where.` : '';
+  return { text: `In every agent’s context from version ${c.version}: ${listWords(c.sections.map((x) => SECTION_LABELS[x]))}.${cut}`, bad: false };
+}
+
 /** "v3 · You · Constraints and steering · 14:32 · picked up at Review 14:40", newest first. */
 export function trailLines(view: DocView, max = 6, stepOfOrd?: (ord: number) => string | null): string[] {
   return view.trail.slice(-max).reverse().map((t) => {
     const a = kindOf(t.author);
     const parts = [`v${t.version}`, authorWord(a), t.sections.map((s) => SECTION_LABELS[s]).join(', '), clock(t.at)];
     const s = steerWords(view.steers.find((x) => x.id === t.steerId), stepOfOrd);
+    const ctx = view.context;
+    const inBlock = a.kind === 'human' && ctx?.engine === true && t.sections.some((x) => x === 'goal' || x === 'approach' || x === 'constraints');
+    if (inBlock && ctx !== undefined) {
+      // (context-doc-switch) A person's Goal, Approach or Constraints go in every agent's context, not a step's note.
+      // Said for the newest outcome only: an older version's own outcome is not kept.
+      if (ctx.error?.version === t.version) parts.push('not in agents’ context');
+      else if (ctx.version === t.version) parts.push('in every agent’s context');
+      else if (ctx.version === null || ctx.version < t.version) parts.push('going into agents’ context');
+    }
     if (s !== null) parts.push(s);
     // A plugin's or an agent's text is recorded, never sent to a step.
-    else if (a.kind === 'plugin' || a.kind === 'agent') parts.push('not sent to a step');
+    else if (!inBlock && (a.kind === 'plugin' || a.kind === 'agent')) parts.push('not sent to a step');
     return parts.join(' · ');
   });
 }
