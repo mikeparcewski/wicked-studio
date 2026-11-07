@@ -28,7 +28,8 @@ describe('InteractiveDocSurfaceAdapter.exported', () => {
   });
 
   it('a kind with no export reads no listing', async () => {
-    const files = await new InteractiveDocSurfaceAdapter(binding('page')).exported(1);
+    // (A page exports since plugins-complete G13: a kind no format is offered for.)
+    const files = await new InteractiveDocSurfaceAdapter(binding('note')).exported(1);
     expect(files).toEqual([]);
     expect(interactive.listExports).not.toHaveBeenCalled();
   });

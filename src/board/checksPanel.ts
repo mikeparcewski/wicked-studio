@@ -79,3 +79,16 @@ export function checksSummary(rows: readonly CheckRow[]): string {
   if (n('inconclusive') > 0) parts.push(`${n('inconclusive')} could not run`);
   return parts.join(' · ');
 }
+
+/** plugins-complete G21: a review asked for `version` has landed when every reviewer has a verdict on exactly it. */
+export function reviewLanded(checks: readonly DocCheck[], version: number): boolean {
+  const on = new Set(checks.filter((c) => c.version === version).map((c) => c.reviewer));
+  return (Object.keys(REVIEWER_WORD) as DocReviewerId[]).every((r) => on.has(r));
+}
+
+/** What "Review this version" posts: interactive's UI intent `wicked.interactive.review.requested` for the version on
+ *  screen (interactive stamps the project; crew answers with one `interactive-review` run, deduped per version). No
+ *  `reviewers` = all four. */
+export function reviewRequestOf(docId: string, version: number): { event_type: string; payload: Record<string, unknown> } {
+  return { event_type: 'wicked.interactive.review.requested', payload: { document_id: docId, version } };
+}

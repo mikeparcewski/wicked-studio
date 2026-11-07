@@ -80,6 +80,19 @@
   .notes textarea { box-sizing: border-box; width: 100%; min-height: 54px; max-height: 120px; resize: vertical; font: inherit; font-size: 13px; line-height: 1.4; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-base); color: var(--ink-high); }
   .notes textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
   body[data-size="pane"] .notes textarea { min-height: 40px; }
+  /* A phone (plugins-complete G14): this frame narrower than 600 px stacks the filmstrip above the slide as one
+     scrolling row of small thumbnails, so the slide takes the frame's full width. The strip rules below touch only the
+     strip, which is [hidden] wherever it does not show. */
+  @media (max-width: 599px) {
+    /* Only where the filmstrip shows (pane and full): inline, present and the options surface hide it (plugin.ts). */
+    .deck:has(> .strip:not([hidden])) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    .strip { overflow-x: auto; overflow-y: hidden; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--border); }
+    .strip ol { flex-direction: row; }
+    .thumb { grid-template-columns: 80px; width: auto; flex: 0 0 auto; }
+    .thumb .n, .thumb .t { display: none; }
+    .thumb .mini { width: 80px; height: 45px; }
+    .thumb .mini iframe { transform: scale(0.0625); }
+  }
   @media (prefers-reduced-motion: no-preference) { .box { transition: left 80ms linear, top 80ms linear; } }
 </style>
 </head>
