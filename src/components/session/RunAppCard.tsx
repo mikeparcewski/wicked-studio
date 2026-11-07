@@ -47,7 +47,12 @@ type Load =
  * first page at the version the turn made (no source is read: the snapshot of its last render in this tab, else its
  * shape with no rows, as a dashboard tile), and **Open the app**. Editing and the app's chat are on the app's page.
  */
-export function RunAppCard({ runId, runStatus }: { runId: string; runStatus: string }): React.ReactElement | null {
+export function RunAppCard(props: { runId: string; runStatus: string }): React.ReactElement | null {
+  // One run's turn, one instance: another run's card never shows this one's result under its own link (review r1).
+  return <RunAppCardOf key={props.runId} {...props} />;
+}
+
+function RunAppCardOf({ runId, runStatus }: { runId: string; runStatus: string }): React.ReactElement | null {
   const slug = appSlugOfRun(runId);
   const { navigate } = useRoute();
   const [load, setLoad] = useState<Load>({ kind: 'loading' });

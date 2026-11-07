@@ -1463,9 +1463,15 @@ function HelperReply({ who, text, ok, citations }: { who: string; text: string; 
  *  `RunArtifacts`, the one renderer), or, for an older attempt at an artifact a newer slot shows, one line. */
 function ProposalSlotView({ slot, sessionId }: { slot: ProposalSlot; sessionId: string }): React.ReactElement | null {
   if (slot.older) return <p data-testid="proposal-slot-older" data-run-id={slot.run.session.id} className="wk-session-grey wk-proposal-slot-line">{olderSlotLine(slot.run)}</p>;
+  return <ProposalSlotArtifacts run={slot.run} sessionId={sessionId} />;
+}
+
+/** The slot's renderer, with the run's chain (a walkthrough step is the chain's, as in the run block: review r1). */
+function ProposalSlotArtifacts({ run, sessionId }: { run: RunView; sessionId: string }): React.ReactElement | null {
+  const { chain } = useRunChain(run);
   return (
-    <RunArtifacts view={slot.run} composerKey={sessionId} only="made"
-      frame={(_who, _suffix, cards) => <div data-testid="proposal-slot" data-run-id={slot.run.session.id} className="wk-proposal-slot">{cards}</div>} />
+    <RunArtifacts view={run} composerKey={sessionId} chain={chain} only="made"
+      frame={(_who, _suffix, cards) => <div data-testid="proposal-slot" data-run-id={run.session.id} className="wk-proposal-slot">{cards}</div>} />
   );
 }
 

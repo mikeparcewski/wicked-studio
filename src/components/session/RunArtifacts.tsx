@@ -24,11 +24,12 @@ import { PlanOrderEditor } from './PlanOrderEditor.js';
 import { WalkthroughEditor } from './WalkthroughEditor.js';
 
 /**
- * S8 — the artifacts a run is producing, in its block of the session thread: the project's
- * documents whose bound run this is (`runBinding.isDocRun` — the run declares the doc's seam
- * directory as a write root), each as a morphing preview. A run filed in no project has no
- * documents to show; a project whose bridge is down shows none rather than an error row (the run's
- * own status sentence already says what it is doing).
+ * S8 — the artifacts a run is producing, in its block of the session thread (or at the proposal that started it, A4):
+ * the documents it made, each as a morphing preview, from the run's mount (its `artifact_ref`'s, else its project's,
+ * else the Unfiled mount: G1). A document is the run's when crew's `artifact_ref` names it, crew's index binds it to the
+ * run (`runs`), or — for a run with no ref — its seam write root names it (`runBinding.isDocRun`). A mount whose bridge
+ * is down shows none rather than an error row (the run's own status sentence already says what it is doing). Also a
+ * review run's Run insights (G2), an app turn's app (G3), a walkthrough, a demo's video or cut, and a plan.
  */
 const docsByProject = new Map<string, { at: number; docs: Promise<DocSummary[]> }>();
 /** A project's list is re-read after this long — a page the run creates after the first read appears
@@ -106,6 +107,9 @@ export function isRunsDoc(view: SessionView, mount: string, doc: string, index: 
   const ref = artifactRefOf(view);
   if (ref !== null && ref.mount === mount && ref.doc === doc) return true;
   if (index?.get(`${mount}/${doc}`)?.includes(view.session.id) === true) return true;
+  // A run that names its artifact is bound to it: the write-root rule's suffix grammar (`<doc>-v<n>` is an edit of
+  // `<doc>`) would otherwise also claim an unrelated `release` for a run that made `release-v1` (review r1).
+  if (ref !== null) return false;
   return isDocRun(view, doc);
 }
 
@@ -118,7 +122,8 @@ export function useRunMadeDocs(view: SessionView | null | undefined): { mount: s
   const runId = view?.session.id ?? null;
   // The list is the one read for this run and mount: while another's read is in flight, nothing (codex h3-fix r1 P2).
   const [read, setRead] = useState<{ key: string; docs: DocSummary[] } | null>(null);
-  const key = `${runId ?? ''}\u0000${mount}`;
+  // The ref is part of the identity: a ref crew adds on a later read re-keys the list (review r1).
+  const key = `${runId ?? ''}\u0000${mount}\u0000${artifactRefOf(view) === null ? '' : `${artifactRefOf(view)!.mount}/${artifactRefOf(view)!.doc}`}`;
   const likely = view !== null && view !== undefined && (artifactRefOf(view) !== null || hasSeamRoot(view));
   useEffect(() => {
     if (view === null || view === undefined || runId === null) { setRead(null); return undefined; }
@@ -184,7 +189,8 @@ export function RunArtifacts({ view, composerKey, chain, only, frame }: {
   const demo = made && isDemoRun(view);
   // G1: filed or Unfiled, the documents live in the run's mount.
   const { mount, docs } = useRunMadeDocs(view);
-  const mine = made ? docs : [];
+  // A demo run's only document is its cut, which its video card opens (DemoArtifact): never a second card (review r1).
+  const mine = made && !demo ? docs : [];
   // G2 / G3: a review run's insights, an app turn's app.
   const insights = made && isReviewRun(view);
   const app = made && isAppTurnRun(view);

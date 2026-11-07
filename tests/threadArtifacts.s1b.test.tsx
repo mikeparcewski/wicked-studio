@@ -85,8 +85,39 @@ function review(runId: string, recs: number): InsightsResponse['reviews'][number
 const RESPONSE: InsightsResponse = { reviews: [review('rv-1', 2), review('rv-2', 1)], newRecommendations: 3, running: false, lastReview: null, metrics: [], minSample: 5 };
 
 describe('G2: Run insights in the review run\'s thread', () => {
-  it('shows only this run\'s review', () => {
-    expect(insightsOfRun(RESPONSE, 'rv-2').reviews.map((r) => r.runId)).toEqual(['rv-2']);
+  it('shows only this run\'s review, with its own counts', () => {
+    const one = insightsOfRun(RESPONSE, 'rv-2');
+    expect(one.reviews.map((r) => r.runId)).toEqual(['rv-2']);
+    expect(one.newRecommendations).toBe(1);
+  });
+
+  it('another run in the same place starts over: no recommendation picked in the first run is decided in the second (review r1)', async () => {
+    insights.mockResolvedValue(RESPONSE);
+    const { rerender } = render(<RunInsightsSlot runId="rv-1" runStatus="completed" size="pane" />);
+    await waitFor(() => expect(hosts).toHaveLength(1));
+    hosts[0]!.o.ui.selected([{ kind: 'element', id: 'v0r0' }]);
+    await screen.findByTestId('insights-accept');
+    rerender(<RunInsightsSlot runId="rv-2" runStatus="completed" size="pane" />);
+    await waitFor(() => expect(hosts).toHaveLength(2));
+    expect(screen.queryByTestId('insights-accept')).toBeNull();
+    hosts[1]!.o.ui.selected([{ kind: 'element', id: 'v0r0' }]);
+    accept.mockResolvedValue({ open: { kind: 'runs', runIds: [] } });
+    fireEvent.click(await screen.findByTestId('insights-accept'));
+    await waitFor(() => expect(accept).toHaveBeenCalledWith('rv-2:rec0'));
+  });
+
+  it('a finished run whose review crew has not recorded yet reads again until it has (review r1)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      insights.mockResolvedValueOnce({ ...RESPONSE, reviews: [] }).mockResolvedValue(RESPONSE);
+      render(<RunInsightsSlot runId="rv-1" runStatus="completed" size="inline" />);
+      expect((await screen.findByTestId('run-insights-state')).textContent).toContain('not recorded yet');
+      await vi.advanceTimersByTimeAsync(16_000);
+      await waitFor(() => expect(hosts).toHaveLength(1));
+      expect(insights).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('inline is read-only (no decide aside); the pane decides on what the plugin points at', async () => {
@@ -134,10 +165,58 @@ describe('G3: the App card in an app turn\'s thread', () => {
     expect(push.mock.calls.at(-1)?.[2]).toBe('/apps/open-tickets');
   });
 
+  it('another run in the same place never shows the first run\'s result under its link (review r1)', async () => {
+    apiFetch.mockResolvedValueOnce(detail([{ runId: 'apps-open-tickets-0123456789ab', at: 1, actor: 'u', message: 'm', about: [], base: 3, state: 'refused', endedAt: 2, version: null, change: null, summary: null, builder: null, reviewer: null, code: 'x', reason: 'Alpha failure' }]));
+    const { rerender } = render(<RunAppCard runId="apps-open-tickets-0123456789ab" runStatus="failed" />);
+    await screen.findByText(/Alpha failure/);
+    apiFetch.mockReturnValueOnce(new Promise(() => undefined));
+    rerender(<RunAppCard runId="apps-beta-0123456789ab" runStatus="failed" />);
+    expect(screen.getByTestId('run-app-card').dataset['app']).toBe('beta');
+    expect(screen.queryByText(/Alpha failure/)).toBeNull();
+    expect(screen.getByTestId('run-app-line').textContent).toBe('Reading the app…');
+  });
+
+  it('an older turn: its version is read from crew (crew#1396); a version crew cannot serve shows no picture, only the line', async () => {
+    const t = { runId: 'apps-open-tickets-0123456789ab', at: 1, actor: 'u', message: 'm', about: [], base: 1, state: 'landed', endedAt: 2, version: 2, change: 'Added 1 chart', summary: null, builder: 'claude', reviewer: 'codex', code: null, reason: null };
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/apps/open-tickets') return detail([t]);
+      if (path === '/apps/open-tickets/versions/2') return { version: { spec: { pages: [] }, lock: {}, queryText: {}, tree: 't2', commit: 'c', slug: 'open-tickets', receipt: {}, version: null } };
+      throw new Error('unexpected');
+    });
+    render(<RunAppCard runId="apps-open-tickets-0123456789ab" runStatus="completed" />);
+    expect((await screen.findByTestId('run-app-version')).textContent).toBe('Version 2');
+    expect(apiFetch).toHaveBeenCalledWith('/apps/open-tickets/versions/2');
+    cleanup();
+    apiFetch.mockImplementation(async (path: string) => { if (path === '/apps/open-tickets') return detail([t]); throw new Error('404 route not found'); });
+    render(<RunAppCard runId="apps-open-tickets-0123456789ab" runStatus="completed" />);
+    expect((await screen.findByTestId('run-app-line')).textContent).toMatch(/^v2 · Added 1 chart/);
+    expect(screen.queryByTestId('run-app-version')).toBeNull();
+    expect(screen.queryByTestId('run-app-preview')).toBeNull();
+  });
+
   it('a landed turn names its version and crew\'s change line', async () => {
     apiFetch.mockResolvedValue(detail([{ runId: 'apps-open-tickets-0123456789ab', at: 1, actor: 'u', message: 'm', about: [], base: 2, state: 'landed', endedAt: 2, version: 3, change: 'Added 1 chart', summary: null, builder: 'claude', reviewer: 'codex', code: null, reason: null }]));
     render(<RunAppCard runId="apps-open-tickets-0123456789ab" runStatus="completed" />);
     expect((await screen.findByTestId('run-app-line')).textContent).toMatch(/^v3 · Added 1 chart/);
     expect(screen.getByTestId('run-app-version').textContent).toBe('Version 3');
+  });
+});
+
+describe('the decide aside (one for /insights and the review run\'s card)', () => {
+  it('Dismiss needs a reason, sends it, re-reads, and says so; a new pick starts over', async () => {
+    const { InsightsDecide } = await import('../src/components/insights/InsightsDecide.js');
+    const { insightsApi } = await import('../src/api/insights.js');
+    const rec = review('rv-1', 1).recommendations[0]!;
+    const onDecided = vi.fn(async () => undefined);
+    const { rerender } = render(<InsightsDecide selected={rec} metrics={[]} navigate={vi.fn()} onDecided={onDecided} />);
+    fireEvent.click(screen.getByTestId('insights-dismiss'));
+    expect(screen.getByTestId('insights-dismiss-confirm')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('insights-dismiss-reason'), { target: { value: 'parked on purpose' } });
+    fireEvent.click(screen.getByTestId('insights-dismiss-confirm'));
+    await waitFor(() => expect(insightsApi.dismiss).toHaveBeenCalledWith('rv-1:rec0', 'parked on purpose'));
+    expect(onDecided).toHaveBeenCalled();
+    expect((await screen.findByTestId('insights-said')).textContent).toBe('Dismissed, with your reason.');
+    rerender(<InsightsDecide selected={{ ...rec, id: 'other' }} metrics={[]} navigate={vi.fn()} onDecided={onDecided} />);
+    await waitFor(() => expect(screen.queryByTestId('insights-said')).toBeNull());
   });
 });
