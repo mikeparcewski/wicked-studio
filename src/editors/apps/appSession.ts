@@ -1,6 +1,6 @@
 import type { AppDetail, AppSpec } from '../../api/types.js';
 import { applyOps, inventoryOf, opsSummary, type AppInventory, type SpecOp } from './appOps.js';
-import type { AppStorePort, StoreRefusal } from './appStore.js';
+import { archivedOf, type AppStorePort, type StoreRefusal } from './appStore.js';
 
 /**
  * One app open in the host (DES-APPS-001 §6.2, §6.4; slice K4): the head crew answered, the edit burst on top of it,
@@ -12,7 +12,9 @@ import type { AppStorePort, StoreRefusal } from './appStore.js';
  *    lands as ONE version after `burstMs` without another op (a drag that sent a hundred moves is still one version).
  *  - The landing names the head it was made on; crew's `409 stale_base` (another tab, or an undo elsewhere) drops the
  *    burst and re-reads, so two tabs never both step from the same version.
- *  - Undo and redo land the burst first, then move crew's pointer from the head.
+ *  - Undo, redo and (G16) restoring an earlier version land the burst first, then change crew's head from it. One of
+ *    them at a time: while one lands, an edit and another are refused, never re-based onto its result.
+ *  - An archived app (G16) is read-only here as crew holds it: nothing is sent until it is restored from Archived.
  */
 
 export type SessionEvent =
@@ -30,10 +32,16 @@ export const BURST_MAX_OPS = 200;
 /** A burst lands at most this long after its first op, however often ops keep coming (no debounce starvation). */
 export const BURST_MAX_AGE_MS = 5_000;
 
-function words(r: StoreRefusal, what: 'saved' | 'undone' | 'redone' = 'saved'): string {
+type What = 'saved' | 'undone' | 'redone' | 'restored';
+
+const ARCHIVED_WHY = 'the app is archived; restore it from Archived to change it';
+
+function words(r: StoreRefusal, what: What = 'saved'): string {
   const not = `Not ${what}`;
   if (r.code === 'stale_base') return `${not}: the app changed in another tab or window; this is its newest version`;
   if (r.code === 'turn_in_flight') return `${not}: a chat turn is changing the app; it is read-only until the turn ends`;
+  if (r.code === 'app_archived') return `${not}: ${ARCHIVED_WHY}`;
+  if (r.code === 'not_accepted') return `${not}: that version was never accepted, so it cannot come back`;
   if (r.code === 'check_failed') return `${not}: ${r.findings?.[0]?.message ?? r.message}`;
   if (r.code === 'source_check_unavailable') return `${not}: ${r.message}`;
   if (r.code === 'nothing_to_undo') return 'Nothing to undo';
@@ -49,6 +57,8 @@ function turnLogMark(app: AppDetail): string {
   const last = t[t.length - 1] as { runId?: unknown; state?: unknown } | undefined;
   return `${t.length}:${String(last?.runId ?? '')}:${String(last?.state ?? '')}`;
 }
+
+export type MoveResult = { ok: true; version: number } | { ok: false; code: string; message: string; head?: number };
 
 export class AppSession {
   private app: AppDetail | null = null;
@@ -84,7 +94,14 @@ export class AppSession {
   /** The landed head's spec: queries and actions run only on a landed version (§7.2 step 1). */
   get landedSpec(): AppSpec | null { return this.app?.spec ?? null; }
   get pending(): number { return this.burst.length; }
-  get readonly(): boolean { return this.app?.turn != null; }
+  /** A turn in flight, or (G16) an archived app: nothing changes from here until it ends or the app is restored. */
+  get readonly(): boolean { return this.app?.turn != null || this.archived; }
+  /** (G16) crew says the app is archived. */
+  get archived(): boolean { return archivedOf(this.app) != null; }
+  /** Why an edit, a move or a restore is refused before anything is sent, or null. */
+  private readonlyWhy(): string {
+    return this.app?.turn != null ? 'a chat turn is changing the app; it is read-only until the turn ends' : ARCHIVED_WHY;
+  }
   inventory(): AppInventory | null { return this.working === null ? null : inventoryOf(this.working); }
 
   async load(): Promise<AppDetail> {
@@ -119,7 +136,9 @@ export class AppSession {
     const turnChanged = (app.turn?.runId ?? null) !== (this.app.turn?.runId ?? null);
     // (K5) The chat reads crew's turn log: a turn that started and ended between two reads changed nothing else.
     const turnsChanged = turnLogMark(app) !== turnLogMark(this.app);
-    if (!moved && !turnChanged && !turnsChanged) return;
+    // (G16) Archived or restored in another tab: the head is the same, the app's state is not.
+    const archivedChanged = archivedOf(app) != null !== this.archived;
+    if (!moved && !turnChanged && !turnsChanged && !archivedChanged) return;
     if (moved) {
       const hadBurst = this.burst.length > 0;
       this.adopt(app);
@@ -134,8 +153,8 @@ export class AppSession {
   /** The runtime's ops, on the version it named. Synchronous: checked against the working spec, then queued. */
   edit(base: number, ops: readonly unknown[]): EditResult {
     if (this.app === null || this.working === null) return { ok: false, code: 'refused', message: 'the app is not loaded yet' };
-    if (this.readonly) return { ok: false, code: 'refused', message: 'a chat turn is changing the app; it is read-only until the turn ends' };
-    if (this.moving) return { ok: false, code: 'refused', message: 'an undo or redo is landing; try again in a moment' };
+    if (this.readonly) return { ok: false, code: 'refused', message: this.readonlyWhy() };
+    if (this.moving) return { ok: false, code: 'refused', message: 'an undo or redo, or a restore, is landing; try again in a moment' };
     if (base !== this.app.head.version) return { ok: false, code: 'head_moved', message: 'the app changed since', head: this.app.head.version };
     // At most BURST_MAX_OPS per version: a batch that would take the burst past it lands the burst so far first, and
     // while that landing is in flight a further full burst waits (codex r2: a 50-op batch at 199 made 249).
@@ -198,7 +217,7 @@ export class AppSession {
   }
 
   /** A refused landing or move: drop the burst, read crew's head, say why. */
-  private async recover(r: StoreRefusal, what: 'saved' | 'undone' | 'redone' = 'saved'): Promise<void> {
+  private async recover(r: StoreRefusal, what: What = 'saved'): Promise<void> {
     this.clearTimer();
     let app: AppDetail | null = null;
     try { app = await this.store.detail(); } catch { app = this.app; }
@@ -213,18 +232,31 @@ export class AppSession {
    * move while one is in flight is refused (never silently re-based onto the first's result), and so is an edit. The
    * caller's own burst lands first; if crew refuses it, nothing is undone.
    */
-  async move(direction: 'undo' | 'redo', base: number): Promise<{ ok: true; version: number } | { ok: false; code: string; message: string; head?: number }> {
+  async move(direction: 'undo' | 'redo', base: number): Promise<MoveResult> {
+    return this.change(direction === 'undo' ? 'undone' : 'redone', base, (from) => this.store.move(direction, from));
+  }
+
+  /**
+   * (G16, operator ruling D5) Restore an earlier accepted version, from the version the caller saw (`base`). It goes
+   * through exactly the serialisation undo and redo do: one change of the head at a time, never during a turn or on an
+   * archived app, the caller's own burst landed first (if crew refuses it, nothing is restored), then crew's CAS on the
+   * head that burst made. The version lands as a new head; the one it replaces stays in the history.
+   */
+  async restore(version: number, base: number): Promise<MoveResult> {
+    return this.change('restored', base, (from) => this.store.restore(from, version));
+  }
+
+  private async change(what: 'undone' | 'redone' | 'restored', base: number, send: (from: number) => ReturnType<AppStorePort['move']>): Promise<MoveResult> {
     if (this.app === null) return { ok: false, code: 'refused', message: 'the app is not loaded yet' };
-    if (this.readonly) return { ok: false, code: 'refused', message: 'a chat turn is changing the app; it is read-only until the turn ends' };
-    if (this.moving) return { ok: false, code: 'refused', message: 'an undo or redo is already landing' };
+    if (this.readonly) return { ok: false, code: 'refused', message: this.readonlyWhy() };
+    if (this.moving) return { ok: false, code: 'refused', message: 'an undo or redo, or a restore, is already landing' };
     if (base !== this.app.head.version) return { ok: false, code: 'head_moved', message: 'the app changed since', head: this.app.head.version };
-    const what = direction === 'undo' ? 'undone' : 'redone';
     this.moving = true;
     try {
       if (!(await this.flush())) return { ok: false, code: 'refused', message: `Not ${what}: your last change did not land`, ...(this.app !== null ? { head: this.app.head.version } : {}) };
       while (this.landing !== null) if (!(await this.landing)) return { ok: false, code: 'refused', message: `Not ${what}: your last change did not land` };
       const from = this.app.head.version;
-      const r = await this.store.move(direction, from);
+      const r = await send(from);
       if (r.ok) {
         this.adopt(r.app);
         this.emit({ kind: 'head', app: r.app, by: 'this-session' });

@@ -5,8 +5,10 @@ import { cellText } from '../../plugins/wicked-apps/runtime/format.js';
 import type { AppHostPort } from './appAdapter.js';
 import { sampleAppData, type AppDataPort, type SampleData } from './appData.js';
 import type { AppSession } from './appSession.js';
-import type { AppStorePort, StoreResult } from './appStore.js';
-import { SampleAppStore } from './appStore.js';
+import type { AppStorePort, StoreResult, VersionReadResult } from './appStore.js';
+import { SampleAppStore, archivedOf } from './appStore.js';
+
+export { archivedOf } from './appStore.js';
 import { SAMPLE_APPS } from './samples.js';
 
 /**
@@ -111,6 +113,8 @@ export interface AppTileData {
   published: AppPublished | null;
   /** The app's project, as crew records it (crew's apps only). */
   projectId?: string;
+  /** (G16) crew's archived state: `{at, by}`, `null` (active), or `undefined` (crew does not archive: no Archive offered). */
+  archived?: { at: number; by: string } | null;
 }
 
 export type AppsDirectory =
@@ -178,6 +182,7 @@ async function tileOf(detail: AppDetail, sample: { key: string; data: SampleData
     kpis: await kpisOf(detail.spec, sample?.data ?? null),
     published: publishedOf(detail),
     ...(sample === null && typeof detail.projectId === 'string' ? { projectId: detail.projectId } : {}),
+    ...(sample === null && archivedOf(detail) !== undefined ? { archived: archivedOf(detail)! } : {}),
   };
 }
 
@@ -190,8 +195,12 @@ function summaryTile(a: Record<string, unknown>, slug: string, note: string | nu
     slug, name: line(a['name'], 120) ?? slug, description: '', sample: false, sampleKey: null, detail: null, note,
     version: `${v} · ${receipt}`, changedAt: isTime(a['createdAt']) ? a['createdAt'] : null, sources: [], kpis: [], published: null,
     ...(typeof a['projectId'] === 'string' ? { projectId: a['projectId'] } : {}),
+    ...(archivedOf(a) !== undefined ? { archived: archivedOf(a)! } : {}),
   };
 }
+
+/** What a Report card of an archived app says. */
+export const ARCHIVED_NOTE = 'Archived: restore it from Apps › Archived to change it.';
 
 const why = (e: unknown): string => (e instanceof Error ? e.message : String(e)).slice(0, 200);
 
@@ -209,17 +218,28 @@ async function crewTile(a: Record<string, unknown>, slug: string): Promise<{ til
   }
 }
 
-/** crew's list of apps (`GET /apps`, or one project's: `?project=`), its entries with an app slug, and how many were not. */
-async function crewList(project: string | null): Promise<{ listed: Array<Record<string, unknown>>; skipped: number } | { error: string }> {
+/** (G16) Which of crew's apps a list reads: the active ones (crew's default), the archived ones, or all of them. */
+export type AppsScope = 'active' | 'archived' | 'all';
+
+/**
+ * crew's list of apps (`GET /apps`, or one project's: `?project=`), its entries with an app slug, and how many were not.
+ * `scope` (crew api-types 0.196.0 `?archived=`): an older daemon ignores the parameter and lists every app, so the
+ * entries are also kept to the scope here by their own `archived` field (none of an older daemon's is archived).
+ */
+async function crewList(project: string | null, scope: AppsScope = 'active'): Promise<{ listed: Array<Record<string, unknown>>; skipped: number } | { error: string }> {
   let list: AppsListResponse;
+  const q = new URLSearchParams();
+  if (project !== null) q.set('project', project);
+  if (scope !== 'active') q.set('archived', scope);
+  const qs = q.toString();
   try {
-    list = await apiFetch<AppsListResponse>(project === null ? '/apps' : `/apps?project=${encodeURIComponent(project)}`);
+    list = await apiFetch<AppsListResponse>(qs === '' ? '/apps' : `/apps?${qs}`);
   } catch (e) {
     return { error: why(e) };
   }
   // crew's answer is data too: a list that is not a list is an error to retry, never an empty store.
   if (typeof list !== 'object' || list === null || !Array.isArray((list as { apps?: unknown }).apps)) return { error: 'crew’s list of apps was not a list' };
-  const entries = list.apps as unknown[];
+  const entries = (list.apps as unknown[]).filter((a) => scope === 'all' || (scope === 'archived') === (archivedOf(a) != null));
   const listed = entries.filter((a): a is Record<string, unknown> => typeof a === 'object' && a !== null && isAppSlug((a as Record<string, unknown>)['slug']));
   return { listed, skipped: entries.length - listed.length };
 }
@@ -229,7 +249,7 @@ async function crewList(project: string | null): Promise<{ listed: Array<Record<
  * first {@link PREVIEW_LIMIT} read their detail for a preview, and a detail that fails or is malformed leaves that card
  * drawn from the list alone, saying so. Only a failed LIST is an error. `project` lists one project's apps only.
  */
-export async function loadAppsDirectory(hasStore: boolean, project: string | null = null): Promise<AppsDirectory> {
+export async function loadAppsDirectory(hasStore: boolean, project: string | null = null, scope: Exclude<AppsScope, 'all'> = 'active'): Promise<AppsDirectory> {
   if (!hasStore) {
     const apps: AppTileData[] = [];
     for (const [key, s] of Object.entries(SAMPLE_APPS)) {
@@ -238,7 +258,7 @@ export async function loadAppsDirectory(hasStore: boolean, project: string | nul
     }
     return { source: 'sample', apps, skipped: 0 };
   }
-  const l = await crewList(project);
+  const l = await crewList(project, scope);
   if ('error' in l) return { source: 'error', message: l.error };
   const apps = await Promise.all(l.listed.map(async (a, i): Promise<AppTileData> => {
     const slug = a['slug'] as string;
@@ -258,7 +278,8 @@ export interface ShownTile { slug: string; tile: AppTileData | null; projectId: 
  */
 export async function loadAppTiles(slugs: readonly string[]): Promise<{ ok: true; tiles: ShownTile[] } | { ok: false; message: string }> {
   if (slugs.length === 0) return { ok: true, tiles: [] };
-  const l = await crewList(null);
+  // An archived app is not gone: its card shows, saying it is archived (G16).
+  const l = await crewList(null, 'all');
   if ('error' in l) return { ok: false, message: l.error };
   const bySlug = new Map(l.listed.map((a) => [a['slug'] as string, a]));
   const tiles = await Promise.all(slugs.map(async (slug): Promise<ShownTile> => {
@@ -267,7 +288,8 @@ export async function loadAppTiles(slugs: readonly string[]): Promise<{ ok: true
     const projectId = typeof a['projectId'] === 'string' ? a['projectId'] : null;
     const { tile, missing } = await crewTile(a, slug);
     // Removed between the list and its read: gone, as if it was never listed.
-    return missing ? { slug, tile: null, projectId: null } : { slug, tile, projectId };
+    if (missing) return { slug, tile: null, projectId: null };
+    return { slug, tile: tile.archived != null ? { ...tile, note: ARCHIVED_NOTE } : tile, projectId };
   }));
   return { ok: true, tiles };
 }
@@ -306,4 +328,23 @@ export class FixedAppStore implements AppStorePort {
   async detail(): Promise<AppDetail> { return structuredClone(this.app); }
   async edit(): Promise<StoreResult> { return { ok: false, code: 'bad_request', message: 'a tile changes nothing' }; }
   async move(): Promise<StoreResult> { return { ok: false, code: 'bad_request', message: 'a tile changes nothing' }; }
+  async restore(): Promise<StoreResult> { return { ok: false, code: 'bad_request', message: 'a tile changes nothing' }; }
+  async readVersion(): Promise<VersionReadResult> { return { ok: false, code: 'bad_request', message: 'a tile reads no other version' }; }
+}
+
+/**
+ * (G16, operator ruling D5) Archive an app (hide it from Apps and close it to changes) or restore it from Archived
+ * (`POST /apps/:app/archive | unarchive`, a person only). Nothing is deleted either way. Answers crew's detail after it,
+ * or crew's words for why not.
+ */
+export async function setArchived(slug: string, archived: boolean): Promise<{ ok: true; app: AppDetail } | { ok: false; message: string }> {
+  if (!isAppSlug(slug)) return { ok: false, message: `“${slug}” is not an app’s address` };
+  try {
+    const r = await apiFetch<AppDetailResponse>(`/apps/${slug}/${archived ? 'archive' : 'unarchive'}`, { method: 'POST', body: '{}' });
+    return { ok: true, app: r.app };
+  } catch (e) {
+    const b = e instanceof ApiError && typeof e.body === 'object' && e.body !== null ? e.body as { code?: unknown; error?: unknown } : {};
+    if (b.code === 'turn_in_flight') return { ok: false, message: 'A chat turn is changing the app: archive it after the turn ends.' };
+    return { ok: false, message: typeof b.error === 'string' && b.error !== '' ? b.error.slice(0, 300) : why(e) };
+  }
 }
