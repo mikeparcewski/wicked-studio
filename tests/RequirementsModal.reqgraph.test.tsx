@@ -1,5 +1,5 @@
 /**
- * Operator rulings 2026-11-06 on the requirements page (crew api-types 0.196.0):
+ * Operator rulings 2026-11-06 on the requirements page (crew api-types 0.197.0):
  *  - P1: "Built from code N commits old (date)" with Refresh map, when the code has moved on.
  *  - P2: a requirement whose code is wrong counts and shows "Code doesn't meet it: …"; a filter lists them.
  *  - P3: the minimum in force and where it comes from; the repository's own minimum can be changed or cleared.
@@ -36,7 +36,7 @@ function pageWith(extra: Record<string, unknown> = {}): RequirementsPage {
   return {
     total: 2, corpus: 2, offset: 0, limit: 50, source: 'store', coverage,
     items: [item('REQ-001', 'clamp', null), item('REQ-003', 'sum', 'the loop starts at index 1, so it skips the first element')],
-    codeDrift: { builtFromCommit: '8cc32aabde358bf81042ed116623a51c0ef03a96', builtAt: '2026-11-01T13:57:56-05:00', basis: 'build', commitsBehind: 69, headCommit: null },
+    codeDrift: { builtFromCommit: '8cc32aabde358bf81042ed116623a51c0ef03a96', builtAt: `${new Date().getFullYear()}-11-01T13:57:56-05:00`, basis: 'build', commitsBehind: 69, headCommit: null },
     minimum: { pct: 66, source: 'repo', repoPct: 66, settingsPct: 80 },
     mismatches: 1,
     ...extra,
@@ -91,20 +91,61 @@ describe('requirements page: code age, minimum, code mismatches (operator ruling
     await waitFor(() => expect(listRequirements).toHaveBeenLastCalledWith('tiny-math', expect.objectContaining({ mismatch: 'yes', offset: 0 })));
   });
 
-  it("shows the repository's own minimum against Settings, and can raise it or go back to Settings", async () => {
+  it("shows the repository's own minimum against Settings, raises it, and goes back to Settings", async () => {
     const user = userEvent.setup();
+    const raised = { pct: 90, source: 'repo', repoPct: 90, settingsPct: 80 };
+    const cleared = { pct: 80, source: 'settings', repoPct: null, settingsPct: 80 };
     render(<RequirementsModal repoId="tiny-math" repoName="tiny-math" onClose={() => {}} />);
     const min = await screen.findByTestId('requirements-minimum');
     expect(min).toHaveTextContent("Minimum 66%, this repository's own (Settings: 80%)");
+    // The read after the write is slow: the page shows the daemon's answer to the write at once.
+    listRequirements.mockImplementation(() => new Promise(() => {}));
+    setRequirementsMinimum.mockResolvedValueOnce({ minimum: raised });
     await user.click(within(min).getByTestId('requirements-minimum-change'));
     const input = within(min).getByTestId('requirements-minimum-input');
+    expect(input).toHaveFocus();
     await user.clear(input);
-    await user.type(input, '90');
-    await user.click(within(min).getByTestId('requirements-minimum-save'));
+    await user.type(input, '90{Enter}');
     expect(setRequirementsMinimum).toHaveBeenCalledWith('tiny-math', 90);
-    await user.click(await within(min).findByTestId('requirements-minimum-clear'));
+    await waitFor(() => expect(screen.getByTestId('requirements-minimum')).toHaveTextContent("Minimum 90%, this repository's own"));
+    setRequirementsMinimum.mockResolvedValueOnce({ minimum: cleared });
+    await user.click(screen.getByTestId('requirements-minimum-clear'));
     expect(setRequirementsMinimum).toHaveBeenLastCalledWith('tiny-math', null);
-    await waitFor(() => expect(listRequirements.mock.calls.length).toBeGreaterThanOrEqual(3));
+    await waitFor(() => expect(screen.getByTestId('requirements-minimum')).toHaveTextContent('Minimum 80%, from Settings'));
+    expect(screen.queryByTestId('requirements-minimum-clear')).not.toBeInTheDocument();
+  });
+
+  it('Cancel discards the draft: Change starts again from the minimum in force', async () => {
+    const user = userEvent.setup();
+    render(<RequirementsModal repoId="tiny-math" repoName="tiny-math" onClose={() => {}} />);
+    const min = await screen.findByTestId('requirements-minimum');
+    await user.click(within(min).getByTestId('requirements-minimum-change'));
+    await user.clear(within(min).getByTestId('requirements-minimum-input'));
+    await user.type(within(min).getByTestId('requirements-minimum-input'), '12');
+    await user.click(within(min).getByRole('button', { name: 'Cancel' }));
+    await user.click(within(min).getByTestId('requirements-minimum-change'));
+    expect(within(min).getByTestId('requirements-minimum-input')).toHaveValue(66);
+    expect(setRequirementsMinimum).not.toHaveBeenCalled();
+  });
+
+  it('a late answer to an older read never overwrites a newer one', async () => {
+    const user = userEvent.setup();
+    let releaseOld: (v: unknown) => void = () => {};
+    listRequirements.mockReset()
+      .mockResolvedValueOnce(pageWith())
+      .mockImplementationOnce(() => new Promise((r) => { releaseOld = r; }))
+      .mockResolvedValueOnce(pageWith({ items: [item('REQ-003', 'sum', 'skips the first')], total: 1 }));
+    render(<RequirementsModal repoId="tiny-math" repoName="tiny-math" onClose={() => {}} />);
+    await screen.findAllByTestId('requirement-row');
+    const filter = screen.getByTestId('requirements-mismatch-filter');
+    await user.click(filter); // read 2 (held)
+    await waitFor(() => expect(listRequirements).toHaveBeenCalledTimes(2));
+    await user.click(filter); // read 3 (answers first)
+    await waitFor(() => expect(listRequirements).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(screen.getAllByTestId('requirement-row')).toHaveLength(1));
+    releaseOld(pageWith());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getAllByTestId('requirement-row')).toHaveLength(1);
   });
 
   it('a minimum from Settings offers no clear, and a repository with no graph yet still shows its minimum', async () => {

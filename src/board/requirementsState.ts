@@ -231,7 +231,7 @@ export function corroborationSentence(c: Corroboration): string {
 }
 
 /**
- * How old the code behind the listed build is (crew api-types 0.196.0 `codeDrift`; operator ruling 2026-11-06): the
+ * How old the code behind the listed build is (crew api-types 0.197.0 `codeDrift`; operator ruling 2026-11-06): the
  * engine counted it with git in the registered checkout. `commitsBehind`/`builtAt` are null when it could not tell.
  */
 export interface CodeDrift {
@@ -275,7 +275,7 @@ export function codeDriftLine(d: CodeDrift | null, now: Date = new Date()): stri
   return `Built from code ${count(n)} ${n === 1 ? 'commit' : 'commits'} old${date !== null ? ` (${date})` : ''}`;
 }
 
-/** The minimum in force and where it comes from (crew api-types 0.196.0 `minimum`). */
+/** The minimum in force and where it comes from (crew api-types 0.197.0 `minimum`). */
 export interface RequirementsMinimum {
   pct: number;
   source: 'repo' | 'settings';
@@ -307,13 +307,13 @@ export function minimumLine(m: RequirementsMinimum): string {
   return `Minimum ${m.pct}%, from Settings`;
 }
 
-/** An item's `codeMismatch` (crew api-types 0.196.0): how the code does not meet it, or null. */
+/** An item's `codeMismatch` (crew api-types 0.197.0): how the code does not meet it, or null. */
 export function codeMismatchOf(item: unknown): string | null {
   const v = (item as { codeMismatch?: unknown } | null)?.codeMismatch;
   return typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
 }
 
-/** How many rows of the corpus have a code mismatch (crew api-types 0.196.0 `mismatches`), or null when not said. */
+/** How many rows of the corpus have a code mismatch (crew api-types 0.197.0 `mismatches`), or null when not said. */
 export function mismatchCountOf(page: unknown): number | null {
   const v = (page as { mismatches?: unknown } | null)?.mismatches;
   return isCount(v) ? v : null;

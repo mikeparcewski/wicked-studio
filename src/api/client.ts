@@ -634,7 +634,7 @@ export const api = {
     return apiFetch<import('./types.js').RequirementsPage>(`/repos/${encodeURIComponent(repoId)}/requirements?${qs.toString()}`, opts.signal !== undefined ? { signal: opts.signal } : undefined);
   },
   /** Set (1..100) or clear (`null`: the Settings minimum applies) a repository's own requirements minimum (crew
-   *  api-types 0.196.0 `PUT /repos/:id/requirements/minimum`). */
+   *  api-types 0.197.0 `PUT /repos/:id/requirements/minimum`). */
   setRequirementsMinimum: (repoId: string, minPct: number | null) =>
     apiFetch<{ minimum: unknown }>(`/repos/${encodeURIComponent(repoId)}/requirements/minimum`, {
       method: 'PUT',
