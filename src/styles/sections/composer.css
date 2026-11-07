@@ -193,7 +193,7 @@
 .wk-composer-cmd-name { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--accent); white-space: nowrap; }
 .wk-composer-cmd--v2 .wk-composer-cmd-title { color: var(--ink-high); font-weight: var(--weight-semi); white-space: nowrap; }
 .wk-composer-menu-item--sub { padding-left: 24px; }
-.wk-composer-menu-item--sub .wk-composer-cmd-title { font-weight: var(--weight-regular, 400); }
+.wk-composer-menu-item--sub .wk-composer-cmd-title { font-weight: var(--weight-regular); }
 .wk-composer-menu-item--sub .wk-composer-cmd-name { color: var(--ink-muted); }
 .wk-composer-menu-item--on.wk-composer-menu-item--sub .wk-composer-cmd-name { color: var(--accent); }
 /* A phone: the command over its title and line, so neither is cut to a few letters. */
