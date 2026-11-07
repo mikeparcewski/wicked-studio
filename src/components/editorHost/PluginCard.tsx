@@ -529,9 +529,12 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const exportGranted = loaded.current?.grants.includes('artifact.export') === true;
   const exports = exportGranted && adapter?.capabilities().includes('export') === true ? (adapter.exports?.() ?? []) : [];
   const head = adapter?.artifact().head ?? 0;
+  // Under the full screen's version lens an older version is on screen while Export makes the head: no export then.
+  const lensShown = full && lensVersion !== null;
+  useEffect(() => { if (lensShown) setExportOpen(false); }, [lensShown]);
   const exportAs = async (format: string): Promise<void> => {
     setExportOpen(false);
-    if (adapter?.exportFile === undefined || head < 1) return;
+    if (adapter?.exportFile === undefined || head < 1 || lensShown) return;
     const label = exports.find((x) => x.format === format)?.label ?? format;
     setLine({ kind: 'working', text: `Making the ${label} of version ${head}…` });
     const out = await adapter.exportFile(format, head);
@@ -615,12 +618,12 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           }}>
           <button type="button" data-testid="plugin-card-action" data-action={a.id} data-verb={a.verb}
             // Under the full screen's version lens an older version is on screen: Export makes the head, so it waits.
-            disabled={a.verb === 'host:export' && (exports.length === 0 || head < 1 || (full && lensVersion !== null))}
-            title={a.verb === 'host:export' && full && lensVersion !== null ? `Export makes version ${head}; go back to it to export` : undefined}
+            disabled={a.verb === 'host:export' && (exports.length === 0 || head < 1 || lensShown)}
+            title={a.verb === 'host:export' && lensShown ? `Export makes version ${head}; go back to it to export` : undefined}
             className={a.primary ? 'wk-host-btn wk-host-btn--primary' : 'wk-host-btn'} onClick={() => void runAction(a)}>
             {a.label}{a.verb === 'host:export' ? ' ▾' : ''}
           </button>
-          {a.verb === 'host:export' && exportOpen && (
+          {a.verb === 'host:export' && exportOpen && !lensShown && (
             <span role="menu" aria-label="Export as" data-testid="artifact-export-menu" className="wk-artifact-menu">
               {exports.map((x) => (
                 <button key={x.format} type="button" role="menuitem" data-testid="artifact-export-format" data-format={x.format} onClick={() => void exportAs(x.format)} className="wk-artifact-menu-item">{x.label}</button>
@@ -730,7 +733,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       {exportOffer !== null && exportGranted && (
         <p data-testid="plugin-card-export-offer" className="wk-artifact-line">
           {editor.title} asks to export this as {exportOffer.label}.{' '}
-          <button type="button" data-testid="plugin-card-export-offer-accept" className="wk-host-btn wk-host-btn--primary" disabled={head < 1 || (full && lensVersion !== null)}
+          <button type="button" data-testid="plugin-card-export-offer-accept" className="wk-host-btn wk-host-btn--primary" disabled={head < 1 || lensShown}
             onClick={() => { const f = exportOffer.format; setExportOffer(null); void exportAs(f); }}>Make the {exportOffer.label}</button>{' '}
           <button type="button" className="wk-since-toggle" onClick={() => setExportOffer(null)}>Not now</button>
         </p>

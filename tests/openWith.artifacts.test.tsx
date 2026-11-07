@@ -74,3 +74,14 @@ describe('Open with leaves out an editor that does not read the artifact (G9)', 
     expect([...select.options].map((o) => o.value)).toEqual(['wicked-page', 'mpx-changelog-entry']);
   });
 });
+
+describe('Open with on a registry that lists no permissions (an older crew)', () => {
+  it('offers every fitting editor, and the pick opens', () => {
+    const bare = (over: Partial<EditorView>) => view({ permissions: undefined as never, ...over });
+    useEditors.setState({ state: 'ready', editors: [bare({ id: 'mpx-other', title: 'Other', first_party: false, source: 'pack' }), bare({})], reason: null });
+    render(<ArtifactMorph artifactKey="r1:p/doc" title="Status" projectId="p" docId="doc" composerKey="c" kind="page" />);
+    expect(screen.getByTestId('stub-card')).toHaveAttribute('data-editor', 'wicked-page');
+    fireEvent.change(screen.getByTestId('plugin-card-open-with-select'), { target: { value: 'mpx-other' } });
+    expect(screen.getByTestId('stub-card')).toHaveAttribute('data-editor', 'mpx-other');
+  });
+});

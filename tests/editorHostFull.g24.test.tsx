@@ -18,6 +18,7 @@ const { FakeSurfaceAdapter } = await import('../src/editors/adapters/fake.js');
 const { RUN_TAB, useHostChrome, useHostPanel } = await import('../src/editors/hostApi.js');
 const { resetArtifactSizes } = await import('../src/store/artifactSizes.js');
 const { useAdvisoryNotes, useEditors } = await import('../src/store/editors.js');
+const { ArtifactAddressProvider } = await import('../src/components/session/ArtifactAddress.js');
 import type { ArtifactBinding } from '../src/editors/hostApi.js';
 
 /**
@@ -206,10 +207,42 @@ describe('G25: a plugin’s export ask is a host offer on the card', () => {
     const { port, adapter } = await openCard(false);
     act(() => { port.postMessage(env('export.request', { format: 'pdf' }, 'y1')); });
     await waitFor(() => expect(screen.getByTestId('plugin-card-export-offer')).toBeTruthy());
+    const replies: { re?: string; ok?: boolean }[] = [];
+    port.onmessage = (m) => { replies.push(m.data as { re?: string; ok?: boolean }); };
     act(() => { port.postMessage(env('export.request', { format: 'html' }, 'y2')); });
-    await new Promise((r) => setTimeout(r, 30));
+    // The host has handled the competing ask (it answered it) before the offer is looked at.
+    await waitFor(() => expect(replies.find((r) => r.re === 'y2')).toMatchObject({ ok: true }));
+    await act(async () => { await Promise.resolve(); });
     expect(screen.getByTestId('plugin-card-export-offer').textContent).toContain('as PDF');
     fireEvent.click(screen.getByTestId('plugin-card-export-offer-accept'));
     await waitFor(() => expect(adapter.made.map((m) => m.format)).toEqual(['pdf']));
+  });
+});
+
+describe('G24: Export waits while the full screen shows an older version', () => {
+  it('an Export menu open when the version lens comes up closes, and Export is disabled under the lens', async () => {
+    const adapter = new ExportingFake(BINDING);
+    const tree = (v: number | null) => (
+      <ArtifactAddressProvider sessionId="s1" routeKey={v === null ? null : BINDING.artifactKey} routeSize="full" routeVersion={v} navigate={vi.fn()}>
+        <PluginCard binding={BINDING} editor={EDITOR} adapter={adapter} src="about:blank" grants={GRANTS} />
+      </ArtifactAddressProvider>
+    );
+    const view = render(tree(null));
+    let frame: HTMLIFrameElement | null = null;
+    await waitFor(() => { frame = screen.getByTestId('plugin-card-frame').querySelector('iframe'); expect(frame).not.toBeNull(); });
+    let transferred: MessagePort | undefined;
+    vi.spyOn(frame!.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { transferred = tr?.[0] as MessagePort | undefined; }) as never);
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: env('plugin.ready', { editor: EDITOR.id, version: EDITOR.version, protocol: [2], surfaces: DECL }), source: frame!.contentWindow })); });
+    ports.push(transferred!);
+    await waitFor(() => expect(screen.getByTestId('plugin-card-full')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('plugin-card-full'));
+    const exportBtn = (): HTMLButtonElement => screen.getByTestId('full-shell-actions').querySelector<HTMLButtonElement>('[data-verb="host:export"]')!;
+    await waitFor(() => expect(exportBtn().disabled).toBe(false));
+    fireEvent.click(exportBtn());
+    expect(screen.getAllByTestId('artifact-export-format').length).toBeGreaterThan(0);
+    view.rerender(tree(1));
+    await waitFor(() => expect(screen.queryAllByTestId('artifact-export-format')).toHaveLength(0));
+    expect(exportBtn().disabled).toBe(true);
+    expect(adapter.made).toEqual([]);
   });
 });
