@@ -206,7 +206,9 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
   // The demo preset's steps (a model reviews it) and the human-review preset's (no review step: rows stay private).
   const modelUnits: readonly UnitLike[] = [{ id: `${RUN}:plan`, ord: 4, status: 'done' }, { id: `${RUN}:record`, ord: 5, status: 'done' }, { id: `${RUN}:review`, ord: 6, status: 'done' }];
   const personUnits: readonly UnitLike[] = [{ id: `${RUN}:plan`, ord: 4, status: 'done' }, { id: `${RUN}:record`, ord: 5, status: 'done' }];
-  function reviewServer(first: DemoView, later: DemoView = first, gateAt: (read: number) => string = () => '1970-01-01T00:00:00.001Z') {
+  /** `laterFrom`: the demo read that starts answering `later` (1 = the card's own read, 2 = the read on opening the note,
+   *  3 = the read on sending). */
+  function reviewServer(first: DemoView, later: DemoView = first, gateAt: (read: number) => string = () => '1970-01-01T00:00:00.001Z', laterFrom = 2) {
     let reads = 0, gateReads = 0;
     // The review gate the card was drawn under (what the run's gate stream put in the store).
     useGateStore.getState().setGate({ runId: RUN, ord: 6, prompt: 'Review the take', lifecycle: 'open', receivedAt: 1 });
@@ -217,7 +219,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
         return json({ runId: RUN, ord: 6, prompt: 'Review the take', lifecycle: 'open', receivedAt: gateAt(gateReads) });
       }
       if (url.endsWith('/demo/document') && init?.method === 'POST') return json({ projectId: 'p', docId: 'demo-runone', created: true });
-      if (url.endsWith('/demo')) { reads += 1; return json(reads === 1 ? first : later); }
+      if (url.endsWith('/demo')) { reads += 1; return json(reads < laterFrom ? first : later); }
       throw new Error(`Unexpected route: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -263,7 +265,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
   });
 
   it('sends nothing when the take changed since it was shown', async () => {
-    const { gatePosts } = reviewServer(reviewDemo(), reviewDemo({ video: { path: 'demo-video/demo.mp4', bytes: 99 } }));
+    const { gatePosts } = reviewServer(reviewDemo(), reviewDemo({ video: { path: 'demo-video/demo.mp4', bytes: 99 } }), undefined, 3);
     render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
     fireEvent.click(await screen.findByTestId('demo-record-again-send'));
@@ -331,10 +333,19 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
     expect(fetchMock.mock.calls.filter(([u, i]) => String(u).endsWith('/gate') && i?.method === 'POST')).toHaveLength(0);
   });
 
+  it('opens no note when the take read on opening is not the one shown', async () => {
+    const { gatePosts } = reviewServer(reviewDemo(), reviewDemo({ video: { path: 'demo-video/demo.mp4', bytes: 77 } }));
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
+    fireEvent.click(await screen.findByTestId('demo-record-again'));
+    expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/take changed/);
+    expect(screen.queryByTestId('demo-record-again-box')).toBeNull();
+    expect(gatePosts()).toHaveLength(0);
+  });
+
   it('sends nothing when the plan changed under the same-size take (chapters are part of the take)', async () => {
     const renamed = reviewDemo();
     renamed.chapters = renamed.chapters.map((c, i) => (i === 1 ? { ...c, title: 'Assign two tickets' } : c));
-    const { gatePosts } = reviewServer(reviewDemo(), renamed);
+    const { gatePosts } = reviewServer(reviewDemo(), renamed, undefined, 3);
     render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
     fireEvent.click(await screen.findByTestId('demo-record-again-send'));
