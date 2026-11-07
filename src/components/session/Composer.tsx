@@ -5,7 +5,7 @@ import { artifactOfChips, chipText, messageWithAbout, projectChip, type AboutChi
 import { inViewFor } from '../../store/artifactInView.js';
 import { composerSendRefusal } from '../../board/launchModel.js';
 import { parseWorkflowCommand, WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
-import { catalogRows, commandList, notOfferedLine, parseCommandLine, workflowEntry, type CatalogRow, type CommandRow } from '../../board/slashCatalog.js';
+import { allCommandRows, catalogRows, commandList, notOfferedLine, parseCommandLine, workflowEntry, type CatalogRow, type CommandRow } from '../../board/slashCatalog.js';
 import { contentWords } from '../../board/commandSearch.js';
 import { commandsOn, LOOKS_DEBOUNCE_MS, looksLike, useCatalogV2 } from '../../store/catalogV2.js';
 import { entryOffered, entryWords, jobCatalogView, startsInline, type CatalogEntry } from '../../board/workflowCatalog.js';
@@ -39,6 +39,13 @@ import { SlashMenu, type AtItem } from './SlashMenu.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { usePhone } from '../../hooks/usePhone.js';
 import { VoiceMicButton } from '../voice/VoiceMicButton.js';
+
+let cmdSeq = 0;
+/** A typed command draft's own request key (codex r1: a second identical command is a new job, not a retry). */
+function newCmdKey(composerKey: string): string {
+  cmdSeq += 1;
+  return `cmd:${composerKey}:${Date.now().toString(36)}:${cmdSeq}`;
+}
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
 export interface ComposerSend {
@@ -235,11 +242,20 @@ export function Composer({
   const v2Project = catalogProjectOf(project?.projectId ?? contextProjectId);
   const v2Load = useCatalogV2(v2Project, cmdsOn, text.trimStart().startsWith('/') || wfChip !== null);
   const v2View = v2Load.state === 'ready' ? v2Load.view : null;
-  const v2Line = cmdsOn && !answerOnly && wfChip === null && text.startsWith('/') && !text.includes('\n');
+  // The line as typed, less any leading blanks: ` /bug` is the same command line (pi r1 P1: a leading space must never fall
+  // back to the v1 list and its launch on a capable daemon).
+  const line = text.trimStart();
+  const v2Line = cmdsOn && !answerOnly && wfChip === null && line.startsWith('/');
+  // Which list a `/` opens is the daemon's to say: until its capabilities are read, neither list is offered (codex r1:
+  // a v1 pick made before discovery would keep its launch path on a capable daemon).
+  const capsLoaded = useCapabilities((s) => s.loaded);
+  useEffect(() => {
+    if (!capsLoaded && line.startsWith('/')) void useCapabilities.getState().load();
+  }, [capsLoaded, line]);
   const [looks, setLooks] = useState<{ text: string; guess: ShapeGuess | null } | null>(null);
   const v2State = useMemo(
-    () => (v2Line && v2View !== null ? commandList(v2View, text, null) : null),
-    [v2Line, v2View, text],
+    () => (v2Line && v2View !== null ? commandList(v2View, line, null) : null),
+    [v2Line, v2View, line],
   );
   const freeWords = v2State !== null && v2State.open ? v2State.freeWords : null;
   // The Looks like row: crew's words layer over free words (4 or more content words), words only, never a seat; the
@@ -254,13 +270,13 @@ export function Composer({
   }, [freeWords, v2Project]);
   const cmdRows: CommandRow[] = useMemo(() => {
     if (!v2Line || v2View === null) return [];
-    const st = commandList(v2View, text, looks !== null && looks.text === freeWords ? looks.guess : null);
+    const st = commandList(v2View, line, looks !== null && looks.text === freeWords ? looks.guess : null);
     return st.open ? st.rows : [];
-  }, [v2Line, v2View, text, looks, freeWords]);
+  }, [v2Line, v2View, line, looks, freeWords]);
   const v2Open = v2Line && (v2View === null || v2State?.open === true);
-  const firstWord = text.slice(1).split(/\s/u)[0] ?? '';
+  const firstWord = line.slice(1).split(/\s/u)[0] ?? '';
   // The "Add a step" rows match a single word only: a line of words lists no step (`\u0000` matches none).
-  const token = v2Line ? (v2Open ? { trigger: '/' as const, query: text.includes(' ') ? '\u0000' : firstWord, start: 0 } : null) : menuToken(text, caret);
+  const token = v2Line ? (v2Open ? { trigger: '/' as const, query: /\s/u.test(line) ? '\u0000' : firstWord, start: 0 } : null) : menuToken(text, caret);
   // A bound box takes `/` and `@` as the answer's own words: no command or helper menu opens, so none dispatches.
   const menuOpen = !answerOnly && token !== null && closedAt !== `${token.trigger}${token.start}`;
   useEffect(() => {
@@ -290,11 +306,12 @@ export function Composer({
     : catalogLoad.state === 'loading' || (catalogLoad.state === 'unavailable' && defs === null) ? 'loading' : 'ready';
   const wfStateV2: 'loading' | 'error' | 'ready' = v2Load.state;
   const wf = useMemo(
-    () => (!v2Line && startCommands && token !== null ? catalogRows(catalogView, token.query, Date.now()) : []),
+    // On a capable daemon the v1 list is never offered: a `/` line is the command list's, or no list (pi r1 P1).
+    () => (capsLoaded && !cmdsOn && startCommands && token !== null ? catalogRows(catalogView, token.query, Date.now()) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [startCommands, token?.query, catalogView],
   );
-  const anyWorkflows = useMemo(() => (v2Line ? v2View !== null && commandList(v2View, '/').open : catalogRows(catalogView, '', Date.now()).length > 0), [catalogView, v2Line, v2View]);
+  const anyWorkflows = useMemo(() => (cmdsOn ? v2View !== null && allCommandRows(v2View).length > 0 : catalogRows(catalogView, '', Date.now()).length > 0), [catalogView, cmdsOn, v2View]);
   // ux-tonight: the card on this composer (its next Enter starts it here), read off the same catalog.
   const chipEntry = useMemo(() => {
     if (wfChip === null || wfChip.job === true || catalogView === null) return null;
@@ -352,10 +369,10 @@ export function Composer({
     });
     return [...p, ...h].filter((x) => x.label.toLowerCase().startsWith(q) || x.id.toLowerCase().startsWith(q)).slice(0, 8);
   }, [token?.trigger, token?.query, projects, roster, eligibleSeats]);
-  const lead = v2Line ? cmdRows.length : wf.length;
+  const lead = cmdsOn ? cmdRows.length : wf.length;
   const count = token?.trigger === '/' ? lead + slash.length : ats.length;
   const rowKeys = token?.trigger === '/'
-    ? [...(v2Line ? cmdRows.map((r) => r.key) : wf.map((r) => `e:${r.entry.id}`)), ...slash.map((it) => `s:${it.command.cmd}`)]
+    ? [...(cmdsOn ? cmdRows.map((r) => r.key) : wf.map((r) => `e:${r.entry.id}`)), ...slash.map((it) => `s:${it.command.cmd}`)]
     : ats.map((it) => `a:${it.kind}:${it.id}`);
   const keyedAt = cursorKey === null ? -1 : rowKeys.indexOf(cursorKey);
   const active = count === 0 ? 0 : keyedAt >= 0 ? keyedAt : Math.min(cursor, count - 1);
@@ -372,7 +389,8 @@ export function Composer({
   // open `@` menu never lets a send past the refusals below (codex r2 on S3).
   // A new app is made by crew's own helpers (the app's turn): no helpers row for it.
   const seatsApply = !answerOnly && jobChip === null && eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
-  const showSeats = seatsApply && !atMenuOpen;
+  // The command list stands in the same place: while it is open over a `/` line the row steps aside (one list shows).
+  const showSeats = seatsApply && !atMenuOpen && !(v2Line && menuOpen);
   // A job's helpers (New job's J4 rule, codex r1 on #982): one that cannot take work now (signed out, benched) is off
   // unless turned on by hand, and the row shows exactly what the launch sends.
   const unusable = useMemo(() => new Set(wfChip === null ? [] : (roster ?? []).flatMap((s) => {
@@ -392,8 +410,12 @@ export function Composer({
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
   const [jobBusy, setJobBusy] = useState(false);
+  const jobBusyRef = useRef(false);
+  /** A typed command's request identity: kept across retries of this draft, renewed once it is posted. */
+  const cmdKey = useRef(newCmdKey(composerKey));
   const canSend = answerOnly ? text.trim() !== ''
-    : jobChip !== null ? !jobBusy && refusal === null
+    // A job's proposal is not a message to a seat: the seat refusals do not gate it (crew's proposal names its seats).
+    : jobChip !== null ? !jobBusy
       : (text.trim() !== '' || (wfChip !== null && wordsOptional)) && refusal === null && seatRefusal === null
         && (wfChip === null || startBlocker === null);
 
@@ -494,7 +516,7 @@ export function Composer({
     if (row.kind === 'yours') {
       const known = workflowEntry(catalogView, row.launchId);
       if (known === null || !entryOffered(known)) { setNote(known === null ? `${row.title} is not listed now.` : notOfferedLine(known)); return; }
-      startEntry(known, '');
+      startEntry(known, freeWords ?? '');
       return;
     }
     const words = freeWords ?? '';
@@ -510,7 +532,7 @@ export function Composer({
   };
   const pick = (i: number): void => {
     if (token?.trigger === '/') {
-      if (i < lead) { if (v2Line) { const r = cmdRows[i]; if (r !== undefined) pickCommand(r); } else { const it = wf[i]; if (it !== undefined) pickWorkflow(it); } }
+      if (i < lead) { if (cmdsOn) { const r = cmdRows[i]; if (r !== undefined) pickCommand(r); } else { const it = wf[i]; if (it !== undefined) pickWorkflow(it); } }
       else { const it = slash[i - lead]; if (it !== undefined) pickSlash(it); }
     } else { const it = ats[i]; if (it !== undefined) pickAt(it); }
   };
@@ -525,23 +547,22 @@ export function Composer({
     // Lane E2 (§4.6, §8.4): a job chip, or a command typed whole, posts the person-made proposal: into this chat, or as
     // a new chat's seed. Never a launch route.
     if (jobChip !== null) {
-      if (refusal !== null) return;
       void sendJob({ card: jobChip.card ?? jobChip.entryId ?? '', option: jobChip.option ?? null, depth: jobChip.depth ?? null, words: text, source: 'pick', pickKey: jobChip.key, chipKey: jobChip.key });
       return;
     }
-    if (cmdsOn && text.trim().startsWith('/') && refusal === null) {
-      if (v2View === null) {
-        if (parseWorkflowCommand(text) !== null || !text.trim().includes(' ')) { setNote(v2Load.state === 'error' ? WORKFLOWS_FAILED_LINE : WORKFLOWS_LOADING_LINE); return; }
-      } else {
-        const hit = parseCommandLine(v2View, text);
-        if (hit !== null) {
-          if (hit.refused !== null) { setNote(hit.refused); return; }
-          void sendJob({ card: hit.wireCard, option: hit.option, depth: hit.depth, words: hit.words, source: 'command', pickKey: `cmd:${composerKey}`, chipKey: null });
-          return;
-        }
-        const old = parseWorkflowCommand(text);
-        if (old !== null) { setNote(`This daemon lists no job with the command /workflow-${old.key}. Nothing was sent.`); return; }
+    // A `/` line before the daemon's capabilities are read is held: which list and which path is the daemon's to say.
+    if (!capsLoaded && line.startsWith('/')) { setNote(WORKFLOWS_LOADING_LINE); return; }
+    if (cmdsOn && line.startsWith('/')) {
+      // A command line is held until the catalog can read it (codex r1): never sent as a chat message meanwhile.
+      if (v2View === null) { setNote(v2Load.state === 'error' ? WORKFLOWS_FAILED_LINE : WORKFLOWS_LOADING_LINE); return; }
+      const hit = parseCommandLine(v2View, line);
+      if (hit !== null) {
+        if (hit.refused !== null) { setNote(hit.refused); return; }
+        void sendJob({ card: hit.wireCard, option: hit.option, depth: hit.depth, words: hit.words, source: 'command', pickKey: cmdKey.current, chipKey: null, renewCmd: true });
+        return;
       }
+      const old = parseWorkflowCommand(line);
+      if (old !== null) { setNote(`This daemon lists no job with the command /workflow-${old.key}. Nothing was sent.`); return; }
     }
     // A `/workflow-<key>` line typed whole (menu closed, a paste): Enter NAMES it — the options row
     // then asks for the repository. Nothing is sent until the next Enter.
@@ -585,23 +606,30 @@ export function Composer({
     setNote(null);
   };
 
-  const sendJob = async (j: { card: string; option: string | null; depth: 'quick' | 'standard' | 'deep' | null; words: string; source: 'pick' | 'command'; pickKey: string; chipKey: string | null }): Promise<void> => {
-    if (jobBusy) return;
+  const sendJob = async (j: { card: string; option: string | null; depth: 'quick' | 'standard' | 'deep' | null; words: string; source: 'pick' | 'command'; pickKey: string; chipKey: string | null; renewCmd?: boolean }): Promise<void> => {
+    // A ref, not the render's state: two Enters before a re-render post once (pi r1).
+    if (jobBusyRef.current) return;
+    jobBusyRef.current = true;
     setJobBusy(true);
     setNote(null);
     setStartNote(composerKey, null);
     const sentWords = text;
     try {
       await postJob({
-        card: j.card, option: j.option, depth: j.depth, words: j.words, source: j.source, chatId: jobChatId,
-        projectId: project?.projectId ?? contextProjectId, repoRef: sessionRepo, pickKey: j.pickKey,
+        card: j.card, option: j.option, depth: j.depth, words: j.words, source: j.source,
+        // An `@project` chip names where the job goes: a new chat in that project, never this chat (codex r1).
+        chatId: project !== null ? null : jobChatId,
+        projectId: project?.projectId ?? contextProjectId, repoRef: project !== null ? null : sessionRepo, pickKey: j.pickKey,
       });
+      // A typed command posted is spent: the next one is its own request (codex r1).
+      if (j.renewCmd === true) cmdKey.current = newCmdKey(composerKey);
       // Only what was posted leaves the box: words typed since stay.
       if (j.chipKey !== null) removeAboutChip(composerKey, j.chipKey);
       if (textNow.current === sentWords) setText('');
     } catch (e) {
       setStartNote(composerKey, `Nothing was started: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
+      jobBusyRef.current = false;
       setJobBusy(false);
     }
   };
@@ -613,10 +641,10 @@ export function Composer({
           menuKey={composerKey}
           trigger={token.trigger}
           startCommands={startCommands}
-          catalogState={v2Line ? wfStateV2 : wfCatalogState}
+          catalogState={!capsLoaded ? 'loading' : cmdsOn ? wfStateV2 : wfCatalogState}
           anyWorkflows={anyWorkflows}
           wf={wf}
-          {...(v2Line ? { cmds: cmdRows, onPickCommand: pickCommand } : {})}
+          {...(cmdsOn ? { cmds: cmdRows, onPickCommand: pickCommand } : {})}
           slash={slash}
           ats={ats}
           {...(!started && askPathOn ? { helpersHead: 'Helpers · the one you pick answers' } : {})}
@@ -638,7 +666,7 @@ export function Composer({
           {refusal !== null && <span data-testid="composer-refused" role="status" className="wk-composer-note wk-composer-note--bad">{refusal}</span>}
           {refusal === null && note !== null && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
           {jobChip !== null && refusal === null && (
-            <span data-testid="composer-job-line" className="wk-composer-note">
+            <span data-testid="composer-job-line" role="status" className="wk-composer-note">
               {jobBusy ? 'Putting the job in the chat…' : 'Enter puts this job in the chat for you to look over. Nothing runs until you press Start.'}
             </span>
           )}

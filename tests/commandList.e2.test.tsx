@@ -41,6 +41,16 @@ let v2: unknown = V2;
 /** What the detect route answers (a promise that never settles = a reading still out). */
 let detect: () => Promise<unknown> = () => new Promise(() => {});
 let calls: Array<{ method: string; path: string; body: Record<string, unknown> | null }> = [];
+/** Statuses the next proposal / seed posts answer with (default 201), in order. */
+let proposalStatuses: number[] = [];
+let seedStatuses: number[] = [];
+/** Held until released: the v2 catalog read, and /health. */
+let v2Gate: Promise<void> = Promise.resolve();
+let healthGate: Promise<void> = Promise.resolve();
+/** What the composer handed over as an ordinary chat message. */
+let chatSends: string[] = [];
+/** What /health advertises (the capabilities store reads it when nothing has yet). */
+let healthCaps: Record<string, unknown> = {};
 const nonGets = (): Array<{ method: string; path: string; body: Record<string, unknown> | null }> => calls.filter((c) => c.method !== 'GET');
 
 function stubWire(): void {
@@ -55,13 +65,18 @@ function stubWire(): void {
       Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } }));
     if (method === 'POST' && path === '/workflows/catalog/detect') return detect().then((g) => json(g));
     if (method === 'POST' && /^\/chats\/[^/]+\/proposals$/.test(path)) {
+      const st = proposalStatuses.shift() ?? 201;
+      if (st >= 400) return json({ code: 'boom', error: 'the daemon said no' }, st);
       return json({ view: { state: 'open', proposal: { pid: `${path.split('/')[2]}:person:1`, kind: 'job' } } }, 201);
     }
     if (method === 'POST' && path === '/chats') {
+      const st = seedStatuses.shift() ?? 201;
+      if (st >= 400) return json({ code: 'boom', error: 'the daemon said no' }, st);
       return json({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } } }, 201);
     }
     if (method !== 'GET') return json({ ok: true });
-    if (path === '/workflows/catalog') return json(u.searchParams.get('v') === '2' ? v2 : rigV1);
+    if (path === '/health') return healthGate.then(() => json({ status: 'ok', capabilities: healthCaps }));
+    if (path === '/workflows/catalog') return u.searchParams.get('v') === '2' ? v2Gate.then(() => json(v2)) : json(rigV1);
     return json(path === '/workflows' ? { workflows: WF } : path === '/roster' ? { roster: [SEAT] } : path === '/repos' ? { repos: [REPO] }
       : path === '/presets' ? { presets: [] } : path === '/projects' ? { projects: [] } : {});
   }));
@@ -69,7 +84,7 @@ function stubWire(): void {
 
 function Harness({ chatId = 'c1', composerKey = 'c1' }: { chatId?: string | null; composerKey?: string }): React.ReactElement {
   const [text, setText] = useState('');
-  return <Composer composerKey={composerKey} jobChatId={chatId} text={text} setText={setText} onSend={() => {}} placeholder="p" ariaLabel="a" variant="session" navigate={() => {}} />;
+  return <Composer composerKey={composerKey} jobChatId={chatId} text={text} setText={setText} onSend={(m) => { chatSends.push(m); }} placeholder="p" ariaLabel="a" variant="session" navigate={() => {}} />;
 }
 function type(text: string): void {
   const box = screen.getByTestId('session-composer-input') as HTMLTextAreaElement;
@@ -87,8 +102,13 @@ async function list(text = '/'): Promise<void> {
 const pickRow = (cmd: string): void => {
   const r = rows().find((x) => x.dataset.cmd === cmd);
   if (r === undefined) throw new Error(`no row ${cmd}: ${cmds().join(', ')}`);
-  fireEvent.mouseDown(r);
+  fireEvent.click(r);
 };
+/** The list is read (a `/` lists rows), then the box is cleared: what is typed next meets a read catalog. */
+async function ready(): Promise<void> {
+  await list('/');
+  type('');
+}
 const proposals = (): Array<Record<string, unknown>> => nonGets().filter((c) => /\/proposals$/.test(c.path)).map((c) => c.body!);
 const launches = (): string[] => nonGets().map((c) => c.path).filter((p) => p === '/runs' || /\/demo$|\/product\/compose$/.test(p));
 
@@ -98,6 +118,12 @@ function capable(on = true): void {
 
 beforeEach(() => {
   v2 = V2;
+  proposalStatuses = [];
+  seedStatuses = [];
+  v2Gate = Promise.resolve();
+  healthGate = Promise.resolve();
+  chatSends = [];
+  healthCaps = {};
   detect = () => new Promise(() => {});
   stubWire();
   capable();
@@ -268,10 +294,13 @@ describe('picking into the composer, and Enter', () => {
   });
   it('a command typed whole and Enter posts the same proposal (source: command)', async () => {
     render(<Harness />);
+    await ready();
     type('/migrate upgrade to node 22');
-    // Once the list is read, a command typed whole with words after it closes the list: Enter posts it.
-    await waitFor(() => expect(document.querySelector('[data-testid="composer-menu"]')).toBeNull());
-    await waitFor(() => { enter(); expect(proposals()).toHaveLength(1); });
+    // A command typed whole with words after it closes the list: Enter posts it, once.
+    expect(document.querySelector('[data-testid="composer-menu"]')).toBeNull();
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    expect(chatSends).toEqual([]);
     expect(proposals()[0]).toMatchObject({ card: 'migrate', option: 'upgrade', words: 'to node 22', source: 'command' });
     expect(launches()).toEqual([]);
   });
@@ -280,15 +309,19 @@ describe('picking into the composer, and Enter', () => {
     await list('/workflow-test');
     expect(rows().map((r) => r.dataset.card)).not.toContain('test-analysis');
     type('/workflow-test-analysis the coverage gaps');
-    await waitFor(() => { enter(); expect(proposals()).toHaveLength(1); });
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    expect(chatSends).toEqual([]);
     expect(proposals()[0]).toMatchObject({ card: '/workflow-test-analysis', words: 'the coverage gaps', source: 'command' });
     expect(proposals()[0]!.card).not.toBe('plan-tests');
   });
   it('a coming command starts nothing and posts nothing', async () => {
     render(<Harness />);
+    await ready();
     type('/due-diligence acme corp');
-    await waitFor(() => expect(calls.some((c) => c.path === '/workflows/catalog?v=2')).toBe(true));
-    await waitFor(() => { enter(); expect(screen.getByTestId('composer-note').textContent).toMatch(/isn’t available on this daemon/); });
+    enter();
+    expect(screen.getByTestId('composer-note').textContent).toMatch(/isn’t available on this daemon/);
+    expect(chatSends).toEqual([]);
     expect(screen.getByTestId('composer-note').textContent).not.toMatch(/coming/i);
     expect(nonGets()).toEqual([]);
   });
@@ -324,7 +357,7 @@ describe('picking into the composer, and Enter', () => {
     render(<Harness />);
     type('/upgrade our node service to 22');
     await waitFor(() => expect(rows()[0]?.dataset.kind).toBe('looks'), { timeout: 3000 });
-    fireEvent.mouseDown(rows()[0]!);
+    fireEvent.click(rows()[0]!);
     expect(chipsOf(useComposerChips.getState(), 'c1')[0]).toMatchObject({ card: 'migrate', option: 'upgrade' });
     expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('upgrade our node service to 22');
   });
@@ -396,5 +429,184 @@ describe('the named-launch bridge and New job on a capable daemon', () => {
     expect(useSessionDrafts.getState().drafts[id]).toBe('the login page crashes');
     expect(useLaunchWizard.getState().open).toBe(false);
     expect(nonGets()).toEqual([]);
+  });
+});
+
+describe('review folds (r1): the path holds under failure, races and edge input', () => {
+  it('a leading space is the same command line: never the v1 list, never a launch', async () => {
+    render(<Harness />);
+    await ready();
+    type(' /bug');
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    expect(rows().every((r) => r.dataset.kind !== undefined)).toBe(true); // v2 rows only
+    type(' /bug login crashes');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    expect(proposals()[0]).toMatchObject({ card: 'bug', words: 'login crashes', source: 'command' });
+    expect(launches()).toEqual([]);
+    expect(screen.queryByTestId('composer-start')).toBeNull(); // ux-tonight's launch row never shows
+  });
+  it('no helper set up: a job is still posted (a proposal is not a message to a seat), never sent as chat', async () => {
+    setCachedRoster([]);
+    render(<Harness />);
+    await ready();
+    type('/bug login crashes');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    expect(chatSends).toEqual([]);
+  });
+  it('a command typed before the list is read is held, never sent as a chat message', async () => {
+    let release!: () => void;
+    v2Gate = new Promise((r) => { release = r; });
+    render(<Harness />);
+    type('/due-diligence acme corp');
+    enter();
+    expect(screen.getByTestId('composer-note').textContent).toMatch(/Reading/);
+    expect(chatSends).toEqual([]);
+    expect(nonGets()).toEqual([]);
+    release();
+    await waitFor(() => expect(rows().length + 1).toBeGreaterThan(0));
+  });
+  it('before the daemon’s capabilities are read, `/` offers no list and Enter sends nothing', async () => {
+    useCapabilities.setState({ loaded: false, chatJobProposals: false, workflowCatalogV2: false });
+    let release!: () => void;
+    healthGate = new Promise((r) => { release = r; });
+    render(<Harness />);
+    type('/');
+    await waitFor(() => expect(screen.getByTestId('composer-menu-empty').dataset.state).toBe('loading'));
+    expect(rows()).toEqual([]);
+    type('/bug login crashes');
+    enter();
+    expect(chatSends).toEqual([]);
+    expect(nonGets()).toEqual([]);
+    // The store's one read in flight is let go, so the next test reads afresh.
+    release();
+    await waitFor(() => expect(useCapabilities.getState().loaded).toBe(true));
+  });
+  it('a failed post says why where the person is and keeps the job; a retry is the same request; new words, a new one', async () => {
+    proposalStatuses = [500, 500];
+    render(<Harness />);
+    await list('/bug');
+    pickRow('/bug');
+    type('login crashes');
+    enter();
+    await waitFor(() => expect(screen.getByTestId('composer-start-note').textContent).toMatch(/Nothing was started: .*the daemon said no/));
+    expect(screen.getByTestId('composer-start-note').getAttribute('role')).toBe('alert');
+    expect(chipsOf(useComposerChips.getState(), 'c1')).toHaveLength(1);
+    expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('login crashes');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(2));
+    expect(proposals()[1]!.requestId).toBe(proposals()[0]!.requestId);
+    type('login crashes on safari');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(3));
+    expect(proposals()[2]!.requestId).not.toBe(proposals()[0]!.requestId);
+    await waitFor(() => expect(chipsOf(useComposerChips.getState(), 'c1')).toEqual([]));
+  });
+  it('a typed command posted is spent: the same command again is a new request', async () => {
+    render(<Harness />);
+    await ready();
+    type('/bug login crashes');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe(''));
+    type('/bug login crashes');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(2));
+    expect(proposals()[1]!.requestId).not.toBe(proposals()[0]!.requestId);
+  });
+  it('two Enters before a re-render post once', async () => {
+    render(<Harness />);
+    await list('/bug');
+    pickRow('/bug');
+    type('x');
+    enter();
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(proposals()).toHaveLength(1);
+  });
+  it('an @project chip sends the job to a new chat in that project, not this chat', async () => {
+    render(<Harness />);
+    act(() => useComposerChips.setState({ byComposer: { c1: [{ kind: 'project', key: 'p:p2', label: 'P2', projectId: 'p2' }] } }));
+    await list('/bug');
+    pickRow('/bug');
+    enter();
+    await waitFor(() => expect(nonGets()).toHaveLength(1));
+    expect(nonGets()[0]).toMatchObject({ path: '/chats', body: { projectId: 'p2', seed: { card: 'bug' } } });
+  });
+  it('§9.2 (q) end to end: substituted commands drive the rendered list, the pick and the typed command', async () => {
+    const sub = structuredClone(V2);
+    const m = sub.cards.find((c) => c.id === 'migrate')!;
+    m.command = '/port';
+    for (const o of m.variant!.options) { o.command = `/port ${o.optionWord!}-x`; o.optionWord = `${o.optionWord!}-x`; }
+    v2 = sub;
+    render(<Harness />);
+    await list('/po');
+    expect(cmds()).toEqual(['/port', '/port move-x', '/port in-place-x', '/port upgrade-x']);
+    pickRow('/port upgrade-x');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    expect(proposals()[0]).toMatchObject({ card: 'migrate', option: 'upgrade', source: 'pick' });
+    type('/port move-x the db');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(2));
+    expect(proposals()[1]).toMatchObject({ card: 'migrate', option: 'move', words: 'the db', source: 'command' });
+    type('/migrate upgrade x');
+    enter();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(proposals()).toHaveLength(2); // the old spelling is not a command here
+    expect(launches()).toEqual([]);
+  });
+  it('a named opener’s seed that fails keeps its requirements and scope; Enter on its new chat retries the same request', async () => {
+    seedStatuses = [500];
+    act(() => openLaunchWizard({ workflowId: DRAFT_EPICS_ID, projectId: 'p1', contextRepo: 'repo-1', requirements: [{ repoId: 'r1', key: 'REQ-1', title: 'One' }] }));
+    await waitFor(() => expect(useStartNotes.getState().notes[useChatFlow.getState().request?.chatId ?? '']).toMatch(/could not be started/));
+    const fresh = useChatFlow.getState().request!.chatId;
+    const first = nonGets()[0]!.body!;
+    render(<Harness chatId={null} composerKey={fresh} />);
+    expect(screen.getByTestId('composer-start-note').textContent).toMatch(/Press Enter to try again/);
+    enter();
+    await waitFor(() => expect(nonGets()).toHaveLength(3));
+    expect(nonGets()[1]!.body).toMatchObject({ requestId: first.requestId, projectId: 'p1', repoRefs: ['repo-1'], seed: { card: 'backlog', option: 'epics' } });
+    expect(nonGets()[2]).toMatchObject({ path: '/chats/seeded-1/proposals', body: { edits: { inputs: { requirements: { kind: 'requirements', refs: [{ repoId: 'r1', key: 'REQ-1' }] } } } } });
+  });
+  it('a named opener replaced before its catalog is read posts nothing and opens nothing', async () => {
+    let release!: () => void;
+    v2Gate = new Promise((r) => { release = r; });
+    act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID }));
+    act(() => openLaunchWizard({ intent: 'something else', composerKey: 'desk' }));
+    const now = useChatFlow.getState().request!.chatId;
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(nonGets()).toEqual([]);
+    expect(useChatFlow.getState().request!.chatId).toBe(now);
+  });
+  it('a named opener racing another read of the catalog still resolves its card', async () => {
+    let release!: () => void;
+    v2Gate = new Promise((r) => { release = r; });
+    render(<Harness />);
+    type('/'); // the composer's read
+    act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID }));
+    type('/b'); // and another
+    release();
+    await waitFor(() => expect(nonGets().find((c) => c.path === '/chats')?.body).toMatchObject({ seed: { card: '/workflow-editor-plugin' } }));
+    expect(useLaunchWizard.getState().open).toBe(false);
+  });
+  it('New job keeps a draft already on the composer: the list opens in a new chat', async () => {
+    render(<Harness />);
+    act(() => { useSessionDrafts.getState().setDraft('c1', 'half a thought'); });
+    act(() => openLaunchWizard({ composerKey: 'c1' }));
+    const id = useChatFlow.getState().request?.chatId;
+    expect(id).toBeDefined();
+    expect(id).not.toBe('c1');
+  });
+  it('New job clicked before the capabilities are read waits for them: a capable daemon never shows the modal', async () => {
+    useCapabilities.setState({ loaded: false, chatJobProposals: false, workflowCatalogV2: false });
+    healthCaps = { chatJobProposals: true, workflowCatalogV2: true };
+    act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID }));
+    expect(useLaunchWizard.getState().open).toBe(false);
+    await waitFor(() => expect(nonGets().find((c) => c.path === '/chats')?.body).toMatchObject({ seed: { card: '/workflow-editor-plugin' } }));
+    expect(useLaunchWizard.getState().open).toBe(false);
   });
 });

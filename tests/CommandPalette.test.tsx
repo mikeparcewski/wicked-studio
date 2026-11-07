@@ -4,6 +4,11 @@ import type { Project } from '../src/api/types.js';
 import { useAskDock } from '../src/store/askDock.js';
 import { DEMO_VIDEO_ID, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { makeView } from './factories.js';
+import { useCapabilities } from '../src/store/capabilities.js';
+
+// An older daemon whose capabilities are read (cat2-commands: New job and the `/` list wait for them; a daemon that
+// takes job proposals gets the v2 command list instead, pinned in tests/commandList.e2.test.tsx).
+beforeEach(() => { useCapabilities.setState({ loaded: true, chatJobProposals: false, workflowCatalogV2: false }); });
 
 /**
  * The universal command palette (DES-FEEDBACK-002 §1, slice G): prefix grammar

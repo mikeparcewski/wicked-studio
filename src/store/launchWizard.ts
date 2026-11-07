@@ -2,8 +2,11 @@ import { create } from 'zustand';
 import type { ConfirmMode } from '../components/ContextPopover.js';
 import { openChatFlow } from './chatFlow.js';
 import { commandsOnNow } from './catalogV2.js';
+import { useCapabilities } from './capabilities.js';
 import { pageComposerKey, seedComposer } from './composerSeed.js';
 import { startInChat } from './inlineStart.js';
+import { chipsOf, useComposerChips } from './composerChips.js';
+import { useSessionDrafts } from './sessionDrafts.js';
 import { composerPrefsLoading, useComposerPrefsStore } from './composerPrefs.js';
 
 /**
@@ -166,6 +169,17 @@ let openGeneration = 0;
 
 export function openLaunchWizard(init: OpenLaunchWizard): void {
   const gen = ++openGeneration;
+  // Which New job this daemon gets is its capabilities' to say: a click before they are read waits for them (a failed
+  // read is an older daemon: today's flow), never opens the modal a capable daemon no longer has.
+  const caps = useCapabilities.getState();
+  if (!caps.loaded) {
+    void caps.load().catch(() => undefined).then(() => { if (gen === openGeneration) openLaunchWizardNow(init, gen); });
+    return;
+  }
+  openLaunchWizardNow(init, gen);
+}
+
+function openLaunchWizardNow(init: OpenLaunchWizard, gen: number): void {
   // DES-CATALOG-002 §8.6 (Lane E2): on a daemon that takes job proposals from a chat and serves the v2 catalog, New
   // job's steps and card grid are gone. A named job starts in a chat (`startInChat`: its proposal, then Start); a plain
   // New job is the `/` command list on this page's composer, or in a new chat. A job with no card on the wire (a saved
@@ -175,7 +189,7 @@ export function openLaunchWizard(init: OpenLaunchWizard): void {
       void startInChat({
         workflowId: init.workflowId!, words: init.intent ?? '', projectId: init.projectId ?? null, repoRef: init.contextRepo ?? null,
         ...(init.requirements !== undefined ? { requirements: init.requirements } : {}),
-      }).then((ok) => { if (!ok && gen === openGeneration) useLaunchWizard.getState().openWith(init); },
+      }, () => gen === openGeneration).then((ok) => { if (!ok && gen === openGeneration) useLaunchWizard.getState().openWith(init); },
         () => { if (gen === openGeneration) useLaunchWizard.getState().openWith(init); });
       return;
     }
@@ -216,8 +230,11 @@ function openCommandList(init: OpenLaunchWizard): void {
     openChatFlow({ projectId: init.projectId ?? null, seedText: init.intent ?? '' });
     return;
   }
+  // The composer on screen takes the list only when it is the one the opener names and it holds nothing yet (codex r1:
+  // another project's New job, or a draft already on the box, gets a new chat instead of overwriting it).
   const here = typeof document === 'undefined' ? null : pageComposerKey();
-  if (here !== null) {
+  const empty = here !== null && chipsOf(useComposerChips.getState(), here).length === 0 && (useSessionDrafts.getState().drafts[here] ?? '').trim() === '';
+  if (here !== null && here === init.composerKey && empty) {
     seedComposer(here, '/');
     return;
   }
