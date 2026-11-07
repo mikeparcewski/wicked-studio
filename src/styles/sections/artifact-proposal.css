@@ -64,5 +64,6 @@ button.wk-proposal-chip:focus-visible { outline: 2px solid var(--focus-ring, var
 .wk-proposal-kept-opt:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wk-proposal-kept > .wk-btn { margin-top: 6px; }
 .wk-proposal-outcome { flex: 1 0 100%; min-width: 0; margin: 0; font-size: var(--text-sm); color: var(--ink-body); overflow-wrap: anywhere; }
-.wk-proposal-outcome:empty { display: none; }
+/* Empty while it waits: still in the accessibility tree (a live region must exist before it speaks), no height. */
+.wk-proposal-outcome:empty { margin: 0; }
 .wk-proposal-outcome--failed { color: var(--ink-high); }
