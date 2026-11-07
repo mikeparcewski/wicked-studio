@@ -1,3 +1,4 @@
+import { ChatProposalCards } from './chat/ChatProposalCards.js';
 import { ExternalLink, Paperclip } from 'lucide-react';
 import { VoiceMicButton } from './voice/VoiceMicButton.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -615,6 +616,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
           ))
         )}
       </div>
+      {/* e2e 2026-11-07 (G4): what the seat proposed is answerable here too, the same card as the chat's full view. */}
+      <ChatProposalCards chatId={chatId} />
       {/* Outside the reply box's own scroll, so the check never hides inside it. */}
       {pathRun !== null && liveOrd !== null && (
         <LiveActivity runId={pathRun} ord={liveOrd} kind="chat" seat={pathPa} label="this answer" />

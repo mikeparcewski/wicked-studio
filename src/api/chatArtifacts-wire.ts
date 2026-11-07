@@ -133,10 +133,24 @@ export interface ArtifactProposal {
   filedIn: { projectId: string | null; label: string };
   target?: { ref: string; title: string; base: number };
   touches?: string[];
+  /** (api-types 0.197.0, A5) refine: the person's own edits this revision keeps, recomputed by crew from the document's
+   *  versions on `target.base`. Each is kept unless the person lets it change (`ProposalEdits.allow`). */
+  protected?: ProtectedEdit[];
   theme?: { name: string; patch: Record<string, string | number | boolean>; changes: string[] };
   demo?: { url: string; audience: string | null; show: string | null };
   /** Go is refused with this reason; `null` = Go is open. */
   blocked: string | null;
+}
+
+/** (api-types 0.197.0) One edit a person made by hand that a refine keeps. The id names one exact value. */
+export interface ProtectedEdit {
+  id: string;
+  kind: 'text' | 'attr' | 'added' | 'gone' | 'order';
+  /** Plain words: "slide 1 · heading “Release 0.17”", "removed slide 5", "your slide order". */
+  label: string;
+  wid: string | null;
+  /** The seat's `touches` or the person's anchors overlap it. */
+  touched: boolean;
 }
 
 export interface ProposalEdits {
