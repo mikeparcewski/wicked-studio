@@ -6,6 +6,7 @@ import type {
   ChatProposalView,
   ProposalEdits,
   ProposalSource,
+  ProtectedEdit,
 } from '../api/chatArtifacts-wire.js';
 import { ApiError } from '../api/errors.js';
 
@@ -66,8 +67,15 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   const demo = p['demo'];
   if (demo !== undefined && (!isObj(demo) || !str(demo['url']) || !strOrNull(demo['audience']) || !strOrNull(demo['show']))) return false;
   const touches = p['touches'];
-  return touches === undefined || (Array.isArray(touches) && touches.every(str));
+  if (touches !== undefined && (!Array.isArray(touches) || !touches.every(str))) return false;
+  // (A5) A refine's protected edits: each one the card can draw and the person can answer.
+  const kept = p['protected'];
+  return kept === undefined || (Array.isArray(kept) && kept.every(isProtectedEdit));
 }
+
+const PROTECTED_KINDS: ReadonlySet<string> = new Set(['text', 'attr', 'added', 'gone', 'order']);
+const isProtectedEdit = (e: unknown): boolean =>
+  isObj(e) && str(e['id']) && str(e['label']) && PROTECTED_KINDS.has(String(e['kind'])) && (e['wid'] === null || str(e['wid'])) && typeof e['touched'] === 'boolean';
 const isResult = (r: unknown): boolean => r === null || (isObj(r) && str(r['runId']) && typeof r['stub'] === 'boolean');
 
 export function isProposalRecord(r: unknown): r is ChatProposalRecord {
@@ -206,14 +214,24 @@ export function changeRoute(kind: ArtifactProposalKind): { kind: 'form' } | { ki
   return { kind: 'stub', note: notes[kind] };
 }
 
+/** A crew-made retry of a proposal-bound attempt that did not land (`<chat>:retry:<run>`, DES §6.2). */
+export function isRetryProposal(p: ArtifactProposal): boolean {
+  return p.sourceRunId !== undefined && p.sourceRunId !== '';
+}
+
+/** The primary's words for this proposal: Try again on a retry, else the kind's. */
+export function goWords(p: ArtifactProposal): string {
+  return isRetryProposal(p) ? 'Try again' : GO_WORDS[p.kind];
+}
+
 /** The card's question: one choose ask, Go preselected (never focused), Change something, Not now. */
 export function proposalAsk(e: ProposalEntry, o: { stub: boolean }): Ask {
   const p = e.proposal;
   const go: AskOption = {
     id: 'go',
-    label: GO_WORDS[p.kind],
+    label: goWords(p),
     // The test configuration starts nothing, and the option says so too (never "Starts now" beside that notice).
-    sub: o.stub ? 'Records your click; nothing starts' : GO_SUB[p.kind],
+    sub: o.stub ? 'Records your click; nothing starts' : isRetryProposal(p) && p.kind === 'refine' ? 'Revises the latest version; your edits are kept' : GO_SUB[p.kind],
     token: 'go',
     tone: 'primary',
     consequence: o.stub
@@ -258,7 +276,7 @@ export function proposalRecordLine(e: ProposalEntry, starting = false): string |
   if (e.state === 'open') return null;
   if (e.state === 'superseded') return 'A newer proposal replaced this one. Nothing was started.';
   if (e.state === 'accepting') return starting ? 'Starting it…' : 'Interrupted before it was recorded as started.';
-  return `You chose: ${e.decision === 'go' ? GO_WORDS[e.proposal.kind] : 'Not now'}`;
+  return `You chose: ${e.decision === 'go' ? goWords(e.proposal) : 'Not now'}`;
 }
 
 /** What Go did, in plain words, for the record line's meta. */
@@ -364,4 +382,46 @@ export function proposalFormEdits(p: ArtifactProposal, f: ProposalForm, projectL
   if (edits.repos === undefined && !sameSet(f.repos, was.repos)) edits.repos = [...f.repos];
   if (!sameSet(f.helpers, was.helpers)) edits.helpers = [...f.helpers];
   return edits;
+}
+
+// ── A refine keeps the person's own edits (slice A5, DES §6.1-6.2) ──────────────────────────────────────────────────────
+
+/** A refine's protected edits as the card lists them: the ones the ask is about inline, the rest folded. */
+export function protectedGroups(p: ArtifactProposal): { touched: ProtectedEdit[]; rest: ProtectedEdit[] } {
+  const all = p.kind === 'refine' ? p.protected ?? [] : [];
+  return { touched: all.filter((e) => e.touched), rest: all.filter((e) => !e.touched) };
+}
+
+/** The edits a refine's Go carries: `allow` names exactly the edits the person let change (and only ones on the card);
+ *  none when they keep everything. */
+export function refineGoEdits(p: ArtifactProposal, letChange: ReadonlySet<string>): ProposalEdits | undefined {
+  const shown = new Set((p.protected ?? []).map((e) => e.id));
+  const allow = [...letChange].filter((id) => shown.has(id));
+  return allow.length > 0 ? { allow } : undefined;
+}
+
+/** What became of a started refine, from its run and the document's versions: `landed` only once a version made by that
+ *  run is in the document (so "Kept your N edits" is never said before it lands), `failed` with crew's reason. */
+export type RefineOutcome = { kind: 'landed'; version: number; kept: number } | { kind: 'failed'; reason: string } | { kind: 'pending' };
+
+export function refineOutcome(
+  run: { session: { id: string; landing_failed?: { reason?: unknown } | null } } | null,
+  versions: ReadonlyArray<{ version: number; run_id?: string | null }> | null,
+  kept: number,
+): RefineOutcome {
+  if (run === null) return { kind: 'pending' };
+  const failed = run.session.landing_failed;
+  if (failed !== undefined && failed !== null) {
+    const why = typeof failed.reason === 'string' && failed.reason.trim() !== '' ? failed.reason.trim() : 'it did not land';
+    return { kind: 'failed', reason: why };
+  }
+  const landed = (versions ?? []).find((v) => v.run_id === run.session.id);
+  return landed !== undefined ? { kind: 'landed', version: landed.version, kept } : { kind: 'pending' };
+}
+
+/** The one line a started refine says once its outcome is known. */
+export function refineOutcomeLine(o: RefineOutcome): string | null {
+  if (o.kind === 'landed') return o.kept > 0 ? `v${o.version} made · kept your ${o.kept} edit${o.kept === 1 ? '' : 's'}` : `v${o.version} made`;
+  if (o.kind === 'failed') return `Not changed: ${o.reason}`;
+  return null;
 }

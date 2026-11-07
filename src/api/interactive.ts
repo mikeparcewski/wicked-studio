@@ -78,6 +78,11 @@ export interface VersionEntry {
    *  generation or fork request (§7.6). Null on pre-merge documents; the scroll
    *  affordance disables rather than guessing which message produced the version. */
   meta?: { sourceMessageId?: string | null };
+  /** (interactive 0.15.0, I1) What landed it (`generated`, `structural`, `deterministic`, `fork`, `theme`, `demo`);
+   *  absent on a version from before. */
+  kind?: string;
+  /** (I1) The run that made it; `null` = by hand (a write, a move, a fork); absent = from before runs were recorded. */
+  run_id?: string | null;
 }
 
 /** `GET /d/:docId/api/versions` — the raw `versions.json` manifest. */

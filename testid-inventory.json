@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 335,
-    "occurrences": 4966,
-    "static": 4174,
+    "occurrences": 4973,
+    "static": 4181,
     "dynamic": 177,
     "computed": 53
   },
@@ -1789,6 +1789,18 @@
       ]
     },
     {
+      "testId": "artifact-proposal-keep",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-let-change",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "artifact-proposal-lines",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
@@ -1796,6 +1808,36 @@
     },
     {
       "testId": "artifact-proposal-note",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-outcome",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-protected",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-protected-edit",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-protected-more",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-protected-none",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
       ]
