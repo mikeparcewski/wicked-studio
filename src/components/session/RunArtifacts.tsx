@@ -6,7 +6,7 @@ import './threadArtifacts.css';
 import { RunInsightsSlot } from '../insights/RunInsightsSlot.js';
 import { appSlugOfRun, RunAppCard } from './RunAppCard.js';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
-import { producerOf, type Responder } from '../../board/responder.js';
+import { CREW, producerOf, type Responder } from '../../board/responder.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { TurnWho } from './TurnWho.js';
 import { getDemo, isDemoRun } from '../../api/demo.js';
@@ -110,7 +110,13 @@ export function isRunsDoc(view: SessionView, mount: string, doc: string, index: 
   // A run that names its artifact is bound to it: the write-root rule's suffix grammar (`<doc>-v<n>` is an edit of
   // `<doc>`) would otherwise also claim an unrelated `release` for a run that made `release-v1` (review r1).
   if (ref !== null) return false;
-  return isDocRun(view, doc);
+  // Root by root: a draft's root is named by its document exactly (the draft seam adds no suffix), so a form-made
+  // `release-v1` never claims `release` too; the other seams keep their key grammar (`isDocRun`) (review r2).
+  return (view.session.extra_write_roots ?? []).some((root) => {
+    const parts = root.split(/[\\/]+/).filter((p) => p !== '');
+    if (parts[parts.length - 2] === 'interactive-drafts') return parts[parts.length - 1] === doc;
+    return isDocRun({ ...view, session: { ...view.session, extra_write_roots: [root] } }, doc);
+  });
 }
 
 /** The documents this run made and the mount they live in, re-read every {@link FRESH_MS} — the run block's artifacts
@@ -198,7 +204,10 @@ export function RunArtifacts({ view, composerKey, chain, only, frame }: {
   const plan = only !== 'made' && hasPlanEditor(view, chain);
   const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0) + (plan ? 1 : 0) + (insights ? 1 : 0) + (app ? 1 : 0);
   const roster = useRoster();
-  const producer = producerOf(view, roster);
+  // A step crew ran itself with a program (a review's tool step names its executable, `/…/bin/node`) is crew's, not a
+  // seat's: the card never says a file path made it.
+  const maker = producerOf(view, roster);
+  const producer = maker.role === 'seat' && /[\\/]/.test(maker.cli ?? maker.name) ? CREW : maker;
   if (count === 0) return null;
   const suffix = count === 1 ? 'made this' : 'made these';
   const cards = (

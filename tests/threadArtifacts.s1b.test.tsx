@@ -106,6 +106,24 @@ describe('G2: Run insights in the review run\'s thread', () => {
     await waitFor(() => expect(accept).toHaveBeenCalledWith('rv-2:rec0'));
   });
 
+  it('a review crew still marks running is read again until its final report (review r2)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const running = { ...RESPONSE, reviews: [{ ...review('rv-1', 0), status: 'running' as const }] };
+      insights.mockResolvedValueOnce(running).mockResolvedValue(RESPONSE);
+      render(<RunInsightsSlot runId="rv-1" runStatus="completed" size="inline" />);
+      await waitFor(() => expect(hosts).toHaveLength(1));
+      await vi.advanceTimersByTimeAsync(16_000);
+      await waitFor(() => expect(insights).toHaveBeenCalledTimes(2));
+      expect(hosts).toHaveLength(1); // the same frame, handed the final report
+      expect((await hosts[0]!.o.adapter.read()).content.reviews).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(16_000);
+      expect(insights).toHaveBeenCalledTimes(2); // final: no more reads
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a finished run whose review crew has not recorded yet reads again until it has (review r1)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
@@ -218,5 +236,20 @@ describe('the decide aside (one for /insights and the review run\'s card)', () =
     expect((await screen.findByTestId('insights-said')).textContent).toBe('Dismissed, with your reason.');
     rerender(<InsightsDecide selected={{ ...rec, id: 'other' }} metrics={[]} navigate={vi.fn()} onDecided={onDecided} />);
     await waitFor(() => expect(screen.queryByTestId('insights-said')).toBeNull());
+  });
+});
+
+describe('/insights still decides through the lifted aside', () => {
+  it('a pointing on the page draws the aside with Accept, for every review', async () => {
+    insights.mockResolvedValue(RESPONSE);
+    const { InsightsPage } = await import('../src/components/insights/InsightsPage.js');
+    render(<InsightsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(hosts).toHaveLength(1));
+    expect((await hosts[0]!.o.adapter.read()).content.reviews).toHaveLength(2);
+    expect(screen.getByTestId('insights-decide')).toBeDefined();
+    hosts[0]!.o.ui.selected([{ kind: 'element', id: 'v1r0' }]);
+    accept.mockResolvedValue({ open: { kind: 'runs', runIds: [] } });
+    fireEvent.click(await screen.findByTestId('insights-accept'));
+    await waitFor(() => expect(accept).toHaveBeenCalledWith('rv-2:rec0'));
   });
 });
