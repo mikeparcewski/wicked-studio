@@ -402,12 +402,14 @@ export function refineGoEdits(p: ArtifactProposal, letChange: ReadonlySet<string
 
 /** What became of a started refine, from its run and the document's versions: `landed` only once a version made by that
  *  run is in the document (so "Kept your N edits" is never said before it lands), `failed` with crew's reason. */
-export type RefineOutcome = { kind: 'landed'; version: number; kept: number } | { kind: 'failed'; reason: string } | { kind: 'pending' };
+export type RefineOutcome = { kind: 'landed'; version: number; kept: number | 'some' } | { kind: 'failed'; reason: string } | { kind: 'pending' };
 
 export function refineOutcome(
   run: { session: { id: string; landing_failed?: { reason?: unknown } | null } } | null,
   versions: ReadonlyArray<{ version: number; run_id?: string | null }> | null,
-  kept: number,
+  /** How many edits the Go kept, when this tab sent it; `'some'` = it kept edits, how many is not known here (another
+   *  tab's Go, a reload); 0 = none to keep. */
+  kept: number | 'some',
 ): RefineOutcome {
   if (run === null) return { kind: 'pending' };
   const failed = run.session.landing_failed;
@@ -421,7 +423,10 @@ export function refineOutcome(
 
 /** The one line a started refine says once its outcome is known. */
 export function refineOutcomeLine(o: RefineOutcome): string | null {
-  if (o.kind === 'landed') return o.kept > 0 ? `v${o.version} made · kept your ${o.kept} edit${o.kept === 1 ? '' : 's'}` : `v${o.version} made`;
+  if (o.kind === 'landed') {
+    if (o.kept === 'some') return `v${o.version} made · your edits were checked and kept`;
+    return o.kept > 0 ? `v${o.version} made · kept your ${o.kept} edit${o.kept === 1 ? '' : 's'}` : `v${o.version} made`;
+  }
   if (o.kind === 'failed') return `Not changed: ${o.reason}`;
   return null;
 }

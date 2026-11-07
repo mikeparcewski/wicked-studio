@@ -75,6 +75,8 @@ describe('the refine board model', () => {
     expect(refineOutcomeLine(refineOutcome(run, [{ version: 4, run_id: RUN }], 2))).toBe('v4 made · kept your 2 edits');
     expect(refineOutcomeLine(refineOutcome({ session: { id: RUN, landing_failed: { reason: 'the revision did not keep your edits' } } }, null, 2)))
       .toBe('Not changed: the revision did not keep your edits');
+    // Read back (a reload, another tab's Go): how many is not known here, so no number is claimed.
+    expect(refineOutcomeLine(refineOutcome(run, [{ version: 4, run_id: RUN }], 'some'))).toBe('v4 made · your edits were checked and kept');
     expect(isArtifactProposal({ ...p, protected: [{ id: 'x', kind: 'bogus', label: 'x', wid: null, touched: false }] })).toBe(false);
   });
 });
