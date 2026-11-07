@@ -240,7 +240,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
     const { gatePosts } = reviewServer(reviewDemo());
     render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
-    const note = (screen.getByTestId('demo-record-again-note') as HTMLTextAreaElement).value;
+    const note = ((await screen.findByTestId('demo-record-again-note')) as HTMLTextAreaElement).value;
     expect(note).toBe('Record the demo again as a new take. Change the plan for chapter 01-open ("Open the queue"). The review found: The app frame is blank while it loads (at 0:07). Every chapter is recorded again from the plan you approve next.');
     fireEvent.click(screen.getByTestId('demo-record-again-send'));
     await waitFor(() => expect(gatePosts()).toHaveLength(1));
@@ -252,7 +252,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
     const { gatePosts } = reviewServer(reviewDemo());
     render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
-    const pick = screen.getByTestId('demo-record-again-pick') as HTMLSelectElement;
+    const pick = (await screen.findByTestId('demo-record-again-pick')) as HTMLSelectElement;
     expect(Array.from(pick.options).map((o) => o.textContent)).toEqual(['The whole take', '0:07 · Open the queue · The app frame is blank while it loads', 'Chapter 2: Assign a ticket']);
     fireEvent.change(pick, { target: { value: 'c:02-assign' } });
     expect((screen.getByTestId('demo-record-again-note') as HTMLTextAreaElement).value).toContain('chapter 02-assign ("Assign a ticket")');
@@ -266,7 +266,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
     const { gatePosts } = reviewServer(reviewDemo(), reviewDemo({ video: { path: 'demo-video/demo.mp4', bytes: 99 } }));
     render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
-    fireEvent.click(screen.getByTestId('demo-record-again-send'));
+    fireEvent.click(await screen.findByTestId('demo-record-again-send'));
     expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/nothing was sent/);
     expect(gatePosts()).toHaveLength(0);
   });
@@ -279,7 +279,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
     expect((await screen.findByTestId('demo-review-line')).textContent).toMatch(/^No model reviews this demo/);
     expect(screen.getAllByTestId('demo-review-sheet')).toHaveLength(3);
     fireEvent.click(screen.getByTestId('demo-record-again'));
-    const pick = screen.getByTestId('demo-record-again-pick') as HTMLSelectElement;
+    const pick = (await screen.findByTestId('demo-record-again-pick')) as HTMLSelectElement;
     expect(Array.from(pick.options).map((o) => o.textContent).join('|')).not.toContain('blank');
     const note = (screen.getByTestId('demo-record-again-note') as HTMLTextAreaElement).value;
     expect(note).toBe('Record the demo again as a new take. Change the plan for chapter 01-open ("Open the queue"). See the take (at 0:07). Every chapter is recorded again from the plan you approve next.');
@@ -296,13 +296,39 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
   });
 
   it('sends nothing when the review gate was answered elsewhere since the box opened (a new gate instance)', async () => {
-    const { gatePosts } = reviewServer(reviewDemo(), reviewDemo(), () => '1970-01-01T00:00:09.000Z');
+    const { gatePosts } = reviewServer(reviewDemo(), reviewDemo(), (n) => (n <= 1 ? '1970-01-01T00:00:00.001Z' : '1970-01-01T00:00:09.000Z'));
     useGateStore.getState().setGate({ runId: RUN, ord: 6, prompt: 'Review the take', lifecycle: 'open', receivedAt: 1 });
     render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
-    fireEvent.click(screen.getByTestId('demo-record-again-send'));
+    fireEvent.click(await screen.findByTestId('demo-record-again-send'));
     expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/nothing was sent/);
     expect(gatePosts()).toHaveLength(0);
+  });
+
+  it('a gate the live stream stamped with the browser’s clock is the same gate crew reads: the note is sent', async () => {
+    const { gatePosts } = reviewServer(reviewDemo(), reviewDemo(), () => '2026-11-07T00:00:00.000Z');
+    // Live ingestion stamps receivedAt with Date.now(); crew's read carries its own time for the same gate.
+    useGateStore.getState().setGate({ runId: RUN, ord: 6, prompt: 'Review the take', lifecycle: 'open', receivedAt: 123456 });
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
+    fireEvent.click(await screen.findByTestId('demo-record-again'));
+    fireEvent.click(await screen.findByTestId('demo-record-again-send'));
+    await waitFor(() => expect(gatePosts()).toHaveLength(1));
+  });
+
+  it('opens no note when no review gate is open (a late join whose gate read fails sends nothing later)', async () => {
+    const view = reviewDemo();
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
+      if (url.endsWith('/gate')) return init?.method === 'POST' ? json({ ok: true }) : json({ error: 'no gate' }, 404);
+      if (url.endsWith('/demo')) return json(view);
+      throw new Error(`Unexpected route: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useGateStore.setState({ gates: {} });
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
+    fireEvent.click(await screen.findByTestId('demo-record-again'));
+    expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/not open any more/);
+    expect(screen.queryByTestId('demo-record-again-box')).toBeNull();
+    expect(fetchMock.mock.calls.filter(([u, i]) => String(u).endsWith('/gate') && i?.method === 'POST')).toHaveLength(0);
   });
 
   it('sends nothing when the plan changed under the same-size take (chapters are part of the take)', async () => {
@@ -311,7 +337,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
     const { gatePosts } = reviewServer(reviewDemo(), renamed);
     render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
-    fireEvent.click(screen.getByTestId('demo-record-again-send'));
+    fireEvent.click(await screen.findByTestId('demo-record-again-send'));
     expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/nothing was sent/);
     expect(gatePosts()).toHaveLength(0);
   });
