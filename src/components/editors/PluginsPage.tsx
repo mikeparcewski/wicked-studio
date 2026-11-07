@@ -204,8 +204,18 @@ const CROSS = <svg aria-hidden viewBox="0 0 16 16" width="14" height="14"><path 
 
 const DOCUMENT_KINDS: readonly string[] = ['page', 'document', 'deck'];
 
-/** Remove, in two presses: "Remove" asks, "Remove <title>" does it. A built-in editor has none (crew refuses it, 409). */
+/**
+ * Remove, in two presses: "Remove" asks, "Remove <title>" does it. A built-in editor has none (crew refuses it, 409).
+ * The state is kept PER EDITOR (xreview r1): a removal still in flight, or its refusal, belongs to the editor it was
+ * pressed on, never to whichever card is open when crew answers.
+ */
 type RemoveState = { state: 'idle' } | { state: 'asking' } | { state: 'removing' } | { state: 'failed'; error: string };
+const IDLE: RemoveState = { state: 'idle' };
+
+/** Whether `card` is an editor this person installed (the only kind Remove is offered for, or ever sent for). */
+export function removableCard(card: Pick<PluginCardModel, 'source' | 'editor'> | null): boolean {
+  return card?.editor !== undefined && !card.editor.first_party && card.source === 'installed';
+}
 
 function PluginDetails({ card, onClose, onSwitch, switching, switchError, navigate, remove, onRemove, onRemoveAsk }: {
   card: PluginCardModel; onClose: () => void; onSwitch: (on: boolean) => void; switching: boolean; switchError: string | null; navigate: (p: string) => void;
@@ -216,10 +226,10 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
   const e = card.editor;
   const words = e !== undefined ? permissionsInWords(e.permissions) : null;
   const opensDocuments = e !== undefined && e.enabled && e.first_party && e.kinds.some((k) => DOCUMENT_KINDS.includes(k));
-  // The app runtime's door is the Apps page (DES-APPS-001: an app is made and opened there), beside its sample.
+  // The app runtime's door is the Apps page (DES-APPS-001: an app is made and opened there), in place of a sample.
   const appsDoor = e !== undefined && e.enabled && e.first_party && e.kinds.includes(APP_KIND);
   const door = e !== undefined ? openHref(e) : null;
-  const removable = e !== undefined && !e.first_party && card.source === 'installed';
+  const removable = removableCard(card);
   return (
     <aside data-testid="plugin-details" data-plugin={card.id} aria-label={`${card.title}: details`} className="wk-plugdetail"
       onKeyDown={(ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); onClose(); } }}>
@@ -241,7 +251,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
         {e !== undefined ? (
           <>
             <span><b>{e.enabled ? 'On' : 'Off'}</b><br /><span className="wk-plugdetail-muted">Off takes effect where it opens next. Only you can change this.</span></span>
-            <button type="button" role="switch" aria-checked={e.enabled} data-testid="plugin-details-switch" disabled={switching}
+            <button type="button" role="switch" aria-checked={e.enabled} data-testid="plugin-details-switch" disabled={switching || remove.state === 'removing'}
               aria-label={`${card.title} is ${e.enabled ? 'on' : 'off'}`} className="wk-switch" onClick={() => onSwitch(!e.enabled)}>
               <span aria-hidden className="wk-switch-track"><span className="wk-switch-thumb" /></span>
             </button>
@@ -322,7 +332,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
             <>
               <p className="wk-plugdetail-muted" data-testid="plugin-remove-confirm-line">Remove {card.title}? It is uninstalled and its install grant is withdrawn. Documents it opened stay; another editor, or studio’s own, opens them.</p>
               <p style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                <button type="button" data-testid="plugin-remove-confirm" className="wk-btn wk-btn--danger wk-btn--sm" disabled={remove.state === 'removing'} onClick={onRemove}>
+                <button type="button" data-testid="plugin-remove-confirm" className="wk-btn wk-btn--danger wk-btn--sm" disabled={remove.state === 'removing' || switching} onClick={onRemove}>
                   {remove.state === 'removing' ? 'Removing…' : `Remove ${card.title}`}
                 </button>
                 <button type="button" data-testid="plugin-remove-cancel" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={remove.state === 'removing'} onClick={() => onRemoveAsk(false)}>Keep it</button>
@@ -332,7 +342,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
             <>
               <p className="wk-plugdetail-muted">Uninstall it. Only you can do this.</p>
               <p style={{ marginTop: 8 }}>
-                <button type="button" data-testid="plugin-remove" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => onRemoveAsk(true)}>Remove</button>
+                <button type="button" data-testid="plugin-remove" className="wk-btn wk-btn--secondary wk-btn--sm" disabled={switching} onClick={() => onRemoveAsk(true)}>Remove</button>
               </p>
             </>
           )}
@@ -357,15 +367,29 @@ export function PluginsPage({ navigate }: { navigate: (p: string) => void }): Re
   const cards = useMemo(() => cardsOf(RUN_PLUGINS, editors), [editors]);
   const [filter, setFilter] = useState<PluginFilter>('all');
   const [picked, setPicked] = useState<string | null>(null);
+  // The card open NOW, read when crew answers a removal (its callback closes over an older render).
+  const pickedRef = useRef<string | null>(null);
+  pickedRef.current = picked;
   const [switching, setSwitching] = useState(false);
-  const [switchError, setSwitchError] = useState<string | null>(null);
-  const [remove, setRemove] = useState<RemoveState>({ state: 'idle' });
+  // A switch's refusal belongs to the editor it was pressed on (xreview r1).
+  const [switchError, setSwitchError] = useState<{ id: string; error: string } | null>(null);
+  const [removes, setRemoves] = useState<Record<string, RemoveState>>({});
+  // Where the keyboard goes once React has committed a Remove step (never a node that is about to go).
+  const [focusNext, setFocusNext] = useState<{ to: 'remove' | 'confirm' | 'grid'; gone: string | null } | null>(null);
   const shown = filterCards(cards, filter);
   const card = picked !== null ? cards.find((c) => c.key === picked) ?? null : null;
-  const pick = (key: string): void => { setSwitchError(null); setRemove({ state: 'idle' }); setPicked((k) => (k === key ? null : key)); };
+  const removeOf = (id: string | undefined): RemoveState => (id !== undefined ? removes[id] ?? IDLE : IDLE);
+  const setRemoveOf = (id: string, r: RemoveState): void => setRemoves((m) => {
+    const next = { ...m };
+    if (r.state === 'idle') delete next[id]; else next[id] = r;
+    return next;
+  });
+  /** Leaving a card drops its unanswered question and its old refusal; a removal in flight keeps going. */
+  const settleOpen = (): void => setRemoves((m) => Object.fromEntries(Object.entries(m).filter(([, r]) => r.state === 'removing')));
+  const pick = (key: string): void => { setSwitchError(null); settleOpen(); setPicked((k) => (k === key ? null : key)); };
   const closeDetails = (): void => {
     const was = picked;
-    setRemove({ state: 'idle' });
+    settleOpen();
     setPicked(null);
     // The keyboard goes back to the card it came from.
     if (was !== null) queueMicrotask(() => document.querySelector<HTMLElement>(`[data-testid="plugin-tile"][data-plugin="${was.split(':')[1]}"]`)?.focus());
@@ -377,23 +401,46 @@ export function PluginsPage({ navigate }: { navigate: (p: string) => void }): Re
     setSwitchError(null);
     setEditorEnabled(e.id, on)
       .then((v) => setSwitched((s) => ({ ...s, [e.id]: typeof v?.enabled === 'boolean' ? v.enabled : on })))
-      .catch((err: unknown) => setSwitchError(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) => setSwitchError({ id: e.id, error: err instanceof Error ? err.message : String(err) }))
       .finally(() => setSwitching(false));
   };
   const onRemove = (): void => {
     const e = card?.editor;
-    if (e === undefined || remove.state === 'removing') return;
-    setRemove({ state: 'removing' });
-    removeEditor(e.id)
+    // Sent only for an editor you installed, never twice at once, never while its switch is being changed.
+    if (e === undefined || !removableCard(card) || removeOf(e.id).state === 'removing' || switching) return;
+    const id = e.id;
+    const key = `editor:${id}`;
+    setRemoveOf(id, { state: 'removing' });
+    removeEditor(id)
       .then(() => {
-        setRemoved((s) => new Set([...s, e.id]));
-        setRemove({ state: 'idle' });
-        setPicked(null);
-        // The keyboard lands on the grid, whose card just went.
-        queueMicrotask(() => document.querySelector<HTMLElement>('[data-testid="plugin-tile"]')?.focus());
+        setRemoved((s) => new Set([...s, id]));
+        setRemoveOf(id, IDLE);
+        // Close the details only if they still show this editor; another card the person opened stays open.
+        if (pickedRef.current === key) {
+          setPicked(null);
+          setFocusNext({ to: 'grid', gone: id });
+        }
       })
-      .catch((err: unknown) => setRemove({ state: 'failed', error: err instanceof Error ? err.message : String(err) }));
+      .catch((err: unknown) => {
+        setRemoveOf(id, { state: 'failed', error: err instanceof Error ? err.message : String(err) });
+        if (pickedRef.current === key) setFocusNext({ to: 'confirm', gone: null });
+      });
   };
+  const onRemoveAsk = (asking: boolean): void => {
+    const id = card?.editor?.id;
+    if (id === undefined) return;
+    setRemoveOf(id, asking ? { state: 'asking' } : IDLE);
+    setFocusNext({ to: asking ? 'confirm' : 'remove', gone: null });
+  };
+  useEffect(() => {
+    if (focusNext === null) return;
+    const q = (sel: string): HTMLElement | null => document.querySelector<HTMLElement>(sel);
+    const el = focusNext.to === 'remove' ? q('[data-testid="plugin-remove"]')
+      : focusNext.to === 'confirm' ? q('[data-testid="plugin-remove-confirm"]')
+        : q(`[data-testid="plugin-tile"]:not([data-plugin="${focusNext.gone ?? ''}"])`) ?? q('[data-testid="plugins-filter"] [aria-checked="true"]');
+    el?.focus();
+    setFocusNext(null);
+  }, [focusNext]);
   const count = (f: PluginFilter): number => filterCards(cards, f).length;
   return (
     <PageFrame
@@ -431,8 +478,9 @@ export function PluginsPage({ navigate }: { navigate: (p: string) => void }): Re
         {filter === 'mine' && shown.length === 0 && load.state === 'ready' && (
           <EmptyState data-testid="editor-plugins-empty" title="Nothing installed by you yet." body="Create one, and it shows here once its job passes studio’s checks and you approve the install." />
         )}
-        {card !== null && <PluginDetails card={card} onClose={closeDetails} onSwitch={onSwitch} switching={switching} switchError={switchError} navigate={navigate}
-          remove={remove} onRemove={onRemove} onRemoveAsk={(asking) => setRemove(asking ? { state: 'asking' } : { state: 'idle' })} />}
+        {card !== null && <PluginDetails card={card} onClose={closeDetails} onSwitch={onSwitch} switching={switching}
+          switchError={switchError !== null && switchError.id === card.editor?.id ? switchError.error : null} navigate={navigate}
+          remove={removeOf(card.editor?.id)} onRemove={onRemove} onRemoveAsk={onRemoveAsk} />}
       </div>
     </PageFrame>
   );
