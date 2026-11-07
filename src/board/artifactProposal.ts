@@ -29,6 +29,9 @@ export interface ProposalEntry extends ChatProposalView {
   /** When Go was recorded (`proposal_accepting`, daemon millis): a real launch takes seconds (A3), so a fresh one is
    *  "Starting it…", not interrupted. */
   acceptingAt?: number;
+  /** (A5) The edits that Go was accepted with, as crew recorded them (`proposal_accepting.edits`): a refine's `allow`
+   *  says which of the person's edits it was let change. `null` = none were sent. */
+  acceptedEdits?: ProposalEdits | null;
 }
 
 const KINDS: ReadonlySet<string> = new Set(['proposal', 'proposal_accepting', 'proposal_decided']);
@@ -61,7 +64,7 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   const filed = p['filedIn'];
   if (!isObj(filed) || !str(filed['label']) || !(filed['projectId'] === null || str(filed['projectId']))) return false;
   const target = p['target'];
-  if (target !== undefined && (!isObj(target) || !str(target['title']) || typeof target['base'] !== 'number')) return false;
+  if (target !== undefined && (!isObj(target) || !str(target['ref']) || !str(target['title']) || typeof target['base'] !== 'number')) return false;
   const theme = p['theme'];
   if (theme !== undefined && (!isObj(theme) || !Array.isArray(theme['changes']) || !theme['changes'].every(str))) return false;
   const demo = p['demo'];
@@ -120,6 +123,7 @@ export function foldChatProposals(records: readonly unknown[]): ProposalEntry[] 
       v.state = 'accepting';
       v.accepted = r.resolution;
       v.acceptingAt = r.at;
+      v.acceptedEdits = r.edits ?? null;
     } else {
       const v = byPid.get(r.pid);
       if (v === undefined || v.state === 'decided') continue;
@@ -402,14 +406,14 @@ export function refineGoEdits(p: ArtifactProposal, letChange: ReadonlySet<string
 
 /** What became of a started refine, from its run and the document's versions: `landed` only once a version made by that
  *  run is in the document (so "Kept your N edits" is never said before it lands), `failed` with crew's reason. */
-export type RefineOutcome = { kind: 'landed'; version: number; kept: number | 'some' } | { kind: 'failed'; reason: string } | { kind: 'pending' };
+export type RefineOutcome = { kind: 'landed'; version: number; kept: number | null } | { kind: 'failed'; reason: string } | { kind: 'pending' };
 
 export function refineOutcome(
   run: { session: { id: string; landing_failed?: { reason?: unknown } | null } } | null,
   versions: ReadonlyArray<{ version: number; run_id?: string | null }> | null,
-  /** How many edits the Go kept, when this tab sent it; `'some'` = it kept edits, how many is not known here (another
-   *  tab's Go, a reload); 0 = none to keep. */
-  kept: number | 'some',
+    /** How many of the person's edits the accepted Go kept, from crew's own accepting record; `null` = not known here (no
+   *  record of it read yet), so nothing is claimed. */
+  kept: number | null,
 ): RefineOutcome {
   if (run === null) return { kind: 'pending' };
   const failed = run.session.landing_failed;
@@ -424,9 +428,17 @@ export function refineOutcome(
 /** The one line a started refine says once its outcome is known. */
 export function refineOutcomeLine(o: RefineOutcome): string | null {
   if (o.kind === 'landed') {
-    if (o.kept === 'some') return `v${o.version} made · your edits were checked and kept`;
-    return o.kept > 0 ? `v${o.version} made · kept your ${o.kept} edit${o.kept === 1 ? '' : 's'}` : `v${o.version} made`;
+    return o.kept !== null && o.kept > 0 ? `v${o.version} made · kept your ${o.kept} edit${o.kept === 1 ? '' : 's'}` : `v${o.version} made`;
   }
   if (o.kind === 'failed') return `Not changed: ${o.reason}`;
   return null;
+}
+
+/** How many of the person's edits an accepted refine kept: its protected edits minus the ones its recorded `allow` let
+ *  change. `null` when crew's accepting record is not in hand (a view from a response alone): never guessed. */
+export function keptByAccepted(e: ProposalEntry): number | null {
+  if (e.acceptingAt === undefined || e.accepted === undefined) return null;
+  const ids = (e.accepted.protected ?? []).map((x) => x.id);
+  const allow = new Set(e.acceptedEdits?.allow ?? []);
+  return ids.filter((id) => !allow.has(id)).length;
 }

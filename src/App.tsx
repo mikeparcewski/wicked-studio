@@ -130,6 +130,8 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
   'runCancelled',
   'sessionFailed',
   'sessionCompleted',
+  // A3/A5: a proposal-bound attempt that did not land says so after the run ended (the run's `landing_failed`).
+  'landingFailed',
   // Power mode: a checkpoint can pause the run (no engine gate opens) and a turn, a flip or a hand-off step ends the
   // pause — the run list carries `power.pause`, which every surface reads to say the run waits on you.
   'powerCheckpointReached',

@@ -63,5 +63,6 @@ button.wk-proposal-chip:focus-visible { outline: 2px solid var(--focus-ring, var
 .wk-proposal-kept-opt--on { border-color: var(--accent); color: var(--ink-high); background: color-mix(in oklab, var(--accent) 12%, transparent); }
 .wk-proposal-kept-opt:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wk-proposal-kept > .wk-btn { margin-top: 6px; }
-.wk-proposal-outcome { flex: 1 0 100%; margin: 0; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-proposal-outcome { flex: 1 0 100%; min-width: 0; margin: 0; font-size: var(--text-sm); color: var(--ink-body); overflow-wrap: anywhere; }
+.wk-proposal-outcome:empty { display: none; }
 .wk-proposal-outcome--failed { color: var(--ink-high); }

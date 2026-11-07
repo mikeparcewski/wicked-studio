@@ -75,8 +75,8 @@ describe('the refine board model', () => {
     expect(refineOutcomeLine(refineOutcome(run, [{ version: 4, run_id: RUN }], 2))).toBe('v4 made · kept your 2 edits');
     expect(refineOutcomeLine(refineOutcome({ session: { id: RUN, landing_failed: { reason: 'the revision did not keep your edits' } } }, null, 2)))
       .toBe('Not changed: the revision did not keep your edits');
-    // Read back (a reload, another tab's Go): how many is not known here, so no number is claimed.
-    expect(refineOutcomeLine(refineOutcome(run, [{ version: 4, run_id: RUN }], 'some'))).toBe('v4 made · your edits were checked and kept');
+    // Without crew's accepting record in hand, how many were kept is not known: nothing is claimed.
+    expect(refineOutcomeLine(refineOutcome(run, [{ version: 4, run_id: RUN }], null))).toBe('v4 made');
     expect(isArtifactProposal({ ...p, protected: [{ id: 'x', kind: 'bogus', label: 'x', wid: null, touched: false }] })).toBe(false);
   });
 });
@@ -120,18 +120,37 @@ describe('the refine card', () => {
     expect(text('artifact-proposal-target')).toBe('ChangesCoverage deck · v4');
   });
 
-  it('"Kept your N edits" only once a version made by the run is in the document', async () => {
-    decideAnswer = () => ok({ view: { proposal: proposal(), state: 'decided', decision: 'go', result: { runId: RUN, artifactRef: 'mikes/coverage-deck', adopted: false, stub: false } } });
-    const run = { session: { id: RUN, status: 'running' } } as never;
-    const { rerender } = render(<ArtifactProposalCard chatId="chat-r" entry={entry(proposal())} seatName="Claude Code" stub={false} onChanged={() => {}} run={null} />);
-    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
-    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));
-    rerender(<ArtifactProposalCard chatId="chat-r" entry={entry(proposal())} seatName="Claude Code" stub={false} onChanged={() => {}} run={run} />);
+  it('"Kept your N edits" only once a version made by the run is in the document, counted from crew’s accepting record', async () => {
+    const result = { runId: RUN, artifactRef: 'mikes/coverage-deck', adopted: false, stub: false };
+    const decided = entry(proposal(), { state: 'decided', decision: 'go', result, accepted: proposal(), acceptingAt: 2, acceptedEdits: { allow: [TITLE.id] } });
+    const { rerender } = render(<ArtifactProposalCard chatId="chat-r" entry={decided} seatName="Claude Code" stub={false} onChanged={() => {}} run={{ session: { id: RUN, status: 'running' } } as never} />);
     await new Promise((r) => setTimeout(r, 50));
-    expect(screen.queryByTestId('artifact-proposal-outcome')).toBeNull();
+    // Running, no version of its own yet: the live region is there and says nothing.
+    expect(screen.getByTestId('artifact-proposal-outcome').textContent).toBe('');
     versions = [{ version: 4, run_id: RUN }];
-    rerender(<ArtifactProposalCard chatId="chat-r" entry={entry(proposal())} seatName="Claude Code" stub={false} onChanged={() => {}} run={{ session: { id: RUN, status: 'completed' } } as never} />);
-    await waitFor(() => expect(screen.getByTestId('artifact-proposal-outcome').textContent).toBe('v4 made · kept your 3 edits'), { timeout: 5000 });
+    rerender(<ArtifactProposalCard chatId="chat-r" entry={decided} seatName="Claude Code" stub={false} onChanged={() => {}} run={{ session: { id: RUN, status: 'completed' } } as never} />);
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-outcome').textContent).toBe('v4 made · kept your 2 edits'), { timeout: 5000 });
+  });
+
+  it('a re-resolution clears every release, also of an edit whose id survived; Go again never resends allow', async () => {
+    const moved = proposal({ target: { ref: 'mikes/coverage-deck', title: 'Coverage deck', base: 4 } });
+    decideAnswer = () => new Response(JSON.stringify({ code: 'proposal_reresolved', error: 'changed (now v4)', view: { proposal: moved, state: 'open' } }), { status: 409, headers: { 'content-type': 'application/json' } });
+    render(<ArtifactProposalCard chatId="chat-r" entry={entry(proposal())} seatName="Claude Code" stub={false} onChanged={() => {}} />);
+    fireEvent.click(screen.getByTestId('artifact-proposal-let-change'));
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(text('artifact-proposal-target')).toBe('ChangesCoverage deck · v4'));
+    expect(screen.getByTestId('artifact-proposal-protected-edit').getAttribute('data-change')).toBe('false');
+    decideAnswer = () => ok({ view: { proposal: moved, state: 'decided', decision: 'go', result: { runId: RUN, artifactRef: 'mikes/coverage-deck', adopted: false, stub: false } } });
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[1]!.body).toEqual({ decision: 'go' });
+    cleanup();
+    posts.length = 0;
+    const interrupted = entry(proposal(), { state: 'accepting', accepted: proposal(), acceptingAt: 1, acceptedEdits: { allow: [TITLE.id] } });
+    render(<ArtifactProposalCard chatId="chat-r" entry={interrupted} seatName="Claude Code" stub={false} onChanged={() => {}} />);
+    fireEvent.click(screen.getByTestId('artifact-proposal-go-again'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.body).toEqual({ decision: 'go' });
   });
 
   it('a refused refine says crew’s reason; the retry card reads Try again', () => {
