@@ -127,9 +127,10 @@ export interface HostUi {
   /** `checks.contribute`: the plugin's own notes, each one line. Advisory: the host shows them as the plugin's, never
    *  as a review or a check that ran (plugins-complete G25). */
   advisory?(notes: readonly { id: string; text: string }[]): void;
-  /** A plugin's `export.request` the host carried out through `exportFile`: the working line, then the outcome (the
-   *  host's own line and Download, as its Export menu draws them). */
-  exportLine?(line: { working: string } | { out: ExportOutcome }): void;
+  /** A plugin's `export.request` for a format the host's own Export makes (`exportFile`): the host draws it as an
+   *  offer the operator presses, never a file made on the plugin's say-so (plugins-complete G25). Absent = this
+   *  surface draws no offer (an options instance): the request answers `unsupported`. */
+  exportOffer?(offer: { format: string; label: string }): void;
   thread(line: string): void;
   /** A write this editor made, structured, so a host can draw its own line and Undo (EP-P2). `anchors`
    *  are the HOST-checked ids the write touched — the words of the line come from them, never from
@@ -567,8 +568,7 @@ export class EditorHost {
     }
     const id = msg.id;
     let settled = false;
-    // An export renders a file (a PDF takes a while): it has the long reply window.
-    const limitMs = msg.type === 'mcp.request' ? LIMITS.mcpReplyMs : msg.type === 'data.action' || msg.type === 'link.open' || msg.type === 'export.request' ? LIMITS.askReplyMs : LIMITS.replyMs;
+    const limitMs = msg.type === 'mcp.request' ? LIMITS.mcpReplyMs : msg.type === 'data.action' || msg.type === 'link.open' ? LIMITS.askReplyMs : LIMITS.replyMs;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -729,19 +729,20 @@ export class EditorHost {
       case 'artifact.sources':
         return a.sources !== undefined ? a.sources() : { error: 'unsupported', message: 'no sources for this artifact' };
       case 'export.request': {
-        // A file is made only under the person's click in THIS frame, judged at receipt (as `tools/call` is).
-        if (!this.clickedNow()) return { error: 'refused', message: 'an export starts only from a click in the editor' };
         const format = String(p['format']);
-        if (a.exportAs !== undefined) return a.exportAs(format);
-        // plugins-complete G25: the data plane's own export (the one the card's Export menu uses), for a format it offers.
+        if (a.exportAs !== undefined) {
+          // A file is made only under the person's click in THIS frame, judged at receipt (as `tools/call` is).
+          if (!this.clickedNow()) return { error: 'refused', message: 'an export starts only from a click in the editor' };
+          return a.exportAs(format);
+        }
+        // plugins-complete G25: the data plane's own export (the card's Export menu), for a format it makes. The host
+        // draws the ask as an offer; only the operator's press on it makes the file.
         const offered = a.exports?.().find((x) => x.format === format);
         if (a.exportFile === undefined || offered === undefined) return { error: 'unsupported', message: `no ${format} export for this artifact` };
-        const version = a.artifact().head;
-        if (version < 1) return { error: 'unavailable', message: 'there is no version to export yet' };
-        this.o.ui.exportLine?.({ working: `Making the ${offered.label} of version ${version}…` });
-        const out = await a.exportFile(format, version);
-        if (!this.torn) this.o.ui.exportLine?.({ out });
-        return out.ok ? { started: true, version, file: out.file } : { error: 'unavailable', message: out.text };
+        if (this.o.ui.exportOffer === undefined) return { error: 'unsupported', message: 'export from the card' };
+        if (a.artifact().head < 1) return { error: 'unavailable', message: 'there is no version to export yet' };
+        this.o.ui.exportOffer({ format, label: offered.label });
+        return { offered: true };
       }
       case 'theme.set': {
         if (a.theme === undefined) return { error: 'unsupported', message: 'this artifact has no theme' };
@@ -984,6 +985,7 @@ export class EditorHost {
         this.o.ui.panelSummary?.({ text: String(p['text']).slice(0, PANEL_SUMMARY_CHARS), tone: (p['tone'] as PanelTone | undefined) ?? 'none' });
         return;
       case 'checks.contribute': {
+        // The parser admitted only an array of at most 100 `{id, text}` one-line strings (protocol.ts payloadOk).
         const notes = (p['checks'] as { id: string; text: string }[]).map((c) => ({ id: c.id, text: c.text }));
         this.o.ui.notes(notes.length);
         this.o.ui.advisory?.(notes);

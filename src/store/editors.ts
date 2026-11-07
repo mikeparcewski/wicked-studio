@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { editorFor, editorsFor, listEditors, type EditorView } from '../api/editors.js';
+import { editorsFor, listEditors, type EditorView } from '../api/editors.js';
 
 /**
  * Crew's editor registry, read once per tab (EP-P2): which plugin opens which artifact kind. `none`
@@ -64,17 +64,19 @@ export const useEditorPicks = create<{ picks: Record<string, string>; pick: (kin
 }));
 
 /** Whether an editor reads the artifact it is opened on: it declares `artifact.read`. One without it shows its own
- *  form, never the artifact (plugins-complete G9), so it is not a way to open one. */
+ *  form, never the artifact (plugins-complete G9), so it is never offered as a way to open one. */
 export function editorReads(e: EditorView): boolean {
   return Array.isArray(e.permissions) && e.permissions.some((p) => p.id === 'artifact.read');
 }
 
 /** The editor that opens `kind` among `editors`: the person's pick only when that editor reads the artifact (a stored
- *  pick of one that does not is ignored), else the first fitting editor that reads it, else the first fitting one. */
+ *  pick of one that does not is ignored), else the first fitting editor that reads it. Only when NO fitting editor
+ *  declares a read does the first fitting one open, as before (an older registry lists no permissions); it is never
+ *  offered beside a reader. */
 export function openingEditor(editors: readonly EditorView[], kind: string, preferred: string | null): EditorView | null {
   const fit = editorsFor(editors, kind);
   const readers = fit.filter(editorReads);
-  return (preferred !== null ? readers.find((e) => e.id === preferred) : undefined) ?? readers[0] ?? editorFor(editors, kind, 'inline');
+  return (preferred !== null ? readers.find((e) => e.id === preferred) : undefined) ?? readers[0] ?? fit[0] ?? null;
 }
 
 /** The editor that opens `kind`, once the registry is read: `undefined` while loading, `null` when none claims it. */

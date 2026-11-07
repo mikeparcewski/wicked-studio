@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4714,
-    "static": 3945,
+    "occurrences": 4716,
+    "static": 3947,
     "dynamic": 173,
     "computed": 53
   },
@@ -12309,6 +12309,18 @@
     },
     {
       "testId": "plugin-card-catch",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-export-offer",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-card-export-offer-accept",
       "files": [
         "src/components/editorHost/PluginCard.tsx"
       ]

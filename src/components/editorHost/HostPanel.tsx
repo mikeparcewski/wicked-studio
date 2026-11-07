@@ -7,6 +7,7 @@ import {
 import { readThemeTokens } from '../../editors/theme.js';
 import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge.js';
 import { setAdvisoryNotes } from '../../store/editors.js';
+import { focusFullOptions } from './FullShell.js';
 import type { Control, OptionsTab } from '../../editors/surfaces.js';
 
 /**
@@ -52,6 +53,10 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
   // page sits under it), at the right edge; × or Esc closes it back to the full screen.
   const fullKey = useHostChrome((s) => s.full);
   const overFull = group !== null && fullKey !== null && group.binding.artifactKey === fullKey;
+  // Opened over the full screen, the keyboard moves into the options (so the next Esc is theirs, not the full screen's).
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { if (overFull) closeRef.current?.focus(); }, [overFull, group?.key]);
+  const close = (): void => { closeGroup(); if (overFull) queueMicrotask(focusFullOptions); };
   // The edge handle and the panel's close hand the keyboard focus to each other, so it never drops to the page.
   const handleRef = useRef<HTMLButtonElement | null>(null);
   const foldRef = useRef<HTMLButtonElement | null>(null);
@@ -84,12 +89,7 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
         if (e.key !== 'Escape' || e.defaultPrevented) return;
         // Over a full screen, Esc closes these options (not the full screen under them) and gives the focus back to
         // the full screen's Options.
-        if (overFull) {
-          e.preventDefault();
-          closeGroup();
-          queueMicrotask(() => document.querySelector<HTMLButtonElement>('[data-testid="full-shell"] [data-testid="plugin-card-options"]')?.focus());
-          return;
-        }
+        if (overFull) { e.preventDefault(); close(); return; }
         // Over the page (below 1200 px), Esc closes the run page's panel back to its handle.
         if (narrow && edgeHandle !== undefined) { moveFocus.current = true; setOverlay(false); }
       }}>
@@ -99,7 +99,7 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
           : runTab !== undefined && <span data-testid="host-panel-heading" className="wk-hpanel-heading">Details</span>}
         <span className="wk-hpanel-gap" />
         {group !== null && (
-          <button type="button" data-testid="host-panel-close" aria-label={`Close ${group.editor.title} options`} className="wk-host-btn" onClick={closeGroup}>×</button>
+          <button ref={closeRef} type="button" data-testid="host-panel-close" aria-label={`Close ${group.editor.title} options`} className="wk-host-btn" onClick={close}>×</button>
         )}
         <button ref={foldRef} type="button" data-testid="host-panel-fold" aria-label={edgeHandle !== undefined && group === null ? 'Close the details' : 'Hide the panel'}
           title={edgeHandle !== undefined && group === null ? 'Close the details — the handle at the right edge opens them again' : undefined} className="wk-host-btn"
@@ -258,7 +258,9 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
         key: (k) => {
           if (k === 'Escape') {
             if (document.activeElement !== hostRef.current?.frame) return;
-            if (withRunRef.current) useHostPanel.getState().setTab(RUN_TAB);
+            // Over its card's full screen, Esc in the options frame closes them back to the full screen (G24).
+            if (useHostChrome.getState().full === group.binding.artifactKey) { useHostPanel.getState().closeGroup(); queueMicrotask(focusFullOptions); }
+            else if (withRunRef.current) useHostPanel.getState().setTab(RUN_TAB);
             else useHostPanel.getState().closeGroup(); // no Run tab here (codex h4-fix r1 P2): Esc closes the options
           }
           else forwardedKey(k, hostRef.current?.frame ?? null);
