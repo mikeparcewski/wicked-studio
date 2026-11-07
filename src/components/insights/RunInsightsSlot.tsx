@@ -13,8 +13,17 @@ import { InsightsDecide } from './InsightsDecide.js';
 
 /** Crew's insights read narrowed to ONE review run's own review (G2): what that run found, and nothing else. */
 export function insightsOfRun(r: InsightsResponse, runId: string): InsightsResponse {
-  return { ...r, reviews: r.reviews.filter((x) => x.runId === runId) };
+  const reviews = r.reviews.filter((x) => x.runId === runId);
+  // The counts are this review's own, never the daemon-wide ones (review r1).
+  const newRecommendations = reviews.reduce((n, x) => n + x.recommendations.filter((rec) => rec.state === 'new').length, 0);
+  return { ...r, reviews, newRecommendations, lastReview: null };
 }
+
+/** While this run's review has no final record yet, the card reads again this often: crew ingests a finished review on
+ *  its scheduler's sweep (about a minute), after the run itself has ended (review r1). */
+const PENDING_POLL_MS = 15_000;
+/** …for at most this long, then the line says so and a reload reads again. */
+const PENDING_POLL_MAX_MS = 10 * 60_000;
 
 type Phase =
   | { kind: 'loading' }
@@ -31,8 +40,15 @@ type Phase =
  * The plugin is mounted ONCE for the slot and told its surface on each morph (`setSurface`), so the frame keeps its
  * place (EP-D2).
  */
-export function RunInsightsSlot({ runId, runStatus, size }: { runId: string; runStatus: string; size: ArtifactSize }): React.ReactElement {
+export function RunInsightsSlot(props: { runId: string; runStatus: string; size: ArtifactSize }): React.ReactElement {
+  // One run's review, one instance: another run never inherits this one's picked recommendation or adapter (review r1).
+  return <RunInsightsOf key={props.runId} {...props} />;
+}
+
+function RunInsightsOf({ runId, runStatus, size }: { runId: string; runStatus: string; size: ArtifactSize }): React.ReactElement {
   const { navigate } = useRoute();
+  const live = useRef(true);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [selected, setSelected] = useState<InsightsRecommendation | null>(null);
   const [metrics, setMetrics] = useState<InsightsMetricDef[]>([]);
@@ -44,10 +60,14 @@ export function RunInsightsSlot({ runId, runStatus, size }: { runId: string; run
   const sizeRef = useRef(size);
   sizeRef.current = size;
 
-  // Read again when the run's status moves (a review that finishes has its report then).
+  // Read again when the run's status moves (a review that finishes has its report then), and keep reading while this
+  // run's review has no final record: crew records it on its next sweep, after the run has ended.
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const started = Date.now();
+    const again = (): void => { if (!cancelled && Date.now() - started < PENDING_POLL_MAX_MS) timer = setTimeout(() => void read(), PENDING_POLL_MS); };
+    const read = async (): Promise<void> => {
       try {
         const [all, editors] = await Promise.all([insightsApi.insights(), listEditors()]);
         if (cancelled) return;
@@ -55,12 +75,16 @@ export function RunInsightsSlot({ runId, runStatus, size }: { runId: string; run
         const data = insightsOfRun(all, runId);
         const review = data.reviews[0];
         if (review === undefined) {
-          setPhase({ kind: 'said', text: ['completed', 'failed', 'cancelled'].includes(runStatus) ? 'This review left no report.' : 'The review is still running. Its report shows here when it ends.' });
+          setPhase({ kind: 'said', text: ['completed', 'failed', 'cancelled'].includes(runStatus) ? 'The review’s report is not recorded yet. It shows here once crew records it.' : 'The review is still running. Its report shows here when it ends.' });
+          again();
           return;
         }
+        if (review.status === 'running') again();
         const editor = editors === null ? null : editorFor(editors, INSIGHTS_KIND, 'full');
         if (editor === null) { setPhase({ kind: 'said', text: 'The Run insights plugin is not installed or is turned off. Turn it on under Build & settings → Plugins.' }); return; }
         setMetrics(data.metrics);
+        // A picked recommendation shows its state as crew has it now.
+        setSelected((cur) => (cur === null ? null : data.reviews.flatMap((r) => r.recommendations).find((r) => r.id === cur.id) ?? null));
         // The same editor already mounted: hand it the new read as a new version, never a second frame.
         if (adapterRef.current !== null && editorIdRef.current === editor.id) {
           const v = adapterRef.current.reload(data);
@@ -74,8 +98,9 @@ export function RunInsightsSlot({ runId, runStatus, size }: { runId: string; run
       } catch (e) {
         if (!cancelled) setPhase({ kind: 'said', text: `The review could not be read: ${e instanceof Error ? e.message : String(e)}` });
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    void read();
+    return () => { cancelled = true; if (timer !== null) clearTimeout(timer); };
   }, [runId, runStatus]);
 
   const editor = phase.kind === 'ready' ? phase.editor : null;
@@ -146,7 +171,8 @@ export function RunInsightsSlot({ runId, runStatus, size }: { runId: string; run
   const refresh = useCallback(async (): Promise<void> => {
     const all = await insightsApi.insights();
     const adapter = adapterRef.current;
-    if (all === null || adapter === null) return;
+    // A decision that settles after this card left (another run's card in its place) changes nothing here.
+    if (!live.current || all === null || adapter === null) return;
     const data = insightsOfRun(all, runId);
     const v = adapter.reload(data);
     hostRef.current?.artifactChanged(v, 'generated');
@@ -158,6 +184,7 @@ export function RunInsightsSlot({ runId, runStatus, size }: { runId: string; run
   }
   const open = size !== 'inline';
   return (
+    <div className="wk-run-insights-box">
     <div data-testid="run-insights" data-size={size} className={`wk-run-insights${open ? ' wk-run-insights--open' : ''}`}>
       <div ref={frameBox} data-testid="run-insights-frame" className="wk-insights-frame" />
       {/* D6: the card is read-only (its click opens the pane); deciding is in the pane and full screen. */}
@@ -165,6 +192,7 @@ export function RunInsightsSlot({ runId, runStatus, size }: { runId: string; run
         <InsightsDecide selected={selected} metrics={metrics} navigate={navigate} onDecided={refresh} said={said}
           hint="Pick a recommendation in this review to see its evidence and accept or dismiss it." />
       )}
+    </div>
     </div>
   );
 }

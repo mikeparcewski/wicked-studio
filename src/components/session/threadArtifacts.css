@@ -5,12 +5,14 @@
 
 /* G2: the plugin reads at the card's height inline; the pane and full screen put the decide aside beside it. */
 .wk-artifact--inline[data-kind="run-insights"] { height: 300px; }
-.wk-run-insights { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); height: 100%; }
+.wk-run-insights-box { flex: 1 1 auto; min-height: 0; height: 100%; display: flex; container-type: inline-size; }
+.wk-run-insights { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); height: 100%; }
 .wk-run-insights--open { grid-template-columns: minmax(0, 1fr) 300px; }
 .wk-run-insights .wk-insights-frame iframe { min-height: 0; }
 .wk-run-insights .wk-insights-decide { padding: 18px 16px; }
 .wk-run-insights-state { margin: 0; padding: 14px 16px; color: var(--ink-muted); font-size: var(--text-body); }
-@media (max-width: 860px) {
+/* The pane is narrow on most screens: the decide aside goes under the review there (the box's width, not the window's). */
+@container (max-width: 900px) {
   .wk-run-insights--open { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 1fr) auto; overflow-y: auto; }
   .wk-run-insights .wk-insights-decide { border-left: 0; border-top: 1px solid var(--border); }
 }
@@ -18,3 +20,5 @@
 /* G3: the App card — read-only, a picture of the pinned version and Open the app. */
 .wk-run-app { max-width: 520px; }
 .wk-run-app-prev { max-width: 520px; }
+/* The preview frame fills the card's width (the dashboard tile's frame is drawn for a narrower card). */
+@container (min-width: 500px) { .wk-run-app-prev .wk-appcard-frame .wk-editor-frame { transform: scale(0.433); } }

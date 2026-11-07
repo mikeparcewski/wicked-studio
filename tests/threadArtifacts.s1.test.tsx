@@ -89,6 +89,14 @@ describe('G1: an Unfiled run finds the document it made', () => {
     expect(isRunsDoc(v, 'default', 'b', new Map([['default/b', ['r-2']]]))).toBe(false);
   });
 
+  it('a run that names its artifact is bound to it: the write-root suffix rule claims no other document (review r1)', () => {
+    const v = run({ artifact_ref: '_unfiled/release-v1', extra_write_roots: ['/state/interactive-drafts/release-v1'] });
+    expect(isRunsDoc(v, 'default', 'release-v1', null)).toBe(true);
+    expect(isRunsDoc(v, 'default', 'release', null)).toBe(false);
+    // With no ref, the write-root rule is all there is (a form-made run): unchanged.
+    expect(isRunsDoc(run({ extra_write_roots: ['/state/interactive-drafts/release-v1'] }), 'default', 'release-v1', null)).toBe(true);
+  });
+
   it('the index reader keeps `runs`', () => {
     const [row] = docsIndexOf({ docs: [{ projectId: 'default', name: 'a', kind: 'doc', head: 1, versions: 1, runs: ['r-1', 7, ''] }] })!;
     expect(row!.runs).toEqual(['r-1']);
@@ -119,6 +127,16 @@ describe('G7 piece 2: a demo\'s made cut binds its card', () => {
     getDemo.mockResolvedValue({ stage: 'done', document: { projectId: 'proj_1', docId: 'demo-d-1' } });
     render(<RunArtifacts view={demoRun()} composerKey="k" only="made" />);
     await waitFor(() => expect(screen.getByTestId('placed').dataset['doc']).toBe('demo-d-1'));
+    expect(screen.getByTestId('placed').dataset['kind']).toBe('demo-video');
+  });
+
+  it('a demo run draws its cut once: in its video card, never as a second document card (review r1)', async () => {
+    getDemo.mockResolvedValue({ stage: 'done', document: { projectId: 'proj_1', docId: DOC.name } });
+    listAllDocs.mockResolvedValue(docsIndexOf({ docs: [{ projectId: 'proj_1', name: DOC.name, kind: 'doc', head: 1, versions: 1, runs: ['d-1'] }] }));
+    render(<RunArtifacts view={demoRun()} composerKey="k" only="made" />);
+    await waitFor(() => expect(screen.getByTestId('placed').dataset['doc']).toBe(DOC.name));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getAllByTestId('placed')).toHaveLength(1);
     expect(screen.getByTestId('placed').dataset['kind']).toBe('demo-video');
   });
 
