@@ -44,8 +44,15 @@ export function reposNamedIn<R extends Pick<RepoEntry, 'id' | 'name'>>(words: st
   return repos.filter((r) => names(words, r.name) || (r.id !== r.name && names(words, r.id)));
 }
 
+/** A name distinct enough to be read as a repository rather than a word: it carries something other than letters (a
+ *  digit, `-`, `_`, `.`), as repository slugs do (`billing-api`, `rg1105-r1b`). `domain`, `core` or `docs` never are:
+ *  "Map the domain of …" must not pick a repository called `domain` (codex/pi r7). Such a name still leads the chips. */
+export function distinctName(name: string): boolean {
+  return name.length >= 3 && /[^\p{L}]/u.test(name);
+}
+
 /**
- * The one repository a job's words clearly name (F41: `/analyze domain Map the domain of rg1 …` from a new chat), with
+ * The one repository a job's words clearly name (F41: `/analyze domain Map the domain of rg1-api …` from a new chat), with
  * the project that certainly and solely holds it (null otherwise). null when the words name none, or several, or the
  * registry could not be read: the job passage then asks, with chips. GETs only.
  */
@@ -54,8 +61,10 @@ export async function repoNamedInWords(words: string): Promise<{ repo: RepoEntry
   let repos: RepoEntry[];
   try { repos = (await api.listRepos()).repos; } catch { return null; }
   const named = reposNamedIn(words, repos);
-  if (named.length !== 1) return null;
-  const repo = named[0]!;
+  // Named by a distinct name or id; two named (or one distinct and one plain) is not clear: the person picks.
+  const clear = named.filter((r) => (distinctName(r.name) && names(words, r.name)) || (r.id !== r.name && distinctName(r.id) && names(words, r.id)));
+  if (named.length !== 1 || clear.length !== 1) return null;
+  const repo = clear[0]!;
   try {
     const { holding, certain } = await projectsForRepo(repo.id);
     return { repo, projectId: certain && holding.length === 1 ? holding[0]!.id : null };

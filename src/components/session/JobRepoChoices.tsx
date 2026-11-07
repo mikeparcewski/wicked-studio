@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ArtifactProposal, Project, RepoEntry } from '../../api/types.js';
 import { placeToken } from '../../store/inlineStart.js';
-import { jobWords, moveJob, useJobMoves } from '../../store/jobMoves.js';
+import { jobWords, moveJob, moveOf, useJobMoves } from '../../store/jobMoves.js';
 import { projectsForRepo, reposNamedIn } from '../../store/repoProjects.js';
 import { JobMovedLine, JobProjectChoices } from './JobProjectChoices.js';
 
@@ -46,7 +46,19 @@ export function JobRepoChoices({ chatId, proposal, onError }: {
   const busyRef = useRef(false);
   /** The repository picked for a job that needs a project no single one holds: its project chips follow. */
   const [picked, setPicked] = useState<RepoEntry | null>(null);
-  const moved = useJobMoves((s) => s.moves[proposal.pid] ?? null);
+  const moved = useJobMoves((s) => moveOf(s.moves, proposal.pid));
+  /** A move of this job out now (the project chips' press, or a press before a remount): nothing else is pressable. */
+  const moving = useJobMoves((s) => s.moving[proposal.pid] === true);
+  /** Where focus goes after the person's own press changes the question (the project question, or back to the chips). */
+  const nextRef = useRef<HTMLDivElement | null>(null);
+  const turned = useRef(false);
+  useEffect(() => {
+    if (!turned.current) return;
+    turned.current = false;
+    const el = nextRef.current;
+    const first = el?.querySelector<HTMLButtonElement>('button:not([disabled])');
+    (first ?? el)?.focus();
+  }, [picked, repos]);
   useEffect(() => {
     let live = true;
     setRepos(null);
@@ -60,16 +72,17 @@ export function JobRepoChoices({ chatId, proposal, onError }: {
   }
   if (picked !== null) {
     return (
-      <>
+      <div ref={nextRef} tabIndex={-1} data-testid="job-passage-repo-picked" aria-live="polite" className="wk-pass-sub">
         <JobProjectChoices chatId={chatId} proposal={proposal} onError={onError} repo={picked.id} repoName={picked.name} />
-        <button type="button" data-testid="job-passage-repos-back" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => setPicked(null)}>Another repository</button>
-      </>
+        <button type="button" data-testid="job-passage-repos-back" className="wk-btn wk-btn--link wk-btn--sm" disabled={moving}
+          onClick={() => { turned.current = true; setPicked(null); }}>Another repository</button>
+      </div>
     );
   }
 
   const pick = (r: RepoEntry): void => {
     // A ref, not the render's state: two presses in one tick seed once (as F39's).
-    if (busyRef.current) return;
+    if (busyRef.current || moving) return;
     busyRef.current = true;
     setBusy(r.id);
     onError(null);
@@ -91,6 +104,7 @@ export function JobRepoChoices({ chatId, proposal, onError }: {
           projectId = holding[0]!.id;
           where = holding[0]!.name;
         } else if (need !== undefined && need.required) {
+          turned.current = true;
           setPicked(r);
           return;
         }
@@ -113,7 +127,7 @@ export function JobRepoChoices({ chatId, proposal, onError }: {
   const { named, list } = repoChoices(jobWords(proposal), repos);
   const shown = all ? list : list.slice(0, Math.max(CHOICES_MAX, named.length));
   return (
-    <div data-testid="job-passage-repos" role="group" aria-label="Which repository?" className="wk-pass-sub wk-composer-start-need">
+    <div ref={nextRef} tabIndex={-1} data-testid="job-passage-repos" role="group" aria-label="Which repository?" className="wk-pass-sub wk-composer-start-need">
       <span className="wk-composer-note">
         {list.length === 0 ? 'Add a repository first: this job runs on one.'
           : named.length === 1 ? `You named ${named[0]!.name}. The job opens in a new chat on the one you pick.`
@@ -121,7 +135,7 @@ export function JobRepoChoices({ chatId, proposal, onError }: {
       </span>
       {shown.map((r) => (
         <button key={r.id} type="button" data-testid="job-passage-repo" data-repo={r.id} data-named={named.includes(r) ? 'true' : undefined}
-          disabled={busy !== null} aria-busy={busy === r.id} onClick={() => pick(r)} className="wk-composer-chip wk-composer-suggestion">
+          disabled={busy !== null || moving} aria-busy={busy === r.id} onClick={() => pick(r)} className="wk-composer-chip wk-composer-suggestion">
           {busy === r.id ? `${r.name}…` : r.name}
         </button>
       ))}

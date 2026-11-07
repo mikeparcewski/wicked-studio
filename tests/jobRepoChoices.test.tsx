@@ -24,6 +24,7 @@ const { putMove, readMoves, resetJobMoves, useJobMoves } = await import('../src/
 const { reposNamedIn } = await import('../src/store/repoProjects.js');
 const { postJob } = await import('../src/store/inlineStart.js');
 const { takesRepo } = await import('../src/board/slashCatalog.js');
+const { resetCatalogV2 } = await import('../src/store/catalogV2.js');
 const { jobProposal } = await import('./jobFixtures.js');
 const rigCatalog = (await import('./fixtures/workflowCatalogV2-rig.json')).default;
 
@@ -50,6 +51,12 @@ const REPOS = [
 let messages: unknown[] = [];
 let members: Record<string, Array<{ member_kind: string; member_ref: string }>> = {};
 let failRepos = false;
+/** The seed's answers, in order (then 201), and a gate the seed waits on; a members read held until released. */
+let seedStatuses: number[] = [];
+let seedGate: Promise<void> = Promise.resolve();
+let membersGate: Promise<void> = Promise.resolve();
+let catalog: unknown = null;
+let repos = REPOS;
 const posts: Array<{ path: string; body: Record<string, unknown> }> = [];
 
 function ok(body: unknown, status = 200): Response {
@@ -61,6 +68,12 @@ beforeEach(() => {
   messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking() }];
   members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg1' }], p2: [] };
   failRepos = false;
+  seedStatuses = [];
+  seedGate = Promise.resolve();
+  membersGate = Promise.resolve();
+  catalog = null;
+  repos = REPOS;
+  resetCatalogV2();
   resetJobMoves();
   resetJobLocal();
   resetDecisionsForTest();
@@ -72,13 +85,17 @@ beforeEach(() => {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
     if (init?.method === 'POST') {
       posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
-      if (path === '/chats') return Promise.resolve(ok({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } } }, 201));
+      if (path === '/chats') {
+        const st = seedStatuses.shift() ?? 201;
+        return seedGate.then(() => (st >= 400 ? ok({ error: 'the daemon said no' }, st) : ok({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } } }, 201)));
+      }
       return Promise.resolve(ok({ view: {} }));
     }
-    if (path === '/repos') return Promise.resolve(failRepos ? ok({ error: 'down' }, 503) : ok({ repos: REPOS }));
+    if (path === '/repos') return Promise.resolve(failRepos ? ok({ error: 'down' }, 503) : ok({ repos }));
+    if (path === '/workflows/catalog') return Promise.resolve(catalog === null ? ok({ error: 'none' }, 404) : ok(catalog));
     if (path === '/projects') return Promise.resolve(ok({ projects: [{ id: 'default', name: 'Unfiled' }, { id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }] }));
     const m = /^\/projects\/([^/]+)\/members$/.exec(path);
-    if (m !== null) return Promise.resolve(ok({ members: members[m[1]!] ?? [] }));
+    if (m !== null) return membersGate.then(() => ok({ members: members[m[1]!] ?? [] }));
     const cm = /^\/chats\/([^/]+)/.exec(path);
     if (cm !== null && !path.includes('/considered')) return Promise.resolve(ok({ chatId: cm[1], seats: ['claude'], scope: { kind: 'none' }, messages }));
     if (path.endsWith('/team')) return Promise.resolve(ok({ teamed: false, rows: [], units: [] }));
@@ -191,6 +208,20 @@ describe('F41: the words name a repository as a whole token', () => {
 describe('F41: a job seeded from a new chat opens on the repository its words name (pre-pick)', () => {
   const seed = (words: string, repoFromWords: boolean, projectId: string | null = null) =>
     postJob({ card: 'analyze-codebase', option: 'domain', depth: null, words, source: 'command', chatId: null, projectId, repoRef: null, pickKey: `k:${words}:${String(repoFromWords)}:${projectId}`, repoFromWords });
+  it('a repository named like a word ("domain") is never picked from the words', async () => {
+    repos = [...REPOS, { id: 'domain', name: 'domain', root_path: '/r/domain', default_branch: 'main', registered_at: 1 }];
+    await seed('Map the domain of the billing service', true);
+    expect(seeds()[0]!.body['repoRefs']).toBeUndefined();
+  });
+  it('a retry sends the scope first read, under the same request id, even when the repositories can no longer be read', async () => {
+    seedStatuses = [503];
+    await expect(seed('Map the domain of rg1', true)).rejects.toThrow();
+    failRepos = true;
+    await seed('Map the domain of rg1', true);
+    expect(seeds()).toHaveLength(2);
+    expect(seeds()[1]!.body['repoRefs']).toEqual(['rg1']);
+    expect(seeds()[1]!.body['requestId']).toBe(seeds()[0]!.body['requestId']);
+  });
   it('one named repository: the seed is scoped on it, in the project that solely holds it', async () => {
     await seed('Map the domain of rg1: what it does', true);
     expect(seeds()[0]!.body).toMatchObject({ repoRefs: ['rg1'], projectId: 'p1' });
@@ -227,10 +258,10 @@ describe('F39/F41 minor: the old chat says where the job moved, not only "You ch
     const line = await screen.findByTestId('job-passage-moved');
     expect(line.textContent).toMatch(/This job moved to reqgraph · Open it/);
     expect(screen.queryByTestId('job-passage-not-started')).toBeNull();
-    const tick = screen.getAllByTestId('job-tick').find((t) => t.dataset['moved'] === 'true')!;
-    expect(tick.textContent).toMatch(/^This job moved to reqgraph · Open it · /);
+    const tick = await waitFor(() => screen.getAllByTestId('job-tick').find((t) => t.dataset['moved'] === 'true')!);
+    expect(tick.textContent).toMatch(/^You moved this job to reqgraph · /);
     expect(screen.getAllByTestId('job-tick').some((t) => /You chose Not now/.test(t.textContent ?? ''))).toBe(false);
-    fireEvent.click(within(tick).getByTestId('job-tick-moved-open'));
+    fireEvent.click(screen.getByTestId('job-passage-moved-open'));
     expect(useChatFlow.getState().request?.chatId).toBe('seeded-1');
   });
   it('a Not now with no move still reads as before', async () => {
@@ -248,5 +279,79 @@ describe('F39/F41 minor: the old chat says where the job moved, not only "You ch
     expect(readMoves('not json')).toEqual({});
     expect(readMoves(JSON.stringify({ x: { chatId: 1 } }))).toEqual({});
     expect(Object.keys(useJobMoves.getState().moves)).toEqual(['a:1', 'a:2']);
+  });
+});
+
+describe('F41 review folds (r7)', () => {
+  it('while the project chips’ move is out, nothing else can start one: Another repository and the chips are held', async () => {
+    let release!: () => void;
+    seedGate = new Promise((r) => { release = r; });
+    page();
+    await waitFor(() => expect(repoChips()).toHaveLength(4));
+    fireEvent.click(repoChips()[0]!); // rg2: no single project, so the project chips ask
+    await waitFor(() => expect(projectChips()).toHaveLength(2));
+    fireEvent.click(projectChips()[1]!);
+    await waitFor(() => expect((screen.getByTestId('job-passage-repos-back') as HTMLButtonElement).disabled).toBe(true));
+    fireEvent.click(screen.getByTestId('job-passage-repos-back'));
+    expect(repoChips()).toHaveLength(0);
+    release();
+    await waitFor(() => expect(notNows()).toHaveLength(1));
+    expect(seeds()).toHaveLength(1);
+  });
+  it('a hidden card moves under its own command (crew refuses a hidden card’s id)', async () => {
+    catalog = { version: 2, categories: [], cards: [{ id: 'test-analysis', hidden: true, aliases: [{ command: '/workflow-test-analysis', option: null }] }] };
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking({ shape: { card: 'test-analysis', option: null, depth: null, by: 'person', source: 'command' },
+      needs: asking().needs!.filter((n) => n.id !== 'project') }) }];
+    page();
+    await waitFor(() => expect(repoChips()).toHaveLength(4));
+    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(seeds()).toHaveLength(1));
+    expect(seeds()[0]!.body).toMatchObject({ seed: { card: '/workflow-test-analysis' }, repoRefs: ['rg2'] });
+  });
+  it('the person went elsewhere while the repository’s projects were read: nothing is moved', async () => {
+    let release!: () => void;
+    membersGate = new Promise((r) => { release = r; });
+    page();
+    await waitFor(() => expect(repoChips()).toHaveLength(4));
+    fireEvent.click(repoChips()[1]!); // rg1
+    act(() => { useChatFlow.setState({ request: { chatId: 'elsewhere', nonce: 99 } as never }); });
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(posts).toEqual([]);
+  });
+  it('focus follows the person’s press: into the project question, and back to the first repository', async () => {
+    page();
+    await waitFor(() => expect(repoChips()).toHaveLength(4));
+    repoChips()[0]!.focus();
+    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(projectChips()).toHaveLength(2));
+    expect(screen.getByTestId('job-passage-repo-picked').contains(document.activeElement)).toBe(true);
+    fireEvent.click(screen.getByTestId('job-passage-repos-back'));
+    await waitFor(() => expect(document.activeElement).toBe(repoChips()[0]));
+  });
+  it('the moved job, in its new chat on the repository and in its project, has Start and no chips', async () => {
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking({ question: null, filedIn: { projectId: 'p1', label: 'reqgraph' }, repoRefs: ['rg1'],
+      needs: asking().needs!.map((n) => (n.id === 'repo' ? { ...n, status: 'met', value: 'rg1' } : n.id === 'project' ? { ...n, status: 'met', value: 'p1' } : n)) }) }];
+    page();
+    await waitFor(() => expect(screen.queryAllByTestId('job-passage-reply').some((b) => b.dataset['reply'] === 'start')).toBe(true));
+    expect(repoChips()).toHaveLength(0);
+    expect(posts).toEqual([]);
+  });
+  it('kept moves are untrusted: a bad error field is dropped, a prototype key never lands, another tab’s moves survive a save', () => {
+    const k = 'wk.jobMoves.v1';
+    const bad = readMoves(JSON.stringify({ x: { chatId: 'c', where: 'w', at: 1, retired: 'failed', error: { message: 'bad' } } }));
+    expect(bad['x']!.error).toBeNull();
+    const proto = readMoves('{"__proto__": {"chatId": "c", "where": "w", "at": 1, "retired": "done", "chat-j:t1": {"where": {}}}}');
+    expect(Object.keys(proto)).toEqual([]);
+    expect(Object.getPrototypeOf(proto)).toBe(Object.prototype);
+    // Another tab saved b:1 after this one loaded; this tab's save of a:1 keeps it.
+    globalThis.localStorage.setItem(k, JSON.stringify({ 'b:1': { chatId: 'cb', where: 'other', retired: 'done', error: null, at: 5 } }));
+    putMove('a:1', { chatId: 'ca', where: 'reqgraph', retired: 'done', error: null });
+    expect(Object.keys(readMoves(globalThis.localStorage.getItem(k))).sort()).toEqual(['a:1', 'b:1']);
+  });
+  it('another tab’s move reaches this one', () => {
+    const k = 'wk.jobMoves.v1';
+    act(() => { window.dispatchEvent(new StorageEvent('storage', { key: k, newValue: JSON.stringify({ 'c:1': { chatId: 'cc', where: 'reqgraph', retired: 'pending', error: null, at: 9 } }) })); });
+    expect(useJobMoves.getState().moves['c:1']).toMatchObject({ chatId: 'cc', retired: 'pending' });
   });
 });

@@ -109,6 +109,8 @@ interface Envelope {
   requirements: { inputId: string; refs: Array<{ repoId: string; key: string }> } | null;
 }
 const envelopes = new Map<string, Envelope>();
+/** The repository a request's words named, as first read, kept until the request is answered (F41). */
+const prepicked = new Map<string, Awaited<ReturnType<typeof repoNamedInWords>>>();
 
 /** The scope a seeded chat opens in: the project, and the repository when one is named. */
 function seedScope(projectId: string | null, repoRef: string | null | undefined): Pick<ChatOpenBody, 'projectId' | 'repoRefs'> {
@@ -145,13 +147,19 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     let projectId = p.projectId;
     let repoRef = p.repoRef ?? null;
     if (env === undefined && (repoRef === null || repoRef === '') && p.repoFromWords === true) {
-      // F41: `/analyze domain Map the domain of rg1 …` from a new chat: the chat opens on rg1, so crew's job has its
-      // repository (a revision cannot add one outside the chat's scope). None or several named: the passage asks.
-      const named = await repoNamedInWords(p.words);
-      if (!wanted()) return null;
+      // F41: `/analyze domain Map the domain of rg1-api …` from a new chat: the chat opens on rg1-api, so crew's job has
+      // its repository (a revision cannot add one outside the chat's scope). None or several named: the passage asks.
+      // Read once per request: a retry sends the same scope under the same request id (codex r7), so a seed crew took
+      // whose answer was lost is recovered, never doubled.
+      let named = prepicked.get(p.pickKey);
+      if (named === undefined) {
+        named = await repoNamedInWords(p.words);
+        if (!wanted()) return null;
+        prepicked.set(p.pickKey, named);
+      }
       if (named !== null) {
         repoRef = named.repo.id;
-        if (projectId === null || projectId === '' || projectId === 'default' || projectId === UNFILED_MOUNT) projectId = named.projectId;
+        if (projectId === null || projectId === '' || projectId === UNFILED_MOUNT) projectId = named.projectId;
       }
     }
     const scope = env !== undefined ? seedScope(env.projectId, env.repoRef) : seedScope(projectId, repoRef);
@@ -167,6 +175,7 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     }
   }
   sent.delete(p.pickKey);
+  prepicked.delete(p.pickKey);
   if (env?.requirements != null && out.proposal !== null) {
     const req = env.requirements;
     // The requirements the person chose on the page are their answer to the job's "which requirements?".

@@ -851,10 +851,36 @@ describe('F41: a command typed in a new chat opens on the repository its words n
     projectMembers = { p1: [{ member_kind: 'crew.repo', member_ref: 'repo-1' }] };
     render(<Harness chatId={null} composerKey="new" />);
     await ready();
-    type('/analyze domain Map the domain of svc: what it does');
+    type('/analyze domain Map the domain of repo-1: what it does');
     enter();
     await waitFor(() => expect(seedOf()).toBeDefined());
-    expect(seedOf()).toMatchObject({ seed: { card: 'analyze-codebase', option: 'domain', words: 'Map the domain of svc: what it does', source: 'command' }, repoRefs: ['repo-1'], projectId: 'p1' });
+    expect(seedOf()).toMatchObject({ seed: { card: 'analyze-codebase', option: 'domain', words: 'Map the domain of repo-1: what it does', source: 'command' }, repoRefs: ['repo-1'], projectId: 'p1' });
+  });
+  it('a repository named like a word (svc) is never picked from the words: the passage asks, the chips lead with it', async () => {
+    render(<Harness chatId={null} composerKey="new" />);
+    await ready();
+    type('/analyze domain Map the domain of svc');
+    enter();
+    await waitFor(() => expect(seedOf()).toBeDefined());
+    expect(seedOf()!['repoRefs']).toBeUndefined();
+  });
+  it('the person went elsewhere while the repositories were read: nothing is posted, and the command stays on the box', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/repos')
+      ? held.then(() => new Response(JSON.stringify({ repos: [REPO] }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      : (real as (u: string, i?: RequestInit) => Promise<Response>)(url, init))));
+    render(<Harness chatId={null} composerKey="new" />);
+    await ready();
+    type('/analyze domain Map the domain of repo-1');
+    enter();
+    await new Promise((r) => setTimeout(r, 30));
+    act(() => { useChatFlow.setState({ request: { chatId: 'elsewhere', nonce: 99 } as never }); });
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(seedOf()).toBeUndefined();
+    expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('/analyze domain Map the domain of repo-1');
   });
   it('words that name no registered repository: the seed names none (the passage asks, with chips)', async () => {
     render(<Harness chatId={null} composerKey="new" />);

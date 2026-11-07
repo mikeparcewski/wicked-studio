@@ -625,7 +625,7 @@ export function Composer({
     setStartNote(composerKey, null);
     const sentWords = text;
     try {
-      await postJob({
+      const out = await postJob({
         card: j.card, option: j.option, depth: j.depth, words: j.words, source: j.source,
         // An `@project` chip names where the job goes: a new chat in that project, never this chat (codex r1).
         chatId: project !== null ? null : jobChatId,
@@ -633,6 +633,8 @@ export function Composer({
         // F41: a new chat's job that takes a repository opens on the one its words name.
         repoFromWords: takesRepo(v2View, j.card, j.option),
       });
+      // Not posted (the person went elsewhere first): the draft, its chip and its request stay for a retry (codex r7).
+      if (out === null) return;
       // The draft this post came from still owns the box only if its pick (or its command key) is still the one there
       // and its words are unchanged: a replacement pick with the same words is not cleared (codex r2).
       const owned = j.chipKey !== null

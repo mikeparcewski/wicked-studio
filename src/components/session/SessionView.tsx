@@ -2,8 +2,8 @@ import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorBadge, floorWords } from '../../board/floorRun.js';
-import { beginChatOpen, chatOpened, openChat, useChatFlow } from '../../store/chatFlow.js';
-import { useJobMoves } from '../../store/jobMoves.js';
+import { beginChatOpen, chatOpened, useChatFlow } from '../../store/chatFlow.js';
+import { moveOf, useJobMoves } from '../../store/jobMoves.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiError, api } from '../../api/client.js';
@@ -1597,17 +1597,11 @@ function DockedComposer({ reply, docked, composerProps, who }: {
   );
 }
 
-/** One tick of a job's history. A Not now whose job was moved to a new chat (F39/F41) says where it went, with the way
- *  there, instead of "You chose Not now". */
+/** One tick of a job's history. A Not now whose job was moved to a new chat (F39/F41) says where it went instead of
+ *  "You chose Not now". */
 function JobTickLine({ text, at, notNowPid }: { text: string; at: number; notNowPid: string | undefined }): React.ReactElement {
-  const moved = useJobMoves((s) => (notNowPid === undefined ? null : s.moves[notNowPid] ?? null));
+  const moved = useJobMoves((s) => (notNowPid === undefined ? null : moveOf(s.moves, notNowPid)));
   const time = new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (moved !== null) {
-    return (
-      <p data-testid="job-tick" data-moved="true" className="wk-pass-tick">
-        This job moved to {moved.where} · <button type="button" className="wk-pass-inl" data-testid="job-tick-moved-open" onClick={() => openChat(moved.chatId)}>Open it</button> · {time}
-      </p>
-    );
-  }
-  return <p data-testid="job-tick" className="wk-pass-tick">{text} · {time}</p>;
+  // The way there is the passage's own "Open it" (one link per move, pi r7).
+  return <p data-testid="job-tick" {...(moved !== null ? { 'data-moved': 'true' } : {})} className="wk-pass-tick">{moved !== null ? `You moved this job to ${moved.where}` : text} · {time}</p>;
 }

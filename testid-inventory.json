@@ -12,7 +12,7 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 332,
-    "occurrences": 4957,
+    "occurrences": 4956,
     "static": 4164,
     "dynamic": 177,
     "computed": 53
@@ -8348,6 +8348,12 @@
       ]
     },
     {
+      "testId": "job-passage-repo-picked",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-repos",
       "files": [
         "src/components/session/JobRepoChoices.tsx"
@@ -8505,12 +8511,6 @@
     },
     {
       "testId": "job-tick",
-      "files": [
-        "src/components/session/SessionView.tsx"
-      ]
-    },
-    {
-      "testId": "job-tick-moved-open",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

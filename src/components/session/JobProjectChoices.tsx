@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ArtifactProposal, Project } from '../../api/types.js';
 import { openChat } from '../../store/chatFlow.js';
-import { moveJob, retireMoved, useJobMoves, type JobMove } from '../../store/jobMoves.js';
+import { moveJob, moveOf, retireMoved, useJobMoves, type JobMove } from '../../store/jobMoves.js';
 import { projectsForRepo } from '../../store/repoProjects.js';
 
 export { jobWords, useJobMoves } from '../../store/jobMoves.js';
@@ -67,7 +67,9 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
   const [busy, setBusy] = useState<string | null>(null);
   const busyRef = useRef(false);
   /** The job, once moved: where it went, and whether this one was set aside (else a retry that never seeds again). */
-  const moved = useJobMoves((s) => s.moves[proposal.pid] ?? null);
+  const moved = useJobMoves((s) => moveOf(s.moves, proposal.pid));
+  /** A move of this job already out (from this control, or another one the person left): nothing more is pressable. */
+  const moving = useJobMoves((s) => s.moving[proposal.pid] === true);
   useEffect(() => {
     let live = true;
     // Choices belong to one repository: a newer one reads afresh, and nothing is pressable meanwhile (codex r4).
@@ -87,7 +89,7 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
   }
   const pick = (p: Project): void => {
     // A ref, not the render's state: two presses in one tick seed once (pi r4).
-    if (busyRef.current || moved !== null) return;
+    if (busyRef.current || moved !== null || moving) return;
     busyRef.current = true;
     setBusy(p.id);
     onError(null);
@@ -116,7 +118,7 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
             : `Which project${repoName !== undefined ? ` for ${repoName}` : ''}? The job opens in a new chat there.`}
       </span>
       {shown.map((p) => (
-        <button key={p.id} type="button" data-testid="job-passage-project" data-project={p.id} disabled={busy !== null}
+        <button key={p.id} type="button" data-testid="job-passage-project" data-project={p.id} disabled={busy !== null || moving}
           aria-busy={busy === p.id} onClick={() => pick(p)} className="wk-composer-chip wk-composer-suggestion">
           {busy === p.id ? `${p.name}…` : p.name}
         </button>
