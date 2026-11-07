@@ -6,7 +6,7 @@ import {
 } from '../../editors/hostApi.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge.js';
-import { setAdvisoryNotes } from '../../store/editors.js';
+import { setAdvisoryNotes, useOptionsOverFull } from '../../store/editors.js';
 import { focusFullOptions } from './FullShell.js';
 import type { Control, OptionsTab } from '../../editors/surfaces.js';
 
@@ -51,7 +51,8 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
   // plugins-complete G24: a card's Options pressed in its full screen opens over that full screen (the panel beside the
   // page sits under it), at the right edge, at every width — never the ribbon; × or Esc closes it back to the full screen.
   const fullKey = useHostChrome((s) => s.full);
-  const overFull = group !== null && fullKey !== null && group.binding.artifactKey === fullKey;
+  const overKey = useOptionsOverFull((s) => s.group);
+  const overFull = group !== null && fullKey !== null && group.binding.artifactKey === fullKey && overKey === group.key;
   const collapsed = overFull ? false : narrow ? !overlay : folded;
   // Opened (or shown again) over the full screen, the keyboard moves into the options, so the next Esc is theirs.
   const closeRef = useRef<HTMLButtonElement | null>(null);
@@ -260,7 +261,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
           if (k === 'Escape') {
             if (document.activeElement !== hostRef.current?.frame) return;
             // Over its card's full screen, Esc in the options frame closes them back to the full screen (G24).
-            if (useHostChrome.getState().full === group.binding.artifactKey) { useHostPanel.getState().closeGroup(); queueMicrotask(focusFullOptions); }
+            if (useHostChrome.getState().full === group.binding.artifactKey && useOptionsOverFull.getState().group === group.key) { useHostPanel.getState().closeGroup(); queueMicrotask(focusFullOptions); }
             else if (withRunRef.current) useHostPanel.getState().setTab(RUN_TAB);
             else useHostPanel.getState().closeGroup(); // no Run tab here (codex h4-fix r1 P2): Esc closes the options
           }
