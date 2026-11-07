@@ -9023,6 +9023,19 @@ class W2Handler(SimpleHTTPRequestHandler):
             out.append({"manifest": manifest, "body": body, "sha256": hashlib.sha256(body).hexdigest()})
         return out
 
+    def _listed_build(self, eid: str, version: str, sha: str) -> tuple:
+        """The version and entry hash the registry stand-in lists for `eid` (unchanged when it lists none)."""
+        for e in self._studio_editors():
+            if e["manifest"]["id"] == eid:
+                return e["manifest"]["version"], e["sha256"]
+        fixtures = {"acme-mcp": "mcp-inspector.html", "acme-good": "good.html"}
+        if eid in fixtures:
+            return "0.1.0", hashlib.sha256((REPO / "e2e" / "editor-fixtures" / fixtures[eid]).read_bytes()).hexdigest()
+        if eid == "mpx-changelog-entry":
+            row = json.loads((REPO / "e2e" / "editor-fixtures" / "changelog-entry.registry.json").read_text())
+            return row["version"], row["sha256"]
+        return version, sha
+
     def _writer_grants(self, version: str, sha: str, project) -> bool:
         """F37: crew's decided set for `acme-good` over the fixture's EDITOR-GRANTS stand-in."""
         with state_lock:
@@ -9102,6 +9115,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             version = (q.get("version") or [""])[0]
             sha = (q.get("sha") or [""])[0]
+            if not version or not sha:
+                # crew answers for the build it serves; the Plugins page asks with no build (F37).
+                version, sha = self._listed_build(parts[4], version, sha)
             if parts[4] == "acme-good":
                 # crew answers for the build it serves, whatever the query names (studio's Plugins page sends none).
                 good = hashlib.sha256((REPO / "e2e" / "editor-fixtures" / "good.html").read_bytes()).hexdigest()

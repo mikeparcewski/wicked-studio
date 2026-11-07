@@ -133,6 +133,11 @@ with sync_playwright() as p:
         details.wait_for(state="visible", timeout=10000)
         row = details.locator(f'[data-testid="editor-plugin-row"][data-editor="{EDITOR}"]')
         head = details.locator(".wk-plugdetail-name").inner_text()
+        # May do is what crew decided (F37): read once its answer is in.
+        try:
+            page.wait_for_function("() => (document.querySelector('[data-testid=\"plugin-details\"] [data-testid=\"editor-plugin-permissions\"]')?.textContent || '').startsWith('Can')", timeout=10000)
+        except Exception:
+            pass
         page.screenshot(path=str(SHOTS / f"editor-installed-plugin-list-{theme}.png"))
         check(f"{theme}-listed-as-installed",
               tile.get_by_test_id("plugin-tile-title").inner_text() == "Changelog entry" and tile.get_by_test_id("plugin-tile-source").inner_text() == "You installed"
