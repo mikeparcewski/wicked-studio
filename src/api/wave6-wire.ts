@@ -56,6 +56,10 @@ export interface InteractiveDocsIndexRow {
    *  per-project list carries them. Absent on an older daemon, or when the row has none. */
   style?: string;
   grounding?: DocGrounding;
+  /** (api-types 0.36.0 `InteractiveDocIndexRow.runs`) The governed runs crew's seams launched for this document, from
+   *  its handoff ledgers: the doc ↔ run binding a run's thread reads to find what it made (an Unfiled run included).
+   *  Absent when the row carries none. */
+  runs?: string[];
 }
 
 /** A grounding record off the wire, or `undefined` when it is missing or not the declared shape —
@@ -88,6 +92,7 @@ export function docsIndexOf(body: unknown): InteractiveDocsIndexRow[] | null {
     if (pid === null || name === null) continue;
     const style = str(b['style']);
     const grounding = groundingOf(b['grounding']);
+    const runs = Array.isArray(b['runs']) ? b['runs'].filter((x): x is string => typeof x === 'string' && x !== '') : null;
     out.push({
       project_id: pid,
       name,
@@ -100,6 +105,7 @@ export function docsIndexOf(body: unknown): InteractiveDocsIndexRow[] | null {
       updated_at: str(b['updated_at']) ?? str(b['updatedAt']),
       ...(style !== null ? { style } : {}),
       ...(grounding !== undefined ? { grounding } : {}),
+      ...(runs !== null && runs.length > 0 ? { runs } : {}),
     });
   }
   return out;

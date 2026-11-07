@@ -6,6 +6,12 @@ import { useHostChrome } from '../../editors/hostApi.js';
 import { useGateStore } from '../../store/gates.js';
 import { recordingGateActions } from '../editorPorts/RecordingGateActions.js';
 
+/** The run's recording verbs with S4's `cutOpens` (studio#1026: the host binds a demo's made cut to its card, so "Edit
+ *  the cut" may be offered). Typed with that fifth parameter, which a shorter function is assignable to: on a base
+ *  without #1026 the argument is ignored; with it, it takes effect. */
+type RecordingVerbs = (binding: ArtifactBinding, units: RunView['units'], onEditOpen?: () => void, script?: boolean, cutOpens?: boolean) => React.ReactNode | null;
+export const recordingVerbs: RecordingVerbs = recordingGateActions;
+
 /**
  * H3 (HOST-API §6): what the run page supplies to the editor host — the run, its current phase (the
  * full-screen header), the open gate's host controls (the card footer and the full-screen header), and
@@ -91,7 +97,8 @@ export function useRunHostValue(runs: readonly RunView[], renderChat: () => Reac
       // A recording (walkthrough, demo video) brings its own gate verbs — Ask helpers to fix, Edit the
       // check, Re-record this chapter — drawn from the run's state by the host (H6, RecordingGateActions);
       // they read the binding's run, which is the run resolved here (never another run's).
-      const recording = recordingGateActions({ ...binding, runId: run.session.id }, run.units, undefined, true);
+      // G7 piece 2: a demo's made cut is bound to its card (RunArtifacts' DemoArtifact), so "Edit the cut" may show.
+      const recording = recordingVerbs({ ...binding, runId: run.session.id }, run.units, undefined, true, true);
       return <>{recording}<GateButtons runId={run.session.id} /></>;
     },
     liveFrameCap: 6,
