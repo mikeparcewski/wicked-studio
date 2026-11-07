@@ -1,3 +1,4 @@
+import { powerOf } from '../api/power.js';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../board/gateActions.js';
@@ -103,9 +104,11 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   const sentBackRaw = useJobLocal((s) => (runId === null ? null : s.sentBack[runId] ?? null));
   const swapPending = useJobLocal((s) => s.swapPending[lineage.lineage] ?? null);
   const deciding = useJobLocal((s) => s.deciding[lineage.lineage] === true);
-  // Past its plan: a plan approval decided on the team record, or a run that is not a team run (no plan gate to wait on).
-  const planDecided = useMemo(() => fold?.snapshot?.teamed === false || (fold?.rows ?? []).some((r) => r.event_type === 'wicked.team.gate.decided'
-    && r.payload['kind'] === 'plan_approval' && PLAN_DECIDED.has(String(r.payload['decision']))), [fold]);
+  // Past its plan: a plan approval decided on the team record, a run that is not a team run (no plan gate to wait on),
+  // or a power run on its own record (api-types 0.196.0: a Start that chose one has no plan gate).
+  const powerRun = powerOf(run?.session)?.on === true;
+  const planDecided = useMemo(() => powerRun || fold?.snapshot?.teamed === false || (fold?.rows ?? []).some((r) => r.event_type === 'wicked.team.gate.decided'
+    && r.payload['kind'] === 'plan_approval' && PLAN_DECIDED.has(String(r.payload['decision']))), [fold, powerRun]);
   // The newest plan revision crew has opened a plan gate for, from the team record.
   const newestPlanRev = useMemo(() => Math.max(-1, ...(fold?.rows ?? []).filter((r) => r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval')
     .map((r) => (typeof r.payload['plan_rev'] === 'number' ? r.payload['plan_rev'] : -1))), [fold]);
