@@ -1008,6 +1008,8 @@
     "repo-card-split": "repo-detail-stats",
     "repo-details": "repo-upkeep",
     "repo-onboard": "repo-row-index",
-    "repo-open": "repo-row"
+    "repo-open": "repo-row",
+    "plugin-coming-soon": "plugin-tile",
+    "plugin-coming-soon-tag": "plugin-tile-source"
   }
 }

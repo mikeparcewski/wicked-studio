@@ -150,7 +150,10 @@ with sync_playwright() as p:
     # ── 5. … and New job adds no coming-soon Apps tile of its own (this daemon has no catalog: today's list) ──
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
-    page.get_by_test_id("launch-catalog-search").wait_for(state="visible", timeout=8000)
+    # Wait for today's list itself (an older daemon: `launch-catalog-older`), not just the search box, which renders
+    # before the list does (xreview r1): an absence checked too early proves nothing.
+    page.get_by_test_id("launch-catalog-older").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("launch-wizard-workflow-demo-video").wait_for(state="visible", timeout=15000)
     page.screenshot(path=str(SHOTS / "desk-plugins-document-newjob.png"))
     check("newjob-no-apps-coming-soon", page.get_by_test_id("launch-catalog-soon-apps").count() == 0)
 

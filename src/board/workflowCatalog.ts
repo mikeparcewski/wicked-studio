@@ -376,7 +376,7 @@ export interface CatalogFilters {
   /** null = every category. */
   category: string | null;
   repo: RepoFilter;
-  /** Show the workflows that cannot start here (unavailable on this daemon, or listed as coming by an older one); on by default. */
+  /** Show the workflows that cannot start here (unavailable on this daemon, or marked coming soon by its catalog); on by default. */
   showSoon: boolean;
 }
 export const NO_FILTERS: CatalogFilters = { category: null, repo: 'any', showSoon: true };

@@ -196,7 +196,86 @@ describe('the Plugins page: Remove an editor you installed', () => {
     const err = await screen.findByTestId('plugin-remove-error');
     expect(err.textContent).toContain('its grant could not be withdrawn');
     expect(screen.getAllByTestId('plugin-tile').map((t) => t.dataset['plugin'])).toContain('acme-terms');
-    // The press can be repeated.
+    // The keyboard is back on the press, and the press can be repeated: a second DELETE that succeeds removes it.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('plugin-remove-confirm')));
     expect(screen.getByTestId('plugin-remove-confirm')).not.toBeDisabled();
+  });
+
+  it('a second press after a refusal sends a second DELETE, which removes it', async () => {
+    let calls = 0;
+    const f = stub(() => json(INDEX), [BUILT_IN, INSTALLED], () => (++calls === 1 ? json({ error: 'try again' }, 503) : json({ removed: true, id: 'acme-terms' })));
+    render(<PluginsPage navigate={vi.fn()} />);
+    fireEvent.click(await tileOf('acme-terms'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    fireEvent.click(screen.getByTestId('plugin-remove-confirm'));
+    await screen.findByTestId('plugin-remove-error');
+    fireEvent.click(screen.getByTestId('plugin-remove-confirm'));
+    await waitFor(() => expect(screen.queryByTestId('plugin-details')).toBeNull());
+    expect(f.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE')).toHaveLength(2);
+    expect(screen.getAllByTestId('plugin-tile').map((t) => t.dataset['plugin'])).not.toContain('acme-terms');
+  });
+
+  it("Keep it puts the keyboard back on Remove", async () => {
+    stub(() => json(INDEX));
+    render(<PluginsPage navigate={vi.fn()} />);
+    fireEvent.click(await tileOf('acme-terms'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('plugin-remove-confirm')));
+    fireEvent.click(screen.getByTestId('plugin-remove-cancel'));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('plugin-remove')));
+  });
+
+  it('removing the last editor under You installed puts the keyboard on the filter', async () => {
+    stub(() => json(INDEX));
+    render(<PluginsPage navigate={vi.fn()} />);
+    await tileOf('acme-terms');
+    fireEvent.click(screen.getByTestId('plugins-filter').querySelector<HTMLElement>('[data-filter="mine"]')!);
+    fireEvent.click(await tileOf('acme-terms'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    fireEvent.click(screen.getByTestId('plugin-remove-confirm'));
+    await screen.findByTestId('editor-plugins-empty');
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-filter')).toBe('mine'));
+  });
+});
+
+describe('the Plugins page: a removal belongs to the editor it was pressed on', () => {
+  const OTHER = { ...INSTALLED, id: 'acme-notes', title: 'Notes checker' };
+  function deferredDelete(): { stubDelete: () => Promise<Response>; settle: (r: Promise<Response>) => void } {
+    let settle: (r: Promise<Response>) => void = () => undefined;
+    const pending = new Promise<Response>((resolve) => { settle = (r) => { void r.then(resolve); }; });
+    return { stubDelete: () => pending, settle: (r) => settle(r) };
+  }
+
+  it("a refusal that lands while another card is open is not shown on it, and arms nothing there", async () => {
+    const d = deferredDelete();
+    const f = stub(() => json(INDEX), [BUILT_IN, INSTALLED, OTHER], d.stubDelete);
+    render(<PluginsPage navigate={vi.fn()} />);
+    fireEvent.click(await tileOf('acme-terms'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    fireEvent.click(screen.getByTestId('plugin-remove-confirm'));
+    fireEvent.click(await tileOf('acme-notes'));
+    d.settle(json({ error: 'grant could not be withdrawn' }, 503));
+    await waitFor(() => expect(f.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByTestId('plugin-details').dataset['plugin']).toBe('acme-notes');
+    expect(screen.queryByTestId('plugin-remove-error')).toBeNull();
+    expect(screen.queryByTestId('plugin-remove-confirm')).toBeNull();
+    expect(screen.getByTestId('plugin-remove')).toBeTruthy();
+  });
+
+  it('a success that lands while another card is open keeps that card open, and still removes the first', async () => {
+    const d = deferredDelete();
+    stub(() => json(INDEX), [BUILT_IN, INSTALLED, OTHER], d.stubDelete);
+    render(<PluginsPage navigate={vi.fn()} />);
+    fireEvent.click(await tileOf('acme-terms'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    fireEvent.click(screen.getByTestId('plugin-remove-confirm'));
+    fireEvent.click(await tileOf('acme-notes'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    d.settle(json({ removed: true, id: 'acme-terms' }));
+    await waitFor(() => expect(screen.getAllByTestId('plugin-tile').map((t) => t.dataset['plugin'])).not.toContain('acme-terms'));
+    expect(screen.getByTestId('plugin-details').dataset['plugin']).toBe('acme-notes');
+    // Its own question is still asked: nothing from the other removal reset it.
+    expect(screen.getByTestId('plugin-remove-confirm').textContent).toBe('Remove Notes checker');
   });
 });
