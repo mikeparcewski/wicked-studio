@@ -19,6 +19,10 @@ export const AGENT_QUERY_CONSEQUENCE =
 export const AGENT_SEE_MEANS = 'Agents in the projects below can list it and read its structure: tables, columns, types and keys. Never a row, never its login.';
 /** (DES-PM-001 §3.1) The same two switches on a project-management source: its trackers' structure, then its issues. */
 export const PM_SEE_MEANS = 'Agents in the projects below can see the structure of the trackers linked to their project or its repositories: issue types, fields and workflow states. Never an issue, never its token.';
+/** (CS9) The web source: "see" names it to agents; "query" is what lets them search and read pages. */
+export const WEB_SEE_MEANS = 'Agents in the projects below are told the web source is here. Nothing is searched or read until “Agents can query” is on.';
+export const WEB_QUERY_CONSEQUENCE =
+  "Search results and page text go to the agent's model provider. crew obeys robots.txt, refuses private and cloud-metadata addresses, cuts a download at 2 MB and records every URL with its time.";
 export const PM_QUERY_CONSEQUENCE =
   "Issues go to the agent's model provider. crew limits every call to the trackers linked to the job's project or its repositories, and drops anything else from an answer before the agent sees it.";
 /** Outcomes where the query ran but its rows never reached the agent (crew withheld them at release). */
@@ -51,7 +55,7 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
   source: string;
   /** Only a Postgres source can be queried by agents in this release; MySQL and uploads are structure only. A
    *  project-management source (`pm`, DES-PM-001) reads issues, bound to the linked trackers. */
-  dialect: 'postgres' | 'mysql' | 'sqlite' | 'pm';
+  dialect: 'postgres' | 'mysql' | 'sqlite' | 'pm' | 'web';
   /** crew's switches for the source (the sheet shows no box when crew sent none). */
   agents: SourceAgentAccess;
   /** crew could not be asked again after a write settled: what is shown may be out of date, so the switches hold. */
@@ -127,8 +131,9 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
   };
   // A project the source names that is no longer active still shows, so a person can take it away.
   const listed = projects === null ? [] : [...projects, ...a.projects.filter((p) => !projects.some((x) => x.id === p)).map((p) => ({ id: p, name: `${p} (not an active project)` }))];
-  const queryable = dialect === 'postgres' || dialect === 'pm';
+  const queryable = dialect === 'postgres' || dialect === 'pm' || dialect === 'web';
   const pm = dialect === 'pm';
+  const web = dialect === 'web';
   const unit = pm ? 'item' : 'row';
   const full = a.projects.length >= AGENT_PROJECTS_MAX;
   /** Nothing is sent from switches that may not be crew's. */
@@ -149,7 +154,7 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
           type="button"
           role="switch"
           aria-checked={a.see}
-          aria-label={pm ? `Agents can see the structure of ${source}’s linked trackers` : `Agents can see the structure of ${source}`}
+          aria-label={pm ? `Agents can see the structure of ${source}’s linked trackers` : web ? 'Agents can see the web source' : `Agents can see the structure of ${source}`}
           data-testid={`${testId}-see`}
           disabled={held || asking}
           className={`wk-src-toggle${a.see ? ' wk-src-toggle--on' : ''}`}
@@ -157,11 +162,11 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
         >
           <span aria-hidden className="wk-src-toggle-thumb" />
         </button>
-        <span className="wk-src-strong">{pm ? 'Agents can see its structure' : 'Agents can see this structure'}</span>
+        <span className="wk-src-strong">{pm ? 'Agents can see its structure' : web ? 'Agents can see this source' : 'Agents can see this structure'}</span>
         <span className="wk-src-sp" />
         <span className="wk-src-cap" data-testid={`${testId}-see-state`}>{a.see ? 'on' : 'off'}</span>
       </div>
-      <p className="wk-src-note">{pm ? PM_SEE_MEANS : AGENT_SEE_MEANS}</p>
+      <p className="wk-src-note">{pm ? PM_SEE_MEANS : web ? WEB_SEE_MEANS : AGENT_SEE_MEANS}</p>
 
       {queryable ? (
         <>
@@ -170,7 +175,7 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
               type="button"
               role="switch"
               aria-checked={a.query}
-              aria-label={pm ? `Agents can read issues from ${source}` : `Agents can query ${source}`}
+              aria-label={pm ? `Agents can read issues from ${source}` : web ? 'Agents can search and read the web' : `Agents can query ${source}`}
               data-testid={`${testId}-query`}
               disabled={held || asking || !a.see}
               className={`wk-src-toggle${a.query ? ' wk-src-toggle--on' : ''}`}
@@ -178,15 +183,20 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
             >
               <span aria-hidden className="wk-src-toggle-thumb" />
             </button>
-            <span className="wk-src-strong">{pm ? 'Agents can read issues' : 'Agents can query this source'}</span>
+            <span className="wk-src-strong">{pm ? 'Agents can read issues' : web ? 'Agents can query: search and read pages' : 'Agents can query this source'}</span>
             <span className="wk-src-sp" />
             <span className="wk-src-cap" data-testid={`${testId}-query-state`}>{a.query ? 'on' : 'off'}</span>
           </div>
-          <p className="wk-src-note" data-testid={`${testId}-consequence`}>{pm ? PM_QUERY_CONSEQUENCE : AGENT_QUERY_CONSEQUENCE}</p>
-          {!a.see && <p className="wk-src-note" data-testid={`${testId}-see-first`}>{pm ? 'Turn on “see” first: agents read issues only of trackers whose structure they can see.' : 'Turn on “see” first: agents query only a structure they can see.'}</p>}
+          <p className="wk-src-note" data-testid={`${testId}-consequence`}>{pm ? PM_QUERY_CONSEQUENCE : web ? WEB_QUERY_CONSEQUENCE : AGENT_QUERY_CONSEQUENCE}</p>
+          {!a.see && <p className="wk-src-note" data-testid={`${testId}-see-first`}>{pm ? 'Turn on “see” first: agents read issues only of trackers whose structure they can see.' : web ? 'Turn on “see” first.' : 'Turn on “see” first: agents query only a structure they can see.'}</p>}
           {asking && (
-            <div className="wk-src-confirm" role="group" aria-label={pm ? 'Turn on agent issue reads' : 'Turn on agent queries'} data-testid={`${testId}-confirm`}>
-              {pm ? (
+            <div className="wk-src-confirm" role="group" aria-label={pm ? 'Turn on agent issue reads' : web ? 'Turn on agent web reads' : 'Turn on agent queries'} data-testid={`${testId}-confirm`}>
+              {web ? (
+                <p>
+                  Let agents search the web and read public pages? What they read goes to their model provider. Only jobs in the projects below can, and you can turn it
+                  off at any time: the next search or read is refused, even in a job that is running.
+                </p>
+              ) : pm ? (
                 <p>
                   Let agents read issues from <b style={{ overflowWrap: 'anywhere' }}>{source}</b>? Issues they read go to their model provider. They read only the trackers
                   linked to their project or its repositories, writes always ask you, and you can turn it off at any time: the next read is refused, even in a job that is running.

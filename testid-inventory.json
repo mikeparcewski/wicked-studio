@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 326,
-    "occurrences": 4782,
-    "static": 4008,
+    "files": 327,
+    "occurrences": 4815,
+    "static": 4040,
     "dynamic": 176,
     "computed": 53
   },
@@ -24116,6 +24116,198 @@
       "testId": "watchtower-undated",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "web-add",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "web-agent-controls",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-agents-after-install",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-cancel",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-does",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-done",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-image-digest",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-image-ref",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-install",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-installs",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-license",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-lock",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-lock-list",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-lock-toggle",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-need-engine",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-need-python",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-needs",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-pkg-reader",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-pkg-search",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-sheet",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-sheet-about",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-sheet-close",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-sheet-error",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-sheet-foot",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-sheet-scrim",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-sheet-state",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-sheet-title",
+      "files": [
+        "src/components/sources/WebSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "web-source",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "web-source-row",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "web-source-state",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "web-source-unreadable",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
+      ]
+    },
+    {
+      "testId": "web-source-why",
+      "files": [
+        "src/components/sources/SourcesPage.tsx"
       ]
     },
     {
