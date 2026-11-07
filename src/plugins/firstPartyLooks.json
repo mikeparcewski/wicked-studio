@@ -21,7 +21,7 @@
     "color": "#7c3aed"
   },
   "wicked-video": {
-    "description": "Opens demo recordings: chapters, narration, trim, export.",
+    "description": "Opens demo recordings: chapters, captions, trim, export.",
     "color": "#be185d"
   }
 }

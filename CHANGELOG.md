@@ -20,6 +20,21 @@ npm publish dates. Every version listed here exists on
   storyline's chapters and steps in words, read-only against the app. The seat line names the engine as the
   recorder ("the engine records on this machine (sandbox-exec, the app's port only)") when crew says it did
   (`DemoView.producer`, read structurally until studio's wicked-crew-api-types has it).
+- **A demo video you can review, record again, edit and export (plugins S4: G7, G8, G14, G15, G22, G23).**
+  - At the review gate, the card shows who reviewed the take and what they found, with the three contact sheets
+    (each opens full size). A demo whose app data stays out of model context says that no model reviews it.
+  - **Record it again** sends the run back to the planner with a note: a finding, a chapter or the whole take,
+    editable. You approve the new plan and the engine records every chapter again. It sends nothing if the take
+    changed since it was shown. The per-chapter re-record is gone: the engine records whole takes.
+  - The Video plugin's Options get a **Review** tab (the verdict, the findings and the contact sheets), and a
+    model review shows as the plugin's Checks.
+  - **Edit the cut** (once the run is done) makes the run's editable cut: crew imports the recorded chapters into a
+    document. Opening it in the card comes with the run-artifact binding (S1).
+  - A cut's versions survive a reload, and **Make this the working version** restores a cut through interactive's
+    `POST /api/demo/restore` (wicked-interactive with cut history), never the page fork. Undo uses the same restore.
+  - A cut exports as a video, a GIF or a poster.
+  - The Video plugin's line and the Demo video job say "captions": the engine makes no voice-over.
+  - Under 600 px the video's full screen is one column: the player first, the chapters below.
 
 ## [0.15.0] — 2026-11-05
 

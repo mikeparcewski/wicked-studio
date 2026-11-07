@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4720,
-    "static": 3949,
+    "occurrences": 4738,
+    "static": 3964,
     "dynamic": 176,
     "computed": 53
   },
@@ -4215,13 +4215,91 @@
       ]
     },
     {
-      "testId": "demo-retake-chapter",
+      "testId": "demo-cut-actions",
       "files": [
         "src/components/editorPorts/RecordingGateActions.tsx"
       ]
     },
     {
-      "testId": "demo-retake-note",
+      "testId": "demo-edit-cut",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-record-again",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-record-again-box",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-record-again-cancel",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-record-again-note",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-record-again-pick",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-record-again-send",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review-finding",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review-findings",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review-line",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review-note",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review-sheet",
+      "files": [
+        "src/components/editorPorts/RecordingGateActions.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review-sheets",
       "files": [
         "src/components/editorPorts/RecordingGateActions.tsx"
       ]
@@ -22963,6 +23041,18 @@
       ]
     },
     {
+      "testId": "video-review",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
+      ]
+    },
+    {
+      "testId": "video-review-line",
+      "files": [
+        "src/plugins/wicked-video/plugin.ts"
+      ]
+    },
+    {
       "testId": "view-settings",
       "files": [
         "src/components/SystemSettings.tsx"
@@ -25026,6 +25116,7 @@
         "src/components/dashboardKit.tsx",
         "src/components/desk/DeskHome.tsx",
         "src/components/desk/DeskParts.tsx",
+        "src/components/editorPorts/RecordingGateActions.tsx",
         "src/components/editors/PluginLivePreview.tsx",
         "src/components/everything/FinishedRunMenu.tsx",
         "src/components/insights/InsightsLine.tsx",
