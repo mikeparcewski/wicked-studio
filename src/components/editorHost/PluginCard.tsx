@@ -14,7 +14,7 @@ import { readThemeTokens } from '../../editors/theme.js';
 import { artifactSizeOf, registerArtifact, setArtifactSize, useArtifactSizes } from '../../store/artifactSizes.js';
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { VersionLens } from '../session/ArtifactVersions.js';
-import { clearAdvisoryNotes, setAdvisoryNotes, useAdvisoryNotes, useEditorChoices, useEditorFor, useEditorPicks } from '../../store/editors.js';
+import { clearAdvisoryNotes, setAdvisoryNotes, setOptionsOverFull, useAdvisoryNotes, useEditorChoices, useEditorFor, useEditorPicks, useOptionsOverFull } from '../../store/editors.js';
 import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import '../../editors/adapters/index.js';
 import './hostTabs.js';
@@ -221,6 +221,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const exitFull = useHostChrome((s) => s.exitFull);
   const openGroup = useHostPanel((s) => s.openGroup);
   const optionsOpen = useHostPanel((s) => s.group?.key === group);
+  // Options drawn over this card's full screen end with that full screen or with the options.
+  useEffect(() => {
+    if ((!full || !optionsOpen) && useOptionsOverFull.getState().group === group) setOptionsOverFull(null);
+  }, [full, optionsOpen, group]);
   const fullRef = useRef(full);
   fullRef.current = full;
   /** Leave full screen — only this card's own. */
@@ -444,6 +448,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     // ("Whole display"): that gives way first, and the app's full screen stays (G24).
     if (fullRef.current && document.fullscreenElement) void document.exitFullscreen?.().catch(() => undefined);
     openOptions();
+    // Pressed in full screen: these options are drawn over it (G24).
+    if (fullRef.current) setOptionsOverFull(group);
     if (address !== null && address.routeKey !== key && !fullRef.current) address.write(key, 'inline', 'pane');
   };
   pressOptionsRef.current = pressOptions;
@@ -596,7 +602,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   /** Esc in full screen with this card's options open over it closes those options first, and the focus goes back to
    *  the full screen's Options (G24). */
   const onEscape = useCallback((): void => {
-    if (useHostPanel.getState().group?.key !== group) { leaveFull(); return; }
+    if (useHostPanel.getState().group?.key !== group || useOptionsOverFull.getState().group !== group) { leaveFull(); return; }
     useHostPanel.getState().closeGroup();
     queueMicrotask(focusFullOptions);
   }, [group, leaveFull]);

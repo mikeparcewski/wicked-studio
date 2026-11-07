@@ -17,7 +17,7 @@ const { RunHostProvider } = await import('../src/components/editorHost/RunHostCo
 const { FakeSurfaceAdapter } = await import('../src/editors/adapters/fake.js');
 const { RUN_TAB, useHostChrome, useHostPanel } = await import('../src/editors/hostApi.js');
 const { resetArtifactSizes } = await import('../src/store/artifactSizes.js');
-const { useAdvisoryNotes, useEditors } = await import('../src/store/editors.js');
+const { useAdvisoryNotes, useEditors, useOptionsOverFull } = await import('../src/store/editors.js');
 const { ArtifactAddressProvider } = await import('../src/components/session/ArtifactAddress.js');
 import type { ArtifactBinding } from '../src/editors/hostApi.js';
 
@@ -76,6 +76,7 @@ beforeEach(() => {
   asked.length = 0;
   useEditors.setState({ state: 'ready', editors: [EDITOR], reason: null });
   useAdvisoryNotes.setState({ byGroup: {} });
+  useOptionsOverFull.setState({ group: null });
   useHostPanel.setState({ group: null, tab: RUN_TAB, folded: false, overlay: false });
   useHostChrome.setState({ full: null, navCollapsed: false, chatOpen: false, navBefore: false });
   resetArtifactSizes();
@@ -127,6 +128,22 @@ describe('G24: full screen keeps the card’s actions', () => {
     // With no options open, the next Esc leaves the full screen.
     fireEvent.keyDown(options, { key: 'Escape' });
     expect(useHostChrome.getState().full).toBeNull();
+  });
+
+  it('options already open beside the card stay beside it when the card goes full screen (the header stays uncovered)', async () => {
+    await openCard(false);
+    fireEvent.click(screen.getByTestId('plugin-card-options'));
+    expect(screen.getByTestId('host-panel').dataset['overFull']).toBeUndefined();
+    fireEvent.click(screen.getByTestId('plugin-card-full'));
+    expect(useHostChrome.getState().full).toBe(BINDING.artifactKey);
+    expect(screen.getByTestId('host-panel').dataset['overFull']).toBeUndefined();
+    // Esc leaves the full screen (the options were not opened over it).
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(useHostChrome.getState().full).toBeNull();
+    // Options pressed IN the full screen are drawn over it.
+    fireEvent.click(screen.getByTestId('plugin-card-full'));
+    fireEvent.click(screen.getByTestId('full-shell-actions').querySelector('[data-testid="plugin-card-options"]')!);
+    expect(screen.getByTestId('host-panel').dataset['overFull']).toBe('true');
   });
 
   it('below 1200 px the options over the full screen show at once (never the ribbon), with the keyboard in them', async () => {

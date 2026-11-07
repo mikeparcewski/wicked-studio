@@ -121,10 +121,19 @@ export function clearAdvisoryNotes(group: string): void {
   });
 }
 
+/**
+ * The options group opened FROM a full screen (its header's Options, plugins-complete G24): only that group is drawn
+ * over the full screen. A group already open beside a card that then goes full screen stays where it was (beside the
+ * page, under the full screen), so entering full screen never covers the full screen's own header.
+ */
+export const useOptionsOverFull = create<{ group: string | null }>(() => ({ group: null }));
+export function setOptionsOverFull(group: string | null): void { useOptionsOverFull.setState({ group }); }
+
 /** Test seam. */
 export function resetEditors(): void {
   useEditors.setState({ state: 'idle', editors: [], reason: null });
   useEditorPicks.setState({ picks: {} });
   useAdvisoryNotes.setState({ byGroup: {} });
+  useOptionsOverFull.setState({ group: null });
   try { localStorage.removeItem(PICK_KEY); } catch { /* none kept */ }
 }
