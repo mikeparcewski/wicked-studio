@@ -119,10 +119,10 @@ function seedScope(projectId: string | null, repoRef: string | null | undefined)
  * it is refused.
  */
 export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: ChatProposalView | null } | null> {
-  // A chat opened since (another New job, another start) owns where the person is: a job posted before it never
-  // navigates over it (codex r2), whatever started it.
-  const nonce0 = useChatFlow.getState().request?.nonce ?? 0;
-  const wanted = (): boolean => (p.stillWanted?.() ?? true) && (useChatFlow.getState().request?.nonce ?? 0) === nonce0;
+  // Where the person is now owns the screen: a job posted before they moved (another New job, another chat opened from
+  // the rail or by Back) never navigates over it (codex r2-r3), whatever started it.
+  const here = placeToken();
+  const wanted = (): boolean => (p.stillWanted?.() ?? true) && placeToken() === here;
   if (!wanted()) return null;
   const env = envelopes.get(p.pickKey);
   const fields = {
@@ -147,7 +147,7 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     out = { chatId: res.chatId, proposal: res.proposal ?? null };
     // The chat and its job stand; only its filing in the project failed: said on that chat (codex r2).
     if (typeof res.projectAttachError === 'string' && res.projectAttachError !== '') {
-      setStartNote(res.chatId, `This chat was not filed in the project (${res.projectAttachError}). Its job is here; file the chat from its menu.`);
+      addStartNote(res.chatId, `This chat was not filed in the project (${res.projectAttachError}). Its job is here; file the chat from its menu.`);
     }
   }
   sent.delete(p.pickKey);
@@ -160,7 +160,7 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
       source: 'question',
       requestId: `${p.pickKey}:requirements`,
     }).catch((e: unknown) => {
-      setStartNote(out.chatId, `The requirements you chose were not added (${e instanceof Error ? e.message : String(e)}): pick them in the job.`);
+      addStartNote(out.chatId, `The requirements you chose were not added (${e instanceof Error ? e.message : String(e)}): pick them in the job.`);
     });
   }
   envelopes.delete(p.pickKey);
@@ -169,8 +169,20 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
   return out;
 }
 
+/** Where the person is: the last chat-flow open and the page's path. Either changes when they go somewhere else. */
+export function placeToken(): string {
+  const path = typeof window === 'undefined' ? '' : window.location.pathname;
+  return `${useChatFlow.getState().request?.nonce ?? 0}\u0000${path}`;
+}
+
 /** Words a start could not post, shown on the composer it was moved to (`startInChat`'s fallback). */
 export const useStartNotes = create<{ notes: Record<string, string> }>(() => ({ notes: {} }));
+
+/** Add a line to a composer's note (two things can go wrong on one start: both are said; codex r3). */
+export function addStartNote(composerKey: string, note: string): void {
+  const prev = useStartNotes.getState().notes[composerKey];
+  setStartNote(composerKey, prev === undefined ? note : `${prev} ${note}`);
+}
 
 export function setStartNote(composerKey: string, note: string | null): void {
   useStartNotes.setState((s) => {
@@ -199,7 +211,11 @@ export interface StartInChat {
  * composer when it was resolved, so Enter retries the same request. `stillWanted` = false: a later opener replaced it,
  * and it does nothing more.
  */
-export async function startInChat(s: StartInChat, stillWanted: () => boolean = () => true): Promise<boolean> {
+export async function startInChat(s: StartInChat, stillOpen: () => boolean = () => true): Promise<boolean> {
+  // One rule for the opener's whole life, taken at its press: a later opener, or the person going elsewhere while the
+  // catalog is read or the seed is out, makes every later step (post, refusal, fallback, navigation) do nothing (codex r3).
+  const here = placeToken();
+  const stillWanted = (): boolean => stillOpen() && placeToken() === here;
   const projectId = s.projectId ?? null;
   const load = await catalogV2Now(projectId === UNFILED_MOUNT ? null : projectId);
   if (!stillWanted()) return true;

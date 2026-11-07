@@ -71,13 +71,11 @@ function stubWire(): void {
     if (method === 'POST' && path === '/workflows/catalog/detect') return detect().then((g) => json(g));
     if (method === 'POST' && /^\/chats\/[^/]+\/proposals$/.test(path)) {
       const st = proposalStatuses.shift() ?? 201;
-      if (st >= 400) return json({ code: 'boom', error: 'the daemon said no' }, st);
-      return proposalGate.then(() => json({ view: { state: 'open', proposal: { pid: `${path.split('/')[2]}:person:1`, kind: 'job' } } }, 201));
+      return proposalGate.then(() => st >= 400 ? json({ code: 'boom', error: 'the daemon said no' }, st) : json({ view: { state: 'open', proposal: { pid: `${path.split('/')[2]}:person:1`, kind: 'job' } } }, 201));
     }
     if (method === 'POST' && path === '/chats') {
       const st = seedStatuses.shift() ?? 201;
-      if (st >= 400) return json({ code: 'boom', error: 'the daemon said no' }, st);
-      return seedGate.then(() => json({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } }, ...seedExtra }, 201));
+      return seedGate.then(() => st >= 400 ? json({ code: 'boom', error: 'the daemon said no' }, st) : json({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } }, ...seedExtra }, 201));
     }
     if (method !== 'GET') return json({ ok: true });
     if (path === '/health') return healthGate.then(() => json({ status: 'ok', capabilities: healthCaps }));
@@ -473,10 +471,8 @@ describe('review folds (r1): the path holds under failure, races and edge input'
     expect(chatSends).toEqual([]);
     expect(nonGets()).toEqual([]);
     release();
-    // Once read, the same line gets its own answer, once, and still nothing is sent.
-    await waitFor(() => expect(calls.some((c) => c.path === '/workflows/catalog?v=2')).toBe(true));
-    await list('/bug');
-    type('/due-diligence acme corp');
+    // Once read, the same line — untouched — gets its own answer on the next Enter, and still nothing is sent.
+    await waitFor(() => expect(document.querySelector('[data-testid="composer-menu"]')).toBeNull());
     enter();
     expect(screen.getByTestId('composer-note').textContent).toMatch(/isn’t available on this daemon/);
     expect(chatSends).toEqual([]);
@@ -742,5 +738,65 @@ describe('review folds (r2)', () => {
     act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID, projectId: 'p1' }));
     await waitFor(() => expect(useStartNotes.getState().notes['seeded-1']).toMatch(/not filed in the project \(project p1 is archived\)/));
     expect(useChatFlow.getState().request?.chatId).toBe('seeded-1');
+  });
+});
+
+describe('review folds (r3)', () => {
+  afterEach(() => { window.history.replaceState({}, '', '/'); });
+  it('a seed answered after the person opened another chat (the rail, Back) does not navigate over it', async () => {
+    let release!: () => void;
+    seedGate = new Promise((r) => { release = r; });
+    render(<Harness chatId={null} composerKey="desk" />);
+    await list('/bug');
+    pickRow('/bug');
+    enter();
+    await waitFor(() => expect(nonGets()).toHaveLength(1));
+    const before = useChatFlow.getState().request;
+    window.history.pushState({}, '', '/s/another-chat');
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(useChatFlow.getState().request).toBe(before);
+  });
+  it('a named opener whose catalog read outlives another chat opening posts nothing', async () => {
+    let release!: () => void;
+    v2Gate = new Promise((r) => { release = r; });
+    act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID }));
+    await waitFor(() => expect(calls.some((c) => c.path === '/workflows/catalog?v=2')).toBe(true));
+    window.history.pushState({}, '', '/s/another-chat');
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(nonGets()).toEqual([]);
+  });
+  it('a named opener whose seed fails after the person moved on opens no fallback over them', async () => {
+    let release!: () => void;
+    seedGate = new Promise((r) => { release = r; });
+    seedStatuses = [500];
+    act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID }));
+    await waitFor(() => expect(nonGets()).toHaveLength(1));
+    const before = useChatFlow.getState().request;
+    window.history.pushState({}, '', '/s/another-chat');
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(useChatFlow.getState().request).toBe(before);
+    expect(useStartNotes.getState().notes).toEqual({});
+  });
+  it('a filing failure and a requirements failure on one start are both said', async () => {
+    seedExtra = { projectAttachError: 'project p1 is archived' };
+    proposalStatuses = [500];
+    act(() => openLaunchWizard({ workflowId: DRAFT_EPICS_ID, projectId: 'p1', requirements: [{ repoId: 'r1', key: 'REQ-1', title: 'One' }] }));
+    await waitFor(() => expect(useStartNotes.getState().notes['seeded-1']).toMatch(/requirements you chose were not added/));
+    expect(useStartNotes.getState().notes['seeded-1']).toMatch(/not filed in the project/);
+  });
+  it('free words and Looks like keep an available sub-command under an unavailable default', () => {
+    const sub = structuredClone(V2);
+    const p = sub.cards.find((c) => c.id === 'propose')!;
+    p.status = 'unavailable';
+    p.variant!.options.find((o) => o.id === 'knowledge')!.status = 'unavailable';
+    const free = commandList(sub, '/rules and memories from our past runs');
+    expect(free.open && free.rows.filter((r) => r.card === 'propose').map((r) => r.command)).toEqual(['/propose rules', '/propose memories']);
+    const guess = { card: 'propose', option: 'rules', depth: null, confidence: 0.9, band: 'sure' as const, reason: 'Rules words', available: true, question: null, source: 'words' as const, catalogRev: sub.rev };
+    const led = commandList(sub, '/rules and memories from our past runs', guess);
+    expect(led.open && [led.rows[0]?.kind, led.rows[0]?.option]).toEqual(['looks', 'rules']);
+    expect(commandList(sub, '/rules and memories from our past runs', { ...guess, option: null }).open && (commandList(sub, '/rules and memories from our past runs', { ...guess, option: null }) as { rows: Array<{ kind: string }> }).rows.some((r) => r.kind === 'looks')).toBe(false);
   });
 });

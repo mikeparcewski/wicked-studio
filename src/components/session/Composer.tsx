@@ -635,7 +635,7 @@ export function Composer({
       // and its words are unchanged: a replacement pick with the same words is not cleared (codex r2).
       const owned = j.chipKey !== null
         ? chipsOf(useComposerChips.getState(), composerKey).some((c) => c.key === j.chipKey)
-        : cmdKeys.get(composerKey) === j.pickKey;
+        : cmdKeys.get(composerKey) === j.pickKey && !chipsOf(useComposerChips.getState(), composerKey).some((c) => c.kind === 'workflow');
       // A typed command posted is spent: the next one is its own request (codex r1).
       if (j.renewCmd === true && cmdKeys.get(composerKey) === j.pickKey) renewCmdKey(composerKey);
       if (j.chipKey !== null) removeAboutChip(composerKey, j.chipKey);
@@ -679,7 +679,7 @@ export function Composer({
           ))}
           {refusal !== null && <span data-testid="composer-refused" role="status" className="wk-composer-note wk-composer-note--bad">{refusal}</span>}
           {/* A command's own answer shows even beside a seat refusal: it is the reason that applies (pi r2). */}
-          {note !== null && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
+          {note !== null && (refusal === null || commandLine || jobChip !== null) && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
           {jobChip !== null && refusal === null && (
             <span data-testid="composer-job-line" role="status" className="wk-composer-note">
               {jobBusy ? 'Putting the job in the chat…' : 'Enter puts this job in the chat for you to look over. Nothing runs until you press Start.'}
