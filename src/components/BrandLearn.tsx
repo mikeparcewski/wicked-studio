@@ -236,8 +236,9 @@ export function BrandLearn({ onApplied, initialUrl }: {
     abortRef.current?.abort();
     // Revert the un-persisted preview: the stored appearance is the truth (with a chat theme preview, if one took over).
     const st = useAppearanceStore.getState();
-    if (st.preview === null) applyAppearance(st.appearance);
-    else applyAppearance(effectiveAppearance(st), { cache: false });
+    // The cache always goes back to the saved appearance (a reload must not paint the learned colours).
+    applyAppearance(st.appearance);
+    if (st.preview !== null) applyAppearance(effectiveAppearance(st), { cache: false });
     setMapping(null);
     setPhase('idle');
     setStatus(null);
