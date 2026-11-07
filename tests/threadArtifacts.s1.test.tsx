@@ -93,8 +93,22 @@ describe('G1: an Unfiled run finds the document it made', () => {
     const v = run({ artifact_ref: '_unfiled/release-v1', extra_write_roots: ['/state/interactive-drafts/release-v1'] });
     expect(isRunsDoc(v, 'default', 'release-v1', null)).toBe(true);
     expect(isRunsDoc(v, 'default', 'release', null)).toBe(false);
-    // With no ref, the write-root rule is all there is (a form-made run): unchanged.
-    expect(isRunsDoc(run({ extra_write_roots: ['/state/interactive-drafts/release-v1'] }), 'default', 'release-v1', null)).toBe(true);
+    // With no ref (a form-made run) the write root binds: a draft root names its document exactly (review r2)…
+    const form = run({ extra_write_roots: ['/state/interactive-drafts/release-v1'] });
+    expect(isRunsDoc(form, 'default', 'release-v1', null)).toBe(true);
+    expect(isRunsDoc(form, 'default', 'release', null)).toBe(false);
+    // …while an edit seam's key grammar still binds its document (`<doc>-v<n>`).
+    expect(isRunsDoc(run({ extra_write_roots: ['/state/interactive-edits/release-v3'] }), 'default', 'release', null)).toBe(true);
+  });
+
+  it('a ref crew adds on a later read re-reads what the run made (review r2)', async () => {
+    listDocs.mockResolvedValue([DOC, OTHER]);
+    const { rerender } = render(<RunArtifacts view={run({ workflow_id: 'docs', extra_write_roots: ['/state/interactive-chats/x-m-1'] })} composerKey="k" only="made" />);
+    await waitFor(() => expect(listDocs).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('placed')).toBeNull();
+    rerender(<RunArtifacts view={run({ workflow_id: 'docs', extra_write_roots: ['/state/interactive-chats/x-m-1'], artifact_ref: `_unfiled/${DOC.name}` })} composerKey="k" only="made" />);
+    expect((await screen.findByTestId('placed')).dataset['doc']).toBe(DOC.name);
   });
 
   it('the index reader keeps `runs`', () => {
@@ -108,6 +122,15 @@ describe('G2 / G3: insights and app runs place their artifact', () => {
   it('a review-recent-work run places a run-insights slot', async () => {
     render(<RunArtifacts view={run({ workflow_id: 'review-recent-work', extra_write_roots: ['/x/reviews/r-1/out'] })} composerKey="k" only="made" />);
     expect((await screen.findByTestId('placed')).dataset['kind']).toBe('run-insights');
+  });
+
+  it('a step crew ran with a program (its executable path) is said as crew, never as a path (look r1)', async () => {
+    const who: string[] = [];
+    const v = makeView({ id: 'r-1', status: 'completed', project_id: null, extra_write_roots: [], workflow_id: 'review-recent-work' } as never,
+      [{ id: 'r-1:u0', session_id: 'r-1', ord: 0, status: 'done', assigned_cli: '/opt/homebrew/bin/node', stage: 'build', role: 'neutral' } as never]);
+    render(<RunArtifacts view={v} composerKey="k" only="made" frame={(w, _s, cards) => { who.push(w.name); return <>{cards}</>; }} />);
+    await screen.findByTestId('placed');
+    expect(who.at(-1)).toBe('crew');
   });
 
   it('an apps-turn run places the App card for its app', async () => {
