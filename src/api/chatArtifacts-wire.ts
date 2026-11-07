@@ -26,7 +26,8 @@ export interface ChatArtifactsCapabilities {
 export interface ChatMessageContext {
   /** The artifact on the surface the message was sent from (inline, pane, Made or full screen). */
   artifact?: ChatArtifactContext;
-  /** The tab's effective appearance, sent when `chatArtifacts.theme` is advertised. */
+  /** The tab's effective appearance (a theme preview included), sent with every message while `chatArtifacts.context` is
+   *  advertised (crew advertises `theme` alongside it since A7). */
   appearance?: ChatContextAppearance;
   /** Studio's page summary (the context pack), kept apart from the person's typed words. At most 32 KiB. */
   page?: string;

@@ -198,6 +198,8 @@ export function BrandLearn({ onApplied, initialUrl }: {
       // Preview IS the page (§3.4): the mapped primitives land inline on
       // <html>, NOT through the store — nothing persists until Apply. The
       // learned shape carries no logo, so the logo override is never touched.
+      // One preview at a time: a chat theme preview on this tab ends here (DES-CHAT-ARTIFACTS-001 §9).
+      useAppearanceStore.getState().endPreview();
       const current = useAppearanceStore.getState().appearance;
       applyAppearance({
         ...current,

@@ -148,7 +148,9 @@ describe('the proposal fold', () => {
     expect(ask.options?.map((o) => o.label)).toStrictEqual(['Make it', 'Change something', 'Not now']);
     expect(ask.options?.[0]?.recommended).toBe(true);
     for (const [kind, word] of [['refine', 'Make the change'], ['theme', 'Preview'], ['demo', 'Make it']] as const) {
-      const [k] = foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: proposal({ kind }) }]);
+      // (A7) A theme record carries its name and patch, or it is not drawn.
+      const extra = kind === 'theme' ? { theme: { name: 'Calm night', patch: { ambient: false }, changes: ['ambient'] } } : {};
+      const [k] = foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: proposal({ kind, ...extra }) }]);
       expect(proposalAsk(k!, { stub: false }).options?.[0]?.label).toBe(word);
     }
     const [b] = foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: proposal({ blocked: 'Needs a second helper to check it' }) }]);

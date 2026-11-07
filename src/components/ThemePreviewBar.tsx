@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Palette } from 'lucide-react';
-import { THEME_UNDO_MS, useAppearanceStore } from '../theming/appearance.js';
+import { effectiveAppearance, THEME_UNDO_MS, useAppearanceStore } from '../theming/appearance.js';
+import { measureTheme } from '../theming/themeContrast.js';
 
 /**
  * THE THEME PREVIEW BAR (DES-CHAT-ARTIFACTS-001 §9, slice A7; mockup e): shown on every page while this tab previews a
@@ -12,12 +13,23 @@ export function ThemePreviewBar(): React.ReactElement | null {
   const preview = useAppearanceStore((s) => s.preview);
   const save = useAppearanceStore((s) => s.save);
   const until = save.undo?.until ?? null;
+  const stored = useAppearanceStore((s) => s.appearance);
+  // The same gate as the Theme page: a preview whose merged result fails contrast offers no Apply.
+  const refused = useMemo(() => {
+    if (preview === null) return null;
+    const c = measureTheme(effectiveAppearance({ appearance: stored, preview }));
+    return c.ok ? null : `Contrast too low: ${c.failing.join('; ')}`;
+  }, [stored, preview]);
 
-  // "Saved" stands for the Undo window, then the bar goes (a recording error stays until dismissed).
+  // "Saved" stands for the Undo window, then the bar goes; a recording error stays until dismissed, its Undo gone.
+  const [, setTick] = useState(0);
   useEffect(() => {
-    if (save.state !== 'saved' || until === null || save.recordError !== undefined) return;
+    if (save.state !== 'saved' || until === null) return;
     const t = setTimeout(() => {
-      if (useAppearanceStore.getState().save.undo?.until === until) useAppearanceStore.getState().clearSave();
+      const now = useAppearanceStore.getState().save;
+      if (now.undo?.until !== until) return;
+      if (now.recordError === undefined) useAppearanceStore.getState().clearSave();
+      else setTick((n) => n + 1);
     }, Math.max(0, until - Date.now()) + 50);
     return () => clearTimeout(t);
   }, [save.state, until, save.recordError]);
@@ -34,10 +46,10 @@ export function ThemePreviewBar(): React.ReactElement | null {
           <span className="wk-theme-bar-words">
             {save.state === 'saving' ? <>Saving <b>{name}</b>…</>
               : save.state === 'failed' ? <>Couldn’t save <b>{name}</b>: {save.error}</>
-              : <>Previewing <b>{name}</b> on this tab only</>}
+              : <>Previewing <b>{name}</b> on this tab only{refused !== null ? `. ${refused}.` : ''}</>}
           </span>
           <button type="button" data-testid="theme-preview-apply" className="wk-btn wk-btn--primary wk-btn--sm"
-            disabled={save.state === 'saving'} onClick={() => void st().applyPreview()}>
+            disabled={save.state === 'saving' || refused !== null} {...(refused !== null ? { title: refused } : {})} onClick={() => void st().applyPreview()}>
             {save.state === 'failed' ? 'Retry' : save.state === 'saving' ? 'Saving…' : 'Apply'}
           </button>
           <button type="button" data-testid="theme-preview-back" className="wk-btn wk-btn--quiet wk-btn--sm"

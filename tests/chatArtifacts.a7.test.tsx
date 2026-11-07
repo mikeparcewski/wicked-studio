@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -25,6 +25,7 @@ const { contrastRatio, measureTheme, parseCssColor, setThemeProbe } = await impo
 const { appearanceContext } = await import('../src/components/AskDock.js');
 const { ThemePreviewBar } = await import('../src/components/ThemePreviewBar.js');
 const { ThemeProposalPanel } = await import('../src/components/ThemePage.js');
+const { useAmbientMood } = await import('../src/hooks/useAmbientMood.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 
 const T0 = 1_700_000_000_000;
@@ -169,6 +170,8 @@ describe('the theme card model', () => {
     expect(themeChangeWords(light, { theme: 'wicked-dark', accent_h: 210, accent_s: 14, accent_l: 70, ambient: false }))
       .toStrictEqual(['Wicked Light → Wicked Dark', 'action colour hue 210, saturation 14, lightness 70', 'Ambient off']);
     expect(themeChangeWords({ ...light, theme: 'wicked-dark' }, { theme: 'wicked-dark', ambient: true, ambient_still: true })).toStrictEqual(['Already Wicked Dark', 'Ambient on, still']);
+    // The still flag is its own key: said even with Ambient off.
+    expect(themeChangeWords(light, { ambient: false, ambient_still: true })).toStrictEqual(['Ambient off (still when on)']);
     const [e] = foldChatProposals([
       { at: 1, turnId: 't1', kind: 'proposal', proposal: themeProposal() },
       { at: 2, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'local', decision: 'go', result: { runId: 'aaaaaaaa', artifactRef: null, adopted: false, stub: false } },
@@ -254,6 +257,79 @@ describe('the preview, Apply and Undo (the appearance store)', () => {
   });
 });
 
+describe('the preview, Apply and Undo: edges (review r1)', () => {
+  const start = (o: { chatId?: string; pid?: string; patch?: Record<string, unknown> } = {}): void =>
+    useAppearanceStore.getState().startPreview({ name: 'Calm night', seat: 'Claude Code', chatId: o.chatId ?? 'chat-ask', pid: o.pid ?? PID, patch: (o.patch ?? { theme: 'wicked-dark', accent_l: 70 }) as never });
+
+  it('Go records the values studio saved (rounded), the one delta saved, recorded and undone', async () => {
+    start({ patch: { theme: 'wicked-dark', accent_s: 47.4, accent_l: 70.4 } });
+    await useAppearanceStore.getState().applyPreview();
+    expect(posts.at(-1)?.body).toStrictEqual({ decision: 'go', edits: { name: 'Calm night', patch: { theme: 'wicked-dark', accent_s: 47, accent_l: 70 } } });
+    expect(useAppearanceStore.getState().save.undo?.applied).toStrictEqual({ theme: 'wicked-dark', accent_s: 47, accent_l: 70 });
+  });
+
+  it('a pending debounced write never lands after Apply’s own', async () => {
+    vi.useFakeTimers();
+    try {
+      useAppearanceStore.getState().update({ site_name: 'Mine' });
+      start();
+      const done = useAppearanceStore.getState().applyPreview();
+      await vi.runAllTimersAsync();
+      await done;
+      const puts = posts.filter((p) => p.path === '/settings').map((p) => (p.body as { 'studio.appearance': Record<string, unknown> })['studio.appearance']);
+      expect(puts).toHaveLength(1);
+      expect(puts[0]).toMatchObject({ theme: 'wicked-dark', site_name: 'Mine' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('while saving, the preview is frozen; a late settings read keeps the preview on screen', async () => {
+    let release: (r: Response) => void = () => undefined;
+    putAnswer = () => new Promise<Response>((r) => { release = r; }) as unknown as Response;
+    start();
+    const done = useAppearanceStore.getState().applyPreview();
+    useAppearanceStore.getState().adjustPreview({ accent_h: 10 });
+    useAppearanceStore.getState().endPreview();
+    start({ pid: 'chat-ask:t9', patch: { accent_h: 99 } });
+    expect(useAppearanceStore.getState().preview).toMatchObject({ pid: PID, delta: { theme: 'wicked-dark', accent_l: 70 } });
+    release(ok({ settings: {} }));
+    expect(await done).toBe(true);
+    // A preview started before the startup read answered survives it.
+    start({ patch: { theme: 'wicked-dark' } });
+    vi.mocked(fetch).mockImplementationOnce(() => Promise.resolve(ok({ settings: { 'studio.appearance': { ...DEFAULT_APPEARANCE, theme: 'wicked-light' } } })));
+    await useAppearanceStore.getState().load();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('wicked-dark');
+    expect(appearanceOf()['theme']).toBe('wicked-light');
+  });
+
+  it('a preview from another chat starts fresh; a refused Go after the save says so, on that save only', async () => {
+    start({ patch: { accent_h: 30 } });
+    start({ chatId: 'other-chat', pid: 'other-chat:t1', patch: { theme: 'wicked-dark', accent_l: 70 } });
+    expect(useAppearanceStore.getState().preview?.delta).toStrictEqual({ theme: 'wicked-dark', accent_l: 70 });
+    decideAnswer = () => new Response(JSON.stringify({ code: 'proposal_superseded', error: 'a newer proposal in this chat replaced this one' }), { status: 409 });
+    expect(await useAppearanceStore.getState().applyPreview()).toBe(true);
+    expect(useAppearanceStore.getState().save).toMatchObject({ state: 'saved', pid: 'other-chat:t1', recordError: expect.stringMatching(/^Saved, but the chat did not record it: a newer proposal/) });
+  });
+
+  it('a previewed Ambient gets its mood; Back to mine takes it away again', () => {
+    document.documentElement.removeAttribute('data-mood');
+    renderHook(() => useAmbientMood([], 0));
+    expect(document.documentElement.hasAttribute('data-mood')).toBe(false);
+    act(() => start({ patch: { theme: 'wicked-dark', accent_l: 70, ambient: true } }));
+    expect(document.documentElement.getAttribute('data-mood')).not.toBeNull();
+    act(() => useAppearanceStore.getState().endPreview());
+    expect(document.documentElement.hasAttribute('data-mood')).toBe(false);
+  });
+
+  it('the preview bar offers no Apply for a preview whose merged result fails contrast', () => {
+    start({ patch: { theme: 'wicked-dark', accent_l: 8 } });
+    render(<ThemePreviewBar />);
+    expect((screen.getByTestId('theme-preview-apply') as HTMLButtonElement).disabled).toBe(true);
+    expect(text('theme-preview-bar')).toMatch(/Contrast too low: action colour on the ground/);
+  });
+});
+
 describe('the theme card in a chat thread', () => {
   it('shows the changes, the contrast, the limits and the disclosure; Preview posts nothing and offers Apply', async () => {
     page();
@@ -282,20 +358,39 @@ describe('the theme card in a chat thread', () => {
     expect(text('artifact-proposal-record')).toBe('You applied this theme');
   });
 
-  it('Back to mine ends the preview; Not now records the decline and ends this card’s preview', async () => {
+  it('Back to mine ends the preview and gives focus back to Preview; Not now then records the decline', async () => {
     page();
     await screen.findByTestId('artifact-proposal');
+    // Keyboard path: focus on the card's confirm, Preview → focus moves to the preview's Apply.
+    screen.getByTestId('artifact-proposal-confirm').focus();
     fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
-    fireEvent.click(await screen.findByTestId('artifact-proposal-theme-back'));
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-testid')).toBe('artifact-proposal-theme-apply'));
+    fireEvent.click(screen.getByTestId('artifact-proposal-theme-back'));
     expect(useAppearanceStore.getState().preview).toBeNull();
     expect(document.documentElement.getAttribute('data-theme')).toBe('wicked-light');
-    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
-    await screen.findByTestId('artifact-proposal-previewing');
-    act(() => useAppearanceStore.getState().endPreview());
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-ask-option')).toBe('go'));
     decideAnswer = () => ok({ view: { proposal: themeProposal(), state: 'decided', decision: 'not_now', result: null, decidedAt: T0 + 3000 } });
     fireEvent.click(card().querySelector('[data-ask-option="not_now"]')!);
     fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
     await waitFor(() => expect(posts).toStrictEqual([{ path: decidePath, body: { decision: 'not_now' } }]));
+  });
+
+  it('while previewing, the card describes and measures what Apply saves (the Theme page’s moves included)', async () => {
+    page();
+    await screen.findByTestId('artifact-proposal');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await screen.findByTestId('artifact-proposal-previewing');
+    act(() => useAppearanceStore.getState().adjustPreview({ accent_h: 30 }));
+    await waitFor(() => expect(text('artifact-proposal-theme')).toBe('ChangesWicked Light → Wicked Dark · action colour hue 30, saturation 14, lightness 70 · Ambient off'));
+  });
+
+  it('a theme record without a name or a patch is not drawn (nothing to preview or apply)', async () => {
+    const bad = themeProposal();
+    chatBody = { ...chatBody, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: { ...bad, theme: { changes: ['theme'] } } }] };
+    page();
+    await screen.findAllByTestId('session-turn');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('artifact-proposal')).toBeNull();
   });
 
   it('a low-contrast patch can’t be previewed: the card shows the numbers and Preview is disabled', async () => {
