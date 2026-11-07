@@ -30,7 +30,11 @@ export function lensVersion(pinned: number | null, head: number | null, list: re
   return list.some((v) => v.version === pinned) ? pinned : null;
 }
 
-export function ArtifactVersions({ projectId, docId, head, list, lens, onLook, onRestored }: {
+/** A restore done by the artifact's own data plane (a demo cut renders the version again, G7 piece 3) instead of
+ *  interactive's HTML fork. A refusal comes back in words; `head` set means another version landed since. */
+export type RestoreVersion = (version: number, expectHead: number) => Promise<{ version: number } | { error: string; message: string; head?: number }>;
+
+export function ArtifactVersions({ projectId, docId, head, list, lens, onLook, onRestored, restore: restoreWith }: {
   projectId: string;
   docId: string;
   head: number | null;
@@ -41,6 +45,8 @@ export function ArtifactVersions({ projectId, docId, head, list, lens, onLook, o
   onLook: (version: number | null) => void;
   /** A restore landed: the new head. */
   onRestored: (newHead: number) => void;
+  /** The artifact restores through its own data plane; absent = interactive's fork. */
+  restore?: RestoreVersion;
 }): React.ReactElement {
   const [line, setLine] = useState<{ bad: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,6 +54,16 @@ export function ArtifactVersions({ projectId, docId, head, list, lens, onLook, o
     if (busy || head === null) return;
     setBusy(true);
     try {
+      if (restoreWith !== undefined) {
+        const r = await restoreWith(version, head);
+        if ('error' in r) {
+          setLine({ bad: true, text: r.error === 'head_moved' ? `Not restored — ${r.head !== undefined ? `version ${r.head}` : 'a newer version'} landed since. Look again.` : `Not restored — ${r.message}` });
+          return;
+        }
+        setLine({ bad: false, text: `Version ${version} is the working version again — as version ${r.version}.` });
+        onRestored(r.version);
+        return;
+      }
       const r = await postFork(projectId, docId, version, undefined, head);
       setLine({ bad: false, text: `Version ${version} is the working version again — as version ${r.version}.` });
       onRestored(r.version);

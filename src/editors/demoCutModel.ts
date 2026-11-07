@@ -24,7 +24,16 @@ export interface RecordingProof {
   checks: { id: string; chapter: string; atSec: number | null; text: string; state: 'PASS' | 'FAIL' | 'PENDING' }[];
 }
 export interface DemoChapter { id: string; title: string; say: string; take: string; inSec: number; outSec: number; durationSec: number; startSec: number; verdict?: RecordingVerdict }
-export interface DemoCut { type: 'demo-cut'; title: string; rev: number; version: number; chapters: DemoChapter[]; takes: Record<string, DemoTake[]>; style: VideoStyle; resolvedTheme?: VideoColours & { font?: VideoStyle['theme']['font'] }; ffmpeg?: { ok: boolean; burnIn: boolean }; proof?: RecordingProof }
+/** A demo recording's review (G8, G22): who reviews it, and the contact sheets the plugin can ask for as media. */
+export interface RecordingReview {
+  /** `model`: a review seat; `person`: no model reviews this take (its rows stay out of model context). */
+  by: 'model' | 'person';
+  /** One line: the verdict, or what is still to come. */
+  line: string;
+  /** Sheet names the plugin may ask for (`artifact.media {sheet}`), with their words. */
+  sheets: { name: string; label: string }[];
+}
+export interface DemoCut { type: 'demo-cut'; title: string; rev: number; version: number; chapters: DemoChapter[]; takes: Record<string, DemoTake[]>; style: VideoStyle; resolvedTheme?: VideoColours & { font?: VideoStyle['theme']['font'] }; ffmpeg?: { ok: boolean; burnIn: boolean }; proof?: RecordingProof; review?: RecordingReview }
 export type ChapterOp = Extract<Op, { chapter: string }>;
 
 export function defaultVideoStyle(title: string): VideoStyle {

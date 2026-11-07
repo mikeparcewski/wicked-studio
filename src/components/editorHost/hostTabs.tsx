@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { registerHostTab, type HostTabContext } from '../../editors/hostApi.js';
-import { ArtifactVersions, useVersionList, VersionLens } from '../session/ArtifactVersions.js';
+import { ArtifactVersions, useVersionList, VersionLens, type RestoreVersion } from '../session/ArtifactVersions.js';
 import { ChecksPanel } from '../session/ChecksPanel.js';
 
 /**
@@ -26,10 +26,13 @@ function VersionsTab({ ctx }: { ctx: HostTabContext }): React.ReactElement {
   const lens = address !== null ? (address.routeKey === key ? address.routeVersion : null) : local;
   const look = (v: number | null): void => { if (address !== null) address.pickVersion(key, v, 'push'); else setLocal(v); };
   const list = useVersionList(projectId, docId, ctx.shown, true);
+  // A data plane with its own restore (a demo cut: G7 piece 3) restores through it; HTML fork is the default.
+  const own = (ctx.adapter as { restoreVersion?: (from: number, expectHead?: number) => ReturnType<RestoreVersion> }).restoreVersion;
+  const restore: RestoreVersion | undefined = own === undefined ? undefined : (v, head) => own.call(ctx.adapter, v, head);
   return (
     <div className="wk-htab-versions">
       {address === null && lens !== null && <VersionLens projectId={projectId} docId={docId} version={lens} onBack={() => setLocal(null)} />}
-      <ArtifactVersions projectId={projectId} docId={docId} head={ctx.shown} list={list} lens={lens} onLook={look}
+      <ArtifactVersions projectId={projectId} docId={docId} head={ctx.shown} list={list} lens={lens} onLook={look} {...(restore === undefined ? {} : { restore })}
         onRestored={(h) => {
           const a = addressRef.current;
           if (mounted.current) { if (a === null) setLocal(null); else if (a.routeKey === key && a.routeVersion !== null) a.pickVersion(key, null, 'replace'); }

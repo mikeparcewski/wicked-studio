@@ -1,4 +1,4 @@
-import type { DemoMarker, DemoView } from '../api/demo.js';
+import type { DemoFinding, DemoMarker, DemoStage, DemoView } from '../api/demo.js';
 import { demoProducer, storylineChapters, type StorylineChapter } from '../api/demo.js';
 import type { WalkthroughCheck, WalkthroughState, WalkthroughVerdict, WalkthroughView } from '../api/walkthrough.js';
 
@@ -70,6 +70,72 @@ export interface Recording {
   recordedBy?: { kind: 'engine'; jail: string | null } | null;
   /** (wicked-core#1249) The storyline the engine records, in words — what the person approves at the plan gate. */
   storyline?: StorylineChapter[];
+  /** A demo's stage as crew names it (the review gate is told apart from the review running); absent for a walkthrough. */
+  demoStage?: DemoStage;
+  /** A demo's review (G22): the review seat's verdict and findings, or `person` when no model reviews this take
+   *  (the app's rows stay out of model context, DES-DEMO-RECORD-001 §3.7: the person reviews at the gate). */
+  review?: DemoReview;
+  /** A demo's contact sheets (G8), root-relative paths for `GET /runs/:id/demo/file`. */
+  sheets?: Array<{ name: string; path: string }>;
+  /** The demo's stitched MP4 size: with the stage and the review, which take a decision is made on. */
+  videoBytes?: number | null;
+  /** The editable cut made from this demo (`POST /runs/:id/demo/document`), once made. */
+  document?: { projectId: string; docId: string } | null;
+}
+
+export interface DemoReview {
+  by: 'model' | 'person';
+  verdict: 'accept' | 'changes' | null;
+  /** The engine judged the review not PASS: the gate is its escalation gate. */
+  rejected: boolean;
+  findings: Array<DemoFinding & { chapterKey: string | null; atSec: number | null }>;
+}
+
+/** "1:23", "01:02:03" or "83" (seconds) as seconds; null for anything else. */
+export function clockSec(at: string): number | null {
+  const t = at.trim();
+  if (/^\d+(\.\d+)?$/.test(t)) return Number(t);
+  const m = /^(?:(\d+):)?(\d{1,2}):(\d{2}(?:\.\d+)?)$/.exec(t);
+  if (m === null) return null;
+  return Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
+
+/** The chapter a finding names: its key, its title, or its 1-based number. */
+function findingChapter(chapters: readonly { key: string; title: string }[], named: string): string | null {
+  const n = named.trim();
+  if (n === '') return null;
+  const byKey = chapters.find((c) => c.key === n) ?? chapters.find((c) => c.title.toLowerCase() === n.toLowerCase());
+  if (byKey !== undefined) return byKey.key;
+  const num = /^(?:chapter\s*)?(\d+)$/i.exec(n);
+  return num !== null ? chapters[Number(num[1]) - 1]?.key ?? null : null;
+}
+
+/** The contact sheets' words (crew's `DemoView.sheets` names). */
+export const SHEET_LABEL: Readonly<Record<string, string>> = { chapters: 'Each chapter, once it is ready', joins: 'The joins between chapters', end: 'The last frames' };
+
+/** One line on a demo's review: the verdict, who gave it, or that a person reviews this take. Null for a walkthrough. */
+export function demoReviewLine(r: Recording): string | null {
+  if (r.kind !== 'demo-video' || r.review === undefined) return null;
+  const rv = r.review;
+  const who = r.seat.evaluator ?? 'The review seat';
+  const n = rv.findings.length;
+  const findings = n === 0 ? '' : ` · ${n} finding${n === 1 ? '' : 's'}`;
+  if (rv.by === 'person') return 'No model reviews this demo: the app’s data stays out of model context. You review the take at the gate.';
+  if (rv.rejected || rv.verdict === 'changes') return `${who} asked for changes${findings}`;
+  if (rv.verdict === 'accept') return `${who} accepted the take${findings}`;
+  return r.demoStage === 'reviewing' ? `${who} is reviewing the take` : 'Not reviewed yet';
+}
+
+/** A demo view's review, in the shape studio shows (G22). */
+export function demoReviewOf(view: DemoView): DemoReview {
+  const r = view.review;
+  const byModel = view.seats.reviewer !== null || r.verdict !== null || r.rejected || r.findings.length > 0;
+  return {
+    by: byModel ? 'model' : 'person',
+    verdict: r.verdict,
+    rejected: r.rejected,
+    findings: r.findings.map((f) => ({ ...f, chapterKey: findingChapter(view.chapters, f.chapter), atSec: clockSec(f.at) })),
+  };
 }
 
 /** "0:41" */
@@ -148,6 +214,11 @@ export function recordingOfDemo(view: DemoView): Recording {
     scriptEditable: view.stage === 'plan_gate',
     recordedBy: (() => { const p = demoProducer(view); return p?.kind === 'engine' ? p : null; })(),
     storyline: storylineChapters(view),
+    demoStage: view.stage,
+    review: demoReviewOf(view),
+    sheets: view.sheets.map(({ name, path }) => ({ name, path })),
+    videoBytes: view.video?.bytes ?? null,
+    document: view.document ?? null,
   };
 }
 
@@ -324,6 +395,13 @@ export function fixNote(r: Recording): string {
 export function takeFingerprint(r: Recording): string {
   const chapters = r.chapters.map((c) => `${c.key}:${c.verdict ?? ''}:${c.takes}:${c.failedAtSec ?? ''}:${c.checks.map((k) => `${k.id}=${k.passed === null ? '' : k.passed ? 1 : 0}`).join(',')}`);
   return `${r.kind}|${r.runId}|${r.step ?? ''}|${r.state}|${chapters.join(';')}`;
+}
+
+/** Which demo take a decision is made on: the stage, the stitched MP4's size, and what the review said. A "Record it
+ *  again" drawn from one take is never sent after another replaced it. */
+export function demoTakeFingerprint(r: Recording): string {
+  const f = (r.review?.findings ?? []).map((x) => `${x.chapter}@${x.at}:${x.verdict}:${x.issue}`).join('|');
+  return `${r.runId}|${r.demoStage ?? ''}|${r.videoBytes ?? ''}|${r.review?.verdict ?? ''}|${r.review?.rejected === true ? 1 : 0}|${f}`;
 }
 
 /** Whether the recording is still moving (poll it) or settled. */

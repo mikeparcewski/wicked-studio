@@ -81,3 +81,27 @@ describe('studio#616 — the lens Back is a control; a row\'s age and restore ar
     expect(older.textContent).toMatch(/ · Make this the working version$/);
   });
 });
+
+describe('plugins S4 (G7 piece 3): an artifact with its own restore never forks the HTML', () => {
+  it('a demo cut restores through its data plane: the restore names the version and the head, postFork is not called', async () => {
+    const restore = vi.fn(async (v: number, head: number) => ({ version: head + 1, v }));
+    const onRestored = vi.fn();
+    render(<ArtifactVersions projectId="p" docId="demo-run" head={2} list={LIST} lens={null} onLook={() => undefined} onRestored={onRestored} restore={restore} />);
+    await userEvent.click(screen.getByTestId('artifact-version-restore'));
+    await waitFor(() => expect(onRestored).toHaveBeenCalledWith(3));
+    expect(restore).toHaveBeenCalledWith(1, 2);
+    expect(interactive.postFork).not.toHaveBeenCalled();
+    expect(screen.getByTestId('artifact-version-line').textContent).toBe('Version 1 is the working version again — as version 3.');
+  });
+  it('a moved head or a refusal is said, and nothing is adopted', async () => {
+    const onRestored = vi.fn();
+    const restore = vi.fn().mockResolvedValueOnce({ error: 'head_moved', message: 'moved', head: 5 }).mockResolvedValueOnce({ error: 'unsupported', message: 'That version was made before the cut kept its history; it can be watched, not restored.' });
+    render(<ArtifactVersions projectId="p" docId="demo-run" head={2} list={LIST} lens={null} onLook={() => undefined} onRestored={onRestored} restore={restore} />);
+    await userEvent.click(screen.getByTestId('artifact-version-restore'));
+    await waitFor(() => expect(screen.getByTestId('artifact-version-line').textContent).toBe('Not restored — version 5 landed since. Look again.'));
+    await userEvent.click(screen.getByTestId('artifact-version-restore'));
+    await waitFor(() => expect(screen.getByTestId('artifact-version-line').textContent).toMatch(/^Not restored — That version was made before/));
+    expect(onRestored).not.toHaveBeenCalled();
+    expect(interactive.postFork).not.toHaveBeenCalled();
+  });
+});

@@ -4,9 +4,7 @@ import type { DemoView } from '../src/api/demo.js';
 import type { WalkthroughView } from '../src/api/walkthrough.js';
 import { resetDecisionsForTest, setUndoWindowForTest } from '../src/board/undoQueue.js';
 import { fixNote, recordingOf, type UnitLike } from '../src/board/walkthroughModel.js';
-import { RecordingGateActions, recordingGateActions, RetakeChapter } from '../src/components/editorPorts/RecordingGateActions.js';
-import { DemoCutSurfaceAdapter } from '../src/editors/adapters/recording.js';
-import { demoCut4 } from '../src/editors/fixtures/demoCut4.js';
+import { RecordingGateActions, recordingGateActions } from '../src/components/editorPorts/RecordingGateActions.js';
 import type { ArtifactBinding } from '../src/editors/hostApi.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useRecordingsStore } from '../src/store/recordings.js';
@@ -33,6 +31,8 @@ function demo(): DemoView {
     runId: RUN, url: null, audience: null, stage: 'done', script: null, chapters: [], markers: [], sheets: [],
     video: { path: 'demo-video/demo.mp4', bytes: 20 }, recording: { readOnly: true },
     review: { verdict: 'accept', findings: [], text: null, rejected: false }, seats: { recorder: 'recorder', reviewer: 'reviewer' }, syntheticLabelled: true,
+    // Its cut is made already: no demo verb applies.
+    document: { projectId: 'p', docId: 'demo-run' },
   };
 }
 function gate(ord = 4): void {
@@ -155,8 +155,9 @@ describe('recording gate controls in host chrome', () => {
       ? <RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />
       : controls(scenario === 'watch only' ? [] : units));
     await act(async () => { await Promise.resolve(); });
-    if (scenario === 'demo') expect(fetchMock).not.toHaveBeenCalled();
-    else await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    // A demo reads its own view, never a walkthrough.
+    if (scenario === 'demo') expect(fetchMock.mock.calls.every(([u]) => String(u).endsWith('/demo'))).toBe(true);
     expect(container.innerHTML).toBe('');
   });
 
@@ -173,7 +174,7 @@ describe('recording gate controls in host chrome', () => {
     const { fetchMock } = server();
     const { rerender, container } = render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
     await act(async () => { await Promise.resolve(); });
-    expect(fetchMock).not.toHaveBeenCalled(); expect(container.innerHTML).toBe('');
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/walkthrough'))).toBe(false); expect(container.innerHTML).toBe('');
     rerender(controls()); await screen.findByTestId('walkthrough-fix');
     expect(fetchMock).toHaveBeenCalled();
     rerender(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
@@ -189,62 +190,114 @@ describe('recording gate controls in host chrome', () => {
   });
 });
 
-describe('host chapter retake', () => {
-  it('calls the demo cut adapter, stays busy while recording, and shows the result', async () => {
-    const adapter = new DemoCutSurfaceAdapter({ ...binding, docId: 'demo cut' });
-    let finish!: (response: Response) => void;
-    const fetchMock = vi.fn(async (url: string): Promise<Response> => url.endsWith('/takes')
-      ? new Promise<Response>(resolve => { finish = resolve; }) : json(demoCut4));
+describe('a demo at its review gate: the review, the sheets, Record it again (plugins S4: G8, G22, G23)', () => {
+  function reviewDemo(over: Partial<DemoView> = {}): DemoView {
+    return {
+      ...demo(), stage: 'review_gate', document: null,
+      chapters: [
+        { key: '01-open', title: 'Open the queue', blurb: '', tags: [], resets: [], recorded: true },
+        { key: '02-assign', title: 'Assign a ticket', blurb: '', tags: [], resets: [], recorded: true },
+      ],
+      sheets: [{ name: 'chapters', path: 'review/chapters.png' }, { name: 'joins', path: 'review/joins.png' }, { name: 'end', path: 'review/end.png' }],
+      review: { verdict: 'changes', rejected: false, text: 'x', findings: [{ at: '0:07', chapter: '01-open', issue: 'The app frame is blank while it loads', verdict: 're-record' }] },
+      ...over,
+    } as DemoView;
+  }
+  function reviewServer(first: DemoView, later: DemoView = first) {
+    let reads = 0;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
+      if (url.endsWith('/gate')) {
+        if (init?.method === 'POST') return json({ ok: true });
+        return json({ runId: RUN, ord: 3, prompt: 'Review the take', lifecycle: 'open', receivedAt: '1970-01-01T00:00:00.001Z' });
+      }
+      if (url.endsWith('/demo/document') && init?.method === 'POST') return json({ projectId: 'p', docId: 'demo-runone', created: true });
+      if (url.endsWith('/demo')) { reads += 1; return json(reads === 1 ? first : later); }
+      throw new Error(`Unexpected route: ${url}`);
+    });
     vi.stubGlobal('fetch', fetchMock);
-    const onChanged = vi.fn();
-    render(<RetakeChapter adapter={adapter} chapter="open-the-scope" onChanged={onChanged} />);
-    const button = screen.getByTestId('demo-retake-chapter');
-    fireEvent.click(button);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(onChanged).not.toHaveBeenCalled();
-    expect(fetchMock.mock.calls[1]?.[0]).toContain('/api/demo/takes');
-    await act(async () => { finish(json({ rev: 2, version: 2 })); });
-    expect((button as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.getByTestId('demo-retake-note').textContent).toBe('The chapter was recorded again.');
-    expect(adapter.artifact().head).toBe(2);
-    expect(onChanged).toHaveBeenCalledTimes(1);
+    const gatePosts = () => fetchMock.mock.calls.filter(([u, i]) => String(u).endsWith('/gate') && i?.method === 'POST').map(([, i]) => JSON.parse(String(i!.body)) as Record<string, unknown>);
+    return { fetchMock, gatePosts };
+  }
+
+  it('shows who reviewed, the findings and the three contact sheets, linked full size', async () => {
+    reviewServer(reviewDemo());
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    expect((await screen.findByTestId('demo-review-line')).textContent).toBe('reviewer asked for changes · 1 finding');
+    expect(screen.getByTestId('demo-review-finding').textContent).toBe('0:07 · Open the queue The app frame is blank while it loads');
+    const sheets = screen.getAllByTestId('demo-review-sheet');
+    expect(sheets.map((a) => a.getAttribute('data-sheet'))).toEqual(['chapters', 'joins', 'end']);
+    expect(sheets[0]!.getAttribute('href')).toContain('/api/v1/runs/run%20one/demo/file?path=review%2Fchapters.png');
+    expect(sheets[0]!.querySelector('img')!.getAttribute('src')).toBe(sheets[0]!.getAttribute('href'));
   });
 
-  it('renders only a retake for demo cuts and forwards onChanged after success without loading a run recording', async () => {
-    const { fetchMock } = server(); const onChanged = vi.fn();
-    const adapter = new DemoCutSurfaceAdapter({ ...binding, docId: 'demo cut' });
-    const retake = vi.spyOn(adapter, 'retake').mockResolvedValue({ version: 2 });
-    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} onChanged={onChanged} retake={{ adapter, chapter: 'open-the-scope' }} />);
-    expect(screen.queryByTestId('walkthrough-actions')).toBeNull();
-    fireEvent.click(screen.getByTestId('demo-retake-chapter'));
-    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
-    expect(retake).toHaveBeenCalledWith('open-the-scope'); expect(fetchMock).not.toHaveBeenCalled();
+  it('Record it again sends request_changes with the finding’s chapter: a whole new take, never one chapter', async () => {
+    const { gatePosts } = reviewServer(reviewDemo());
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    fireEvent.click(await screen.findByTestId('demo-record-again'));
+    const note = (screen.getByTestId('demo-record-again-note') as HTMLTextAreaElement).value;
+    expect(note).toBe('Record the demo again as a new take. Change the plan for chapter 01-open ("Open the queue"). The review found: The app frame is blank while it loads (at 0:07). Every chapter is recorded again from the plan you approve next.');
+    fireEvent.click(screen.getByTestId('demo-record-again-send'));
+    await waitFor(() => expect(gatePosts()).toHaveLength(1));
+    expect(gatePosts()[0]).toMatchObject({ approve: false, action: 'request_changes', amend: note });
+    expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/^Sent back to the planner/);
   });
 
-  it('does not call onChanged for adapter errors or thrown retake failures', async () => {
-    const adapter = new DemoCutSurfaceAdapter({ ...binding, docId: 'demo cut' }); const onChanged = vi.fn();
-    const retake = vi.spyOn(adapter, 'retake').mockResolvedValueOnce({ error: 'unavailable', message: 'offline' }).mockRejectedValueOnce(new Error('failed'));
-    render(<RetakeChapter adapter={adapter} chapter="open-the-scope" onChanged={onChanged} />);
-    fireEvent.click(screen.getByTestId('demo-retake-chapter'));
-    await waitFor(() => expect(screen.getByTestId('demo-retake-note').textContent).toBe('offline'));
-    fireEvent.click(screen.getByTestId('demo-retake-chapter'));
-    await waitFor(() => expect(screen.getByTestId('demo-retake-note').textContent).toBe('failed'));
-    expect(retake).toHaveBeenCalledTimes(2); expect(onChanged).not.toHaveBeenCalled();
+  it('picks another chapter or the whole take; the note stays editable', async () => {
+    const { gatePosts } = reviewServer(reviewDemo());
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    fireEvent.click(await screen.findByTestId('demo-record-again'));
+    const pick = screen.getByTestId('demo-record-again-pick') as HTMLSelectElement;
+    expect(Array.from(pick.options).map((o) => o.textContent)).toEqual(['The whole take', '0:07 · Open the queue · The app frame is blank while it loads', 'Chapter 2: Assign a ticket']);
+    fireEvent.change(pick, { target: { value: 'c:02-assign' } });
+    expect((screen.getByTestId('demo-record-again-note') as HTMLTextAreaElement).value).toContain('chapter 02-assign ("Assign a ticket")');
+    fireEvent.change(screen.getByTestId('demo-record-again-note'), { target: { value: 'Slower on the assign.' } });
+    fireEvent.click(screen.getByTestId('demo-record-again-send'));
+    await waitFor(() => expect(gatePosts()).toHaveLength(1));
+    expect(gatePosts()[0]).toMatchObject({ amend: 'Slower on the assign.' });
   });
 
-  it('shows a refused chapter request and offers the verb only with demo retake props', async () => {
-    server();
-    const adapter = new DemoCutSurfaceAdapter({ ...binding, docId: 'demo cut' });
-    const retake = vi.spyOn(adapter, 'retake').mockResolvedValue({ error: 'bad_request', message: 'Chapter not in this cut.' });
-    const { rerender } = render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
-    expect(screen.queryByTestId('demo-retake-chapter')).toBeNull();
-    rerender(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} retake={{ adapter, chapter: 'unknown' }} />);
-    fireEvent.click(screen.getByTestId('demo-retake-chapter'));
-    expect((await screen.findByTestId('demo-retake-note')).textContent).toBe('Chapter not in this cut.');
-    expect(retake).toHaveBeenCalledWith('unknown');
-    rerender(<RecordingGateActions runId={RUN} kind="walkthrough" step={STEP} units={units} retake={{ adapter, chapter: 'unknown' }} />);
-    expect(screen.queryByTestId('demo-retake-chapter')).toBeNull();
+  it('sends nothing when the take changed since it was shown', async () => {
+    const { gatePosts } = reviewServer(reviewDemo(), reviewDemo({ video: { path: 'demo-video/demo.mp4', bytes: 99 } }));
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    fireEvent.click(await screen.findByTestId('demo-record-again'));
+    fireEvent.click(screen.getByTestId('demo-record-again-send'));
+    expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/nothing was sent/);
+    expect(gatePosts()).toHaveLength(0);
+  });
+
+  it('a person-reviewed demo (rows stay out of model context) says so, and its note carries no frame text', async () => {
+    const view = reviewDemo({ seats: { recorder: null, reviewer: null }, review: { verdict: null, rejected: false, text: null, findings: [] } });
+    reviewServer(view);
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    expect((await screen.findByTestId('demo-review-line')).textContent).toMatch(/^No model reviews this demo/);
+    expect(screen.queryByTestId('demo-review-findings')).toBeNull();
+    expect(screen.getAllByTestId('demo-review-sheet')).toHaveLength(3);
+    fireEvent.click(screen.getByTestId('demo-record-again'));
+    expect((screen.getByTestId('demo-record-again-note') as HTMLTextAreaElement).value).toBe('Record the demo again as a new take. Every chapter is recorded again from the plan you approve next.');
+  });
+
+  it('a rejected review offers the same host action', async () => {
+    reviewServer(reviewDemo({ review: { verdict: null, rejected: true, text: 'x', findings: [] } }));
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    expect((await screen.findByTestId('demo-review-line')).textContent).toBe('reviewer asked for changes');
+    expect(screen.getByTestId('demo-record-again')).toBeTruthy();
+  });
+
+  it('Edit the cut makes the run’s editable cut once the run is done, and is not offered before or after', async () => {
+    const done = reviewDemo({ stage: 'done', document: null });
+    const { fetchMock } = reviewServer(done, { ...done, document: { projectId: 'p', docId: 'demo-runone' } });
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    expect(screen.queryByTestId('demo-record-again')).toBeNull();
+    fireEvent.click(await screen.findByTestId('demo-edit-cut'));
+    expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/^The cut is made/);
+    expect(fetchMock.mock.calls.filter(([u, i]) => String(u).endsWith('/runs/run%20one/demo/document') && i?.method === 'POST')).toHaveLength(1);
+    await waitFor(() => expect(screen.queryByTestId('demo-edit-cut')).toBeNull());
+    cleanup();
+    reviewServer(reviewDemo({ stage: 'recording' }));
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    expect(screen.queryByTestId('demo-edit-cut')).toBeNull();
+    expect(screen.queryByTestId('demo-review')).toBeNull();
   });
 });
 

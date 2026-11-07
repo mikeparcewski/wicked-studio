@@ -11,9 +11,10 @@ const declaration = parsed.value;
 export function start(): void {
   // Static markup only; every artifact string is assigned as text or an input value below.
   document.body.insertAdjacentHTML('afterbegin', `<main id="video-editor" class="video-editor" data-testid="video-editor" tabindex="0">
-    <aside id="chapters" class="chapters"><h2>Chapters</h2><ol id="chapter-list"></ol><div id="editor-fields" class="editor-fields"></div><p id="hint" class="hint"></p></aside>
+    <aside id="chapters" class="chapters"><h2>Chapters</h2><ol id="chapter-list"></ol><div id="editor-fields" class="editor-fields"></div></aside>
     <section id="work" class="work"><div class="player"><video id="player" data-testid="video-player" playsinline preload="metadata" aria-label="Video"></video><div id="unavailable" class="unavailable">The video isn't available here</div><img id="poster" data-testid="video-poster" class="poster" alt="" hidden><div id="caption" class="caption"></div></div>
     <div class="transport"><button id="play" data-testid="video-play" type="button">Play</button><span id="count"></span></div><div id="chips" class="chips" aria-label="Chapter chips"></div><div id="timeline" class="timeline" aria-label="Chapter timeline"></div><p id="status" class="status" role="status"></p></section>
+    <section id="review-tab" class="review-tab" data-testid="video-review" hidden><h2>Review</h2><p id="review-line" class="summary" data-testid="video-review-line"></p><ol id="review-findings" class="findings" aria-label="Findings"></ol><div id="review-sheets" class="sheets" aria-label="Contact sheets"></div></section>
     <aside id="inspectors" class="inspectors"><section id="proof"><h2>Checks</h2><p id="proof-summary" class="summary"></p><ol id="check-list" aria-label="Checks"></ol></section><h2>Text</h2><textarea id="say" aria-label="Chapter caption text" readonly></textarea><h2>Theme</h2><p id="theme-summary" class="summary"></p></aside></main>`);
   const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
   const root = el('video-editor'), list = el('chapter-list'), fields = el('editor-fields');
@@ -25,6 +26,8 @@ export function start(): void {
   let renaming: string | null = null, renameText = '', renameBase = 0;
   let mediaUrl: string | null = null, mediaGeneration = 0, readingGeneration = 0, takePreview = false;
   let pendingSeek: number | null = null, loadingMedia = false;
+  /** The contact sheets drawn in the Review tab, for the cut content they were read for (G8). */
+  let sheetsFor: string | null = null, sheetUrls: string[] = [], sheetGeneration = 0;
   const pending = new Map<string, { resolve: (r: Reply) => void; timer: ReturnType<typeof setTimeout> }>();
   const send = (type: string, payload: unknown): void => port?.postMessage({ p: PROTOCOL, v: ENVELOPE, type, payload });
   const req = (type: string, payload: unknown): Promise<Reply> => new Promise(resolve => {
@@ -270,6 +273,48 @@ export function start(): void {
     }
     timeline.dataset['proof'] = String(track.childElementCount > 0); timeline.append(track);
   }
+  /** The Review tab (G8, G22): the review's line, its findings, and the contact sheets, each fetched through the host
+   *  (`artifact.media {sheet}`), never by URL. */
+  function drawReview(): void {
+    const section = el('review-tab');
+    section.hidden = surface !== 'options' || tab !== 'sheets';
+    if (section.hidden || cut === null) return;
+    const review = cut.review;
+    el('review-line').textContent = review?.line ?? 'This is an edited cut. The take’s own review is on its run.';
+    const findings = el('review-findings');
+    findings.replaceChildren();
+    for (const k of cut.proof?.checks ?? []) {
+      const li = document.createElement('li'); li.dataset['testid'] = 'video-finding'; li.dataset['state'] = k.state;
+      const chapter = cut.chapters.find(c => c.id === k.chapter)?.title;
+      li.textContent = `${k.atSec === null ? '' : `${Math.floor(k.atSec / 60)}:${String(Math.round(k.atSec % 60)).padStart(2, '0')} · `}${chapter === undefined ? '' : `${chapter} · `}${k.text}`;
+      findings.append(li);
+    }
+    const key = `${cut.version}|${(review?.sheets ?? []).map(sh => sh.name).join(',')}`;
+    if (sheetsFor === key) return;
+    sheetsFor = key;
+    void loadSheets(review?.sheets ?? []);
+  }
+  async function loadSheets(sheets: readonly { name: string; label: string }[]): Promise<void> {
+    const generation = ++sheetGeneration;
+    const box = el('review-sheets');
+    for (const u of sheetUrls) URL.revokeObjectURL(u);
+    sheetUrls = []; box.replaceChildren();
+    if (sheets.length === 0) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = 'No contact sheets yet.'; box.append(p); return; }
+    if (!grants.includes('media.read')) return;
+    for (const sh of sheets) {
+      const fig = document.createElement('figure'); fig.className = 'sheet'; fig.dataset['testid'] = 'video-sheet'; fig.dataset['sheet'] = sh.name;
+      const cap = document.createElement('figcaption'); cap.textContent = sh.label;
+      fig.append(cap); box.append(fig);
+      const r = await req('artifact.media', { ref: { sheet: sh.name } });
+      if (disposed || generation !== sheetGeneration) return;
+      const blob = r.payload?.['blob'], type = r.payload?.['type'];
+      if (!r.ok || !(blob instanceof Blob) || typeof type !== 'string' || !type.startsWith('image/') || typeof URL.createObjectURL !== 'function') {
+        cap.textContent = `${sh.label} · not available`; continue;
+      }
+      const url = URL.createObjectURL(blob); sheetUrls.push(url);
+      const img = document.createElement('img'); img.src = url; img.alt = sh.label; fig.prepend(img);
+    }
+  }
   function draw(): void {
     const active = document.activeElement as HTMLElement | null;
     const previousRename = fields.querySelector<HTMLInputElement>('[data-testid="video-rename-input"]');
@@ -280,6 +325,7 @@ export function start(): void {
     root.dataset['surface'] = surface; root.dataset['mode'] = mode; root.dataset['head'] = String(cut?.version ?? 0); root.dataset['current'] = selected ?? '';
     el('chapters').hidden = surface === 'card' || (surface === 'options' && tab !== 'chapters');
     el('work').hidden = surface === 'options'; el('inspectors').hidden = surface !== 'full' || mode !== 'advanced';
+    drawReview();
     timeline.hidden = surface !== 'full'; chips.hidden = surface !== 'card';
     list.replaceChildren(); chips.replaceChildren(); timeline.replaceChildren(); fields.replaceChildren(); timeline.dataset['proof'] = 'false';
     if (cut === null) return;
@@ -325,7 +371,6 @@ export function start(): void {
     });
     drawProof();
     const c = current();
-    el('hint').textContent = c === undefined ? '' : "Re-record this chapter: the host's button";
     el('count').textContent = c === undefined ? 'No chapters' : `${cut.chapters.findIndex(x => x.id === c.id) + 1} of ${cut.chapters.length}`;
     el<HTMLTextAreaElement>('say').value = c?.say ?? '';
     const t = cut.style.theme;
@@ -408,7 +453,8 @@ export function start(): void {
     if (e.key.length === 1) { e.preventDefault(); send('ui.typed', { grapheme: e.key }); }
   };
   function dispose(): void {
-    disposed = true; ++mediaGeneration; ++readingGeneration; revoke(); if (posterUrl !== null) { URL.revokeObjectURL(posterUrl); posterUrl = null; }
+    disposed = true; ++mediaGeneration; ++readingGeneration; ++sheetGeneration; revoke(); if (posterUrl !== null) { URL.revokeObjectURL(posterUrl); posterUrl = null; }
+    for (const u of sheetUrls) URL.revokeObjectURL(u); sheetUrls = [];
     for (const { timer, resolve } of pending.values()) { clearTimeout(timer); resolve({ ok: false, error: { code: 'unavailable', message: 'Editor closed.' } }); }
     pending.clear(); port?.close(); window.removeEventListener('message', hello);
   }

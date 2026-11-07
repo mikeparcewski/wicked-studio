@@ -1,17 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { putDemoScript } from '../../api/demo.js';
+import { demoFileUrl, getDemo, makeDemoDocument, putDemoScript, rerecordNote, sendBackDemo } from '../../api/demo.js';
 import { walkthroughApi, type WalkthroughView } from '../../api/walkthrough.js';
 import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
-import { escalationOpen, fixNote, gateVerbs, recordingOf, takeFingerprint, type Recording, type RecordingKind, type UnitLike } from '../../board/walkthroughModel.js';
-import type { DemoCutSurfaceAdapter } from '../../editors/adapters/recording.js';
+import { demoReviewLine, demoTakeFingerprint, escalationOpen, fixNote, fmtTime, gateVerbs, recordingOf, recordingOfDemo, SHEET_LABEL, takeFingerprint, type Recording, type RecordingKind, type UnitLike } from '../../board/walkthroughModel.js';
 import type { ArtifactBinding } from '../../editors/hostApi.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRecording } from './useRecording.js';
-
-type RetakeProps = { adapter: DemoCutSurfaceAdapter; chapter: string };
+import './editorPorts.css';
 
 /** The run's gate controls live in host chrome, alongside the recording plugin. */
-export function RecordingGateActions({ runId, kind, step, units, onChanged, onEditOpen, retake, script = false }: {
+export function RecordingGateActions({ runId, kind, step, units, onChanged, onEditOpen, script = false }: {
   runId: string;
   kind: RecordingKind;
   step: string | null;
@@ -19,7 +17,6 @@ export function RecordingGateActions({ runId, kind, step, units, onChanged, onEd
   onChanged?: () => void;
   /** "Edit the check" opened its storyline box: a host that can give it room (an inline slot grows to the pane) does. */
   onEditOpen?: () => void;
-  retake?: RetakeProps;
   /** Draw the plan gate's script editor: on a plugin card only (the morphing slot's own editor has its box). */
   script?: boolean;
 }): React.ReactElement | null {
@@ -27,7 +24,7 @@ export function RecordingGateActions({ runId, kind, step, units, onChanged, onEd
     return (
       <>
         {script && <DemoScriptActions runId={runId} units={units} {...(onChanged === undefined ? {} : { onChanged })} />}
-        {retake !== undefined && <RetakeChapter key={retake.chapter} {...retake} {...(onChanged === undefined ? {} : { onChanged })} />}
+        <DemoReviewActions runId={runId} units={units} {...(onChanged === undefined ? {} : { onChanged })} />
       </>
     );
   }
@@ -233,33 +230,152 @@ function DemoScriptActions({ runId, units, onChanged }: { runId: string; units: 
   );
 }
 
-/** The demo cut adapter owns the take request; only host chrome offers the verb. */
-export function RetakeChapter({ adapter, chapter, onChanged }: RetakeProps & { onChanged?: () => void }): React.ReactElement {
+type Note = { tone: 'ok' | 'bad'; text: string };
+
+function NoteLine({ note, testId }: { note: Note | null; testId: string }): React.ReactElement | null {
+  return note === null ? null : <p data-testid={testId} data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>;
+}
+
+/**
+ * A demo's review and its two host verbs (plugins S4: G8, G22, G23, G7 piece 1):
+ *
+ *  - at the review gate: who reviewed it and what they found, the contact sheets, and **Record it again** — a gate
+ *    send-back with a note, so the planner changes the plan and the engine records a whole new take of it (operator
+ *    ruling D3; DES-DEMO-RECORD-001 §3.6). There is no one-chapter re-record.
+ *  - once the run is done: **Edit the cut**, which makes the run's editable cut (crew imports the segments into a
+ *    document the video editor re-cuts).
+ */
+function DemoReviewActions({ runId, units, onChanged }: { runId: string; units: readonly UnitLike[]; onChanged?: () => void }): React.ReactElement | null {
+  const { load, reload } = useRecording(runId, 'demo-video', null, JSON.stringify(units));
+  const [open, setOpen] = useState<{ take: string; pick: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+  const [note, setNote] = useState<Note | null>(null);
   const live = useRef(true);
-  const pending = useRef(false);
   useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
-  const retake = async (): Promise<void> => {
-    if (pending.current) return;
-    pending.current = true;
+  const recRef = useRef<Recording | null>(null);
+  const rec = load.kind === 'ready' ? load.rec : null;
+  useLayoutEffect(() => { recRef.current = rec; }, [rec]);
+  if (rec === null) return null;
+  const atGate = rec.demoStage === 'review_gate';
+  const canCut = rec.demoStage === 'done' && rec.video !== null && (rec.document ?? null) === null;
+  if (!atGate && !canCut) return <NoteLine note={note} testId="demo-review-note" />;
+  const take = demoTakeFingerprint(rec);
+  const review = rec.review;
+  // When a person reviews (the app's rows stay out of model context) the note sent to the planner carries no text the
+  // recording showed: chapter keys, titles and times only.
+  const isPrivate = review?.by !== 'model';
+  const findings = review?.findings ?? [];
+  const choices: Array<{ id: string; label: string; note: string }> = [
+    { id: 'whole', label: 'The whole take', note: rerecordNote() },
+    ...findings.map((f, i) => {
+      const c = rec.chapters.find((x) => x.key === f.chapterKey);
+      return { id: `f${i}`, label: `${f.at !== '' ? `${f.at} · ` : ''}${c?.title ?? f.chapter}${isPrivate ? '' : ` · ${f.issue}`}`.slice(0, 120),
+        note: rerecordNote(c === undefined ? undefined : { key: c.key, title: c.title }, f, { private: isPrivate }) };
+    }),
+    ...rec.chapters.filter((c) => !findings.some((f) => f.chapterKey === c.key)).map((c) => ({ id: `c:${c.key}`, label: `Chapter ${c.index}: ${c.title}`, note: rerecordNote({ key: c.key, title: c.title }) })),
+  ];
+  const editing = open !== null && open.take === take;
+  const startAgain = (): void => {
+    const first = choices.find((c) => c.id === 'f0') ?? choices[0]!;
+    setNote(null);
+    setOpen(editing ? null : { take, pick: first.id, text: first.note });
+  };
+  const send = async (): Promise<void> => {
+    if (busy || !editing) return;
     setBusy(true);
     setNote(null);
     try {
-      const result = await adapter.retake(chapter);
-      if (live.current && !('error' in result)) onChanged?.();
-      if (live.current) setNote('error' in result
-        ? { tone: 'bad', text: result.message }
-        : { tone: 'ok', text: 'The chapter was recorded again.' });
+      // The verb was drawn from one take: re-read it, and send only while the same take is still at its review gate.
+      const now = recordingOfDemo(await getDemo(runId));
+      if (!live.current) return;
+      const shown = recRef.current;
+      if (now.demoStage !== 'review_gate' || demoTakeFingerprint(now) !== open.take || shown === null || demoTakeFingerprint(shown) !== open.take) {
+        reload();
+        throw new Error('The take changed since this was shown — nothing was sent. Look at it again.');
+      }
+      const outcome = await sendBackDemo(runId, open.text.trim());
+      if (outcome === 'undone') throw new Error('Undone — nothing was sent.');
+      if (outcome !== 'sent') throw new Error('Not sent — the gate changed or was already answered.');
+      if (!live.current) return;
+      setOpen(null);
+      setNote({ tone: 'ok', text: 'Sent back to the planner. Approve the new plan and the engine records a new take.' });
+      reload();
+      onChanged?.();
     } catch (e) {
       if (live.current) setNote({ tone: 'bad', text: e instanceof Error ? e.message : String(e) });
     } finally {
-      pending.current = false;
       if (live.current) setBusy(false);
     }
   };
-  return <div className="wk-walk-actions">
-    <button type="button" data-testid="demo-retake-chapter" disabled={busy} onClick={() => void retake()} className="wk-prop-btn wk-prop-btn--ghost">Re-record this chapter</button>
-    {note !== null && <p data-testid="demo-retake-note" data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>}
-  </div>;
+  const makeCut = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const doc = await makeDemoDocument(runId);
+      if (!live.current) return;
+      setNote({ tone: 'ok', text: doc.created ? 'The cut is made: chapters, trims, captions and theme can now be edited, each change a version.' : 'The cut was made before.' });
+      reload();
+      onChanged?.();
+    } catch (e) {
+      if (live.current) setNote({ tone: 'bad', text: `The cut was not made: ${e instanceof Error ? e.message : String(e)}` });
+    } finally {
+      if (live.current) setBusy(false);
+    }
+  };
+  if (!atGate) {
+    return (
+      <div data-testid="demo-cut-actions" className="wk-walk-actions">
+        <button type="button" data-testid="demo-edit-cut" disabled={busy} onClick={() => void makeCut()} className="wk-prop-btn wk-prop-btn--ghost">{busy ? 'Making the cut…' : 'Edit the cut'}</button>
+        <NoteLine note={note} testId="demo-review-note" />
+      </div>
+    );
+  }
+  const line = demoReviewLine(rec);
+  const tone = review?.by === 'model' && (review.rejected || review.verdict === 'changes') ? 'bad' : review?.verdict === 'accept' ? 'ok' : 'quiet';
+  return (
+    <div data-testid="demo-review" className="wk-demo-review">
+      {line !== null && <p data-testid="demo-review-line" data-tone={tone} className={`wk-walk-quiet${tone === 'bad' ? ' wk-walk-bad' : ''}`}>{line}</p>}
+      {findings.length > 0 && (
+        <ol data-testid="demo-review-findings" className="wk-demo-findings">
+          {findings.map((f, i) => (
+            <li key={i} data-testid="demo-review-finding" data-verdict={f.verdict}>
+              <span className="wk-session-grey">{f.atSec !== null ? fmtTime(f.atSec) : f.at}{f.chapterKey !== null ? ` · ${rec.chapters.find((c) => c.key === f.chapterKey)?.title ?? f.chapter}` : ''}</span>
+              {' '}{f.issue}
+            </li>
+          ))}
+        </ol>
+      )}
+      {(rec.sheets ?? []).length > 0 && (
+        <div data-testid="demo-review-sheets" className="wk-demo-sheets">
+          {(rec.sheets ?? []).map((sh) => (
+            <a key={sh.name} href={demoFileUrl(runId, sh.path)} target="_blank" rel="noreferrer" data-testid="demo-review-sheet" data-sheet={sh.name} className="wk-demo-sheet" title={`${SHEET_LABEL[sh.name] ?? sh.name} (opens full size)`}>
+              <img src={demoFileUrl(runId, sh.path)} alt={SHEET_LABEL[sh.name] ?? sh.name} loading="lazy" />
+              <span className="wk-session-grey">{SHEET_LABEL[sh.name] ?? sh.name}</span>
+            </a>
+          ))}
+        </div>
+      )}
+      <div className="wk-walk-actions">
+        <button type="button" data-testid="demo-record-again" disabled={busy} aria-expanded={editing} onClick={startAgain} className="wk-prop-btn wk-prop-btn--ghost">Record it again</button>
+      </div>
+      {editing && (
+        <div data-testid="demo-record-again-box" className="wk-walk-edit">
+          <p className="wk-walk-quiet">The planner changes the plan with your note. You approve the new plan, then the engine records every chapter again.</p>
+          <label className="wk-walk-quiet">What to change
+            <select data-testid="demo-record-again-pick" value={open.pick} disabled={busy}
+              onChange={(e) => { const c = choices.find((x) => x.id === e.target.value); if (c !== undefined) setOpen({ take, pick: c.id, text: c.note }); }}>
+              {choices.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </label>
+          <textarea data-testid="demo-record-again-note" value={open.text} readOnly={busy} onChange={(e) => setOpen({ ...open, text: e.target.value })} rows={4} className="wk-walk-storyline" aria-label="The note to the planner" />
+          <div className="wk-prop-btns">
+            <button type="button" data-testid="demo-record-again-send" disabled={busy || open.text.trim() === ''} onClick={() => void send()} className="wk-prop-btn wk-prop-btn--primary">Send back and record again</button>
+            <button type="button" data-testid="demo-record-again-cancel" disabled={busy} onClick={() => setOpen(null)} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
+          </div>
+        </div>
+      )}
+      <NoteLine note={note} testId="demo-review-note" />
+    </div>
+  );
 }

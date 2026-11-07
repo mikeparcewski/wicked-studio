@@ -6,8 +6,8 @@ import type { LaunchDraft } from '../store/launchWizard.js';
  * what is sent and a launch is never refused for a shape the form could have caught.
  */
 
-/** "Demo video" (studio#664): a narrated recording of a running app, made by the `demo` preset. */
-export const DEMO_VIDEO_LINE = 'Record a narrated video of a running app';
+/** "Demo video" (studio#664): a captioned recording of a running app (no voice-over: the engine renders no audio), made by the `demo` preset. */
+export const DEMO_VIDEO_LINE = 'Record a captioned video of a running app';
 /** Who a demo is for: three common answers to start from; any words will do (crew takes free text). */
 export const DEMO_AUDIENCES = ['Executives', 'Engineers', 'Customers'] as const;
 /** crew's demo body bounds (`DemoLaunchSchema`): what the review shows is what is sent. */
