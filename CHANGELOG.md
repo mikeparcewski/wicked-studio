@@ -64,6 +64,24 @@ npm publish dates. Every version listed here exists on
 
 ### Removed
 - Studio's own guess of a workflow from a launch's words (`detectWorkflow`): reading what words ask for is crew's.
+### Fixed
+- **What a run made shows in its thread, filed or Unfiled (plugins S1, G1; DES-CHAT-ARTIFACTS-001 §7 slice A4).** A
+  document made by an Unfiled chat or run (crew's `default` mount) now renders in the thread. A run's documents are
+  the ones crew's `artifact_ref` names, crew's index binds to the run (`runs`), or, with no ref, its seam write root
+  names (a draft root exactly). A run that can have made none reads no document list, so no Unfiled bridge starts for
+  it. A chat proposal's card now has its run's artifacts right under it (the run's own block leaves them out, so each
+  card shows once); an older attempt at the same document says why it didn't land.
+
+### Added
+- **Run insights in a review run's thread (G2).** The review's own report, read-only in the card; open it to accept or
+  dismiss a recommendation beside it (the same decide panel as `/insights`). A review crew hasn't recorded yet is read
+  again until it is.
+- **The App card in an app turn's thread (G3).** What the turn did in crew's words (the version it made and its change
+  line, or why nothing landed), a picture of that version (crew's version read, wicked-crew api-types 0.196.0), and
+  Open the app.
+- **A demo's cut opens in its card (G7, piece 2).** Once the cut is made, the video card is bound to it (versions,
+  theme, exports), and the run thread tells the recording verbs that it does, so "Edit the cut" can be offered (with
+  studio#1026).
 
 ## [0.15.0] — 2026-11-05
 
