@@ -39,7 +39,9 @@ export function holdsLine(spec: AppSpec): string {
 
 type Asking = { version: number; state: 'reading' } | { version: number; state: 'read'; read: AppVersionView } | { version: number; state: 'failed'; message: string };
 
-export function AppVersions({ detail, session, pending = 0, disabledWhy, onDone, onClose }: {
+export function AppVersions({ detail, session, pending = 0, disabledWhy, onDone, onClose, onBusy }: {
+  /** Told when a restore starts and settles (the host keeps its Versions toggle from closing the panel under it). */
+  onBusy?: (busy: boolean) => void;
   detail: AppDetail;
   session: AppSession;
   /** Edits still saving: they land first, so the restore's version number is not known yet. */
@@ -73,12 +75,18 @@ export function AppVersions({ detail, session, pending = 0, disabledWhy, onDone,
   };
   const restore = async (version: number): Promise<void> => {
     setBusy(true);
+    onBusy?.(true);
     try {
       const r = await session.restore(version, head);
       onDone(r.ok ? `Restored v${version}: now v${r.version}` : r.message);
-      if (r.ok) setAsking(null);
+      if (r.ok) {
+        setAsking(null);
+        // The confirmation (and its focused button) is gone: the panel keeps the focus, so Escape still closes it.
+        requestAnimationFrame(() => panel.current?.focus());
+      }
     } finally {
       setBusy(false);
+      onBusy?.(false);
     }
   };
 

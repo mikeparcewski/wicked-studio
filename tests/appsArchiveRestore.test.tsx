@@ -184,10 +184,48 @@ describe('restore an earlier version: through the session’s one-change-at-a-ti
     expect(s.edit(1, [{ op: 'component-move', id: 'weekly', x: 0, y: 9 }])).toMatchObject({ ok: true });
     answer = { ...base, archived: { at: 2, by: 'sam' } } as AppDetail;
     await s.refresh();
-    expect(await s.flush()).toBe(false);
-    expect(edit).not.toHaveBeenCalled();
+    // Dropped as soon as the archive is seen (codex r2), saying so; a flush then has nothing to send.
     expect(s.pending).toBe(0);
     expect(failed.at(-1)).toMatch(/Not saved: the app is archived/);
+    expect(await s.flush()).toBe(true);
+    expect(edit).not.toHaveBeenCalled();
+  });
+
+  it('archived then restored elsewhere before the burst’s timer: the burst was dropped when the archive was seen, never saved (codex r2)', async () => {
+    const store = new SampleAppStore('esc', SPEC(), new MemStorage());
+    const base = await store.detail();
+    let answer: AppDetail = { ...base, archived: null } as AppDetail;
+    const edit = vi.fn();
+    const port: AppStorePort = { slug: 'esc', kind: 'sample', detail: async () => structuredClone(answer), edit, move: vi.fn(), restore: vi.fn(), readVersion: vi.fn() };
+    const s = new AppSession(port, { burstMs: 1_000 });
+    await s.load();
+    expect(s.edit(1, [{ op: 'component-move', id: 'weekly', x: 0, y: 9 }])).toMatchObject({ ok: true });
+    answer = { ...base, archived: { at: 2, by: 'sam' } } as AppDetail;
+    await s.refresh();
+    expect(s.pending).toBe(0);
+    answer = { ...base, archived: null } as AppDetail;
+    await s.refresh();
+    expect(await s.flush()).toBe(true);
+    expect(edit).not.toHaveBeenCalled();
+  });
+
+  it('take(): crew’s answer to an archive or unarchive becomes the session’s state, so a later re-archive is seen (codex r2)', async () => {
+    const store = new SampleAppStore('esc', SPEC(), new MemStorage());
+    const base = await store.detail();
+    let answer: AppDetail = { ...base, archived: { at: 1, by: 'you' } } as AppDetail;
+    const port: AppStorePort = { slug: 'esc', kind: 'sample', detail: async () => structuredClone(answer), edit: vi.fn(), move: vi.fn(), restore: vi.fn(), readVersion: vi.fn() };
+    const s = new AppSession(port);
+    await s.load();
+    expect(s.archived).toBe(true);
+    s.take({ ...base, archived: null } as AppDetail);
+    expect(s.archived).toBe(false);
+    // Another tab archives it again: the next read differs from what the session took, so it is seen.
+    const heads: AppDetail[] = [];
+    s.on((e) => { if (e.kind === 'head') heads.push(e.app); });
+    answer = { ...base, archived: { at: 3, by: 'sam' } } as AppDetail;
+    await s.refresh();
+    expect(s.archived).toBe(true);
+    expect(heads).toHaveLength(1);
   });
 
   it('archived or restored in another tab: a refresh takes the new state though the head did not move', async () => {
@@ -211,6 +249,14 @@ describe('restore an earlier version: through the session’s one-change-at-a-ti
     expect(await store.readVersion(9)).toMatchObject({ ok: false, code: 'unknown_version' });
     expect(await store.restore(3, 9)).toMatchObject({ ok: false, code: 'unknown_version' });
     expect(await store.restore(2, 1)).toMatchObject({ ok: false, code: 'stale_base', head: 3 });
+    // An unaccepted version (as a rejected turn's would be): neither read nor restored.
+    const mem = (store as unknown as { storage: Storage }).storage;
+    const key = 'wicked-apps-sample:esc';
+    const state = JSON.parse(mem.getItem(key)!) as { detail: AppDetail };
+    state.detail.versions[1]!.receipt = null;
+    mem.setItem(key, JSON.stringify(state));
+    expect(await store.readVersion(2)).toMatchObject({ ok: false, code: 'not_accepted' });
+    expect(await store.restore(3, 2)).toMatchObject({ ok: false, code: 'not_accepted' });
   });
 
   it('crew’s answers are read field by field: archived, and the version read', () => {
@@ -236,7 +282,7 @@ function crew(routes: (c: Call) => unknown): Call[] {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, 'http://studio.local');
     const c: Call = { method: init?.method ?? 'GET', path: url.pathname.replace(/^\/api\/v1/u, ''), query: url.search, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined };
     calls.push(c);
-    const out = routes(c);
+    const out: unknown = await routes(c);
     if (out === undefined) return new Response(JSON.stringify({ error: 'no route' }), { status: 404 });
     if (typeof out === 'object' && out !== null && '__status' in out) {
       const { __status, ...body } = out as { __status: number };
@@ -347,6 +393,37 @@ describe('/apps: Archive with Restore (never a delete)', () => {
     expect(screen.queryByTestId('apps-card-edit')).toBeNull();
     // No menu: Show on Report and Archive both change something (codex/pi r1).
     expect(screen.queryByTestId('apps-card-menu')).toBeNull();
+  });
+
+  it('Archive refused while a chat turn runs says so; a framed studio offers no Archive or Restore', async () => {
+    crew((c) => {
+      if (c.path === '/health') return { status: 'ok', capabilities: CAPS };
+      if (c.path === '/editors') return EDITORS;
+      if (c.path === '/editors/wicked-apps/grants') return { grants: [] };
+      if (c.path === '/apps') return { apps: [{ slug: 'desk', name: 'Desk', archived: null }, { slug: 'ops', name: 'Ops', archived: { at: 1, by: 'you' } }] };
+      if (c.path === '/apps/desk') return { app: detail('desk') };
+      if (c.path === '/apps/ops') return { app: detail('ops', { archived: { at: 1, by: 'you' } }) };
+      if (c.path === '/apps/desk/archive') return { __status: 409, code: 'turn_in_flight', error: 'a turn is changing desk' };
+      return undefined;
+    });
+    const r = render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    fireEvent.click(screen.getByTestId('apps-card-menu'));
+    fireEvent.click(screen.getByTestId('apps-card-archive'));
+    await waitFor(() => expect(screen.getByTestId('apps-archive-line').textContent).toMatch(/Not archived: A chat turn is changing the app/));
+    r.unmount();
+    Object.defineProperty(window, 'top', { configurable: true, get: () => ({}) });
+    try {
+      render(<AppsPage navigate={vi.fn()} />);
+      await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+      fireEvent.click(screen.getByTestId('apps-card-menu'));
+      expect(screen.queryByTestId('apps-card-archive')).toBeNull();
+      fireEvent.click(screen.getByTestId('apps-scope-archived'));
+      await waitFor(() => expect(screen.getAllByTestId('apps-card-archived')).toHaveLength(1));
+      expect(screen.queryByTestId('apps-card-unarchive')).toBeNull();
+    } finally {
+      Object.defineProperty(window, 'top', { configurable: true, get: () => window });
+    }
   });
 
   it('every app archived: the Archived switch is still there, so they can be restored (codex/pi r1)', async () => {
@@ -487,6 +564,63 @@ describe('the app host: Versions with Restore, an archived app, a phone', () => 
     await waitFor(() => expect(screen.queryByTestId('apps-archived-note')).toBeNull());
     expect(calls.filter((c) => c.method === 'POST').map((c) => c.path)).toStrictEqual(['/apps/desk/unarchive']);
     expect((screen.getByTestId('apps-mode-edit') as HTMLButtonElement).disabled).toBe(false);
+    // Another tab archives it again (crew's GET still says archived): the next read shows it (codex r2: the view and the
+    // session no longer split).
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(screen.getByTestId('apps-archived-note')).toBeTruthy());
+    expect((screen.getByTestId('apps-mode-edit') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('a daemon with no version route: the read says so, Restore stays off, and nothing is posted', async () => {
+    const calls = hostCrew(detail('desk'));
+    openHost();
+    await waitFor(() => expect((screen.getByTestId('apps-versions-open') as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('apps-versions-open'));
+    const row = screen.getAllByTestId('apps-versions-row').find((r) => r.getAttribute('data-version') === '1')!;
+    fireEvent.click(within(row).getByTestId('apps-version-restore'));
+    await waitFor(() => expect(screen.getByTestId('apps-version-failed').textContent).toMatch(/could not be read/));
+    expect((screen.getByTestId('apps-version-restore-confirm') as HTMLButtonElement).disabled).toBe(true);
+    expect(calls.filter((c) => c.method !== 'GET')).toStrictEqual([]);
+  });
+
+  it('a framed studio changes nothing: no Restore it, and every Restore… is off (says why)', async () => {
+    Object.defineProperty(window, 'top', { configurable: true, get: () => ({}) });
+    try {
+      const calls = hostCrew(detail('desk', { archived: { at: 1, by: 'you' } }));
+      openHost();
+      await waitFor(() => expect(screen.getByTestId('apps-archived-note')).toBeTruthy());
+      expect(screen.queryByTestId('apps-unarchive')).toBeNull();
+      fireEvent.click(screen.getByTestId('apps-versions-open'));
+      expect(screen.getByTestId('apps-versions-why').textContent).toMatch(/inside another page/);
+      for (const b of screen.getAllByTestId('apps-version-restore')) expect((b as HTMLButtonElement).disabled).toBe(true);
+      expect(calls.filter((c) => c.method !== 'GET')).toStrictEqual([]);
+    } finally {
+      Object.defineProperty(window, 'top', { configurable: true, get: () => window });
+    }
+  });
+
+  it('a restore on its way: Versions in the header cannot close the panel under it (codex r2)', async () => {
+    const d = detail('desk');
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    hostCrew(d, (c) => {
+      if (c.path === '/apps/desk/versions/1') return { version: { slug: 'desk', version: version(1), commit: 'c1', tree: 't1', receipt: { kind: 'you' }, spec: SPEC(), lock: {}, queryText: {} } };
+      if (c.path === '/apps/desk/restore') return held.then(() => ({ app: { ...d, head: { version: 4, tree: 't1', receipt: 'restored' }, versions: [...d.versions, version(4, 'restored')] }, landed: version(4, 'restored') }));
+      return undefined;
+    });
+    openHost();
+    await waitFor(() => expect((screen.getByTestId('apps-versions-open') as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('apps-versions-open'));
+    const row = screen.getAllByTestId('apps-versions-row').find((r) => r.getAttribute('data-version') === '1')!;
+    fireEvent.click(within(row).getByTestId('apps-version-restore'));
+    await waitFor(() => expect((screen.getByTestId('apps-version-restore-confirm') as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('apps-version-restore-confirm'));
+    await waitFor(() => expect((screen.getByTestId('apps-versions-open') as HTMLButtonElement).disabled).toBe(true));
+    expect((screen.getByTestId('apps-version-restore-cancel') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('apps-versions-close') as HTMLButtonElement).disabled).toBe(true);
+    release();
+    await waitFor(() => expect((screen.getByTestId('apps-versions-open') as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('apps-versions')));
   });
 
   it('a phone is view + chat only: no Edit switch, Undo, Redo, Versions, chat Undo or Show on Report; nothing is posted (codex r1)', async () => {
