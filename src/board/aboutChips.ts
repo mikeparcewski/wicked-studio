@@ -19,8 +19,15 @@ export type AboutChip =
   /** A destination: the project the message goes to. */
   | { kind: 'project'; key: string; label: string; projectId: string }
   /** S19a: the workflow this message STARTS (`label` is the card's title). One at a time. `entryId` (ux-tonight): the
-   *  catalog card picked, so two cards that launch one workflow keep their own needs. */
-  | { kind: 'workflow'; key: string; label: string; workflowId: string; entryId?: string };
+   *  catalog card picked, so two cards that launch one workflow keep their own needs.
+   *  DES-CATALOG-002 §8.5 (Lane E2): a pick from the v2 `/` list is a JOB chip (`job: true`): it keeps the exact pick,
+   *  the card (`entryId`), its `option` and `depth` (two variants can share one workflow: `/migrate upgrade` and
+   *  `/migrate in-place` both run `migration`), and `card`, what the proposal names on the wire (the card id, or the
+   *  alias that reached it). Enter posts the person-made proposal; it never launches. */
+  | {
+    kind: 'workflow'; key: string; label: string; workflowId: string; entryId?: string;
+    job?: true; card?: string; option?: string | null; depth?: 'quick' | 'standard' | 'deep' | null;
+  };
 
 /** The longest quote a selection becomes before it is cut with "…". */
 export const QUOTE_MAX = 42;

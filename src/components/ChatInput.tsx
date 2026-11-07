@@ -22,7 +22,7 @@ import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
 import { noCarryingSeatReason } from './gateVerdictModel.js';
-import { baseSkillRefusalOf, describeBaseSkill, detectWorkflow, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
+import { baseSkillRefusalOf, describeBaseSkill, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { menuToken, dropToken } from '../board/planDraft.js';
@@ -779,11 +779,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (!problem.trim() || selectedClis.size === 0 || submitting) return;
     // studio#315: Cmd+Enter takes the same refusal as the disabled Send — zero POST /runs.
     if (noCarryingSeatReason(selectedClis, roster) !== null) return;
-    // §7.8 preflight (EC43): a code-shaped intent — an explicit workflow, or
-    // the detector reading one from the text — launched with no repo attached
-    // cannot produce reviewable work. Warn-and-block: ZERO POST /runs until a
-    // repo attaches or the operator overrides ("Launch anyway").
-    const codeShaped = Boolean(selection.composing || workflowOverride?.trim() || workflow || detectWorkflow(problem));
+    // §7.8 preflight (EC43): a code-shaped intent — an explicit workflow — launched with no repo attached
+    // cannot produce reviewable work. Warn-and-block: ZERO POST /runs until a repo attaches or the operator
+    // overrides ("Launch anyway"). Studio no longer guesses a workflow from the words (DES-CATALOG-002 §8.6:
+    // reading what words ask for is crew's).
+    const codeShaped = Boolean(selection.composing || workflowOverride?.trim() || workflow);
     if (!preflightOverride && launchNeedsRepo(codeShaped, noRepoAttached)) {
       setPreflightBlocked(true);
       return;

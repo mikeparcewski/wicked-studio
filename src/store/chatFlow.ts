@@ -73,6 +73,15 @@ export function openChatFlow(opts: { projectId?: string | null; seedText?: strin
   return chatId;
 }
 
+/**
+ * Go to a chat the daemon already holds (DES-CATALOG-002 §4.6, the adopt path): a seeded chat whose id crew derived
+ * (`POST /chats {seed}`). Unlike {@link openChatFlow} it mints no id and marks nothing fresh: the page reads the chat
+ * (and its proposal) back from the daemon.
+ */
+export function openChat(chatId: string): void {
+  useChatFlow.setState((s) => ({ request: { nonce: (s.request?.nonce ?? 0) + 1, chatId } }));
+}
+
 /** The fresh chat this id names (opened by `openChatFlow`, no message sent yet), or null. */
 export function freshChat(chatId: string): FreshChat | null {
   return useChatFlow.getState().fresh[chatId] ?? null;

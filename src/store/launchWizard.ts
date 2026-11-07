@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type { ConfirmMode } from '../components/ContextPopover.js';
 import { openChatFlow } from './chatFlow.js';
+import { commandsOnNow } from './catalogV2.js';
+import { pageComposerKey, seedComposer } from './composerSeed.js';
+import { startInChat } from './inlineStart.js';
 import { composerPrefsLoading, useComposerPrefsStore } from './composerPrefs.js';
 
 /**
@@ -163,6 +166,22 @@ let openGeneration = 0;
 
 export function openLaunchWizard(init: OpenLaunchWizard): void {
   const gen = ++openGeneration;
+  // DES-CATALOG-002 §8.6 (Lane E2): on a daemon that takes job proposals from a chat and serves the v2 catalog, New
+  // job's steps and card grid are gone. A named job starts in a chat (`startInChat`: its proposal, then Start); a plain
+  // New job is the `/` command list on this page's composer, or in a new chat. A job with no card on the wire (a saved
+  // workflow, an older card) keeps today's form.
+  if (commandsOnNow()) {
+    if ((init.workflowId ?? null) !== null) {
+      void startInChat({
+        workflowId: init.workflowId!, words: init.intent ?? '', projectId: init.projectId ?? null, repoRef: init.contextRepo ?? null,
+        ...(init.requirements !== undefined ? { requirements: init.requirements } : {}),
+      }).then((ok) => { if (!ok && gen === openGeneration) useLaunchWizard.getState().openWith(init); },
+        () => { if (gen === openGeneration) useLaunchWizard.getState().openWith(init); });
+      return;
+    }
+    openCommandList(init);
+    return;
+  }
   if (!isGenericNewJob(init)) {
     useLaunchWizard.getState().openWith(init);
     return;
@@ -184,6 +203,26 @@ function openGenericNewJob(init: OpenLaunchWizard): void {
     return;
   }
   useLaunchWizard.getState().openWith(init);
+}
+
+/**
+ * A plain New job on a capable daemon: words brought along wait in a new chat's composer (Enter sends them; the chat
+ * proposes the job), and with none the `/` command list opens on the composer on screen, else in a new chat.
+ * Nothing is sent.
+ */
+function openCommandList(init: OpenLaunchWizard): void {
+  const intent = (init.intent ?? '').trim();
+  if (intent !== '') {
+    openChatFlow({ projectId: init.projectId ?? null, seedText: init.intent ?? '' });
+    return;
+  }
+  const here = typeof document === 'undefined' ? null : pageComposerKey();
+  if (here !== null) {
+    seedComposer(here, '/');
+    return;
+  }
+  const chatId = openChatFlow({ projectId: init.projectId ?? null });
+  seedComposer(chatId, '/');
 }
 
 /** Test hook. */
