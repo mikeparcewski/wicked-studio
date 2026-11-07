@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ApiError } from '../src/api/errors.js';
 import { requirementsNotGenerated } from '../src/board/requirementsState.js';
+import * as m from '../src/board/requirementsState.js';
 
 describe('requirementsNotGenerated (lane repo-page)', () => {
   it('reads crew\'s typed 404 and the workflow it names', () => {
@@ -139,5 +140,35 @@ describe('not counted (crew api-types 0.167.0)', () => {
     expect(uncountedLine({ stated: 0, placeholders: 0 })).toBeNull();
     expect(configDataCountOf({ categories: { functional: 5770, configData: 0 } })).toBe(0);
     expect(configDataCountOf({})).toBeNull();
+  });
+});
+
+describe('code age, minimum and mismatches (crew api-types 0.196.0)', () => {
+  it('says the code age only when it is known and not zero, singular for one', () => {
+    const now = new Date('2026-11-07T00:00:00Z');
+    expect(m.codeDriftLine(m.codeDriftOf({ codeDrift: { builtFromCommit: 'abc1234', builtAt: '2026-11-01T13:57:56-05:00', commitsBehind: 69 } }), now))
+      .toBe('Built from code 69 commits old (Nov 1)');
+    expect(m.codeDriftLine(m.codeDriftOf({ codeDrift: { builtFromCommit: 'abc1234', builtAt: null, commitsBehind: 1 } }), now)).toBe('Built from code 1 commit old');
+    expect(m.codeDriftLine(m.codeDriftOf({ codeDrift: { builtFromCommit: 'abc1234', builtAt: null, commitsBehind: 0 } }), now)).toBeNull();
+    expect(m.codeDriftLine(m.codeDriftOf({ codeDrift: { builtFromCommit: 'abc1234', builtAt: null, commitsBehind: null } }), now)).toBeNull();
+    expect(m.codeDriftOf({ codeDrift: { builtFromCommit: 'HEAD', commitsBehind: 3 } })).toBeNull();
+    expect(m.codeDriftLine(m.codeDriftOf({ codeDrift: { builtFromCommit: 'abc1234', builtAt: '2025-12-24T00:00:00Z', commitsBehind: 2 } }), now))
+      .toMatch(/^Built from code 2 commits old \(Dec 2[34], 2025\)$/);
+  });
+  it('reads the minimum and its source, and nothing malformed', () => {
+    const repo = m.minimumOf({ minimum: { pct: 66, source: 'repo', repoPct: 66, settingsPct: 80 } });
+    expect(repo && m.minimumLine(repo)).toBe("Minimum 66%, this repository's own (Settings: 80%)");
+    const settings = m.minimumOf({ minimum: { pct: 80, source: 'settings', repoPct: null, settingsPct: 80 } });
+    expect(settings && m.minimumLine(settings)).toBe('Minimum 80%, from Settings');
+    expect(m.minimumOf({ minimum: { pct: 0, source: 'repo' } })).toBeNull();
+    expect(m.minimumOf({ minimum: { pct: 80, source: 'guess' } })).toBeNull();
+    expect(m.minimumOf({})).toBeNull();
+  });
+  it('reads a code mismatch and the count, and nothing from an older daemon', () => {
+    expect(m.codeMismatchOf({ codeMismatch: ' skips the first ' })).toBe('skips the first');
+    expect(m.codeMismatchOf({ codeMismatch: '  ' })).toBeNull();
+    expect(m.codeMismatchOf({})).toBeNull();
+    expect(m.mismatchCountOf({ mismatches: 2 })).toBe(2);
+    expect(m.mismatchCountOf({})).toBeNull();
   });
 });
