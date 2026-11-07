@@ -289,8 +289,13 @@ export function commandList(view: WorkflowCatalogV2Response, text: string, looks
     // A whole command, then more: an option word being typed lists that card's sub-commands; anything else is words.
     if (whole !== undefined && parts.length === 2 && parts[1] !== '' && aliased === undefined) {
       const w = lower(parts[1]!);
-      const subs = all.filter((r) => r.kind === 'option' && r.card === whole.id && r.command !== null && lower(r.command).split(/\s+/u)[1]?.startsWith(w) === true);
-      if (subs.length > 0 && !subs.some((r) => lower(r.command!).split(/\s+/u)[1] === w && query.endsWith(' '))) return { open: true, rows: subs, freeWords: null, query };
+      // By the option word the parser reads (the wire's `optionWord`), so the list and the parser agree (pi r1).
+      const wordOf = (r: CommandRow): string | null => {
+        const o = whole.variant?.options.find((x) => x.id === r.option);
+        return o === undefined ? null : optionWordOf(o);
+      };
+      const subs = all.filter((r) => r.kind === 'option' && r.card === whole.id && wordOf(r)?.startsWith(w) === true);
+      if (subs.length > 0) return { open: true, rows: subs, freeWords: null, query };
     }
     return { open: false };
   }

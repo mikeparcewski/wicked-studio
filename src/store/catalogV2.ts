@@ -40,8 +40,18 @@ function isV2(body: unknown): body is WorkflowCatalogV2Response {
   return b !== null && typeof b === 'object' && b.version === 2 && Array.isArray(b.cards) && Array.isArray(b.categories);
 }
 
+/** Reads out, by project: a caller that needs the answer waits for the newest one (codex r1: two readers race). */
+const inflight = new Map<string, Promise<CatalogV2Load | null>>();
+
 /** Read one project's v2 catalog (a GET). The answer lands only if no newer read was asked since. */
-export async function readCatalogV2(projectId: string | null): Promise<CatalogV2Load | null> {
+export function readCatalogV2(projectId: string | null): Promise<CatalogV2Load | null> {
+  const key = keyOf(projectId);
+  const p = readOnce(projectId).finally(() => { if (inflight.get(key) === p) inflight.delete(key); });
+  inflight.set(key, p);
+  return p;
+}
+
+async function readOnce(projectId: string | null): Promise<CatalogV2Load | null> {
   const key = keyOf(projectId);
   const gen = (asked.get(key) ?? 0) + 1;
   asked.set(key, gen);
@@ -59,13 +69,18 @@ export async function readCatalogV2(projectId: string | null): Promise<CatalogV2
   return load;
 }
 
-/** The v2 catalog for a project once read (or null), reading it if nothing is cached. */
-export async function catalogV2Now(projectId: string | null): Promise<WorkflowCatalogV2Response | null> {
-  const have = cache.get(keyOf(projectId));
-  if (have?.state === 'ready') return have.view;
-  const load = await readCatalogV2(projectId);
-  const now = load ?? cache.get(keyOf(projectId));
-  return now?.state === 'ready' ? now.view : null;
+/** The v2 catalog for a project as of now: the cached one, else the newest read's answer (a superseded read waits for
+ *  the read that replaced it). `error` = it could not be read, which is not "no such card". */
+export async function catalogV2Now(projectId: string | null): Promise<CatalogV2Load> {
+  const key = keyOf(projectId);
+  for (let i = 0; i < 3; i += 1) {
+    const have = cache.get(key);
+    if (have?.state === 'ready') return have;
+    const out = inflight.get(key);
+    const load = await (out ?? readCatalogV2(projectId));
+    if (load !== null) return load;
+  }
+  return cache.get(key) ?? { state: 'error' };
 }
 
 const LOADING: CatalogV2Load = { state: 'loading' };
@@ -90,6 +105,7 @@ export function useCatalogV2(projectId: string | null, on: boolean, enabled: boo
 export function resetCatalogV2(): void {
   cache.clear();
   asked.clear();
+  inflight.clear();
   epoch += 1;
   notify();
 }

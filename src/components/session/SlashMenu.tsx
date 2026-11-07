@@ -154,7 +154,10 @@ export function SlashMenu({
                 data-option={it.option ?? ''}
                 {...(it.command !== null ? { 'data-cmd': it.command } : {})}
                 title={it.line}
-                onMouseDown={(e) => { e.preventDefault(); onPickCommand?.(it); }}
+                // Picked on click (a pointer, a keyboard or an assistive technology's activation: codex r1); the
+                // pointer-down only keeps the box's focus.
+                onMouseDown={(e) => { e.preventDefault(); }}
+                onClick={() => onPickCommand?.(it)}
                 className={`wk-composer-menu-item wk-composer-menu-item--cmd${sub ? ' wk-composer-menu-item--sub' : ''}${i === active ? ' wk-composer-menu-item--on' : ''}`}
               >
                 <span className="wk-composer-cmd wk-composer-cmd--v2">

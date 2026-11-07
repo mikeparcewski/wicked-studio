@@ -12,7 +12,7 @@ const titleOf = new Map(golden.categories.map((c) => [c.id, c.title]));
 
 describe('the `/` list scorer is crew’s words layer (golden)', () => {
   it('has cases that rank something', () => {
-    expect(golden.cases.length).toBeGreaterThanOrEqual(30);
+    expect(golden.cases.length).toBeGreaterThanOrEqual(80);
     expect(golden.cases.filter((c) => c.ranked.length > 0).length).toBeGreaterThanOrEqual(28);
   });
   for (const c of golden.cases) {

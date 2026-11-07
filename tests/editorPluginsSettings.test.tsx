@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CREATE_EDITOR_WORKFLOW_ID,
   devHostHref,
@@ -12,6 +12,11 @@ import { PluginsPage, cardsOf, editorLooks, filterCards, slotWords } from '../sr
 import { RUN_PLUGINS } from '../src/plugins/runPlugins.js';
 import { useLaunchWizard } from '../src/store/launchWizard.js';
 import { takeComposerSeed } from '../src/store/composerSeed.js';
+import { useCapabilities } from '../src/store/capabilities.js';
+
+// An older daemon whose capabilities are read (cat2-commands: New job and the `/` list wait for them; a daemon that
+// takes job proposals gets the v2 command list instead, pinned in tests/commandList.e2.test.tsx).
+beforeEach(() => { useCapabilities.setState({ loaded: true, chatJobProposals: false, workflowCatalogV2: false }); });
 
 /** A plugin's card on the Plugins page, once the list is read. */
 async function tileOf(id: string): Promise<HTMLElement> {

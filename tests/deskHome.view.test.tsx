@@ -7,6 +7,11 @@ import { useBatchGateStore } from '../src/board/batchGates.js';
 import { useLaunchWizard, resetLaunchWizard } from '../src/store/launchWizard.js';
 import { useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { NOW, deskRun } from './fixtures/deskV2.js';
+import { useCapabilities } from '../src/store/capabilities.js';
+
+// An older daemon whose capabilities are read (cat2-commands: New job waits for them; a daemon that takes job
+// proposals gets the v2 command list instead, pinned in tests/commandList.e2.test.tsx).
+beforeEach(() => { useCapabilities.setState({ loaded: true, chatJobProposals: false, workflowCatalogV2: false }); });
 
 /**
  * The landing (home v2) on screen: one sentence, the ask box starts the New job flow, ONE card with

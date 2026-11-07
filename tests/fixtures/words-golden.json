@@ -2660,6 +2660,1490 @@
           "score": 1.3333333333333333
         }
       ]
+    },
+    {
+      "q": "doc the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "document",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-documents",
+          "score": 2
+        },
+        {
+          "card": "critique",
+          "score": 2
+        },
+        {
+          "card": "decide",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "interactive-page",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "estimate-price",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "run-cost",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "operating-model",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "respond",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "rework",
+          "score": 0.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "document the payments service",
+      "ranked": [
+        {
+          "card": "analyze-documents",
+          "score": 4
+        },
+        {
+          "card": "critique",
+          "score": 4
+        },
+        {
+          "card": "document",
+          "score": 4
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "due-diligence",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "decide",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "interactive-page",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "estimate-price",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "run-cost",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "operating-model",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "respond",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "rework",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "documentation the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "document",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-documents",
+          "score": 2
+        },
+        {
+          "card": "critique",
+          "score": 2
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "decide",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "interactive-page",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "estimate-price",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "run-cost",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "operating-model",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "respond",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "rework",
+          "score": 0.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "readme the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "document",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "decide",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "guide the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "document",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "demo-video",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "write the payments service",
+      "ranked": [
+        {
+          "card": "write-tests",
+          "score": 4
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "document",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "communicate",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "decide",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "explain the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "document",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "demo-video",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "propose",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "retro",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "learn the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "propose",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "retro",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "research",
+          "score": 2
+        },
+        {
+          "card": "demo-video",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "slide the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "document",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "rework",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "deck the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "document",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "rework",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "pitch the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "document",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "video the payments service",
+      "ranked": [
+        {
+          "card": "demo-video",
+          "score": 4
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "communicate",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "record the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "demo-video",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "communicate",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "screencast the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "demo-video",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "communicate",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "bug the payments service",
+      "ranked": [
+        {
+          "card": "bug",
+          "score": 4
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "incident",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "suite-health",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "security",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "issue the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "bug",
+          "score": 2
+        },
+        {
+          "card": "suite-health",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "incident",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "security",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "fix the payments service",
+      "ranked": [
+        {
+          "card": "bug",
+          "score": 4
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "suite-health",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "incident",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "security",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "broken the payments service",
+      "ranked": [
+        {
+          "card": "bug",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "suite-health",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "incident",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "break the payments service",
+      "ranked": [
+        {
+          "card": "plan-it",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "migrate",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "backlog",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "bug",
+          "score": 2
+        },
+        {
+          "card": "suite-health",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "incident",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "crash the payments service",
+      "ranked": [
+        {
+          "card": "bug",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "suite-health",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "incident",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "error the payments service",
+      "ranked": [
+        {
+          "card": "bug",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "incident",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "suite-health",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "fail the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 4.166666666666666
+        },
+        {
+          "card": "bug",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "suite-health",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "review-change",
+          "score": 2
+        },
+        {
+          "card": "security",
+          "score": 2
+        },
+        {
+          "card": "review-recent-work",
+          "score": 2
+        },
+        {
+          "card": "critique",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "risk",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "feature",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "demo-video",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "failure the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 4.166666666666666
+        },
+        {
+          "card": "suite-health",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "risk",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "review-change",
+          "score": 2
+        },
+        {
+          "card": "security",
+          "score": 2
+        },
+        {
+          "card": "review-recent-work",
+          "score": 2
+        },
+        {
+          "card": "bug",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "critique",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "feature",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "demo-video",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "why the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 4.166666666666666
+        },
+        {
+          "card": "incident",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "reconstruct",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "communicate",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 2
+        },
+        {
+          "card": "analyze-documents",
+          "score": 2
+        },
+        {
+          "card": "review-change",
+          "score": 2
+        },
+        {
+          "card": "security",
+          "score": 2
+        },
+        {
+          "card": "analyze-runs",
+          "score": 2
+        },
+        {
+          "card": "review-recent-work",
+          "score": 2
+        },
+        {
+          "card": "critique",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "feature",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "demo-video",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "map-requirements",
+          "score": 0.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "went the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 4.166666666666666
+        },
+        {
+          "card": "review-recent-work",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "retro",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "review-change",
+          "score": 2
+        },
+        {
+          "card": "security",
+          "score": 2
+        },
+        {
+          "card": "critique",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "feature",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "demo-video",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "happen the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 4.166666666666666
+        },
+        {
+          "card": "reconstruct",
+          "score": 4
+        },
+        {
+          "card": "review-change",
+          "score": 2
+        },
+        {
+          "card": "security",
+          "score": 2
+        },
+        {
+          "card": "review-recent-work",
+          "score": 2
+        },
+        {
+          "card": "critique",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "feature",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "demo-video",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "run the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 4.166666666666666
+        },
+        {
+          "card": "write-tests",
+          "score": 4
+        },
+        {
+          "card": "run-cost",
+          "score": 4
+        },
+        {
+          "card": "analyze-runs",
+          "score": 4
+        },
+        {
+          "card": "communicate",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "review-recent-work",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "review-change",
+          "score": 2
+        },
+        {
+          "card": "security",
+          "score": 2
+        },
+        {
+          "card": "suite-health",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "reconstruct",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "critique",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "feature",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "demo-video",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "retro",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "job the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 4.166666666666666
+        },
+        {
+          "card": "write-tests",
+          "score": 2
+        },
+        {
+          "card": "review-change",
+          "score": 2
+        },
+        {
+          "card": "security",
+          "score": 2
+        },
+        {
+          "card": "run-cost",
+          "score": 2
+        },
+        {
+          "card": "analyze-runs",
+          "score": 2
+        },
+        {
+          "card": "review-recent-work",
+          "score": 2
+        },
+        {
+          "card": "plan-it",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "critique",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "communicate",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "feature",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "suite-health",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "reconstruct",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "demo-video",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "retro",
+          "score": 0.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "upgrade the payments service",
+      "ranked": [
+        {
+          "card": "migrate",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "migrate the payments service",
+      "ranked": [
+        {
+          "card": "migrate",
+          "score": 4
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "port the payments service",
+      "ranked": [
+        {
+          "card": "migrate",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "move the payments service",
+      "ranked": [
+        {
+          "card": "migrate",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "test the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 5
+        },
+        {
+          "card": "plan-tests",
+          "score": 4
+        },
+        {
+          "card": "write-tests",
+          "score": 4
+        },
+        {
+          "card": "suite-health",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "evaluate-rules",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "feature",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "studio-plugin",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "bug",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "refactor",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "analyze-runs",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "coverage the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 4.166666666666666
+        },
+        {
+          "card": "plan-tests",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "map-requirements",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "evaluate-rules",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "write-tests",
+          "score": 2
+        },
+        {
+          "card": "competitive",
+          "score": 2
+        },
+        {
+          "card": "risk",
+          "score": 2
+        },
+        {
+          "card": "suite-health",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "feature",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "studio-plugin",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "plan the payments service",
+      "ranked": [
+        {
+          "card": "plan-it",
+          "score": 4
+        },
+        {
+          "card": "plan-tests",
+          "score": 4
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "migrate",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "run-cost",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "automate the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "write-tests",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "plan-tests",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "domain the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "run-cost",
+          "score": 2
+        },
+        {
+          "card": "operating-model",
+          "score": 2
+        }
+      ]
+    },
+    {
+      "q": "business the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "plugin the payments service",
+      "ranked": [
+        {
+          "card": "studio-plugin",
+          "score": 4
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "extension the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "studio-plugin",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "editor the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "studio-plugin",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "tool the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 6.666666666666666
+        }
+      ]
+    },
+    {
+      "q": "mcp the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 6.666666666666666
+        }
+      ]
+    },
+    {
+      "q": "build the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 5
+        },
+        {
+          "card": "feature",
+          "score": 4
+        },
+        {
+          "card": "bug",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "migrate",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "refactor",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "release",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "studio-plugin",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "document",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "interactive-page",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "demo-video",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "respond",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "rework",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "communicate",
+          "score": 0.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "add the payments service",
+      "ranked": [
+        {
+          "card": "feature",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "write-tests",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "feature the payments service",
+      "ranked": [
+        {
+          "card": "feature",
+          "score": 4
+        },
+        {
+          "card": "start-new",
+          "score": 3.7499999999999996
+        },
+        {
+          "card": "bug",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "migrate",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "refactor",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "release",
+          "score": 0.3333333333333333
+        },
+        {
+          "card": "studio-plugin",
+          "score": 0.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "app the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "demo-video",
+          "score": 1.3333333333333333
+        }
+      ]
+    },
+    {
+      "q": "dashboard the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "demo-video",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "validate the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "feature",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "bug",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "check the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 4.166666666666666
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "review-change",
+          "score": 2
+        },
+        {
+          "card": "security",
+          "score": 2
+        },
+        {
+          "card": "review-recent-work",
+          "score": 2
+        },
+        {
+          "card": "feature",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "bug",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "critique",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "due-diligence",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "demo-video",
+          "score": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "q": "verify the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 2.6666666666666665
+        }
+      ]
+    },
+    {
+      "q": "review the payments service",
+      "ranked": [
+        {
+          "card": "start-new",
+          "score": 5
+        },
+        {
+          "card": "review-change",
+          "score": 4
+        },
+        {
+          "card": "security",
+          "score": 4
+        },
+        {
+          "card": "review-recent-work",
+          "score": 4
+        },
+        {
+          "card": "critique",
+          "score": 2.6666666666666665
+        },
+        {
+          "card": "analyze-codebase",
+          "score": 2
+        },
+        {
+          "card": "analyze-documents",
+          "score": 2
+        },
+        {
+          "card": "analyze-runs",
+          "score": 2
+        },
+        {
+          "card": "feature",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "due-diligence",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "demo-video",
+          "score": 1.3333333333333333
+        },
+        {
+          "card": "bug",
+          "score": 0.6666666666666666
+        },
+        {
+          "card": "map-requirements",
+          "score": 0.3333333333333333
+        }
+      ]
     }
   ]
 }

@@ -11,6 +11,11 @@ import { DEMO_VIDEO_ID, openLaunchWizard, resetLaunchWizard, useLaunchWizard } f
 import { demoVideoProjectOf } from '../src/components/session/RunArtifacts.js';
 import type { DocSummary } from '../src/api/interactive.js';
 import type { SessionView } from '../src/api/types.js';
+import { useCapabilities } from '../src/store/capabilities.js';
+
+// An older daemon whose capabilities are read (cat2-commands: New job and the `/` list wait for them; a daemon that
+// takes job proposals gets the v2 command list instead, pinned in tests/commandList.e2.test.tsx).
+beforeEach(() => { useCapabilities.setState({ loaded: true, chatJobProposals: false, workflowCatalogV2: false }); });
 
 beforeEach(() => {
   resetLaunchWizard();

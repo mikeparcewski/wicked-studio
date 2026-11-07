@@ -200,5 +200,7 @@
 @media (max-width: 600px) {
   .wk-composer-menu-item--cmd { flex-direction: column; align-items: flex-start; gap: 1px; padding-block: 6px; white-space: normal; }
   .wk-composer-menu-item--cmd .wk-composer-cmd-desc { width: 100%; }
+  .wk-composer-menu-item--cmd .wk-composer-cmd--v2 { flex-wrap: wrap; column-gap: 8px; row-gap: 0; max-width: 100%; }
+  .wk-composer-cmd--v2 .wk-composer-cmd-title { white-space: normal; }
   .wk-composer-menu-item--sub { padding-left: 20px; }
 }

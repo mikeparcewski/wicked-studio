@@ -79,9 +79,13 @@ export interface JobPost {
   repoRef?: string | null;
   /** Kept per pick, so a retry of the same body is the same request (crew answers the same proposal). */
   pickKey: string;
+  /** Whether the person still wants this one (a later opener supersedes it): checked before the post and before the
+   *  chat it made is opened. */
+  stillWanted?: () => boolean;
 }
 
-/** The request id a pick's body was sent under: a retry of the same body reuses it, another body gets its own. */
+/** The request id a pick's body was sent under: a retry of the same body reuses it, another body gets its own. Spent
+ *  once the post is answered (codex r1: the next identical job is a new request). */
 const sent = new Map<string, { body: string; requestId: string }>();
 
 function requestIdFor(pickKey: string, body: string): string {
@@ -93,18 +97,31 @@ function requestIdFor(pickKey: string, body: string): string {
   return requestId;
 }
 
+/** A named opener's own envelope, kept with its job chip until the job is posted: where it opens (the project, the
+ *  repository) and the requirements the person chose (codex r1: a retry after a failed seed keeps all of it). */
+interface Envelope {
+  projectId: string | null;
+  repoRef: string | null;
+  requirements: { inputId: string; refs: Array<{ repoId: string; key: string }> } | null;
+}
+const envelopes = new Map<string, Envelope>();
+
 /** The scope a seeded chat opens in: the project, and the repository when one is named. */
 function seedScope(projectId: string | null, repoRef: string | null | undefined): Pick<ChatOpenBody, 'projectId' | 'repoRefs'> {
-  const project = projectId !== null && projectId !== '' && projectId !== 'default' ? { projectId } : {};
+  const project = projectId !== null && projectId !== '' && projectId !== 'default' && projectId !== UNFILED_MOUNT ? { projectId } : {};
   return repoRef !== undefined && repoRef !== null && repoRef !== '' ? { repoRefs: [repoRef], ...project } : project;
 }
 
 /**
  * Post a job as the person's proposal, never a launch: into the live chat (`POST /chats/:id/proposals`), or, with no
  * live chat, as the seed of a new one (`POST /chats {seed}`), which then opens ({@link openChat}). Resolves to the
- * chat the proposal is in and its view. Throws with the daemon's words when it is refused.
+ * chat the proposal is in and its view (null when the person no longer wants it). Throws with the daemon's words when
+ * it is refused.
  */
-export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: ChatProposalView | null }> {
+export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: ChatProposalView | null } | null> {
+  const wanted = p.stillWanted ?? ((): boolean => true);
+  if (!wanted()) return null;
+  const env = envelopes.get(p.pickKey);
   const fields = {
     card: p.card,
     ...(p.option !== null ? { option: p.option } : {}),
@@ -112,19 +129,37 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     ...(p.words.trim() !== '' ? { words: p.words.trim() } : {}),
     source: p.source,
   };
+  let out: { chatId: string; proposal: ChatProposalView | null };
   if (p.chatId !== null) {
     const body = JSON.stringify(['chat', p.chatId, fields]);
     const { view } = await api.proposeInChat(p.chatId, { ...fields, requestId: requestIdFor(p.pickKey, body) });
-    return { chatId: p.chatId, proposal: view };
+    out = { chatId: p.chatId, proposal: view };
+  } else {
+    const scope = env !== undefined ? seedScope(env.projectId, env.repoRef) : seedScope(p.projectId, p.repoRef);
+    const body = JSON.stringify(['seed', fields, scope]);
+    const res = await api.openChat({ seed: fields, requestId: requestIdFor(p.pickKey, body), ...scope });
+    // A refused seed opened its chat but made no proposal: say why where the person is. A retry of the same body is the
+    // same request, so crew answers that chat and completes its proposal (§4.6).
+    if (res.proposal === undefined && res.seedRefused !== undefined) throw new Error(res.seedRefused.error);
+    out = { chatId: res.chatId, proposal: res.proposal ?? null };
   }
-  const scope = seedScope(p.projectId, p.repoRef);
-  const body = JSON.stringify(['seed', fields, scope]);
-  const res = await api.openChat({ seed: fields, requestId: requestIdFor(p.pickKey, body), ...scope });
-  // A refused seed opened its chat but made no proposal: say why where the person is. A retry of the same body is the
-  // same request, so crew answers that chat and completes its proposal (§4.6).
-  if (res.proposal === undefined && res.seedRefused !== undefined) throw new Error(res.seedRefused.error);
-  openChat(res.chatId);
-  return { chatId: res.chatId, proposal: res.proposal ?? null };
+  sent.delete(p.pickKey);
+  if (env?.requirements != null && out.proposal !== null) {
+    const req = env.requirements;
+    // The requirements the person chose on the page are their answer to the job's "which requirements?".
+    await api.reviseChatProposal(out.chatId, {
+      revises: out.proposal.proposal.pid,
+      edits: { inputs: { [req.inputId]: { kind: 'requirements', refs: req.refs } } },
+      source: 'question',
+      requestId: `${p.pickKey}:requirements`,
+    }).catch((e: unknown) => {
+      setStartNote(out.chatId, `The requirements you chose were not added (${e instanceof Error ? e.message : String(e)}): pick them in the job.`);
+    });
+  }
+  envelopes.delete(p.pickKey);
+  // A chat made for a job the person has since left is not opened over where they are now.
+  if (p.chatId === null && wanted()) openChat(out.chatId);
+  return out;
 }
 
 /** Words a start could not post, shown on the composer it was moved to (`startInChat`'s fallback). */
@@ -152,40 +187,42 @@ export interface StartInChat {
  * THE NAMED-LAUNCH BRIDGE (§8.6: `openLaunchWizard(draft)` becomes `startInChat(...)`). On a daemon that takes job
  * proposals and serves the v2 catalog: the card is resolved from the wire ({@link cardForWorkflow}), a seeded chat
  * opens with its proposal (the sentence and Start: nothing runs before Start), and chosen requirements fill the job's
- * requirements input as the person's own answer. Returns false when there is no card for it (the caller keeps today's
- * flow). A failure to post opens a new chat with the job on its composer and the reason under it, so Enter retries.
+ * requirements input as the person's own answer. Returns false when the catalog has no card for it (the caller keeps
+ * today's flow). A failure (the catalog unread, the post refused) opens a new chat that says why, with the job on its
+ * composer when it was resolved, so Enter retries the same request. `stillWanted` = false: a later opener replaced it,
+ * and it does nothing more.
  */
-export async function startInChat(s: StartInChat): Promise<boolean> {
+export async function startInChat(s: StartInChat, stillWanted: () => boolean = () => true): Promise<boolean> {
   const projectId = s.projectId ?? null;
-  const view = await catalogV2Now(projectId === UNFILED_MOUNT ? null : projectId);
-  if (view === null) return false;
-  const hit = cardForWorkflow(view, s.workflowId);
+  const load = await catalogV2Now(projectId === UNFILED_MOUNT ? null : projectId);
+  if (!stillWanted()) return true;
+  const words = s.words ?? '';
+  if (load.state !== 'ready') {
+    const chatId = openChatFlow({ projectId, seedText: words });
+    setStartNote(chatId, 'This daemon’s list of jobs could not be read, so nothing was started. Type / to pick the job.');
+    return true;
+  }
+  const hit = cardForWorkflow(load.view, s.workflowId);
   if (hit === null) return false;
   const option = hit.option === null ? null : hit.card.variant?.options.find((o) => o.id === hit.option) ?? null;
+  const resolved = option ?? hit.card;
   const chip = jobChipFor({
     card: hit.card.id, wireCard: hit.wireCard, option: hit.option, depth: null,
     title: option !== null ? `${hit.card.title} · ${option.title}` : hit.card.title,
-    launchId: (option ?? hit.card).launch.kind === 'run' ? ((option ?? hit.card).launch as { workflow: string }).workflow : (option ?? hit.card).launch.kind,
+    launchId: resolved.launch.kind === 'run' ? resolved.launch.workflow : resolved.launch.kind,
   });
-  const words = s.words ?? '';
+  const reqInput = resolved.inputs.find((i) => i.kind === 'requirements') ?? hit.card.inputs.find((i) => i.kind === 'requirements');
+  envelopes.set(chip.key, {
+    projectId,
+    repoRef: s.repoRef ?? null,
+    requirements: reqInput !== undefined && s.requirements !== undefined && s.requirements.length > 0
+      ? { inputId: reqInput.id, refs: s.requirements.map((r) => ({ repoId: r.repoId, key: r.key })) } : null,
+  });
   try {
-    const out = await postJob({
-      card: hit.wireCard, option: hit.option, depth: null, words, source: 'pick', chatId: null,
-      projectId, repoRef: s.repoRef ?? null, pickKey: chip.key,
-    });
-    const reqInput = (option ?? hit.card).inputs.find((i) => i.kind === 'requirements') ?? hit.card.inputs.find((i) => i.kind === 'requirements');
-    if (out.proposal !== null && reqInput !== undefined && s.requirements !== undefined && s.requirements.length > 0) {
-      // The requirements the person chose on the page are their answer to the job's "which requirements?".
-      await api.reviseChatProposal(out.chatId, {
-        revises: out.proposal.proposal.pid,
-        edits: { inputs: { [reqInput.id]: { kind: 'requirements', refs: s.requirements.map((r) => ({ repoId: r.repoId, key: r.key })) } } },
-        source: 'question',
-        requestId: `${chip.key}:requirements`,
-      }).catch((e: unknown) => {
-        setStartNote(out.chatId, `The requirements you chose were not added (${e instanceof Error ? e.message : String(e)}): pick them in the job.`);
-      });
-    }
+    await postJob({ card: hit.wireCard, option: hit.option, depth: null, words, source: 'pick', chatId: null, projectId, repoRef: s.repoRef ?? null, pickKey: chip.key, stillWanted });
   } catch (e) {
+    if (!stillWanted()) return true;
+    // The job waits on a new chat's composer, with its envelope and request kept: Enter there retries the same request.
     const chatId = openChatFlow({ projectId, seedText: words });
     addAboutChip(chatId, chip);
     setStartNote(chatId, `${chip.label} could not be started (${e instanceof Error ? e.message : String(e)}). Press Enter to try again.`);

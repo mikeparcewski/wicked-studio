@@ -81,6 +81,9 @@ const LEXICON: Readonly<Record<string, readonly string[]>> = {
   review: ['analyze', 'check'],
 };
 
+/** The lexicon's words (the golden fixture has a case for each, so a drift in either copy is caught). */
+export const LEXICON_KEYS: readonly string[] = Object.keys(LEXICON);
+
 /** Plain English stemming (crew's `stem`). */
 export function stem(w: string): string {
   let s = w.toLowerCase();

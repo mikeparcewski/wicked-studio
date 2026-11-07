@@ -52,7 +52,9 @@ try {
   writeFileSync(entry, `
 import { CATALOG_V2_CARDS, CATALOG_V2_CATEGORIES } from ${JSON.stringify(join(src, 'catalog-data-v2.ts'))};
 import { detectable, wordsLayer, withoutAimed } from ${JSON.stringify(join(src, 'detect.ts'))};
-const queries = ${JSON.stringify(QUERIES)};
+import { LEXICON_KEYS } from ${JSON.stringify(resolve('src/board/commandSearch.ts'))};
+// Every lexicon word, in a phrase of its own: a drift in either copy of the lexicon changes a ranking here.
+const queries = [...${JSON.stringify(QUERIES)}, ...LEXICON_KEYS.map((k) => k + ' the payments service')];
 const cards = CATALOG_V2_CARDS.filter(detectable).map((c) => ({
   id: c.id, category: c.category, title: c.title, words: c.words ?? [], outcome: c.outcome ?? '', needs: c.needs ?? [],
   variant: c.variant ? { options: c.variant.options.map((o) => ({ id: o.id, title: o.title, words: o.words ?? [] })) } : null,
