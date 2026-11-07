@@ -106,10 +106,10 @@ export function DocSubjectPicker({
     const want = focusNext.current;
     if (want === null || adding || root.current === null) return;
     focusNext.current = null;
-    // Only focus the chooser lost (it closed under it); never pull focus from where the person went meanwhile, e.g.
-    // back to the brief while the attach was in flight (codex on the diff).
+    // Only focus the chooser lost (it closed under it, so nothing holds focus); never pull it from a control the
+    // person moved to meanwhile: the brief, the format, another chip (codex on the diff, rounds 2 and 3).
     const at = document.activeElement;
-    if (at !== null && at !== document.body && !root.current.contains(at)) return;
+    if (at !== null && at !== document.body) return;
     const target = want === '' ? root.current.querySelector<HTMLElement>('[data-testid="doc-subject-add"]')
       : [...root.current.querySelectorAll<HTMLElement>('[data-testid="doc-subject-repo"]')].find((b) => b.dataset['repoId'] === want);
     target?.focus();

@@ -226,4 +226,18 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
       brief.remove();
     }
   });
+
+  it('an attach that lands while the person is on another picker control leaves focus there (codex r3)', async () => {
+    listProjectMembers.mockResolvedValue({ members: [member('p12', 'r-hello')] });
+    const pending = deferred<{ member: ProjectMember }>();
+    attachProjectMember.mockReturnValue(pending.promise);
+    render(<Harness projectId="p12" />);
+    fireEvent.click(await screen.findByTestId('doc-subject-add'));
+    await choose(screen.getByTestId('doc-subject-add-select'), 'r-core');
+    const format = screen.getByTestId('doc-format');
+    format.focus();
+    await act(async () => { pending.resolve({ member: member('p12', 'r-core') }); await new Promise((r) => setTimeout(r, 0)); });
+    expect(document.activeElement).toBe(format);
+    expect(refsSeen).toEqual(['r-core']);
+  });
 });
