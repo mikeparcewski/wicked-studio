@@ -41,6 +41,8 @@ let members: Record<string, Array<{ member_kind: string; member_ref: string }>> 
 let failMembers = new Set<string>();
 let failProjects = false;
 let notNowStatus = 200;
+/** Held until released: the Not now answer. */
+let notNowGate: Promise<void> = Promise.resolve();
 /** What each chat's transcript read answers (the job's own chat, and the one a pick seeds). */
 let chatMessages: Record<string, unknown[]> = {};
 const posts: Array<{ path: string; body: Record<string, unknown> }> = [];
@@ -58,6 +60,7 @@ beforeEach(() => {
   failMembers = new Set();
   failProjects = false;
   notNowStatus = 200;
+  notNowGate = Promise.resolve();
   chatMessages = {};
   useJobMoves.setState({ moves: {} });
   resetJobLocal();
@@ -70,7 +73,7 @@ beforeEach(() => {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
     if (init?.method === 'POST') {
       posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
-      if (path.startsWith(`/chats/${CHAT}/proposals/`)) return Promise.resolve(notNowStatus >= 400 ? ok({ error: 'the daemon said no' }, notNowStatus) : ok({ view: {} }));
+      if (path.startsWith(`/chats/${CHAT}/proposals/`)) return notNowGate.then(() => (notNowStatus >= 400 ? ok({ error: 'the daemon said no' }, notNowStatus) : ok({ view: {} })));
       if (path === '/chats') return Promise.resolve(ok({ chatId: 'seeded-p1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-p1:person:1', kind: 'job' } } }, 201));
       return Promise.resolve(ok({ view: {} }));
     }
@@ -207,6 +210,27 @@ describe('F39 review folds (r5): the move outlives the page it left', () => {
     page();
     await waitFor(() => expect(screen.getByTestId('job-passage-projects').textContent).toMatch(/can’t be moved to a project from here/));
     expect(posts).toEqual([]);
+  });
+  it('returning while the Not now is still out shows the moved job, never chips; its late failure is said with a retry', async () => {
+    notNowStatus = 503;
+    let release!: () => void;
+    notNowGate = new Promise((r) => { release = r; });
+    const v = page();
+    await waitFor(() => expect(chips()).toHaveLength(1));
+    fireEvent.click(chips()[0]!);
+    await waitFor(() => expect(posts.filter((p) => p.path.startsWith(`/chats/${CHAT}/proposals/`))).toHaveLength(1));
+    v.unmount();
+    page();
+    await waitFor(() => expect(screen.getByTestId('job-passage-projects').dataset['state']).toBe('moved'));
+    expect(chips()).toHaveLength(0);
+    expect(screen.queryByTestId('job-passage-projects-retire')).toBeNull();
+    release();
+    await screen.findByTestId('job-passage-projects-retire');
+    notNowStatus = 200;
+    notNowGate = Promise.resolve();
+    fireEvent.click(screen.getByTestId('job-passage-projects-retire'));
+    await waitFor(() => expect(posts.filter((p) => p.path.startsWith(`/chats/${CHAT}/proposals/`))).toHaveLength(2));
+    expect(posts.filter((p) => p.path === '/chats')).toHaveLength(1);
   });
 });
 void act;
