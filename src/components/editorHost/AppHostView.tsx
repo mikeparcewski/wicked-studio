@@ -182,6 +182,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   /** A restore on its way: the panel cannot be closed under it (its progress would vanish). */
   const [restoring, setRestoring] = useState(false);
   const versionsBtn = useRef<HTMLButtonElement | null>(null);
+  const statusRef = useRef<HTMLParagraphElement | null>(null);
   const [unarchiving, setUnarchiving] = useState(false);
   // Read before `shown`: an archived app is Preview only (crew refuses every change until it is restored).
   const [detail, setDetail] = useState<AppDetail | null>(null);
@@ -191,6 +192,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const editLeftRef = useRef(Number.NEGATIVE_INFINITY);
   // Only the person's own switch to Preview gets that grace; Edit taken away (a phone, an archived app) ends at once.
   if (modeRef.current === 'edit' && shown !== 'edit') editLeftRef.current = mode === 'preview' ? Date.now() : Number.NEGATIVE_INFINITY;
+  // ...and a grace already running ends the moment Edit is taken away (Preview, then a phone within it: codex r3).
+  if (narrow || archived) editLeftRef.current = Number.NEGATIVE_INFINITY;
   modeRef.current = shown;
   // The host page decides framing, once, and never relaxes it (§7.1): studio refuses to be framed (S8), so a framed
   // studio is a page someone else put it in.
@@ -401,7 +404,11 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       const r = await setArchived(slug, false);
       setStatus(r.ok ? 'Restored: the app is back on Apps and can be changed again.' : `Not restored: ${r.message}`);
       // Through the session, so its next read compares against this answer (one source for the view).
-      if (r.ok) sessionRef.current?.take(r.app);
+      if (r.ok) {
+        sessionRef.current?.take(r.app);
+        // The line and its button are gone: the status line that says so takes the focus.
+        requestAnimationFrame(() => statusRef.current?.focus());
+      }
     } finally {
       setUnarchiving(false);
     }
@@ -414,8 +421,9 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const versionsWhy = framed ? 'This page is inside another page, so nothing can be restored here.'
     : archived ? 'This app is archived: restore it to Apps first.'
       : busy ? 'A chat turn is changing the app: restore after it lands.' : null;
-  // (K5) Chat is how an app changes: open on every crew app's page, in Preview and in Edit alike (not while archived).
-  const chatOn = turnsOn && kind?.store === 'crew' && slug !== null && detail !== null && !archived;
+  // (K5) Chat is how an app changes: open on every crew app's page, in Preview and in Edit alike. On an archived app it
+  // stays (closed, saying why), so a message being typed when the archive is seen is kept (codex r3).
+  const chatOn = turnsOn && kind?.store === 'crew' && slug !== null && detail !== null;
   // The side panel (Properties, and Chat when crew runs turns) is on every crew app's page: its Properties tab holds
   // the app's own settings (Show on Report), which need no chat (DES-REPORT-DASHBOARDS-001 §2).
   const sideOn = kind?.store === 'crew' && slug !== null && detail !== null;
@@ -465,7 +473,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       {narrow && (
         <p className="wk-apps-line" data-testid="apps-phone-note">
           {!phone ? 'Edit on a larger screen. This is the app as a viewer sees it.'
-            : chatOn ? 'On a phone you can view the app and ask for changes in the chat. Edit, Undo and Versions are on a larger screen.'
+            : chatOn && !archived ? 'On a phone you can view the app and ask for changes in the chat. Edit, Undo and Versions are on a larger screen.'
               : 'On a phone you can view the app. Edit, Undo and Versions are on a larger screen.'}
         </p>
       )}
@@ -477,7 +485,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
               : 'The rows are live. This daemon does not run app actions yet: an action shows a sample card and writes nothing.'}
         </p>
       )}
-      {(status !== null || pending > 0) && <p className="wk-apps-line" data-testid="apps-status" aria-live="polite">{pending > 0 ? `Saving ${pending} change${pending === 1 ? '' : 's'}…` : status}</p>}
+      {(status !== null || pending > 0) && <p ref={statusRef} tabIndex={-1} className="wk-apps-line" data-testid="apps-status" aria-live="polite">{pending > 0 ? `Saving ${pending} change${pending === 1 ? '' : 's'}…` : status}</p>}
       {error !== null && (
         <p className="wk-apps-line wk-apps-line--fail" data-testid="apps-error">
           {error} · <button type="button" className="wk-btn wk-btn--link" data-testid="apps-error-retry" onClick={() => setMountKey((k) => k + 1)}>Try again</button>
@@ -543,7 +551,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
                 chat={!chatOn ? null : (
                   <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
                     onSent={() => { void sessionRef.current?.refresh(); }} prepareSend={prepareSend} pending={pending}
-                    undoOff={phone}
+                    undoOff={phone || archived}
+                    closedWhy={archived ? 'This app is archived: restore it to ask for changes.' : null}
                     onUndo={() => {
                       if (phone) return; // view + chat on a phone (operator ruling D5): no Undo, whatever drew the button
                       if ((sessionRef.current?.pending ?? 0) > 0) { setStatus('Your last edit is still saving: Undo after it lands.'); return; }
