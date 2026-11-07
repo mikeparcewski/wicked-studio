@@ -10,6 +10,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client.js';
+import { ApiError } from '../api/errors.js';
 import type { RequirementSummary, RequirementDetail, RequirementsPage, RequirementPatch } from '../api/types.js';
 import { useModalEscape } from './Modal.js';
 import { openLaunchWizard } from '../store/launchWizard.js';
@@ -28,7 +29,14 @@ import {
   uncountedLine,
   uncountedOf,
   requirementsNotGenerated,
+  codeDriftLine,
+  codeDriftOf,
+  codeMismatchOf,
+  minimumLine,
+  minimumOf,
+  mismatchCountOf,
   type RequirementsCoverage,
+  type RequirementsMinimum,
 } from '../board/requirementsState.js';
 import { workflowLabel } from '../board/workflowNames.js';
 import { isLiveStatus, repeatLineOf } from '../board/repeatProgress.js';
@@ -97,7 +105,11 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   // are honest but they're about the tooling, not the product.
   const [category, setCategory] = useState<'functional' | 'config-data' | 'all'>('functional');
   const [offset, setOffset] = useState(0);
+  // Operator ruling 2026-11-06: the rows whose code does not meet them, as a filter.
+  const [onlyMismatch, setOnlyMismatch] = useState(false);
   const [page, setPage] = useState<RequirementsPage | null>(null);
+  // The minimum in force and where it comes from (crew 0.197.0), from the page or the notGenerated answer.
+  const [minimum, setMinimum] = useState<RequirementsMinimum | null>(null);
   // "Config & data" is a filter only when the corpus holds some (crew 0.167.0 categories); a daemon from before the
   // count keeps it, and nothing shows before the first read.
   const configData = configDataCountOf(page);
@@ -123,22 +135,44 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   }, [notGenerated, repoId, mappingAsk]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Only the newest read is applied (codex r1: a late answer for an older filter, an older minimum or another
+  // repository never overwrites a newer one).
+  const readGen = useRef(0);
+  // A read in flight: the mapping poll skips a beat rather than start another (codex r2: reads longer than the poll
+  // interval would otherwise discard each other forever).
+  const inFlight = useRef(0); // the generation of the read in flight, 0 when none
+  // The repository the view is for now: a write that lands after a switch is not applied to another one.
+  const viewRepo = useRef(repoId);
+  useEffect(() => {
+    viewRepo.current = repoId;
+    readGen.current += 1; // reads for the previous repository are void from now, not from the next read
+    setMinimum(null);
+  }, [repoId]);
 
   const fetchPage = useCallback(
-    (q: string, r: typeof risk, cat: typeof category, off: number) => {
+    (q: string, r: typeof risk, cat: typeof category, off: number, mm: boolean) => {
+      const gen = ++readGen.current;
+      inFlight.current = gen;
       const params: Parameters<typeof api.listRequirements>[1] = { offset: off, limit: PAGE_SIZE };
       if (q.trim() !== '') params.q = q.trim();
       if (r !== 'all') params.risk = r;
       if (cat !== 'all') params.category = cat;
+      if (mm) params.mismatch = 'yes';
       api
         .listRequirements(repoId, params)
         .then((p) => {
+          if (inFlight.current === gen) inFlight.current = 0;
+          if (gen !== readGen.current) return;
           setPage(p);
+          setMinimum(minimumOf(p));
           setLoadError(null);
           setNotGenerated(null);
         })
         .catch((e: unknown) => {
+          if (inFlight.current === gen) inFlight.current = 0;
+          if (gen !== readGen.current) return;
           const missing = requirementsNotGenerated(e);
+          setMinimum(missing !== null && e instanceof ApiError ? minimumOf(e.body) : null);
           setNotGenerated(missing);
           setLoadError(missing !== null ? null : e instanceof Error ? e.message : String(e));
         });
@@ -151,25 +185,33 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const mappingLive = mapping !== null && mapping !== undefined && mapping !== 'unknown';
   useEffect(() => {
     if (!mappingLive) return;
-    const t = setInterval(() => fetchPage(query, risk, category, offset), MAPPING_REFRESH_MS);
+    const t = setInterval(() => {
+      if (inFlight.current === 0) fetchPage(query, risk, category, offset, onlyMismatch);
+    }, MAPPING_REFRESH_MS);
     return () => clearInterval(t);
-  }, [mappingLive, fetchPage, query, risk, category, offset]);
+  }, [mappingLive, fetchPage, query, risk, category, offset, onlyMismatch]);
   // …and once more when the job it watched ends (codex r2 on the branch): the read that saw no graph may have come just
   // before the job built it, and the view must not keep saying there is none.
   const wasMapping = useRef(false);
   useEffect(() => {
-    if (wasMapping.current && mapping === null) fetchPage(query, risk, category, offset);
+    if (wasMapping.current && mapping === null) fetchPage(query, risk, category, offset, onlyMismatch);
     wasMapping.current = mappingLive;
-  }, [mapping, mappingLive, fetchPage, query, risk, category, offset]);
+  }, [mapping, mappingLive, fetchPage, query, risk, category, offset, onlyMismatch]);
 
   // One debounced (250ms) server fetch covers search, filter, and pagination changes.
   useEffect(() => {
     if (debounceRef.current !== null) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchPage(query, risk, category, offset), 250);
+    readGen.current += 1; // the view changed: an answer for the old one is void now (codex r2)
+    debounceRef.current = setTimeout(() => fetchPage(query, risk, category, offset, onlyMismatch), 250);
     return () => {
       if (debounceRef.current !== null) clearTimeout(debounceRef.current);
     };
-  }, [query, risk, category, offset, fetchPage]);
+  }, [query, risk, category, offset, onlyMismatch, fetchPage]);
+  const mismatches = mismatchCountOf(page);
+  // A write's follow-up read uses the view's filters as they are WHEN it lands (codex r1), not as they were when it
+  // started.
+  const refetchNow = useRef(() => {});
+  refetchNow.current = () => fetchPage(query, risk, category, offset, onlyMismatch);
 
   function setFilter(r: 'all' | 'risk' | 'no-risk'): void {
     setRisk(r);
@@ -231,6 +273,24 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
             requirements
           </span>
           {page !== null && <GraphCoverage page={page} />}
+          {page !== null && notGenerated === null && <CodeAge page={page} onRefresh={() => generate(DOMAIN_EXTRACTION_ID)} />}
+          {minimum !== null && (
+            <MinimumControl
+              key={repoId}
+              repoId={repoId}
+              minimum={minimum}
+              onChanged={(m, forRepo) => {
+                if (forRepo !== viewRepo.current) return;
+                if (m !== null) {
+                  setMinimum(m);
+                  // Every minimum on the page says the same number until the next read (codex r2).
+                  setPage((prev) => withMinPct(prev, m.pct));
+                  setNotGenerated((prev) => (prev === null || prev.share === null ? prev : { ...prev, share: { ...prev.share, minPct: m.pct } }));
+                }
+                refetchNow.current();
+              }}
+            />
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -274,6 +334,25 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               </button>
             ))}
           </div>
+          {(onlyMismatch || (mismatches !== null && mismatches > 0)) && (
+            <button
+              type="button"
+              data-testid="requirements-mismatch-filter"
+              onClick={() => {
+                setOnlyMismatch((v) => !v);
+                setOffset(0);
+              }}
+              aria-pressed={onlyMismatch}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold"
+              style={{
+                background: onlyMismatch ? 'var(--status-warn-dim)' : 'transparent',
+                color: onlyMismatch ? 'var(--status-warn)' : T.faint,
+                border: `1px solid ${onlyMismatch ? T.hairlineS : 'transparent'}`,
+              }}
+            >
+              Code doesn{"'"}t meet it{mismatches !== null ? ` · ${mismatches.toLocaleString('en-US')}` : ''}
+            </button>
+          )}
           <div className="hidden sm:block w-px h-4" style={{ background: T.hairline }} />
           <div className="flex items-center gap-1" role="group" aria-label="Risk filter">
             {(['all', 'risk', 'no-risk'] as const).map((r) => (
@@ -457,6 +536,123 @@ function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement
   );
 }
 
+/** `page` with its coverage held to `pct`, or as it is when it carries no coverage. */
+function withMinPct(page: RequirementsPage | null, pct: number): RequirementsPage | null {
+  const cov = (page as { coverage?: unknown } | null)?.coverage;
+  if (page === null || cov === null || cov === undefined || typeof cov !== 'object') return page;
+  return { ...page, coverage: { ...(cov as object), minPct: pct } } as RequirementsPage;
+}
+
+/**
+ * How old the code behind the listed graph is (operator ruling 2026-11-06): "Built from code N commits old (date)",
+ * with Refresh map (the same mapping job "Keep mapping" opens). Nothing when the graph is current or the daemon cannot
+ * tell.
+ */
+function CodeAge({ page, onRefresh }: { page: RequirementsPage; onRefresh: () => void }): React.ReactElement | null {
+  const line = codeDriftLine(codeDriftOf(page));
+  if (line === null) return null;
+  return (
+    <div className="order-last basis-full min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="requirements-code-age">
+      <span className="text-xs" style={{ color: 'var(--status-warn)' }}>{line}</span>
+      <button type="button" onClick={onRefresh} data-testid="requirements-refresh-map" className="text-xs font-semibold underline" style={{ color: T.link }}>
+        Refresh map
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The minimum in force and where it comes from (operator 2026-11-06, P3): a repository's own minimum (set when a job's
+ * "Lower the minimum" was answered) can be changed or cleared here, so it is never stuck lower than Settings.
+ */
+function MinimumControl({
+  repoId,
+  minimum,
+  onChanged,
+}: {
+  repoId: string;
+  minimum: RequirementsMinimum;
+  /** After a write: the minimum the daemon answered with (applied at once), then a fresh read. */
+  onChanged: (minimum: RequirementsMinimum | null, forRepo: string) => void;
+}): React.ReactElement {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(String(minimum.pct));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const n = Number(text);
+  const valid = /^\d{1,3}$/u.test(text.trim()) && n >= 1 && n <= 100;
+  function open(): void {
+    // Every edit starts from the minimum in force, never a discarded draft (codex/pi r1).
+    setText(String(minimum.pct));
+    setError(null);
+    setEditing(true);
+  }
+  function save(pct: number | null): void {
+    setBusy(true);
+    setError(null);
+    api
+      .setRequirementsMinimum(repoId, pct)
+      .then((out) => {
+        setEditing(false);
+        onChanged(minimumOf(out), repoId);
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false));
+  }
+  return (
+    <div className="order-last basis-full min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="requirements-minimum" data-source={minimum.source}>
+      <span className="text-xs" style={{ color: T.muted }}>{minimumLine(minimum)}</span>
+      {editing ? (
+        <form
+          className="contents"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (valid && !busy) save(n);
+          }}
+        >
+          <input
+            autoFocus
+            disabled={busy}
+            type="number"
+            min={1}
+            max={100}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            aria-label="Minimum for this repository"
+            data-testid="requirements-minimum-input"
+            className="wk-field w-16 text-xs px-1.5 py-0.5"
+          />
+          <button type="submit" disabled={!valid || busy} data-testid="requirements-minimum-save" className="text-xs font-semibold" style={{ color: T.link }}>
+            Save
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setEditing(false);
+              setError(null);
+            }}
+            className="text-xs"
+            style={{ color: T.faint }}
+          >
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button type="button" disabled={busy} onClick={open} data-testid="requirements-minimum-change" className="text-xs font-semibold underline" style={{ color: T.link }}>
+          Change
+        </button>
+      )}
+      {minimum.source === 'repo' && !editing && (
+        <button type="button" disabled={busy} onClick={() => save(null)} data-testid="requirements-minimum-clear" className="text-xs font-semibold underline" style={{ color: T.link }}>
+          Use Settings{minimum.settingsPct !== null ? ` (${minimum.settingsPct}%)` : ''}
+        </button>
+      )}
+      {error !== null && <span role="alert" className="text-xs" style={{ color: T.deny }}>{error}</span>}
+    </div>
+  );
+}
+
 /** An item's mark: validated (with its count of independent sources) or unconfirmed. */
 function CorroborationMark({ req }: { req: unknown }): React.ReactElement | null {
   const c = corroborationOf(req);
@@ -504,6 +700,7 @@ function RequirementRow({
 }): React.ReactElement {
   const placeholder = isPlaceholder(req);
   const uncounted = uncountedOf(req);
+  const mismatch = codeMismatchOf(req);
   return (
     <button
       type="button"
@@ -520,6 +717,11 @@ function RequirementRow({
           <span className="block text-xs truncate" style={{ color: T.muted }}>{req.statement.trim()}</span>
         )}
         <span className="block text-xs truncate" style={{ color: T.faint }}>{req.domain}</span>
+        {mismatch !== null && (
+          <span data-testid="requirement-code-mismatch" className="block text-xs" style={{ color: 'var(--status-warn)', overflowWrap: 'anywhere' }}>
+            Code doesn{"'"}t meet it: {mismatch}
+          </span>
+        )}
         {!placeholder && uncounted === null && <UnconfirmedWhy req={req} />}
       </span>
       {/* The chips stack under the title on a narrow screen (operator 2026-11-01: titles collapsed beside them). */}
