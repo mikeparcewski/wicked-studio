@@ -229,7 +229,7 @@ export function WorkflowCatalog({ view, failed = false, pickedId, pickedEntryId 
             <label className="wk-catalog-soon-filter">
               <input type="checkbox" data-testid="launch-catalog-soon-toggle" checked={filters.showSoon}
                 onChange={(e) => setFilter({ showSoon: e.target.checked })} />
-              Show coming soon
+              Show unavailable
             </label>
           </div>
         </div>

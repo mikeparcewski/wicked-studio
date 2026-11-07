@@ -14,7 +14,6 @@
 button.wk-plugcard:hover { box-shadow: inset 0 0 0 1px var(--border-strong), var(--shadow-raised); transform: translateY(-1px); }
 button.wk-plugcard:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 .wk-plugcard[aria-pressed='true'] { box-shadow: inset 0 0 0 2px var(--accent); }
-.wk-plugcard--soon { cursor: default; }
 .wk-plugcard--off .wk-plugcard-prev { opacity: .45; }
 .wk-plugcard-prev { position: relative; aspect-ratio: 16 / 9; flex: 0 0 auto; background: var(--surface-base); border-bottom: 1px solid var(--border-subtle); overflow: hidden; }
 .wk-plugcard > .wk-plugcard-prev { margin: 1px 1px 0; border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0; }
@@ -68,7 +67,6 @@ button.wk-plugcard:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-mini-list { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
 .wk-mini-list i { position: relative; height: 14px; border-radius: 4px; background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--border-subtle); }
 .wk-mini-list i::before { content: ''; position: absolute; left: 6px; top: 4px; width: 26px; height: 6px; border-radius: 3px; background: var(--status-ok); }
-.wk-mini-soon { display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--border); border-radius: 6px; color: var(--ink-dim); font-size: var(--text-sm); }
 
 /* One plugin's details. */
 .wk-plugdetail {

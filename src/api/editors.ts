@@ -60,3 +60,12 @@ export const MCP_SERVER_KIND = 'mcp-server';
 export async function setEditorEnabled(id: string, enabled: boolean): Promise<EditorView> {
   return apiFetch<EditorView>(`/editors/${encodeURIComponent(id)}/enabled`, { method: 'POST', body: JSON.stringify({ enabled }) });
 }
+
+/**
+ * `DELETE /editors/:id` (human-only; crew `editors/routes.ts`): uninstall an editor you installed. crew withdraws its
+ * install grant first, then removes it. A built-in editor is refused (409: switch it off instead); a withdrawal that
+ * fails is a 503 and the editor stays installed, so the press can be repeated.
+ */
+export async function removeEditor(id: string): Promise<{ removed: true; id: string }> {
+  return apiFetch<{ removed: true; id: string }>(`/editors/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}

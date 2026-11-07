@@ -1,7 +1,8 @@
 /**
  * The Plugins page's door into the built-in Document editor (operator 2026-10-12, lane
- * editors-document): the documents it opens, each opening the real document (not the sample), and the
- * app builder listed as coming soon with nothing behind it.
+ * editors-document): the documents it opens, each opening the real document (not the sample). Nothing on the page is
+ * "coming soon" (operator 2026-11-06): the App runtime's card opens the Apps page, and an editor you installed can be
+ * removed (crew's human-only `DELETE /editors/:id`), never a built-in one.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,6 @@ import { PluginsPage } from '../src/components/editors/PluginsPage.js';
 import { documentsFor, openDocumentHref, OPEN_DOCUMENT_ROWS } from '../src/components/editors/OpenDocumentList.js';
 import { madeRows, readEverythingQuery } from '../src/board/everythingModel.js';
 import { useDocsCache } from '../src/store/docsCache.js';
-import { VIBE_SOON } from '../src/board/comingSoon.js';
 
 /** A plugin's card on the Plugins page, once the list is read. */
 async function tileOf(id: string): Promise<HTMLElement> {
@@ -42,9 +42,10 @@ const INDEX = {
 const json = (body: unknown, status = 200): Promise<Response> =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
 
-function stub(index: () => Promise<Response>, editors: unknown[] = [BUILT_IN, INSTALLED]): ReturnType<typeof vi.fn> {
-  const f = vi.fn((input: RequestInfo | URL) => {
+function stub(index: () => Promise<Response>, editors: unknown[] = [BUILT_IN, INSTALLED], onDelete?: (u: string) => Promise<Response>): ReturnType<typeof vi.fn> {
+  const f = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const u = String(input);
+    if (init?.method === 'DELETE') return onDelete !== undefined ? onDelete(u) : json({ removed: true, id: u.slice(u.lastIndexOf('/') + 1) });
     if (u.includes('/interactive/docs')) return index();
     if (u.includes('/editors')) return json({ editors, installs: 'conformance_required' });
     return json({});
@@ -139,16 +140,63 @@ describe('the Plugins page: the built-in Document editor opens real documents', 
   });
 });
 
-describe('the Plugins page: the app builder is coming soon', () => {
-  it('one card, disabled, with its one line and nothing to click', async () => {
-    stub(() => json(INDEX));
+const APPS = { ...BUILT_IN, id: 'wicked-apps', title: 'App', kinds: ['app'], entry_url: '/api/v1/editors/wicked-apps/1.0.0/entry' };
+
+describe('the Plugins page: nothing is coming soon', () => {
+  it('lists no "coming soon" card, and the App card opens the Apps page', async () => {
+    stub(() => json(INDEX), [BUILT_IN, APPS, INSTALLED]);
+    const navigate = vi.fn();
+    render(<PluginsPage navigate={navigate} />);
+    fireEvent.click(await tileOf('wicked-apps'));
+    expect(screen.queryByTestId('plugin-coming-soon')).toBeNull();
+    expect(screen.getByTestId('plugins-page').textContent).not.toMatch(/coming soon/i);
+    const open = screen.getByTestId('plugin-open-apps');
+    expect(open.getAttribute('href')).toBe('/apps');
+    fireEvent.click(open);
+    expect(navigate).toHaveBeenLastCalledWith('/apps');
+    // The App runtime is built in: it can be switched off, never removed.
+    expect(screen.queryByTestId('plugin-details-remove')).toBeNull();
+  });
+});
+
+describe('the Plugins page: Remove an editor you installed', () => {
+  it('asks, then removes it through crew and takes its card away', async () => {
+    const f = stub(() => json(INDEX));
     render(<PluginsPage navigate={vi.fn()} />);
-    const soon = await screen.findByTestId('plugin-coming-soon');
-    expect(soon.getAttribute('aria-disabled')).toBe('true');
-    expect(soon.textContent).toContain(VIBE_SOON.name);
-    expect(soon.textContent).toContain('Coming soon');
-    expect(soon.textContent).toContain(VIBE_SOON.line);
-    expect(soon.querySelector('a, button')).toBeNull();
-    expect(VIBE_SOON).toEqual({ name: 'Apps', line: 'A live app or dashboard over your APIs and databases.' });
+    fireEvent.click(await tileOf('acme-terms'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    expect(screen.getByTestId('plugin-remove-confirm-line').textContent).toContain('Remove Terms checker?');
+    // Nothing is removed until the second press.
+    expect(f.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE')).toBe(false);
+    fireEvent.click(screen.getByTestId('plugin-remove-confirm'));
+    await waitFor(() => expect(screen.queryByTestId('plugin-details')).toBeNull());
+    const del = f.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE');
+    expect(String(del?.[0])).toMatch(/\/editors\/acme-terms$/);
+    expect(screen.getAllByTestId('plugin-tile').map((t) => t.dataset['plugin'])).not.toContain('acme-terms');
+  });
+
+  it('Keep it cancels, and a built-in editor offers no Remove', async () => {
+    const f = stub(() => json(INDEX));
+    render(<PluginsPage navigate={vi.fn()} />);
+    fireEvent.click(await tileOf('acme-terms'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    fireEvent.click(screen.getByTestId('plugin-remove-cancel'));
+    expect(screen.getByTestId('plugin-remove')).toBeTruthy();
+    fireEvent.click(await tileOf('wicked-page'));
+    expect(screen.queryByTestId('plugin-details-remove')).toBeNull();
+    expect(f.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE')).toBe(false);
+  });
+
+  it("a refusal keeps the card and says crew's reason", async () => {
+    stub(() => json(INDEX), [BUILT_IN, INSTALLED], () => json({ error: "acme-terms was not removed: its grant could not be withdrawn; try again" }, 503));
+    render(<PluginsPage navigate={vi.fn()} />);
+    fireEvent.click(await tileOf('acme-terms'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    fireEvent.click(screen.getByTestId('plugin-remove-confirm'));
+    const err = await screen.findByTestId('plugin-remove-error');
+    expect(err.textContent).toContain('its grant could not be withdrawn');
+    expect(screen.getAllByTestId('plugin-tile').map((t) => t.dataset['plugin'])).toContain('acme-terms');
+    // The press can be repeated.
+    expect(screen.getByTestId('plugin-remove-confirm')).not.toBeDisabled();
   });
 });

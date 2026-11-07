@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4709,
-    "static": 3940,
+    "occurrences": 4715,
+    "static": 3946,
     "dynamic": 173,
     "computed": 53
   },
@@ -12362,19 +12362,13 @@
       ]
     },
     {
-      "testId": "plugin-coming-soon",
-      "files": [
-        "src/components/editors/PluginsPage.tsx"
-      ]
-    },
-    {
-      "testId": "plugin-coming-soon-tag",
-      "files": [
-        "src/components/editors/PluginsPage.tsx"
-      ]
-    },
-    {
       "testId": "plugin-details",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-apps",
       "files": [
         "src/components/editors/PluginsPage.tsx"
       ]
@@ -12411,6 +12405,12 @@
     },
     {
       "testId": "plugin-details-preview",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-details-remove",
       "files": [
         "src/components/editors/PluginsPage.tsx"
       ]
@@ -12488,10 +12488,46 @@
       ]
     },
     {
+      "testId": "plugin-open-apps",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
       "testId": "plugin-reload",
       "files": [
         "src/components/editorHost/PluginCard.tsx",
         "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-remove",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-remove-cancel",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-remove-confirm",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-remove-confirm-line",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-remove-error",
+      "files": [
+        "src/components/editors/PluginsPage.tsx"
       ]
     },
     {
