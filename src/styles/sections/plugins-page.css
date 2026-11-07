@@ -91,7 +91,9 @@ button.wk-plugcard:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-plugdetail-manifest { margin: 0; padding: 10px 12px; max-height: 260px; overflow: auto; border-radius: var(--radius-md); background: var(--surface-base); color: var(--ink-body); font-family: var(--font-mono); font-size: var(--text-code); line-height: 1.5; white-space: pre; }
 @media (max-width: 1199px) {
   .wk-plugpage-layout[data-detail='true'] { grid-template-columns: minmax(0, 1fr); }
-  .wk-plugdetail { position: fixed; inset: 0 0 0 auto; z-index: 40; width: min(420px, 100vw); max-height: none; border-radius: 0; box-shadow: var(--shadow-overlay); }
+  /* Bounded to the screen so it scrolls inside itself: without a height, an ancestor that holds fixed boxes let it
+     grow past the screen's bottom, and its last sections (the manifest, Remove) could not be reached on a phone. */
+  .wk-plugdetail { position: fixed; inset: 0 0 0 auto; z-index: 40; width: min(420px, 100vw); height: 100dvh; max-height: 100dvh; border-radius: 0; box-shadow: var(--shadow-overlay); }
 }
 @media (max-width: 767px) {
   .wk-plugpage-grid { grid-template-columns: minmax(0, 1fr); }
