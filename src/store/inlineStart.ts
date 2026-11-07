@@ -3,12 +3,12 @@ import type { ChatOpenBody, ChatProposalView } from 'wicked-crew-api-types';
 import { api } from '../api/client.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
 import type { AboutChip } from '../board/aboutChips.js';
-import { cardForWorkflow } from '../board/slashCatalog.js';
+import { cardForWorkflow, refusalOf } from '../board/slashCatalog.js';
 import { catalogV2Now } from './catalogV2.js';
 import type { CatalogEntry } from '../board/workflowCatalog.js';
 import { createByChat } from '../editors/apps/appTurns.js';
 import { stashDraft } from '../components/apps/AppChat.js';
-import { openChat, openChatFlow } from './chatFlow.js';
+import { openChat, openChatFlow, useChatFlow } from './chatFlow.js';
 import { addAboutChip } from './composerChips.js';
 
 /**
@@ -119,7 +119,10 @@ function seedScope(projectId: string | null, repoRef: string | null | undefined)
  * it is refused.
  */
 export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: ChatProposalView | null } | null> {
-  const wanted = p.stillWanted ?? ((): boolean => true);
+  // A chat opened since (another New job, another start) owns where the person is: a job posted before it never
+  // navigates over it (codex r2), whatever started it.
+  const nonce0 = useChatFlow.getState().request?.nonce ?? 0;
+  const wanted = (): boolean => (p.stillWanted?.() ?? true) && (useChatFlow.getState().request?.nonce ?? 0) === nonce0;
   if (!wanted()) return null;
   const env = envelopes.get(p.pickKey);
   const fields = {
@@ -142,6 +145,10 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     // same request, so crew answers that chat and completes its proposal (§4.6).
     if (res.proposal === undefined && res.seedRefused !== undefined) throw new Error(res.seedRefused.error);
     out = { chatId: res.chatId, proposal: res.proposal ?? null };
+    // The chat and its job stand; only its filing in the project failed: said on that chat (codex r2).
+    if (typeof res.projectAttachError === 'string' && res.projectAttachError !== '') {
+      setStartNote(res.chatId, `This chat was not filed in the project (${res.projectAttachError}). Its job is here; file the chat from its menu.`);
+    }
   }
   sent.delete(p.pickKey);
   if (env?.requirements != null && out.proposal !== null) {
@@ -205,6 +212,14 @@ export async function startInChat(s: StartInChat, stillWanted: () => boolean = (
   const hit = cardForWorkflow(load.view, s.workflowId);
   if (hit === null) return false;
   const option = hit.option === null ? null : hit.card.variant?.options.find((o) => o.id === hit.option) ?? null;
+  // The `/` list's rule holds here too (codex r2): a job that cannot start here, or takes an input this studio does not
+  // know, is never posted; the person is told why, and nothing falls back to a launch.
+  const refused = refusalOf(hit.card, option);
+  if (refused !== null) {
+    const chatId = openChatFlow({ projectId, seedText: words });
+    setStartNote(chatId, refused);
+    return true;
+  }
   const resolved = option ?? hit.card;
   const chip = jobChipFor({
     card: hit.card.id, wireCard: hit.wireCard, option: hit.option, depth: null,

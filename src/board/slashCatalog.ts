@@ -160,21 +160,29 @@ export function cardListed(c: CatalogCardV2): boolean {
   return !c.hidden && c.category !== 'yours' && c.command !== null && c.status === 'available' && inputsKnown(c);
 }
 
-/** An option the list shows under its (listed) card. */
+/** An option the list shows. */
 export function optionListed(o: CatalogOptionV2): boolean {
   return o.command !== null && o.status === 'available' && inputsKnown(o);
+}
+
+/** Whether a card's sub-commands may show: a card a person can reach by command (not hidden, not coming, not Yours).
+ *  A card's own status is its DEFAULT option's (crew `build-v2.ts`), so an unavailable default never hides an
+ *  available sibling (codex r2): the card row is left out, its listed options stay. */
+function optionsReachable(c: CatalogCardV2): boolean {
+  return !c.hidden && c.category !== 'yours' && c.command !== null && c.status !== 'coming_soon';
 }
 
 const launchIdOf = (r: Pick<CatalogResolved, 'launch'>): string => (r.launch.kind === 'run' ? r.launch.workflow : r.launch.kind);
 
 /** Why a card (or its option) cannot start here, or null. Plain words, never "coming". */
 export function refusalOf(card: CatalogCardV2, option: CatalogOptionV2 | null): string | null {
+  // What starts is the option's resolution (or the card's, its default option's): judged on that alone.
   const r: CatalogResolved = option ?? card;
   const name = option !== null ? `${card.title} · ${option.title}` : card.title;
   if (r.status !== 'available' || card.status === 'coming_soon') {
     return `${name} isn’t available on this daemon.${r.status === 'unavailable' && r.statusNote !== null ? ` ${r.statusNote}` : ''} Nothing was sent.`;
   }
-  if (!inputsKnown(r) || !inputsKnown(card)) return `${name} needs a newer studio. Nothing was sent.`;
+  if (!inputsKnown(r)) return `${name} needs a newer studio. Nothing was sent.`;
   return null;
 }
 
@@ -190,9 +198,15 @@ function yoursRow(c: CatalogCardV2, groupTitle: string): CommandRow {
   return { key: `c:${c.id}`, kind: 'yours', group: 'yours', groupTitle, command: null, title: c.title, line: c.summary, card: c.id, option: null, depth: null, launchId: launchIdOf(c) };
 }
 
-/** A card's rows: the card, then its listed options indented under it. */
+/** A card's rows: the card (when it can start), then its listed options indented under it. */
 function rowsOfCard(c: CatalogCardV2, group: string, groupTitle: string): CommandRow[] {
-  return [cardRow(c, group, groupTitle), ...(c.variant?.options ?? []).filter(optionListed).map((o) => optionRow(c, o, group, groupTitle))];
+  const opts = optionsReachable(c) ? (c.variant?.options ?? []).filter(optionListed).map((o) => optionRow(c, o, group, groupTitle)) : [];
+  return [...(cardListed(c) ? [cardRow(c, group, groupTitle)] : []), ...opts];
+}
+
+/** A card with anything to list: itself, or an available sub-command. */
+function cardShown(c: CatalogCardV2): boolean {
+  return cardListed(c) || (optionsReachable(c) && (c.variant?.options ?? []).some(optionListed));
 }
 
 /** Yours: saved steps and workflows no card offers, which start by their workflow (the wire's rule). */
@@ -206,7 +220,7 @@ export function allCommandRows(view: WorkflowCatalogV2Response): CommandRow[] {
   const out: CommandRow[] = [];
   for (const k of view.categories) {
     if (k.id === 'yours') continue;
-    for (const c of view.cards) if (c.category === k.id && cardListed(c)) out.push(...rowsOfCard(c, k.id, k.title));
+    for (const c of view.cards) if (c.category === k.id && cardShown(c)) out.push(...rowsOfCard(c, k.id, k.title));
   }
   return [...out, ...yoursRows(view)];
 }
@@ -306,7 +320,7 @@ export function commandList(view: WorkflowCatalogV2Response, text: string, looks
   }
   // Free words: the one scorer ranks the listed cards (and Yours), each followed by its sub-commands.
   const titleOf = new Map(view.categories.map((k) => [k.id as string, k.title]));
-  const listed = view.cards.filter((c) => cardListed(c) || (c.category === 'yours' && c.status === 'available' && c.launch.kind === 'run'));
+  const listed = view.cards.filter((c) => cardShown(c) || (c.category === 'yours' && c.status === 'available' && c.launch.kind === 'run'));
   const ranked = rankCards(listed, query, (id) => titleOf.get(id) ?? '');
   const rows: CommandRow[] = [];
   for (const { card } of ranked) {
@@ -327,7 +341,7 @@ export const LOOKS_GROUP = { id: 'looks', title: 'Looks like' } as const;
 function aliasRows(view: WorkflowCatalogV2Response, head: string, all: readonly CommandRow[]): CommandRow[] {
   const out: CommandRow[] = [];
   for (const c of view.cards) {
-    if (!cardListed(c)) continue;
+    if (!cardShown(c)) continue;
     for (const a of c.aliases) {
       if (!lower(a.command).startsWith(head)) continue;
       const target = all.find((r) => r.card === c.id && r.option === a.option && (r.kind === 'card' || r.kind === 'option'));
@@ -342,9 +356,9 @@ function aliasRows(view: WorkflowCatalogV2Response, head: string, all: readonly 
 export function looksRow(view: WorkflowCatalogV2Response, g: ShapeGuess | null): CommandRow | null {
   if (g === null || !g.available || g.band === 'ask' || g.card === '') return null;
   const c = view.cards.find((x) => x.id === g.card);
-  if (c === undefined || !cardListed(c)) return null;
+  if (c === undefined) return null;
   const o = g.option === null ? null : c.variant?.options.find((x) => x.id === g.option) ?? null;
-  if (g.option !== null && (o === null || !optionListed(o))) return null;
+  if (g.option === null ? !cardListed(c) : (o === null || !optionsReachable(c) || !optionListed(o))) return null;
   const base = o === null ? cardRow(c, LOOKS_GROUP.id, LOOKS_GROUP.title) : optionRow(c, o, LOOKS_GROUP.id, LOOKS_GROUP.title);
   return { ...base, key: `l:${c.id}:${o?.id ?? ''}`, kind: 'looks', depth: c.depth ? g.depth : null, line: g.reason !== '' ? g.reason : base.line };
 }

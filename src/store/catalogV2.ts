@@ -40,12 +40,14 @@ function isV2(body: unknown): body is WorkflowCatalogV2Response {
   return b !== null && typeof b === 'object' && b.version === 2 && Array.isArray(b.cards) && Array.isArray(b.categories);
 }
 
-/** Reads out, by project: a caller that needs the answer waits for the newest one (codex r1: two readers race). */
+/** The read out, by project: a second reader shares it (codex r1-r2: readers that race never supersede each other). */
 const inflight = new Map<string, Promise<CatalogV2Load | null>>();
 
-/** Read one project's v2 catalog (a GET). The answer lands only if no newer read was asked since. */
+/** Read one project's v2 catalog (a GET), or join the read already out for it. */
 export function readCatalogV2(projectId: string | null): Promise<CatalogV2Load | null> {
   const key = keyOf(projectId);
+  const out = inflight.get(key);
+  if (out !== undefined) return out;
   const p = readOnce(projectId).finally(() => { if (inflight.get(key) === p) inflight.delete(key); });
   inflight.set(key, p);
   return p;
@@ -69,18 +71,15 @@ async function readOnce(projectId: string | null): Promise<CatalogV2Load | null>
   return load;
 }
 
-/** The v2 catalog for a project as of now: the cached one, else the newest read's answer (a superseded read waits for
- *  the read that replaced it). `error` = it could not be read, which is not "no such card". */
+/** The v2 catalog for a project as of now: the cached one, else the answer of the read out for it (shared).
+ *  `error` = it could not be read, which is not "no such card". */
 export async function catalogV2Now(projectId: string | null): Promise<CatalogV2Load> {
   const key = keyOf(projectId);
-  for (let i = 0; i < 3; i += 1) {
-    const have = cache.get(key);
-    if (have?.state === 'ready') return have;
-    const out = inflight.get(key);
-    const load = await (out ?? readCatalogV2(projectId));
-    if (load !== null) return load;
-  }
-  return cache.get(key) ?? { state: 'error' };
+  const have = cache.get(key);
+  if (have?.state === 'ready') return have;
+  const load = await readCatalogV2(projectId);
+  // null only after a reset (a test): what the cache holds now.
+  return load ?? cache.get(key) ?? { state: 'error' };
 }
 
 const LOADING: CatalogV2Load = { state: 'loading' };

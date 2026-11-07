@@ -16,7 +16,7 @@ import { TEST_WORKFLOW_ID } from '../src/components/RouteRedirect.js';
 import { CREATE_EDITOR_WORKFLOW_ID } from '../src/components/editors/EditorPluginsSettings.js';
 import { LEARN_WORKFLOW_ID } from '../src/components/learn/learnModel.js';
 import { useCapabilities } from '../src/store/capabilities.js';
-import { resetCatalogV2, resetLooksLike } from '../src/store/catalogV2.js';
+import { readCatalogV2, resetCatalogV2, resetLooksLike } from '../src/store/catalogV2.js';
 import { resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
 import { chipsOf, useComposerChips } from '../src/store/composerChips.js';
 import { resetComposerSeats } from '../src/store/composerSeats.js';
@@ -51,6 +51,11 @@ let healthGate: Promise<void> = Promise.resolve();
 let chatSends: string[] = [];
 /** What /health advertises (the capabilities store reads it when nothing has yet). */
 let healthCaps: Record<string, unknown> = {};
+/** Held until released: the proposal and seed posts. */
+let proposalGate: Promise<void> = Promise.resolve();
+let seedGate: Promise<void> = Promise.resolve();
+/** Extra fields on a seed's answer. */
+let seedExtra: Record<string, unknown> = {};
 const nonGets = (): Array<{ method: string; path: string; body: Record<string, unknown> | null }> => calls.filter((c) => c.method !== 'GET');
 
 function stubWire(): void {
@@ -67,12 +72,12 @@ function stubWire(): void {
     if (method === 'POST' && /^\/chats\/[^/]+\/proposals$/.test(path)) {
       const st = proposalStatuses.shift() ?? 201;
       if (st >= 400) return json({ code: 'boom', error: 'the daemon said no' }, st);
-      return json({ view: { state: 'open', proposal: { pid: `${path.split('/')[2]}:person:1`, kind: 'job' } } }, 201);
+      return proposalGate.then(() => json({ view: { state: 'open', proposal: { pid: `${path.split('/')[2]}:person:1`, kind: 'job' } } }, 201));
     }
     if (method === 'POST' && path === '/chats') {
       const st = seedStatuses.shift() ?? 201;
       if (st >= 400) return json({ code: 'boom', error: 'the daemon said no' }, st);
-      return json({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } } }, 201);
+      return seedGate.then(() => json({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } }, ...seedExtra }, 201));
     }
     if (method !== 'GET') return json({ ok: true });
     if (path === '/health') return healthGate.then(() => json({ status: 'ok', capabilities: healthCaps }));
@@ -124,6 +129,9 @@ beforeEach(() => {
   healthGate = Promise.resolve();
   chatSends = [];
   healthCaps = {};
+  proposalGate = Promise.resolve();
+  seedGate = Promise.resolve();
+  seedExtra = {};
   detect = () => new Promise(() => {});
   stubWire();
   capable();
@@ -465,7 +473,14 @@ describe('review folds (r1): the path holds under failure, races and edge input'
     expect(chatSends).toEqual([]);
     expect(nonGets()).toEqual([]);
     release();
-    await waitFor(() => expect(rows().length + 1).toBeGreaterThan(0));
+    // Once read, the same line gets its own answer, once, and still nothing is sent.
+    await waitFor(() => expect(calls.some((c) => c.path === '/workflows/catalog?v=2')).toBe(true));
+    await list('/bug');
+    type('/due-diligence acme corp');
+    enter();
+    expect(screen.getByTestId('composer-note').textContent).toMatch(/isn’t available on this daemon/);
+    expect(chatSends).toEqual([]);
+    expect(nonGets()).toEqual([]);
   });
   it('before the daemon’s capabilities are read, `/` offers no list and Enter sends nothing', async () => {
     useCapabilities.setState({ loaded: false, chatJobProposals: false, workflowCatalogV2: false });
@@ -520,8 +535,12 @@ describe('review folds (r1): the path holds under failure, races and edge input'
     await list('/bug');
     pickRow('/bug');
     type('x');
-    enter();
-    enter();
+    // Two Enters in one batch: nothing renders between them, so only a ref (not the render's state) can hold the second.
+    const box = screen.getByTestId('session-composer-input');
+    act(() => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
     await waitFor(() => expect(proposals()).toHaveLength(1));
     await new Promise((r) => setTimeout(r, 50));
     expect(proposals()).toHaveLength(1);
@@ -582,15 +601,16 @@ describe('review folds (r1): the path holds under failure, races and edge input'
     expect(nonGets()).toEqual([]);
     expect(useChatFlow.getState().request!.chatId).toBe(now);
   });
-  it('a named opener racing another read of the catalog still resolves its card', async () => {
+  it('a named opener racing another read of the catalog shares it: one read, and the opener still posts its card', async () => {
     let release!: () => void;
     v2Gate = new Promise((r) => { release = r; });
-    render(<Harness />);
-    type('/'); // the composer's read
     act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID }));
-    type('/b'); // and another
+    await waitFor(() => expect(calls.filter((c) => c.path === '/workflows/catalog?v=2')).toHaveLength(1));
+    void readCatalogV2(null); // a competing reader (a composer's `/`)
+    void readCatalogV2(null);
     release();
     await waitFor(() => expect(nonGets().find((c) => c.path === '/chats')?.body).toMatchObject({ seed: { card: '/workflow-editor-plugin' } }));
+    expect(calls.filter((c) => c.path === '/workflows/catalog?v=2')).toHaveLength(1);
     expect(useLaunchWizard.getState().open).toBe(false);
   });
   it('New job keeps a draft already on the composer: the list opens in a new chat', async () => {
@@ -608,5 +628,119 @@ describe('review folds (r1): the path holds under failure, races and edge input'
     expect(useLaunchWizard.getState().open).toBe(false);
     await waitFor(() => expect(nonGets().find((c) => c.path === '/chats')?.body).toMatchObject({ seed: { card: '/workflow-editor-plugin' } }));
     expect(useLaunchWizard.getState().open).toBe(false);
+  });
+  it('no helper set up: a typed command is a job — Send is on, no helpers row, and a refused command says its own reason', async () => {
+    setCachedRoster([]);
+    render(<Harness />);
+    await ready();
+    type('/bug login crashes');
+    expect(screen.queryByTestId('composer-seats')).toBeNull();
+    expect((screen.getByTestId('session-composer-send') as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByTestId('session-composer-send'));
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    type('/due-diligence acme corp');
+    enter();
+    expect(screen.getByTestId('composer-note').textContent).toMatch(/isn’t available on this daemon/);
+    expect(proposals()).toHaveLength(1);
+  });
+  it('the list filters sub-commands by the wire’s option word, as the parser reads it', () => {
+    const sub = structuredClone(V2);
+    const up = sub.cards.find((c) => c.id === 'migrate')!.variant!.options.find((o) => o.id === 'upgrade')!;
+    up.optionWord = 'bump'; // the command still reads `/migrate upgrade`
+    const st = commandList(sub, '/migrate bu');
+    expect(st.open && st.rows.map((r) => r.option)).toEqual(['upgrade']);
+    expect(parseCommandLine(sub, '/migrate bump to 22')).toMatchObject({ option: 'upgrade', words: 'to 22' });
+  });
+});
+
+describe('review folds (r2)', () => {
+  it('an older daemon whose capabilities land after its catalog lists its workflows without another key', async () => {
+    useCapabilities.setState({ loaded: false, chatJobProposals: false, workflowCatalogV2: false });
+    let release!: () => void;
+    healthGate = new Promise((r) => { release = r; });
+    render(<Harness />);
+    type('/');
+    await waitFor(() => expect(calls.some((c) => c.path === '/workflows/catalog')).toBe(true));
+    expect(rows()).toEqual([]);
+    release();
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    expect(rows().every((r) => r.dataset.entry !== undefined)).toBe(true);
+  });
+  it('an unavailable default never hides an available sibling (the card row goes, the sub-command stays)', () => {
+    const sub = structuredClone(V2);
+    const p = sub.cards.find((c) => c.id === 'propose')!;
+    p.status = 'unavailable';
+    p.variant!.options.find((o) => o.id === 'knowledge')!.status = 'unavailable';
+    const all = allCommandRows(sub).filter((r) => r.card === 'propose').map((r) => r.command);
+    expect(all).toEqual(['/propose rules', '/propose memories']);
+    expect(parseCommandLine(sub, '/propose rules from runs')).toMatchObject({ option: 'rules', refused: null });
+    expect(parseCommandLine(sub, '/workflow-learn x')!.refused).toMatch(/isn’t available/);
+    const st = commandList(sub, '/propose');
+    expect(st.open && st.rows.map((r) => r.command)).toEqual(['/propose rules', '/propose memories']);
+  });
+  it('a typed command retried after a remount is the same request', async () => {
+    proposalStatuses = [500];
+    const v = render(<Harness />);
+    await ready();
+    type('/bug login crashes');
+    enter();
+    await waitFor(() => expect(screen.getByTestId('composer-start-note')).toBeTruthy());
+    v.unmount();
+    render(<Harness />);
+    await ready();
+    type('/bug login crashes');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(2));
+    expect(proposals()[1]!.requestId).toBe(proposals()[0]!.requestId);
+  });
+  it('a job posted before another New job never navigates over it', async () => {
+    let release!: () => void;
+    seedGate = new Promise((r) => { release = r; });
+    render(<Harness chatId={null} composerKey="desk" />);
+    await list('/bug');
+    pickRow('/bug');
+    enter();
+    await waitFor(() => expect(nonGets()).toHaveLength(1));
+    act(() => openLaunchWizard({ intent: 'something else', composerKey: 'desk' }));
+    const now = useChatFlow.getState().request!.chatId;
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(useChatFlow.getState().request!.chatId).toBe(now);
+  });
+  it('an old post never clears a replacement pick’s words', async () => {
+    let release!: () => void;
+    proposalGate = new Promise((r) => { release = r; });
+    render(<Harness />);
+    await list('/bug');
+    pickRow('/bug');
+    type('login crashes');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    const a = chipsOf(useComposerChips.getState(), 'c1')[0]!;
+    act(() => useComposerChips.setState({ byComposer: { c1: [] } }));
+    type('/feat');
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    pickRow('/feature');
+    type('login crashes');
+    expect(chipsOf(useComposerChips.getState(), 'c1')[0]!.key).not.toBe(a.key);
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('login crashes');
+    expect(chipsOf(useComposerChips.getState(), 'c1')[0]).toMatchObject({ card: 'feature' });
+  });
+  it('a named opener for a job this studio cannot collect posts nothing and says why', async () => {
+    const sub = structuredClone(V2);
+    sub.cards.find((c) => c.id === 'studio-plugin')!.variant!.options.find((o) => o.id === 'editor')!.inputs.push({ id: 'docs', label: 'Documents', kind: 'documents', required: true });
+    v2 = sub;
+    act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID }));
+    await waitFor(() => expect(Object.values(useStartNotes.getState().notes).join(' ')).toMatch(/needs a newer studio/));
+    expect(nonGets()).toEqual([]);
+    expect(useLaunchWizard.getState().open).toBe(false);
+  });
+  it('a seed whose chat could not be filed in the project says so on that chat', async () => {
+    seedExtra = { projectAttachError: 'project p1 is archived' };
+    act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID, projectId: 'p1' }));
+    await waitFor(() => expect(useStartNotes.getState().notes['seeded-1']).toMatch(/not filed in the project \(project p1 is archived\)/));
+    expect(useChatFlow.getState().request?.chatId).toBe('seeded-1');
   });
 });
