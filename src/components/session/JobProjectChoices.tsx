@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { create } from 'zustand';
 import { api } from '../../api/client.js';
 import type { ArtifactProposal, Project } from '../../api/types.js';
 import { openChat } from '../../store/chatFlow.js';
@@ -29,6 +30,15 @@ export function jobWords(p: Pick<ArtifactProposal, 'words' | 'details'>): string
   return [p.words ?? '', ...(p.details ?? [])].map((w) => w.trim()).filter((w) => w !== '').join('. ');
 }
 
+/** A job moved to a project, by the moved proposal's id: where it went and whether the old one was set aside. Kept for
+ *  the tab's life outside the passage, because the move itself navigates away (codex/pi r5): coming back finds the
+ *  moved job (and a retry of only the Not now), never fresh chips that would seed it again. */
+export interface JobMove { chatId: string; projectName: string; retired: 'pending' | 'done' | 'failed'; error: string | null }
+export const useJobMoves = create<{ moves: Record<string, JobMove> }>(() => ({ moves: {} }));
+function putMove(pid: string, m: JobMove): void {
+  useJobMoves.setState((s) => ({ moves: { ...s.moves, [pid]: m } }));
+}
+
 type Choices = { repo: string | null; list: Project[]; holding: boolean } | { repo: string | null; failed: true } | null;
 
 /**
@@ -52,7 +62,7 @@ export function JobProjectChoices({ chatId, proposal, onError }: {
   const [busy, setBusy] = useState<string | null>(null);
   const busyRef = useRef(false);
   /** The job, once moved: where it went, and whether this one was set aside (else a retry that never seeds again). */
-  const [moved, setMoved] = useState<{ chatId: string; project: Project; retired: boolean } | null>(null);
+  const moved = useJobMoves((s) => s.moves[proposal.pid] ?? null);
   useEffect(() => {
     let live = true;
     // Choices belong to one repository: a newer one reads afresh, and nothing is pressable meanwhile (codex r4).
@@ -66,15 +76,14 @@ export function JobProjectChoices({ chatId, proposal, onError }: {
     return () => { live = false; };
   }, [repo, tries]);
 
-  const retire = useCallback((to: { chatId: string; project: Project }): void => {
-    api.decideChatProposal(chatId, proposal.pid, { decision: 'not_now' }).then(
-      () => { setMoved({ ...to, retired: true }); onError(null); },
-      (e: unknown) => {
-        setMoved({ ...to, retired: false });
-        onError(`The job moved to ${to.project.name}, but this one was not set aside (${e instanceof Error ? e.message : String(e)}).`);
-      },
+  const retire = useCallback((to: { chatId: string; projectName: string }): void => {
+    const pid = proposal.pid;
+    putMove(pid, { ...to, retired: 'pending', error: null });
+    api.decideChatProposal(chatId, pid, { decision: 'not_now' }).then(
+      () => putMove(pid, { ...to, retired: 'done', error: null }),
+      (e: unknown) => putMove(pid, { ...to, retired: 'failed', error: `This one was not set aside (${e instanceof Error ? e.message : String(e)}).` }),
     );
-  }, [chatId, proposal.pid, onError]);
+  }, [chatId, proposal.pid]);
 
   const shape = proposal.shape;
   if (shape === undefined) {
@@ -90,7 +99,8 @@ export function JobProjectChoices({ chatId, proposal, onError }: {
       card: shape.card, option: shape.option, depth: shape.depth, words: jobWords(proposal), source: 'pick',
       chatId: null, projectId: p.id, repoRef: repo, pickKey: `${proposal.pid}:project:${p.id}`,
     }).then(
-      (out) => { if (out !== null) retire({ chatId: out.chatId, project: p }); },
+      // Recorded at once (before the press guard is let go), so no second press can seed again (pi/codex r5).
+      (out) => { if (out !== null) retire({ chatId: out.chatId, projectName: p.name }); },
       (e: unknown) => onError(`The job was not moved to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick a project again.`),
     ).finally(() => { busyRef.current = false; setBusy(null); });
   };
@@ -98,10 +108,13 @@ export function JobProjectChoices({ chatId, proposal, onError }: {
   if (moved !== null) {
     return (
       <div data-testid="job-passage-projects" data-state="moved" role="status" className="wk-pass-sub wk-composer-start-need">
-        <span className="wk-composer-note">This job moved to {moved.project.name}{moved.retired ? '' : '; this copy is still here'}.</span>
+        <span className="wk-composer-note">This job moved to {moved.projectName}{moved.retired === 'failed' ? '; this copy is still here' : ''}.</span>
         <button type="button" data-testid="job-passage-projects-open" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => openChat(moved.chatId)}>Open it</button>
-        {!moved.retired && (
-          <button type="button" data-testid="job-passage-projects-retire" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => retire(moved)}>Set this one aside</button>
+        {moved.retired === 'failed' && (
+          <>
+            <span role="alert" data-testid="job-passage-projects-error" className="wk-composer-note wk-composer-note--bad">{moved.error}</span>
+            <button type="button" data-testid="job-passage-projects-retire" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => retire(moved)}>Set this one aside</button>
+          </>
         )}
       </div>
     );

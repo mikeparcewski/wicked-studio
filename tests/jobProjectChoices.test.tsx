@@ -18,7 +18,7 @@ const { useChatFlow, resetChatFlow } = await import('../src/store/chatFlow.js');
 const { resetJobLocal } = await import('../src/hooks/useJobStream.js');
 const { resetDecisionsForTest } = await import('../src/board/undoQueue.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
-const { asksForProject } = await import('../src/components/session/JobProjectChoices.js');
+const { asksForProject, useJobMoves } = await import('../src/components/session/JobProjectChoices.js');
 const { jobProposal } = await import('./jobFixtures.js');
 
 const CHAT = 'chat-j';
@@ -59,6 +59,7 @@ beforeEach(() => {
   failProjects = false;
   notNowStatus = 200;
   chatMessages = {};
+  useJobMoves.setState({ moves: {} });
   resetJobLocal();
   resetDecisionsForTest();
   resetChatFlow();
@@ -137,7 +138,7 @@ describe('F39 review folds (r4): the move is one job, kept whole, and never doub
     await waitFor(() => expect(chips()).toHaveLength(1));
     fireEvent.click(chips()[0]!);
     await screen.findByTestId('job-passage-projects-retire');
-    expect(screen.getByTestId('job-passage-error').textContent).toMatch(/moved to reqgraph, but this one was not set aside/);
+    expect(screen.getByTestId('job-passage-projects-error').textContent).toMatch(/This one was not set aside/);
     notNowStatus = 200;
     fireEvent.click(screen.getByTestId('job-passage-projects-retire'));
     await waitFor(() => expect(screen.queryByTestId('job-passage-projects-retire')).toBeNull());
@@ -174,6 +175,37 @@ describe('F39 review folds (r4): the move is one job, kept whole, and never doub
     await screen.findByTestId('job-passage');
     await waitFor(() => expect(screen.queryAllByTestId('job-passage-reply').some((b) => b.dataset['reply'] === 'start')).toBe(true));
     expect(chips()).toHaveLength(0);
+    expect(posts).toEqual([]);
+  });
+});
+describe('F39 review folds (r5): the move outlives the page it left', () => {
+  it('two presses in one batch seed once', async () => {
+    members = { p1: [], p2: [] };
+    page();
+    await waitFor(() => expect(chips()).toHaveLength(2));
+    const [a, b] = chips();
+    act(() => { a!.click(); b!.click(); });
+    await waitFor(() => expect(screen.getByTestId('job-passage-projects').dataset['state']).toBe('moved'));
+    expect(posts.filter((p) => p.path === '/chats')).toHaveLength(1);
+  });
+  it('after the move navigates away and the Not now fails, coming back finds the moved job and a retry, never chips', async () => {
+    notNowStatus = 503;
+    const v = page();
+    await waitFor(() => expect(chips()).toHaveLength(1));
+    fireEvent.click(chips()[0]!);
+    await waitFor(() => expect(posts.filter((p) => p.path.startsWith(`/chats/${CHAT}/proposals/`))).toHaveLength(1));
+    v.unmount(); // the move opened the new chat
+    await new Promise((r) => setTimeout(r, 20));
+    page();
+    await screen.findByTestId('job-passage-projects-retire');
+    expect(chips()).toHaveLength(0);
+    expect(screen.getByTestId('job-passage-projects-error').textContent).toMatch(/not set aside/);
+    expect(posts.filter((p) => p.path === '/chats')).toHaveLength(1);
+  });
+  it('a job with no shape says it cannot be moved from here, and sends nothing', async () => {
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: { ...asking(), shape: undefined } }];
+    page();
+    await waitFor(() => expect(screen.getByTestId('job-passage-projects').textContent).toMatch(/can’t be moved to a project from here/));
     expect(posts).toEqual([]);
   });
 });

@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 331,
-    "occurrences": 4943,
-    "static": 4155,
+    "occurrences": 4944,
+    "static": 4156,
     "dynamic": 177,
     "computed": 53
   },
@@ -8265,6 +8265,12 @@
     },
     {
       "testId": "job-passage-projects",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-error",
       "files": [
         "src/components/session/JobProjectChoices.tsx"
       ]
