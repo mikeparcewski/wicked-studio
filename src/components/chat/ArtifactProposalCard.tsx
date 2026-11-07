@@ -449,5 +449,6 @@ function useRefineOutcome(p: ArtifactProposal, run: SessionView | null, keptByGo
       if (timer !== undefined) clearTimeout(timer);
     };
   }, [ref, runId, failed]);
-  return refineOutcome(run === null ? null : (run as unknown as { session: { id: string; landing_failed?: { reason?: unknown } | null } }), versions, keptByGo ?? 0);
+  const kept = keptByGo ?? ((p.protected ?? []).length > 0 ? 'some' : 0);
+  return refineOutcome(run === null ? null : (run as unknown as { session: { id: string; landing_failed?: { reason?: unknown } | null } }), versions, kept);
 }
