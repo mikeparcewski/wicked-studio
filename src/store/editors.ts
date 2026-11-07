@@ -64,19 +64,24 @@ export const useEditorPicks = create<{ picks: Record<string, string>; pick: (kin
 }));
 
 /** Whether an editor reads the artifact it is opened on: it declares `artifact.read`. One without it shows its own
- *  form, never the artifact (plugins-complete G9), so it is never offered as a way to open one. */
+ *  form, never the artifact (plugins-complete G9), so it is not offered, or opened, beside one that does. */
 export function editorReads(e: EditorView): boolean {
   return Array.isArray(e.permissions) && e.permissions.some((p) => p.id === 'artifact.read');
 }
 
-/** The editor that opens `kind` among `editors`: the person's pick only when that editor reads the artifact (a stored
- *  pick of one that does not is ignored), else the first fitting editor that reads it. Only when NO fitting editor
- *  declares a read does the first fitting one open, as before (an older registry lists no permissions); it is never
- *  offered beside a reader. */
-export function openingEditor(editors: readonly EditorView[], kind: string, preferred: string | null): EditorView | null {
+/** The editors a kind can open with: the fitting ones that read the artifact; when NONE declares a read (an older
+ *  registry lists no permissions), every fitting one, as before. "Open with" offers exactly these. */
+export function openableEditors(editors: readonly EditorView[], kind: string): EditorView[] {
   const fit = editorsFor(editors, kind);
   const readers = fit.filter(editorReads);
-  return (preferred !== null ? readers.find((e) => e.id === preferred) : undefined) ?? readers[0] ?? fit[0] ?? null;
+  return readers.length > 0 ? readers : fit;
+}
+
+/** The editor that opens `kind` among `editors`: the person's pick while it is one of {@link openableEditors} (a stored
+ *  pick of a non-reader beside a reader is ignored), else the first of them. */
+export function openingEditor(editors: readonly EditorView[], kind: string, preferred: string | null): EditorView | null {
+  const can = openableEditors(editors, kind);
+  return (preferred !== null ? can.find((e) => e.id === preferred) : undefined) ?? can[0] ?? null;
 }
 
 /** The editor that opens `kind`, once the registry is read: `undefined` while loading, `null` when none claims it. */
@@ -89,16 +94,12 @@ export function useEditorFor(kind: string): EditorView | null | undefined {
   return openingEditor(editors, kind, preferred);
 }
 
-/** Every editor that can open `kind` (the "Open with" choices), once the registry is read; `[]` before. An editor
- *  that does not read the artifact is left out beside one that does. */
+/** Every editor that can open `kind` (the "Open with" choices: {@link openableEditors}), once the registry is read;
+ *  `[]` before. */
 export function useEditorChoices(kind: string): EditorView[] {
   const state = useEditors((s) => s.state);
   const editors = useEditors((s) => s.editors);
-  if (state !== 'ready') return [];
-  const fit = editorsFor(editors, kind);
-  const readers = fit.filter(editorReads);
-  // A registry that lists no permissions (an older crew) declares no reads at all: every fitting editor stays a choice.
-  return readers.length > 0 ? readers : fit;
+  return state === 'ready' ? openableEditors(editors, kind) : [];
 }
 
 /**
