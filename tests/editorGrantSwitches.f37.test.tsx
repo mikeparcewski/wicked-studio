@@ -24,17 +24,17 @@ const EDITORS = {
 };
 
 type Decision = 'allow' | 'ask' | 'deny';
-function decided(id: string, d: Record<string, [Decision, string[]]>): unknown {
+function decided(id: string, d: Record<string, [Decision, string[]]>, sha = SHA): unknown {
   return {
-    editorId: id, version: '1.0.0', sha256: SHA, project: null, firstParty: false,
-    grants: Object.entries(d).map(([permission, [decision, ruleIds]]) => ({ permission, decision, ruleIds, token: `editor:${id}@1.0.0#${SHA}/${permission}` })),
+    editorId: id, version: '1.0.0', sha256: sha, project: null, firstParty: id.startsWith('wicked-'),
+    grants: Object.entries(d).map(([permission, [decision, ruleIds]]) => ({ permission, decision, ruleIds, token: `editor:${id}@1.0.0#${sha}/${permission}` })),
   };
 }
 const json = (body: unknown, status = 200): Promise<Response> =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
 
 /** A crew with a ledger: GET answers from it, POST changes it (the human-only route). */
-function crew(opts: { deny?: boolean; refuse?: string } = {}): { fetch: ReturnType<typeof vi.fn>; ledger: Set<string> } {
+function crew(opts: { deny?: boolean; refuse?: string; otherBuild?: boolean; dropPost?: boolean; failRead?: boolean; holdPost?: Promise<void> } = {}): { fetch: ReturnType<typeof vi.fn>; ledger: Set<string> } {
   const ledger = new Set<string>();
   const now = (): unknown => decided('e2e-checklist', {
     'artifact.read': ['allow', ['EDITOR-OPEN-DEFAULTS']],
@@ -49,11 +49,17 @@ function crew(opts: { deny?: boolean; refuse?: string } = {}): { fetch: ReturnTy
         if (opts.refuse !== undefined) return json({ error: opts.refuse }, 403);
         const body = JSON.parse(String(init.body)) as { permission: string; allow: boolean };
         if (body.allow) ledger.add(body.permission); else ledger.delete(body.permission);
+        // The write landed, then the connection dropped before the answer.
+        if (opts.dropPost === true) return Promise.reject(new TypeError('Failed to fetch'));
+        if (opts.holdPost !== undefined) return opts.holdPost.then(() => json(now()));
+      } else if (opts.failRead === true) {
+        return json({ error: 'engine down' }, 500);
       }
-      return json(now());
+      const d = now() as { version: string; sha256: string };
+      return json(opts.otherBuild === true ? { ...d, version: '1.1.0', sha256: 'd'.repeat(64) } : d);
     }
     if (url.includes('/editors/wicked-page/grants')) {
-      return json(decided('wicked-page', { 'artifact.read': ['allow', ['EDITOR-BUILTIN']], 'artifact.write': ['allow', ['EDITOR-BUILTIN']] }));
+      return json(decided('wicked-page', { 'artifact.read': ['allow', ['EDITOR-BUILTIN']], 'artifact.write': ['allow', ['EDITOR-BUILTIN']] }, PAGE_SHA));
     }
     if (url.includes('/editors')) return json(EDITORS);
     return json({});
@@ -141,6 +147,51 @@ describe('F37: what an installed editor asks for is a switch the person turns', 
     render(<PluginsPage navigate={() => undefined} search="?editor=e2e-checklist&allow=artifact.write" />);
     await waitFor(() => expect(screen.getByTestId('plugin-details').dataset['plugin']).toBe('e2e-checklist'));
     await waitFor(() => expect(document.activeElement).toBe(switchOf('artifact.write')));
+  });
+});
+
+describe('F37 review r1: the switch only ever acts on, and shows, the build the page shows', () => {
+  it('an answer for another build (an update landed) shows no switch and says to reload', async () => {
+    const c = crew({ otherBuild: true });
+    render(<PluginsPage navigate={() => undefined} />);
+    await openDetails('e2e-checklist');
+    await waitFor(() => screen.getByTestId('plugin-grants-changed'));
+    expect(screen.queryAllByTestId('plugin-grant-switch')).toHaveLength(0);
+    expect(posts(c.fetch)).toEqual([]);
+  });
+
+  it('one press at a time: while it is in flight every switch of the editor is disabled', async () => {
+    let release = (): void => undefined;
+    const hold = new Promise<void>((r) => { release = r; });
+    crew({ holdPost: hold });
+    render(<PluginsPage navigate={() => undefined} />);
+    await openDetails('e2e-checklist');
+    await waitFor(() => switchOf('checks.read'));
+    fireEvent.click(switchOf('artifact.write'));
+    await waitFor(() => expect((switchOf('checks.read') as HTMLButtonElement).disabled).toBe(true));
+    expect((switchOf('artifact.write') as HTMLButtonElement).disabled).toBe(true);
+    release();
+    await waitFor(() => expect(switchOf('artifact.write').getAttribute('aria-checked')).toBe('true'));
+    expect((switchOf('checks.read') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('a press whose answer is lost re-reads crew instead of claiming "Not changed"', async () => {
+    crew({ dropPost: true });
+    render(<PluginsPage navigate={() => undefined} />);
+    await openDetails('e2e-checklist');
+    await waitFor(() => switchOf('artifact.write'));
+    fireEvent.click(switchOf('artifact.write'));
+    await waitFor(() => expect(screen.getByTestId('plugin-grant-error').textContent).toMatch(/Could not confirm the change/u));
+    // The write had landed: what crew says now is on.
+    await waitFor(() => expect(switchOf('artifact.write').getAttribute('aria-checked')).toBe('true'));
+  });
+
+  it('when crew’s answer cannot be read, May do ticks nothing for an installed editor', async () => {
+    crew({ failRead: true });
+    render(<PluginsPage navigate={() => undefined} />);
+    await openDetails('e2e-checklist');
+    await waitFor(() => screen.getByTestId('plugin-grants-error'));
+    expect(screen.getByTestId('editor-plugin-permissions').textContent).not.toMatch(/change it|read what it opens/u);
   });
 });
 

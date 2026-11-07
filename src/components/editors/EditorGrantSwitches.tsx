@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { readEditorGrants, setEditorGrant, type EditorGrantsResponse, type EditorView } from '../../api/editors.js';
+import { ApiError } from '../../api/errors.js';
 import { PERMISSION_WORDS } from '../../editors/model.js';
 import type { PermissionId } from '../../editors/protocol.js';
 
@@ -38,74 +39,110 @@ export function grantRows(decided: Pick<EditorGrantsResponse, 'grants'>): GrantR
   return rows.sort((a, b) => Number(b.permission === 'artifact.write') - Number(a.permission === 'artifact.write'));
 }
 
-/** The permissions still waiting for the person (asked, not allowed): the "May do" line leaves them out. */
-export function askingOf(decided: Pick<EditorGrantsResponse, 'grants'> | null): ReadonlySet<string> {
-  return new Set((decided?.grants ?? []).filter((g) => g.decision !== 'allow').map((g) => g.permission));
+/**
+ * What "May do" may claim (codex r1): the permissions crew decided `allow`. Until crew's answer is read, a built-in
+ * editor claims its manifest (it ships with studio, with its default set) and an installed one claims nothing: `null`
+ * = not known yet. An older service with no grants route grants an installed editor nothing.
+ */
+export function allowedOf(e: Pick<EditorView, 'first_party' | 'permissions'>, load: Load): ReadonlySet<string> | null {
+  if (load.state === 'ready') return new Set(load.decided.grants.filter((g) => g.decision === 'allow').map((g) => g.permission));
+  if (e.first_party) return new Set(e.permissions.map((p) => p.id));
+  return load.state === 'none' ? new Set() : null;
 }
 
-type Load = { state: 'loading' } | { state: 'ready'; decided: EditorGrantsResponse } | { state: 'none' } | { state: 'error'; error: string };
+export type Load = { state: 'loading' } | { state: 'ready'; decided: EditorGrantsResponse } | { state: 'none' } | { state: 'error'; error: string };
 
-/** The editor's decided set, re-read when the editor (or its build) changes. No editor (a run plugin's card) = none. */
-export function useEditorGrants(e: Pick<EditorView, 'id' | 'sha256'> | undefined): { load: Load; set: (d: EditorGrantsResponse) => void } {
+type Shown = Pick<EditorView, 'id' | 'version' | 'sha256'>;
+const keyOf = (e: Pick<EditorView, 'id' | 'version' | 'sha256'>): string => `${e.id}@${e.version}#${e.sha256}`;
+
+/**
+ * The editor's decided set for the build this page SHOWS, re-read when the editor (or its build) changes. Every answer
+ * is kept only for the build it is about (codex r1): an answer for another build (an update landed between the list
+ * and this read) is "changed", and a late answer for a card no longer open is dropped. No editor = none.
+ */
+export function useEditorGrants(e: Shown | undefined): { load: Load | { state: 'changed' }; set: (d: EditorGrantsResponse) => void; reload: () => void } {
+  const want = e !== undefined ? keyOf(e) : null;
+  const wantRef = useRef(want);
+  wantRef.current = want;
+  const [got, setGot] = useState<{ key: string | null; load: Load | { state: 'changed' } }>({ key: want, load: want === null ? { state: 'none' } : { state: 'loading' } });
+  const [attempt, setAttempt] = useState(0);
   const id = e?.id ?? null;
-  const sha = e?.sha256 ?? null;
-  const [load, setLoad] = useState<Load>(id === null ? { state: 'none' } : { state: 'loading' });
   useEffect(() => {
-    if (id === null) { setLoad({ state: 'none' }); return undefined; }
+    if (id === null || want === null) { setGot({ key: want, load: { state: 'none' } }); return undefined; }
     let live = true;
-    setLoad({ state: 'loading' });
+    setGot({ key: want, load: { state: 'loading' } });
     readEditorGrants(id)
-      .then((d) => { if (live) setLoad(d === null || !Array.isArray(d.grants) ? { state: 'none' } : { state: 'ready', decided: d }); })
-      .catch((err: unknown) => { if (live) setLoad({ state: 'error', error: err instanceof Error ? err.message : String(err) }); });
+      .then((d) => {
+        if (!live) return;
+        if (d === null || !Array.isArray(d.grants)) setGot({ key: want, load: { state: 'none' } });
+        else setGot({ key: want, load: keyOf({ id: d.editorId, version: d.version, sha256: d.sha256 }) === want ? { state: 'ready', decided: d } : { state: 'changed' } });
+      })
+      .catch((err: unknown) => { if (live) setGot({ key: want, load: { state: 'error', error: err instanceof Error ? err.message : String(err) } }); });
     return () => { live = false; };
-  }, [id, sha]);
-  return { load, set: (d) => setLoad({ state: 'ready', decided: d }) };
+  }, [id, want, attempt]);
+  const set = (d: EditorGrantsResponse): void => {
+    const k = keyOf({ id: d.editorId, version: d.version, sha256: d.sha256 });
+    if (k === wantRef.current) setGot({ key: k, load: { state: 'ready', decided: d } });
+  };
+  // A load kept for another build than the one shown now is still loading for this one.
+  return { load: got.key === want ? got.load : { state: 'loading' }, set, reload: () => setAttempt((n) => n + 1) };
+}
+
+/** Whether a failed press is a definite refusal (crew answered and wrote nothing) or an unknown outcome. */
+function refused(err: unknown): boolean {
+  return err instanceof ApiError && err.status >= 400 && err.status < 500;
 }
 
 export function EditorGrantSwitches({ editor, title, grants, focus }: {
-  editor: Pick<EditorView, 'id' | 'sha256'>;
+  editor: Shown;
   title: string;
   grants: ReturnType<typeof useEditorGrants>;
   /** The permission a host note's "Allow it" link pointed at: its switch takes the keyboard once it shows. */
   focus: string | null;
 }): React.ReactElement | null {
-  const { load, set } = grants;
-  // A press belongs to the editor it was made on: switching to another card drops the old one's state.
-  const [busy, setBusy] = useState<{ id: string; permission: string } | null>(null);
-  const [error, setError] = useState<{ id: string; permission: string; text: string } | null>(null);
-  const focused = useRef<string | null>(null);
+  // Keyed by the build (the caller remounts it per editor build), so a press, its error and the focus request all
+  // belong to the editor they were made on.
+  const { load, set, reload } = grants;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<{ permission: string; text: string } | null>(null);
+  const focused = useRef(false);
   const rows = load.state === 'ready' ? grantRows(load.decided) : [];
   useEffect(() => {
-    if (focus === null || load.state !== 'ready') return;
-    const key = `${editor.id}:${focus}`;
-    if (focused.current === key) return;
-    const el = document.querySelector<HTMLElement>(`[data-testid="plugin-grant-switch"][data-permission="${CSS.escape(focus)}"]`);
+    if (focus === null || load.state !== 'ready' || focused.current) return;
+    const el = document.querySelector<HTMLElement>(`[data-testid="plugin-grant-switch"][data-editor="${CSS.escape(editor.id)}"][data-permission="${CSS.escape(focus)}"]`);
     if (el === null) return;
-    focused.current = key;
     el.scrollIntoView({ block: 'center' });
     el.focus({ preventScroll: true });
+    if (document.activeElement === el) focused.current = true;
   }, [focus, load.state, editor.id]);
   if (load.state === 'none') return null;
   if (load.state === 'ready' && rows.length === 0) return null;
   const press = (permission: string, allow: boolean): void => {
-    if (load.state !== 'ready') return;
-    const id = editor.id;
+    // One press at a time per editor (codex r1): each answer is the whole decided set, so two in flight could land
+    // out of order and show an older one.
+    if (load.state !== 'ready' || busy !== null) return;
     const shown = { version: load.decided.version, sha256: load.decided.sha256 };
-    setBusy({ id, permission });
+    setBusy(permission);
     setError(null);
-    setEditorGrant(id, permission, allow, shown)
-      .then((d) => { if (d.editorId === id) set(d); })
-      .catch((err: unknown) => setError({ id, permission, text: err instanceof Error ? err.message : String(err) }))
-      .finally(() => setBusy((b) => (b?.id === id && b.permission === permission ? null : b)));
+    setEditorGrant(editor.id, permission, allow, shown)
+      .then((d) => set(d))
+      .catch((err: unknown) => {
+        // crew answered and refused: nothing changed. Anything else (the connection dropped): it may have landed, so
+        // what crew decides now is read again rather than guessed (codex r1).
+        if (refused(err)) setError({ permission, text: `Not changed: ${err instanceof Error ? err.message : String(err)}` });
+        else { setError({ permission, text: 'Could not confirm the change; showing what studio’s service says now.' }); reload(); }
+      })
+      .finally(() => setBusy(null));
   };
   return (
     <section className="wk-plugdetail-sec" data-testid="plugin-details-grants" data-editor={editor.id}>
       <h3>Asks for</h3>
       {load.state === 'loading' && <p className="wk-plugdetail-muted" data-testid="plugin-grants-loading">Reading what it may do…</p>}
+      {load.state === 'changed' && <p role="alert" className="wk-plugdetail-bad" data-testid="plugin-grants-changed">This editor was updated since this page was read. Reload the page to see what the new version asks for.</p>}
       {load.state === 'error' && <p role="alert" className="wk-plugdetail-bad" data-testid="plugin-grants-error">Could not read what it may do: {load.error}</p>}
       {rows.map((r) => {
         const label = grantLabel(r.permission);
-        const mine = error !== null && error.id === editor.id && error.permission === r.permission ? error.text : null;
+        const mine = error !== null && error.permission === r.permission ? error.text : null;
         if (r.state === 'denied') {
           return (
             <div key={r.permission} className="wk-plugdetail-switch" data-testid="plugin-grant-row" data-permission={r.permission} data-state="denied">
@@ -114,7 +151,6 @@ export function EditorGrantSwitches({ editor, title, grants, focus }: {
           );
         }
         const on = r.state === 'on';
-        const pressing = busy !== null && busy.id === editor.id && busy.permission === r.permission;
         return (
           <div key={r.permission} style={{ marginBottom: 6 }}>
             <div className="wk-plugdetail-switch" data-testid="plugin-grant-row" data-permission={r.permission} data-state={r.state}>
@@ -122,12 +158,12 @@ export function EditorGrantSwitches({ editor, title, grants, focus }: {
                 <b>{label}</b><br />
                 <span className="wk-plugdetail-muted">{on ? 'Allowed by you for this version. ' : 'Off: it asks. '}Takes effect where it opens next. Only you can change this.</span>
               </span>
-              <button type="button" role="switch" aria-checked={on} data-testid="plugin-grant-switch" data-permission={r.permission} disabled={pressing}
+              <button type="button" role="switch" aria-checked={on} data-testid="plugin-grant-switch" data-editor={editor.id} data-permission={r.permission} disabled={busy !== null}
                 aria-label={`${title}: ${label.toLowerCase()}, ${on ? 'allowed' : 'off'}`} className="wk-switch" onClick={() => press(r.permission, !on)}>
                 <span aria-hidden className="wk-switch-track"><span className="wk-switch-thumb" /></span>
               </button>
             </div>
-            {mine !== null && <p role="alert" data-testid="plugin-grant-error" className="wk-plugdetail-bad">Not changed: {mine}</p>}
+            {mine !== null && <p role="alert" data-testid="plugin-grant-error" className="wk-plugdetail-bad">{mine}</p>}
           </div>
         );
       })}

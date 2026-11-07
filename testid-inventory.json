@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 329,
-    "occurrences": 4853,
-    "static": 4076,
+    "occurrences": 4857,
+    "static": 4078,
     "dynamic": 177,
     "computed": 53
   },
@@ -12186,6 +12186,13 @@
       ]
     },
     {
+      "testId": "page-line-status",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx",
+        "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
       "testId": "page-note",
       "files": [
         "src/plugins/_shared/pageEditor.ts"
@@ -12939,6 +12946,12 @@
     },
     {
       "testId": "plugin-grant-switch",
+      "files": [
+        "src/components/editors/EditorGrantSwitches.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-grants-changed",
       "files": [
         "src/components/editors/EditorGrantSwitches.tsx"
       ]

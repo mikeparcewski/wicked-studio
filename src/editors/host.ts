@@ -1220,7 +1220,9 @@ export class EditorHost {
     this.inventory = null;
     if (!('error' in r)) {
       this.ownVersions.add(head);
-      this.post(event('artifact.changed', { version: head, head, by: 'this-editor', kind: 'fork' }));
+      // `other`, not `this-editor` (F37; §5.5 mapping): the plugin never asked for this fork, so what it shows is the
+      // edit that was just undone. A plugin that skips re-reading its own versions must still re-read this one.
+      this.post(event('artifact.changed', { version: head, head, by: 'other', kind: 'fork' }));
     } else {
       this.post(event('artifact.changed', { version: head, head, by: 'other', kind: 'generated' }));
     }

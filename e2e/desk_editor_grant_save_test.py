@@ -128,6 +128,32 @@ def wait_line(page, kind: str, step: str) -> str:
     return page.locator(LINE).inner_text()
 
 
+def wait_headline(page, want: str, timeout_s: float = 15) -> str | None:
+    """What the editor shows for the headline, once it reads `want` (it re-reads the page on every version it did
+    not write itself), else the last thing it showed."""
+    deadline = time.time() + timeout_s
+    last = None
+    while time.time() < deadline:
+        st = plugin_state(page)
+        last = st["headline"] if st else None
+        if last == want:
+            return last
+        page.wait_for_timeout(250)
+    return last
+
+
+def page_headline(pid: str, doc: str, version: int) -> str | None:
+    """The headline of a stored version of the document, as the bridge serves it."""
+    import re
+    try:
+        with urllib.request.urlopen(f"{origin}/api/v1/projects/{pid}/interactive/d/{doc}/doc/{version}", timeout=10) as res:
+            html = res.read().decode()
+    except Exception:
+        return None
+    m = re.search(r'data-wid="headline"[^>]*>([^<]*)<', html)
+    return m.group(1).strip() if m else None
+
+
 def spa(page, path: str) -> None:
     page.evaluate("(p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); }", path)
 
@@ -169,6 +195,7 @@ def run(p, proto: int) -> None:
     page.get_by_test_id("plugin-card-open-with-select").first.select_option(EDITOR)
     page.locator(CARD).wait_for(state="visible", timeout=15000)
     s1 = wait_mode(page, "Read-only here.", "asks")
+    original = s1["headline"]
     note = page.locator(NOTE)
     note.wait_for(state="visible", timeout=10000)
     link = note.get_by_test_id("editor-grants-allow")
@@ -218,14 +245,19 @@ def run(p, proto: int) -> None:
     page.keyboard.type("Q3: revenue up 18%")
     page.keyboard.press("Enter")
     line1 = wait_line(page, "edited", "save")
+    saved = page_headline(PID, doc, 2)
     page.screenshot(path=str(SHOTS / f"desk-editor-grant-p{proto}-4-saved.png"))
-    check(f"p{proto}-save", note_after == 0 and "version 2" in line1, note_shown=note_after, line=line1, plugin=s3)
+    check(f"p{proto}-save", note_after == 0 and "version 2" in line1 and saved == "Q3: revenue up 18%",
+          note_shown=note_after, line=line1, stored_headline=saved, plugin=s3)
 
     # ── 4. undo ──
     page.locator(LINE).get_by_test_id("page-undo").click()
     line2 = wait_line(page, "undone", "undo")
+    shown = wait_headline(page, original)
+    restored = page_headline(PID, doc, 3)
     page.screenshot(path=str(SHOTS / f"desk-editor-grant-p{proto}-5-undone.png"))
-    check(f"p{proto}-undo", "version 3" in line2, line=line2)
+    check(f"p{proto}-undo", "version 3" in line2 and restored == original and shown == original,
+          line=line2, stored_headline=restored, editor_shows=shown, original=original)
 
     # ── 5. the switch off again: read-only, and it asks again ──
     spa(page, f"/plugins?editor={EDITOR}&allow=artifact.write")

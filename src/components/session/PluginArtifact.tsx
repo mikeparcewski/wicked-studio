@@ -26,11 +26,16 @@ import { ChecksPanel } from './ChecksPanel.js';
 const IDLE_MS = 5_000;
 
 type Line =
-  | { kind: 'edited'; version: number; base: number; what: string; verb: WriteVerb }
+  | { kind: 'edited'; version: number; base: number; what: string; verb: WriteVerb; status?: string }
   | { kind: 'undone'; version: number }
   | { kind: 'not-undone'; head: number }
   | { kind: 'working' | 'failed' | 'status'; text: string }
   | { kind: 'drafted'; editor: string; text: string };
+
+/** F37: a status line over the current one. Over "edited · Undo" it rides beside it, so Undo is never taken away. */
+function statusOver(cur: Line | null, text: string): Line {
+  return cur?.kind === 'edited' ? { ...cur, status: text } : { kind: 'status', text };
+}
 
 /** The session composer this artifact's chips go to: the typed character lands there, with the focus. */
 function focusComposer(composerKey: string): void {
@@ -124,9 +129,9 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
             else if (k === 'Tab' || k === 'Shift+Tab') focusBeside(hostRef.current?.frame ?? null, k === 'Shift+Tab');
           },
           morph: (to) => morphRef.current(to),
-          // F37: the host's "edited · Undo" line stays until the next write or undo: a plugin's own status line ("Saved as
-          // version 2") never takes the person's Undo away.
-          status: (l) => { if (live.current) setLine((cur) => (cur?.kind === 'edited' ? cur : { kind: 'status', text: l })); },
+          // F37: a status line ("Saved as version 2", or the host's own "not changed yet") is shown beside the host's
+          // "edited · Undo" line, never instead of it: the person's Undo stays until the next write or undo.
+          status: (l) => { if (live.current) setLine((cur) => statusOver(cur, l)); },
           notes: () => undefined,
           // The structured `written` draws the line with its Undo; the plain line is the dev page's.
           thread: () => undefined,
@@ -205,6 +210,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
             <>
               {editor.first_party ? editedLine(line.version, line.what, line.verb) : `${editor.title} ${line.verb} ${line.what} — version ${line.version}.`}{' '}
               <button type="button" data-testid="page-undo" disabled={busy} onClick={() => void undo()} className="wk-since-toggle">Undo</button>
+              {line.status !== undefined && <span data-testid="page-line-status"> · {line.status}</span>}
             </>
           )}
           {line.kind === 'undone' && undoneLine(line.version)}

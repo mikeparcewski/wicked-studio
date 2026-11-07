@@ -11,7 +11,7 @@ import { EmptyState, PageFrame, Skeleton, StateBanner } from '../ui/index.js';
 import { OpenDocumentList } from './OpenDocumentList.js';
 import { PluginLivePreview } from './PluginLivePreview.js';
 import { kindsInWords, openHref, permissionsInWords, startCreateEditorPlugin, useEditorList } from './EditorPluginsSettings.js';
-import { askingOf, EditorGrantSwitches, useEditorGrants } from './EditorGrantSwitches.js';
+import { allowedOf, EditorGrantSwitches, useEditorGrants } from './EditorGrantSwitches.js';
 
 /**
  * THE PLUGINS PAGE AS CARDS (program DES-LEARN §2; operator 2026-10-30: "Settings > Plugins as cards with visuals").
@@ -228,9 +228,10 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
   useEffect(() => { close.current?.focus({ preventScroll: true }); }, [card.key]);
   const e = card.editor;
   const grants = useEditorGrants(e);
-  // "May do" lists what it may do NOW: a permission still asking (or denied) is under "Asks for", not ticked here.
-  const asking = askingOf(grants.load.state === 'ready' ? grants.load.decided : null);
-  const words = e !== undefined ? permissionsInWords(e.permissions.filter((p) => !asking.has(p.id))) : null;
+  // "May do" ticks only what crew decided it may do (F37, codex r1): a permission still asking (or denied) is under
+  // "Asks for"; while crew's answer is unknown, an installed editor is ticked for nothing.
+  const allowed = e !== undefined ? allowedOf(e, grants.load.state === 'changed' ? { state: 'loading' } : grants.load) : null;
+  const words = e !== undefined && allowed !== null ? permissionsInWords(e.permissions.filter((p) => allowed.has(p.id))) : null;
   const opensDocuments = e !== undefined && e.enabled && e.first_party && e.kinds.some((k) => DOCUMENT_KINDS.includes(k));
   // The app runtime's door is the Apps page (DES-APPS-001: an app is made and opened there), in place of a sample.
   const appsDoor = e !== undefined && e.enabled && e.first_party && e.kinds.includes(APP_KIND);
@@ -268,7 +269,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
       </div>
       {switchError !== null && <p role="alert" data-testid="plugin-details-switch-error" className="wk-plugdetail-bad">Not changed: {switchError}</p>}
 
-      {e !== undefined && <EditorGrantSwitches editor={e} title={card.title} grants={grants} focus={focusGrant} />}
+      {e !== undefined && <EditorGrantSwitches key={`${e.id}@${e.version}#${e.sha256}`} editor={e} title={card.title} grants={grants} focus={focusGrant} />}
 
       {card.run !== undefined && card.run.panels.length > 0 && (
         <section className="wk-plugdetail-sec" data-testid="plugin-details-slot">
@@ -297,6 +298,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
         <ul className="wk-plugdetail-grants">
           {card.run?.permissions.map((g) => <li key={g.id} data-permission={g.id}>{CHECK}<span>It {permissionWords(g.id)} <code>{g.id}</code></span></li>)}
           {e !== undefined && words !== null && <li>{CHECK}<span data-testid="editor-plugin-permissions">{words.can}</span></li>}
+          {e !== undefined && words === null && <li>{CHECK}<span data-testid="editor-plugin-permissions">Reading what it may do from studio’s service…</span></li>}
           {words?.internet != null && <li data-testid="editor-plugin-internet">{CHECK}<span>{words.internet}</span></li>}
           <li className="wk-plugdetail-never">{CROSS}<span>{card.run !== undefined ? 'Never answers a decision, lowers rigor or skips a review; only you send a step anything.' : 'Never starts an agent, answers a decision or sends your work anywhere.'}</span></li>
         </ul>
@@ -395,7 +397,9 @@ export function PluginsPage({ navigate, search }: { navigate: (p: string) => voi
   // The deep link opens its editor once the list has it (once per link: closing the details is not undone).
   const linked = useRef<string | null>(null);
   useEffect(() => {
-    if (link === null || load.state !== 'ready') return;
+    // Leaving the link forgets it (codex r1): arriving on it again opens the details again.
+    if (link === null) { linked.current = null; return; }
+    if (load.state !== 'ready') return;
     const key = `editor:${link.editor}`;
     if (linked.current === `${search ?? ''}`) return;
     if (!cards.some((c) => c.key === key)) return;

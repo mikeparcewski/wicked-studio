@@ -402,6 +402,22 @@ describe('the host controller', () => {
     host.teardown('done');
   });
 
+  it('F37: the host’s own Undo tells the plugin the page changed under it (by other), so a plugin that skips its own versions re-reads', async () => {
+    const { host, fromFrame } = makeHost(['artifact.read', 'artifact.write']);
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const toPlugin: { type?: string; re?: string; payload?: unknown }[] = [];
+    port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+    port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+    await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toBeDefined());
+    const r = await host.undo(2);
+    expect('error' in r).toBe(false);
+    await vi.waitFor(() => expect(toPlugin.filter((m) => m.type === 'artifact.changed').length).toBeGreaterThan(0));
+    expect(toPlugin.filter((m) => m.type === 'artifact.changed').at(-1)).toMatchObject({ payload: { by: 'other', kind: 'fork' } });
+    host.teardown('done');
+  });
+
   it('codex r2: a write that landed under a helper’s newer head — the reply says the version written, then artifact.changed says the head', async () => {
     const { host, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write']);
     let port: MessagePort | null = null;
