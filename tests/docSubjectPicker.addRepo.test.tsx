@@ -39,19 +39,23 @@ function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: 
 
 /** The picker as the form holds it: the refs it sends live in the parent. */
 let refsSeen: string[] = [];
+let statuses: string[] = [];
+/** The composer's own gate (NewDocument `blocked`): Create waits while the subject is `loading`. */
+const createBlocked = (): boolean => statuses.at(-1) !== 'ready';
 function Harness({ projectId }: { projectId: string }): React.ReactElement {
   const [refs, setRefs] = useState<string[]>([]);
   refsSeen = refs;
   return (
     <DocSubjectPicker
       projectId={projectId} mode="document" repoRefs={refs} onRepoRefs={setRefs}
-      format="" onFormat={() => {}} noGrounding={false} onNoGrounding={() => {}} onStatus={() => {}}
+      format="" onFormat={() => {}} noGrounding={false} onNoGrounding={() => {}} onStatus={(st) => { statuses.push(st); }}
     />
   );
 }
 
 beforeEach(() => {
   refsSeen = [];
+  statuses = [];
   listProjectMembers.mockReset();
   listRepos.mockReset();
   attachProjectMember.mockReset();
@@ -133,5 +137,49 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     render(<Harness projectId="p6" />);
     fireEvent.click(await screen.findByTestId('doc-subject-add'));
     expect([...(screen.getByTestId('doc-subject-add-select') as HTMLSelectElement).options].slice(1).map((o) => o.value)).toEqual(['r-hello', 'r-studio']);
+  });
+
+  it('Create waits while the pick is attaching, and only the picked repository is sent once it lands', async () => {
+    listProjectMembers.mockResolvedValue({ members: [member('p7', 'r-hello')] });
+    const pending = deferred<{ member: ProjectMember }>();
+    attachProjectMember.mockReturnValue(pending.promise);
+    render(<Harness projectId="p7" />);
+    fireEvent.click(await screen.findByTestId('doc-subject-add'));
+    expect(createBlocked()).toBe(false);
+    const select = screen.getByTestId('doc-subject-add-select') as HTMLSelectElement;
+    await act(async () => { fireEvent.change(select, { target: { value: 'r-core' } }); });
+    expect(createBlocked()).toBe(true);
+    expect(select.disabled).toBe(true);
+    // A second pick while one is in flight is not a second attach.
+    await act(async () => { fireEvent.change(select, { target: { value: 'r-studio' } }); });
+    expect(attachProjectMember).toHaveBeenCalledTimes(1);
+    await act(async () => { pending.resolve({ member: member('p7', 'r-core') }); await new Promise((r) => setTimeout(r, 0)); });
+    expect(createBlocked()).toBe(false);
+    expect(refsSeen).toEqual(['r-core']);
+    // Focus lands on the chip just added (the chooser it was in is gone).
+    expect((document.activeElement as HTMLElement | null)?.dataset['repoId']).toBe('r-core');
+  });
+
+  it('a refused attach lets the form go on (the refusal is on screen); a stale one reports nothing', async () => {
+    listProjectMembers.mockResolvedValue({ members: [] });
+    attachProjectMember.mockRejectedValueOnce(new Error('403 not yours'));
+    const { rerender } = render(<Harness projectId="p8" />);
+    fireEvent.click(await screen.findByTestId('doc-subject-add'));
+    await act(async () => { fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-core' } }); });
+    await screen.findByTestId('doc-subject-add-error');
+    expect(createBlocked()).toBe(false);
+    // Cancel returns focus to "Add a repository…".
+    fireEvent.click(screen.getByTestId('doc-subject-add-cancel'));
+    expect(document.activeElement).toBe(screen.getByTestId('doc-subject-add'));
+    const pending = deferred<{ member: ProjectMember }>();
+    attachProjectMember.mockReturnValue(pending.promise);
+    fireEvent.click(screen.getByTestId('doc-subject-add'));
+    await act(async () => { fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-core' } }); });
+    rerender(<Harness projectId="p9" />);
+    await screen.findByTestId('doc-subject-add');
+    const before = statuses.length;
+    await act(async () => { pending.resolve({ member: member('p8', 'r-core') }); await new Promise((r) => setTimeout(r, 0)); });
+    expect(statuses.slice(before)).toEqual([]);
+    expect(createBlocked()).toBe(false);
   });
 });

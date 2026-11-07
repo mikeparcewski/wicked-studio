@@ -95,6 +95,19 @@ export function DocSubjectPicker({
   // The parent's newest refs, read when an attach lands (the snapshot this render closed over may be stale by then).
   const refsNow = useRef(repoRefs);
   refsNow.current = repoRefs;
+  // Where focus goes when the chooser closes (keyboard users keep their place): back to "Add a repository…", or to
+  // the chip of the repository just added.
+  const root = useRef<HTMLDivElement | null>(null);
+  const focusNext = useRef<string | null>(null);
+  useEffect(() => {
+    const want = focusNext.current;
+    if (want === null || adding || root.current === null) return;
+    focusNext.current = null;
+    const target = want === '' ? root.current.querySelector<HTMLElement>('[data-testid="doc-subject-add"]')
+      : [...root.current.querySelectorAll<HTMLElement>('[data-testid="doc-subject-repo"]')].find((b) => b.dataset['repoId'] === want);
+    target?.focus();
+  }, [adding, repos]);
+  const closeChooser = (): void => { focusNext.current = ''; setAdding(false); setAddFailure(null); };
 
   useEffect(() => {
     let cancelled = false;
@@ -135,30 +148,37 @@ export function DocSubjectPicker({
     onRepoRefs(repoRefs.includes(id) ? repoRefs.filter((r) => r !== id) : [...repoRefs, id]);
   };
 
-  /** Attach a registered repository to the project (the project's own attach), then ground on it. */
+  /** Attach a registered repository to the project (the project's own attach), then ground on it. While it is in
+   *  flight the composer is told `loading`, so Create cannot send the refs from before the pick (codex on the diff). */
   const attach = async (repo: ProjectRepoOption): Promise<void> => {
     if (attaching !== null) return;
     const forGeneration = generation.current;
     setAttaching(repo.id);
     setAddFailure(null);
+    onStatus('loading');
     try {
       await api.attachProjectMember(projectId, { kind: REPO_KIND, ref: repo.id, attachedBy: 'studio' });
       if (generation.current !== forGeneration) return; // another project (or a re-read) since: not this list's
       setRepos((list) => (list.some((r) => r.id === repo.id) ? list : [...list, repo]));
       setAttachable((list) => list.filter((r) => r.id !== repo.id));
+      focusNext.current = repo.id;
       setAdding(false);
       if (!refsNow.current.includes(repo.id)) onRepoRefs([...refsNow.current, repo.id]);
     } catch (e) {
       if (generation.current !== forGeneration) return;
+      // Said on the form (role=alert) beside the chips that WILL be sent; the person retries, cancels or creates.
       setAddFailure(e instanceof Error ? e.message : String(e));
     } finally {
-      if (generation.current === forGeneration) setAttaching(null);
+      if (generation.current === forGeneration) {
+        setAttaching(null);
+        onStatus('ready');
+      }
     }
   };
   const chip: React.CSSProperties = { border: '1px solid var(--surface-overlay)', cursor: 'pointer', background: 'transparent' };
 
   return (
-    <div data-testid="doc-subject" data-subject-status={status} className="flex flex-wrap items-center gap-1.5">
+    <div ref={root} data-testid="doc-subject" data-subject-status={status} className="flex flex-wrap items-center gap-1.5" style={{ minWidth: 0 }}>
       {status === 'loading' && (
         <span data-testid="doc-subject-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           finding the project’s repositories…
@@ -221,6 +241,7 @@ export function DocSubjectPicker({
             // The form's own toggle (the Helpers row's): an inline accent-on-accent-dim pill was unreadable in the
             // light theme, and an added repository shows pressed at once.
             className="wk-chip"
+            style={{ maxWidth: '100%', overflowWrap: 'anywhere' }}
           >
             {repo.name}
           </button>
@@ -238,11 +259,13 @@ export function DocSubjectPicker({
         </button>
       )}
       {status === 'ready' && projectId !== UNFILED_MOUNT && adding && (
-        <span className="flex flex-wrap items-center gap-1.5">
+        // A native select sizes to its longest option: held to the form's width on a phone (codex on the diff).
+        <span className="flex flex-wrap items-center gap-1.5" style={{ maxWidth: '100%', minWidth: 0 }}>
           <select
             data-testid="doc-subject-add-select"
             aria-label="Add a repository to this project"
             className="wk-field"
+            style={{ maxWidth: '100%', minWidth: 0 }}
             value=""
             disabled={attaching !== null}
             autoFocus
@@ -250,7 +273,7 @@ export function DocSubjectPicker({
               const repo = attachable.find((r) => r.id === e.target.value);
               if (repo !== undefined) void attach(repo);
             }}
-            onKeyDown={(e) => { if (e.key === 'Escape' && attaching === null) { e.stopPropagation(); setAdding(false); } }}
+            onKeyDown={(e) => { if (e.key === 'Escape' && attaching === null) { e.stopPropagation(); closeChooser(); } }}
           >
             <option value="">{attaching !== null ? 'adding…' : 'Choose a repository…'}</option>
             {attachable.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -259,7 +282,7 @@ export function DocSubjectPicker({
             type="button"
             data-testid="doc-subject-add-cancel"
             disabled={attaching !== null}
-            onClick={() => { setAdding(false); setAddFailure(null); }}
+            onClick={closeChooser}
             className="wk-since-toggle text-xs"
           >
             cancel
