@@ -9102,6 +9102,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             version = (q.get("version") or [""])[0]
             sha = (q.get("sha") or [""])[0]
+            if parts[4] == "acme-good":
+                # crew answers for the build it serves, whatever the query names (studio's Plugins page sends none).
+                good = hashlib.sha256((REPO / "e2e" / "editor-fixtures" / "good.html").read_bytes()).hexdigest()
+                return self._writer_grants("0.1.0", good, (q.get("project") or [None])[0])
             decided = [(g, "allow") for g in grants]
             if parts[4] == "acme-mcp":
                 with state_lock:
@@ -9110,10 +9114,6 @@ class W2Handler(SimpleHTTPRequestHandler):
             if parts[4] == "mpx-changelog-entry":
                 # Decided at its install consent: it reads the page, adds entries as versions, goes full screen (G9).
                 decided = [("artifact.read", "allow"), ("artifact.write", "allow"), ("ui.fullscreen", "allow")]
-            if parts[4] == "acme-good":
-                # crew answers for the build it serves, whatever the query names (studio's Plugins page sends none).
-                good = hashlib.sha256((REPO / "e2e" / "editor-fixtures" / "good.html").read_bytes()).hexdigest()
-                return self._writer_grants("0.1.0", good, (q.get("project") or [None])[0])
             self._json(200, {"editorId": parts[4], "version": version, "sha256": sha, "project": (q.get("project") or [None])[0],
                              "firstParty": parts[4].startswith("wicked-"),
                              "grants": [{"permission": g, "decision": d, "ruleIds": [],
