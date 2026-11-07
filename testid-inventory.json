@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 325,
-    "occurrences": 4749,
-    "static": 3975,
+    "occurrences": 4750,
+    "static": 3976,
     "dynamic": 176,
     "computed": 53
   },
@@ -5634,6 +5634,12 @@
     },
     {
       "testId": "doc-subject-add-error",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-add-hint",
       "files": [
         "src/components/DocSubjectPicker.tsx"
       ]
