@@ -39,9 +39,11 @@ export function holdsLine(spec: AppSpec): string {
 
 type Asking = { version: number; state: 'reading' } | { version: number; state: 'read'; read: AppVersionView } | { version: number; state: 'failed'; message: string };
 
-export function AppVersions({ detail, session, disabledWhy, onDone, onClose }: {
+export function AppVersions({ detail, session, pending = 0, disabledWhy, onDone, onClose }: {
   detail: AppDetail;
   session: AppSession;
+  /** Edits still saving: they land first, so the restore's version number is not known yet. */
+  pending?: number;
   /** Why nothing can be restored right now (a turn, an archived app, a framed page), or null. */
   disabledWhy: string | null;
   /** The restore's outcome, as one status line for the host. */
@@ -51,7 +53,16 @@ export function AppVersions({ detail, session, disabledWhy, onDone, onClose }: {
   const [asking, setAsking] = useState<Asking | null>(null);
   const [busy, setBusy] = useState(false);
   const panel = useRef<HTMLElement | null>(null);
+  const confirmBox = useRef<HTMLDivElement | null>(null);
   useEffect(() => { panel.current?.focus(); }, []);
+  // The confirmation takes the focus when it opens (the button that opened it is gone), so Escape and Tab stay here.
+  const openVersion = asking?.version ?? null;
+  useEffect(() => { if (openVersion !== null) confirmBox.current?.focus(); }, [openVersion]);
+  /** Close the confirmation and put the focus back on that version's Restore… (codex r1). */
+  const cancel = (version: number): void => {
+    setAsking(null);
+    requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>(`[data-version="${version}"] [data-testid="apps-version-restore"]`)?.focus());
+  };
   const head = detail.head.version;
   const rows = [...detail.versions].sort((a, b) => b.version - a.version);
 
@@ -73,11 +84,16 @@ export function AppVersions({ detail, session, disabledWhy, onDone, onClose }: {
 
   return (
     <section ref={panel} tabIndex={-1} className="wk-apps-versions" data-testid="apps-versions" aria-label="Versions"
-      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || busy) return;
+        e.stopPropagation();
+        // Escape closes the open confirmation first, then the panel.
+        if (asking !== null) cancel(asking.version); else onClose();
+      }}>
       <header className="wk-apps-versions-head">
         <h2 className="wk-apps-versions-title">Versions</h2>
         <span className="wk-apps-versions-sub">Restore brings an earlier version back as the newest one. Nothing is lost: the version it replaces stays here.</span>
-        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-versions-close" onClick={onClose}>Close</button>
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-versions-close" disabled={busy} onClick={onClose}>Close</button>
       </header>
       {disabledWhy !== null && <p className="wk-apps-versions-why" data-testid="apps-versions-why">{disabledWhy}</p>}
       <ol className="wk-apps-versions-list">
@@ -96,22 +112,24 @@ export function AppVersions({ detail, session, disabledWhy, onDone, onClose }: {
                 {now && <span className="wk-pill" data-testid="apps-version-now">Now</span>}
                 {restorable && !open && (
                   <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-version-restore" disabled={disabledWhy !== null || busy}
-                    onClick={() => void ask(v.version)}>Restore…</button>
+                    aria-label={`Restore v${v.version}…`} onClick={() => void ask(v.version)}>Restore…</button>
                 )}
               </div>
               {open && (
-                <div className="wk-apps-version-confirm" data-testid="apps-version-confirm" role="group" aria-label={`Restore v${v.version}?`}>
+                <div ref={confirmBox} tabIndex={-1} className="wk-apps-version-confirm" data-testid="apps-version-confirm" role="group" aria-label={`Restore v${v.version}?`}>
                   {asking.state === 'reading' && <p className="wk-apps-version-line">Reading v{v.version}…</p>}
                   {asking.state === 'failed' && <p className="wk-apps-version-line wk-apps-line--fail" data-testid="apps-version-failed">v{v.version} could not be read: {asking.message}</p>}
                   {asking.state === 'read' && (
                     <p className="wk-apps-version-line" data-testid="apps-version-holds">
-                      v{v.version} holds {holdsLine(asking.read.spec)}. Now (v{head}): {holdsLine(detail.spec)}. It comes back as v{head + 1}.
+                      v{v.version} holds {holdsLine(asking.read.spec)}. Now (v{head}): {holdsLine(detail.spec)}.{' '}
+                      {pending > 0 ? 'Your change still saving lands first; then it comes back as a new version.' : `It comes back as v${head + 1}.`}
                     </p>
                   )}
                   <span className="wk-apps-version-actions">
                     <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="apps-version-restore-confirm"
-                      disabled={asking.state !== 'read' || disabledWhy !== null || busy} onClick={() => void restore(v.version)}>Restore v{v.version}</button>
-                    <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-version-restore-cancel" onClick={() => setAsking(null)}>Cancel</button>
+                      disabled={asking.state !== 'read' || disabledWhy !== null || busy} onClick={() => void restore(v.version)}>{busy ? 'Restoring…' : `Restore v${v.version}`}</button>
+                    {/* Once Restore is pressed it is on its way (after any change still saving): Cancel would not stop it. */}
+                    <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-version-restore-cancel" disabled={busy} onClick={() => cancel(v.version)}>Cancel</button>
                   </span>
                 </div>
               )}

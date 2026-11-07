@@ -205,7 +205,7 @@
 .wk-apppanel--collapsed .wk-apppanel-head[hidden], .wk-apppanel--collapsed .wk-apppanel-body[hidden] { display: none; }
 
 /* plugins G16 (operator ruling D5): Versions with Restore, Archive with Restore. Host chrome, tokens only. */
-.wk-apps-versions { border-bottom: 1px solid var(--border); background: var(--surface-card); max-height: 42vh; overflow-y: auto; outline: none; }
+.wk-apps-versions { border-bottom: 1px solid var(--border); background: var(--surface-card); max-height: 42vh; overflow-y: auto; outline: none; scroll-padding-top: 56px; }
 .wk-apps-versions-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2) var(--space-3); padding: var(--space-3) var(--space-5) var(--space-2); background: var(--surface-card); }
 .wk-apps-versions-title { margin: 0; color: var(--ink-high); font-size: var(--text-body); font-weight: var(--weight-strong); }
 .wk-apps-versions-sub { flex: 1 1 280px; min-width: 0; color: var(--ink-muted); font-size: var(--text-caption); }

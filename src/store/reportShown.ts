@@ -150,7 +150,8 @@ export const useReportShown = create<ReportShownState>((set, get) => ({
     set({ apps: { ...get().apps, state: 'loading' } });
     appsLoading = (async () => {
       try {
-        const list = await apiFetch<AppsListResponse>('/apps');
+        // Every app, archived ones included (crew lists only the active ones by default; an older crew ignores this).
+        const list = await apiFetch<AppsListResponse>('/apps?archived=all');
         const bySlug: Record<string, ShownAppRef> = {};
         for (const a of Array.isArray(list?.apps) ? list.apps as unknown[] : []) {
           const r = a as Record<string, unknown>;
