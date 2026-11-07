@@ -1,7 +1,6 @@
 import type { WorkflowDef } from '../api/types.js';
 import type { Preset } from '../api/teamPlan.js';
 import type { CatalogLoad } from '../store/workflowCatalog.js';
-import { VIBE_SOON } from './comingSoon.js';
 import { DEMO_VIDEO_LINE } from './demoLaunch.js';
 import { isDocFormat } from './everythingModel.js';
 import { workflowItems } from './workflowCommand.js';
@@ -277,7 +276,7 @@ export function withStudioKinds(view: CatalogView, extras: readonly CatalogEntry
 
 /** "Draft epics" (operator 2026-10-12): a project's requirements become epics, features and stories. */
 export const DRAFT_EPICS_LINE = 'Turn requirements into epics and stories';
-/** Studio's own kinds in the catalog (launched through their own routes), and the app builder that is coming. */
+/** Studio's own kinds in the catalog (launched through their own routes). */
 const studioEntry = (e: Pick<CatalogEntry, 'id' | 'title' | 'category' | 'gets' | 'needs' | 'status' | 'tags' | 'launchKind' | 'delivers'>): CatalogEntry => ({
   launchId: e.id, docStyle: null, subcategory: null, summary: '', inputs: [], form: false, time: null, cost: null, synonyms: [], statusNote: null,
   order: 0, artKey: e.id, launches: 0, lastUsedAt: null, medianMinutes: null, ...e,
@@ -287,8 +286,6 @@ export const STUDIO_KINDS: readonly CatalogEntry[] = [
   studioEntry({ id: STUDIO_KIND_DEMO, launchKind: 'demo', title: 'Demo video', category: 'create', gets: DEMO_VIDEO_LINE, needs: ['running_app'], status: 'ready', delivers: 'video', tags: ['demo', 'video', 'recording', 'walkthrough'] }),
   studioEntry({ id: STUDIO_KIND_DRAFT_EPICS, launchKind: 'compose', title: 'Draft epics', category: 'more', gets: DRAFT_EPICS_LINE, needs: ['project', 'requirements'], status: 'ready', delivers: null, tags: ['epics', 'stories', 'backlog', 'requirements', 'planning'] }),
 ];
-/** Apps (the data builder) is coming: an older daemon's list shows it (crew's catalog lists its own `apps`). */
-export const VIBE_ENTRY: CatalogEntry = studioEntry({ id: 'apps', launchKind: 'none', title: VIBE_SOON.name, category: null, gets: VIBE_SOON.line, needs: [], status: 'soon', delivers: null, tags: ['app', 'apps', 'dashboard', 'data app', 'internal tool', 'vibe', 'builder'] });
 
 /**
  * THE ONE LIST OF KINDS OF JOB (slash-catalog, operator 2026-11-04: "the slash commands in the chatbox
@@ -303,7 +300,7 @@ export function jobCatalogView(load: CatalogLoad, defs: readonly WorkflowDef[] |
   if (load.state === 'loading' || load.state === 'error') return null;
   // An older daemon: today's list. Its defs may never come (no `/workflows`, or the read failed and the
   // cache keeps "not known"), so studio's own kinds show at once and the daemon's join when they land.
-  return withStudioKinds(catalogFromDefs(defs ?? [], presets), [...STUDIO_KINDS, VIBE_ENTRY]);
+  return withStudioKinds(catalogFromDefs(defs ?? [], presets), STUDIO_KINDS);
 }
 
 /**
@@ -379,7 +376,7 @@ export interface CatalogFilters {
   /** null = every category. */
   category: string | null;
   repo: RepoFilter;
-  /** Show the workflows that are coming soon or unavailable (on by default: the operator sees what is coming). */
+  /** Show the workflows that cannot start here (unavailable on this daemon, or marked coming soon by its catalog); on by default. */
   showSoon: boolean;
 }
 export const NO_FILTERS: CatalogFilters = { category: null, repo: 'any', showSoon: true };

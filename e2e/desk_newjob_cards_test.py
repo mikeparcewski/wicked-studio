@@ -70,8 +70,9 @@ DEFS = [
 ]
 WORKFLOWS = {"workflows": [
     {"id": i, "is_system": s, "phases": [{"id": p, "executes_code": True} for p in ph]} for (i, ph, s) in DEFS]}
-# Older daemon: every ordinary workflow (no 8-row cap), then studio's own kinds, then the app builder (coming soon).
-OLDER = [i for (i, _, s) in DEFS if not s] + ["demo-video", "draft-epics", "apps"]
+# Older daemon: every ordinary workflow (no 8-row cap), then studio's own kinds. Studio adds no "Apps · Coming soon"
+# tile of its own any more (operator 2026-11-06: what is shown as coming is built; lane coming-soon-build CS1).
+OLDER = [i for (i, _, s) in DEFS if not s] + ["demo-video", "draft-epics"]
 
 MEASURE = r"""() => {
   const panel = document.querySelector('[data-testid=launch-catalog-results]');
