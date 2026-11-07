@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { AppearanceSettings } from './AppearanceSettings.js';
 import { THEME_LIMITS, themeChangeWords, themeDisclosure } from '../board/artifactProposal.js';
-import { effectiveAppearance, useAppearanceStore } from '../theming/appearance.js';
+import { canonicalDelta, effectiveAppearance, useAppearanceStore } from '../theming/appearance.js';
 import { contrastWords, measureTheme } from '../theming/themeContrast.js';
 import { ThemeSwatches } from './ThemeSwatches.js';
 
@@ -42,7 +42,7 @@ export function ThemeProposalPanel(): React.ReactElement | null {
   const facts = useMemo(() => {
     if (preview === null) return null;
     const proposed = effectiveAppearance({ appearance: stored, preview });
-    return { yours: measureTheme(stored), proposed: measureTheme(proposed), changes: themeChangeWords(stored, preview.delta) };
+    return { yours: measureTheme(stored), proposed: measureTheme(proposed), changes: themeChangeWords(stored, canonicalDelta(stored, preview.delta)) };
   }, [stored, preview]);
   if (preview === null || facts === null) return null;
   const st = useAppearanceStore.getState;
@@ -53,7 +53,7 @@ export function ThemeProposalPanel(): React.ReactElement | null {
         <span className="wk-tag">from {preview.seat}</span>
         <span className="wk-theme-proposal-sp" />
         <button type="button" data-testid="theme-proposal-discard" className="wk-btn wk-btn--secondary wk-btn--sm"
-          disabled={save.state === 'saving'} onClick={() => st().endPreview()}>Discard</button>
+          disabled={save.state === 'saving'} onClick={() => { st().endPreview(); document.getElementById('main')?.focus(); }}>Discard</button>
         <button type="button" data-testid="theme-proposal-apply" className="wk-btn wk-btn--primary wk-btn--sm"
           disabled={save.state === 'saving' || !facts.proposed.ok} onClick={() => void st().applyPreview()}>
           {save.state === 'saving' ? 'Saving…' : save.state === 'failed' ? 'Retry' : 'Apply'}

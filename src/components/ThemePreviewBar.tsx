@@ -53,7 +53,7 @@ export function ThemePreviewBar(): React.ReactElement | null {
             {save.state === 'failed' ? 'Retry' : save.state === 'saving' ? 'Saving…' : 'Apply'}
           </button>
           <button type="button" data-testid="theme-preview-back" className="wk-btn wk-btn--quiet wk-btn--sm"
-            disabled={save.state === 'saving'} onClick={() => st().endPreview()}>Back to mine</button>
+            disabled={save.state === 'saving'} onClick={() => { st().endPreview(); document.getElementById('main')?.focus(); }}>Back to mine</button>
         </>
       ) : save.state === 'saved' ? (
         <>

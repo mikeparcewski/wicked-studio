@@ -234,11 +234,26 @@ export interface ThemeSave {
   undo?: { prior: ThemePatch; applied: ThemePatch; until: number };
   /** Recording the Apply on the proposal failed (the theme is saved either way). */
   recordError?: string;
+  /** The proposal's answer settled (recorded or refused): a card re-reads its chat then. */
+  recorded?: boolean;
 }
 
 export const THEME_UNDO_MS = 10_000;
 
 const IDLE: ThemeSave = { state: 'idle', name: null };
+
+/** Paint what the tab shows in ONE step: the saved appearance is cached, and with a preview on, only the effective
+ *  result is painted (no intermediate saved-only paint that would drop a previewed Ambient's mood). */
+function paintSaved(saved: StudioAppearance, preview: ThemePreview | null): void {
+  if (preview === null) { applyAppearance(saved); return; }
+  writeCachedAppearance(saved);
+  applyAppearance(mergedAppearance(saved, preview.delta), { cache: false });
+}
+
+/** The delta as studio stores it (rounded, clamped) over a base: what is shown, saved, recorded and undone. */
+export function canonicalDelta(base: StudioAppearance, delta: ThemePatch): ThemePatch {
+  return pick(mergedAppearance(base, delta), THEME_PATCH_KEYS.filter((k) => k in delta));
+}
 
 function pick(a: StudioAppearance, keys: readonly ThemePatchKey[]): ThemePatch {
   const out: Record<string, unknown> = {};
@@ -306,9 +321,11 @@ function persistSoon(read: () => StudioAppearance): void {
 }
 
 /** (A7) Apply's own awaited write supersedes a pending debounced one: its body already holds every saved edit. */
-function cancelPendingPersist(): void {
+function cancelPendingPersist(): boolean {
+  const pending = persistTimer !== null || retryTimer !== null;
   if (persistTimer !== null) { clearTimeout(persistTimer); persistTimer = null; }
   if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
+  return pending;
 }
 
 /** The starting state: the cached appearance when this client has one, applied before the first
@@ -326,11 +343,9 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
       const { settings } = await api.getAppearanceSettings();
       const stored = (settings as Record<string, unknown>)[APPEARANCE_KEY];
       const appearance = sanitizeAppearance(stored);
-      applyAppearance(appearance);
-      set({ appearance, loaded: true });
       // A preview started before this read answered stays on screen (it is tab-local, never the stored record).
-      const preview = get().preview;
-      if (preview !== null) applyAppearance(mergedAppearance(appearance, preview.delta), { cache: false });
+      paintSaved(appearance, get().preview);
+      set({ appearance, loaded: true });
     } catch {
       // No settings surface, or the daemon is unreachable: what this client last applied stands
       // (the cache, already applied at start) — else the tokens.css defaults.
@@ -340,11 +355,9 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
 
   update: (patch) => {
     const appearance = { ...get().appearance, ...patch };
-    applyAppearance(appearance);
-    set({ appearance });
     // A preview stays on screen over a saved change (a ⌘K theme toggle while previewing).
-    const preview = get().preview;
-    if (preview !== null) applyAppearance(mergedAppearance(appearance, preview.delta), { cache: false });
+    paintSaved(appearance, get().preview);
+    set({ appearance });
     persistSoon(() => get().appearance);
   },
 
@@ -398,20 +411,27 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
     }
     set({ save: { state: 'saving', name: pv.name, pid: pv.pid } });
     // Every saved edit is in `merged`: a pending debounced write would only race it.
-    cancelPendingPersist();
+    const hadPending = cancelPendingPersist();
     try {
       await api.putAppearanceSettings(merged);
     } catch (err) {
       set({ save: { state: 'failed', name: pv.name, pid: pv.pid, error: err instanceof Error && err.message !== '' ? err.message : 'Studio’s service did not save it.' } });
+      // A saved edit whose write Apply cancelled still has to reach the daemon.
+      if (hadPending) persistSoon(() => get().appearance);
       return false;
     }
-    // Saved: exactly what was measured and acknowledged becomes the stored appearance (by the delta's keys alone).
-    applyAppearance(merged);
+    // Saved: the delta's keys take exactly the measured, acknowledged values; anything else edited while it saved (the
+    // site name, the logo) is kept and persisted after it.
+    const now = get().appearance;
+    const after: StudioAppearance = { ...now, ...applied };
+    paintSaved(after, null);
     set({
-      appearance: merged,
+      appearance: after,
       preview: null,
       save: { state: 'saved', name: pv.name, pid: pv.pid, undo: { prior: pick(base, keys), applied, until: Date.now() + THEME_UNDO_MS } },
     });
+    if (JSON.stringify(sanitizeAppearance(after)) !== JSON.stringify(merged)) persistSoon(() => get().appearance);
+    let recordError: string | undefined;
     try {
       await api.decideChatProposal(pv.chatId, pv.pid, { decision: 'go', edits: { name: pv.name, patch: applied } });
     } catch (err) {
@@ -419,9 +439,10 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
       const words = code === 'proposal_superseded'
         ? 'a newer proposal in that chat replaced this one, so the chat shows it as not applied'
         : err instanceof Error && err.message !== '' ? err.message : 'the chat did not take the answer';
-      const now = get().save;
-      if (now.state === 'saved' && now.pid === pv.pid) set({ save: { ...now, recordError: `Saved, but the chat did not record it: ${words}.` } });
+      recordError = `Saved, but the chat did not record it: ${words}.`;
     }
+    const settled = get().save;
+    if (settled.state === 'saved' && settled.pid === pv.pid) set({ save: { ...settled, recorded: true, ...(recordError !== undefined ? { recordError } : {}) } });
     return true;
   },
 
