@@ -166,8 +166,9 @@ export type ChatProposalRecord =
   | { at: number; turnId: string; kind: 'proposal_accepting'; pid: string; actor: string; edits: ProposalEdits | null; resolution: ArtifactProposal; identity: ProposalIdentity }
   | { at: number; turnId: string; kind: 'proposal_decided'; pid: string; actor: string; decision: 'go' | 'not_now'; result: ProposalResult | null };
 
-/** `POST /chats/:id/proposals/:pid` body. */
-export interface ChatProposalDecisionBody { decision: 'go' | 'not_now'; edits?: ProposalEdits }
+/** `POST /chats/:id/proposals/:pid` body. (api-types 0.196.0) `power`: a job Start's choice, sent only where crew
+ *  advertises `chatJobPower` and the proposal says `powerChoice` (true = a power run, false = it stops at its plan). */
+export interface ChatProposalDecisionBody { decision: 'go' | 'not_now'; edits?: ProposalEdits; power?: boolean }
 
 /** `POST /chats/:id/proposals/:pid` → 200 (and the `view` a 409 carries). */
 export interface ChatProposalDecisionResponse { view: ChatProposalView }
