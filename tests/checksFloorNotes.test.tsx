@@ -24,11 +24,17 @@ describe('the floor row and the notes fold', () => {
   it('the board words: measured vs estimated pages, not measured, none recorded', () => {
     expect(floorRow(undefined)).toBeNull();
     expect(floorRow(FLOOR as never)).toMatchObject({ state: 'pass', stateWord: 'Meets the floor', pages: '1 printed page · budget 1 exactly' });
-    expect(floorRow({ ...FLOOR, verdict: 'unverified', pages: { count: 2, measured: false, budget: 1, exact: true } } as never)?.pages).toBe('about 2 pages, estimated (not printed) · budget 1 exactly');
+    expect(floorRow({ ...FLOOR, verdict: 'unverified', pages: { count: 2, measured: false, budget: 1, exact: true } } as never)?.pages).toBe('at least 2 pages by its structure; the printed count was not measured · budget 1 exactly');
     expect(floorRow(null)).toMatchObject({ state: 'none', stateWord: 'Not measured' });
     expect(notesView(null, 3)?.head).toBe('No notes were recorded');
     expect(notesView(NOTES as never, 3)).toMatchObject({ head: 'Left out 1 thing nothing could confirm', from: 'from version 2', unused: ['run:1a2b3c4d'] });
     expect(notesView({ ...NOTES, from_version: 3 } as never, 3)?.from).toBeNull();
+    // Used sources are kept; a malformed record is said unreadable, never "nothing left out".
+    expect(notesView({ ...NOTES, left_out: [], assumptions: [], struck: [], sources: [{ token: 'run:x', used: true }] } as never, 3)).toMatchObject({ head: 'Nothing left out · the writer’s notes', used: ['run:x'] });
+    expect(notesView({ ...NOTES, left_out: [], assumptions: [], struck: [], sources: [] } as never, 3)?.head).toBe('Nothing left out');
+    expect(floorRow('unreadable')).toMatchObject({ stateWord: 'Could not be read' });
+    expect(notesView('unreadable', 3)?.head).toBe('The writer’s notes could not be read');
+    expect(floorRow(null)?.attribution).toBe('the host’s floor check, not a review');
   });
 
   it('draws the floor as measured by the host, and the notes folded with where they came from', async () => {
@@ -38,10 +44,17 @@ describe('the floor row and the notes fold', () => {
     expect(screen.getByTestId('artifact-checks-floor').textContent).toContain('measured by the host, not a review');
     expect(screen.getByTestId('artifact-checks-floor-pages').textContent).toBe('1 printed page · budget 1 exactly');
     expect(screen.getByTestId('artifact-checks-notes-from').textContent).toContain('from version 2');
+    expect(screen.getByTestId('artifact-checks-notes-toggle').getAttribute('aria-label')).toBe('The writer’s notes: Left out 1 thing nothing could confirm, from version 2');
     expect(screen.queryByTestId('artifact-checks-notes-body')).toBeNull();
     fireEvent.click(screen.getByTestId('artifact-checks-notes-toggle'));
     expect(screen.getByTestId('artifact-checks-notes-left-out').textContent).toBe('p95 latency 40 ms — no record confirms it');
     expect(screen.getByTestId('artifact-checks-notes-body').textContent).toContain('Left out by crew before the run: run:9f9f9f9f (not named in this chat)');
+  });
+
+  it('a malformed notes record reads as unreadable, never as clean', async () => {
+    body = { document_id: 'deck', version: 3, checks: [], floor: FLOOR, notes: { ...NOTES, left_out: [{ claim: 'x', why: null }] } };
+    render(<ChecksPanel projectId="kes" docId="deck" head={3} pointAt={async () => true} />);
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-notes-head').textContent).toBe('The writer’s notes could not be read'));
   });
 
   it('a version made by hand says not measured and no notes; an older daemon draws neither', async () => {

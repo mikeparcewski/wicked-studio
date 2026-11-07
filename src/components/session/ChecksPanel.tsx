@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { getDocChecks, type ChecksRead } from '../../api/docChecks.js';
 import { postEvent } from '../../api/interactive.js';
 import { checkRows, checksSummary, floorRow, notesView, reviewLanded, reviewRequestOf } from '../../board/checksPanel.js';
@@ -117,8 +117,8 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
       </p>
       {note !== null && <p data-testid="artifact-checks-note" role="status" className="wk-checks-note">{note}</p>}
       {floor !== null && (
-        <div data-testid="artifact-checks-floor" data-state={floor.state} className={`wk-check wk-check--floor wk-check--${floor.state === 'pass' ? 'pass' : floor.state === 'none' ? 'none' : 'inconclusive'}`}>
-          <p className="wk-check-top"><b>Floor</b> · <span data-testid="artifact-checks-floor-state">{floor.stateWord}</span> <span className="wk-check-dim">· measured by the host, not a review</span></p>
+        <div data-testid="artifact-checks-floor" data-state={floor.state} className={`wk-check wk-check--floor wk-check--floor-${floor.state}`}>
+          <p className="wk-check-top"><b>Floor</b> · <span data-testid="artifact-checks-floor-state">{floor.stateWord}</span> <span className="wk-check-dim">· {floor.attribution}</span></p>
           {floor.pages !== null && <p data-testid="artifact-checks-floor-pages" className="wk-check-sentence">{floor.pages}</p>}
           {floor.sentence !== '' && <p className="wk-check-dim">{floor.sentence}</p>}
         </div>
@@ -158,25 +158,28 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
  *  they belong to an earlier version than the one on screen; an empty list is said as such, never as a clean one. */
 function NotesFold({ notes }: { notes: import('../../board/checksPanel.js').NotesView }): React.ReactElement {
   const [open, setOpen] = useState(false);
-  const has = notes.leftOut.length + notes.assumptions.length + notes.struck.length + notes.unused.length > 0;
+  const bodyId = useId();
+  const has = notes.leftOut.length + notes.assumptions.length + notes.struck.length + notes.used.length + notes.unused.length > 0;
   return (
     <div data-testid="artifact-checks-notes" className="wk-checks-notes">
       <p className="wk-check-top">
         {has ? (
-          <button type="button" data-testid="artifact-checks-notes-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="wk-since-toggle">
-            {open ? '▾' : '▸'} {notes.head}
+          <button type="button" data-testid="artifact-checks-notes-toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((o) => !o)} className="wk-since-toggle"
+            aria-label={`The writer’s notes: ${notes.head}${notes.from !== null ? `, ${notes.from}` : ''}`}>
+            <span aria-hidden="true">{open ? '▾' : '▸'}</span> {notes.head}
           </button>
         ) : <span data-testid="artifact-checks-notes-head">{notes.head}</span>}
         {notes.from !== null && <span data-testid="artifact-checks-notes-from" className="wk-check-dim"> · {notes.from}</span>}
       </p>
       {has && open && (
-        <div data-testid="artifact-checks-notes-body" className="wk-checks-notes-body">
+        <div id={bodyId} data-testid="artifact-checks-notes-body" className="wk-checks-notes-body">
           {notes.leftOut.length > 0 && (
             <ul className="wk-check-findings">
               {notes.leftOut.map((x, i) => <li key={i} data-testid="artifact-checks-notes-left-out"><b>{x.claim}</b> — {x.why}</li>)}
             </ul>
           )}
           {notes.assumptions.length > 0 && <p className="wk-check-dim">Assumed: {notes.assumptions.join(' · ')}</p>}
+          {notes.used.length > 0 && <p className="wk-check-dim">Used: {notes.used.join(', ')}</p>}
           {notes.unused.length > 0 && <p className="wk-check-dim">Given but not used: {notes.unused.join(', ')}</p>}
           {notes.struck.length > 0 && <p className="wk-check-dim">Left out by crew before the run: {notes.struck.map((x) => `${x.token} (${x.reason})`).join('; ')}</p>}
         </div>
