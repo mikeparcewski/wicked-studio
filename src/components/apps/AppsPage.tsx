@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { listEditors } from '../../api/editors.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
@@ -80,6 +80,9 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   const [line, setLine] = useState<{ text: string; undo: { tile: AppTileData; to: boolean } | null; fail: boolean } | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const phone = usePhone();
+  /** crew archives (seen once, kept): the switch stays mounted while the list reloads, so its focus is not lost. */
+  const [archivesSeen, setArchivesSeen] = useState(false);
+  const lineRef = useRef<HTMLParagraphElement | null>(null);
   // A framed studio changes nothing (§7.1, S8): no app is made from inside another page.
   const framed = useMemo(() => { try { return window.top !== window.self; } catch { return true; } }, []);
   // ONE scheduler for the page: every card's live reads share its limit (at most 3 at once) and its stagger.
@@ -125,6 +128,8 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
       if (!r.ok) { setLine({ text: `${to ? 'Not archived' : 'Not restored'}: ${r.message}`, undo: null, fail: true }); return; }
       setLine({ text: to ? `Archived “${t.name}”. It is under Archived; nothing was deleted.` : `Restored “${t.name}” to Apps.`, undo: undoable ? { tile: t, to: !to } : null, fail: false });
       setAttempt((n) => n + 1);
+      // The card (and the control that was focused) leaves this list: the focus goes to the line that says so.
+      requestAnimationFrame(() => lineRef.current?.focus());
     } finally {
       setActing(null);
     }
@@ -135,7 +140,8 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   const apps = dir !== null && dir.source !== 'error' ? dir.apps : [];
   // Archive is offered only where crew says it archives (its records carry `archived`, read from the whole list, so the
   // switch stays when every app is archived); Archived is listed with it.
-  const archives = dir !== null && dir.source === 'crew' && (scope === 'archived' || dir.archives === true);
+  const archives = archivesSeen || scope === 'archived' || (dir !== null && dir.source === 'crew' && dir.archives === true);
+  useEffect(() => { if (dir !== null && dir.source === 'crew' && dir.archives === true) setArchivesSeen(true); }, [dir]);
   const skipped = dir !== null && dir.source !== 'error' ? dir.skipped : 0;
   // Opened from a Report: the cards (and Edit) carry the way back on to the app, whose crumb then leads there.
   const carry = back !== null ? origin : null;
@@ -160,7 +166,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
           )}
         </p>
       )}
-      {(archives || scope === 'archived') && (
+      {archives && (
         <p className="wk-apps-scope" data-testid="apps-scope">
           <span className="wk-seg" role="group" aria-label="Which apps">
             <button type="button" className={`wk-seg-btn${scope === 'active' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-scope-active" aria-pressed={scope === 'active'} onClick={() => { setScope('active'); setLine(null); }}>Apps</button>
@@ -169,7 +175,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
         </p>
       )}
       {line !== null && (
-        <p className={`wk-apps-dash-line${line.fail ? ' wk-apps-dash-line--fail' : ''}`} data-testid="apps-archive-line" aria-live="polite">
+        <p ref={lineRef} tabIndex={-1} className={`wk-apps-dash-line${line.fail ? ' wk-apps-dash-line--fail' : ''}`} data-testid="apps-archive-line" aria-live="polite">
           {line.text}
           {line.undo !== null && !phone && !framed && <> <button type="button" className="wk-btn wk-btn--link" data-testid="apps-archive-undo" disabled={acting !== null} onClick={() => void setTileArchived(line.undo!.tile, line.undo!.to, false)}>Undo</button></>}
         </p>
@@ -196,7 +202,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
         <div className="wk-apps-grid" data-testid="apps-empty">
           <div className="wk-appcard wk-appcard--ghost wk-appcard--empty">
             <div className="wk-appcard-prev wk-appcard-prev--ghost"><i /><i /><i /><i /></div>
-            <p className="wk-appcard-desc">{scope === 'archived' ? 'No archived app. Archive one from its card’s ⋯ menu; it comes back with Restore.' : filter !== null ? `${filterName ?? 'This project'} has no app yet.` : 'Apps are dashboards and tools over your data: describe one above and it is built for you.'}</p>
+            <p className="wk-appcard-desc">{scope === 'archived' ? (phone ? 'No archived app. Archiving is on a larger screen.' : 'No archived app. Archive one from its card’s ⋯ menu; it comes back with Restore.') : filter !== null ? `${filterName ?? 'This project'} has no app yet.` : 'Apps are dashboards and tools over your data: describe one above and it is built for you.'}</p>
           </div>
         </div>
       )}

@@ -179,6 +179,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const modeRef = useRef<AppMode>(initialMode ?? 'preview');
   const [sharing, setSharing] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  /** A restore on its way: the panel cannot be closed under it (its progress would vanish). */
+  const [restoring, setRestoring] = useState(false);
   const versionsBtn = useRef<HTMLButtonElement | null>(null);
   const [unarchiving, setUnarchiving] = useState(false);
   // Read before `shown`: an archived app is Preview only (crew refuses every change until it is restored).
@@ -187,7 +189,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const shown = narrow || archived ? 'preview' : mode;
   // When Edit was left: a field typed in Edit commits as the person clicks Preview, and that op is still Edit's.
   const editLeftRef = useRef(Number.NEGATIVE_INFINITY);
-  if (modeRef.current === 'edit' && shown !== 'edit') editLeftRef.current = Date.now();
+  // Only the person's own switch to Preview gets that grace; Edit taken away (a phone, an archived app) ends at once.
+  if (modeRef.current === 'edit' && shown !== 'edit') editLeftRef.current = mode === 'preview' ? Date.now() : Number.NEGATIVE_INFINITY;
   modeRef.current = shown;
   // The host page decides framing, once, and never relaxes it (§7.1): studio refuses to be framed (S8), so a framed
   // studio is a page someone else put it in.
@@ -397,7 +400,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
     try {
       const r = await setArchived(slug, false);
       setStatus(r.ok ? 'Restored: the app is back on Apps and can be changed again.' : `Not restored: ${r.message}`);
-      if (r.ok) { setDetail(r.app); void sessionRef.current?.refresh(); }
+      // Through the session, so its next read compares against this answer (one source for the view).
+      if (r.ok) sessionRef.current?.take(r.app);
     } finally {
       setUnarchiving(false);
     }
@@ -433,7 +437,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           <span className="wk-apps-history" role="group" aria-label="History">
             <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-undo" disabled={history?.canUndo !== true || busy || framed || archived} onClick={() => void move('undo')} aria-label="Undo">Undo</button>
             <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-redo" disabled={history?.canRedo !== true || busy || framed || archived} onClick={() => void move('redo')} aria-label="Redo">Redo</button>
-            <button ref={versionsBtn} type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-versions-open" disabled={detail === null} aria-expanded={versionsOpen}
+            <button ref={versionsBtn} type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-versions-open" disabled={detail === null || restoring} aria-expanded={versionsOpen}
               onClick={() => setVersionsOpen((o) => !o)}>Versions</button>
           </span>
         )}
@@ -455,7 +459,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         </p>
       )}
       {versionsOpen && !phone && detail !== null && sessionRef.current !== null && (
-        <AppVersions detail={detail} session={sessionRef.current} pending={pending} disabledWhy={versionsWhy} onDone={(line) => setStatus(line)}
+        <AppVersions detail={detail} session={sessionRef.current} pending={pending} disabledWhy={versionsWhy} onDone={(line) => setStatus(line)} onBusy={setRestoring}
           onClose={() => { setVersionsOpen(false); versionsBtn.current?.focus(); }} />
       )}
       {narrow && (

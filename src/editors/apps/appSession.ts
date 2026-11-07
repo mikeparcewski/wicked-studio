@@ -142,6 +142,14 @@ export class AppSession {
     // (G16) Archived or restored in another tab: the head is the same, the app's state is not.
     const archivedChanged = archivedOf(app) != null !== this.archived;
     if (!moved && !turnChanged && !turnsChanged && !archivedChanged) return;
+    // Archived meanwhile, with a burst waiting: it is dropped NOW, saying so, so it can never save later (an unarchive
+    // seen before its timer would otherwise land it; codex r2).
+    if (!moved && archivedChanged && archivedOf(app) != null && this.burst.length > 0) {
+      this.adopt(app);
+      this.emit({ kind: 'failed', message: `Not saved: ${ARCHIVED_WHY}`, app });
+      this.emit({ kind: 'head', app, by: 'elsewhere' });
+      return;
+    }
     if (moved) {
       const hadBurst = this.burst.length > 0;
       this.adopt(app);
@@ -150,6 +158,18 @@ export class AppSession {
       this.app = app; // only the turn state changed: the burst (if any) stays on the same head
       this.gen += 1;
     }
+    this.emit({ kind: 'head', app, by: 'elsewhere' });
+  }
+
+  /**
+   * (G16) crew's answer to a change made outside the session (archive, unarchive): taken as the session's own state, so
+   * the next read compares against it and every view draws from one place (codex r2: a re-archive in another tab was
+   * otherwise never seen). An answer older than the head held is ignored.
+   */
+  take(app: AppDetail): void {
+    if (this.app === null || app.head.version < this.app.head.version) return;
+    if (app.head.version > this.app.head.version) this.adopt(app);
+    else { this.app = app; this.gen += 1; }
     this.emit({ kind: 'head', app, by: 'elsewhere' });
   }
 
