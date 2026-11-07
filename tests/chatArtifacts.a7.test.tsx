@@ -170,8 +170,9 @@ describe('the theme card model', () => {
     expect(themeChangeWords(light, { theme: 'wicked-dark', accent_h: 210, accent_s: 14, accent_l: 70, ambient: false }))
       .toStrictEqual(['Wicked Light → Wicked Dark', 'action colour hue 210, saturation 14, lightness 70', 'Ambient off']);
     expect(themeChangeWords({ ...light, theme: 'wicked-dark' }, { theme: 'wicked-dark', ambient: true, ambient_still: true })).toStrictEqual(['Already Wicked Dark', 'Ambient on, still']);
-    // The still flag is its own key: said even with Ambient off.
-    expect(themeChangeWords(light, { ambient: false, ambient_still: true })).toStrictEqual(['Ambient off (still when on)']);
+    // The still flag named with Ambient off: said in plain words, not as a setting for later.
+    expect(themeChangeWords(light, { ambient: false, ambient_still: true })).toStrictEqual(['Ambient off: no background motion']);
+    expect(themeChangeWords(light, { ambient_still: true })).toStrictEqual(['Ambient off: no background motion']);
     const [e] = foldChatProposals([
       { at: 1, turnId: 't1', kind: 'proposal', proposal: themeProposal() },
       { at: 2, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'local', decision: 'go', result: { runId: 'aaaaaaaa', artifactRef: null, adopted: false, stub: false } },
