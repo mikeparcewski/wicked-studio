@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
 
@@ -14,6 +14,11 @@ import { UNFILED_MOUNT } from '../api/interactive.js';
 // silently ungrounded create (codex on #241): it renders as a visible error with a retry, the
 // composer refuses to submit until the list loaded — or until the user EXPLICITLY chooses to
 // create without repository grounding, which the thread then says out loud.
+//
+// G11 (e2e F6): the picker offered only repositories ALREADY in the project, and crew grounds on members only, so
+// a project without the right one drafted ungrounded. "Add a repository…" attaches a registered one through the
+// project's existing attach (`api.attachProjectMember`, the call the project's Repositories section makes), and
+// the added repository is toggled on. Unfiled has no members to add to: it says to file the document instead.
 
 /** The bridge's style set, plus '' = let crew infer from the brief. */
 export type DocFormat = '' | 'web' | 'doc' | 'ppt' | 'brochure';
@@ -31,16 +36,25 @@ export type SubjectStatus = 'loading' | 'ready' | 'error';
 
 export interface ProjectRepoOption { id: string; name: string }
 
-/** The project's `crew.repo` members, named through the registry (the id when the registry
- *  does not know it). The Unfiled mount has no members and never asks. Throws on a failed read —
- *  the picker renders that, it does not hide it. */
-export async function loadProjectRepos(projectId: string): Promise<ProjectRepoOption[]> {
-  if (projectId === UNFILED_MOUNT) return [];
+const REPO_KIND = 'crew.repo';
+
+/** The project's `crew.repo` members, named through the registry (the id when the registry does not know it),
+ *  and the registered repositories that are NOT members yet (what "Add a repository…" offers). A member names a
+ *  registered repo by id, or by name on a legacy ref (the Repositories section's rule). The Unfiled mount has no
+ *  members and never asks. Throws on a failed read — the picker renders that, it does not hide it. */
+export async function loadProjectRepos(projectId: string): Promise<{ attached: ProjectRepoOption[]; attachable: ProjectRepoOption[] }> {
+  if (projectId === UNFILED_MOUNT) return { attached: [], attachable: [] };
   const [{ members }, { repos }] = await Promise.all([api.listProjectMembers(projectId), api.listRepos()]);
   const nameById = new Map(repos.map((r) => [r.id, r.name] as const)); // one pass over the registry, not one per member
-  return members
-    .filter((m) => m.member_kind === 'crew.repo')
-    .map((m) => ({ id: m.member_ref, name: nameById.get(m.member_ref) ?? m.member_ref }));
+  const refs = members.filter((m) => m.member_kind === REPO_KIND).map((m) => m.member_ref);
+  const taken = new Set(refs);
+  return {
+    attached: refs.map((ref) => ({ id: ref, name: nameById.get(ref) ?? ref })),
+    attachable: repos
+      .filter((r) => !taken.has(r.id) && !taken.has(r.name))
+      .map((r) => ({ id: r.id, name: r.name }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  };
 }
 
 /** The thread line a no-grounding create leaves behind (the composer adds it after the create). */
@@ -68,13 +82,57 @@ export function DocSubjectPicker({
   projectId, mode, repoRefs, onRepoRefs, format, onFormat, noGrounding, onNoGrounding, onStatus,
 }: DocSubjectPickerProps): React.ReactElement {
   const [repos, setRepos] = useState<ProjectRepoOption[]>([]);
+  const [attachable, setAttachable] = useState<ProjectRepoOption[]>([]);
   const [status, setStatus] = useState<SubjectStatus>('loading');
   const [failure, setFailure] = useState<string>('');
   const [attempt, setAttempt] = useState(0);
+  // "Add a repository…": the chooser is open, an attach is in flight (its repo id), or it failed (the wire's words).
+  const [adding, setAdding] = useState(false);
+  const [attaching, setAttaching] = useState<string | null>(null);
+  const [addFailure, setAddFailure] = useState<string | null>(null);
+  // The chooser's pick. Choosing is not adding: a closed native select fires `change` on every arrow key on
+  // Windows and Linux, so the attach waits for the "Add" press (pi on the diff).
+  const [pick, setPick] = useState('');
+  // Bumped on every project change (and every re-read): an attach that lands for an older one is not this list's.
+  const generation = useRef(0);
+  // The parent's newest refs, read when an attach lands (the snapshot this render closed over may be stale by then).
+  const refsNow = useRef(repoRefs);
+  refsNow.current = repoRefs;
+  // Where focus goes when the chooser closes (keyboard users keep their place): back to "Add a repository…", or to
+  // the chip of the repository just added.
+  const root = useRef<HTMLDivElement | null>(null);
+  const focusNext = useRef<string | null>(null);
+  useEffect(() => {
+    const want = focusNext.current;
+    if (want === null || adding || root.current === null) return;
+    focusNext.current = null;
+    // Only focus the chooser lost (it closed under it, so nothing holds focus); never pull it from a control the
+    // person moved to meanwhile: the brief, the format, another chip (codex on the diff, rounds 2 and 3).
+    const at = document.activeElement;
+    if (at !== null && at !== document.body) return;
+    const target = want === '' ? root.current.querySelector<HTMLElement>('[data-testid="doc-subject-add"]')
+      : [...root.current.querySelectorAll<HTMLElement>('[data-testid="doc-subject-repo"]')].find((b) => b.dataset['repoId'] === want);
+    target?.focus();
+  }, [adding, repos]);
+  const closeChooser = (): void => { focusNext.current = ''; setAdding(false); setAddFailure(null); setPick(''); };
+  // A repository chosen but not added (or whose add was refused) holds Create until the person presses Add or
+  // cancels: a pick that reads as "added" is never created without (pi on the diff). The attach reports its own.
+  const holding = adding && pick !== '' && attaching === null;
+  useEffect(() => {
+    if (attaching !== null || status !== 'ready') return;
+    onStatus(holding ? 'loading' : 'ready');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reported when the hold flips, not on every render
+  }, [holding]);
 
   useEffect(() => {
     let cancelled = false;
+    generation.current += 1;
     setRepos([]);
+    setAttachable([]);
+    setAdding(false);
+    setAttaching(null);
+    setAddFailure(null);
+    setPick('');
     setFailure('');
     if (projectId === UNFILED_MOUNT) {
       setStatus('ready');
@@ -86,7 +144,8 @@ export function DocSubjectPicker({
     loadProjectRepos(projectId)
       .then((list) => {
         if (cancelled) return;
-        setRepos(list);
+        setRepos(list.attached);
+        setAttachable(list.attachable);
         setStatus('ready');
         onStatus('ready');
       })
@@ -104,10 +163,42 @@ export function DocSubjectPicker({
   const toggle = (id: string): void => {
     onRepoRefs(repoRefs.includes(id) ? repoRefs.filter((r) => r !== id) : [...repoRefs, id]);
   };
+
+  /** Attach a registered repository to the project (the project's own attach), then ground on it. While it is in
+   *  flight the composer is told `loading`, so Create cannot send the refs from before the pick (codex on the diff). */
+  const attach = async (repo: ProjectRepoOption): Promise<void> => {
+    if (attaching !== null) return;
+    const forGeneration = generation.current;
+    setAttaching(repo.id);
+    setAddFailure(null);
+    onStatus('loading');
+    let added = false;
+    try {
+      await api.attachProjectMember(projectId, { kind: REPO_KIND, ref: repo.id, attachedBy: 'studio' });
+      added = true;
+      if (generation.current !== forGeneration) return; // another project (or a re-read) since: not this list's
+      setRepos((list) => (list.some((r) => r.id === repo.id) ? list : [...list, repo]));
+      setAttachable((list) => list.filter((r) => r.id !== repo.id));
+      focusNext.current = repo.id;
+      setAdding(false);
+      setPick('');
+      if (!refsNow.current.includes(repo.id)) onRepoRefs([...refsNow.current, repo.id]);
+    } catch (e) {
+      if (generation.current !== forGeneration) return;
+      // Said on the form (role=alert) beside the chips that WILL be sent; the person retries, cancels or creates.
+      setAddFailure(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (generation.current === forGeneration) {
+        setAttaching(null);
+        // A refused pick is still held (the chooser stays open on it): Create waits for a retry or cancel.
+        onStatus(added ? 'ready' : 'loading');
+      }
+    }
+  };
   const chip: React.CSSProperties = { border: '1px solid var(--surface-overlay)', cursor: 'pointer', background: 'transparent' };
 
   return (
-    <div data-testid="doc-subject" data-subject-status={status} className="flex flex-wrap items-center gap-1.5">
+    <div ref={root} data-testid="doc-subject" data-subject-status={attaching !== null || holding ? 'loading' : status} className="flex flex-wrap items-center gap-1.5" style={{ minWidth: 0 }}>
       {status === 'loading' && (
         <span data-testid="doc-subject-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           finding the project’s repositories…
@@ -143,6 +234,11 @@ export function DocSubjectPicker({
           </label>
         </>
       )}
+      {status === 'ready' && projectId === UNFILED_MOUNT && (
+        <span data-testid="doc-subject-unfiled" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
+          File it in a project to ground it on code.
+        </span>
+      )}
       {status === 'ready' && repos.length === 0 && projectId !== UNFILED_MOUNT && (
         <span data-testid="doc-subject-none" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           No repositories in this project, so the helpers work from what you wrote.
@@ -162,18 +258,82 @@ export function DocSubjectPicker({
             aria-pressed={on}
             onClick={() => toggle(repo.id)}
             title={on ? `The ${mode === 'video' ? 'demo' : 'document'} is about ${repo.name} — click to drop it` : `Ground on ${repo.name}`}
-            className="rounded-full px-2 py-0.5 text-xs"
-            style={{
-              background: on ? 'var(--accent-dim)' : 'transparent',
-              color: on ? 'var(--accent)' : 'var(--ink-muted)',
-              border: `1px solid ${on ? 'var(--accent-subtle)' : 'var(--surface-overlay)'}`,
-              cursor: 'pointer',
-            }}
+            // The form's own toggle (the Helpers row's): an inline accent-on-accent-dim pill was unreadable in the
+            // light theme, and an added repository shows pressed at once.
+            className="wk-chip"
+            style={{ maxWidth: '100%', overflowWrap: 'anywhere' }}
           >
             {repo.name}
           </button>
         );
       })}
+      {status === 'ready' && projectId !== UNFILED_MOUNT && attachable.length > 0 && !adding && (
+        <button
+          type="button"
+          data-testid="doc-subject-add"
+          onClick={() => { setAdding(true); setAddFailure(null); setPick(''); }}
+          title="Add a repository to this project and ground on it"
+          className="wk-chip"
+        >
+          + Add a repository…
+        </button>
+      )}
+      {status === 'ready' && projectId !== UNFILED_MOUNT && adding && (
+        // A native select sizes to its longest option: held to the form's width on a phone (codex on the diff).
+        <span className="flex flex-wrap items-center gap-1.5" style={{ maxWidth: '100%', minWidth: 0 }}>
+          <select
+            data-testid="doc-subject-add-select"
+            aria-label="Add a repository to this project"
+            className="wk-field"
+            style={{ maxWidth: '100%', minWidth: 0 }}
+            value={pick}
+            disabled={attaching !== null}
+            autoFocus
+            onChange={(e) => setPick(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape' && attaching === null) { e.stopPropagation(); closeChooser(); } }}
+          >
+            <option value="">Choose a repository…</option>
+            {attachable.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+          <button
+            type="button"
+            data-testid="doc-subject-add-confirm"
+            disabled={attaching !== null || pick === ''}
+            onClick={() => {
+              const repo = attachable.find((r) => r.id === pick);
+              if (repo !== undefined) void attach(repo);
+            }}
+            className="wk-chip"
+          >
+            {attaching !== null ? 'adding…' : 'Add'}
+          </button>
+          {holding && (
+            <span data-testid="doc-subject-add-hint" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
+              press Add to ground on it, or cancel
+            </span>
+          )}
+          <button
+            type="button"
+            data-testid="doc-subject-add-cancel"
+            disabled={attaching !== null}
+            onClick={closeChooser}
+            className="wk-since-toggle text-xs"
+          >
+            cancel
+          </button>
+        </span>
+      )}
+      {addFailure !== null && (
+        <span
+          data-testid="doc-subject-add-error"
+          role="alert"
+          className="text-xs"
+          // The wire's words may hold a long unbroken id or path: wrapped inside the form on a phone (codex on the diff).
+          style={{ color: 'var(--status-fail, var(--danger))', minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}
+        >
+          could not add it to the project: {addFailure}
+        </span>
+      )}
       {(
         <select
           data-testid="doc-format"
