@@ -50,7 +50,8 @@ import { turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
 import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
-import { demoVideoProjectOf, useRunDocs } from './RunArtifacts.js';
+import { demoVideoProjectOf, RunArtifacts, useRunDocs } from './RunArtifacts.js';
+import { olderSlotLine, proposalSlots, type ProposalSlot } from '../../board/proposalSlots.js';
 import { DEMO_VIDEO_ID, openLaunchWizard } from '../../store/launchWizard.js';
 import { OperatorMessage } from '../OperatorMessage.js';
 import { Markdown } from '../Markdown.js';
@@ -367,6 +368,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   }, [jobLineages, mine]);
   // The proposals a passage owns: never drawn again as a card.
   const jobPids = useMemo(() => new Set(jobLineages.flatMap((l) => l.versions.map((v) => v.pid))), [jobLineages]);
+  // A4 (DES-CHAT-ARTIFACTS-001 §7, PLAN S1 G1): the run each drawn proposal card started, drawn under the card; its own
+  // block then leaves out what it made, so each artifact shows once.
+  const slots = useMemo(() => proposalSlots(
+    proposalEntries.filter((p) => !(jobPids.has(p.pid) || (jobsOn && (p.proposal as { sentence?: unknown }).sentence !== undefined)))
+      .map((p) => ({ pid: p.pid, result: p.result ?? null })),
+    mine, launchedMs), [proposalEntries, jobPids, jobsOn, mine]);
+  const slotRunIds = useMemo(() => new Set([...slots.values()].map((x) => x.run.session.id)), [slots]);
   // The ticks: the job's states and the person's acts, each from its record (the run's team record is the one the
   // passage folds), in time order among the messages.
   const teamByRun = useTeamPlanStore((s) => s.byRun);
@@ -1326,7 +1334,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               : e.kind === 'proposal'
                 ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />
               : e.kind === 'artifact' && ref.kind === 'chat'
-                ? <ArtifactProposalCard key={e.key} chatId={ref.chatId} entry={e.entry} seatName={who.name} stub={proposalIsStub(proposalsStub, proposalsStubOps, e.entry.proposal.kind)} onChanged={() => setChatTry((n) => n + 1)} />
+                ? (
+                  <Fragment key={e.key}>
+                    <ArtifactProposalCard chatId={ref.chatId} entry={e.entry} seatName={who.name} stub={proposalIsStub(proposalsStub, proposalsStubOps, e.entry.proposal.kind)} onChanged={() => setChatTry((n) => n + 1)} />
+                    {slots.has(e.entry.pid) && <ProposalSlotView slot={slots.get(e.entry.pid)!} sessionId={sessionId} />}
+                  </Fragment>
+                )
               : e.kind === 'artifact'
                 ? null
               : e.kind === 'job' && ref.kind === 'chat'
@@ -1375,7 +1388,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 ))}
               </div>
             )
-            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} solo={mine.length === 1 ? title : null} />);
+            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} solo={mine.length === 1 ? title : null} madeElsewhere={slotRunIds.has(e.view.session.id)} />);
             return <Fragment key={e.key}>{label}{node}</Fragment>;
           })}
           {/* A2: an ended chat's proposal cards come from its kept history; a failed read says so, with Retry. */}
@@ -1439,6 +1452,22 @@ function HelperReply({ who, text, ok, citations }: { who: string; text: string; 
         </details>
       )}
     </div>
+  );
+}
+
+/** A4 (DES-CHAT-ARTIFACTS-001 §7): a proposal's slot under its card — what the run its Go started made (the run's own
+ *  `RunArtifacts`, the one renderer), or, for an older attempt at an artifact a newer slot shows, one line. */
+function ProposalSlotView({ slot, sessionId }: { slot: ProposalSlot; sessionId: string }): React.ReactElement | null {
+  if (slot.older) return <p data-testid="proposal-slot-older" data-run-id={slot.run.session.id} className="wk-session-grey wk-proposal-slot-line">{olderSlotLine(slot.run)}</p>;
+  return <ProposalSlotArtifacts run={slot.run} sessionId={sessionId} />;
+}
+
+/** The slot's renderer, with the run's chain (a walkthrough step is the chain's, as in the run block: review r1). */
+function ProposalSlotArtifacts({ run, sessionId }: { run: RunView; sessionId: string }): React.ReactElement | null {
+  const { chain } = useRunChain(run);
+  return (
+    <RunArtifacts view={run} composerKey={sessionId} chain={chain} only="made"
+      frame={(_who, _suffix, cards) => <div data-testid="proposal-slot" data-run-id={run.session.id} className="wk-proposal-slot">{cards}</div>} />
   );
 }
 
