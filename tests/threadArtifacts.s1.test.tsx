@@ -114,7 +114,7 @@ describe('G2 / G3: insights and app runs place their artifact', () => {
 });
 
 describe('G7 piece 2: a demo\'s made cut binds its card', () => {
-  const demoRun = (): SessionView => run({ id: 'd-1', workflow_id: 'demo', project_id: 'proj_1', team_plan: { preset: 'demo' } });
+  const demoRun = (): SessionView => run({ id: 'd-1', workflow_id: 'demo', project_id: 'proj_1', team_plan: { preset: 'demo' } as never });
   it('with DemoView.document the card is bound to the cut (the demo adapter opens the cut); without, the recording', async () => {
     getDemo.mockResolvedValue({ stage: 'done', document: { projectId: 'proj_1', docId: 'demo-d-1' } });
     render(<RunArtifacts view={demoRun()} composerKey="k" only="made" />);
