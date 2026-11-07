@@ -100,7 +100,7 @@ export function rigorHistoryWords(c: RigorChange): string {
   const what = c.trigger === 'intake' ? 'intake'
     : changedBy(c) === 'you' ? 'raised by you'
       : c.trigger === 'plugin' ? `raised by ${c.by.replace(/^plugin:/, '').replace(/@.*$/, '')}`
-        : c.trigger === 'doc_edit' ? 'a working-document edit'
+        : c.trigger === 'doc_edit' ? 'a context-document edit'
           : c.trigger === 'toggle' ? 'power switch'
             : c.checkpoint !== null ? `checkpoint ${c.checkpoint}` : c.trigger === 'pre_handoff' ? 'before hand-off' : c.trigger;
   const reason = changeReason(c);

@@ -75,7 +75,7 @@
     },
     {
       "id": "doc.propose_edit",
-      "why": "to save what you type in it (yours, steering the next step) and to add its own lines under Decisions (labelled as the plugin's)"
+      "why": "to save what you type in it (yours; it steers the job's agents) and to add its own lines under Decisions (labelled as the plugin's)"
     },
     {
       "id": "steer.propose",

@@ -260,9 +260,9 @@ describe('the context document (context-doc-switch)', () => {
     const b = await boot((m) => (m.type === 'doc.read' ? { ok: true, payload: { view: withBlock } } : { ok: true, payload: {} }));
     expect(b.$('#wd .wd-title')?.textContent).toBe('Context document');
     expect(b.$('[data-testid="wd-context"]')?.textContent).toBe('In every agent’s context from version 4: Goal.');
-    expect(b.$('[data-testid="wd-seen-by"]')?.textContent).toBe('Seen by: judge (Codex).');
+    expect(b.$('[data-testid="wd-seen-by"]')?.textContent).toBe('Version 4 seen by: judge (Codex).');
     b.openSection('goal');
-    expect(b.$('.wd-effect')?.textContent).toBe('Saving puts it in every agent’s context for this job.');
+    expect(b.$('.wd-effect')?.textContent).toBe('Saving sends it to every agent of this job as context.');
   });
 
   it('an engine with no block shows no context line and keeps the old words', async () => {

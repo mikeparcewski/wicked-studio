@@ -29,14 +29,14 @@ export const STEER_NOTE = 'Edits steer the next step. They can raise rigor, neve
 
 /** (context-doc-switch) With the engine's context block: Goal, Approach and Constraints reach every agent of the job. */
 export const SECTION_EFFECT_BLOCK: Readonly<Record<SectionId, string>> = {
-  goal: 'Saving puts it in every agent’s context for this job.',
-  approach: 'Saving puts it in every agent’s context for this job.',
-  constraints: 'Saving puts it in every agent’s context for this job.',
+  goal: 'Saving sends it to every agent of this job as context.',
+  approach: 'Saving sends it to every agent of this job as context.',
+  constraints: 'Saving sends it to every agent of this job as context.',
   next: 'Saving tells the next step.',
   decisions: 'Recorded here. Not sent to a step.',
   questions: 'Recorded here. Not sent to a step.',
 };
-export const STEER_NOTE_BLOCK = 'Your Goal, Approach and Constraints are in the context of every agent this job starts: builders, reviewers, judges and QE. They add to what is checked, never skip a check.';
+export const STEER_NOTE_BLOCK = 'What you write in Goal, Approach and Constraints goes to every agent this job starts (builders, reviewers, judges and QE) as context. It adds to what is checked, never skips a check.';
 
 /** What saving a section does, for this document. */
 export function sectionEffect(view: Pick<DocView, 'context'> | null, id: SectionId): string {
@@ -150,7 +150,7 @@ const listWords = (xs: readonly string[]): string => (xs.length <= 1 ? xs.join('
 /** "Seen by: Fix (Claude Code), judge (Codex) and QE (Pi CLI)": the seats the engine handed the block in force to, one
  *  name per step or role and seat. Null when none yet. */
 export function seenByWords(c: DocContext | undefined, stepOfOrd: (ord: number) => string | null = () => null): string | null {
-  if (c === undefined || c.seenBy.length === 0) return null;
+  if (c === undefined || c.seenBy.length === 0 || c.sections.length === 0) return null;
   const names: string[] = [];
   for (const r of c.seenBy) {
     const role = r.recipient === 'unit' ? (stepOfOrd(r.ord) ?? `step ${r.ord}`) : (RECIPIENT_WORDS[r.recipient] ?? r.recipient.replace(/_/gu, ' '));
@@ -158,7 +158,7 @@ export function seenByWords(c: DocContext | undefined, stepOfOrd: (ord: number) 
     const name = `${role}${seat}`;
     if (!names.includes(name)) names.push(name);
   }
-  return `Seen by: ${listWords(names)}.`;
+  return `Version ${c.version ?? '?'} seen by: ${listWords(names)}.`;
 }
 
 const n = (x: string): string => Number(x).toLocaleString('en-US');
@@ -173,30 +173,40 @@ function reasonWords(reason: string): string {
 /** What the document says about the engine's context block, or null (no block engine, nothing to say). */
 export function contextWords(c: DocContext | undefined): { text: string; bad: boolean } | null {
   if (c === undefined || !c.engine) return null;
+  // What the agents have now: the block the engine holds (its version, sections and cuts), said in every case, also
+  // beside a failed later version (codex s1: a refusal hid a block still in force).
+  const cut = c.cut.length > 0 && c.sections.length > 0
+    ? ` ${listWords(c.cut.map((x) => SECTION_LABELS[x]))} ${c.cut.length === 1 ? 'was' : 'were'} cut to fit: agents get a shorter copy that says it was cut.`
+    : '';
+  const now = c.version !== null && c.sections.length > 0 ? `version ${c.version}: ${listWords(c.sections.map((x) => SECTION_LABELS[x]))}.${cut}` : null;
   if (c.error !== null && (c.version === null || c.error.version >= c.version)) {
-    const tail = c.error.cleared ? ' The earlier context was taken out, so agents do not follow words you replaced.' : '';
     const fix = /too long|renders to|characters; at most/iu.test(c.error.reason) ? ' Shorten Goal, Approach or Constraints and save again.' : '';
-    return { text: `Version ${c.error.version} is not in agents’ context: ${reasonWords(c.error.reason)}.${tail}${fix}`, bad: true };
+    const kept = c.error.cleared
+      ? ' The earlier context was taken out, so agents do not follow words you replaced.'
+      : now !== null && c.version !== c.error.version ? ` Agents still have ${now}` : '';
+    return { text: `Version ${c.error.version} is not in agents’ context: ${reasonWords(c.error.reason)}.${kept}${fix}`, bad: true };
   }
-  if (c.version === null || c.sections.length === 0) return { text: 'Nothing of yours is in agents’ context yet. Write a Goal, Approach or Constraints to add it.', bad: false };
-  const cut = c.cut.length > 0 ? ` ${listWords(c.cut.map((x) => SECTION_LABELS[x]))} ${c.cut.length === 1 ? 'was' : 'were'} cut to fit; the text says where.` : '';
-  return { text: `In every agent’s context from version ${c.version}: ${listWords(c.sections.map((x) => SECTION_LABELS[x]))}.${cut}`, bad: false };
+  if (now === null) return { text: 'Nothing of yours is in agents’ context now. Write a Goal, Approach or Constraints to add it.', bad: false };
+  return { text: `In every agent’s context from ${now}`, bad: false };
 }
 
 /** "v3 · You · Constraints and steering · 14:32 · picked up at Review 14:40", newest first. */
+const isContextEdit = (t: TrailEntry): boolean => t.sections.some((x) => x === 'goal' || x === 'approach' || x === 'constraints');
+
 export function trailLines(view: DocView, max = 6, stepOfOrd?: (ord: number) => string | null): string[] {
+  const lastContextEdit = view.trail.reduce((m, t) => (t.author.kind === 'human' && isContextEdit(t) ? Math.max(m, t.version) : m), -1);
   return view.trail.slice(-max).reverse().map((t) => {
     const a = kindOf(t.author);
     const parts = [`v${t.version}`, authorWord(a), t.sections.map((s) => SECTION_LABELS[s]).join(', '), clock(t.at)];
     const s = steerWords(view.steers.find((x) => x.id === t.steerId), stepOfOrd);
     const ctx = view.context;
-    const inBlock = a.kind === 'human' && ctx?.engine === true && t.sections.some((x) => x === 'goal' || x === 'approach' || x === 'constraints');
+    const inBlock = a.kind === 'human' && ctx?.engine === true && isContextEdit(t);
     if (inBlock && ctx !== undefined) {
-      // (context-doc-switch) A person's Goal, Approach or Constraints go in every agent's context, not a step's note.
-      // Said for the newest outcome only: an older version's own outcome is not kept.
+      // (context-doc-switch) A person's Goal, Approach or Constraints go to every agent as context, not a step's note.
+      // Said for the outcome crew keeps (the newest only): an older, superseded version gets no claim.
       if (ctx.error?.version === t.version) parts.push('not in agents’ context');
-      else if (ctx.version === t.version) parts.push('in every agent’s context');
-      else if (ctx.version === null || ctx.version < t.version) parts.push('going into agents’ context');
+      else if (ctx.version === t.version) parts.push(t.sections.some((x) => ctx.sections.includes(x)) ? 'in every agent’s context' : 'taken out of agents’ context');
+      else if (t.version === lastContextEdit && (ctx.version === null || ctx.version < t.version)) parts.push('going into agents’ context');
     }
     if (s !== null) parts.push(s);
     // A plugin's or an agent's text is recorded, never sent to a step.
