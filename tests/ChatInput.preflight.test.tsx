@@ -44,9 +44,11 @@ async function typeAndSend(user: ReturnType<typeof userEvent.setup>, text: strin
 }
 
 describe('ChatInput preflight (§7.8, EC43)', () => {
+  // DES-CATALOG-002 §8.6: studio no longer guesses a workflow from the words (detectWorkflow is gone); a code intent is
+  // one that names its workflow.
   it('blocks a repo-less code intent — zero POST /runs — and the override launches', async () => {
     const user = userEvent.setup();
-    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} workflowOverride="bug" />);
     await typeAndSend(user, 'fix the login bug');
 
     // Warn-and-block: the block renders and NO launch fired.
@@ -54,6 +56,14 @@ describe('ChatInput preflight (§7.8, EC43)', () => {
     expect(client.api.launchRun).not.toHaveBeenCalled();
 
     await user.click(screen.getByTestId('preflight-override'));
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('preflight-block')).toBeNull();
+  });
+
+  it('words alone are not read as a workflow: "fix the login bug" with none named launches without preflight', async () => {
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await typeAndSend(user, 'fix the login bug');
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('preflight-block')).toBeNull();
   });
@@ -85,7 +95,7 @@ describe('ChatInput preflight (§7.8, EC43)', () => {
   it('removing the auto chip is the operator speaking — auto never re-attaches', async () => {
     vi.mocked(client.api.listProjectMembers).mockResolvedValue({ members: [MEMBER as never] });
     const user = userEvent.setup();
-    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} lockedProjectId="api-migration" />);
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} lockedProjectId="api-migration" workflowOverride="bug" />);
     await screen.findByTestId('repo-chip');
 
     await user.click(screen.getByLabelText(/Clear Repo: studio-api/));

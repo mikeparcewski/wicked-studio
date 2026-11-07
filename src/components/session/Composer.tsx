@@ -1,12 +1,15 @@
+import type { ShapeGuess } from 'wicked-crew-api-types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import { artifactOfChips, chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
 import { inViewFor } from '../../store/artifactInView.js';
 import { composerSendRefusal } from '../../board/launchModel.js';
 import { parseWorkflowCommand, WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
-import { catalogRows, notOfferedLine, workflowEntry, type CatalogRow } from '../../board/slashCatalog.js';
+import { allCommandRows, catalogRows, commandList, notOfferedLine, parseCommandLine, workflowEntry, type CatalogRow, type CommandRow } from '../../board/slashCatalog.js';
+import { contentWords } from '../../board/commandSearch.js';
+import { commandsOn, LOOKS_DEBOUNCE_MS, looksLike, useCatalogV2 } from '../../store/catalogV2.js';
 import { entryOffered, entryWords, jobCatalogView, startsInline, type CatalogEntry } from '../../board/workflowCatalog.js';
-import { workflowChipFor } from '../../store/inlineStart.js';
+import { jobChipFor, postJob, setStartNote, useStartNotes, workflowChipFor } from '../../store/inlineStart.js';
 import { InlineStart, type InlineStartHandle } from './InlineStart.js';
 import { catalogProjectOf, useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { startCatalogEntry } from '../../store/startCatalogEntry.js';
@@ -36,6 +39,22 @@ import { SlashMenu, type AtItem } from './SlashMenu.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { usePhone } from '../../hooks/usePhone.js';
 import { VoiceMicButton } from '../voice/VoiceMicButton.js';
+
+let cmdSeq = 0;
+/** Each composer's typed-command draft key, kept as long as its draft (the module's life, as `sessionDrafts`): a retry
+ *  after a remount is the same request (codex r2); a posted command renews it, so the next is its own (codex r1). */
+const cmdKeys = new Map<string, string>();
+function cmdKeyOf(composerKey: string): string {
+  let k = cmdKeys.get(composerKey);
+  if (k === undefined) { k = renewCmdKey(composerKey); }
+  return k;
+}
+function renewCmdKey(composerKey: string): string {
+  cmdSeq += 1;
+  const k = `cmd:${composerKey}:${Date.now().toString(36)}:${cmdSeq}`;
+  cmdKeys.set(composerKey, k);
+  return k;
+}
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
 export interface ComposerSend {
@@ -147,8 +166,11 @@ export interface ComposerSuggestion { id: string; label: string; title?: string;
 
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false,
+  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false, jobChatId = null,
 }: {
+  /** DES-CATALOG-002 §4.6 (Lane E2): the chat this composer stands in, live on the daemon. A job picked here is posted
+   *  into it (`POST /chats/:id/proposals`); with none (the Desk, a fresh chat's page) it seeds a new chat. */
+  jobChatId?: string | null;
   /** The box answers one thing (a job's bound reply, DES-CATALOG-002 §2.4): Send hands over the typed words alone —
    *  no workflow chip, `/` command or about-chip context starts or decorates anything. */
   answerOnly?: boolean;
@@ -193,6 +215,10 @@ export function Composer({
   const presets = Array.isArray(presetsState) ? presetsState : null;
   // A bound box (answerOnly) suspends any workflow it was about to start: its chip, blockers and Start are not in play.
   const wfChip = answerOnly ? null : (chips.find((c) => c.kind === 'workflow') as Extract<AboutChip, { kind: 'workflow' }> | undefined) ?? null;
+  // Lane E2: a pick from the v2 `/` list is a job chip; Enter posts the person-made proposal, never a launch.
+  const jobChip = wfChip !== null && wfChip.job === true ? wfChip : null;
+  const cmdsOn = useCapabilities((s) => commandsOn(s));
+  const startNote = useStartNotes((s) => s.notes[composerKey] ?? null);
   const askPathOn = useCapabilities((s) => s.askPath);
   const own = useRef<HTMLTextAreaElement | null>(null);
   // A one-row box on a phone shows only the placeholder's first clause, ended by an ellipsis —
@@ -220,7 +246,46 @@ export function Composer({
   const [closedAt, setClosedAt] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  const token = menuToken(text, caret);
+  // Lane E2: on a daemon with the v2 catalog, a line that starts with `/` is the command list's (the whole line filters
+  // it; a command typed whole and followed by words closes it, and Enter posts the job).
+  const v2Project = catalogProjectOf(project?.projectId ?? contextProjectId);
+  const v2Load = useCatalogV2(v2Project, cmdsOn, text.trimStart().startsWith('/') || wfChip !== null);
+  const v2View = v2Load.state === 'ready' ? v2Load.view : null;
+  // The line as typed, less any leading blanks: ` /bug` is the same command line (pi r1 P1: a leading space must never fall
+  // back to the v1 list and its launch on a capable daemon).
+  const line = text.trimStart();
+  const v2Line = cmdsOn && !answerOnly && wfChip === null && line.startsWith('/');
+  // Which list a `/` opens is the daemon's to say: until its capabilities are read, neither list is offered (codex r1:
+  // a v1 pick made before discovery would keep its launch path on a capable daemon).
+  const capsLoaded = useCapabilities((s) => s.loaded);
+  useEffect(() => {
+    if (!capsLoaded && line.startsWith('/')) void useCapabilities.getState().load();
+  }, [capsLoaded, line]);
+  const [looks, setLooks] = useState<{ text: string; guess: ShapeGuess | null } | null>(null);
+  const v2State = useMemo(
+    () => (v2Line && v2View !== null ? commandList(v2View, line, null) : null),
+    [v2Line, v2View, line],
+  );
+  const freeWords = v2State !== null && v2State.open ? v2State.freeWords : null;
+  // The Looks like row: crew's words layer over free words (4 or more content words), words only, never a seat; the
+  // rows are listed without waiting for it.
+  useEffect(() => {
+    if (freeWords === null || contentWords(freeWords) < 4) return undefined;
+    let live = true;
+    const t = setTimeout(() => {
+      void looksLike(freeWords, v2Project).then((guess) => { if (live) setLooks({ text: freeWords, guess }); });
+    }, LOOKS_DEBOUNCE_MS);
+    return () => { live = false; clearTimeout(t); };
+  }, [freeWords, v2Project]);
+  const cmdRows: CommandRow[] = useMemo(() => {
+    if (!v2Line || v2View === null) return [];
+    const st = commandList(v2View, line, looks !== null && looks.text === freeWords ? looks.guess : null);
+    return st.open ? st.rows : [];
+  }, [v2Line, v2View, line, looks, freeWords]);
+  const v2Open = v2Line && (v2View === null || v2State?.open === true);
+  const firstWord = line.slice(1).split(/\s/u)[0] ?? '';
+  // The "Add a step" rows match a single word only: a line of words lists no step (`\u0000` matches none).
+  const token = v2Line ? (v2Open ? { trigger: '/' as const, query: /\s/u.test(line) ? '\u0000' : firstWord, start: 0 } : null) : menuToken(text, caret);
   // A bound box takes `/` and `@` as the answer's own words: no command or helper menu opens, so none dispatches.
   const menuOpen = !answerOnly && token !== null && closedAt !== `${token.trigger}${token.start}`;
   useEffect(() => {
@@ -248,15 +313,17 @@ export function Composer({
   // An older daemon's list is today's workflows: still being read until they land.
   const wfCatalogState: 'loading' | 'error' | 'ready' = catalogLoad.state === 'error' ? 'error'
     : catalogLoad.state === 'loading' || (catalogLoad.state === 'unavailable' && defs === null) ? 'loading' : 'ready';
+  const wfStateV2: 'loading' | 'error' | 'ready' = v2Load.state;
   const wf = useMemo(
-    () => (startCommands && token !== null ? catalogRows(catalogView, token.query, Date.now()) : []),
+    // On a capable daemon the v1 list is never offered: a `/` line is the command list's, or no list (pi r1 P1).
+    () => (capsLoaded && !cmdsOn && startCommands && token !== null ? catalogRows(catalogView, token.query, Date.now()) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startCommands, token?.query, catalogView],
+    [startCommands, token?.query, catalogView, capsLoaded, cmdsOn],
   );
-  const anyWorkflows = useMemo(() => catalogRows(catalogView, '', Date.now()).length > 0, [catalogView]);
+  const anyWorkflows = useMemo(() => (cmdsOn ? v2View !== null && allCommandRows(v2View).length > 0 : catalogRows(catalogView, '', Date.now()).length > 0), [catalogView, cmdsOn, v2View]);
   // ux-tonight: the card on this composer (its next Enter starts it here), read off the same catalog.
   const chipEntry = useMemo(() => {
-    if (wfChip === null || catalogView === null) return null;
+    if (wfChip === null || wfChip.job === true || catalogView === null) return null;
     const byCard = wfChip.entryId === undefined ? undefined : catalogView.entries.find((e) => e.id === wfChip.entryId);
     const found = byCard ?? (wfChip.entryId === undefined ? workflowEntry(catalogView, wfChip.workflowId) : null);
     // A card a refresh retargeted (another workflow, another kind) is not the card picked: pick it again (codex r1).
@@ -311,9 +378,10 @@ export function Composer({
     });
     return [...p, ...h].filter((x) => x.label.toLowerCase().startsWith(q) || x.id.toLowerCase().startsWith(q)).slice(0, 8);
   }, [token?.trigger, token?.query, projects, roster, eligibleSeats]);
-  const count = token?.trigger === '/' ? wf.length + slash.length : ats.length;
+  const lead = cmdsOn ? cmdRows.length : wf.length;
+  const count = token?.trigger === '/' ? lead + slash.length : ats.length;
   const rowKeys = token?.trigger === '/'
-    ? [...wf.map((r) => `e:${r.entry.id}`), ...slash.map((it) => `s:${it.command.cmd}`)]
+    ? [...(cmdsOn ? cmdRows.map((r) => r.key) : wf.map((r) => `e:${r.entry.id}`)), ...slash.map((it) => `s:${it.command.cmd}`)]
     : ats.map((it) => `a:${it.kind}:${it.id}`);
   const keyedAt = cursorKey === null ? -1 : rowKeys.indexOf(cursorKey);
   const active = count === 0 ? 0 : keyedAt >= 0 ? keyedAt : Math.min(cursor, count - 1);
@@ -329,8 +397,11 @@ export function Composer({
   // Whether the seat rules apply to this send — independent of whether the row is on screen, so an
   // open `@` menu never lets a send past the refusals below (codex r2 on S3).
   // A new app is made by crew's own helpers (the app's turn): no helpers row for it.
-  const seatsApply = !answerOnly && eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
-  const showSeats = seatsApply && !atMenuOpen;
+  // A command typed whole on a capable daemon is a job, like a picked one (pi r2): no seat row, no seat refusal.
+  const commandLine = v2Line && v2View !== null && parseCommandLine(v2View, line) !== null;
+  const seatsApply = !answerOnly && jobChip === null && !commandLine && eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
+  // The command list stands in the same place: while it is open over a `/` line the row steps aside (one list shows).
+  const showSeats = seatsApply && !atMenuOpen && !v2Line;
   // A job's helpers (New job's J4 rule, codex r1 on #982): one that cannot take work now (signed out, benched) is off
   // unless turned on by hand, and the row shows exactly what the launch sends.
   const unusable = useMemo(() => new Set(wfChip === null ? [] : (roster ?? []).flatMap((s) => {
@@ -349,8 +420,14 @@ export function Composer({
     : sendSeats.length === 0 ? NO_SEAT_PICKED
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
-  const canSend = answerOnly ? text.trim() !== '' : (text.trim() !== '' || (wfChip !== null && wordsOptional)) && refusal === null && seatRefusal === null
-    && (wfChip === null || startBlocker === null);
+  const [jobBusy, setJobBusy] = useState(false);
+  const jobBusyRef = useRef(false);
+
+  const canSend = answerOnly ? text.trim() !== ''
+    // A job's proposal is not a message to a seat: the seat refusals do not gate it (crew's proposal names its seats).
+    : jobChip !== null || commandLine ? !jobBusy
+      : (text.trim() !== '' || (wfChip !== null && wordsOptional)) && refusal === null && seatRefusal === null
+        && (wfChip === null || startBlocker === null);
 
   const syncCaret = (el: HTMLTextAreaElement): void => setCaret(el.selectionStart ?? el.value.length);
   const focusEnd = (value: string): void => {
@@ -443,10 +520,30 @@ export function Composer({
     if (!item.offered) { setNote(notOfferedLine(item.entry)); return; }
     startEntry(item.entry, dropToken(text, token.start, caret));
   };
+  // Lane E2: a v2 row goes on the composer as the job chip, exactly as picked (card, option, depth); free words typed
+  // in the line stay as the job's words. Nothing is sent until Enter. A Yours row starts by its workflow (ux-tonight).
+  const pickCommand = (row: CommandRow): void => {
+    if (row.kind === 'yours') {
+      const known = workflowEntry(catalogView, row.launchId);
+      if (known === null || !entryOffered(known)) { setNote(known === null ? `${row.title} is not listed now.` : notOfferedLine(known)); return; }
+      startEntry(known, freeWords ?? '');
+      return;
+    }
+    const words = freeWords ?? '';
+    addAboutChip(composerKey, jobChipFor({
+      card: row.card, wireCard: row.kind === 'alias' && row.command !== null ? row.command : row.card,
+      option: row.option, depth: row.depth, title: row.title, launchId: row.launchId,
+    }));
+    setStartNote(composerKey, null);
+    setText(words);
+    setNote(null);
+    setClosedAt(null);
+    focusEnd(words);
+  };
   const pick = (i: number): void => {
     if (token?.trigger === '/') {
-      if (i < wf.length) { const it = wf[i]; if (it !== undefined) pickWorkflow(it); }
-      else { const it = slash[i - wf.length]; if (it !== undefined) pickSlash(it); }
+      if (i < lead) { if (cmdsOn) { const r = cmdRows[i]; if (r !== undefined) pickCommand(r); } else { const it = wf[i]; if (it !== undefined) pickWorkflow(it); } }
+      else { const it = slash[i - lead]; if (it !== undefined) pickSlash(it); }
     } else { const it = ats[i]; if (it !== undefined) pickAt(it); }
   };
 
@@ -457,9 +554,29 @@ export function Composer({
       onSend(text, {});
       return;
     }
+    // Lane E2 (§4.6, §8.4): a job chip, or a command typed whole, posts the person-made proposal: into this chat, or as
+    // a new chat's seed. Never a launch route.
+    if (jobChip !== null) {
+      void sendJob({ card: jobChip.card ?? jobChip.entryId ?? '', option: jobChip.option ?? null, depth: jobChip.depth ?? null, words: text, source: 'pick', pickKey: jobChip.key, chipKey: jobChip.key });
+      return;
+    }
+    // A `/` line before the daemon's capabilities are read is held: which list and which path is the daemon's to say.
+    if (!capsLoaded && line.startsWith('/')) { setNote(WORKFLOWS_LOADING_LINE); return; }
+    if (cmdsOn && line.startsWith('/')) {
+      // A command line is held until the catalog can read it (codex r1): never sent as a chat message meanwhile.
+      if (v2View === null) { setNote(v2Load.state === 'error' ? WORKFLOWS_FAILED_LINE : WORKFLOWS_LOADING_LINE); return; }
+      const hit = parseCommandLine(v2View, line);
+      if (hit !== null) {
+        if (hit.refused !== null) { setNote(hit.refused); return; }
+        void sendJob({ card: hit.wireCard, option: hit.option, depth: hit.depth, words: hit.words, source: 'command', pickKey: cmdKeyOf(composerKey), chipKey: null, renewCmd: true });
+        return;
+      }
+      const old = parseWorkflowCommand(line);
+      if (old !== null) { setNote(`This daemon lists no job with the command /workflow-${old.key}. Nothing was sent.`); return; }
+    }
     // A `/workflow-<key>` line typed whole (menu closed, a paste): Enter NAMES it — the options row
     // then asks for the repository. Nothing is sent until the next Enter.
-    const typed = parseWorkflowCommand(text);
+    const typed = cmdsOn ? null : parseWorkflowCommand(text);
     if (typed !== null && refusal === null) {
       // Only a workflow the catalog lists is started — studio keeps no list and never invents a name.
       const known = workflowEntry(catalogView, typed.key);
@@ -499,6 +616,38 @@ export function Composer({
     setNote(null);
   };
 
+  const sendJob = async (j: { card: string; option: string | null; depth: 'quick' | 'standard' | 'deep' | null; words: string; source: 'pick' | 'command'; pickKey: string; chipKey: string | null; renewCmd?: boolean }): Promise<void> => {
+    // A ref, not the render's state: two Enters before a re-render post once (pi r1).
+    if (jobBusyRef.current) return;
+    jobBusyRef.current = true;
+    setJobBusy(true);
+    setNote(null);
+    setStartNote(composerKey, null);
+    const sentWords = text;
+    try {
+      await postJob({
+        card: j.card, option: j.option, depth: j.depth, words: j.words, source: j.source,
+        // An `@project` chip names where the job goes: a new chat in that project, never this chat (codex r1).
+        chatId: project !== null ? null : jobChatId,
+        projectId: project?.projectId ?? contextProjectId, repoRef: project !== null ? null : sessionRepo, pickKey: j.pickKey,
+      });
+      // The draft this post came from still owns the box only if its pick (or its command key) is still the one there
+      // and its words are unchanged: a replacement pick with the same words is not cleared (codex r2).
+      const owned = j.chipKey !== null
+        ? chipsOf(useComposerChips.getState(), composerKey).some((c) => c.key === j.chipKey)
+        : cmdKeys.get(composerKey) === j.pickKey && !chipsOf(useComposerChips.getState(), composerKey).some((c) => c.kind === 'workflow');
+      // A typed command posted is spent: the next one is its own request (codex r1).
+      if (j.renewCmd === true && cmdKeys.get(composerKey) === j.pickKey) renewCmdKey(composerKey);
+      if (j.chipKey !== null) removeAboutChip(composerKey, j.chipKey);
+      if (owned && textNow.current === sentWords) setText('');
+    } catch (e) {
+      setStartNote(composerKey, `Nothing was started: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      jobBusyRef.current = false;
+      setJobBusy(false);
+    }
+  };
+
   return (
     <div className={`wk-composer ${className}`} data-testid="composer" data-composer={composerKey}>
       {menuOpen && token !== null && (
@@ -506,9 +655,10 @@ export function Composer({
           menuKey={composerKey}
           trigger={token.trigger}
           startCommands={startCommands}
-          catalogState={wfCatalogState}
+          catalogState={!capsLoaded ? 'loading' : cmdsOn ? wfStateV2 : wfCatalogState}
           anyWorkflows={anyWorkflows}
           wf={wf}
+          {...(cmdsOn ? { cmds: cmdRows, onPickCommand: pickCommand } : {})}
           slash={slash}
           ats={ats}
           {...(!started && askPathOn ? { helpersHead: 'Helpers · the one you pick answers' } : {})}
@@ -519,16 +669,23 @@ export function Composer({
           onPickAt={pickAt}
         />
       )}
-      {(chips.length > 0 || note !== null || refusal !== null) && (
+      {(chips.length > 0 || note !== null || refusal !== null || startNote !== null) && (
         <div className="wk-composer-chips">
           {chips.map((c) => (
-            <span key={c.key} data-testid="composer-chip" data-kind={c.kind} data-key={c.key} className="wk-composer-chip" title={c.kind === 'project' ? 'Where your next message goes' : c.kind === 'workflow' ? 'The workflow this starts' : 'Your next message is about this'}>
+            <span key={c.key} data-testid="composer-chip" data-kind={c.kind} data-key={c.key} className="wk-composer-chip" title={c.kind === 'project' ? 'Where your next message goes' : c.kind === 'workflow' ? (c.job === true ? 'The job Enter puts in the chat' : 'The workflow this starts') : 'Your next message is about this'}>
               {chipText(c)}
               <button type="button" data-testid="composer-chip-remove" aria-label={`Remove ${chipText(c)}`} onClick={() => { removeAboutChip(composerKey, c.key); box.current?.focus(); }} className="wk-composer-chip-x">×</button>
             </span>
           ))}
           {refusal !== null && <span data-testid="composer-refused" role="status" className="wk-composer-note wk-composer-note--bad">{refusal}</span>}
-          {refusal === null && note !== null && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
+          {/* A command's own answer shows even beside a seat refusal: it is the reason that applies (pi r2). */}
+          {note !== null && (refusal === null || commandLine || jobChip !== null) && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
+          {jobChip !== null && refusal === null && (
+            <span data-testid="composer-job-line" role="status" className="wk-composer-note">
+              {jobBusy ? 'Putting the job in the chat…' : 'Enter puts this job in the chat for you to look over. Nothing runs until you press Start.'}
+            </span>
+          )}
+          {startNote !== null && <span data-testid="composer-start-note" role="alert" className="wk-composer-note wk-composer-note--bad">{startNote}</span>}
         </div>
       )}
       {showSeats && (
@@ -556,7 +713,7 @@ export function Composer({
           {seatRefusal !== null && <span data-testid="composer-seats-refused" role="status" className="wk-composer-note wk-composer-note--bad">{seatRefusal}</span>}
         </div>
       )}
-      {wfChip !== null && (
+      {wfChip !== null && jobChip === null && (
         <InlineStart
           composerKey={composerKey}
           entry={chipEntry}
@@ -593,7 +750,8 @@ export function Composer({
             setText(e.target.value); syncCaret(e.target); setCursor(0); setCursorKey(null); if (note !== null && e.target.value !== '') setNote(null);
             // studio#623 (#620's launch-form rule): an Escape closes THIS token's menu; once that token
             // is gone (or the caret is in another one), a new `/` or `@` opens the menu again.
-            const tok = menuToken(e.target.value, e.target.selectionStart ?? e.target.value.length);
+            // A v2 command line is one token (the whole line): an Escape keeps it closed while the line is a `/` line.
+            const tok = cmdsOn && wfChip === null && e.target.value.startsWith('/') ? { trigger: '/' as const, start: 0 } : menuToken(e.target.value, e.target.selectionStart ?? e.target.value.length);
             if (tok === null || `${tok.trigger}${tok.start}` !== closedAt) setClosedAt(null);
           }}
           onSelect={(e) => syncCaret(e.currentTarget)}
@@ -609,11 +767,11 @@ export function Composer({
             if (e.key === 'Backspace' && text === '' && backspaceAboutChip(composerKey, text)) { e.preventDefault(); return; }
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
           }}
-          placeholder={wfChip !== null ? (chipEntry !== null ? entryWords(chipEntry).label : 'Describe the work to start') : phone || !roomy ? shortPlaceholder(placeholder) : placeholder}
+          placeholder={jobChip !== null ? 'Add words for the job, or press Enter' : wfChip !== null ? (chipEntry !== null ? entryWords(chipEntry).label : 'Describe the work to start') : phone || !roomy ? shortPlaceholder(placeholder) : placeholder}
           className="wk-desk-input"
         />
         <VoiceMicButton size="xs" testId={variant === 'desk' ? 'desk-composer-voice' : 'session-composer-voice'} focus={variant === 'session' ? runs[runs.length - 1]?.session.id ?? null : null} />
-        <button type="submit" data-testid={variant === 'desk' ? 'desk-composer-send' : 'session-composer-send'} aria-label={wfChip !== null ? 'Start' : 'Send'} disabled={!canSend} className="wk-desk-send">↑</button>
+        <button type="submit" data-testid={variant === 'desk' ? 'desk-composer-send' : 'session-composer-send'} aria-label={jobChip !== null ? 'Put the job in the chat' : wfChip !== null ? 'Start' : 'Send'} disabled={!canSend} className="wk-desk-send">↑</button>
       </form>
       {(hint || footer !== null) && (
         <div className="wk-composer-foot">

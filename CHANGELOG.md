@@ -12,6 +12,19 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **The `/` command list (DES-CATALOG-002 Lane E2; crew `chatJobProposals` + `workflowCatalogV2`).** On a daemon that
+  takes job proposals from a chat, `/` lists the v2 catalog by verb: each job's command (`/migrate`), title and line,
+  its variants as sub-commands (`/migrate upgrade`), and Yours. Typing filters it; with four or more words, crew's
+  words layer leads with a **Looks like** row. A pick puts the job on the composer with its exact variant and depth,
+  and nothing is sent until Enter, which puts the job in the chat as your proposal (its sentence and Start). A command
+  typed whole, or an old `/workflow-…` command, does the same; `/workflow-test-analysis` reaches its own job. Only jobs
+  that can start here are listed. New job, ⌘K New job and the named openers (Create an editor plugin, Learn, New demo
+  video, Draft epics, Write tests) open in a chat instead of the New job window. An older daemon keeps today's flow.
+
+### Removed
+- Studio's own guess of a workflow from a launch's words (`detectWorkflow`): reading what words ask for is crew's.
+
 ## [0.15.0] — 2026-11-05
 
 A feature release for crew 0.17.0: Apps by chat (K5) on the data sources sheet and panel (K3), Ask a question of a
