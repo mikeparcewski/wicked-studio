@@ -18,10 +18,13 @@ export function grantNote(decided: Pick<DecidedGrants, 'note' | 'allow'>, naviga
   return (
     <>
       {asks}{' '}
-      <a href={allow.href} data-testid="editor-grants-allow" data-permission={allow.permission} className="wk-link"
-        onClick={(ev) => { ev.preventDefault(); navigate(allow.href); }}>
-        Allow it in Plugins
-      </a>.
+      {/* The link and its full stop wrap together: a narrow note never leaves the "." alone on a line. */}
+      <span style={{ whiteSpace: 'nowrap' }}>
+        <a href={allow.href} data-testid="editor-grants-allow" data-permission={allow.permission} className="wk-link"
+          onClick={(ev) => { ev.preventDefault(); navigate(allow.href); }}>
+          Allow it in Plugins
+        </a>.
+      </span>
     </>
   );
 }
