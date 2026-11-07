@@ -316,8 +316,9 @@ export function themeChangeWords(current: StudioAppearance, patch: ThemePatch): 
   if (has('ambient') || has('ambient_still')) {
     const on = has('ambient') ? patch.ambient === true : current.ambient === true;
     const still = has('ambient_still') ? patch.ambient_still === true : current.ambient_still === true;
-    // The still flag is its own key: said whenever the patch names it, even with Ambient off.
-    out.push(on ? `Ambient on${still ? ', still' : ''}` : has('ambient_still') ? `Ambient off (${still ? 'still' : 'moving'} when on)` : 'Ambient off');
+    // With Ambient off, its still flag changes nothing on screen: the words say what the person gets (coordinator copy
+    // fix: "Ambient off (still when on)" read unclear).
+    out.push(on ? `Ambient on${still ? ', still' : ''}` : has('ambient_still') ? 'Ambient off: no background motion' : 'Ambient off');
   }
   return out;
 }
