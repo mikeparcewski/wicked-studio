@@ -83,7 +83,9 @@
   },
   "full": {}
 };
-  let port = null, grants = [], seq = 0, protocol = 1, head = 0, parts = [];
+  // head/parts: the page as last read; fresh: that read is the head the host announced; busy: a save in flight;
+  // readGen: only the newest read lands (an older reply never rolls the page or the write base back).
+  let port = null, grants = [], seq = 0, protocol = 1, head = 0, parts = [], fresh = false, busy = false, readGen = 0;
   let surface = 'card', mode = 'simple';
   const pending = new Map();
   const $ = (id) => document.getElementById(id);
@@ -102,6 +104,8 @@
     send('ui.status', { line: String(line).slice(0, 120) });
   };
   const granted = (p) => grants.includes(p);
+  // A line inside the frame only: after a write the host's own line (with its Undo) must stay on the card.
+  const note = (line) => { $('status').textContent = line; };
 
   // The card's height, when it declares aspect "auto" (the host clamps it to 120-560 px).
   function reportHeight() {
@@ -123,7 +127,7 @@
     const e = entry();
     $('prnote').textContent = e.bad ? 'PR number must be digits' : '';
     $('out').textContent = e.text;
-    $('add').disabled = !e.summary || !last() || !granted('artifact.write');
+    $('add').disabled = busy || !fresh || !e.summary || !last() || !granted('artifact.write');
     reportHeight();
   }
 
@@ -150,25 +154,41 @@
   }
 
   async function load() {
-    if (!granted('artifact.read')) { status('This editor may not read the page here.'); return; }
+    if (!granted('artifact.read')) { note('This editor may not read the page here.'); return false; }
+    const gen = ++readGen;
+    fresh = false;
+    render();
     const r = await req('artifact.read', {});
-    if (!r.ok) { status('Not read: ' + ((r.error && r.error.code) || 'error')); return; }
+    if (gen !== readGen) return false; // a newer read owns the page
+    if (!r.ok) { note('Not read: ' + ((r.error && r.error.code) || 'error') + '. It reads again when the page changes.'); return false; }
     head = r.payload.version;
+    fresh = true;
     showPage(r.payload.content);
-    status('Version ' + head + ' · fill in the form to add an entry');
+    note('Version ' + head + ' · fill in the form to add an entry');
+    return true;
   }
 
   // Add the entry to the end of the page's last part: ONE text edit, one version the host can undo.
   async function add() {
     const e = entry(), t = last();
-    if (!e.summary || !t) return;
-    $('add').disabled = true;
+    if (busy || !fresh || !e.summary || !t) return;
+    busy = true;
+    render();
+    const sent = { summary: $('summary').value, pr: $('pr').value };
     const r = await req('version.write', { base: head, ops: [{ op: 'text', anchor: t.anchor, value: t.text + '\n\n' + e.text, before: t.text }],
       summary: ('Changelog entry: ' + e.summary).slice(0, 200) });
-    if (!r.ok) { status('Not added: ' + ((r.error && (r.error.message || r.error.code)) || 'error')); render(); return; }
-    $('summary').value = ''; $('pr').value = '';
-    await load();
-    status('Added as version ' + r.payload.version);
+    busy = false;
+    if (!r.ok) {
+      const code = r.error && r.error.code;
+      // The host says why on the card; a page that moved on is read again before the next try.
+      note('Not added: ' + ((r.error && (r.error.message || code)) || 'error'));
+      if (code === 'head_moved' || code === 'stale') await load(); else render();
+      return;
+    }
+    // Only what was sent is cleared: words typed while it saved stay.
+    if ($('summary').value === sent.summary && $('pr').value === sent.pr) { $('summary').value = ''; $('pr').value = ''; }
+    const ok = await load();
+    if (ok) note('Added as version ' + r.payload.version);
   }
 
   // A host-drawn card action with verb "plugin": no user activation, no request.
@@ -240,7 +260,8 @@
           }
           break;
         }
-        case 'artifact.changed': if (p.by !== 'this-editor') load(); break;
+        // Another writer's version, or one of ours the page does not show yet (an Undo, a write that landed late).
+        case 'artifact.changed': if (p.by !== 'this-editor' || p.head !== head) load(); break;
         // ── protocol 2 (only a host that negotiated 2 sends these) ──
         case 'host.surface': if (protocol >= 2 && ['card', 'options', 'full'].includes(p.surface)) setSurface(p.surface, p.mode); break;
         case 'host.mode': if (protocol >= 2 && typeof d.id === 'string') { setMode('simple'); answer(d.id, { mode }); } break;

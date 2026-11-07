@@ -27,8 +27,9 @@ and its grants as decided at its install consent (read, write, full screen).
      "### Fixed (<today>)\\n- The export button no longer hangs (#123)"; "#45" is accepted as 45; a PR that is not
      digits is dropped from the line with the hint "PR number must be digits"; no summary shows the prompt and
      "Add entry" is disabled.
-  5. SAVES: "Add entry" lands ONE version (version 2) whose last part ends with the entry; the plugin says
-     "Added as version 2", lists the entry as the page's last part and clears the form.
+  5. SAVES: "Add entry" lands ONE version (version 2): the page's last part is what it was plus the entry; the
+     plugin says "Added as version 2" and clears the form; the card keeps the host's edited line with its Undo,
+     and Undo takes the entry back out (the plugin reads the page again and shows it as it was).
   6. HOST ACTION: the host-drawn "Clear form" (verb plugin) reaches the plugin, which clears the form and
      answers "Form cleared" on the card's line.
   7. 0 page errors, in light and dark, at 1440x700.
@@ -195,6 +196,7 @@ with sync_playwright() as p:
         # ── 5. saves: Add entry lands ONE version whose last part ends with the entry ────────────────
         # The card's own host and adapter (the test page's `window.__wickedEditor` is not the card's): what the
         # plugin reads back from the host after the write is the evidence, with the version the write's reply named.
+        orig_last = frame.locator("#page li").last.inner_text()
         frame.locator("#type").select_option("Changed")
         fill(frame, "#summary", "The export button no longer hangs")
         fill(frame, "#pr", "123")
@@ -210,11 +212,19 @@ with sync_playwright() as p:
         last_part = frame.locator("#page li").last.inner_text()
         page_text = "\n".join(frame.locator("#page li").all_inner_texts())
         page.screenshot(path=str(SHOTS / f"editor-installed-plugin-saved-{theme}.png"))
+        # The host's own line for the write, with its Undo (the plugin never talks over it).
+        host_line = card.get_by_test_id("page-line")
         check(f"{theme}-saves-one-version",
-              frame.locator("#status").inner_text() == "Added as version 2" and last_part.endswith(want)
+              frame.locator("#status").inner_text() == "Added as version 2" and last_part == f"{orig_last}\n\n{want}"
               and page_text.count("The export button no longer hangs (#123)") == 1
+              and host_line.get_attribute("data-kind") == "edited" and card.get_by_test_id("page-undo").count() == 1
               and frame.locator("#summary").input_value() == "" and frame.locator("#pr").input_value() == "",
-              last_part=last_part[-120:], status=frame.locator("#status").inner_text())
+              last_part=last_part[-160:], original=orig_last, line=host_line.inner_text(), status=frame.locator("#status").inner_text())
+        # The host's Undo takes the entry back out, and the plugin shows the page as it was.
+        card.get_by_test_id("page-undo").click()
+        frame.locator("#page li", has_text="The export button no longer hangs (#123)").wait_for(state="detached", timeout=10000)
+        check(f"{theme}-host-undo-takes-it-back", frame.locator("#page li").last.inner_text() == orig_last,
+              last=frame.locator("#page li").last.inner_text()[-120:], line=host_line.inner_text())
 
         # ── 6. the host-drawn Clear form reaches the plugin ─────────────────────────────────────────
         fill(frame, "#summary", "Something to clear")
