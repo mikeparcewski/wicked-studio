@@ -181,13 +181,30 @@ export interface StarterRule {
    *  machine check) or `evidence:delivery` (its subject is the pull request: deferred at review and
    *  QE, checked at the deliver step). */
   obligations?: readonly string[];
+  /** The rule's acceptance criteria (core renders them beside the statement for the judge). */
+  criteria?: string;
+  /** Earlier texts of this starter, verbatim. An adopted copy that still reads one of them is offered the
+   *  update ({@link starterUpdate}); it is never rewritten without the person's click. */
+  previous?: readonly { statement: string; criteria?: string }[];
+  /** What the update changes, in the person's words: shown with the offer, so taking it is an informed choice. */
+  changed?: string;
 }
 
 export const STARTER_RULES: readonly StarterRule[] = [
   { id: 'learn-small-prs', title: 'Small pull requests', line: 'One concern; under 400 changed lines', type: 'development', statement: 'A pull request carries one concern and stays under 400 changed lines; split anything larger.' },
   { id: 'learn-tests-with-fixes', title: 'Tests with every fix', line: 'A failing test first, then the fix', type: 'testing', statement: 'A bug fix includes a test that fails without the fix.', obligations: ['check:test-fails-on-base'] },
   { id: 'learn-no-secrets', title: 'No secrets in code', line: 'Keys and tokens come from the environment', type: 'security', statement: 'No key, token or password is written in code, config or tests; secrets come from the environment.' },
-  { id: 'learn-linked-issue', title: 'Linked issue', line: 'Every PR names the issue it closes', type: 'development', statement: 'Every pull request names the issue it closes in its description.', obligations: ['evidence:delivery'] },
+  // (e2e-1105 F21, operator Q3 2026-11-06) Conditional: a job with no issue is not applicable, a job with one must close
+  // it. The criteria are load-bearing: with the statement alone a judge read the deliver step's "applies" note as
+  // overriding the condition and broke a no-issue pull request (codex, 3 of 3).
+  {
+    id: 'learn-linked-issue', title: 'Linked issue', line: 'A PR that resolves an issue closes it (Fixes #N)', type: 'development',
+    statement: 'When a pull request resolves a tracked issue, its description names it with a closing keyword (Fixes #N).',
+    criteria: 'Not applicable when neither the job nor the pull request text names a tracked issue (an issue number or link). Broken when an issue the work resolves is named but the description does not close it with a closing keyword.',
+    obligations: ['evidence:delivery'],
+    previous: [{ statement: 'Every pull request names the issue it closes in its description.' }],
+    changed: 'With no named issue it does not apply. When the work resolves a named issue, the pull request must close it (Fixes #N). Keep yours if every pull request must have an issue.',
+  },
   { id: 'learn-accessible', title: 'Accessible by default', line: 'Labels, focus and contrast on every screen', type: 'design-ux', statement: 'Every new screen has labelled controls, a visible focus and text contrast of at least 4.5:1.' },
   { id: 'learn-reversible-migrations', title: 'Migrations are reversible', line: 'Every schema change has a down step', type: 'operations', statement: 'Every schema migration has a tested down step.' },
 ];
@@ -207,7 +224,49 @@ export function starterRule(s: StarterRule): ConformanceRule {
     excludes: [],
     weight: 1.0,
     ...(s.obligations !== undefined && s.obligations.length > 0 ? { obligations: [...s.obligations] } : {}),
+    ...(s.criteria !== undefined && s.criteria !== '' ? { criteria: s.criteria } : {}),
   } as ConformanceRule;
+}
+
+/** The person's copy of a starter: the one in force, else a retired one, else undefined. */
+export function starterCopy(s: StarterRule, rules: readonly ConformanceRule[]): ConformanceRule | undefined {
+  return rules.find((r) => r.id === s.id && r.retired !== true) ?? rules.find((r) => r.id === s.id);
+}
+
+/**
+ * What picking a starter writes, or null when its copy is already in force (nothing to write). A retired copy is
+ * the team's own rule: it comes back as it was (only `retired` changes), never replaced by the starter's defaults.
+ * Only a starter never adopted is written fresh.
+ */
+export function starterAdoption(s: StarterRule, rules: readonly ConformanceRule[]): ConformanceRule | null {
+  const copy = starterCopy(s, rules);
+  if (copy === undefined) return starterRule(s);
+  return copy.retired === true ? { ...copy, retired: false } : null;
+}
+
+/**
+ * (F21, operator Q3) The update for an adopted starter whose text changed, or null. Offered only for the person's
+ * own adopted copy (in force, with the starter's own provenance: `ui`, `learn:starter`, its source kinds) that still
+ * reads an earlier text of the starter VERBATIM, statement and criteria both: a copy anyone edited is theirs and is
+ * left alone. The update keeps everything else the copy carries (severity, scope, weight, obligations, provenance) and
+ * replaces only the words. Written only when the person clicks "Update" (crew's rule write, `POST /governance/rules`),
+ * never silently.
+ */
+export function starterUpdate(s: StarterRule, rules: readonly ConformanceRule[]): ConformanceRule | null {
+  if (s.previous === undefined || s.previous.length === 0) return null;
+  const copy = rules.find((r) => r.id === s.id && r.retired !== true);
+  if (copy === undefined) return null;
+  const own = starterRule(s).provenance;
+  const p = copy.provenance;
+  if (p.source !== own.source || p.ref !== own.ref || JSON.stringify(p.source_kinds ?? []) !== JSON.stringify(own.source_kinds)) return null;
+  const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+  const statement = text(copy.statement);
+  const criteria = text(copy.criteria);
+  if (!s.previous.some((x) => x.statement === statement && (x.criteria ?? '') === criteria)) return null;
+  const next: ConformanceRule = { ...copy, statement: s.statement };
+  if (s.criteria !== undefined && s.criteria !== '') next.criteria = s.criteria;
+  else delete next.criteria;
+  return next;
 }
 
 /** Rules a person added or adopted (by hand, a starter, a chat or a Learn run), not built in or imported. */
