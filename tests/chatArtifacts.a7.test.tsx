@@ -322,6 +322,66 @@ describe('the preview, Apply and Undo: edges (review r1)', () => {
     expect(document.documentElement.hasAttribute('data-mood')).toBe(false);
   });
 
+  it('an edit made while Apply saves is kept and persisted after it (the theme keys take the saved values)', async () => {
+    let release: (r: Response) => void = () => undefined;
+    putAnswer = () => new Promise<Response>((r) => { release = r; }) as unknown as Response;
+    start();
+    const done = useAppearanceStore.getState().applyPreview();
+    useAppearanceStore.getState().update({ site_name: 'Mine' });
+    release(ok({ settings: {} }));
+    await done;
+    expect(appearanceOf()).toMatchObject({ theme: 'wicked-dark', accent_l: 70, site_name: 'Mine' });
+  });
+
+  it('a failed Apply puts back the saved edit’s write it cancelled', async () => {
+    vi.useFakeTimers();
+    try {
+      useAppearanceStore.getState().update({ site_name: 'Mine' });
+      putAnswer = () => new Response(JSON.stringify({ error: 'busy' }), { status: 503 });
+      start();
+      const done = useAppearanceStore.getState().applyPreview();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(await done).toBe(false);
+      putAnswer = () => ok({ settings: {} });
+      await vi.advanceTimersByTimeAsync(1000);
+      const puts = posts.filter((p) => p.path === '/settings').map((p) => (p.body as { 'studio.appearance': Record<string, unknown> })['studio.appearance']);
+      expect(puts.at(-1)).toMatchObject({ theme: 'wicked-light', site_name: 'Mine' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a late refused record of an earlier Apply never lands on a newer save', async () => {
+    let releaseA: (r: Response) => void = () => undefined;
+    decideAnswer = () => new Promise<Response>((r) => { releaseA = r; }) as unknown as Response;
+    start({ pid: 'chat-ask:tA' });
+    const a = useAppearanceStore.getState().applyPreview();
+    await waitFor(() => expect(posts.some((p) => p.path.includes('tA'))).toBe(true));
+    decideAnswer = () => ok({ view: { proposal: themeProposal(), state: 'decided', decision: 'go', result: null, decidedAt: T0 } });
+    start({ pid: 'chat-ask:tB', patch: { accent_h: 30 } });
+    await useAppearanceStore.getState().applyPreview();
+    releaseA(new Response(JSON.stringify({ code: 'proposal_superseded', error: 'x' }), { status: 409 }));
+    await a;
+    expect(useAppearanceStore.getState().save).toMatchObject({ state: 'saved', pid: 'chat-ask:tB', recorded: true });
+    expect(useAppearanceStore.getState().save.recordError).toBeUndefined();
+  });
+
+  it('Undo expires on screen even when the record error keeps the bar up', async () => {
+    decideAnswer = () => new Response(JSON.stringify({ error: 'no' }), { status: 500 });
+    start();
+    await useAppearanceStore.getState().applyPreview();
+    vi.useFakeTimers();
+    try {
+      render(<ThemePreviewBar />);
+      expect(screen.queryByTestId('theme-preview-undo')).not.toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(11_000); });
+      expect(screen.queryByTestId('theme-preview-undo')).toBeNull();
+      expect(text('theme-preview-bar')).toMatch(/did not record it/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('the preview bar offers no Apply for a preview whose merged result fails contrast', () => {
     start({ patch: { theme: 'wicked-dark', accent_l: 8 } });
     render(<ThemePreviewBar />);
@@ -382,6 +442,43 @@ describe('the theme card in a chat thread', () => {
     await screen.findByTestId('artifact-proposal-previewing');
     act(() => useAppearanceStore.getState().adjustPreview({ accent_h: 30 }));
     await waitFor(() => expect(text('artifact-proposal-theme')).toBe('ChangesWicked Light → Wicked Dark · action colour hue 30, saturation 14, lightness 70 · Ambient off'));
+  });
+
+  it('while previewing, the card measures the adjusted preview (a move into low contrast shows there)', async () => {
+    page();
+    await screen.findByTestId('artifact-proposal');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await screen.findByTestId('artifact-proposal-previewing');
+    act(() => useAppearanceStore.getState().adjustPreview({ accent_l: 8 }));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-theme-contrast').querySelector('[data-ok]')?.getAttribute('data-ok')).toBe('false'));
+  });
+
+  it('an Apply from the bar re-reads the card’s chat once the answer is recorded, not before', async () => {
+    page();
+    await screen.findByTestId('artifact-proposal');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await screen.findByTestId('artifact-proposal-previewing');
+    let release: () => void = () => undefined;
+    decideAnswer = () => new Promise<Response>((r) => {
+      release = () => {
+        chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: T0 + 3000, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'local', decision: 'go', result: { runId: 'aaaaaaaa-1111-5222-8333-444444444444', artifactRef: null, adopted: false, stub: false } }] };
+        r(ok({ view: { proposal: themeProposal(), state: 'decided', decision: 'go', result: null, decidedAt: T0 + 3000 } }));
+      };
+    }) as unknown as Response;
+    render(<ThemePreviewBar />);
+    fireEvent.click(screen.getByTestId('theme-preview-apply'));
+    await waitFor(() => expect(posts.some((p) => p.path === decidePath)).toBe(true));
+    release();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));
+  });
+
+  it('a theme record with a name but no usable patch is not drawn', async () => {
+    const bad = themeProposal();
+    chatBody = { ...chatBody, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: { ...bad, theme: { name: 'Calm night', patch: 'x', changes: [] } } }] };
+    page();
+    await screen.findAllByTestId('session-turn');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('artifact-proposal')).toBeNull();
   });
 
   it('a theme record without a name or a patch is not drawn (nothing to preview or apply)', async () => {

@@ -24,7 +24,7 @@ import {
   type ProposalEntry,
 } from '../../board/artifactProposal.js';
 import { SETTINGS_THEME_PATH } from '../../board/settingsTabs.js';
-import { effectiveAppearance, mergedAppearance, themePatchOf, useAppearanceStore } from '../../theming/appearance.js';
+import { canonicalDelta, effectiveAppearance, mergedAppearance, themePatchOf, useAppearanceStore } from '../../theming/appearance.js';
 import { contrastWords, measureTheme, type ContrastCheck } from '../../theming/themeContrast.js';
 import { ThemeSwatches } from '../ThemeSwatches.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
@@ -110,13 +110,14 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
     // The preview of THIS card is what Apply saves: the whole accumulated delta (with any Theme-page moves) against the
     // saved appearance. Any other card shows what its Preview would show: its patch over what the tab shows now.
     if (previewingThis && preview !== null) {
-      return { changes: themeChangeWords(stored, preview.delta), check: measureTheme(effectiveAppearance({ appearance: stored, preview })), seatName };
+      return { changes: themeChangeWords(stored, canonicalDelta(stored, preview.delta)), check: measureTheme(effectiveAppearance({ appearance: stored, preview })), seatName };
     }
     const patch = themePatchOf(p.theme.patch);
-    const current = effectiveAppearance({ appearance: stored, preview });
+    // The base Preview will build on (the store's rule): this chat's preview, else the saved appearance.
+    const current = preview !== null && preview.chatId === chatId ? effectiveAppearance({ appearance: stored, preview }) : stored;
     if (Object.keys(patch).length === 0) return { changes: [], check: { ratios: null, colors: null, ok: false, failing: ['this proposal names nothing studio can change'] }, seatName };
-    return { changes: themeChangeWords(current, patch), check: measureTheme(mergedAppearance(current, patch)), seatName };
-  }, [p, stored, preview, previewingThis, seatName]);
+    return { changes: themeChangeWords(current, canonicalDelta(current, patch)), check: measureTheme(mergedAppearance(current, patch)), seatName };
+  }, [p, stored, preview, previewingThis, seatName, chatId]);
   const themeRefused = themeFacts === null || themeFacts.check.ok ? null : `Can’t preview: ${themeFacts.check.failing.join('; ')}`;
   const startThemePreview = (): void => {
     if (p.theme === undefined || themeRefused !== null) return;
@@ -124,7 +125,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   };
   // An Apply of this card's preview from the bar or the Theme page: re-read the chat, so the card shows it answered
   // even without the live frame.
-  const savedThis = save.state === 'saved' && save.pid === entry.pid;
+  const savedThis = save.state === 'saved' && save.pid === entry.pid && save.recorded === true;
   useEffect(() => {
     if (savedThis) onChanged();
   }, [savedThis]); // eslint-disable-line react-hooks/exhaustive-deps
