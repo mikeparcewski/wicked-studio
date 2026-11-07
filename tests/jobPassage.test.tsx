@@ -503,6 +503,18 @@ describe('review round 2 folds', () => {
     expect((await screen.findByTestId('job-passage-planning')).textContent).toMatch(/^Claude Code is planning/);
   });
 
+  it('a power run (its record says power on) is never "planning": no plan promised, while the team read is pending', async () => {
+    team = { teamed: true, rows: [], units: [] };
+    messages = [USER, SEAT, P1, decided];
+    const r = run('executing');
+    (r.session as unknown as Record<string, unknown>)['power'] = { on: true, available: true, history: [], refusedReason: null, rigor: null, plan: null };
+    page([r]);
+    const passage = await screen.findByTestId('job-passage');
+    await waitFor(() => expect(passage.getAttribute('data-phase')).toBe('running'));
+    expect(screen.queryByTestId('job-passage-planning')).toBeNull();
+    expect(passage.textContent).not.toContain('show you the plan');
+  });
+
   it('an older lost revision never offers a retry over a newer one’s hold', async () => {
     messages = [USER, SEAT, P1];
     const answers: Array<{ res: (r: Response) => void; rej: (e: unknown) => void }> = [];
