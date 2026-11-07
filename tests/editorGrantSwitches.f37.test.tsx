@@ -34,7 +34,7 @@ const json = (body: unknown, status = 200): Promise<Response> =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
 
 /** A crew with a ledger: GET answers from it, POST changes it (the human-only route). */
-function crew(opts: { deny?: boolean; refuse?: string; otherBuild?: boolean; dropPost?: boolean; failRead?: boolean; holdPost?: Promise<void> } = {}): { fetch: ReturnType<typeof vi.fn>; ledger: Set<string> } {
+function crew(opts: { deny?: boolean; refuse?: string; otherBuild?: boolean; dropPost?: boolean; failRead?: boolean; holdPost?: Promise<void>; buildChanged?: boolean } = {}): { fetch: ReturnType<typeof vi.fn>; ledger: Set<string> } {
   const ledger = new Set<string>();
   const now = (): unknown => decided('e2e-checklist', {
     'artifact.read': ['allow', ['EDITOR-OPEN-DEFAULTS']],
@@ -47,6 +47,7 @@ function crew(opts: { deny?: boolean; refuse?: string; otherBuild?: boolean; dro
     if (url.includes('/editors/e2e-checklist/grants')) {
       if (init?.method === 'POST') {
         if (opts.refuse !== undefined) return json({ error: opts.refuse }, 403);
+        if (opts.buildChanged === true) return json({ code: 'build_changed', error: 'e2e-checklist changed to version 1.1.0 since this was shown' }, 409);
         const body = JSON.parse(String(init.body)) as { permission: string; allow: boolean };
         if (body.allow) ledger.add(body.permission); else ledger.delete(body.permission);
         // The write landed, then the connection dropped before the answer.
@@ -225,6 +226,18 @@ describe('F37 review r1: the switch only ever acts on, and shows, the build the 
     await waitFor(() => expect(document.activeElement).toBe(switchOf('artifact.write')));
     rerender(<PluginsPage navigate={() => undefined} search="?editor=e2e-checklist&allow=checks.read" />);
     await waitFor(() => expect(document.activeElement).toBe(switchOf('checks.read')));
+  });
+
+  it('codex r3: an update between the read and the press (409 build_changed) takes the switches and the claims away', async () => {
+    const c = crew({ buildChanged: true });
+    render(<PluginsPage navigate={() => undefined} />);
+    await openDetails('e2e-checklist');
+    await waitFor(() => switchOf('artifact.write'));
+    fireEvent.click(switchOf('artifact.write'));
+    await waitFor(() => screen.getByTestId('plugin-grants-changed'));
+    expect(screen.queryAllByTestId('plugin-grant-switch')).toHaveLength(0);
+    expect(screen.getByTestId('editor-plugin-permissions').textContent).toMatch(/reload/u);
+    expect(c.ledger.size).toBe(0);
   });
 
   it('a press whose answer is lost re-reads crew instead of claiming "Not changed"', async () => {

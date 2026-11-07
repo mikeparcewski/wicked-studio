@@ -63,32 +63,47 @@ const keyOf = (e: Pick<EditorView, 'id' | 'version' | 'sha256'>): string => `${e
  * is kept only for the build it is about (codex r1): an answer for another build (an update landed between the list
  * and this read) is "changed", and a late answer for a card no longer open is dropped. No editor = none.
  */
-export function useEditorGrants(e: Shown | undefined): { load: Load | { state: 'changed' }; set: (d: EditorGrantsResponse) => void; reload: () => void } {
+export function useEditorGrants(e: Shown | undefined): {
+  load: Load | { state: 'changed' };
+  set: (d: EditorGrantsResponse) => void;
+  /** Re-read crew's answer for `forId` (only while that editor is the one shown). */
+  reload: (forId: string) => void;
+  /** crew said the build shown is no longer installed (409 `build_changed`): no switch or claim stands for it. */
+  changed: (forId: string) => void;
+} {
   const want = e !== undefined ? keyOf(e) : null;
   const wantRef = useRef(want);
   wantRef.current = want;
+  // Bumped by every answer a press applies: a read that started before it is older and is dropped (codex r3).
+  const gen = useRef(0);
   const [got, setGot] = useState<{ key: string | null; load: Load | { state: 'changed' } }>({ key: want, load: want === null ? { state: 'none' } : { state: 'loading' } });
   const [attempt, setAttempt] = useState(0);
   const id = e?.id ?? null;
   useEffect(() => {
     if (id === null || want === null) { setGot({ key: want, load: { state: 'none' } }); return undefined; }
     let live = true;
+    const started = gen.current;
     setGot({ key: want, load: { state: 'loading' } });
     readEditorGrants(id)
       .then((d) => {
-        if (!live) return;
+        if (!live || gen.current !== started) return;
         if (d === null || !Array.isArray(d.grants)) setGot({ key: want, load: { state: 'none' } });
         else setGot({ key: want, load: keyOf({ id: d.editorId, version: d.version, sha256: d.sha256 }) === want ? { state: 'ready', decided: d } : { state: 'changed' } });
       })
-      .catch((err: unknown) => { if (live) setGot({ key: want, load: { state: 'error', error: err instanceof Error ? err.message : String(err) } }); });
+      .catch((err: unknown) => { if (live && gen.current === started) setGot({ key: want, load: { state: 'error', error: err instanceof Error ? err.message : String(err) } }); });
     return () => { live = false; };
   }, [id, want, attempt]);
   const set = (d: EditorGrantsResponse): void => {
     const k = keyOf({ id: d.editorId, version: d.version, sha256: d.sha256 });
-    if (k === wantRef.current) setGot({ key: k, load: { state: 'ready', decided: d } });
+    if (k !== wantRef.current) return;
+    gen.current += 1;
+    setGot({ key: k, load: { state: 'ready', decided: d } });
   };
+  const shown = (forId: string): boolean => wantRef.current !== null && wantRef.current.startsWith(`${forId}@`);
+  const reload = (forId: string): void => { if (shown(forId)) setAttempt((n) => n + 1); };
+  const changed = (forId: string): void => { if (shown(forId)) { gen.current += 1; setGot({ key: wantRef.current, load: { state: 'changed' } }); } };
   // A load kept for another build than the one shown now is still loading for this one.
-  return { load: got.key === want ? got.load : { state: 'loading' }, set, reload: () => setAttempt((n) => n + 1) };
+  return { load: got.key === want ? got.load : { state: 'loading' }, set, reload, changed };
 }
 
 /**
@@ -112,7 +127,7 @@ export function EditorGrantSwitches({ editor, title, grants, focus }: {
 }): React.ReactElement | null {
   // Keyed by the build (the caller remounts it per editor build), so a press, its error and the focus request all
   // belong to the editor they were made on.
-  const { load, set, reload } = grants;
+  const { load, set, reload, changed } = grants;
   const [busy, setBusy] = useState<string | null>(() => (pressing.has(editor.id) ? '…' : null));
   const [error, setError] = useState<{ permission: string; text: string } | null>(null);
   // The focus request this mount has fulfilled: a new request (another permission, or the link again) is honoured.
@@ -123,7 +138,7 @@ export function EditorGrantSwitches({ editor, title, grants, focus }: {
     const p = pressing.get(editor.id);
     if (p === undefined) return undefined;
     let live = true;
-    void p.done.finally(() => { if (live) { setBusy(null); reload(); } });
+    void p.done.finally(() => { if (live) { setBusy(null); reload(editor.id); } });
     return () => { live = false; };
   }, [editor.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = load.state === 'ready' ? grantRows(load.decided) : [];
@@ -152,8 +167,10 @@ export function EditorGrantSwitches({ editor, title, grants, focus }: {
       .catch((err: unknown) => {
         // crew answered and refused: nothing changed. Anything else (the connection dropped): it may have landed, so
         // what crew decides now is read again rather than guessed (codex r1).
-        if (refused(err)) setError({ permission, text: `Not changed: ${err instanceof Error ? err.message : String(err)}` });
-        else { setError({ permission, text: 'Could not confirm the change; showing what studio’s service says now.' }); reload(); }
+        // The editor was updated since this was read (409 build_changed): nothing stands for the old build (codex r3).
+        if (err instanceof ApiError && err.status === 409 && (err.body as { code?: unknown } | undefined)?.code === 'build_changed') changed(editor.id);
+        else if (refused(err)) setError({ permission, text: `Not changed: ${err instanceof Error ? err.message : String(err)}` });
+        else { setError({ permission, text: 'Could not confirm the change; showing what studio’s service says now.' }); reload(editor.id); }
       })
       .finally(() => { if (pressing.get(editor.id)?.seq === seq) pressing.delete(editor.id); setBusy(null); });
     pressing.set(editor.id, { seq, done });
