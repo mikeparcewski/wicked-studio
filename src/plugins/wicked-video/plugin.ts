@@ -286,7 +286,8 @@ export function start(): void {
     for (const k of cut.proof?.checks ?? []) {
       const li = document.createElement('li'); li.dataset['testid'] = 'video-finding'; li.dataset['state'] = k.state;
       const chapter = cut.chapters.find(c => c.id === k.chapter)?.title;
-      li.textContent = `${k.atSec === null ? '' : `${Math.floor(k.atSec / 60)}:${String(Math.round(k.atSec % 60)).padStart(2, '0')} · `}${chapter === undefined ? '' : `${chapter} · `}${k.text}`;
+      const whole = k.atSec === null ? null : Math.max(0, Math.round(k.atSec));
+      li.textContent = `${whole === null ? '' : `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')} · `}${chapter === undefined ? '' : `${chapter} · `}${k.text}`;
       findings.append(li);
     }
     const key = `${cut.version}|${(review?.sheets ?? []).map(sh => sh.name).join(',')}`;

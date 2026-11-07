@@ -59,6 +59,8 @@ export class DemoCutAdapter implements HostAdapter {
     const kept = this.versionCuts.get(version);
     if (kept !== undefined) return kept;
     const cut = this.shaped(await this.json<DemoCut>(`cut?version=${version}`));
+    // An interactive that keeps no cut history ignores the query and answers the head: never show that as version N.
+    if (cut.version !== version) throw new ApiError(404, 'no_history', { error: 'no_history' });
     this.versionCuts.set(version, cut);
     return cut;
   }
@@ -69,7 +71,12 @@ export class DemoCutAdapter implements HostAdapter {
       return { error: 'head_moved', message: 'The cut changed; read it again before editing.', ...(this.cut === null ? {} : { head: this.head, moved: { head: this.head, kind: 'generated' as const } }) };
     }
     const code = e instanceof ApiError ? (e.body as { error?: unknown } | undefined)?.error : undefined;
-    if (code === 'no_snapshot') return { error: 'unsupported', message: 'That version was made before the cut kept its history; it can be watched, not restored.' };
+    if (code === 'no_snapshot') return { error: 'unsupported', message: 'That version has no kept cut (it was made before the cut kept its history, or it is not a cut render); it can be looked at, not restored.' };
+    if (code === 'no_history' || (e instanceof ApiError && e.status === 404 && code === undefined)) return { error: 'unsupported', message: 'This wicked-interactive keeps no cut history; update it to look at or restore earlier cuts.' };
+    if (code === 'head_moved') {
+      const head = (e as ApiError).body as { head?: unknown };
+      return { error: 'head_moved', message: 'A newer version landed since.', ...(typeof head.head === 'number' ? { head: head.head } : {}) };
+    }
     if (code === 'take_missing') return { error: 'unavailable', message: 'A recording that version used is no longer on disk.' };
     return { error: e instanceof ApiError && e.status === 404 ? 'unsupported' : e instanceof ApiError && e.status === 400 ? 'bad_request' : 'unavailable', message: e instanceof Error ? e.message : 'The cut is unavailable.' };
   }
@@ -109,7 +116,8 @@ export class DemoCutAdapter implements HostAdapter {
       const cut = await this.load();
       if (expectHead !== undefined) { const stale = this.stale(expectHead); if (stale !== null) return stale; }
       if (from === cut.version) return { error: 'bad_request', message: 'That is the working version already.' };
-      const r = await this.json<{ rev: number; version: number }>('restore', 'POST', { rev: cut.rev, from });
+      // `expect_head`: the document's head, not only the cut's rev — a page version can land on a cut document.
+      const r = await this.json<{ rev: number; version: number }>('restore', 'POST', { rev: cut.rev, from, ...(expectHead !== undefined ? { expect_head: expectHead } : {}) });
       this.cut = null; this.setHead(r.version);
       return { version: r.version };
     } catch (e) { return this.failure(e); }

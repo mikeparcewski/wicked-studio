@@ -100,25 +100,36 @@ describe('demo cut adapter over the E1 proxy', () => {
     const a = new DemoCutAdapter('p', 'demo', 'Demo');
     expect(await a.read(1)).toMatchObject({ error: 'unsupported', message: expect.stringContaining('before the cut kept its history') });
   });
+  it('an older interactive that ignores ?version (answers the head) is never shown as that version, and has no restore', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => (init?.method === 'POST' ? new Response('Cannot POST', { status: 404 }) : json({ ...demoCut4, rev: 3, version: 3 }))));
+    const a = new DemoCutAdapter('p', 'demo', 'Demo');
+    expect(await a.read(1)).toMatchObject({ error: 'unsupported', message: expect.stringContaining('keeps no cut history') });
+    expect(await a.restoreVersion(1, 3)).toMatchObject({ error: 'unsupported', message: expect.stringContaining('keeps no cut history') });
+  });
+  it('a page version that landed on the cut document since is a moved head, named', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => (init?.method === 'POST' ? json({ error: 'head_moved', head: 4 }, 409) : json({ ...demoCut4, rev: 3, version: 3 }))));
+    const a = new DemoCutAdapter('p', 'demo', 'Demo');
+    expect(await a.restoreVersion(1, 3)).toEqual({ error: 'head_moved', message: 'A newer version landed since.', head: 4 });
+  });
   it('restore, fork and undo are one durable write: POST restore {rev, from}, never the HTML fork', async () => {
     const calls: Array<{ url: string; body: unknown }> = [];
     let head = { ...demoCut4, rev: 5, version: 3 };
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url: String(url), body: init?.body === undefined ? undefined : JSON.parse(init.body as string) });
-      if (String(url).endsWith('/api/versions')) return json({ head: head.version, versions: [{ version: 1, parent: 0, created_at: 't' }, { version: 2, parent: 1, created_at: 't' }, { version: 3, parent: 2, created_at: 't' }] });
+      if (String(url).endsWith('/api/versions')) return json({ head: head.version, versions: Array.from({ length: head.version }, (_, i) => ({ version: i + 1, parent: i === 0 ? null : i, created_at: 't' })) });
       if (init?.method === 'POST') { head = { ...head, rev: head.rev + 1, version: head.version + 1 }; return json({ rev: head.rev, version: head.version, parent: head.version - 1 }); }
       return json(head);
     }));
     const a = new DemoCutSurfaceAdapter(binding);
     expect(await a.restoreVersion(1, 3)).toEqual({ version: 4 });
-    expect(calls.at(-1)).toEqual({ url: expect.stringContaining('/d/team%20demo/api/demo/restore'), body: { rev: 5, from: 1 } });
+    expect(calls.at(-1)).toEqual({ url: expect.stringContaining('/d/team%20demo/api/demo/restore'), body: { rev: 5, from: 1, expect_head: 3 } });
     // Undo after a reload: the parent comes from the document's own lineage, not a session snapshot.
     const fresh = new DemoCutSurfaceAdapter(binding);
     expect(await fresh.undo(3)).toMatchObject({ error: 'head_moved', head: 4 });
-    expect(await fresh.undo(4)).toMatchObject({ error: 'unsupported' });
+    expect(await fresh.undo(1)).toMatchObject({ error: 'unsupported', message: 'There is no earlier cut to go back to.' });
     head = { ...head, version: 3, rev: 9 };
     expect(await new DemoCutSurfaceAdapter(binding).undo(3)).toEqual({ undone: true, moved: { head: 4, kind: 'fork' } });
-    expect(calls.at(-1)).toEqual({ url: expect.stringContaining('/api/demo/restore'), body: { rev: 9, from: 2 } });
+    expect(calls.at(-1)).toEqual({ url: expect.stringContaining('/api/demo/restore'), body: { rev: 9, from: 2, expect_head: 3 } });
     expect(await new DemoCutSurfaceAdapter(binding).fork(1)).toEqual({ version: 5 });
     expect(calls.some((c) => c.url.includes('/api/fork'))).toBe(false);
     expect(await new DemoCutSurfaceAdapter(binding).restoreVersion(5, 5)).toMatchObject({ error: 'bad_request' });

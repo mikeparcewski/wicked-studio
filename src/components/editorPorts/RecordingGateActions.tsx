@@ -2,14 +2,14 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { demoFileUrl, getDemo, makeDemoDocument, putDemoScript, rerecordNote, sendBackDemo } from '../../api/demo.js';
 import { walkthroughApi, type WalkthroughView } from '../../api/walkthrough.js';
 import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
-import { demoReviewLine, demoTakeFingerprint, escalationOpen, fixNote, fmtTime, gateVerbs, recordingOf, recordingOfDemo, SHEET_LABEL, takeFingerprint, type Recording, type RecordingKind, type UnitLike } from '../../board/walkthroughModel.js';
+import { demoReviewLine, demoReviewPolicy, demoTakeFingerprint, escalationOpen, fixNote, fmtTime, gateVerbs, recordingOf, recordingOfDemo, SHEET_LABEL, takeFingerprint, type Recording, type RecordingKind, type UnitLike } from '../../board/walkthroughModel.js';
 import type { ArtifactBinding } from '../../editors/hostApi.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRecording } from './useRecording.js';
 import './editorPorts.css';
 
 /** The run's gate controls live in host chrome, alongside the recording plugin. */
-export function RecordingGateActions({ runId, kind, step, units, onChanged, onEditOpen, script = false }: {
+export function RecordingGateActions({ runId, kind, step, units, onChanged, onEditOpen, script = false, cutOpens = false }: {
   runId: string;
   kind: RecordingKind;
   step: string | null;
@@ -19,12 +19,15 @@ export function RecordingGateActions({ runId, kind, step, units, onChanged, onEd
   onEditOpen?: () => void;
   /** Draw the plan gate's script editor: on a plugin card only (the morphing slot's own editor has its box). */
   script?: boolean;
+  /** The host opens a demo's cut once it is made (it binds `DemoView.document`, G7 piece 2): only then is "Edit the
+   *  cut" offered. A host that cannot open it never offers a verb whose result the person cannot reach. */
+  cutOpens?: boolean;
 }): React.ReactElement | null {
   if (kind === 'demo-video') {
     return (
       <>
         {script && <DemoScriptActions runId={runId} units={units} {...(onChanged === undefined ? {} : { onChanged })} />}
-        <DemoReviewActions runId={runId} units={units} {...(onChanged === undefined ? {} : { onChanged })} />
+        <DemoReviewActions runId={runId} units={units} cutOpens={cutOpens} {...(onChanged === undefined ? {} : { onChanged })} />
       </>
     );
   }
@@ -40,9 +43,11 @@ function WalkthroughGateActions({ runId, step, units, onChanged, onEditOpen }: {
   return load.kind === 'ready' ? <GateActions rec={load.rec} units={units} reload={changed} {...(onEditOpen === undefined ? {} : { onEditOpen })} /> : null;
 }
 
-export function recordingGateActions(binding: ArtifactBinding, units: readonly UnitLike[], onEditOpen?: () => void, script = false): ReactNode | null {
+/** `cutOpens`: the caller's host binds a demo's made cut to its card (G7 piece 2, the run-artifact binding); until a host
+ *  says so, "Edit the cut" is not offered. */
+export function recordingGateActions(binding: ArtifactBinding, units: readonly UnitLike[], onEditOpen?: () => void, script = false, cutOpens = false): ReactNode | null {
   if ((binding.source !== 'walkthrough' && binding.source !== 'demo') || binding.runId === undefined) return null;
-  return <RecordingGateActions runId={binding.runId} kind={binding.source === 'walkthrough' ? 'walkthrough' : 'demo-video'} step={binding.source === 'walkthrough' ? binding.docId || null : null} units={units} script={script} {...(onEditOpen === undefined ? {} : { onEditOpen })} />;
+  return <RecordingGateActions runId={binding.runId} kind={binding.source === 'walkthrough' ? 'walkthrough' : 'demo-video'} step={binding.source === 'walkthrough' ? binding.docId || null : null} units={units} script={script} cutOpens={cutOpens} {...(onEditOpen === undefined ? {} : { onEditOpen })} />;
 }
 
 function GateActions({ rec, units, reload, onEditOpen }: { rec: Recording; units: readonly UnitLike[]; reload: () => void; onEditOpen?: () => void }): React.ReactElement | null {
@@ -245,9 +250,10 @@ function NoteLine({ note, testId }: { note: Note | null; testId: string }): Reac
  *  - once the run is done: **Edit the cut**, which makes the run's editable cut (crew imports the segments into a
  *    document the video editor re-cuts).
  */
-function DemoReviewActions({ runId, units, onChanged }: { runId: string; units: readonly UnitLike[]; onChanged?: () => void }): React.ReactElement | null {
+function DemoReviewActions({ runId, units, cutOpens, onChanged }: { runId: string; units: readonly UnitLike[]; cutOpens: boolean; onChanged?: () => void }): React.ReactElement | null {
   const { load, reload } = useRecording(runId, 'demo-video', null, JSON.stringify(units));
-  const [open, setOpen] = useState<{ take: string; pick: string; text: string } | null>(null);
+  /** The box is bound to the take it was opened on and to the gate instance open then (when one was known). */
+  const [open, setOpen] = useState<{ take: string; gate: { ord: number; receivedAt: number } | null; pick: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Note | null>(null);
   const live = useRef(true);
@@ -257,13 +263,14 @@ function DemoReviewActions({ runId, units, onChanged }: { runId: string; units: 
   useLayoutEffect(() => { recRef.current = rec; }, [rec]);
   if (rec === null) return null;
   const atGate = rec.demoStage === 'review_gate';
-  const canCut = rec.demoStage === 'done' && rec.video !== null && (rec.document ?? null) === null;
+  const canCut = cutOpens && rec.demoStage === 'done' && rec.video !== null && (rec.document ?? null) === null;
   if (!atGate && !canCut) return <NoteLine note={note} testId="demo-review-note" />;
   const take = demoTakeFingerprint(rec);
   const review = rec.review;
-  // When a person reviews (the app's rows stay out of model context) the note sent to the planner carries no text the
-  // recording showed: chapter keys, titles and times only.
-  const isPrivate = review?.by !== 'model';
+  // Whether a model reviews this demo comes from the run's own steps, never from a seat not assigned yet. Unless a model
+  // reviews it, the note sent to the planner carries no text the recording showed: chapter keys, titles and times only.
+  const policy = demoReviewPolicy(runId, units);
+  const isPrivate = policy !== 'model';
   const findings = review?.findings ?? [];
   const choices: Array<{ id: string; label: string; note: string }> = [
     { id: 'whole', label: 'The whole take', note: rerecordNote() },
@@ -278,22 +285,27 @@ function DemoReviewActions({ runId, units, onChanged }: { runId: string; units: 
   const startAgain = (): void => {
     const first = choices.find((c) => c.id === 'f0') ?? choices[0]!;
     setNote(null);
-    setOpen(editing ? null : { take, pick: first.id, text: first.note });
+    const g = useGateStore.getState().gates[runId];
+    setOpen(editing ? null : { take, gate: g === undefined ? null : { ord: g.ord, receivedAt: g.receivedAt }, pick: first.id, text: first.note });
   };
   const send = async (): Promise<void> => {
     if (busy || !editing) return;
     setBusy(true);
     setNote(null);
     try {
-      // The verb was drawn from one take: re-read it, and send only while the same take is still at its review gate.
+      // The verb was drawn from one take at one gate: read both again, and send only while the same take is still at
+      // that review gate. The decision names that gate instance, so a gate answered meanwhile (another tab) is not.
+      await refreshGate(runId);
       const now = recordingOfDemo(await getDemo(runId));
       if (!live.current) return;
+      const gate = useGateStore.getState().gates[runId];
       const shown = recRef.current;
-      if (now.demoStage !== 'review_gate' || demoTakeFingerprint(now) !== open.take || shown === null || demoTakeFingerprint(shown) !== open.take) {
+      const sameGate = gate !== undefined && (open.gate === null || (gate.ord === open.gate.ord && gate.receivedAt === open.gate.receivedAt));
+      if (!sameGate || now.demoStage !== 'review_gate' || demoTakeFingerprint(now) !== open.take || shown === null || demoTakeFingerprint(shown) !== open.take) {
         reload();
         throw new Error('The take changed since this was shown — nothing was sent. Look at it again.');
       }
-      const outcome = await sendBackDemo(runId, open.text.trim());
+      const outcome = await sendBackDemo(runId, open.text.trim(), { ord: gate.ord, receivedAt: gate.receivedAt });
       if (outcome === 'undone') throw new Error('Undone — nothing was sent.');
       if (outcome !== 'sent') throw new Error('Not sent — the gate changed or was already answered.');
       if (!live.current) return;
@@ -314,7 +326,7 @@ function DemoReviewActions({ runId, units, onChanged }: { runId: string; units: 
     try {
       const doc = await makeDemoDocument(runId);
       if (!live.current) return;
-      setNote({ tone: 'ok', text: doc.created ? 'The cut is made: chapters, trims, captions and theme can now be edited, each change a version.' : 'The cut was made before.' });
+      setNote({ tone: 'ok', text: doc.created ? 'The cut is made. It opens here: chapters, trims, captions and theme, each change a version.' : 'The cut was made before. It opens here.' });
       reload();
       onChanged?.();
     } catch (e) {
@@ -325,14 +337,14 @@ function DemoReviewActions({ runId, units, onChanged }: { runId: string; units: 
   };
   if (!atGate) {
     return (
-      <div data-testid="demo-cut-actions" className="wk-walk-actions">
+      <div data-testid="demo-cut-actions" className="wk-walk-actions wk-demo-verbs">
         <button type="button" data-testid="demo-edit-cut" disabled={busy} onClick={() => void makeCut()} className="wk-prop-btn wk-prop-btn--ghost">{busy ? 'Making the cut…' : 'Edit the cut'}</button>
         <NoteLine note={note} testId="demo-review-note" />
       </div>
     );
   }
-  const line = demoReviewLine(rec);
-  const tone = review?.by === 'model' && (review.rejected || review.verdict === 'changes') ? 'bad' : review?.verdict === 'accept' ? 'ok' : 'quiet';
+  const line = demoReviewLine(rec, policy);
+  const tone = policy !== 'person' && review !== undefined && (review.rejected || review.verdict === 'changes') ? 'bad' : policy !== 'person' && review?.verdict === 'accept' ? 'ok' : 'quiet';
   return (
     <div data-testid="demo-review" className="wk-demo-review">
       {line !== null && <p data-testid="demo-review-line" data-tone={tone} className={`wk-walk-quiet${tone === 'bad' ? ' wk-walk-bad' : ''}`}>{line}</p>}
@@ -356,7 +368,7 @@ function DemoReviewActions({ runId, units, onChanged }: { runId: string; units: 
           ))}
         </div>
       )}
-      <div className="wk-walk-actions">
+      <div className="wk-walk-actions wk-demo-verbs">
         <button type="button" data-testid="demo-record-again" disabled={busy} aria-expanded={editing} onClick={startAgain} className="wk-prop-btn wk-prop-btn--ghost">Record it again</button>
       </div>
       {editing && (
@@ -364,7 +376,7 @@ function DemoReviewActions({ runId, units, onChanged }: { runId: string; units: 
           <p className="wk-walk-quiet">The planner changes the plan with your note. You approve the new plan, then the engine records every chapter again.</p>
           <label className="wk-walk-quiet">What to change
             <select data-testid="demo-record-again-pick" value={open.pick} disabled={busy}
-              onChange={(e) => { const c = choices.find((x) => x.id === e.target.value); if (c !== undefined) setOpen({ take, pick: c.id, text: c.note }); }}>
+              onChange={(e) => { const c = choices.find((x) => x.id === e.target.value); if (c !== undefined) setOpen({ ...open, pick: c.id, text: c.note }); }}>
               {choices.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </label>

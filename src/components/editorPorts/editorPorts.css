@@ -17,3 +17,4 @@
 .wk-demo-sheet:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .wk-demo-review label { display: grid; gap: 4px; }
 .wk-demo-review select { box-sizing: border-box; width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-base); color: var(--ink-high); font: inherit; font-size: var(--text-sm); }
+.wk-demo-verbs .wk-prop-btn { white-space: nowrap; }
