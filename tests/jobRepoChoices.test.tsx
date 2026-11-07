@@ -421,10 +421,12 @@ describe('F41 review folds (r7, r8)', () => {
     page();
     await waitFor(() => expect(repoChips()).toHaveLength(4));
     fireEvent.click(repoChips()[1]!); // rg1
-    await new Promise((r) => setTimeout(r, 30));
+    // The move is out (its catalog read held) before the person goes elsewhere; asserted only once it has ended.
+    await waitFor(() => expect(useJobMoves.getState().moving[`${CHAT}:t1`]).toBe(true));
     act(() => { useChatFlow.setState({ request: { chatId: 'elsewhere', nonce: 99 } as never }); });
     releaseCat();
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(() => expect(useJobMoves.getState().moving[`${CHAT}:t1`]).toBeUndefined());
     expect(posts).toEqual([]);
+    expect(useChatFlow.getState().request?.chatId).toBe('elsewhere');
   });
 });
