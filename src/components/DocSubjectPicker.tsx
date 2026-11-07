@@ -90,6 +90,9 @@ export function DocSubjectPicker({
   const [adding, setAdding] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
   const [addFailure, setAddFailure] = useState<string | null>(null);
+  // The chooser's pick. Choosing is not adding: a closed native select fires `change` on every arrow key on
+  // Windows and Linux, so the attach waits for the "Add" press (pi on the diff).
+  const [pick, setPick] = useState('');
   // Bumped on every project change (and every re-read): an attach that lands for an older one is not this list's.
   const generation = useRef(0);
   // The parent's newest refs, read when an attach lands (the snapshot this render closed over may be stale by then).
@@ -103,11 +106,15 @@ export function DocSubjectPicker({
     const want = focusNext.current;
     if (want === null || adding || root.current === null) return;
     focusNext.current = null;
+    // Only focus the chooser lost (it closed under it); never pull focus from where the person went meanwhile, e.g.
+    // back to the brief while the attach was in flight (codex on the diff).
+    const at = document.activeElement;
+    if (at !== null && at !== document.body && !root.current.contains(at)) return;
     const target = want === '' ? root.current.querySelector<HTMLElement>('[data-testid="doc-subject-add"]')
       : [...root.current.querySelectorAll<HTMLElement>('[data-testid="doc-subject-repo"]')].find((b) => b.dataset['repoId'] === want);
     target?.focus();
   }, [adding, repos]);
-  const closeChooser = (): void => { focusNext.current = ''; setAdding(false); setAddFailure(null); };
+  const closeChooser = (): void => { focusNext.current = ''; setAdding(false); setAddFailure(null); setPick(''); };
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +124,7 @@ export function DocSubjectPicker({
     setAdding(false);
     setAttaching(null);
     setAddFailure(null);
+    setPick('');
     setFailure('');
     if (projectId === UNFILED_MOUNT) {
       setStatus('ready');
@@ -163,6 +171,7 @@ export function DocSubjectPicker({
       setAttachable((list) => list.filter((r) => r.id !== repo.id));
       focusNext.current = repo.id;
       setAdding(false);
+      setPick('');
       if (!refsNow.current.includes(repo.id)) onRepoRefs([...refsNow.current, repo.id]);
     } catch (e) {
       if (generation.current !== forGeneration) return;
@@ -178,7 +187,7 @@ export function DocSubjectPicker({
   const chip: React.CSSProperties = { border: '1px solid var(--surface-overlay)', cursor: 'pointer', background: 'transparent' };
 
   return (
-    <div ref={root} data-testid="doc-subject" data-subject-status={status} className="flex flex-wrap items-center gap-1.5" style={{ minWidth: 0 }}>
+    <div ref={root} data-testid="doc-subject" data-subject-status={attaching !== null ? 'loading' : status} className="flex flex-wrap items-center gap-1.5" style={{ minWidth: 0 }}>
       {status === 'loading' && (
         <span data-testid="doc-subject-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           finding the project’s repositories…
@@ -251,7 +260,7 @@ export function DocSubjectPicker({
         <button
           type="button"
           data-testid="doc-subject-add"
-          onClick={() => { setAdding(true); setAddFailure(null); }}
+          onClick={() => { setAdding(true); setAddFailure(null); setPick(''); }}
           title="Add a repository to this project and ground on it"
           className="wk-chip"
         >
@@ -266,18 +275,27 @@ export function DocSubjectPicker({
             aria-label="Add a repository to this project"
             className="wk-field"
             style={{ maxWidth: '100%', minWidth: 0 }}
-            value=""
+            value={pick}
             disabled={attaching !== null}
             autoFocus
-            onChange={(e) => {
-              const repo = attachable.find((r) => r.id === e.target.value);
-              if (repo !== undefined) void attach(repo);
-            }}
+            onChange={(e) => setPick(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Escape' && attaching === null) { e.stopPropagation(); closeChooser(); } }}
           >
-            <option value="">{attaching !== null ? 'adding…' : 'Choose a repository…'}</option>
+            <option value="">Choose a repository…</option>
             {attachable.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
+          <button
+            type="button"
+            data-testid="doc-subject-add-confirm"
+            disabled={attaching !== null || pick === ''}
+            onClick={() => {
+              const repo = attachable.find((r) => r.id === pick);
+              if (repo !== undefined) void attach(repo);
+            }}
+            className="wk-chip"
+          >
+            {attaching !== null ? 'adding…' : 'Add'}
+          </button>
           <button
             type="button"
             data-testid="doc-subject-add-cancel"
@@ -294,7 +312,8 @@ export function DocSubjectPicker({
           data-testid="doc-subject-add-error"
           role="alert"
           className="text-xs"
-          style={{ color: 'var(--status-fail, var(--danger))' }}
+          // The wire's words may hold a long unbroken id or path: wrapped inside the form on a phone (codex on the diff).
+          style={{ color: 'var(--status-fail, var(--danger))', minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}
         >
           could not add it to the project: {addFailure}
         </span>

@@ -37,6 +37,12 @@ function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: 
   return { promise, resolve, reject };
 }
 
+/** Choose a repository in the chooser and press Add (choosing alone never attaches). */
+async function choose(select: HTMLElement, value: string): Promise<void> {
+  fireEvent.change(select, { target: { value } });
+  await act(async () => { fireEvent.click(screen.getByTestId('doc-subject-add-confirm')); });
+}
+
 /** The picker as the form holds it: the refs it sends live in the parent. */
 let refsSeen: string[] = [];
 let statuses: string[] = [];
@@ -76,7 +82,7 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     // Only what is not attached yet, by name.
     expect([...select.options].slice(1).map((o) => o.textContent)).toEqual(['wicked-core', 'wicked-studio']);
 
-    await act(async () => { fireEvent.change(select, { target: { value: 'r-studio' } }); });
+    await choose(select, 'r-studio');
     expect(attachProjectMember).toHaveBeenCalledWith('p1', { kind: 'crew.repo', ref: 'r-studio', attachedBy: 'studio' });
     await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo').map((b) => b.textContent)).toEqual(['hello-1105', 'wicked-studio']));
     const added = screen.getAllByTestId('doc-subject-repo').find((b) => b.dataset['repoId'] === 'r-studio')!;
@@ -94,7 +100,7 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     render(<Harness projectId="p2" />);
     await screen.findByTestId('doc-subject-none');
     fireEvent.click(screen.getByTestId('doc-subject-add'));
-    await act(async () => { fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-core' } }); });
+    await choose(screen.getByTestId('doc-subject-add-select'), 'r-core');
     await waitFor(() => expect(refsSeen).toEqual(['r-core']));
     expect(screen.queryByTestId('doc-subject-none')).toBeNull();
   });
@@ -104,7 +110,7 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     attachProjectMember.mockRejectedValue(new Error('409 already a member'));
     render(<Harness projectId="p3" />);
     fireEvent.click(await screen.findByTestId('doc-subject-add'));
-    await act(async () => { fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-core' } }); });
+    await choose(screen.getByTestId('doc-subject-add-select'), 'r-core');
     expect((await screen.findByTestId('doc-subject-add-error')).textContent).toContain('409 already a member');
     expect(refsSeen).toEqual([]);
     expect(screen.queryAllByTestId('doc-subject-repo')).toHaveLength(0);
@@ -117,7 +123,7 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     attachProjectMember.mockReturnValue(pending.promise);
     const { rerender } = render(<Harness projectId="p4" />);
     fireEvent.click(await screen.findByTestId('doc-subject-add'));
-    await act(async () => { fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-core' } }); });
+    await choose(screen.getByTestId('doc-subject-add-select'), 'r-core');
     rerender(<Harness projectId="p5" />);
     await screen.findByTestId('doc-subject-add');
     await act(async () => { pending.resolve({ member: member('p4', 'r-core') }); await new Promise((r) => setTimeout(r, 0)); });
@@ -147,11 +153,11 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     fireEvent.click(await screen.findByTestId('doc-subject-add'));
     expect(createBlocked()).toBe(false);
     const select = screen.getByTestId('doc-subject-add-select') as HTMLSelectElement;
-    await act(async () => { fireEvent.change(select, { target: { value: 'r-core' } }); });
+    await choose(select, 'r-core');
     expect(createBlocked()).toBe(true);
     expect(select.disabled).toBe(true);
     // A second pick while one is in flight is not a second attach.
-    await act(async () => { fireEvent.change(select, { target: { value: 'r-studio' } }); });
+    await choose(select, 'r-studio');
     expect(attachProjectMember).toHaveBeenCalledTimes(1);
     await act(async () => { pending.resolve({ member: member('p7', 'r-core') }); await new Promise((r) => setTimeout(r, 0)); });
     expect(createBlocked()).toBe(false);
@@ -165,7 +171,7 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     attachProjectMember.mockRejectedValueOnce(new Error('403 not yours'));
     const { rerender } = render(<Harness projectId="p8" />);
     fireEvent.click(await screen.findByTestId('doc-subject-add'));
-    await act(async () => { fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-core' } }); });
+    await choose(screen.getByTestId('doc-subject-add-select'), 'r-core');
     await screen.findByTestId('doc-subject-add-error');
     expect(createBlocked()).toBe(false);
     // Cancel returns focus to "Add a repository…".
@@ -174,12 +180,50 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     const pending = deferred<{ member: ProjectMember }>();
     attachProjectMember.mockReturnValue(pending.promise);
     fireEvent.click(screen.getByTestId('doc-subject-add'));
-    await act(async () => { fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-core' } }); });
+    await choose(screen.getByTestId('doc-subject-add-select'), 'r-core');
     rerender(<Harness projectId="p9" />);
     await screen.findByTestId('doc-subject-add');
     const before = statuses.length;
     await act(async () => { pending.resolve({ member: member('p8', 'r-core') }); await new Promise((r) => setTimeout(r, 0)); });
     expect(statuses.slice(before)).toEqual([]);
     expect(createBlocked()).toBe(false);
+  });
+
+  it('choosing is not adding: arrowing through the chooser attaches nothing until Add is pressed (pi on the diff)', async () => {
+    listProjectMembers.mockResolvedValue({ members: [] });
+    attachProjectMember.mockResolvedValue({ member: member('p10', 'r-studio') });
+    render(<Harness projectId="p10" />);
+    fireEvent.click(await screen.findByTestId('doc-subject-add'));
+    const select = screen.getByTestId('doc-subject-add-select');
+    expect((screen.getByTestId('doc-subject-add-confirm') as HTMLButtonElement).disabled).toBe(true);
+    // What a closed select does on Windows/Linux for each ArrowDown: a change per option passed.
+    for (const v of ['r-core', 'r-hello', 'r-studio']) fireEvent.change(select, { target: { value: v } });
+    expect(attachProjectMember).not.toHaveBeenCalled();
+    expect(refsSeen).toEqual([]);
+    await act(async () => { fireEvent.click(screen.getByTestId('doc-subject-add-confirm')); });
+    expect(attachProjectMember).toHaveBeenCalledTimes(1);
+    expect(attachProjectMember).toHaveBeenCalledWith('p10', { kind: 'crew.repo', ref: 'r-studio', attachedBy: 'studio' });
+    await waitFor(() => expect(refsSeen).toEqual(['r-studio']));
+  });
+
+  it('an attach that lands while the person is typing elsewhere leaves their focus where it is (codex on the diff)', async () => {
+    listProjectMembers.mockResolvedValue({ members: [] });
+    const pending = deferred<{ member: ProjectMember }>();
+    attachProjectMember.mockReturnValue(pending.promise);
+    const brief = document.createElement('textarea');
+    document.body.appendChild(brief);
+    try {
+      render(<Harness projectId="p11" />);
+      fireEvent.click(await screen.findByTestId('doc-subject-add'));
+      await choose(screen.getByTestId('doc-subject-add-select'), 'r-core');
+      expect(screen.getByTestId('doc-subject').dataset['subjectStatus']).toBe('loading');
+      brief.focus();
+      await act(async () => { pending.resolve({ member: member('p11', 'r-core') }); await new Promise((r) => setTimeout(r, 0)); });
+      expect(document.activeElement).toBe(brief);
+      expect(refsSeen).toEqual(['r-core']);
+      expect(screen.getByTestId('doc-subject').dataset['subjectStatus']).toBe('ready');
+    } finally {
+      brief.remove();
+    }
   });
 });
