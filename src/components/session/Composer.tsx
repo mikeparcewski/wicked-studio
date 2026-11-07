@@ -41,10 +41,19 @@ import { usePhone } from '../../hooks/usePhone.js';
 import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 
 let cmdSeq = 0;
-/** A typed command draft's own request key (codex r1: a second identical command is a new job, not a retry). */
-function newCmdKey(composerKey: string): string {
+/** Each composer's typed-command draft key, kept as long as its draft (the module's life, as `sessionDrafts`): a retry
+ *  after a remount is the same request (codex r2); a posted command renews it, so the next is its own (codex r1). */
+const cmdKeys = new Map<string, string>();
+function cmdKeyOf(composerKey: string): string {
+  let k = cmdKeys.get(composerKey);
+  if (k === undefined) { k = renewCmdKey(composerKey); }
+  return k;
+}
+function renewCmdKey(composerKey: string): string {
   cmdSeq += 1;
-  return `cmd:${composerKey}:${Date.now().toString(36)}:${cmdSeq}`;
+  const k = `cmd:${composerKey}:${Date.now().toString(36)}:${cmdSeq}`;
+  cmdKeys.set(composerKey, k);
+  return k;
 }
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
@@ -309,7 +318,7 @@ export function Composer({
     // On a capable daemon the v1 list is never offered: a `/` line is the command list's, or no list (pi r1 P1).
     () => (capsLoaded && !cmdsOn && startCommands && token !== null ? catalogRows(catalogView, token.query, Date.now()) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startCommands, token?.query, catalogView],
+    [startCommands, token?.query, catalogView, capsLoaded, cmdsOn],
   );
   const anyWorkflows = useMemo(() => (cmdsOn ? v2View !== null && allCommandRows(v2View).length > 0 : catalogRows(catalogView, '', Date.now()).length > 0), [catalogView, cmdsOn, v2View]);
   // ux-tonight: the card on this composer (its next Enter starts it here), read off the same catalog.
@@ -388,9 +397,11 @@ export function Composer({
   // Whether the seat rules apply to this send — independent of whether the row is on screen, so an
   // open `@` menu never lets a send past the refusals below (codex r2 on S3).
   // A new app is made by crew's own helpers (the app's turn): no helpers row for it.
-  const seatsApply = !answerOnly && jobChip === null && eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
+  // A command typed whole on a capable daemon is a job, like a picked one (pi r2): no seat row, no seat refusal.
+  const commandLine = v2Line && v2View !== null && parseCommandLine(v2View, line) !== null;
+  const seatsApply = !answerOnly && jobChip === null && !commandLine && eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
   // The command list stands in the same place: while it is open over a `/` line the row steps aside (one list shows).
-  const showSeats = seatsApply && !atMenuOpen && !(v2Line && menuOpen);
+  const showSeats = seatsApply && !atMenuOpen && !v2Line;
   // A job's helpers (New job's J4 rule, codex r1 on #982): one that cannot take work now (signed out, benched) is off
   // unless turned on by hand, and the row shows exactly what the launch sends.
   const unusable = useMemo(() => new Set(wfChip === null ? [] : (roster ?? []).flatMap((s) => {
@@ -411,11 +422,10 @@ export function Composer({
         : null;
   const [jobBusy, setJobBusy] = useState(false);
   const jobBusyRef = useRef(false);
-  /** A typed command's request identity: kept across retries of this draft, renewed once it is posted. */
-  const cmdKey = useRef(newCmdKey(composerKey));
+
   const canSend = answerOnly ? text.trim() !== ''
     // A job's proposal is not a message to a seat: the seat refusals do not gate it (crew's proposal names its seats).
-    : jobChip !== null ? !jobBusy
+    : jobChip !== null || commandLine ? !jobBusy
       : (text.trim() !== '' || (wfChip !== null && wordsOptional)) && refusal === null && seatRefusal === null
         && (wfChip === null || startBlocker === null);
 
@@ -558,7 +568,7 @@ export function Composer({
       const hit = parseCommandLine(v2View, line);
       if (hit !== null) {
         if (hit.refused !== null) { setNote(hit.refused); return; }
-        void sendJob({ card: hit.wireCard, option: hit.option, depth: hit.depth, words: hit.words, source: 'command', pickKey: cmdKey.current, chipKey: null, renewCmd: true });
+        void sendJob({ card: hit.wireCard, option: hit.option, depth: hit.depth, words: hit.words, source: 'command', pickKey: cmdKeyOf(composerKey), chipKey: null, renewCmd: true });
         return;
       }
       const old = parseWorkflowCommand(line);
@@ -621,11 +631,15 @@ export function Composer({
         chatId: project !== null ? null : jobChatId,
         projectId: project?.projectId ?? contextProjectId, repoRef: project !== null ? null : sessionRepo, pickKey: j.pickKey,
       });
+      // The draft this post came from still owns the box only if its pick (or its command key) is still the one there
+      // and its words are unchanged: a replacement pick with the same words is not cleared (codex r2).
+      const owned = j.chipKey !== null
+        ? chipsOf(useComposerChips.getState(), composerKey).some((c) => c.key === j.chipKey)
+        : cmdKeys.get(composerKey) === j.pickKey;
       // A typed command posted is spent: the next one is its own request (codex r1).
-      if (j.renewCmd === true) cmdKey.current = newCmdKey(composerKey);
-      // Only what was posted leaves the box: words typed since stay.
+      if (j.renewCmd === true && cmdKeys.get(composerKey) === j.pickKey) renewCmdKey(composerKey);
       if (j.chipKey !== null) removeAboutChip(composerKey, j.chipKey);
-      if (textNow.current === sentWords) setText('');
+      if (owned && textNow.current === sentWords) setText('');
     } catch (e) {
       setStartNote(composerKey, `Nothing was started: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -664,7 +678,8 @@ export function Composer({
             </span>
           ))}
           {refusal !== null && <span data-testid="composer-refused" role="status" className="wk-composer-note wk-composer-note--bad">{refusal}</span>}
-          {refusal === null && note !== null && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
+          {/* A command's own answer shows even beside a seat refusal: it is the reason that applies (pi r2). */}
+          {note !== null && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
           {jobChip !== null && refusal === null && (
             <span data-testid="composer-job-line" role="status" className="wk-composer-note">
               {jobBusy ? 'Putting the job in the chat…' : 'Enter puts this job in the chat for you to look over. Nothing runs until you press Start.'}
