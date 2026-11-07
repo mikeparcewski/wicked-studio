@@ -15,7 +15,8 @@ import '../../editors/adapters/index.js';
  *  behind the same chrome: its kind (the artifact's `data-kind`) and the body drawn at each size.
  *  `morph` lets a control inside it change the size (the walkthrough's Watch opens the pane). */
 export interface ArtifactSlot {
-  kind: 'walkthrough' | 'demo-video' | 'plan';
+  /** `run-insights` (G2): a review run's Run insights, read-only inline, deciding in the pane and full screen. */
+  kind: 'walkthrough' | 'demo-video' | 'plan' | 'run-insights';
   body: (size: ArtifactSize, morph: (to: ArtifactSize) => void) => React.ReactNode;
 }
 
@@ -54,7 +55,7 @@ type ArtifactMorphProps = {
  * and the slot bodies (walkthrough, demo video, plan, until H6) keep the morphing section below.
  */
 /** The data plane a slot body lives in (HOST-API §2): a walkthrough's recording, a demo video's cut. */
-const SLOT_SOURCE: Readonly<Record<ArtifactSlot['kind'], AdapterSource | null>> = { walkthrough: 'walkthrough', 'demo-video': 'demo', plan: null };
+const SLOT_SOURCE: Readonly<Record<ArtifactSlot['kind'], AdapterSource | null>> = { walkthrough: 'walkthrough', 'demo-video': 'demo', plan: null, 'run-insights': null };
 
 export function ArtifactMorph(props: ArtifactMorphProps): React.ReactElement {
   // A slot (walkthrough, demo video) is claimed by its slot kind; anything else by the document's kind.
