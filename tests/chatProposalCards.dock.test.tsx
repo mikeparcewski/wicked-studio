@@ -11,6 +11,8 @@ import type { AssistVerbs } from '../src/components/AssistDock.js';
  */
 
 const getChat = vi.fn();
+const getChatMessages = vi.fn();
+const getRun = vi.fn();
 const decide = vi.fn();
 vi.mock('../src/api/diagnostics.js', () => ({
   getDiagnostics: () => Promise.resolve({ components: { coreTs: '0.7.27' } }),
@@ -19,8 +21,8 @@ vi.mock('../src/api/diagnostics.js', () => ({
 vi.mock('../src/api/client.js', () => ({
   api: {
     getChat: (...a: unknown[]) => getChat(...a),
-    getChatMessages: () => Promise.reject(new Error('not ended')),
-    getRun: () => Promise.reject(new Error('no run in this rig')),
+    getChatMessages: (...a: unknown[]) => getChatMessages(...a),
+    getRun: (...a: unknown[]) => getRun(...a),
     decideChatProposal: (...a: unknown[]) => decide(...a),
     confirmGate: vi.fn(),
     cancelRun: vi.fn(),
@@ -33,6 +35,7 @@ const { AssistDock } = await import('../src/components/AssistDock.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
 const { useAskThreadStore } = await import('../src/store/askThread.js');
 const { resetSettledProposals } = await import('../src/board/artifactProposal.js');
+const { useConnectionStore } = await import('../src/store/connection.js');
 
 const TITLE = { id: 'text:h#0a1b2c3d', kind: 'text', label: 'heading “tiny-math exports overview (hand edit)”', wid: 'h', touched: true };
 const REFINE = {
@@ -57,8 +60,13 @@ beforeEach(() => {
   cleanup();
   resetSettledProposals();
   getChat.mockReset();
+  getChatMessages.mockReset();
+  getRun.mockReset();
+  getRun.mockRejectedValue(new Error('no run in this rig'));
+  getChatMessages.mockRejectedValue(new Error('not ended'));
   decide.mockReset();
-  useCapabilities.setState({ loaded: true, chatProposals: true, chatArtifactsStub: false, chatList: true });
+  useCapabilities.setState({ loaded: true, chatProposals: true, chatArtifactsStub: false, chatList: true, chatJobProposals: false });
+  useConnectionStore.setState({ status: 'connected' });
   useAskThreadStore.setState({ replySeq: {} });
   try { localStorage.clear(); } catch { /* stubbed */ }
 });
@@ -97,5 +105,77 @@ describe('the side chat draws the proposal card', () => {
     await screen.findByTestId('assist-chat');
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByTestId('artifact-proposal')).toBeNull();
+  });
+
+  it('review r1: a v2 create (a job passage’s on the full view) is not drawn here as a legacy card', async () => {
+    useCapabilities.setState({ chatJobProposals: true });
+    const base: Record<string, unknown> = { ...REFINE };
+    delete base['target'];
+    delete base['protected'];
+    const CREATE = { ...base, pid: 'chat-1:t1', kind: 'create', what: { ...REFINE.what, label: 'New · tiny math overview' }, sentence: 'I will write a short overview.' };
+    getChat.mockResolvedValue({ chatId: 'chat-1', seats: ['claude'], messages: [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: CREATE }] });
+    const user = userEvent.setup();
+    dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
+    await user.type(screen.getByTestId('assist-input'), 'write an overview');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+    await waitFor(() => expect(getChat).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByTestId('artifact-proposal')).toBeNull();
+    // The same record is a valid card where crew has no job proposals: only the passage rule kept it out.
+    act(() => { useCapabilities.setState({ chatJobProposals: false }); });
+    expect((await screen.findByTestId('artifact-proposal')).getAttribute('data-kind')).toBe('create');
+  });
+
+  it('review r1: an ended chat’s history that cannot be read keeps the card it showed', async () => {
+    getChat.mockResolvedValue({ chatId: 'chat-1', seats: [], messages: [] });
+    getChatMessages.mockResolvedValueOnce({ messages: [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: REFINE }] });
+    const user = userEvent.setup();
+    dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
+    await user.type(screen.getByTestId('assist-input'), 'make the intro shorter');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('artifact-proposal');
+    getChatMessages.mockRejectedValue(Object.assign(new Error('busy'), { status: 503 }));
+    act(() => { useAskThreadStore.setState({ replySeq: { 'chat-1': 1 } }); });
+    await waitFor(() => expect(getChatMessages).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId('artifact-proposal')).toBeTruthy();
+  });
+
+  it('review r1: the socket coming back reads the transcript again (frames are not replayed)', async () => {
+    let records: unknown[] = [...TURN];
+    getChat.mockImplementation(() => Promise.resolve({ chatId: 'chat-1', seats: ['claude'], messages: records }));
+    const user = userEvent.setup();
+    dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
+    await user.type(screen.getByTestId('assist-input'), 'make the intro shorter');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+    await waitFor(() => expect(getChat).toHaveBeenCalled());
+    act(() => { useConnectionStore.setState({ status: 'disconnected' }); });
+    records = [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: REFINE }];
+    act(() => { useConnectionStore.setState({ status: 'connected' }); });
+    expect((await screen.findByTestId('artifact-proposal')).getAttribute('data-kind')).toBe('refine');
+  });
+
+  it('review r2: a chat event reads a started refine’s run even after its polling budget ran out', async () => {
+    const DECIDED = { at: 4, turnId: 't1', kind: 'proposal_decided', pid: REFINE.pid, actor: 'local', decision: 'go', result: { runId: 'run-1', artifactRef: REFINE.target.ref, adopted: false, stub: false } };
+    getChat.mockResolvedValue({ chatId: 'chat-1', seats: ['claude'], messages: [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: REFINE }, DECIDED] });
+    getRun.mockResolvedValue({ run: { session: { id: 'run-1', status: 'running' } } });
+    const user = userEvent.setup();
+    dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
+    await user.type(screen.getByTestId('assist-input'), 'make the intro shorter');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('artifact-proposal');
+    await waitFor(() => expect(getRun).toHaveBeenCalledTimes(1));
+    // Sixteen minutes on, the timer reads no more; a chat event still reads the run once.
+    const real = Date.now;
+    const later = real() + 16 * 60_000;
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => later);
+    try {
+      act(() => { useAskThreadStore.setState({ replySeq: { 'chat-1': 1 } }); });
+      await waitFor(() => expect(getRun).toHaveBeenCalledTimes(2));
+    } finally {
+      now.mockRestore();
+    }
   });
 });

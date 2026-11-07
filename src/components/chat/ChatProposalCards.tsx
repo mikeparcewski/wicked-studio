@@ -2,70 +2,88 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { SessionView } from '../../api/types.js';
 import { foldChatProposals, reconcileProposals, type ProposalEntry } from '../../board/artifactProposal.js';
+import { foldJobLineages } from '../../board/jobStream.js';
+import { seatLabel } from '../../board/seatNames.js';
 import { useAskThreadStore } from '../../store/askThread.js';
 import { proposalIsStub, useCapabilities } from '../../store/capabilities.js';
-import { seatLabel } from '../../board/seatNames.js';
+import { useConnectionStore } from '../../store/connection.js';
 import { getCachedRoster } from '../../store/rosterCache.js';
 import { ArtifactProposalCard } from './ArtifactProposalCard.js';
 
-/** How often a started refine's run is read while it may still land, and for how long. */
+/** How often a started refine's run is read, for how long before it ends, and for how long after (its version lands,
+ *  or its landing fails, seconds after the run itself ends). */
 const RUN_POLL_MS = 5_000;
 const RUN_POLL_FOR_MS = 15 * 60_000;
+const RUN_LANDING_GRACE_MS = 2 * 60_000;
 
 /**
  * A CHAT'S PROPOSAL CARDS WHERE THE CHAT IS SHOWN BESIDE SOMETHING (e2e 2026-11-07, plugins-complete G4): the document's
  * side chat ("Ask about this"), the page chat and the system chat draw a conversation as dock bubbles, not as the
  * session thread — so a refine the seat proposed there showed only its prose, and the card (Keep it / Let this change
  * it, Make the change) lived only on the chat's full view (`/s/<chat>`). This is the same card, folded from the same
- * transcript records with the same rules (`foldChatProposals`, `reconcileProposals`): one card per proposal, a
- * superseded one hidden, answered through `POST /chats/:id/proposals/:pid` like everywhere else.
+ * transcript records with the same rules as the full view (`foldChatProposals`, `reconcileProposals`; a job's or a v2
+ * create's proposal belongs to its passage there, so it is not drawn here either; a superseded card says nothing to act
+ * on), answered through `POST /chats/:id/proposals/:pid` like everywhere else.
  *
- * The transcript is read when the block opens and again whenever crew says the chat changed (a `chatProposal`,
- * `chatReply`, `chatDecisions` or `chatCitations` frame ticks the chat's `replySeq`), or the card recorded an answer.
- * A started refine's run is read so its card can say what became of it (landed, or crew's reason it did not).
+ * The transcript is read when the block opens, whenever crew says the chat changed (a `chatProposal`, `chatReply`,
+ * `chatDecisions` or `chatCitations` frame ticks the chat's `replySeq`), when the socket comes back (frames are not
+ * replayed), and after a card recorded an answer. A read that fails keeps what the cards showed. A started refine's run
+ * is read so its card can say what became of it.
  */
 export function ChatProposalCards({ chatId }: { chatId: string }): React.ReactElement | null {
   const proposalsOn = useCapabilities((s) => s.chatProposals);
   const historyOn = useCapabilities((s) => s.chatList);
+  const jobsOn = useCapabilities((s) => s.chatJobProposals);
   const stub = useCapabilities((s) => s.chatArtifactsStub);
   const stubOps = useCapabilities((s) => s.chatArtifactsStubOps);
   const replySeq = useAskThreadStore((s) => s.replySeq[chatId] ?? 0);
   const [tick, setTick] = useState(0);
   const [records, setRecords] = useState<{ chatId: string; records: readonly unknown[] } | null>(null);
 
+  // `/ws` replays nothing: what was recorded while the socket was down is read back when it returns.
+  const wsStatus = useConnectionStore((s) => s.status);
+  const wasConnected = useRef(wsStatus === 'connected');
+  useEffect(() => {
+    const now = wsStatus === 'connected';
+    if (now && !wasConnected.current) setTick((n) => n + 1);
+    wasConnected.current = now;
+  }, [wsStatus]);
+
   useEffect(() => {
     if (!proposalsOn) return undefined;
     let cancelled = false;
-    // An open chat's live transcript; an ended chat's kept history (its open proposal stays answerable).
+    const keep = (r: readonly unknown[]): void => { if (!cancelled) setRecords({ chatId, records: r }); };
     api.getChat(chatId)
       .then(async (d) => {
-        const detail = d as unknown as { status?: unknown; messages?: unknown };
-        const closed = detail.status === 'closed' || (Array.isArray((d as { seats?: unknown }).seats) && (d as { seats: unknown[] }).seats.length === 0);
-        if (closed && historyOn) {
+        const live = Array.isArray((d as { messages?: unknown }).messages) ? ((d as { messages: unknown[] }).messages as readonly unknown[]) : [];
+        // A chat no seat holds any more has ended: its kept history holds its records (an open proposal stays
+        // answerable). A history that cannot be read keeps what the cards showed; only a 404 says there is none.
+        if (d.seats.length === 0 && historyOn) {
           try {
-            return (await api.getChatMessages(chatId)).messages as readonly unknown[];
-          } catch {
-            /* the live read is what there is */
+            keep((await api.getChatMessages(chatId)).messages as readonly unknown[]);
+          } catch (e) {
+            if ((e as { status?: unknown }).status === 404) keep(live);
           }
+          return;
         }
-        return Array.isArray(detail.messages) ? (detail.messages as readonly unknown[]) : [];
+        keep(live);
       })
-      .then((r) => { if (!cancelled) setRecords({ chatId, records: r }); })
-      // A failed read keeps what the cards last showed (never a blank flash that drops an answer just given).
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, [chatId, proposalsOn, historyOn, replySeq, tick]);
 
   const entries = useMemo<ProposalEntry[]>(() => {
     if (!proposalsOn || records === null || records.chatId !== chatId) return [];
-    // Superseded cards say nothing a person can act on here; the full view keeps them.
-    return reconcileProposals(chatId, foldChatProposals(records.records)).filter((e) => e.state !== 'superseded');
-  }, [proposalsOn, records, chatId]);
+    // The proposals a job's passage owns (and a v2 create under job proposals) are answered there, as on the full view.
+    const passage = jobsOn ? new Set(foldJobLineages(records.records).flatMap((l) => l.versions.map((v) => v.pid))) : new Set<string>();
+    return reconcileProposals(chatId, foldChatProposals(records.records)).filter((e) =>
+      e.state !== 'superseded' && !passage.has(e.pid) && !(jobsOn && (e.proposal as { sentence?: unknown }).sentence !== undefined));
+  }, [proposalsOn, jobsOn, records, chatId]);
 
   const runs = useStartedRuns(entries, tick + replySeq);
+  if (entries.length === 0) return null;
   // The proposing seat's one name (the roster's, else its key title-cased), as the full view names it.
   const seatName = (key: string): string => seatLabel(getCachedRoster()?.find((r) => r.key === key) ?? { key });
-  if (entries.length === 0) return null;
   return (
     <div data-testid="chat-proposal-cards" className="wk-dock-proposals">
       {entries.map((e) => (
@@ -83,7 +101,14 @@ export function ChatProposalCards({ chatId }: { chatId: string }): React.ReactEl
   );
 }
 
-/** The runs Go started for a refine, read until each is terminal (or failed to land), at most 15 minutes. */
+const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+
+/**
+ * The runs Go started for a refine, each read on its own clock: while it runs, up to 15 minutes from when it was first
+ * asked for; once it ended, for two more minutes (its version lands, or its landing fails, after it ends); never after
+ * crew recorded `landing_failed`. A chat event or the socket coming back reads every one of them once, without
+ * renewing any clock.
+ */
 function useStartedRuns(entries: readonly ProposalEntry[], seq: number): Record<string, SessionView> {
   const ids = useMemo(
     () => entries.filter((e) => e.state === 'decided' && e.decision === 'go' && e.proposal.kind === 'refine' && e.result?.stub !== true && typeof e.result?.runId === 'string').map((e) => e.result!.runId),
@@ -91,31 +116,49 @@ function useStartedRuns(entries: readonly ProposalEntry[], seq: number): Record<
   );
   const key = ids.join('\u0000');
   const [runs, setRuns] = useState<Record<string, SessionView>>({});
-  const startedAt = useRef<number>(Date.now());
-  useEffect(() => { startedAt.current = Date.now(); }, [key, seq]);
+  /** Per run: when first asked for, and when first seen ended. */
+  const clocks = useRef(new Map<string, { seen: number; ended: number | null }>());
   useEffect(() => {
     if (ids.length === 0) return undefined;
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const read = async (): Promise<void> => {
-      const got = await Promise.all(ids.map((id) => api.getRun(id).then((r) => r.run).catch(() => null)));
+    const due = (id: string, now: number): boolean => {
+      const c = clocks.current.get(id);
+      if (c === undefined) return true;
+      return c.ended !== null ? now - c.ended < RUN_LANDING_GRACE_MS : now - c.seen < RUN_POLL_FOR_MS;
+    };
+    // The first read answers what woke it (a chat event, the socket back, a card's answer): every run, whatever its
+    // clock says. Only the reads after it, on the timer, are bounded by the clocks.
+    const read = async (first: boolean): Promise<void> => {
+      const now = Date.now();
+      const want = first ? ids : ids.filter((id) => due(id, now));
+      if (want.length === 0) return;
+      // A run's clock starts when it is first asked for, not when an answer lands (a read a newer event cancels
+      // would otherwise never start it).
+      for (const id of want) if (!clocks.current.has(id)) clocks.current.set(id, { seen: now, ended: null });
+      const got = await Promise.all(want.map((id) => api.getRun(id).then((r) => r.run).catch(() => null)));
       if (stop) return;
+      const at = Date.now();
+      for (const [i, id] of want.entries()) {
+        const r = got[i] ?? null;
+        const c = clocks.current.get(id) ?? { seen: now, ended: null };
+        if (r !== null && (r.session as { landing_failed?: unknown }).landing_failed != null) c.ended = at - RUN_LANDING_GRACE_MS; // nothing more to learn
+        else if (r !== null && TERMINAL.has(String(r.session.status)) && c.ended === null) c.ended = at;
+        clocks.current.set(id, c);
+      }
       setRuns((prev) => {
         const next = { ...prev };
         for (const r of got) if (r !== null) next[r.session.id] = r;
         return next;
       });
-      const settled = got.every((r) => r !== null && (['completed', 'failed', 'cancelled'].includes(String(r.session.status))
-        || (r.session as { landing_failed?: unknown }).landing_failed != null));
-      // A completed run is read a few more times: its version lands (or its landing fails) seconds after it ends.
-      if (!stop && Date.now() - startedAt.current < (settled ? 60_000 : RUN_POLL_FOR_MS)) timer = setTimeout(() => void read(), RUN_POLL_MS);
+      if (!stop && ids.some((id) => due(id, Date.now()))) timer = setTimeout(() => void read(false), RUN_POLL_MS);
     };
-    void read();
+    void read(true);
     return () => {
       stop = true;
       if (timer !== undefined) clearTimeout(timer);
     };
-    // `seq` re-reads when crew says the chat changed.
+    // `seq` reads at once when crew says the chat changed; the clocks are per run and never renewed by it.
   }, [key, seq]); // eslint-disable-line react-hooks/exhaustive-deps
   return runs;
 }
