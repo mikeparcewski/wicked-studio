@@ -566,7 +566,9 @@ def main() -> None:
         pf.wait_for_selector(".wk-table tbody tr", timeout=20_000)
         lefts = pf.eval_on_selector_all(".wk-cell:not(.wk-cell--filter)", "els => [...new Set(els.map(e => Math.round(e.getBoundingClientRect().left)))]")
         shot(pp, "4-phone")
-        check("phone", pp.is_disabled('[data-testid="apps-mode-edit"]') and pp.locator('[data-testid="apps-phone-note"]').count() == 1
+        # A phone is view + chat (operator ruling D5): no Edit switch, Undo, Redo or Versions are drawn at all.
+        check("phone", pp.locator('[data-testid="apps-mode-edit"]').count() == 0 and pp.locator('[data-testid="apps-undo"]').count() == 0
+              and pp.locator('[data-testid="apps-versions-open"]').count() == 0 and pp.locator('[data-testid="apps-phone-note"]').count() == 1
               and len(lefts) == 1 and no_style(pf) == 0, lefts=lefts)
         phone.close()
 
