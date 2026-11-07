@@ -2,7 +2,8 @@ import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorBadge, floorWords } from '../../board/floorRun.js';
-import { beginChatOpen, chatOpened, useChatFlow } from '../../store/chatFlow.js';
+import { beginChatOpen, chatOpened, openChat, useChatFlow } from '../../store/chatFlow.js';
+import { useJobMoves } from '../../store/jobMoves.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiError, api } from '../../api/client.js';
@@ -160,7 +161,7 @@ type ThreadEntry =
   /** DES-CATALOG-002 rev 7 §2.8.1: a job, as wicked's passage (its proposals, then the run it launched). */
   | { kind: 'job'; key: string; at: number; lineage: JobLineage; settled: boolean }
   /** rev 6 §2.7.1: one dim line for a state the job reached or the person's act, from its record. */
-  | { kind: 'tick'; key: string; at: number; text: string };
+  | { kind: 'tick'; key: string; at: number; text: string; notNowPid?: string };
 
 
 /** How long a just-decided proposal keeps the run's block away while the daemon's status catches up. */
@@ -710,7 +711,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       const own = ticks.filter((t) => t.key.startsWith(`${l.lineage}:`)).reduce((m, t) => Math.max(m, t.at), 0);
       out.push({ kind: 'job', key: `job:${l.lineage}`, at: Math.max(l.at, own + 1), lineage: l, settled: i < jobLineages.length - 1 });
     });
-    for (const t of ticks) out.push({ kind: 'tick', key: `tick:${t.key}`, at: t.at, text: t.text });
+    for (const t of ticks) out.push({ kind: 'tick', key: `tick:${t.key}`, at: t.at, text: t.text, ...(t.notNowPid !== undefined ? { notNowPid: t.notNowPid } : {}) });
     // Something visible while a helper works: a step executing (and not held by Needs you) gets a
     // live line at the thread's foot, so nobody types again or clicks because nothing seems to move.
     // A chat's own "thinking" line already says it for the answering step.
@@ -1338,7 +1339,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               : e.kind === 'job'
                 ? null
               : e.kind === 'tick'
-                ? <p key={e.key} data-testid="job-tick" className="wk-pass-tick">{e.text} · {new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                ? <JobTickLine key={e.key} text={e.text} at={e.at} notNowPid={e.notNowPid} />
                 : e.kind === 'turn'
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})}
@@ -1594,4 +1595,19 @@ function DockedComposer({ reply, docked, composerProps, who }: {
       className="wk-session-composer"
     />
   );
+}
+
+/** One tick of a job's history. A Not now whose job was moved to a new chat (F39/F41) says where it went, with the way
+ *  there, instead of "You chose Not now". */
+function JobTickLine({ text, at, notNowPid }: { text: string; at: number; notNowPid: string | undefined }): React.ReactElement {
+  const moved = useJobMoves((s) => (notNowPid === undefined ? null : s.moves[notNowPid] ?? null));
+  const time = new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (moved !== null) {
+    return (
+      <p data-testid="job-tick" data-moved="true" className="wk-pass-tick">
+        This job moved to {moved.where} · <button type="button" className="wk-pass-inl" data-testid="job-tick-moved-open" onClick={() => openChat(moved.chatId)}>Open it</button> · {time}
+      </p>
+    );
+  }
+  return <p data-testid="job-tick" className="wk-pass-tick">{text} · {time}</p>;
 }

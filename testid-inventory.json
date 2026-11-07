@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 331,
-    "occurrences": 4944,
-    "static": 4156,
+    "files": 332,
+    "occurrences": 4957,
+    "static": 4164,
     "dynamic": 177,
     "computed": 53
   },
@@ -8168,6 +8168,18 @@
       ]
     },
     {
+      "testId": "job-passage-moved",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-moved-open",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-next",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8330,6 +8342,36 @@
       ]
     },
     {
+      "testId": "job-passage-repo",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repos",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repos-back",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repos-more",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repos-retry",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-retry",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8463,6 +8505,12 @@
     },
     {
       "testId": "job-tick",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "job-tick-moved-open",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

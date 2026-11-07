@@ -386,3 +386,15 @@ export function cardForWorkflow(view: WorkflowCatalogV2Response, workflowId: str
   if (hits.length !== 1) return null;
   return { wireCard: hits[0]!.card.id, card: hits[0]!.card, option: hits[0]!.option };
 }
+
+/** Whether the job a card (or its alias) and option start takes a repository (its option's inputs, else the default
+ *  option's, else the card's). False when the wire names no such card. */
+export function takesRepo(view: WorkflowCatalogV2Response | null, wireCard: string, option: string | null): boolean {
+  if (view === null) return false;
+  const viaAlias = aliasOf(view, lower(wireCard));
+  const card = view.cards.find((c) => c.id === wireCard) ?? viaAlias?.card;
+  if (card === undefined) return false;
+  const optId = option ?? viaAlias?.alias.option ?? card.variant?.default ?? null;
+  const opt = optId === null ? null : card.variant?.options.find((o) => o.id === optId) ?? null;
+  return (opt ?? card).inputs.some((i) => i.kind === 'repo');
+}

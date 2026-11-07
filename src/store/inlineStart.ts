@@ -5,7 +5,7 @@ import { UNFILED_MOUNT } from '../api/interactive.js';
 import type { AboutChip } from '../board/aboutChips.js';
 import { cardForWorkflow, refusalOf } from '../board/slashCatalog.js';
 import { catalogV2Now } from './catalogV2.js';
-import { projectsForRepo } from './repoProjects.js';
+import { projectsForRepo, repoNamedInWords } from './repoProjects.js';
 import type { CatalogEntry } from '../board/workflowCatalog.js';
 import { createByChat } from '../editors/apps/appTurns.js';
 import { stashDraft } from '../components/apps/AppChat.js';
@@ -80,6 +80,9 @@ export interface JobPost {
   repoRef?: string | null;
   /** Kept per pick, so a retry of the same body is the same request (crew answers the same proposal). */
   pickKey: string;
+  /** The job takes a repository: a seed with none takes the one its words clearly name (F41), filed in the project
+   *  that solely holds it when the box names no project. */
+  repoFromWords?: boolean;
   /** Whether the person still wants this one (a later opener supersedes it): checked before the post and before the
    *  chat it made is opened. */
   stillWanted?: () => boolean;
@@ -139,7 +142,19 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     const { view } = await api.proposeInChat(p.chatId, { ...fields, requestId: requestIdFor(p.pickKey, body) });
     out = { chatId: p.chatId, proposal: view };
   } else {
-    const scope = env !== undefined ? seedScope(env.projectId, env.repoRef) : seedScope(p.projectId, p.repoRef);
+    let projectId = p.projectId;
+    let repoRef = p.repoRef ?? null;
+    if (env === undefined && (repoRef === null || repoRef === '') && p.repoFromWords === true) {
+      // F41: `/analyze domain Map the domain of rg1 …` from a new chat: the chat opens on rg1, so crew's job has its
+      // repository (a revision cannot add one outside the chat's scope). None or several named: the passage asks.
+      const named = await repoNamedInWords(p.words);
+      if (!wanted()) return null;
+      if (named !== null) {
+        repoRef = named.repo.id;
+        if (projectId === null || projectId === '' || projectId === 'default' || projectId === UNFILED_MOUNT) projectId = named.projectId;
+      }
+    }
+    const scope = env !== undefined ? seedScope(env.projectId, env.repoRef) : seedScope(projectId, repoRef);
     const body = JSON.stringify(['seed', fields, scope]);
     const res = await api.openChat({ seed: fields, requestId: requestIdFor(p.pickKey, body), ...scope });
     // A refused seed opened its chat but made no proposal: say why where the person is. A retry of the same body is the

@@ -5,7 +5,7 @@ import { artifactOfChips, chipText, messageWithAbout, projectChip, type AboutChi
 import { inViewFor } from '../../store/artifactInView.js';
 import { composerSendRefusal } from '../../board/launchModel.js';
 import { parseWorkflowCommand, WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
-import { allCommandRows, catalogRows, commandList, notOfferedLine, parseCommandLine, workflowEntry, type CatalogRow, type CommandRow } from '../../board/slashCatalog.js';
+import { allCommandRows, catalogRows, commandList, notOfferedLine, parseCommandLine, takesRepo, workflowEntry, type CatalogRow, type CommandRow } from '../../board/slashCatalog.js';
 import { contentWords } from '../../board/commandSearch.js';
 import { commandsOn, LOOKS_DEBOUNCE_MS, looksLike, useCatalogV2 } from '../../store/catalogV2.js';
 import { entryOffered, entryWords, jobCatalogView, startsInline, type CatalogEntry } from '../../board/workflowCatalog.js';
@@ -630,6 +630,8 @@ export function Composer({
         // An `@project` chip names where the job goes: a new chat in that project, never this chat (codex r1).
         chatId: project !== null ? null : jobChatId,
         projectId: project?.projectId ?? contextProjectId, repoRef: project !== null ? null : sessionRepo, pickKey: j.pickKey,
+        // F41: a new chat's job that takes a repository opens on the one its words name.
+        repoFromWords: takesRepo(v2View, j.card, j.option),
       });
       // The draft this post came from still owns the box only if its pick (or its command key) is still the one there
       // and its words are unchanged: a replacement pick with the same words is not cleared (codex r2).

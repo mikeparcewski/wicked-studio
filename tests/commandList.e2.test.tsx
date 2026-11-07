@@ -843,3 +843,25 @@ describe('F39: the Requirements page’s "Generate it" files its job in the repo
   });
 });
 
+
+describe('F41: a command typed in a new chat opens on the repository its words name', () => {
+  const seedOf = (): Record<string, unknown> | undefined => nonGets().find((c) => c.path === '/chats')?.body ?? undefined;
+  it('/analyze domain naming a registered repository: the seed is scoped on it, in the project that solely holds it', async () => {
+    projectList = [{ id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }];
+    projectMembers = { p1: [{ member_kind: 'crew.repo', member_ref: 'repo-1' }] };
+    render(<Harness chatId={null} composerKey="new" />);
+    await ready();
+    type('/analyze domain Map the domain of svc: what it does');
+    enter();
+    await waitFor(() => expect(seedOf()).toBeDefined());
+    expect(seedOf()).toMatchObject({ seed: { card: 'analyze-codebase', option: 'domain', words: 'Map the domain of svc: what it does', source: 'command' }, repoRefs: ['repo-1'], projectId: 'p1' });
+  });
+  it('words that name no registered repository: the seed names none (the passage asks, with chips)', async () => {
+    render(<Harness chatId={null} composerKey="new" />);
+    await ready();
+    type('/analyze domain Map the domain of the billing service');
+    enter();
+    await waitFor(() => expect(seedOf()).toBeDefined());
+    expect(seedOf()!['repoRefs']).toBeUndefined();
+  });
+});

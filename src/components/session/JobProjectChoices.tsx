@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { create } from 'zustand';
-import { api } from '../../api/client.js';
+import { useEffect, useRef, useState } from 'react';
 import type { ArtifactProposal, Project } from '../../api/types.js';
 import { openChat } from '../../store/chatFlow.js';
-import { postJob } from '../../store/inlineStart.js';
+import { moveJob, retireMoved, useJobMoves, type JobMove } from '../../store/jobMoves.js';
 import { projectsForRepo } from '../../store/repoProjects.js';
+
+export { jobWords, useJobMoves } from '../../store/jobMoves.js';
 
 /** How many projects show before "N more". */
 const CHOICES_MAX = 6;
@@ -24,19 +24,21 @@ export function jobRepo(p: Pick<ArtifactProposal, 'needs' | 'repoRefs'>): string
   return p.repoRefs?.length === 1 ? p.repoRefs[0]! : null;
 }
 
-/** The job's words as the person gave them: the first words, then the corrections carried as details (crew rebuilds the
- *  brief from both). */
-export function jobWords(p: Pick<ArtifactProposal, 'words' | 'details'>): string {
-  return [p.words ?? '', ...(p.details ?? [])].map((w) => w.trim()).filter((w) => w !== '').join('. ');
-}
-
-/** A job moved to a project, by the moved proposal's id: where it went and whether the old one was set aside. Kept for
- *  the tab's life outside the passage, because the move itself navigates away (codex/pi r5): coming back finds the
- *  moved job (and a retry of only the Not now), never fresh chips that would seed it again. */
-export interface JobMove { chatId: string; projectName: string; retired: 'pending' | 'done' | 'failed'; error: string | null }
-export const useJobMoves = create<{ moves: Record<string, JobMove> }>(() => ({ moves: {} }));
-function putMove(pid: string, m: JobMove): void {
-  useJobMoves.setState((s) => ({ moves: { ...s.moves, [pid]: m } }));
+/** The moved job, where its chips were: "This job moved to X · Open it", and a retry of only the set-aside when that
+ *  failed (never a second seed). */
+export function JobMovedLine({ chatId, pid, moved }: { chatId: string; pid: string; moved: JobMove }): React.ReactElement {
+  return (
+    <div data-testid="job-passage-projects" data-state="moved" role="status" className="wk-pass-sub wk-composer-start-need">
+      <span className="wk-composer-note">This job moved to {moved.where}{moved.retired === 'failed' ? '; this copy is still here' : ''}.</span>
+      <button type="button" data-testid="job-passage-projects-open" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => openChat(moved.chatId)}>Open it</button>
+      {moved.retired === 'failed' && (
+        <>
+          <span role="alert" data-testid="job-passage-projects-error" className="wk-composer-note wk-composer-note--bad">{moved.error}</span>
+          <button type="button" data-testid="job-passage-projects-retire" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => retireMoved(chatId, pid, moved)}>Set this one aside</button>
+        </>
+      )}
+    </div>
+  );
 }
 
 type Choices = { repo: string | null; list: Project[]; holding: boolean } | { repo: string | null; failed: true } | null;
@@ -50,12 +52,15 @@ type Choices = { repo: string | null; list: Project[]; holding: boolean } | { re
  * proposal is then set aside (Not now). Once moved, the chips give way to the moved job, so a second press never makes
  * a second one. Reads are GETs; the only writes are the press's.
  */
-export function JobProjectChoices({ chatId, proposal, onError }: {
+export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked, repoName }: {
   chatId: string;
   proposal: ArtifactProposal;
   onError: (words: string | null) => void;
+  /** The repository the person just picked for this job (F41), when its chat had none: the move takes it along. */
+  repo?: string;
+  repoName?: string;
 }): React.ReactElement | null {
-  const repo = jobRepo(proposal);
+  const repo = repoPicked ?? jobRepo(proposal);
   const [choices, setChoices] = useState<Choices>(null);
   const [tries, setTries] = useState(0);
   const [all, setAll] = useState(false);
@@ -76,15 +81,6 @@ export function JobProjectChoices({ chatId, proposal, onError }: {
     return () => { live = false; };
   }, [repo, tries]);
 
-  const retire = useCallback((to: { chatId: string; projectName: string }): void => {
-    const pid = proposal.pid;
-    putMove(pid, { ...to, retired: 'pending', error: null });
-    api.decideChatProposal(chatId, pid, { decision: 'not_now' }).then(
-      () => putMove(pid, { ...to, retired: 'done', error: null }),
-      (e: unknown) => putMove(pid, { ...to, retired: 'failed', error: `This one was not set aside (${e instanceof Error ? e.message : String(e)}).` }),
-    );
-  }, [chatId, proposal.pid]);
-
   const shape = proposal.shape;
   if (shape === undefined) {
     return <p data-testid="job-passage-projects" data-state="failed" role="alert" className="wk-pass-sub">This job can’t be moved to a project from here. Start it again from the / list in a project’s chat.</p>;
@@ -95,30 +91,13 @@ export function JobProjectChoices({ chatId, proposal, onError }: {
     busyRef.current = true;
     setBusy(p.id);
     onError(null);
-    void postJob({
-      card: shape.card, option: shape.option, depth: shape.depth, words: jobWords(proposal), source: 'pick',
-      chatId: null, projectId: p.id, repoRef: repo, pickKey: `${proposal.pid}:project:${p.id}`,
-    }).then(
-      // Recorded at once (before the press guard is let go), so no second press can seed again (pi/codex r5).
-      (out) => { if (out !== null) retire({ chatId: out.chatId, projectName: p.name }); },
+    void moveJob({ fromChatId: chatId, proposal, projectId: p.id, repoRef: repo, where: p.name, pickKey: `${proposal.pid}:project:${p.id}` }).then(
+      () => undefined,
       (e: unknown) => onError(`The job was not moved to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick a project again.`),
     ).finally(() => { busyRef.current = false; setBusy(null); });
   };
 
-  if (moved !== null) {
-    return (
-      <div data-testid="job-passage-projects" data-state="moved" role="status" className="wk-pass-sub wk-composer-start-need">
-        <span className="wk-composer-note">This job moved to {moved.projectName}{moved.retired === 'failed' ? '; this copy is still here' : ''}.</span>
-        <button type="button" data-testid="job-passage-projects-open" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => openChat(moved.chatId)}>Open it</button>
-        {moved.retired === 'failed' && (
-          <>
-            <span role="alert" data-testid="job-passage-projects-error" className="wk-composer-note wk-composer-note--bad">{moved.error}</span>
-            <button type="button" data-testid="job-passage-projects-retire" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => retire(moved)}>Set this one aside</button>
-          </>
-        )}
-      </div>
-    );
-  }
+  if (moved !== null) return <JobMovedLine chatId={chatId} pid={proposal.pid} moved={moved} />;
   if (choices === null || choices.repo !== repo) return <p data-testid="job-passage-projects" data-state="loading" className="wk-pass-sub wk-pass-grey">Reading your projects…</p>;
   if ('failed' in choices) {
     return (
@@ -133,8 +112,8 @@ export function JobProjectChoices({ chatId, proposal, onError }: {
     <div data-testid="job-passage-projects" role="group" aria-label="Which project?" className="wk-pass-sub wk-composer-start-need">
       <span className="wk-composer-note">
         {choices.list.length === 0 ? 'Make a project first: this job belongs to a project.'
-          : choices.holding ? 'Which project? These hold its repository. The job opens in a new chat there.'
-            : 'Which project? The job opens in a new chat there.'}
+          : choices.holding ? `Which project? ${repoName !== undefined ? `These hold ${repoName}.` : 'These hold its repository.'} The job opens in a new chat there.`
+            : `Which project${repoName !== undefined ? ` for ${repoName}` : ''}? The job opens in a new chat there.`}
       </span>
       {shown.map((p) => (
         <button key={p.id} type="button" data-testid="job-passage-project" data-project={p.id} disabled={busy !== null}

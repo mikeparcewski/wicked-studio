@@ -56,6 +56,11 @@ npm publish dates. Every version listed here exists on
 - **A job that needs a project asks which, with chips (F39).** "Generate it" on a repository's Requirements files its
   Analyze a codebase · Domain job in the project that holds the repository. When none (or several) do, the job's
   "Project?" offers the projects as chips; a pick puts the same job in a new chat in that project, with Start.
+- **A job that needs a repository can get one from a new chat (F41).** A job typed in a new chat whose words name one
+  registered repository (`/analyze domain Map the domain of billing-api`) opens on it, filed in the project that holds
+  it. When the words name none, the job's "Which repository?" offers the registered repositories as chips (the ones
+  the words name first); a pick puts the same job in a new chat on that repository (and asks which project when the
+  job needs one no single project holds). The chat the job left says "This job moved to … · Open it", after a reload too.
 
 ### Removed
 - Studio's own guess of a workflow from a launch's words (`detectWorkflow`): reading what words ask for is crew's.

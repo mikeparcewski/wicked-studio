@@ -1,6 +1,6 @@
 import { api } from '../api/client.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
-import type { Project } from '../api/types.js';
+import type { Project, RepoEntry } from '../api/types.js';
 
 /**
  * The projects a registered repository belongs to (its `crew.repo` memberships), and the projects a person can file a
@@ -28,4 +28,36 @@ export async function projectsForRepo(repoId: string | null): Promise<{ all: Pro
     } catch { return null; }
   }));
   return { all, holding: all.filter((_, i) => holds[i] === true), certain: holds.every((h) => h !== null) };
+}
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Whether `words` name `term` as a whole token (case-insensitive): not inside a longer name (`rg1` is not named by
+ *  `rg10` or `rg1-old`); a sentence's punctuation after it still ends it. */
+function names(words: string, term: string): boolean {
+  if (term.trim() === '') return false;
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}_./-])${escapeRe(term)}(?=$|[^\\p{L}\\p{N}_./-]|\\.(?:$|[^\\p{L}\\p{N}_./-]))`, 'iu').test(words);
+}
+
+/** The registered repositories the words name (by name or id), in registry order (F41). */
+export function reposNamedIn<R extends Pick<RepoEntry, 'id' | 'name'>>(words: string, repos: readonly R[]): R[] {
+  return repos.filter((r) => names(words, r.name) || (r.id !== r.name && names(words, r.id)));
+}
+
+/**
+ * The one repository a job's words clearly name (F41: `/analyze domain Map the domain of rg1 …` from a new chat), with
+ * the project that certainly and solely holds it (null otherwise). null when the words name none, or several, or the
+ * registry could not be read: the job passage then asks, with chips. GETs only.
+ */
+export async function repoNamedInWords(words: string): Promise<{ repo: RepoEntry; projectId: string | null } | null> {
+  if (words.trim() === '') return null;
+  let repos: RepoEntry[];
+  try { repos = (await api.listRepos()).repos; } catch { return null; }
+  const named = reposNamedIn(words, repos);
+  if (named.length !== 1) return null;
+  const repo = named[0]!;
+  try {
+    const { holding, certain } = await projectsForRepo(repo.id);
+    return { repo, projectId: certain && holding.length === 1 ? holding[0]!.id : null };
+  } catch { return { repo, projectId: null }; }
 }
