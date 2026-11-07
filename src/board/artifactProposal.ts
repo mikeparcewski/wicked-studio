@@ -8,6 +8,7 @@ import type {
   ProposalSource,
 } from '../api/chatArtifacts-wire.js';
 import { ApiError } from '../api/errors.js';
+import { patchValue, THEMES, type StudioAppearance, type ThemePatch, type ThemePatchKey } from '../theming/appearance.js';
 
 /**
  * A CHAT'S PROPOSALS (DES-CHAT-ARTIFACTS-001 §4.2-§4.3, slice A2): the transcript's `proposal`, `proposal_accepting`
@@ -63,6 +64,8 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   if (target !== undefined && (!isObj(target) || !str(target['title']) || typeof target['base'] !== 'number')) return false;
   const theme = p['theme'];
   if (theme !== undefined && (!isObj(theme) || !Array.isArray(theme['changes']) || !theme['changes'].every(str))) return false;
+  // (A7) A theme is previewed and applied from its name and patch: both must be there and well formed.
+  if (p['kind'] === 'theme' && (!isObj(theme) || !str(theme['name']) || theme['name'].trim() === '' || theme['name'].length > 60 || !isObj(theme['patch']))) return false;
   const demo = p['demo'];
   if (demo !== undefined && (!isObj(demo) || !str(demo['url']) || !strOrNull(demo['audience']) || !strOrNull(demo['show']))) return false;
   const touches = p['touches'];
@@ -180,7 +183,15 @@ const CHANGE_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
   create: 'Brief, sources, helpers',
   demo: 'Address, audience, what to show',
   refine: 'Edit the ask',
-  theme: 'On the Theme page',
+  theme: 'Compare and apply',
+};
+
+/** Change something's label: a theme's is "Open in Theme" (DES §4.2, mockup e). */
+const CHANGE_WORDS: Readonly<Record<ArtifactProposalKind, string>> = {
+  create: 'Change something',
+  demo: 'Change something',
+  refine: 'Change something',
+  theme: 'Open in Theme',
 };
 
 const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
@@ -195,20 +206,23 @@ const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
  * page (theme) or New job's demo form (demo). Each arrives with its own slice; until then the card says what is coming
  * instead of opening a form that cannot answer the proposal.
  */
-export function changeRoute(kind: ArtifactProposalKind): { kind: 'form' } | { kind: 'stub'; note: string } {
+export function changeRoute(kind: ArtifactProposalKind): { kind: 'form' } | { kind: 'theme' } | { kind: 'stub'; note: string } {
   // A3: a create opens New document in "answer this proposal" mode, under the card.
   if (kind === 'create') return { kind: 'form' };
-  const notes: Record<Exclude<ArtifactProposalKind, 'create'>, string> = {
+  // A7: a theme opens the Theme page with the proposal previewed (compare, adjust, apply).
+  if (kind === 'theme') return { kind: 'theme' };
+  const notes: Record<Exclude<ArtifactProposalKind, 'create' | 'theme'>, string> = {
     refine: 'Editing the ask here comes with refining from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
-    theme: 'Opening the theme on the Theme page comes with theme proposals. For now, say what to change in the chat and a new proposal replaces this one.',
     demo: 'Changing the address, audience and what to show comes with demo videos from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
   };
   return { kind: 'stub', note: notes[kind] };
 }
 
-/** The card's question: one choose ask, Go preselected (never focused), Change something, Not now. */
-export function proposalAsk(e: ProposalEntry, o: { stub: boolean }): Ask {
+/** The card's question: one choose ask, Go preselected (never focused), Change something, Not now. A theme whose
+ *  contrast fails (or can't be measured) offers neither Preview nor Open in Theme (`themeRefused`, DES §9). */
+export function proposalAsk(e: ProposalEntry, o: { stub: boolean; themeRefused?: string | null }): Ask {
   const p = e.proposal;
+  const refused = p.kind === 'theme' && o.themeRefused !== undefined && o.themeRefused !== null ? o.themeRefused : null;
   const go: AskOption = {
     id: 'go',
     label: GO_WORDS[p.kind],
@@ -219,11 +233,16 @@ export function proposalAsk(e: ProposalEntry, o: { stub: boolean }): Ask {
     consequence: o.stub
       ? 'Test configuration: Studio records your click and starts nothing.'
       : GO_CONSEQUENCE[p.kind],
-    ...(p.blocked !== null ? { disabled: `Blocked: ${p.blocked}` } : { recommended: true }),
+    ...(p.blocked !== null ? { disabled: `Blocked: ${p.blocked}` } : refused !== null ? { disabled: refused } : { recommended: true }),
+  };
+  const change: AskOption = {
+    id: 'change', label: CHANGE_WORDS[p.kind], sub: CHANGE_SUB[p.kind], token: 'change', tone: 'neutral',
+    consequence: p.kind === 'theme' ? 'The Theme page shows yours and the proposal side by side; nothing is saved until you apply it.' : 'Change what is proposed before anything starts.',
+    ...(refused !== null ? { disabled: refused } : {}),
   };
   const options: AskOption[] = [
     go,
-    { id: 'change', label: 'Change something', sub: CHANGE_SUB[p.kind], token: 'change', tone: 'neutral', consequence: 'Change what is proposed before anything starts.' },
+    change,
     { id: 'not_now', label: 'Not now', sub: NOT_NOW_SUB[p.kind], token: 'not_now', tone: 'neutral', consequence: 'Nothing starts. The proposal stays in the chat as declined.' },
   ];
   return {
@@ -233,7 +252,7 @@ export function proposalAsk(e: ProposalEntry, o: { stub: boolean }): Ask {
     prompt: p.what.label,
     kind: 'choose',
     options,
-    default: p.blocked !== null ? 'change' : 'go',
+    default: refused !== null ? 'not_now' : p.blocked !== null ? 'change' : 'go',
     answeredBy: 'person',
     record: 'You chose: {label}',
   };
@@ -258,6 +277,8 @@ export function proposalRecordLine(e: ProposalEntry, starting = false): string |
   if (e.state === 'open') return null;
   if (e.state === 'superseded') return 'A newer proposal replaced this one. Nothing was started.';
   if (e.state === 'accepting') return starting ? 'Starting it…' : 'Interrupted before it was recorded as started.';
+  // A theme's Go is recorded when the person APPLIED it (a preview records nothing).
+  if (e.proposal.kind === 'theme' && e.decision === 'go') return 'You applied this theme';
   return `You chose: ${e.decision === 'go' ? GO_WORDS[e.proposal.kind] : 'Not now'}`;
 }
 
@@ -265,7 +286,49 @@ export function proposalRecordLine(e: ProposalEntry, starting = false): string |
 export function proposalResultWords(e: ProposalEntry): string | null {
   if (e.state !== 'decided' || e.decision !== 'go' || e.result === null || e.result === undefined) return null;
   if (e.result.stub) return 'Test configuration: recorded, nothing was made';
+  if (e.proposal.kind === 'theme') return 'Saved to your studio settings · no job was started';
   return `Started · run ${e.result.runId.slice(0, 8)}`;
+}
+
+// ── Theme proposals (slice A7, DES §9) ─────────────────────────────────────────────────────────────────────────────
+
+const themeLabel = (id: string): string => THEMES.find((t) => t.id === id)?.label ?? id;
+
+/**
+ * Every key the patch changes, in words, against what the tab shows now: "Wicked Light → Wicked Dark", "action colour
+ * hue 210, saturation 14, lightness 70", "Ambient on, still". A key the patch names with the value it already has says
+ * so ("Already Wicked Dark").
+ */
+export function themeChangeWords(current: StudioAppearance, patch: ThemePatch): string[] {
+  const out: string[] = [];
+  const has = (k: ThemePatchKey): boolean => k in patch;
+  const moved = (k: ThemePatchKey): boolean => has(k) && patch[k] !== patchValue(current, k);
+  if (has('theme')) out.push(moved('theme') ? `${themeLabel(current.theme)} → ${themeLabel(patch.theme!)}` : `Already ${themeLabel(current.theme)}`);
+  if (has('accent_h') || has('accent_s') || has('accent_l')) {
+    const parts = [
+      has('accent_h') ? `hue ${patch.accent_h}` : null,
+      has('accent_s') ? `saturation ${patch.accent_s}` : null,
+      has('accent_l') ? `lightness ${patch.accent_l}` : null,
+    ].filter((x): x is string => x !== null);
+    const same = !moved('accent_h') && !moved('accent_s') && !moved('accent_l');
+    out.push(same ? `action colour unchanged (${parts.join(', ')})` : `action colour ${parts.join(', ')}`);
+  }
+  if (has('ambient') || has('ambient_still')) {
+    const on = has('ambient') ? patch.ambient === true : current.ambient === true;
+    const still = has('ambient_still') ? patch.ambient_still === true : current.ambient_still === true;
+    // With Ambient off, its still flag changes nothing on screen: the words say what the person gets (coordinator copy
+    // fix: "Ambient off (still when on)" read unclear).
+    out.push(on ? `Ambient on${still ? ', still' : ''}` : has('ambient_still') ? 'Ambient off: no background motion' : 'Ambient off');
+  }
+  return out;
+}
+
+/** The one line on what a studio theme can't change (DES §9). */
+export const THEME_LIMITS = 'Studio themes set light or dark, the action colour and Ambient. Fonts and spacing are fixed.';
+
+/** "Proposed by Claude Code · checked by the contrast check · no second agent reviewed it" (DES §9, §15.2). */
+export function themeDisclosure(seatName: string): string {
+  return `Proposed by ${seatName} · checked by the contrast check · no second agent reviewed it`;
 }
 
 /** A refusal of `POST /chats/:id/proposals/:pid` as the card says it: crew's own sentence, and its view when it sent one. */

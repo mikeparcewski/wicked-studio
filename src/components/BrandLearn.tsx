@@ -9,7 +9,7 @@ import { interactiveRootOf } from '../hooks/useBoardModel.js';
 import { learnBody, learnReady, LEARN_KINDS, LEARN_LABEL } from '../interactive/themeWire.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
 import { useProjectsStore } from '../store/projects.js';
-import { applyAppearance, useAppearanceStore } from '../theming/appearance.js';
+import { applyAppearance, effectiveAppearance, useAppearanceStore } from '../theming/appearance.js';
 import { isUnsatisfiable, mapBrandTheme, type BrandTokenOverrides } from '../theming/brandMapper.js';
 import { adaptLearnedTokens } from '../theming/learnedTheme.js';
 import { pollLearnedTheme } from '../theming/learnPoll.js';
@@ -198,6 +198,8 @@ export function BrandLearn({ onApplied, initialUrl }: {
       // Preview IS the page (§3.4): the mapped primitives land inline on
       // <html>, NOT through the store — nothing persists until Apply. The
       // learned shape carries no logo, so the logo override is never touched.
+      // One preview at a time: a chat theme preview on this tab ends here (DES-CHAT-ARTIFACTS-001 §9).
+      useAppearanceStore.getState().endPreview();
       const current = useAppearanceStore.getState().appearance;
       applyAppearance({
         ...current,
@@ -232,8 +234,11 @@ export function BrandLearn({ onApplied, initialUrl }: {
 
   function onDiscard(): void {
     abortRef.current?.abort();
-    // Revert the un-persisted preview: the stored appearance is the truth.
-    applyAppearance(useAppearanceStore.getState().appearance);
+    // Revert the un-persisted preview: the stored appearance is the truth (with a chat theme preview, if one took over).
+    const st = useAppearanceStore.getState();
+    // The cache always goes back to the saved appearance (a reload must not paint the learned colours).
+    applyAppearance(st.appearance);
+    if (st.preview !== null) applyAppearance(effectiveAppearance(st), { cache: false });
     setMapping(null);
     setPhase('idle');
     setStatus(null);
