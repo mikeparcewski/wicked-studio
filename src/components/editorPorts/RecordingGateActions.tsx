@@ -290,10 +290,18 @@ function DemoReviewActions({ runId, units, cutOpens, onChanged }: { runId: strin
     setNote(null);
     setBusy(true);
     try {
-      await refreshGate(runId);
+      // The take on screen and the gate open now, both read again: a note is bound to that pair only when the take
+      // read now is the one shown (a newer take, or a gate gone, means look again first).
+      const [, fresh] = await Promise.all([refreshGate(runId), getDemo(runId)]);
       if (!live.current) return;
       const g = useGateStore.getState().gates[runId];
       if (g === undefined) { setNote({ tone: 'bad', text: 'The review gate is not open any more. Look at the run again.' }); return; }
+      const now = recordingOfDemo(fresh);
+      if (now.demoStage !== 'review_gate' || demoTakeFingerprint(now) !== take) {
+        reload();
+        setNote({ tone: 'bad', text: 'The take changed since this was shown. Look at it again.' });
+        return;
+      }
       setOpen({ take, gate: { ord: g.ord, receivedAt: g.receivedAt }, pick: first.id, text: first.note });
     } finally {
       if (live.current) setBusy(false);
