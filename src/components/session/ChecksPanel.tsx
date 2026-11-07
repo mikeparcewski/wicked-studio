@@ -28,14 +28,21 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
   /** The host's "point at it": a chip on the composer, or false when the element is not on this page. */
   pointAt: (wid: string) => Promise<boolean>;
 }): React.ReactElement | null {
-  const [read, setRead] = useState<ChecksRead | null>(null);
+  // A read is kept with what it was read for: one for another document or version is never this one's.
+  const [held, setRead] = useState<{ of: string; r: ChecksRead } | null>(null);
+  const of = `${projectId}/${docId}@${head}`;
+  const read = held !== null && held.of === of ? held.r : null;
+  /** A read is in flight: the next poll waits for it, and "Read again" does not start a second one. */
+  const [reading, setReading] = useState(false);
   const [asks, setAsks] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const [asked, setAsked] = useState<Asked | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void getDocChecks(projectId, docId, head).then((r) => { if (!cancelled) setRead(r); });
+    const readFor = `${projectId}/${docId}@${head}`;
+    setReading(true);
+    void getDocChecks(projectId, docId, head).then((r) => { if (!cancelled) { setRead({ of: readFor, r }); setReading(false); } });
     return () => { cancelled = true; };
   }, [projectId, docId, head, asks]);
 
@@ -45,13 +52,20 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
   // starts 10 s later. A late ask still lands on a later read ("Read again").
   const pending = asked !== null && (asked.state === 'asked' || asked.state === 'late');
   useEffect(() => {
-    if (!pending || asked === null || read === null) return undefined;
+    if (!pending || asked === null || read === null || reading) return undefined;
     if (read.state === 'ok' && reviewLanded(read.checks, asked.version)) { setAsked((a) => (a?.gen === asked.gen ? { ...a, state: 'landed' } : a)); return undefined; }
     if (asked.state === 'late') return undefined;
-    if (Date.now() - asked.at > REVIEW_POLL_FOR_MS) { setAsked((a) => (a?.gen === asked.gen ? { ...a, state: 'late' } : a)); return undefined; }
     const t = setTimeout(() => setAsks((n) => n + 1), REVIEW_POLL_MS);
     return () => clearTimeout(t);
-  }, [pending, asked, read]);
+  }, [pending, asked, read, reading]);
+  // The 15-minute bound is its own timer: a read that never answers cannot hold the ask open.
+  const askedGen = asked?.state === 'asked' ? asked.gen : null;
+  const askedAt = asked?.state === 'asked' ? asked.at : 0;
+  useEffect(() => {
+    if (askedGen === null) return undefined;
+    const t = setTimeout(() => setAsked((a) => (a?.gen === askedGen && a.state === 'asked' ? { ...a, state: 'late' } : a)), Math.max(0, askedAt + REVIEW_POLL_FOR_MS - Date.now()));
+    return () => clearTimeout(t);
+  }, [askedGen, askedAt]);
   const askReview = useCallback(async () => {
     const my = ++gen.current;
     const version = head;
@@ -72,7 +86,7 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
   }, [pointAt]);
 
   if (read === null || read.state === 'absent') return null;
-  const again = <button type="button" data-testid="artifact-checks-refresh" onClick={() => setAsks((n) => n + 1)} className="wk-since-toggle">Read again</button>;
+  const again = <button type="button" data-testid="artifact-checks-refresh" disabled={reading} onClick={() => setAsks((n) => n + 1)} className="wk-since-toggle">Read again</button>;
   if (read.state === 'failed') {
     return (
       <section data-testid="artifact-checks" data-state="failed" className="wk-checks" aria-label="Checks">
@@ -85,15 +99,15 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
   return (
     <section data-testid="artifact-checks" data-state="ok" data-count={rows.length} className="wk-checks" aria-label="Checks">
       <p data-testid="artifact-checks-summary" className="wk-checks-head"><b>Checks</b> · {checksSummary(rows)} · {again}</p>
-      <p className="wk-checks-head">
+      <p className="wk-checks-review">
         <button type="button" data-testid="artifact-checks-review" disabled={mine?.state === 'sending' || mine?.state === 'asked'}
           onClick={() => void askReview()} className="wk-host-btn">Review this version</button>
         {mine !== null && (
           <span data-testid="artifact-checks-review-state" data-state={mine.state} role="status" className={mine.state === 'failed' ? 'wk-artifact-line--bad' : undefined}>
-            {' '}{mine.state === 'sending' ? 'Asking…'
+            {mine.state === 'sending' ? 'Asking…'
               : mine.state === 'asked' ? `Asked for version ${mine.version}: four reviewers read it in a review run. Their verdicts show here when it finishes.`
               : mine.state === 'landed' ? (mine.already === true ? `Version ${mine.version} already has its four reviews.` : `Version ${mine.version} is reviewed.`)
-              : mine.state === 'late' ? `No verdicts on version ${mine.version} after 15 minutes. Read again to look later.`
+              : mine.state === 'late' ? `Not every reviewer has a verdict on version ${mine.version} after 15 minutes. Read again to look later.`
               : `The review was not asked for: ${mine.why ?? 'no answer'}`}
           </span>
         )}

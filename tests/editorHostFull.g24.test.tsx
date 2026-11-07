@@ -3,12 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EditorView } from '../src/api/editors.js';
 
 // The ask route is askAbout's own (tests/askAbout*): here only WHEN it is called, and what is on screen by then.
-const asked: { full: string | null; chatOpen: boolean }[] = [];
+// Recorded SYNCHRONOUSLY at the call, from the DOM: what is on screen when the ask runs.
+const asked: { key: string; full: boolean; drawer: boolean }[] = [];
 vi.mock('../src/board/askAbout.js', () => ({
-  askAbout: vi.fn(async () => {
-    const { useHostChrome } = await import('../src/editors/hostApi.js');
-    const s = useHostChrome.getState();
-    asked.push({ full: s.full, chatOpen: s.chatOpen });
+  askAbout: vi.fn(async (b: { artifactKey: string }) => {
+    asked.push({ key: b.artifactKey, full: document.querySelector('[data-testid="full-shell"]') !== null, drawer: document.querySelector('[data-testid="full-shell-drawer"]') !== null });
   }),
 }));
 
@@ -129,6 +128,31 @@ describe('G24: full screen keeps the card’s actions', () => {
     expect(useHostChrome.getState().full).toBeNull();
   });
 
+  it('below 1200 px the options over the full screen show at once (never the ribbon), with the keyboard in them', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('max-width'), media: q, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    await openCard(false);
+    fireEvent.click(screen.getByTestId('plugin-card-full'));
+    fireEvent.click(screen.getByTestId('full-shell-actions').querySelector('[data-testid="plugin-card-options"]')!);
+    const panel = screen.getByTestId('host-panel');
+    expect(panel.hidden).toBe(false);
+    expect(panel.dataset['overFull']).toBe('true');
+    expect(document.activeElement).toBe(screen.getByTestId('host-panel-close'));
+    expect(screen.queryByTestId('host-panel-fold')).toBeNull();
+  });
+
+  it('Esc from the editor’s own frame in full screen closes the options over it first', async () => {
+    const { port } = await openCard(false);
+    fireEvent.click(screen.getByTestId('plugin-card-full'));
+    fireEvent.click(screen.getByTestId('full-shell-actions').querySelector('[data-testid="plugin-card-options"]')!);
+    const frame = screen.getByTestId('plugin-card-frame').querySelector('iframe')!;
+    vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { userActivation: { isActive: true, hasBeenActive: true } }));
+    frame.focus();
+    expect(document.activeElement).toBe(frame);
+    act(() => { port.postMessage(env('ui.key', { key: 'Escape' })); });
+    await waitFor(() => expect(useHostPanel.getState().group).toBeNull());
+    expect(useHostChrome.getState().full).toBe(BINDING.artifactKey);
+  });
+
   it('× on the options over the full screen gives the focus back to its Options', async () => {
     await openCard(false);
     fireEvent.click(screen.getByTestId('plugin-card-full'));
@@ -143,7 +167,7 @@ describe('G24: full screen keeps the card’s actions', () => {
     fireEvent.click(screen.getByTestId('plugin-card-full'));
     fireEvent.click(screen.getByTestId('full-shell-actions').querySelector('[data-verb="host:ask"]')!);
     await waitFor(() => expect(asked).toHaveLength(1));
-    expect(asked[0]).toEqual({ full: BINDING.artifactKey, chatOpen: true });
+    expect(asked[0]).toEqual({ key: BINDING.artifactKey, full: true, drawer: true });
     expect(screen.getByTestId('full-shell-drawer').textContent).toContain('the thread');
   });
 
@@ -152,7 +176,7 @@ describe('G24: full screen keeps the card’s actions', () => {
     fireEvent.click(screen.getByTestId('plugin-card-full'));
     fireEvent.click(screen.getByTestId('full-shell-actions').querySelector('[data-verb="host:ask"]')!);
     await waitFor(() => expect(asked).toHaveLength(1));
-    expect(asked[0]!.full).toBeNull();
+    expect(asked[0]).toEqual({ key: BINDING.artifactKey, full: false, drawer: false });
   });
 });
 
@@ -176,5 +200,16 @@ describe('G25: a plugin’s export ask is a host offer on the card', () => {
     await waitFor(() => expect(adapter.made).toEqual([{ format: 'pdf', version: adapter.artifact().head }]));
     expect(screen.queryByTestId('plugin-card-export-offer')).toBeNull();
     await waitFor(() => expect(screen.getByTestId('artifact-export-download')).toBeTruthy());
+  });
+
+  it('a later ask cannot swap the offer the operator is answering', async () => {
+    const { port, adapter } = await openCard(false);
+    act(() => { port.postMessage(env('export.request', { format: 'pdf' }, 'y1')); });
+    await waitFor(() => expect(screen.getByTestId('plugin-card-export-offer')).toBeTruthy());
+    act(() => { port.postMessage(env('export.request', { format: 'html' }, 'y2')); });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByTestId('plugin-card-export-offer').textContent).toContain('as PDF');
+    fireEvent.click(screen.getByTestId('plugin-card-export-offer-accept'));
+    await waitFor(() => expect(adapter.made.map((m) => m.format)).toEqual(['pdf']));
   });
 });

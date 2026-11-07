@@ -90,11 +90,15 @@ export function useEditorFor(kind: string): EditorView | null | undefined {
 }
 
 /** Every editor that can open `kind` (the "Open with" choices), once the registry is read; `[]` before. An editor
- *  that does not read the artifact is left out. */
+ *  that does not read the artifact is left out beside one that does. */
 export function useEditorChoices(kind: string): EditorView[] {
   const state = useEditors((s) => s.state);
   const editors = useEditors((s) => s.editors);
-  return state === 'ready' ? editorsFor(editors, kind).filter(editorReads) : [];
+  if (state !== 'ready') return [];
+  const fit = editorsFor(editors, kind);
+  const readers = fit.filter(editorReads);
+  // A registry that lists no permissions (an older crew) declares no reads at all: every fitting editor stays a choice.
+  return readers.length > 0 ? readers : fit;
 }
 
 /**
@@ -106,6 +110,14 @@ export interface AdvisoryNote { id: string; text: string }
 export const useAdvisoryNotes = create<{ byGroup: Record<string, readonly AdvisoryNote[]> }>(() => ({ byGroup: {} }));
 export function setAdvisoryNotes(group: string, notes: readonly AdvisoryNote[]): void {
   useAdvisoryNotes.setState((s) => ({ byGroup: { ...s.byGroup, [group]: notes } }));
+}
+export function clearAdvisoryNotes(group: string): void {
+  useAdvisoryNotes.setState((s) => {
+    if (!(group in s.byGroup)) return s;
+    const byGroup = { ...s.byGroup };
+    delete byGroup[group];
+    return { byGroup };
+  });
 }
 
 /** Test seam. */

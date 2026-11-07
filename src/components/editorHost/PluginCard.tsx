@@ -14,7 +14,7 @@ import { readThemeTokens } from '../../editors/theme.js';
 import { artifactSizeOf, registerArtifact, setArtifactSize, useArtifactSizes } from '../../store/artifactSizes.js';
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { VersionLens } from '../session/ArtifactVersions.js';
-import { setAdvisoryNotes, useAdvisoryNotes, useEditorChoices, useEditorFor, useEditorPicks } from '../../store/editors.js';
+import { clearAdvisoryNotes, setAdvisoryNotes, useAdvisoryNotes, useEditorChoices, useEditorFor, useEditorPicks } from '../../store/editors.js';
 import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import '../../editors/adapters/index.js';
 import './hostTabs.js';
@@ -186,6 +186,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const group = groupKey(editor.id, binding.artifactKey);
   const full = useHostChrome((s) => s.full === binding.artifactKey);
   const advisory = useAdvisoryNotes((s) => s.byGroup[group]);
+  // The notes belong to this card's session with the plugin: gone with the card, never shown stale on a later one.
+  useEffect(() => () => clearAdvisoryNotes(group), [group]);
   // DES-CHAT-ARTIFACTS-001 §5.1: a document card on screen is what a chat message from its composer (or the floating
   // chat beside it) is about. The send reads the version it shows after its writes in flight have settled.
   const inViewRef = binding.source === 'interactive-doc' ? artifactRefOf(binding.projectId, binding.docId) : null;
@@ -291,8 +293,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           draft: (text, chips) => { if (live.current) setLine({ kind: 'drafted', editor: editor.title, text: chips.length > 0 ? `${text} (about ${chips.map((c) => c.label).join(', ')})` : text }); },
           typed: (g) => typedToComposer(bindingRef.current.composerKey, g),
           key: (k) => {
-            // Escape is honoured only with the focus in this frame (codex h2a-r3 P1), like every plugin-made shrink.
-            if (k === 'Escape') { if (clickedIn(hostRef.current?.frame) || document.activeElement === hostRef.current?.frame) leaveFull(); }
+            // Escape is honoured only with the focus in this frame (codex h2a-r3 P1), like every plugin-made shrink. In full
+            // screen it is the full screen's Esc: the options open over it close first (G24).
+            if (k === 'Escape') { if ((clickedIn(hostRef.current?.frame) || document.activeElement === hostRef.current?.frame) && fullRef.current) onEscapeRef.current(); }
             else forwardedKey(k, hostRef.current?.frame ?? null);
           },
           // v1 sizes: pane is the Options group (the "Editor" tab), full is full screen, inline is the card.
@@ -307,7 +310,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           notes: () => undefined,
           advisory: (notes) => setAdvisoryNotes(group, notes),
           // A plugin's export.request becomes a host offer; the operator's press makes the file (G25).
-          exportOffer: (o) => { if (live.current) setExportOffer(o); },
+          // One offer at a time, unchanged until the operator answers it: a later ask cannot swap what they are pressing.
+          exportOffer: (o) => { if (live.current) setExportOffer((cur) => cur ?? o); },
           // `written` owns the structured line and the group announcement.
           thread: () => undefined,
           written,
@@ -593,6 +597,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     useHostPanel.getState().closeGroup();
     queueMicrotask(focusFullOptions);
   }, [group, leaveFull]);
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
 
   /** The card's declared actions, drawn the same way in its footer and in the full-screen header (G24). */
   const actionButtons = (
@@ -608,7 +614,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
             (e.currentTarget.querySelector('[data-verb="host:export"]') as HTMLButtonElement | null)?.focus();
           }}>
           <button type="button" data-testid="plugin-card-action" data-action={a.id} data-verb={a.verb}
-            disabled={a.verb === 'host:export' && (exports.length === 0 || head < 1)}
+            // Under the full screen's version lens an older version is on screen: Export makes the head, so it waits.
+            disabled={a.verb === 'host:export' && (exports.length === 0 || head < 1 || (full && lensVersion !== null))}
+            title={a.verb === 'host:export' && full && lensVersion !== null ? `Export makes version ${head}; go back to it to export` : undefined}
             className={a.primary ? 'wk-host-btn wk-host-btn--primary' : 'wk-host-btn'} onClick={() => void runAction(a)}>
             {a.label}{a.verb === 'host:export' ? ' ▾' : ''}
           </button>
@@ -722,7 +730,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       {exportOffer !== null && exportGranted && (
         <p data-testid="plugin-card-export-offer" className="wk-artifact-line">
           {editor.title} asks to export this as {exportOffer.label}.{' '}
-          <button type="button" data-testid="plugin-card-export-offer-accept" className="wk-host-btn wk-host-btn--primary" disabled={head < 1}
+          <button type="button" data-testid="plugin-card-export-offer-accept" className="wk-host-btn wk-host-btn--primary" disabled={head < 1 || (full && lensVersion !== null)}
             onClick={() => { const f = exportOffer.format; setExportOffer(null); void exportAs(f); }}>Make the {exportOffer.label}</button>{' '}
           <button type="button" className="wk-since-toggle" onClick={() => setExportOffer(null)}>Not now</button>
         </p>

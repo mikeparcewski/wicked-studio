@@ -48,14 +48,14 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
 
   // Folded or narrow, the panel is the ribbon — but its subtree stays mounted (hidden), so the group's options
   // instance and its confirmed values live as long as the group (codex h2b-r1 P2).
-  const collapsed = narrow ? !overlay : folded;
   // plugins-complete G24: a card's Options pressed in its full screen opens over that full screen (the panel beside the
-  // page sits under it), at the right edge; × or Esc closes it back to the full screen.
+  // page sits under it), at the right edge, at every width — never the ribbon; × or Esc closes it back to the full screen.
   const fullKey = useHostChrome((s) => s.full);
   const overFull = group !== null && fullKey !== null && group.binding.artifactKey === fullKey;
-  // Opened over the full screen, the keyboard moves into the options (so the next Esc is theirs, not the full screen's).
+  const collapsed = overFull ? false : narrow ? !overlay : folded;
+  // Opened (or shown again) over the full screen, the keyboard moves into the options, so the next Esc is theirs.
   const closeRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => { if (overFull) closeRef.current?.focus(); }, [overFull, group?.key]);
+  useEffect(() => { if (overFull && !collapsed) closeRef.current?.focus(); }, [overFull, collapsed, group?.key, revealed]);
   const close = (): void => { closeGroup(); if (overFull) queueMicrotask(focusFullOptions); };
   // The edge handle and the panel's close hand the keyboard focus to each other, so it never drops to the page.
   const handleRef = useRef<HTMLButtonElement | null>(null);
@@ -101,9 +101,10 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
         {group !== null && (
           <button ref={closeRef} type="button" data-testid="host-panel-close" aria-label={`Close ${group.editor.title} options`} className="wk-host-btn" onClick={close}>×</button>
         )}
-        <button ref={foldRef} type="button" data-testid="host-panel-fold" aria-label={edgeHandle !== undefined && group === null ? 'Close the details' : 'Hide the panel'}
+        {/* Over a full screen there is nothing beside it to fold to: × closes. */}
+        {!overFull && <button ref={foldRef} type="button" data-testid="host-panel-fold" aria-label={edgeHandle !== undefined && group === null ? 'Close the details' : 'Hide the panel'}
           title={edgeHandle !== undefined && group === null ? 'Close the details — the handle at the right edge opens them again' : undefined} className="wk-host-btn"
-          onClick={() => { moveFocus.current = edgeHandle !== undefined; if (narrow) setOverlay(false); else { setFolded(true); onToggle?.(false); } }}>⟩</button>
+          onClick={() => { moveFocus.current = edgeHandle !== undefined; if (narrow) setOverlay(false); else { setFolded(true); onToggle?.(false); } }}>⟩</button>}
       </div>
       <PanelTabs group={group} tab={tab} setTab={setTab} withRun={runTab !== undefined} />
       <div className="wk-hpanel-body">

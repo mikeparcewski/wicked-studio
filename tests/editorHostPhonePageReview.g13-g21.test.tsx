@@ -148,6 +148,46 @@ describe('G21: Review this version', () => {
     await waitFor(() => expect(screen.getByTestId('artifact-checks-review-state').textContent).toContain('already has its four reviews'));
   });
 
+  it('a read of another document is never this one’s: no review is called landed from it', async () => {
+    let bAnswer: (() => void) | null = null;
+    vi.stubGlobal('fetch', vi.fn(async (u: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Response(JSON.stringify({ ok: true, event_id: 'e', correlation_id: 'c' }), { status: 200 });
+      if (u.includes('/docs/doc-b/')) { await new Promise<void>((r) => { bAnswer = r; }); return new Response(JSON.stringify({ document_id: 'doc-b', version: 3, checks: [] }), { status: 200 }); }
+      return new Response(JSON.stringify({ document_id: 'doc-a', version: 3, checks: (['match', 'a11y', 'copy', 'qe'] as const).map((r) => check(r, 3)) }), { status: 200 });
+    }));
+    const view = render(<ChecksPanel projectId="notes" docId="doc-a" head={3} pointAt={async () => true} />);
+    await waitFor(() => expect(screen.getByTestId('artifact-checks').dataset['count']).toBe('4'));
+    view.rerender(<ChecksPanel projectId="notes" docId="doc-b" head={3} pointAt={async () => true} />);
+    // B's read has not answered: A's rows (and A's verdicts) are not shown as B's, and B cannot be asked from them.
+    expect(screen.queryByTestId('artifact-checks-review')).toBeNull();
+    await act(async () => { bAnswer!(); await Promise.resolve(); });
+    await waitFor(() => expect(screen.getByTestId('artifact-checks').dataset['count']).toBe('0'));
+    fireEvent.click(screen.getByTestId('artifact-checks-review'));
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-review-state').dataset['state']).toBe('asked'));
+  });
+
+  it('a read that never answers cannot hold the ask open past 15 minutes; Read again waits for the read in flight', async () => {
+    let gets = 0;
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Response(JSON.stringify({ ok: true, event_id: 'e', correlation_id: 'c' }), { status: 200 });
+      gets += 1;
+      if (gets > 1) await new Promise<void>(() => undefined);
+      return new Response(JSON.stringify({ document_id: 'launch', version: 3, checks: [] }), { status: 200 });
+    }));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(<ChecksPanel projectId="notes" docId="launch" head={3} pointAt={async () => true} />);
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-review')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('artifact-checks-review'));
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-review-state').dataset['state']).toBe('asked'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(REVIEW_POLL_MS + 10); });
+    expect(gets).toBe(2);
+    expect((screen.getByTestId('artifact-checks-refresh') as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(16 * 60_000); });
+    await waitFor(() => expect(screen.getByTestId('artifact-checks-review-state').dataset['state']).toBe('late'));
+    expect(screen.getByTestId('artifact-checks-review-state').textContent).toContain('Not every reviewer has a verdict on version 3');
+    expect(gets).toBe(2);
+  });
+
   it('a refused ask says why, and the button comes back', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => (init?.method === 'POST'
       ? new Response(JSON.stringify({ error: 'unknown doc' }), { status: 404 })

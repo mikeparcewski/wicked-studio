@@ -136,3 +136,8 @@
 /* A plugin's own notes (checks.contribute, plugins-complete G25): folded under the card, labelled advisory. */
 .wk-pcard-advisory summary { cursor: pointer; }
 .wk-pcard-advisory ul { max-height: 160px; overflow: auto; margin: var(--space-1) 0 0; padding-left: 18px; }
+
+/* The Checks host tab: the panel body scrolls, so the checks are not held to the third of a page they get beside one
+   (with "Review this version" under the summary, the summary had scrolled out of that third). */
+.wk-hpanel-body .wk-checks { max-height: none; overflow: visible; border-top: 0; padding: 0; background: transparent; }
+.wk-checks-review { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-2); }
