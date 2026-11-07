@@ -87,13 +87,13 @@ describe('the Plugins page (editor plugins)', () => {
     await waitFor(() => expect(screen.getAllByTestId('plugin-tile')).toHaveLength(3));
     const tiles = screen.getAllByTestId('plugin-tile');
     expect(tiles.map((t) => t.dataset.plugin)).toEqual(['wicked-phase-report', 'wicked-page', 'e2e-json-viewer']);
-    expect(screen.getAllByTestId('plugin-tile-source').map((t) => t.textContent)).toEqual(['Built in', 'Built in', 'You installed', 'Coming soon']);
+    expect(screen.getAllByTestId('plugin-tile-source').map((t) => t.textContent)).toEqual(['Built in', 'Built in', 'You installed']);
     // The run plugin offers a live preview; a built-in editor with no preview image draws its miniature.
-    expect(screen.getAllByTestId('plugin-tile-preview').map((p) => p.dataset.preview)).toEqual(['live', 'mini', 'mini', 'mini']);
+    expect(screen.getAllByTestId('plugin-tile-preview').map((p) => p.dataset.preview)).toEqual(['live', 'mini', 'mini']);
     expect(tiles[2]!.textContent).toContain('Opens pages and documents.');
-    expect(screen.getByTestId('plugin-coming-soon').querySelector('a, button')).toBeNull();
+    expect(screen.queryByTestId('plugin-coming-soon')).toBeNull();
     const filter = (id: string): HTMLElement => screen.getByTestId('plugins-filter').querySelector<HTMLElement>(`[data-filter="${id}"]`)!;
-    expect(['all', 'job', 'editor', 'mine'].map((id) => filter(id).textContent)).toEqual(['All · 4', 'Job details · 1', 'Editors · 2', 'You installed · 1']);
+    expect(['all', 'job', 'editor', 'mine'].map((id) => filter(id).textContent)).toEqual(['All · 3', 'Job details · 1', 'Editors · 2', 'You installed · 1']);
     fireEvent.click(filter('mine'));
     expect(screen.getAllByTestId('plugin-tile').map((t) => t.dataset.plugin)).toEqual(['e2e-json-viewer']);
     fireEvent.click(filter('all'));

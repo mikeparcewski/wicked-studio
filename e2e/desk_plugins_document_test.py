@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 desk_plugins_document_test.py — the built-in Document editor opens real documents from the Plugins page,
-and the app builder is shown as coming soon (operator 2026-10-12, lane editors-document). 1440x700 on
+and nothing on the page or in New job is shown as coming soon (operator 2026-11-06: what the product shows as coming
+is built; lane coming-soon-build CS1). 1440x700 on
 the Desk, against the in-process fixture with the daemon-wide document index on: project `notes`, a
 page-style doc `launch-page`, an unstyled doc `loose-notes` and a written doc `q4-brief`.
 
@@ -12,8 +13,8 @@ page-style doc `launch-page`, an unstyled doc `loose-notes` and a written doc `q
      in the plugin frame (the hash-pinned bundle, kind `page`), on the Made list's `open=` address — not the editor test page's sample;
      picking version 1 in its version list shows version 1 (no address to write there).
   3. ESC from full screen comes back to the card (DES §7.3); Esc on the card closes it back to the list.
-  4. SOON (Plugins): "Apps · Coming soon" (the data builder, was "Vibe") is one card with no link or button.
-  5. SOON (New job): the grid ends with the same entry as a tile that is not a button.
+  4. NOT SOON (Plugins): no "coming soon" card and no "Coming soon" text (Apps shipped as the built-in App plugin).
+  5. NOT SOON (New job, an older daemon with no catalog): studio adds no "Apps · Coming soon" tile of its own.
   6. 0 page errors.
 
 Captures: e2e/shots/desk-plugins-document-*.png. Env: FEEDBACK_PORT (default 4477). JSON report; exit 0/1.
@@ -137,28 +138,21 @@ with sync_playwright() as p:
     page.wait_for_function("() => !document.querySelector('[data-testid=\"everything-made-open\"]')", timeout=8000)
     check("esc-closes-to-the-list", "open=" not in page.url, url=page.url)
 
-    # ── 4. the app builder is coming soon on the Plugins page: no link, no button ──────────────
+    # ── 4. nothing is coming soon on the Plugins page ──────────────────────────────────────────
     page.goto(f"{origin}/plugins", wait_until="networkidle")
-    soon = page.get_by_test_id("plugin-coming-soon")
-    soon.wait_for(state="visible", timeout=10000)
-    check("plugins-vibe-coming-soon",
-          "Apps" in soon.inner_text() and "Coming soon" in soon.inner_text()
-          and "A live app or dashboard over your APIs and databases." in soon.inner_text()
-          and soon.locator("a, button").count() == 0 and soon.get_attribute("aria-disabled") == "true",
-          text=soon.inner_text())
+    page.get_by_test_id("plugins-grid").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id("plugin-tile").first.wait_for(state="visible", timeout=10000)
+    grid_text = page.get_by_test_id("plugins-page").inner_text()
+    check("plugins-nothing-coming-soon",
+          page.get_by_test_id("plugin-coming-soon").count() == 0 and "coming soon" not in grid_text.lower(),
+          text=grid_text[:400])
 
-    # ── 5. … and in New job's catalog: the last card (this daemon has no catalog: today's list), not a button ──
+    # ── 5. … and New job adds no coming-soon Apps tile of its own (this daemon has no catalog: today's list) ──
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-rail-new-job").click()
-    tile = page.get_by_test_id("launch-catalog-soon-apps")
-    tile.wait_for(state="visible", timeout=8000)
-    tile.scroll_into_view_if_needed()
+    page.get_by_test_id("launch-catalog-search").wait_for(state="visible", timeout=8000)
     page.screenshot(path=str(SHOTS / "desk-plugins-document-newjob.png"))
-    last = page.evaluate("() => document.querySelector('[data-section=\"all\"] .wk-catalog-grid')?.lastElementChild?.dataset.testid ?? null")
-    check("newjob-vibe-coming-soon",
-          last == "launch-catalog-soon-apps" and tile.evaluate("e => e.tagName") != "BUTTON"
-          and tile.locator("a, button").count() == 0 and "Coming soon" in tile.inner_text(),
-          last=last)
+    check("newjob-no-apps-coming-soon", page.get_by_test_id("launch-catalog-soon-apps").count() == 0)
 
     browser.close()
 
