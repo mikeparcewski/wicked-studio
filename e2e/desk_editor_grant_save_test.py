@@ -20,8 +20,10 @@ over the fixture's EDITOR-GRANTS stand-in (`writer_editor`).
   6. 0 page errors.
 
 It runs twice: acme-good listed as protocol 1 (the session hosts it in the page's plugin body, PluginArtifact; the
-page opens beside the thread to be edited) and as protocol 1+2 with a card declaration (the card drawn from it,
-PluginCard: the path W9's installed checklist takes).
+page opens beside the thread to be edited) and listed as protocol 1+2 with a card declaration, so the session hosts it
+in the card host (PluginCard, the host W9's installed checklist gets). good.html itself says protocol 1 at its
+handshake, so that card runs the v1 mapping: the host, the note, the grant and the Undo line are the card's; the
+protocol-2 surfaces themselves are not what this journey tests.
 
 Captures: e2e/shots/desk-editor-grant-*.png. Env: FEEDBACK_PORT (default 4493). JSON report; exit 0/1.
 """
@@ -245,10 +247,15 @@ def run(p, proto: int) -> None:
     page.keyboard.type("Q3: revenue up 18%")
     page.keyboard.press("Enter")
     line1 = wait_line(page, "edited", "save")
+    # The host's own line, with its Undo, even after the plugin's "Saved as version 2" status (it rides beside it).
+    page.wait_for_timeout(500)
+    host_line = page.locator(f'{LINE}[data-kind="edited"]')
+    line1 = host_line.inner_text() if host_line.count() == 1 else ""
+    undo_there = host_line.get_by_test_id("page-undo").count() == 1
     saved = page_headline(PID, doc, 2)
     page.screenshot(path=str(SHOTS / f"desk-editor-grant-p{proto}-4-saved.png"))
-    check(f"p{proto}-save", note_after == 0 and "version 2" in line1 and saved == "Q3: revenue up 18%",
-          note_shown=note_after, line=line1, stored_headline=saved, plugin=s3)
+    check(f"p{proto}-save", note_after == 0 and "version 2" in line1 and undo_there and saved == "Q3: revenue up 18%",
+          note_shown=note_after, line=line1, undo=undo_there, stored_headline=saved, plugin=s3)
 
     # ── 4. undo ──
     page.locator(LINE).get_by_test_id("page-undo").click()

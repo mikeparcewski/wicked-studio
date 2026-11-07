@@ -197,6 +197,36 @@ describe('F37 review r1: the switch only ever acts on, and shows, the build the 
     expect(screen.queryAllByTestId('plugin-grant-row')).toHaveLength(0);
   });
 
+  it('codex r2: A, then B, then A again while A’s press is in flight: A waits for it, then shows what crew says', async () => {
+    let release = (): void => undefined;
+    const hold = new Promise<void>((r) => { release = r; });
+    const c = crew({ holdPost: hold });
+    render(<PluginsPage navigate={() => undefined} />);
+    await openDetails('e2e-checklist');
+    await waitFor(() => switchOf('artifact.write'));
+    fireEvent.click(switchOf('artifact.write'));
+    await openDetails('wicked-page');
+    await waitFor(() => expect(screen.getByTestId('plugin-details-title').textContent).toBe('Page editor'));
+    await openDetails('e2e-checklist');
+    await waitFor(() => switchOf('artifact.write'));
+    // Its earlier press is still in flight: no second press goes out.
+    expect(switchOf('artifact.write').getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(switchOf('artifact.write'));
+    expect(posts(c.fetch)).toHaveLength(1);
+    release();
+    await waitFor(() => expect(switchOf('artifact.write').getAttribute('aria-checked')).toBe('true'));
+    await waitFor(() => expect(switchOf('artifact.write').getAttribute('aria-disabled')).toBe('false'));
+    expect(c.ledger.has('artifact.write')).toBe(true);
+  });
+
+  it('codex r2: a second deep link to the same editor puts the keyboard on the permission it names', async () => {
+    crew();
+    const { rerender } = render(<PluginsPage navigate={() => undefined} search="?editor=e2e-checklist&allow=artifact.write" />);
+    await waitFor(() => expect(document.activeElement).toBe(switchOf('artifact.write')));
+    rerender(<PluginsPage navigate={() => undefined} search="?editor=e2e-checklist&allow=checks.read" />);
+    await waitFor(() => expect(document.activeElement).toBe(switchOf('checks.read')));
+  });
+
   it('a press whose answer is lost re-reads crew instead of claiming "Not changed"', async () => {
     crew({ dropPost: true });
     render(<PluginsPage navigate={() => undefined} />);

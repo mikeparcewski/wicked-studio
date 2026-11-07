@@ -716,7 +716,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
             <>
               {editor.first_party ? editedLine(line.version, line.what, line.verb) : `${editor.title} ${line.verb} ${line.what} — version ${line.version}.`}{' '}
               <button type="button" data-testid="page-undo" disabled={busy} onClick={() => void undo()} className="wk-since-toggle">Undo</button>
-              {line.status !== undefined && <span data-testid="page-line-status"> · {line.status}</span>}
+              {line.status !== undefined && line.status !== '' && <span data-testid="page-line-status"> · {line.status}</span>}
             </>
           )}
           {line.kind === 'undone' && undoneLine(line.version)}

@@ -230,8 +230,10 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
   const grants = useEditorGrants(e);
   // "May do" ticks only what crew decided it may do (F37, codex r1): a permission still asking (or denied) is under
   // "Asks for"; while crew's answer is unknown, an installed editor is ticked for nothing.
-  const allowed = e !== undefined ? allowedOf(e, grants.load.state === 'changed' ? { state: 'loading' } : grants.load) : null;
-  const words = e !== undefined && allowed !== null ? permissionsInWords(e.permissions.filter((p) => allowed.has(p.id))) : null;
+  const allowed = e !== undefined ? allowedOf(e, grants.load) : null;
+  const mayDo = e !== undefined && allowed !== null ? e.permissions.filter((p) => allowed.has(p.id)) : null;
+  // An empty decided set is "nothing yet", not the manifest's "Asks for nothing" (codex r2).
+  const words = mayDo === null ? null : mayDo.length === 0 ? { can: 'Nothing yet: it does only what you allow.', internet: null } : permissionsInWords(mayDo);
   const opensDocuments = e !== undefined && e.enabled && e.first_party && e.kinds.some((k) => DOCUMENT_KINDS.includes(k));
   // The app runtime's door is the Apps page (DES-APPS-001: an app is made and opened there), in place of a sample.
   const appsDoor = e !== undefined && e.enabled && e.first_party && e.kinds.includes(APP_KIND);
@@ -298,7 +300,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
         <ul className="wk-plugdetail-grants">
           {card.run?.permissions.map((g) => <li key={g.id} data-permission={g.id}>{CHECK}<span>It {permissionWords(g.id)} <code>{g.id}</code></span></li>)}
           {e !== undefined && words !== null && <li>{CHECK}<span data-testid="editor-plugin-permissions">{words.can}</span></li>}
-          {e !== undefined && words === null && <li>{CHECK}<span data-testid="editor-plugin-permissions">Reading what it may do from studio’s service…</span></li>}
+          {e !== undefined && words === null && <li>{CHECK}<span data-testid="editor-plugin-permissions">{grants.load.state === 'changed' ? 'Updated since this page was read: reload it to see what it may do.' : grants.load.state === 'error' ? 'Not known: what it may do could not be read.' : 'Reading what it may do from studio’s service…'}</span></li>}
           {words?.internet != null && <li data-testid="editor-plugin-internet">{CHECK}<span>{words.internet}</span></li>}
           <li className="wk-plugdetail-never">{CROSS}<span>{card.run !== undefined ? 'Never answers a decision, lowers rigor or skips a review; only you send a step anything.' : 'Never starts an agent, answers a decision or sends your work anywhere.'}</span></li>
         </ul>

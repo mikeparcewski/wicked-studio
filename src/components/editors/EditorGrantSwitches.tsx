@@ -44,15 +44,18 @@ export function grantRows(decided: Pick<EditorGrantsResponse, 'grants'>): GrantR
  * editor claims its manifest (it ships with studio, with its default set) and an installed one claims nothing: `null`
  * = not known yet. An older service with no grants route grants an installed editor nothing.
  */
-export function allowedOf(e: Pick<EditorView, 'first_party' | 'permissions'>, load: Load): ReadonlySet<string> | null {
+export function allowedOf(e: Pick<EditorView, 'first_party' | 'permissions'>, load: Load | { state: 'changed' }): ReadonlySet<string> | null {
   if (load.state === 'ready') return new Set(load.decided.grants.filter((g) => g.decision === 'allow').map((g) => g.permission));
-  if (e.first_party) return new Set(e.permissions.map((p) => p.id));
-  return load.state === 'none' ? new Set() : null;
+  // Only an older service with no grants route falls back, as the host does: a built-in editor its manifest, an
+  // installed one nothing. Loading, a failed read or a changed build is not known (codex r2).
+  if (load.state === 'none') return e.first_party ? new Set(e.permissions.map((p) => p.id)) : new Set();
+  return null;
 }
 
 export type Load = { state: 'loading' } | { state: 'ready'; decided: EditorGrantsResponse } | { state: 'none' } | { state: 'error'; error: string };
 
 type Shown = Pick<EditorView, 'id' | 'version' | 'sha256'>;
+type ShownEditor = Shown & Pick<EditorView, 'first_party'>;
 const keyOf = (e: Pick<EditorView, 'id' | 'version' | 'sha256'>): string => `${e.id}@${e.version}#${e.sha256}`;
 
 /**
@@ -88,13 +91,20 @@ export function useEditorGrants(e: Shown | undefined): { load: Load | { state: '
   return { load: got.key === want ? got.load : { state: 'loading' }, set, reload: () => setAttempt((n) => n + 1) };
 }
 
+/**
+ * Presses per editor, across remounts of its details (codex r2): one in flight at a time, and only the newest press's
+ * answer is shown. A late answer from an earlier visit to the same card never overwrites a newer decision.
+ */
+const pressing = new Map<string, { seq: number; done: Promise<unknown> }>();
+let pressSeq = 0;
+
 /** Whether a failed press is a definite refusal (crew answered and wrote nothing) or an unknown outcome. */
 function refused(err: unknown): boolean {
   return err instanceof ApiError && err.status >= 400 && err.status < 500;
 }
 
 export function EditorGrantSwitches({ editor, title, grants, focus }: {
-  editor: Shown;
+  editor: ShownEditor;
   title: string;
   grants: ReturnType<typeof useEditorGrants>;
   /** The permission a host note's "Allow it" link pointed at: its switch takes the keyboard once it shows. */
@@ -103,36 +113,50 @@ export function EditorGrantSwitches({ editor, title, grants, focus }: {
   // Keyed by the build (the caller remounts it per editor build), so a press, its error and the focus request all
   // belong to the editor they were made on.
   const { load, set, reload } = grants;
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(() => (pressing.has(editor.id) ? '…' : null));
   const [error, setError] = useState<{ permission: string; text: string } | null>(null);
-  const focused = useRef(false);
+  // The focus request this mount has fulfilled: a new request (another permission, or the link again) is honoured.
+  const focused = useRef<string | null>(null);
+  useEffect(() => { if (focus === null) focused.current = null; }, [focus]);
+  // A press from an earlier visit still in flight: this mount waits for it, then reads what crew says.
+  useEffect(() => {
+    const p = pressing.get(editor.id);
+    if (p === undefined) return undefined;
+    let live = true;
+    void p.done.finally(() => { if (live) { setBusy(null); reload(); } });
+    return () => { live = false; };
+  }, [editor.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = load.state === 'ready' ? grantRows(load.decided) : [];
   useEffect(() => {
-    if (focus === null || load.state !== 'ready' || focused.current) return;
+    if (focus === null || load.state !== 'ready' || focused.current === focus) return;
     const el = document.querySelector<HTMLElement>(`[data-testid="plugin-grant-switch"][data-editor="${CSS.escape(editor.id)}"][data-permission="${CSS.escape(focus)}"]`);
     if (el === null) return;
     el.scrollIntoView({ block: 'center' });
     el.focus({ preventScroll: true });
-    if (document.activeElement === el) focused.current = true;
+    if (document.activeElement === el) focused.current = focus;
   }, [focus, load.state, editor.id]);
   if (load.state === 'none') return null;
   if (load.state === 'ready' && rows.length === 0) return null;
+  // A built-in editor is allowed its set by default: no "Asks for" flashes while its answer is read.
+  if (load.state === 'loading' && editor.first_party) return null;
   const press = (permission: string, allow: boolean): void => {
     // One press at a time per editor (codex r1): each answer is the whole decided set, so two in flight could land
     // out of order and show an older one.
-    if (load.state !== 'ready' || busy !== null) return;
+    if (load.state !== 'ready' || busy !== null || pressing.has(editor.id)) return;
     const shown = { version: load.decided.version, sha256: load.decided.sha256 };
+    const seq = ++pressSeq;
     setBusy(permission);
     setError(null);
-    setEditorGrant(editor.id, permission, allow, shown)
-      .then((d) => set(d))
+    const done = setEditorGrant(editor.id, permission, allow, shown)
+      .then((d) => { if (pressing.get(editor.id)?.seq === seq) set(d); })
       .catch((err: unknown) => {
         // crew answered and refused: nothing changed. Anything else (the connection dropped): it may have landed, so
         // what crew decides now is read again rather than guessed (codex r1).
         if (refused(err)) setError({ permission, text: `Not changed: ${err instanceof Error ? err.message : String(err)}` });
         else { setError({ permission, text: 'Could not confirm the change; showing what studio’s service says now.' }); reload(); }
       })
-      .finally(() => setBusy(null));
+      .finally(() => { if (pressing.get(editor.id)?.seq === seq) pressing.delete(editor.id); setBusy(null); });
+    pressing.set(editor.id, { seq, done });
   };
   return (
     <section className="wk-plugdetail-sec" data-testid="plugin-details-grants" data-editor={editor.id}>
