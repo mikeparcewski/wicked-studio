@@ -108,7 +108,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   // Operator ruling 2026-11-06: the rows whose code does not meet them, as a filter.
   const [onlyMismatch, setOnlyMismatch] = useState(false);
   const [page, setPage] = useState<RequirementsPage | null>(null);
-  // The minimum in force and where it comes from (crew 0.196.0), from the page or the notGenerated answer.
+  // The minimum in force and where it comes from (crew 0.197.0), from the page or the notGenerated answer.
   const [minimum, setMinimum] = useState<RequirementsMinimum | null>(null);
   // "Config & data" is a filter only when the corpus holds some (crew 0.167.0 categories); a daemon from before the
   // count keeps it, and nothing shows before the first read.
@@ -135,9 +135,14 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   }, [notGenerated, repoId, mappingAsk]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Only the newest read is applied (codex r1: a late answer for an older filter, an older minimum or another
+  // repository never overwrites a newer one).
+  const readGen = useRef(0);
+  useEffect(() => { setMinimum(null); }, [repoId]);
 
   const fetchPage = useCallback(
     (q: string, r: typeof risk, cat: typeof category, off: number, mm: boolean) => {
+      const gen = ++readGen.current;
       const params: Parameters<typeof api.listRequirements>[1] = { offset: off, limit: PAGE_SIZE };
       if (q.trim() !== '') params.q = q.trim();
       if (r !== 'all') params.risk = r;
@@ -146,12 +151,14 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
       api
         .listRequirements(repoId, params)
         .then((p) => {
+          if (gen !== readGen.current) return;
           setPage(p);
           setMinimum(minimumOf(p));
           setLoadError(null);
           setNotGenerated(null);
         })
         .catch((e: unknown) => {
+          if (gen !== readGen.current) return;
           const missing = requirementsNotGenerated(e);
           setMinimum(missing !== null && e instanceof ApiError ? minimumOf(e.body) : null);
           setNotGenerated(missing);
@@ -186,6 +193,10 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     };
   }, [query, risk, category, offset, onlyMismatch, fetchPage]);
   const mismatches = mismatchCountOf(page);
+  // A write's follow-up read uses the view's filters as they are WHEN it lands (codex r1), not as they were when it
+  // started.
+  const refetchNow = useRef(() => {});
+  refetchNow.current = () => fetchPage(query, risk, category, offset, onlyMismatch);
 
   function setFilter(r: 'all' | 'risk' | 'no-risk'): void {
     setRisk(r);
@@ -250,9 +261,13 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
           {page !== null && notGenerated === null && <CodeAge page={page} onRefresh={() => generate(DOMAIN_EXTRACTION_ID)} />}
           {minimum !== null && (
             <MinimumControl
+              key={repoId}
               repoId={repoId}
               minimum={minimum}
-              onChanged={() => fetchPage(query, risk, category, offset, onlyMismatch)}
+              onChanged={(m) => {
+                if (m !== null) setMinimum(m);
+                refetchNow.current();
+              }}
             />
           )}
           <button
@@ -529,23 +544,29 @@ function MinimumControl({
 }: {
   repoId: string;
   minimum: RequirementsMinimum;
-  onChanged: () => void;
+  /** After a write: the minimum the daemon answered with (applied at once), then a fresh read. */
+  onChanged: (minimum: RequirementsMinimum | null) => void;
 }): React.ReactElement {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(String(minimum.pct));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { setText(String(minimum.pct)); }, [minimum.pct]);
   const n = Number(text);
   const valid = /^\d{1,3}$/u.test(text.trim()) && n >= 1 && n <= 100;
+  function open(): void {
+    // Every edit starts from the minimum in force, never a discarded draft (codex/pi r1).
+    setText(String(minimum.pct));
+    setError(null);
+    setEditing(true);
+  }
   function save(pct: number | null): void {
     setBusy(true);
     setError(null);
     api
       .setRequirementsMinimum(repoId, pct)
-      .then(() => {
+      .then((out) => {
         setEditing(false);
-        onChanged();
+        onChanged(minimumOf(out));
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setBusy(false));
@@ -554,8 +575,16 @@ function MinimumControl({
     <div className="order-last basis-full min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="requirements-minimum" data-source={minimum.source}>
       <span className="text-xs" style={{ color: T.muted }}>{minimumLine(minimum)}</span>
       {editing ? (
-        <>
+        <form
+          className="contents"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (valid && !busy) save(n);
+          }}
+        >
           <input
+            autoFocus
+            disabled={busy}
             type="number"
             min={1}
             max={100}
@@ -565,15 +594,24 @@ function MinimumControl({
             data-testid="requirements-minimum-input"
             className="wk-field w-16 text-xs px-1.5 py-0.5"
           />
-          <button type="button" disabled={!valid || busy} onClick={() => save(n)} data-testid="requirements-minimum-save" className="text-xs font-semibold" style={{ color: T.link }}>
+          <button type="submit" disabled={!valid || busy} data-testid="requirements-minimum-save" className="text-xs font-semibold" style={{ color: T.link }}>
             Save
           </button>
-          <button type="button" disabled={busy} onClick={() => setEditing(false)} className="text-xs" style={{ color: T.faint }}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setEditing(false);
+              setError(null);
+            }}
+            className="text-xs"
+            style={{ color: T.faint }}
+          >
             Cancel
           </button>
-        </>
+        </form>
       ) : (
-        <button type="button" onClick={() => setEditing(true)} data-testid="requirements-minimum-change" className="text-xs font-semibold underline" style={{ color: T.link }}>
+        <button type="button" disabled={busy} onClick={open} data-testid="requirements-minimum-change" className="text-xs font-semibold underline" style={{ color: T.link }}>
           Change
         </button>
       )}
@@ -582,7 +620,7 @@ function MinimumControl({
           Use Settings{minimum.settingsPct !== null ? ` (${minimum.settingsPct}%)` : ''}
         </button>
       )}
-      {error !== null && <span className="text-xs" style={{ color: T.deny }}>{error}</span>}
+      {error !== null && <span role="alert" className="text-xs" style={{ color: T.deny }}>{error}</span>}
     </div>
   );
 }
@@ -652,7 +690,7 @@ function RequirementRow({
         )}
         <span className="block text-xs truncate" style={{ color: T.faint }}>{req.domain}</span>
         {mismatch !== null && (
-          <span data-testid="requirement-code-mismatch" className="block text-xs" style={{ color: 'var(--status-warn)' }}>
+          <span data-testid="requirement-code-mismatch" className="block text-xs" style={{ color: 'var(--status-warn)', overflowWrap: 'anywhere' }}>
             Code doesn{"'"}t meet it: {mismatch}
           </span>
         )}
