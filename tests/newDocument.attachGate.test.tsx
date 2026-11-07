@@ -68,7 +68,7 @@ describe('New document: Create and an attach in flight (G11)', () => {
     fireEvent.change(screen.getByTestId('made-new-document-brief'), { target: { value: 'A tour of the repo' } });
     fireEvent.click(await screen.findByTestId('doc-subject-add'));
     fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-b' } });
-    expect(create().disabled).toBe(false);
+    expect(create().disabled).toBe(true); // chosen, not added yet
     await act(async () => { fireEvent.click(screen.getByTestId('doc-subject-add-confirm')); });
     expect(create().disabled).toBe(true);
     await act(async () => { fireEvent.click(create()); });
@@ -80,7 +80,7 @@ describe('New document: Create and an attach in flight (G11)', () => {
     expect((createDoc.mock.calls[0]![1] as { repo_refs?: string[] }).repo_refs).toEqual(['r-b']);
   });
 
-  it('a refused attach leaves Create usable, with only the refs on screen', async () => {
+  it('a refused attach holds Create until cancel, then creates with only the refs on screen', async () => {
     attachProjectMember.mockRejectedValue(new Error('403 not yours'));
     render(form());
     fireEvent.change(screen.getByTestId('made-new-document-brief'), { target: { value: 'A tour of the repo' } });
@@ -88,6 +88,8 @@ describe('New document: Create and an attach in flight (G11)', () => {
     fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-b' } });
     await act(async () => { fireEvent.click(screen.getByTestId('doc-subject-add-confirm')); });
     await screen.findByTestId('doc-subject-add-error');
+    expect(create().disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('doc-subject-add-cancel'));
     expect(create().disabled).toBe(false);
     await act(async () => { fireEvent.click(create()); });
     expect((createDoc.mock.calls[0]![1] as { repo_refs?: string[] }).repo_refs).toBeUndefined();

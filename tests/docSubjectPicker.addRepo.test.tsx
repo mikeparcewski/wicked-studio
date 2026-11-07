@@ -166,16 +166,18 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     expect((document.activeElement as HTMLElement | null)?.dataset['repoId']).toBe('r-core');
   });
 
-  it('a refused attach lets the form go on (the refusal is on screen); a stale one reports nothing', async () => {
+  it('a refused attach holds Create until the person retries or cancels; a stale one reports nothing', async () => {
     listProjectMembers.mockResolvedValue({ members: [] });
     attachProjectMember.mockRejectedValueOnce(new Error('403 not yours'));
     const { rerender } = render(<Harness projectId="p8" />);
     fireEvent.click(await screen.findByTestId('doc-subject-add'));
     await choose(screen.getByTestId('doc-subject-add-select'), 'r-core');
     await screen.findByTestId('doc-subject-add-error');
-    expect(createBlocked()).toBe(false);
-    // Cancel returns focus to "Add a repository…".
+    expect(createBlocked()).toBe(true);
+    expect(screen.getByTestId('doc-subject-add-hint').textContent).toBe('press Add to ground on it, or cancel');
+    // Cancel lets the form go on, and returns focus to "Add a repository…".
     fireEvent.click(screen.getByTestId('doc-subject-add-cancel'));
+    expect(createBlocked()).toBe(false);
     expect(document.activeElement).toBe(screen.getByTestId('doc-subject-add'));
     const pending = deferred<{ member: ProjectMember }>();
     attachProjectMember.mockReturnValue(pending.promise);
@@ -239,5 +241,19 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     await act(async () => { pending.resolve({ member: member('p12', 'r-core') }); await new Promise((r) => setTimeout(r, 0)); });
     expect(document.activeElement).toBe(format);
     expect(refsSeen).toEqual(['r-core']);
+  });
+
+  it('a repository chosen but not added holds Create, saying to press Add (pi on the diff)', async () => {
+    listProjectMembers.mockResolvedValue({ members: [] });
+    render(<Harness projectId="p13" />);
+    fireEvent.click(await screen.findByTestId('doc-subject-add'));
+    expect(createBlocked()).toBe(false);
+    fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: 'r-core' } });
+    expect(createBlocked()).toBe(true);
+    expect(screen.getByTestId('doc-subject').dataset['subjectStatus']).toBe('loading');
+    screen.getByTestId('doc-subject-add-hint');
+    fireEvent.change(screen.getByTestId('doc-subject-add-select'), { target: { value: '' } });
+    expect(createBlocked()).toBe(false);
+    expect(attachProjectMember).not.toHaveBeenCalled();
   });
 });

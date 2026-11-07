@@ -115,6 +115,14 @@ export function DocSubjectPicker({
     target?.focus();
   }, [adding, repos]);
   const closeChooser = (): void => { focusNext.current = ''; setAdding(false); setAddFailure(null); setPick(''); };
+  // A repository chosen but not added (or whose add was refused) holds Create until the person presses Add or
+  // cancels: a pick that reads as "added" is never created without (pi on the diff). The attach reports its own.
+  const holding = adding && pick !== '' && attaching === null;
+  useEffect(() => {
+    if (attaching !== null || status !== 'ready') return;
+    onStatus(holding ? 'loading' : 'ready');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reported when the hold flips, not on every render
+  }, [holding]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,8 +172,10 @@ export function DocSubjectPicker({
     setAttaching(repo.id);
     setAddFailure(null);
     onStatus('loading');
+    let added = false;
     try {
       await api.attachProjectMember(projectId, { kind: REPO_KIND, ref: repo.id, attachedBy: 'studio' });
+      added = true;
       if (generation.current !== forGeneration) return; // another project (or a re-read) since: not this list's
       setRepos((list) => (list.some((r) => r.id === repo.id) ? list : [...list, repo]));
       setAttachable((list) => list.filter((r) => r.id !== repo.id));
@@ -180,14 +190,15 @@ export function DocSubjectPicker({
     } finally {
       if (generation.current === forGeneration) {
         setAttaching(null);
-        onStatus('ready');
+        // A refused pick is still held (the chooser stays open on it): Create waits for a retry or cancel.
+        onStatus(added ? 'ready' : 'loading');
       }
     }
   };
   const chip: React.CSSProperties = { border: '1px solid var(--surface-overlay)', cursor: 'pointer', background: 'transparent' };
 
   return (
-    <div ref={root} data-testid="doc-subject" data-subject-status={attaching !== null ? 'loading' : status} className="flex flex-wrap items-center gap-1.5" style={{ minWidth: 0 }}>
+    <div ref={root} data-testid="doc-subject" data-subject-status={attaching !== null || holding ? 'loading' : status} className="flex flex-wrap items-center gap-1.5" style={{ minWidth: 0 }}>
       {status === 'loading' && (
         <span data-testid="doc-subject-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           finding the project’s repositories…
@@ -296,6 +307,11 @@ export function DocSubjectPicker({
           >
             {attaching !== null ? 'adding…' : 'Add'}
           </button>
+          {holding && (
+            <span data-testid="doc-subject-add-hint" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
+              press Add to ground on it, or cancel
+            </span>
+          )}
           <button
             type="button"
             data-testid="doc-subject-add-cancel"
