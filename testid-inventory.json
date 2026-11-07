@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 325,
-    "occurrences": 4750,
-    "static": 3976,
+    "files": 326,
+    "occurrences": 4773,
+    "static": 3999,
     "dynamic": 176,
     "computed": 53
   },
@@ -795,6 +795,24 @@
       ]
     },
     {
+      "testId": "apps-archive-line",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-archive-undo",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-archived-note",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
       "testId": "apps-back-report",
       "files": [
         "src/components/apps/AppsPage.tsx"
@@ -805,6 +823,24 @@
       "files": [
         "src/components/apps/AppCard.tsx",
         "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-archive",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-archive-item",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-archived",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
       ]
     },
     {
@@ -956,6 +992,12 @@
       "testId": "apps-card-turn",
       "files": [
         "src/components/apps/AppCard.tsx"
+      ]
+    },
+    {
+      "testId": "apps-card-unarchive",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
       ]
     },
     {
@@ -1236,6 +1278,24 @@
       ]
     },
     {
+      "testId": "apps-scope",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-scope-active",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
+      "testId": "apps-scope-archived",
+      "files": [
+        "src/components/apps/AppsPage.tsx"
+      ]
+    },
+    {
       "testId": "apps-share",
       "files": [
         "src/components/apps/ShareSheet.tsx"
@@ -1326,6 +1386,12 @@
       ]
     },
     {
+      "testId": "apps-unarchive",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
       "testId": "apps-undo",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
@@ -1335,6 +1401,78 @@
       "testId": "apps-version",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-version-confirm",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-version-failed",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-version-holds",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-version-now",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-version-restore",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-version-restore-cancel",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-version-restore-confirm",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-versions",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-versions-close",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-versions-open",
+      "files": [
+        "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-versions-row",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
+      ]
+    },
+    {
+      "testId": "apps-versions-why",
+      "files": [
+        "src/components/apps/AppVersions.tsx"
       ]
     },
     {
