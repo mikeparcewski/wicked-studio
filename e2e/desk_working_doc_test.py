@@ -8,7 +8,7 @@ routes, in memory). `/ws` is played by the journey.
      next step. They can raise rigor, never lower it.", Goal waiting to be started.
   2. A PERSON'S EDIT: click Constraints and steering, type, press Save (a real click in the frame). crew is sent
      `author: 'operator'` with the plugin as the surface; the trail reads "v1 · You · Constraints and steering · …
-     · waiting for the next step"; the thread shows "You edited the working document · Constraints · waiting for the
+     · waiting for the next step"; the thread shows "You edited the context document · Constraints · waiting for the
      next step". A Save by keyboard (Cmd/Ctrl+Enter) is a person's too.
   1b. FILLED FROM EVENTS: before any document exists, the block shows the plugin's own line under Open questions
      ("Waiting on you · …", marked not saved yet) and writes nothing. Once a person's edit starts the document, the
@@ -19,7 +19,7 @@ routes, in memory). `/ws` is played by the journey.
      "picked up at Review".
   5. PINNED (to the top of the panel) AND OPEN: the document is there too. PHONE (390x844): the Details overlay holds
      it and the editor fits the width. An OLDER SERVICE (no
-     working-doc routes): the block says it keeps no working document, and nothing is written. 0 page errors.
+     working-doc routes): the block says it keeps no context document, and nothing is written. 0 page errors.
 
 Captures: e2e/shots/desk-working-doc-*.png. Env: FEEDBACK_PORT (default 4662).
 """
@@ -163,7 +163,7 @@ with sync_playwright() as p:
     first = next((x for x in version_posts if x.get("author") == "operator"), {})
     check("2-person-edit", any(you("Constraints and steering").match(l) and l.endswith("waiting for the next step") for l in lines)
           and first.get("author") == "operator" and first.get("plugin", {}).get("id") == "wicked-phase-report" and first.get("base") == 0
-          and row == ["You edited the working document · Constraints · waiting for the next step"],
+          and row == ["You edited the context document · Constraints · waiting for the next step"],
           trail=lines, post=first, rows=row)
     page.locator(BLOCK).first.scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-working-doc-edited-1440.png"))
@@ -218,7 +218,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(400)
     rows = page.locator('[data-testid="working-doc-steer"]').all_inner_texts()
     check("4-picked-up", any(you("Approach").match(l) and "picked up at Review" in l for l in lines)
-          and "You edited the working document · Approach · picked up at Review" in rows, trail=lines, rows=rows)
+          and "You edited the context document · Approach · picked up at Review" in rows, trail=lines, rows=rows)
     page.locator(BLOCK).first.scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-working-doc-picked-1440.png"))
 
@@ -255,7 +255,7 @@ with sync_playwright() as p:
     frame(page).locator("#wd").wait_for(state="visible", timeout=15000)
     page.wait_for_timeout(800)
     said = frame(page).locator("#wd").inner_text()
-    check("5c-older-service", "keeps no working document" in said and len(version_posts) == n_before, said=said[:200])
+    check("5c-older-service", "keeps no context document" in said and len(version_posts) == n_before, said=said[:200])
     ctx.close()
     browser.close()
 

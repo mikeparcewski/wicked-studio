@@ -327,7 +327,7 @@ export function RunPluginSection({ runId, plugin, section, live }: { runId: stri
             </p>
           </div>
         )}
-        <p data-testid="run-plugin-attribution" className="wk-runplugin-foot" title={`It hears ${topics}. It writes only its own lines in the working document; what you type there is yours, and it never answers a decision.`}>{attributionLine(plugin)}</p>
+        <p data-testid="run-plugin-attribution" className="wk-runplugin-foot" title={`It hears ${topics}. It writes only its own lines in the context document; what you type there is yours, and it never answers a decision.`}>{attributionLine(plugin)}</p>
       </div>
     </section>
   );
@@ -403,7 +403,7 @@ const SECTION_WORDS: Record<string, string> = {
   goal: 'Goal', approach: 'Approach', decisions: 'Decisions', constraints: 'Constraints', questions: 'Open questions', next: 'Next work',
 };
 
-/** One steering note's thread row words: "You edited the working document · Constraints · picked up at Review"
+/** One steering note's thread row words: "You edited the context document · Constraints · picked up at Review"
  *  ("You (by voice) edited …" when it was said). */
 export function steerRowWords(by: string, sections: readonly string[], s: { pickedUp: { step: string | null; ord: number | null } | null; error: string | null; input?: 'voice' }, stepOfOrd?: (ord: number) => string | null): string {
   // (crew api-types 0.161.0) An edit said by voice and confirmed on screen says so.
@@ -411,11 +411,11 @@ export function steerRowWords(by: string, sections: readonly string[], s: { pick
   const where = s.error !== null ? `not sent: ${s.error}`
     : s.pickedUp !== null ? `picked up at ${pickedUpStep(s.pickedUp, stepOfOrd)}`
     : 'waiting for the next step';
-  return `${who} edited the working document · ${sections.map((x) => SECTION_WORDS[x] ?? x).join(', ')} · ${where}`;
+  return `${who} edited the context document · ${sections.map((x) => SECTION_WORDS[x] ?? x).join(', ')} · ${where}`;
 }
 
 /**
- * The working document's steering notes in the thread (power mode spike 3), one slim row each, at the step that picked
+ * The context document's steering notes in the thread (power mode spike 3), one slim row each, at the step that picked
  * it up (`ords`), or — not picked up yet, or picked up by a step with no message — after the last step (`except`).
  */
 export function WorkingDocSteerRows({ runId, ords, except, stepOfOrd }: { runId: string; ords?: readonly number[]; except?: readonly number[]; stepOfOrd?: (ord: number) => string | null }): React.ReactElement | null {

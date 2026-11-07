@@ -147,7 +147,7 @@ describe('the working-document editor', () => {
     await vi.waitFor(() => expect(b.$('#wd')?.textContent).not.toMatch(/could not be read/u));
     fail = 'unsupported';
     b.push('doc.changed', { head: 1 });
-    await vi.waitFor(() => expect(b.$('#wd')?.textContent).toMatch(/keeps no working document/u));
+    await vi.waitFor(() => expect(b.$('#wd')?.textContent).toMatch(/keeps no context document/u));
   });
 
   it('a click elsewhere never throws an unsaved draft away; an untouched editor just moves', async () => {
@@ -248,5 +248,27 @@ describe('the working-document editor', () => {
     await vi.waitFor(() => expect(decisions.split('\n')).toHaveLength(2));
     expect(b.edits().every((m) => m.payload?.['origin'] === 'generated' && m.payload?.['section'] === 'decisions')).toBe(true);
     expect(decisions).toMatch(/^Approve the plan · answered .*\nA failed check or review · answered /u);
+  });
+});
+
+describe('the context document (context-doc-switch)', () => {
+  it('is headed the context document, says what is in every agent’s context and who has seen it', async () => {
+    const withBlock = {
+      ...view(4, { goal: 'EUR prints €1.240,00' }),
+      context: { engine: true, version: 4, sections: ['goal'], cut: [], at: 1, error: null, seenBy: [{ recipient: 'judge', cli: 'codex', ord: 2 }] },
+    };
+    const b = await boot((m) => (m.type === 'doc.read' ? { ok: true, payload: { view: withBlock } } : { ok: true, payload: {} }));
+    expect(b.$('#wd .wd-title')?.textContent).toBe('Context document');
+    expect(b.$('[data-testid="wd-context"]')?.textContent).toBe('In every agent’s context from version 4: Goal.');
+    expect(b.$('[data-testid="wd-seen-by"]')?.textContent).toBe('Version 4 seen by: judge (Codex).');
+    b.openSection('goal');
+    expect(b.$('.wd-effect')?.textContent).toBe('Saving sends it to every agent of this job as context.');
+  });
+
+  it('an engine with no block shows no context line and keeps the old words', async () => {
+    const b = await boot((m) => (m.type === 'doc.read' ? { ok: true, payload: { view: view(1) } } : { ok: true, payload: {} }));
+    expect(b.$('#wd .wd-title')?.textContent).toBe('Context document');
+    expect(b.$('[data-testid="wd-context"]')).toBeNull();
+    expect(b.$('.wd-note')?.textContent).toBe('Edits steer the next step. They can raise rigor, never lower it.');
   });
 });

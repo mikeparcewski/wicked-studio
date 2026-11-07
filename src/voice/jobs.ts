@@ -8,7 +8,7 @@
  *     and recent jobs: words of the title, a prefix, or one letter off (a transcription slip). Several close matches →
  *     a choose-one ask.
  *  2. WHAT TO DO. Deterministic first: show / the other one / close / pin; tell it to …; stop (with a reason); raise
- *     rigor; check on it; answer its gate; a constraint or a next step for its working document. Only words that match
+ *     rigor; check on it; answer its gate; a constraint or a next step for its context document. Only words that match
  *     none of these, said while a job is in view, go to one cheap classification (the controller's).
  */
 
@@ -188,7 +188,7 @@ export function actionOf(raw: string): JobAction | null {
   if (/^(?:check on (?:it|this|that|the job|the run|how it's going|its progress)|check in(?: on it)?|is it (?:stuck|looping|okay|ok|going well|wasting tokens)\??|how is it (?:doing|going)\??|how's it (?:doing|going)\??|analy[sz]e it)$/.test(t)) {
     return { kind: 'check' };
   }
-  // the working document: "add a constraint: keep /v1 working", "constraint: …", "next: add GBP tests", "do X next"
+  // the context document: "add a constraint: keep /v1 working", "constraint: …", "next: add GBP tests", "do X next"
   // (matched on the words as said, so a path or a symbol in them is kept)
   const c = /^(?:add\s+(?:a\s+|the\s+|this\s+)?constraint|new constraint|constraint)\s*(?:that\b|:|,|-)?\s*(.+)$/i.exec(said);
   if (c !== null) return { kind: 'doc', section: 'constraints', text: cap(c[1]!.trim()) };

@@ -2894,9 +2894,9 @@ def _wd_propose(rid: str, body: dict) -> tuple[int, dict]:
     working_doc_posts.append({"runId": rid, **body})
     d = working_docs.get(rid)
     if d is None:
-        return 404, {"error": "this job has no working document yet"}
+        return 404, {"error": "this job has no context document yet"}
     if body.get("base") != d["head"]:
-        return 409, {"error": "the working document changed since", "head": d["head"]}
+        return 409, {"error": "the context document changed since", "head": d["head"]}
     author = body.get("author")
     plugin = body.get("plugin") or {}
     wanted = body.get("sections") or {}

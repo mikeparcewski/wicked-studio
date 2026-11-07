@@ -265,7 +265,7 @@ export function rigorMarkWords(c: RigorChange, ctx: RigorMarkContext = { pausedC
   const lead = who === 'you'
     ? (reason !== null && /continue at high rigor/i.test(reason) ? `you chose ‘continue at high rigor’ ${at}` : reason !== null ? `you raised it: ${reason}` : 'you raised it')
     : who === 'plugin' ? `raised by ${c.by.replace(/^plugin:/, '').replace(/@.*$/, '')}${reason !== null ? `: ${reason}` : ''}`
-      : c.trigger === 'doc_edit' ? `raised by a working-document edit${reason !== null ? `: ${reason}` : ''}`
+      : c.trigger === 'doc_edit' ? `raised by a context-document edit${reason !== null ? `: ${reason}` : ''}`
         : reason;
   const consequence = raiseConsequenceWhen(c.from, c.to, ctx.handoffRan);
   const tail = c.direction === 'down'

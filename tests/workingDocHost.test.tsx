@@ -221,8 +221,8 @@ describe('the words', () => {
   });
 
   it('the thread row says who edited which section and where the note stands', () => {
-    expect(steerRowWords('local', ['constraints'], { pickedUp: { step: 'review', ord: 7 }, error: null })).toBe('You edited the working document · Constraints · picked up at Review');
-    expect(steerRowWords('local', ['goal', 'next'], { pickedUp: null, error: null })).toBe('You edited the working document · Goal, Next work · waiting for the next step');
+    expect(steerRowWords('local', ['constraints'], { pickedUp: { step: 'review', ord: 7 }, error: null })).toBe('You edited the context document · Constraints · picked up at Review');
+    expect(steerRowWords('local', ['goal', 'next'], { pickedUp: null, error: null })).toBe('You edited the context document · Goal, Next work · waiting for the next step');
     useWorkingDocs.getState().set('run-1', { runId: 'run-1', doc: { projectId: 'default', docId: 'w', head: 2 }, sections: null, labels: {} as never, trail: [], steers: [
       { id: 's1', version: 2, sections: ['constraints'], kind: 'standing', note: 'n', at: 0, by: 'local', queuedAt: 1, pickedUp: { ord: 7, step: 'review', at: 0 }, error: null },
       { id: 's2', version: 3, sections: ['next'], kind: 'next', note: 'n', at: 0, by: 'local', queuedAt: 1, pickedUp: null, error: null },
@@ -240,8 +240,8 @@ describe('the words', () => {
     const unitId = { step: 'wf-9397a34b-08c9-484d-a97d-57675423c817:unit-2', ord: 2 };
     const byOrd = (ord: number): string | null => (ord === 2 ? 'Fix' : null);
     expect(steerRowWords('local', ['constraints'], { pickedUp: unitId, error: null }, byOrd))
-      .toBe('You edited the working document · Constraints · picked up at Fix');
-    expect(steerRowWords('local', ['constraints'], { pickedUp: unitId, error: null })).toBe('You edited the working document · Constraints · picked up at step 2');
+      .toBe('You edited the context document · Constraints · picked up at Fix');
+    expect(steerRowWords('local', ['constraints'], { pickedUp: unitId, error: null })).toBe('You edited the context document · Constraints · picked up at step 2');
     expect(pickedUpStep(unitId)).not.toMatch(/wf|unit|9397/iu);
     expect(pickedUpStep({ step: 'review', ord: 7 })).toBe('Review');
     expect(pickedUpStep({ step: 'review', ord: 7 }, () => 'Review 2')).toBe('Review 2');
@@ -250,7 +250,7 @@ describe('the words', () => {
       { id: 's9', version: 1, sections: ['constraints'], kind: 'standing', note: 'n', at: 0, by: 'local', queuedAt: 1, pickedUp: { ...unitId, at: 0 }, error: null },
     ] });
     render(<WorkingDocSteerRows runId="run-2" ords={[2]} stepOfOrd={byOrd} />);
-    expect(screen.getByTestId('working-doc-steer').textContent).toBe('You edited the working document · Constraints · picked up at Fix');
+    expect(screen.getByTestId('working-doc-steer').textContent).toBe('You edited the context document · Constraints · picked up at Fix');
   });
 
   it('the built-in plugin asks for the doc requests, each with its reason, and only run-thread ones', () => {

@@ -84,7 +84,7 @@ const TOPIC_WORDS: Record<string, string> = {
 };
 
 const PERMISSION_WORDS: Record<string, string> = {
-  'doc.read': 'reads the job’s working document',
+  'doc.read': 'reads the job’s context document',
   'doc.propose_edit': 'saves what you type in it, and adds its own lines under Decisions as itself',
   'steer.propose': 'suggests a note for the next step (you press Send)',
 };

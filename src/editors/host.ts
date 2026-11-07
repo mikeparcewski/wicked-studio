@@ -695,14 +695,14 @@ export class EditorHost {
       }
       case 'ui.fullscreen': return { entered: await this.o.ui.fullscreen() };
       case 'mcp.request': return this.mcpRequest(p);
-      case 'doc.read': return this.o.doc !== undefined ? this.o.doc.read() : { error: 'unavailable', message: 'this block has no working document' };
+      case 'doc.read': return this.o.doc !== undefined ? this.o.doc.read() : { error: 'unavailable', message: 'this block has no context document' };
       case 'doc.propose_edit': {
         // Whose words, judged AT RECEIPT (before any await): text the plugin calls `typed` is the operator's only when
         // a person's own click or key in THIS frame sent it. Anything else — generated lines, or a "typed" claim with
         // no gesture behind it — is the plugin's, and a plugin writes only its own section.
         const gesture = (this.o.activation ?? NO_ACTIVATION)() && (this.o.focusInFrame ?? ((f) => document.activeElement === f))(this.frame);
         const by: 'operator' | 'plugin' = p['origin'] === 'typed' && gesture ? 'operator' : 'plugin';
-        if (this.o.doc === undefined) return { error: 'unavailable', message: 'this block has no working document' };
+        if (this.o.doc === undefined) return { error: 'unavailable', message: 'this block has no context document' };
         if (by === 'plugin' && !PLUGIN_DOC_SECTIONS.has(String(p['section']))) {
           return { error: 'refused', message: p['origin'] === 'typed' ? 'an edit is a person’s only when they save it with their own click or key' : `a plugin writes only its own section (${[...PLUGIN_DOC_SECTIONS].join(', ')})` };
         }
