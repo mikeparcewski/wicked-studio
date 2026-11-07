@@ -571,6 +571,25 @@ describe('the app host: Versions with Restore, an archived app, a phone', () => 
     expect((screen.getByTestId('apps-mode-edit') as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('a message being typed when the archive is seen is kept: the chat stays, closed, saying why (codex r3)', async () => {
+    let archived: unknown = null;
+    crew((c) => {
+      if (c.path === '/health') return { status: 'ok', capabilities: CAPS };
+      if (c.path === '/editors/wicked-apps/grants') return { grants: [] };
+      if (c.path === '/apps/desk' && c.method === 'GET') return { app: detail('desk', { archived }) };
+      return undefined;
+    });
+    render(<AppHostView editor="wicked-apps" version="0.13.0" sha={'a'.repeat(64)} app="desk" sample={null} caps={{ apps: { ...CAPS.apps, turns: true } }} />);
+    const box = await waitFor(() => screen.getByTestId('app-composer-input') as HTMLTextAreaElement);
+    fireEvent.change(box, { target: { value: 'make the chart bigger' } });
+    archived = { at: 2, by: 'sam' };
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(screen.getByTestId('apps-archived-note')).toBeTruthy());
+    expect((screen.getByTestId('app-composer-input') as HTMLTextAreaElement).value).toBe('make the chart bigger');
+    expect(screen.getByTestId('app-composer-readonly').textContent).toMatch(/archived: restore it to ask for changes/);
+    expect((screen.getByTestId('app-composer-send') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('a daemon with no version route: the read says so, Restore stays off, and nothing is posted', async () => {
     const calls = hostCrew(detail('desk'));
     openHost();
