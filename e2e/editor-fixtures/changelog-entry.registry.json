@@ -41,12 +41,20 @@
   },
   "permissions": [
     {
+      "id": "artifact.read",
+      "why": "to show the page you open it on"
+    },
+    {
+      "id": "artifact.write",
+      "why": "to add the entry to the page as a version you can undo"
+    },
+    {
       "id": "ui.fullscreen",
       "why": "to go full screen"
     }
   ],
-  "sha256": "9bb3121a91e45f4bcef2f5bcb53b39fe5ca58ea918e1f76ca8bfced99878e339",
-  "bytes": 12244,
+  "sha256": "d6f6e4b914aef4bc4be7111da71afff517006d3189038a0b6d74457b56d6cb51",
+  "bytes": 15467,
   "first_party": false,
   "enabled": true,
   "source": "pack",

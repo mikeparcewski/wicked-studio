@@ -1124,10 +1124,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "mcp_inspect": False, "mcp_inspect_grant": True,
          # installed_editor — (e2e/editor_installed_plugin_test.py; needs `editors`) an editor plugin a
          #   /workflow-editor-plugin run BUILT and garden's install.py INSTALLED: GET /api/v1/editors also lists
-         #   `mpx-changelog-entry` exactly as crew 0.16.3 listed it after that install
-         #   (e2e/editor-fixtures/changelog-entry.registry.json, source `pack`); its entry is the run's own bundle,
-         #   byte for byte (e2e/editor-fixtures/changelog-entry.html), and its grants are crew's decided set for
-         #   it (ui.fullscreen, allowed by EDITOR-OPEN-DEFAULTS).
+         #   `mpx-changelog-entry` in crew's row shape (e2e/editor-fixtures/changelog-entry.registry.json, source `pack`);
+         #   its entry is that run's bundle with the behaviour conformance now requires
+         #   (e2e/editor-fixtures/changelog-entry.html, reading the page and adding entries as versions, G9), and its
+         #   grants are crew's decided set for it after its install consent (artifact.read, artifact.write, ui.fullscreen).
          "installed_editor": False,
          # apps — (DES-APPS-001 K4, e2e/apps_runtime_test.py) crew's app store and the app data routes, in
          #   e2e/apps_fixture.py: GET /api/v1/apps/<slug>, POST edits/undo/redo (409 stale_base, one undo pointer),
@@ -9059,7 +9059,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                     mcp_grant = state["mcp_inspect_grant"]
                 decided = [("artifact.read", "allow"), ("ui.fullscreen", "allow"), ("mcp.session", "allow" if mcp_grant else "ask")]
             if parts[4] == "mpx-changelog-entry":
-                decided = [("ui.fullscreen", "allow")]
+                # Decided at its install consent: it reads the page, adds entries as versions, goes full screen (G9).
+                decided = [("artifact.read", "allow"), ("artifact.write", "allow"), ("ui.fullscreen", "allow")]
             self._json(200, {"editorId": parts[4], "version": version, "sha256": sha, "project": (q.get("project") or [None])[0],
                              "firstParty": parts[4].startswith("wicked-"),
                              "grants": [{"permission": g, "decision": d, "ruleIds": [],

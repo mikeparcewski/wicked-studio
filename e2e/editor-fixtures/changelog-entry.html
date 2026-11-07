@@ -2,7 +2,9 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!--
   Changelog entry (mpx-changelog-entry 0.1.0): an artifact editor plugin speaking wicked.editor/2, and
-  /1 to an older host (DES-EDITOR-PLUGIN-CONTRACT-001; DES-EDITOR-PLUGINS-001 §5). ONE self-contained file:
+  /1 to an older host (DES-EDITOR-PLUGIN-CONTRACT-001; DES-EDITOR-PLUGINS-001 §5). It shows the page it is opened on
+  (artifact.read, read again when another version lands) and adds a dated entry to the end of it as ONE version
+  (artifact.write, through the control marked data-wicked-save: garden conformance cases 18 and 7). ONE self-contained file:
   every script and style is inline, nothing is loaded from outside it (the bundle's policy has connect-src
   'none' and the pack check refuses outside references). It talks only to the host, over the MessagePort the
   host transfers with host.hello.
@@ -33,15 +35,21 @@
   button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--ink-muted); border-radius: 4px; padding: 2px 8px; }
   .hint { color: var(--ink-muted); font-size: 12px; min-height: 1.4em; margin: 2px 0 0; }
   h2 { font-size: 13px; margin: 10px 0 4px; }
+  #page { list-style: none; margin: 0 0 8px; padding: 0; max-height: 160px; overflow: auto; border: 1px solid var(--ink-muted); border-radius: 4px; }
+  #page li { padding: 2px 8px; white-space: pre-wrap; word-break: break-word; }
+  #page li:last-child { border-left: 3px solid var(--accent); }
   pre { margin: 0; padding: 6px 8px; border: 1px solid var(--ink-muted); border-radius: 4px; white-space: pre-wrap; word-break: break-word; font: 12px/1.4 ui-monospace, monospace; }
   body[data-protocol="1"][data-size="inline"] main { pointer-events: none; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style></head>
 <body data-size="pane" data-protocol="1">
 <main>
-  <p class="note" id="status">Fill in the form to build an entry.</p>
+  <p class="note" id="status">Reading the page…</p>
+  <h2 id="pageh">On this page</h2>
+  <ul id="page" aria-labelledby="pageh"></ul>
+  <p class="hint" id="target"></p>
   <div class="field"><label for="type">Type</label>
-    <select id="type"><option>Added</option><option>Changed</option><option>Deprecated</option><option>Removed</option><option>Fixed</option><option>Security</option></select></div>
+    <select id="type"><option>Added</option><option selected>Changed</option><option>Deprecated</option><option>Removed</option><option>Fixed</option><option>Security</option></select></div>
   <div class="field"><label for="summary">Summary</label>
     <input type="text" id="summary" maxlength="200" autocomplete="off"></div>
   <div class="field"><label for="pr">PR number</label>
@@ -49,7 +57,7 @@
     <p class="hint" id="prnote"></p></div>
   <h2 id="outh">Entry</h2>
   <pre id="out" aria-labelledby="outh" aria-live="polite"></pre>
-  <p><button type="button" id="clear">Clear form</button> <button type="button" id="full">Full screen</button></p>
+  <p><button type="button" id="add" data-wicked-save disabled>Add entry</button> <button type="button" id="clear">Clear form</button> <button type="button" id="full">Full screen</button></p>
 </main>
 <script>
 (() => {
@@ -75,7 +83,7 @@
   },
   "full": {}
 };
-  let port = null, grants = [], seq = 0, protocol = 1;
+  let port = null, grants = [], seq = 0, protocol = 1, head = 0, parts = [];
   let surface = 'card', mode = 'simple';
   const pending = new Map();
   const $ = (id) => document.getElementById(id);
@@ -100,23 +108,73 @@
     if (protocol >= 2 && surface === 'card' && SURFACES.card.aspect === 'auto') send('ui.height', { px: Math.ceil(document.body.scrollHeight) });
   }
 
-  // The entry as plain text. PR: optional leading '#', then digits only; anything else is no PR.
-  function render() {
+  // The entry as plain text, dated today. PR: optional leading '#', then digits only; anything else is no PR.
+  const today = () => new Date().toISOString().slice(0, 10);
+  function entry() {
     const summary = $('summary').value.trim().replace(/\s+/g, ' ');
     const prRaw = $('pr').value.trim();
     const m = /^#?(\d+)$/.exec(prRaw);
-    $('prnote').textContent = prRaw && !m ? 'PR number must be digits' : '';
-    const line = summary
-      ? '- ' + summary + (m ? ' (#' + m[1] + ')' : '')
-      : 'Add a summary to see the entry line.';
-    $('out').textContent = '### ' + $('type').value + '\n' + line;
+    return { summary, bad: Boolean(prRaw && !m), text: '### ' + $('type').value + ' (' + today() + ')\n'
+      + (summary ? '- ' + summary + (m ? ' (#' + m[1] + ')' : '') : 'Add a summary to see the entry line.') };
+  }
+  // The part the entry is added to: the page's last anchored part.
+  const last = () => parts[parts.length - 1] || null;
+  function render() {
+    const e = entry();
+    $('prnote').textContent = e.bad ? 'PR number must be digits' : '';
+    $('out').textContent = e.text;
+    $('add').disabled = !e.summary || !last() || !granted('artifact.write');
     reportHeight();
+  }
+
+  // The page as read: its anchored leaf parts, as text (DOMParser runs nothing; textContent, never markup).
+  function showPage(content) {
+    const list = $('page');
+    list.textContent = '';
+    parts = [];
+    if (content && content.type === 'html') {
+      const doc = new DOMParser().parseFromString(content.html, 'text/html');
+      for (const el of doc.querySelectorAll('[data-wid]')) {
+        if (el.querySelector('[data-wid]') || el.closest('[hidden], [data-wi-no-anchor]')) continue;
+        const text = el.textContent.trim();
+        if (!text) continue;
+        const li = document.createElement('li');
+        li.textContent = text;
+        list.appendChild(li);
+        parts.push({ anchor: el.getAttribute('data-wid'), text: el.textContent });
+      }
+    }
+    const t = last();
+    $('target').textContent = t ? 'The entry goes after: ' + t.text.trim().slice(0, 80) : 'Nothing on this page to add an entry to.';
+    render();
+  }
+
+  async function load() {
+    if (!granted('artifact.read')) { status('This editor may not read the page here.'); return; }
+    const r = await req('artifact.read', {});
+    if (!r.ok) { status('Not read: ' + ((r.error && r.error.code) || 'error')); return; }
+    head = r.payload.version;
+    showPage(r.payload.content);
+    status('Version ' + head + ' · fill in the form to add an entry');
+  }
+
+  // Add the entry to the end of the page's last part: ONE text edit, one version the host can undo.
+  async function add() {
+    const e = entry(), t = last();
+    if (!e.summary || !t) return;
+    $('add').disabled = true;
+    const r = await req('version.write', { base: head, ops: [{ op: 'text', anchor: t.anchor, value: t.text + '\n\n' + e.text, before: t.text }],
+      summary: ('Changelog entry: ' + e.summary).slice(0, 200) });
+    if (!r.ok) { status('Not added: ' + ((r.error && (r.error.message || r.error.code)) || 'error')); render(); return; }
+    $('summary').value = ''; $('pr').value = '';
+    await load();
+    status('Added as version ' + r.payload.version);
   }
 
   // A host-drawn card action with verb "plugin": no user activation, no request.
   function onAction(id) {
     if (id === 'clear') {
-      $('summary').value = ''; $('pr').value = ''; $('type').selectedIndex = 0;
+      $('summary').value = ''; $('pr').value = ''; $('type').value = 'Changed';
       render();
       return { handled: true, status: 'Form cleared' };
     }
@@ -134,6 +192,7 @@
 
   for (const id of ['type', 'summary', 'pr']) { $(id).addEventListener('input', render); $(id).addEventListener('change', render); }
   $('clear').addEventListener('click', () => { onAction('clear'); });
+  $('add').addEventListener('click', () => { add(); });
   $('full').addEventListener('click', () => {
     if (protocol >= 2) { if (SURFACES.full) send('ui.morph', { to: surface === 'full' ? 'card' : 'full' }); return; }
     if (granted('ui.fullscreen')) req('ui.fullscreen', {}); // protocol 1: the host's container
@@ -181,7 +240,7 @@
           }
           break;
         }
-        case 'artifact.changed': break; // the editor never reads the page
+        case 'artifact.changed': if (p.by !== 'this-editor') load(); break;
         // ── protocol 2 (only a host that negotiated 2 sends these) ──
         case 'host.surface': if (protocol >= 2 && ['card', 'options', 'full'].includes(p.surface)) setSurface(p.surface, p.mode); break;
         case 'host.mode': if (protocol >= 2 && typeof d.id === 'string') { setMode('simple'); answer(d.id, { mode }); } break;
@@ -211,6 +270,7 @@
       setSurface(['card', 'options', 'full'].includes(p.surface) ? p.surface : 'card');
     }
     render();
+    load();
   });
   parent.postMessage(env('plugin.ready', { editor: EDITOR, version: VERSION, protocol: [1, 2], surfaces: SURFACES }), '*');
 })();
