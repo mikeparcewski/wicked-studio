@@ -288,7 +288,7 @@ export function rigorRowWords(h: RigorRow): string {
   const what = h.trigger === 'intake' ? 'intake'
     : h.trigger === 'operator' || h.byKind === 'person' ? 'raised by you'
       : h.trigger === 'plugin' ? 'raised by a plugin'
-        : h.trigger === 'doc_edit' ? 'a working-document edit'
+        : h.trigger === 'doc_edit' ? 'a context-document edit'
           : h.trigger === 'toggle' ? 'power switch'
             : h.checkpoint !== null ? `checkpoint ${h.checkpoint}` : h.trigger === 'pre_handoff' ? 'before hand-off' : h.trigger.replace(/_/g, ' ');
   const score = h.trigger === 'intake' ? (h.actual !== null ? `, score ${h.actual}` : '')

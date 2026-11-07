@@ -18,7 +18,7 @@
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
 import { dashboard, emptyReport, foldRows, openGates, panelLine, phaseDashboard, phaseSummary, scopeOf, stepWord, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
-import { SECTION_EFFECT, SECTION_LABELS, SECTIONS, STEER_NOTE, addedLines, docLines, ownQuestionLines, pluginWritesLines, represents, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
+import { SECTION_LABELS, SECTIONS, addedLines, contextWords, sectionEffect, seenByWords, steerNote, docLines, ownQuestionLines, pluginWritesLines, represents, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
 
@@ -34,7 +34,7 @@ export function start(): void {
   // title and pin, so this frame draws only the body, and says its folded line with `panel.summary`.
   let inPanel = false;
   let saidSummary = '';
-  // The working document: null until read; `unsupported` when the service keeps none (an older crew).
+  // The context document: null until read; `unsupported` when the service keeps none (an older crew).
   let doc: DocView | null = null;
   let docState: 'reading' | 'ready' | 'unsupported' = 'reading';
   let docGranted = true;
@@ -166,7 +166,7 @@ export function start(): void {
     reportHeight();
   }
 
-  // ── the working document (spike 3) ─────────────────────────────────────────────────────────────────
+  // ── the context document (spike 3) ────────────────────────────────────────────────────────────────────
   //
   // One editor at a time, as a SESSION: the section, the version it was opened on (the save's base: a refresh never
   // moves it, so a change made meanwhile is a conflict, never an overwrite), the text it opened with, and whether a
@@ -207,7 +207,7 @@ export function start(): void {
       session.saving = false;
       if (r.ok) {
         const v = r.payload?.['version'];
-        docLine = { text: typeof v === 'number' ? `Saved as version ${v}. ${SECTION_EFFECT[session.section]}` : 'Nothing changed.', bad: false };
+        docLine = { text: typeof v === 'number' ? `Saved as version ${v}. ${sectionEffect(doc, session.section)}` : 'Nothing changed.', bad: false };
         // Close it only if it is still this session and nothing was typed while it saved; otherwise keep the newer text
         // as the draft, on the version just made.
         if (edit === session && currentDraft() === text) { edit = null; queueMicrotask(catchUp); }
@@ -233,7 +233,7 @@ export function start(): void {
   }
 
   /**
-   * The plugin's own lines in the working document, kept up to date from the run's events, written as itself:
+   * The plugin's own lines in the context document, kept up to date from the run's events, written as itself:
    * Decisions (each decision answered: gates, checkpoint pauses — who and what), Open questions (what waits on a person
    * now), Next (what the newest hand-off round left). One instance writes them (never one per phase). While a person has
    * a section open in the editor it waits (a write would move the version their save is based on), and catches up when
@@ -312,9 +312,15 @@ export function start(): void {
     syncDoc();
   }
 
+  /** A unit's step name in the thread's words, or null (an engine unit id is never shown). */
+  function stepOfOrd(ord: number): string | null {
+    const u = report.units.get(ord);
+    return u !== undefined && u.step !== null && !u.step.includes(':') ? stepWord(u) : null;
+  }
+
   function drawDoc(): void {
     const box = $('wd');
-    // The working document is the run's, shown once: in the run's block, or in a power run's Build block.
+    // The context document is the run's, shown once: in the run's block, or in a power run's Build block.
     // Not granted `doc.read` (a preview on sample events): there is no document to show, nor to say is missing.
     box.hidden = folded || !writesDoc(scope) || !docGranted;
     if (folded || !writesDoc(scope) || !docGranted) return;
@@ -324,19 +330,32 @@ export function start(): void {
     const caret = keep !== null ? [keep.selectionStart, keep.selectionEnd] as const : null;
     box.replaceChildren();
     const head = el('div', 'wd-head');
-    head.append(el('h3', 'wd-title', 'Working document'));
+    head.append(el('h3', 'wd-title', 'Context document'));
     if (doc?.doc != null) head.append(el('span', 'wd-ver', `version ${doc.doc.head}`));
-    box.append(head, el('p', 'wd-note', STEER_NOTE));
-    if (docState === 'unsupported') { box.append(el('p', 'sub', 'This version of studio’s service keeps no working document.')); return; }
+    box.append(head, el('p', 'wd-note', steerNote(doc)));
+    // (context-doc-switch) Whether the person's words are in every agent's context now, and who has seen them.
+    const ctxLine = contextWords(doc?.context);
+    if (ctxLine !== null) {
+      const p = el('p', `wd-ctx${ctxLine.bad ? ' bad' : ''}`, ctxLine.text);
+      p.setAttribute('data-testid', 'wd-context');
+      box.append(p);
+    }
+    const seen = seenByWords(doc?.context, stepOfOrd);
+    if (seen !== null) {
+      const p = el('p', 'wd-seen', seen);
+      p.setAttribute('data-testid', 'wd-seen-by');
+      box.append(p);
+    }
+    if (docState === 'unsupported') { box.append(el('p', 'sub', 'This version of studio’s service keeps no context document.')); return; }
     if (readFailed) {
-      const p = el('p', 'wd-status bad', 'The working document could not be read just now. ');
+      const p = el('p', 'wd-status bad', 'The context document could not be read just now. ');
       const retry = el('button', 'wd-btn', 'Try again') as HTMLButtonElement;
       retry.type = 'button';
       retry.addEventListener('click', () => { void readDoc(); });
       p.append(retry);
       box.append(p);
     }
-    if (docState === 'reading') { box.append(el('p', 'sub', 'Reading the working document…')); return; }
+    if (docState === 'reading') { box.append(el('p', 'sub', 'Reading the context document…')); return; }
     for (const id of SECTIONS) {
       const sec = el('div', 'wd-sec');
       sec.dataset['section'] = id;
@@ -374,12 +393,12 @@ export function start(): void {
         const cancel = el('button', 'wd-btn', 'Cancel') as HTMLButtonElement;
         cancel.type = 'button';
         cancel.addEventListener('click', closeEditor);
-        bar.append(saveBtn, cancel, el('span', 'wd-effect', SECTION_EFFECT[id]));
+        bar.append(saveBtn, cancel, el('span', 'wd-effect', sectionEffect(doc, id)));
         sec.append(ta, bar);
         if (keep !== null && hadFocus) { ta.focus(); if (caret !== null) ta.setSelectionRange(caret[0], caret[1]); }
       } else {
         const blank = text.trim() === '' && unsaved.length === 0;
-        const t = el('div', `wd-text${blank ? ' empty' : ''}`, blank ? (id === 'goal' && doc?.doc == null ? 'Not started. Edit a section to start the working document.' : 'Nothing yet.') : text);
+        const t = el('div', `wd-text${blank ? ' empty' : ''}`, blank ? (id === 'goal' && doc?.doc == null ? 'Not started yet. Edit a section to start the context document.' : 'Nothing yet.') : text);
         for (const line of unsaved) t.append(el('span', 'wd-gen', line));
         t.tabIndex = 0;
         t.setAttribute('role', 'button');
@@ -389,8 +408,8 @@ export function start(): void {
         sec.append(t);
         if (unsaved.length > 0) {
           sec.append(el('p', 'wd-gen-note', doc?.doc == null
-            ? 'From the job’s events. Not saved: no working document is started yet (a person’s first edit starts it).'
-            : 'From the job’s events. Not saved in the working document yet.'));
+            ? 'From the job’s events. Not saved: the context document is not started yet.'
+            : 'From the job’s events. Not saved in the context document yet.'));
         }
       }
       box.append(sec);
@@ -403,7 +422,7 @@ export function start(): void {
     if (doc !== null && doc.trail.length > 0) {
       const ol = el('ol', 'wd-trail');
       ol.setAttribute('aria-label', 'Versions');
-      for (const line of trailLines(doc, 6, (ord) => { const u = report.units.get(ord); return u !== undefined && u.step !== null && !u.step.includes(':') ? stepWord(u) : null; })) ol.append(el('li', null, line));
+      for (const line of trailLines(doc, 6, stepOfOrd)) ol.append(el('li', null, line));
       box.append(ol);
     }
   }
@@ -445,7 +464,7 @@ export function start(): void {
           const first = !report.loaded;
           report.loaded = true;
           if (foldRows(report, rows) || first) draw();
-          // The plugin's own lines in the working document follow the events (the replay too: an open job's past).
+          // The plugin's own lines in the context document follow the events (the replay too: an open job's past).
           syncDoc();
           break;
         }

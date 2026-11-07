@@ -154,7 +154,7 @@ describe('the thread says "You (by voice)"', () => {
 
   it('a working-document edit said by voice', async () => {
     const { steerRowWords } = await import('../src/components/session/RunThreadPlugin.js');
-    expect(steerRowWords('local', ['constraints'], { pickedUp: null, error: null, input: 'voice' })).toBe('You (by voice) edited the working document · Constraints · waiting for the next step');
-    expect(steerRowWords('local', ['constraints'], { pickedUp: null, error: null })).toBe('You edited the working document · Constraints · waiting for the next step');
+    expect(steerRowWords('local', ['constraints'], { pickedUp: null, error: null, input: 'voice' })).toBe('You (by voice) edited the context document · Constraints · waiting for the next step');
+    expect(steerRowWords('local', ['constraints'], { pickedUp: null, error: null })).toBe('You edited the context document · Constraints · waiting for the next step');
   });
 });
