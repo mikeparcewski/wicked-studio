@@ -173,7 +173,7 @@ with sync_playwright() as p:
               and target.startswith("The entry goes after: ") and shown[-1].startswith(target.removeprefix("The entry goes after: ")[:40]),
               shown=shown[:6], target=target)
 
-        # ── 3. used: fill the form, read the entry it renders ───────────────────────────────────────
+        # ── 4. used: fill the form, read the entry it renders ───────────────────────────────────────
         frame.locator("#type").select_option("Fixed")
         fill(frame, "#summary", "The export button no longer hangs")
         fill(frame, "#pr", "123")

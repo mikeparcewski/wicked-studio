@@ -175,7 +175,7 @@
     busy = true;
     render();
     const sent = { summary: $('summary').value, pr: $('pr').value };
-    const r = await req('version.write', { base: head, ops: [{ op: 'text', anchor: t.anchor, value: t.text + '\n\n' + e.text, before: t.text }],
+    const r = await req('version.write', { base: head, ops: [{ op: 'text', anchor: t.anchor, value: t.text.trim() + '\n\n' + e.text, before: t.text }],
       summary: ('Changelog entry: ' + e.summary).slice(0, 200) });
     busy = false;
     if (!r.ok) {
@@ -187,6 +187,9 @@
     }
     // Only what was sent is cleared: words typed while it saved stay.
     if ($('summary').value === sent.summary && $('pr').value === sent.pr) { $('summary').value = ''; $('pr').value = ''; }
+    // The version this write made is the head now: the host's echo of it (by this-editor, that head) reads nothing
+    // twice, and the read below is the one that shows it (pi on the diff: a second read used to supersede it).
+    head = r.payload.version;
     const ok = await load();
     if (ok) note('Added as version ' + r.payload.version);
   }
