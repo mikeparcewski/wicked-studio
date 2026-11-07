@@ -27,11 +27,77 @@ import type { DemoLaunchBody, DemoLaunchResponse, DemoStage, DemoChapter, DemoMa
 export type { DemoLaunchBody, DemoLaunchResponse, DemoStage, DemoChapter, DemoMarker, DemoFinding, DemoView };
 
 export const DEMO_PRESET = 'demo';
+/** (wicked-core#1249) The preset for an app whose data stays out of model context: no model review step, the person
+ *  reviews the take at the record step's own gate. */
+export const DEMO_HUMAN_REVIEW_PRESET = 'demo-human-review';
+const DEMO_PRESETS: readonly unknown[] = [DEMO_PRESET, DEMO_HUMAN_REVIEW_PRESET];
 
-/** A demo run: launched from the `demo` preset. Read structurally — studio's api-types predates `team_plan`. */
+/** A demo run: launched from a demo preset. Read structurally — studio's api-types predates `team_plan`. */
 export function isDemoRun(view: Pick<SessionView, 'session'>): boolean {
   const plan = (view.session as { team_plan?: { preset?: unknown } }).team_plan;
-  return plan?.preset === DEMO_PRESET;
+  return DEMO_PRESETS.includes(plan?.preset);
+}
+
+/** (wicked-core#1249) Who recorded a demo: the engine on this machine, in its jail (crew's `DemoView.producer`, read
+ *  structurally until studio's api-types has it). `null` from a daemon before that field, or before `record`. */
+export function demoProducer(view: DemoView): { kind: 'engine'; jail: string | null } | { kind: 'seat' } | null {
+  const p = (view as { producer?: { kind?: unknown; jail?: unknown } | null }).producer;
+  if (p?.kind === 'engine') return { kind: 'engine', jail: typeof p.jail === 'string' ? p.jail : null };
+  if (p?.kind === 'seat') return { kind: 'seat' };
+  return null;
+}
+
+/** One step of the approved storyline, in words (refs/storyline-json.md's closed list). */
+export interface StorylineChapter {
+  key: string;
+  title: string;
+  steps: string[];
+}
+
+function targetWords(t: unknown): string {
+  if (t === null || typeof t !== 'object') return 'something';
+  const o = t as Record<string, unknown>;
+  const where = o.in === 'content' ? ' in the app' : '';
+  if (typeof o.role === 'string') return `the ${o.role}${typeof o.name === 'string' ? ` “${o.name}”` : ''}${where}`;
+  for (const k of ['text', 'button', 'section', 'testId', 'css'] as const) {
+    if (typeof o[k] === 'string') return `${k === 'text' ? '' : `${k === 'testId' ? 'test id' : k} `}“${o[k] as string}”${where}`;
+  }
+  return 'something';
+}
+
+function stepWords(step: unknown): string[] {
+  if (step === null || typeof step !== 'object') return [];
+  const [verb, raw] = Object.entries(step as Record<string, unknown>)[0] ?? [];
+  const a = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+  switch (verb) {
+    case 'go': return [`Open ${str(a.path)}`];
+    case 'caption': return [`Caption: ${str(a.title)}`];
+    case 'point': return [`Point at ${targetWords(a.target)}${str(a.label) !== '' ? ` (“${str(a.label)}”)` : ''}`];
+    case 'unpoint': return [];
+    case 'click': return [`Click ${targetWords(a.target)}`];
+    case 'type': return [`Type “${str(a.text)}” into ${targetWords(a.target)}`];
+    case 'hold': return [];
+    case 'card': return [`Card: ${str(a.title)}`];
+    case 'waitVisible': return [`Wait for ${targetWords(a.target)}`];
+    case 'waitForPath': return [`Wait for ${str(a.path)}`];
+    case 'fast': return [`Time-lapse: ${str(a.label)}`];
+    case 'time': return Array.isArray(a.steps) ? (a.steps as unknown[]).flatMap(stepWords) : [];
+    default: return [];
+  }
+}
+
+/** The approved storyline (crew's `DemoView.storyline`) as chapters of plain-language steps; [] when there is none. */
+export function storylineChapters(view: DemoView): StorylineChapter[] {
+  const s = (view as { storyline?: unknown }).storyline;
+  const segs = s !== null && typeof s === 'object' ? (s as { segments?: unknown }).segments : undefined;
+  if (!Array.isArray(segs)) return [];
+  return segs.flatMap((g) => {
+    if (g === null || typeof g !== 'object') return [];
+    const o = g as Record<string, unknown>;
+    if (typeof o.key !== 'string') return [];
+    return [{ key: o.key, title: typeof o.title === 'string' ? o.title : o.key, steps: Array.isArray(o.steps) ? (o.steps as unknown[]).flatMap(stepWords) : [] }];
+  });
 }
 
 export function launchDemo(projectId: string, body: DemoLaunchBody): Promise<DemoLaunchResponse> {
