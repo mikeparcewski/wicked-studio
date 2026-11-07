@@ -48,3 +48,20 @@ button.wk-proposal-chip:focus-visible { outline: 2px solid var(--focus-ring, var
 /* The form's chip rows wrap inside the thread at any width (a phone keeps every helper in view). */
 .wk-proposal-answer .wk-prop-btns { flex-wrap: wrap; min-width: 0; }
 .wk-proposal-answer .wk-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+/* A5: the person's own edits a refine keeps — Keep it (default) or Let this change it, per edit. */
+.wk-proposal-kept { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--surface-base); }
+.wk-proposal-kept-head, .wk-proposal-kept-none { margin: 0 0 6px; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-proposal-kept-none { margin: 0 0 10px; color: var(--ink-muted); }
+.wk-proposal-kept-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.wk-proposal-kept-list[hidden] { display: none; }
+.wk-proposal-kept-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: var(--text-sm); min-width: 0; }
+.wk-proposal-kept-label { flex: 1 1 220px; min-width: 0; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-proposal-kept-choice { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.wk-proposal-kept-opt { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-body); cursor: pointer; }
+.wk-proposal-kept-opt input { margin: 0; accent-color: var(--accent); }
+.wk-proposal-kept-opt--on { border-color: var(--accent); color: var(--ink-high); background: color-mix(in oklab, var(--accent) 12%, transparent); }
+.wk-proposal-kept-opt:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wk-proposal-kept > .wk-btn { margin-top: 6px; }
+.wk-proposal-outcome { flex: 1 0 100%; margin: 0; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-proposal-outcome--failed { color: var(--ink-high); }

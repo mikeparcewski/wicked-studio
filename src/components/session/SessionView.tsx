@@ -1336,7 +1336,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               : e.kind === 'artifact' && ref.kind === 'chat'
                 ? (
                   <Fragment key={e.key}>
-                    <ArtifactProposalCard chatId={ref.chatId} entry={e.entry} seatName={who.name} stub={proposalIsStub(proposalsStub, proposalsStubOps, e.entry.proposal.kind)} onChanged={() => setChatTry((n) => n + 1)} />
+                    <ArtifactProposalCard chatId={ref.chatId} entry={e.entry} seatName={who.name} stub={proposalIsStub(proposalsStub, proposalsStubOps, e.entry.proposal.kind)} onChanged={() => setChatTry((n) => n + 1)}
+                      run={slots.get(e.entry.pid)?.run ?? null} />
                     {slots.has(e.entry.pid) && <ProposalSlotView slot={slots.get(e.entry.pid)!} sessionId={sessionId} />}
                   </Fragment>
                 )
