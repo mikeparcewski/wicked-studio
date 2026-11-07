@@ -125,7 +125,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged 
   };
   // An Apply of this card's preview from the bar or the Theme page: re-read the chat, so the card shows it answered
   // even without the live frame.
-  const savedThis = save.state === 'saved' && save.pid === entry.pid && save.recorded === true;
+  const savedThis = useAppearanceStore((s) => s.answered === entry.pid);
   useEffect(() => {
     if (savedThis) onChanged();
   }, [savedThis]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -351,7 +351,7 @@ function ProposalLines({ p, id, theme }: { p: ArtifactProposal; id?: string; the
           {theme.check.colors !== null && <Row k="Looks" testId="artifact-proposal-theme-swatches"><ThemeSwatches colors={theme.check.colors} /></Row>}
           <Row k="Changes" testId="artifact-proposal-theme">{theme.changes.length > 0 ? theme.changes.join(' · ') : p.theme.changes.join(', ')}</Row>
           <Row k="Contrast" testId="artifact-proposal-theme-contrast">
-            <span data-ok={theme.check.ok ? 'true' : 'false'} className={theme.check.ok ? undefined : 'wk-proposal-error'}>
+            <span data-ok={theme.check.ok ? 'true' : 'false'} className={theme.check.ok ? undefined : 'wk-proposal-contrast-low'}>
               {theme.check.ok ? contrastWords(theme.check) : `${contrastWords(theme.check)}${theme.check.ratios !== null ? ` · too low: ${theme.check.failing.join('; ')}` : ''}`}
             </span>
           </Row>

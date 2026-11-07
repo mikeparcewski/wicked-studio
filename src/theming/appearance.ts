@@ -285,6 +285,9 @@ interface AppearanceStore {
   removeLogo: () => void;
   /** (A7) The tab-local theme preview, or `null`. */
   preview: ThemePreview | null;
+  /** The last proposal whose Apply answer settled (recorded or refused), kept apart from the dismissible save status:
+   *  its card re-reads its chat. */
+  answered: string | null;
   save: ThemeSave;
   /** Preview a proposal on this tab: a second one while one is on adds its patch to the delta. */
   startPreview: (p: { name: string; seat: string; chatId: string; pid: string; patch: ThemePatch }) => void;
@@ -370,6 +373,7 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
 
   preview: null,
   save: IDLE,
+  answered: null,
 
   startPreview: ({ name, seat, chatId, pid, patch }) => {
     // While an Apply is saving, the preview it is saving is frozen.
@@ -443,6 +447,7 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
     }
     const settled = get().save;
     if (settled.state === 'saved' && settled.pid === pv.pid) set({ save: { ...settled, recorded: true, ...(recordError !== undefined ? { recordError } : {}) } });
+    set({ answered: pv.pid });
     return true;
   },
 

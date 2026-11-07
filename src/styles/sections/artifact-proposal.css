@@ -63,3 +63,4 @@ button.wk-proposal-chip:focus-visible { outline: 2px solid var(--focus-ring, var
 .wk-theme-proposal-sp { flex: 1 1 auto; }
 .wk-theme-proposal-twins { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .wk-theme-proposal .wk-proposal-error { margin: 0; }
+.wk-proposal-contrast-low { color: var(--ink-high); font-weight: var(--weight-strong); }

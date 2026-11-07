@@ -98,7 +98,7 @@ beforeEach(() => {
   putAnswer = () => ok({ settings: {} });
   setThemeProbe(probe as never);
   localStorage.clear();
-  useAppearanceStore.setState({ appearance: { ...DEFAULT_APPEARANCE, theme: 'wicked-light' }, preview: null, save: { state: 'idle', name: null } });
+  useAppearanceStore.setState({ appearance: { ...DEFAULT_APPEARANCE, theme: 'wicked-light' }, preview: null, save: { state: 'idle', name: null }, answered: null });
   keptBody = 404;
   chatFail = null;
   resetSettledProposals();
@@ -331,6 +331,12 @@ describe('the preview, Apply and Undo: edges (review r1)', () => {
     release(ok({ settings: {} }));
     await done;
     expect(appearanceOf()).toMatchObject({ theme: 'wicked-dark', accent_l: 70, site_name: 'Mine' });
+    // ...and reaches the daemon: the next write carries both the edit and the applied theme.
+    putAnswer = () => ok({ settings: {} });
+    await waitFor(() => {
+      const last = posts.filter((p) => p.path === '/settings').at(-1)?.body as { 'studio.appearance': Record<string, unknown> } | undefined;
+      expect(last?.['studio.appearance']).toMatchObject({ theme: 'wicked-dark', accent_l: 70, site_name: 'Mine' });
+    }, { timeout: 3000 });
   });
 
   it('a failed Apply puts back the saved edit’s write it cancelled', async () => {
@@ -468,6 +474,8 @@ describe('the theme card in a chat thread', () => {
     render(<ThemePreviewBar />);
     fireEvent.click(screen.getByTestId('theme-preview-apply'));
     await waitFor(() => expect(posts.some((p) => p.path === decidePath)).toBe(true));
+    // The person dismisses the Saved strip before the answer settles: the card still re-reads after it.
+    fireEvent.click(await screen.findByTestId('theme-preview-dismiss'));
     release();
     await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));
   });
