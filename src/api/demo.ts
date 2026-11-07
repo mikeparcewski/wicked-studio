@@ -9,8 +9,11 @@
  *   PUT  /runs/:id/demo/script     the presenter's script edit, at the plan gate only
  *
  * The two gates are the run's own (`POST /runs/:id/gate`): approve, or `request_changes` with the
- * note as `amend` — at the plan gate the planner runs again, at the review gate the recorder does
- * (one chapter).
+ * note as `amend` — at the plan gate the planner runs again; at the review gate the run goes back to
+ * the plan too, and the engine records a whole new take of the plan you approve next
+ * (DES-DEMO-RECORD-001 §3.6). There is no one-chapter re-record.
+ *
+ *   POST /runs/:id/demo/document   make (once) the run's editable cut: an interactive document of its segments
  *
  * ── CONTRACT ───────────────────────────────────────────────────────────────────────────────────
  * Types come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1); the hand-mirrored copies that lived
@@ -23,8 +26,8 @@ import { commitGateDecision, refreshGate, type DecisionOutcome } from '../board/
 import type { SessionView } from './types.js';
 
 /** The preset a demo run is launched from (`team_plan.preset`, api-types 0.46.0). */
-import type { DemoLaunchBody, DemoLaunchResponse, DemoStage, DemoChapter, DemoMarker, DemoFinding, DemoView } from 'wicked-crew-api-types';
-export type { DemoLaunchBody, DemoLaunchResponse, DemoStage, DemoChapter, DemoMarker, DemoFinding, DemoView };
+import type { DemoLaunchBody, DemoLaunchResponse, DemoStage, DemoChapter, DemoMarker, DemoFinding, DemoView, DemoDocumentResponse } from 'wicked-crew-api-types';
+export type { DemoLaunchBody, DemoLaunchResponse, DemoStage, DemoChapter, DemoMarker, DemoFinding, DemoView, DemoDocumentResponse };
 
 export const DEMO_PRESET = 'demo';
 /** (wicked-core#1249) The preset for an app whose data stays out of model context: no model review step, the person
@@ -116,6 +119,12 @@ export function demoFileUrl(runId: string, path: string): string {
   return `${apiBase()}/runs/${encodeURIComponent(runId)}/demo/file?path=${encodeURIComponent(path)}`;
 }
 
+/** Make (once) the run's editable cut (crew imports the recorded segments into an interactive document; only once
+ *  the run has completed or was cancelled). Idempotent: `created:false` when it was made before. */
+export function makeDemoDocument(runId: string): Promise<DemoDocumentResponse> {
+  return apiFetch<DemoDocumentResponse>(`/runs/${encodeURIComponent(runId)}/demo/document`, { method: 'POST', body: '{}' });
+}
+
 export function putDemoScript(runId: string, content: string): Promise<{ bytes: number }> {
   return apiFetch<{ bytes: number }>(`/runs/${encodeURIComponent(runId)}/demo/script`, {
     method: 'PUT',
@@ -139,15 +148,23 @@ export function approveDemoGate(runId: string): Promise<DecisionOutcome> {
   return decideDemoGate(runId, { approve: true });
 }
 
-/** Send the run back with a note: the plan gate re-runs the planner, the review gate the recorder. */
+/** Send the run back with a note: at either gate the planner runs again, and the engine records a new whole take of
+ *  the plan approved next. */
 export function sendBackDemo(runId: string, note: string): Promise<DecisionOutcome> {
   return decideDemoGate(runId, { approve: false, action: 'request_changes', amend: note });
 }
 
-/** The note that asks the recorder to re-record ONE chapter (the review gate's "Re-record"). */
-export function rerecordNote(chapter: DemoChapter, finding?: DemoFinding): string {
-  const why = finding !== undefined ? ` The review found: ${finding.issue} (at ${finding.at}).` : '';
-  return `Re-record only chapter ${chapter.key} ("${chapter.title}").${why} Leave every other segment as it is, restitch, and regenerate the contact sheets.`;
+/**
+ * The note "Record it again" sends back to the planner (the review gate's one re-record verb, operator ruling D3): the
+ * engine records every chapter again, from the plan approved next. With a chapter, it names what to change there.
+ * `private` (the app's rows stay out of model context, DES-DEMO-RECORD-001 §3.7): the finding's words are left out;
+ * the note carries the chapter's key, title and time only.
+ */
+export function rerecordNote(chapter?: Pick<DemoChapter, 'key' | 'title'>, finding?: DemoFinding, opts: { private?: boolean } = {}): string {
+  const at = finding !== undefined && finding.at !== '' ? ` (at ${finding.at})` : '';
+  const why = finding !== undefined && opts.private !== true ? ` The review found: ${finding.issue}${at}.` : at !== '' ? ` See the take${at}.` : '';
+  const where = chapter !== undefined ? ` Change the plan for chapter ${chapter.key} ("${chapter.title}").${why}` : why;
+  return `Record the demo again as a new take.${where} Every chapter is recorded again from the plan you approve next.`;
 }
 
 /** The step a stage belongs to, for the stepper: plan → record → review → watch. */
@@ -179,7 +196,7 @@ export const STAGE_LINE: Record<DemoStage, string> = {
   plan_gate: 'The plan is ready. Review the script and chapters before anything records.',
   recording: 'The recorder is filming each chapter as its own segment.',
   reviewing: 'A different seat is reviewing the contact sheets.',
-  review_gate: 'The review is in. Accept the recording, or re-record a chapter.',
+  review_gate: 'The take is ready to review. Accept it, or record it again.',
   done: 'The demo is ready to watch and share.',
   failed: 'The demo run stopped. Its files so far are below.',
 };

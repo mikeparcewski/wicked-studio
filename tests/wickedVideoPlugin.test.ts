@@ -22,6 +22,21 @@ const messages = (type: string) => seen.filter(m => m.type === type);
 const values = (tab: string) => messages('options.values').filter(m => m.payload?.['tab'] === tab).at(-1)?.payload?.['values'];
 const send = (type: string, payload: unknown, id?: string) => ch.port1.postMessage(env(type, payload, id));
 const settled = async (version: number) => vi.waitFor(() => { expect(root().dataset['head']).toBe(String(version)); expect(node('video-rename')?.hasAttribute('disabled') ?? false).toBe(false); });
+function demoRecordingCut(): DemoCut {
+  const rec: Recording = {
+    kind: 'demo-video', runId: 'run', step: null, planStep: null, state: 'judging', cause: null,
+    seat: { evaluator: 'Codex', builders: [] }, sealed: false, video: 'demo-video/demo.mp4', poster: null,
+    markers: [{ at: '0:00', sec: 0, title: 'Open' }, { at: '0:20', sec: 20, title: 'Assign' }],
+    script: null, exportable: true, scriptEditable: false, demoStage: 'review_gate', videoBytes: 10, document: null,
+    sheets: [{ name: 'chapters', path: 'review/chapters.png' }, { name: 'joins', path: 'review/joins.png' }, { name: 'end', path: 'review/end.png' }],
+    review: { by: 'model', verdict: 'changes', rejected: false, findings: [{ at: '0:07', chapter: '01-open', issue: '<b>Blank</b> app frame', verdict: 're-record', chapterKey: '01-open', atSec: 7 }] },
+    chapters: [['01-open', 'Open'], ['02-assign', 'Assign']].map(([key, title], i) => ({
+      key: key!, title: title!, blurb: '', index: i + 1, total: 2, startSec: i === 0 ? 0 : 20, verdict: null, recorded: true, takes: 1,
+      failedAtSec: null, failedAbsSec: null, failedFrame: null, proves: [], checks: [],
+    })),
+  };
+  return cutOfRecording(rec, 'Demo');
+}
 function recordingCut(): DemoCut {
   const rec: Recording = {
     kind: 'walkthrough', runId: 'run', step: 'review', planStep: 'plan', state: 'failed', cause: null,
@@ -60,7 +75,12 @@ async function open(protocol = 2, surface = 'card', size = surface === 'card' ? 
       if (initialSeek !== undefined) { send('host.selection', { anchors: [{ kind: 'time', atSec: initialSeek }] }); initialSeek = undefined; }
       result = await adapter.read();
     }
-    else if (d.type === 'artifact.media') result = refuseMedia ? { error: 'unsupported', message: 'No video' } : await adapter.media();
+    else if (d.type === 'artifact.media') {
+      const ref = d.payload?.['ref'] as { sheet?: string } | undefined;
+      result = refuseMedia ? { error: 'unsupported', message: 'No video' }
+        : typeof ref === 'object' && typeof ref.sheet === 'string' ? (ref.sheet === 'end' ? { error: 'unavailable', message: 'gone' } : { type: 'image/png', blob: new Blob(['png'], { type: 'image/png' }) })
+          : await adapter.media();
+    }
     else if (d.type === 'version.write') {
       const r = await adapter.read(); if ('error' in r) throw new Error(r.message);
       const checked = checkOps(d.payload?.['ops'] as unknown[], chapterInventoryOf(r.content));
@@ -186,7 +206,9 @@ describe('wicked-video protocol 2 surfaces and player', () => {
     await vi.waitFor(() => expect(seen.find(m => m.re === 'mode-1')?.payload).toEqual({ mode: 'advanced' }));
     expect(document.getElementById('inspectors')).not.toHaveAttribute('hidden'); expect(node('video-trim-in')).toBeTruthy();
     expect(document.getElementById('say')).toHaveAttribute('readonly'); expect(node('video-player')).toBe(player);
-    expect(document.getElementById('hint')?.textContent).toBe("Re-record this chapter: the host's button");
+    // A demo is recorded again as a whole take from the review gate (D3): no per-chapter re-record line.
+    expect(document.getElementById('hint')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/re-record this chapter/i);
     send('host.mode', { mode: 'simple' }, 'mode-2');
     await vi.waitFor(() => expect(seen.find(m => m.re === 'mode-2')?.payload).toEqual({ mode: 'simple' }));
   });
@@ -274,6 +296,34 @@ describe('chapter edits are one operation in one write', () => {
     await vi.waitFor(() => expect(root().dataset['surface']).toBe('options'));
     expect(document.getElementById('work')).toHaveAttribute('hidden'); expect(node('video-rename')).toBeTruthy();
     send('host.tab', { tab: 'captions' }); await vi.waitFor(() => expect(document.getElementById('chapters')).toHaveAttribute('hidden'));
+  });
+});
+
+describe('the Review tab (plugins S4: G8, G22)', () => {
+  it('shows the reviewer’s verdict and findings as Checks, and the contact sheets fetched as media by name', async () => {
+    await show(demoRecordingCut());
+    send('host.surface', { surface: 'options' }); send('host.tab', { tab: 'sheets' });
+    await vi.waitFor(() => expect(node('video-review')).not.toHaveAttribute('hidden'));
+    expect(document.getElementById('chapters')).toHaveAttribute('hidden');
+    expect(node('video-review-line').textContent).toBe('Codex asked for changes · 1 finding');
+    const finding = node('video-finding');
+    expect(finding.textContent).toBe('0:07 · Open · Record again: <b>Blank</b> app frame');
+    expect(finding.querySelector('b')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-testid="video-sheet"] img')).toHaveLength(2));
+    const asked = messages('artifact.media').map(m => (m.payload?.['ref'] as { sheet?: string })?.sheet).filter(Boolean);
+    expect(asked).toEqual(['chapters', 'joins', 'end']);
+    expect(document.querySelector('[data-sheet="end"] figcaption')?.textContent).toBe('The last frames · not available');
+    // The proof is the plugin's Checks in Advanced too.
+    send('host.surface', { surface: 'full', mode: 'advanced' });
+    await vi.waitFor(() => expect(document.getElementById('inspectors')).not.toHaveAttribute('hidden'));
+    expect(document.getElementById('proof')).not.toHaveAttribute('hidden');
+    expect(document.getElementById('proof-summary')?.textContent).toBe('FAIL · Failed at 7.0s');
+    expect(node('video-review')).toHaveAttribute('hidden');
+  });
+  it('an edited cut has no review of its own and says where the take’s review is', async () => {
+    send('host.surface', { surface: 'options' }); send('host.tab', { tab: 'sheets' });
+    await vi.waitFor(() => expect(node('video-review')).not.toHaveAttribute('hidden'));
+    expect(node('video-review-line').textContent).toMatch(/edited cut/);
   });
 });
 
