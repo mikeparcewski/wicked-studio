@@ -439,6 +439,7 @@ export function refineOutcomeLine(o: RefineOutcome): string | null {
 export function keptByAccepted(e: ProposalEntry): number | null {
   if (e.acceptingAt === undefined || e.accepted === undefined) return null;
   const ids = (e.accepted.protected ?? []).map((x) => x.id);
-  const allow = new Set(e.acceptedEdits?.allow ?? []);
+  const sent = e.acceptedEdits?.allow;
+  const allow = new Set(Array.isArray(sent) ? sent.filter((x): x is string => typeof x === 'string') : []);
   return ids.filter((id) => !allow.has(id)).length;
 }
