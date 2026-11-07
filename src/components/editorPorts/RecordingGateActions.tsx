@@ -252,8 +252,9 @@ function NoteLine({ note, testId }: { note: Note | null; testId: string }): Reac
  */
 function DemoReviewActions({ runId, units, cutOpens, onChanged }: { runId: string; units: readonly UnitLike[]; cutOpens: boolean; onChanged?: () => void }): React.ReactElement | null {
   const { load, reload } = useRecording(runId, 'demo-video', null, JSON.stringify(units));
-  /** The box is bound to the take it was opened on and to the gate instance open then (when one was known). */
-  const [open, setOpen] = useState<{ take: string; gate: { ord: number; receivedAt: number } | null; pick: string; text: string } | null>(null);
+  /** The box is bound to the take it was opened on and to the gate instance open then, as crew names it (read on open:
+   *  the live stream stamps a gate with the browser's clock, crew's read with its own, so only crew's read compares). */
+  const [open, setOpen] = useState<{ take: string; gate: { ord: number; receivedAt: number }; pick: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Note | null>(null);
   const live = useRef(true);
@@ -282,11 +283,21 @@ function DemoReviewActions({ runId, units, cutOpens, onChanged }: { runId: strin
     ...rec.chapters.filter((c) => !findings.some((f) => f.chapterKey === c.key)).map((c) => ({ id: `c:${c.key}`, label: `Chapter ${c.index}: ${c.title}`, note: rerecordNote({ key: c.key, title: c.title }) })),
   ];
   const editing = open !== null && open.take === take;
-  const startAgain = (): void => {
+  const startAgain = async (): Promise<void> => {
+    if (editing) { setOpen(null); return; }
+    if (busy) return;
     const first = choices.find((c) => c.id === 'f0') ?? choices[0]!;
     setNote(null);
-    const g = useGateStore.getState().gates[runId];
-    setOpen(editing ? null : { take, gate: g === undefined ? null : { ord: g.ord, receivedAt: g.receivedAt }, pick: first.id, text: first.note });
+    setBusy(true);
+    try {
+      await refreshGate(runId);
+      if (!live.current) return;
+      const g = useGateStore.getState().gates[runId];
+      if (g === undefined) { setNote({ tone: 'bad', text: 'The review gate is not open any more. Look at the run again.' }); return; }
+      setOpen({ take, gate: { ord: g.ord, receivedAt: g.receivedAt }, pick: first.id, text: first.note });
+    } finally {
+      if (live.current) setBusy(false);
+    }
   };
   const send = async (): Promise<void> => {
     if (busy || !editing) return;
@@ -300,7 +311,7 @@ function DemoReviewActions({ runId, units, cutOpens, onChanged }: { runId: strin
       if (!live.current) return;
       const gate = useGateStore.getState().gates[runId];
       const shown = recRef.current;
-      const sameGate = gate !== undefined && (open.gate === null || (gate.ord === open.gate.ord && gate.receivedAt === open.gate.receivedAt));
+      const sameGate = gate !== undefined && gate.ord === open.gate.ord && gate.receivedAt === open.gate.receivedAt;
       if (!sameGate || now.demoStage !== 'review_gate' || demoTakeFingerprint(now) !== open.take || shown === null || demoTakeFingerprint(shown) !== open.take) {
         reload();
         throw new Error('The take changed since this was shown — nothing was sent. Look at it again.');
@@ -369,7 +380,7 @@ function DemoReviewActions({ runId, units, cutOpens, onChanged }: { runId: strin
         </div>
       )}
       <div className="wk-walk-actions wk-demo-verbs">
-        <button type="button" data-testid="demo-record-again" disabled={busy} aria-expanded={editing} onClick={startAgain} className="wk-prop-btn wk-prop-btn--ghost">Record it again</button>
+        <button type="button" data-testid="demo-record-again" disabled={busy} aria-expanded={editing} onClick={() => void startAgain()} className="wk-prop-btn wk-prop-btn--ghost">Record it again</button>
       </div>
       {editing && (
         <div data-testid="demo-record-again-box" className="wk-walk-edit">
