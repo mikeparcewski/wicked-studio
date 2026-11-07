@@ -14,7 +14,8 @@ import { archivedOf, type AppStorePort, type StoreRefusal } from './appStore.js'
  *    burst and re-reads, so two tabs never both step from the same version.
  *  - Undo, redo and (G16) restoring an earlier version land the burst first, then change crew's head from it. One of
  *    them at a time: while one lands, an edit and another are refused, never re-based onto its result.
- *  - An archived app (G16) is read-only here as crew holds it: nothing is sent until it is restored from Archived.
+ *  - An archived app (G16) is read-only here as crew holds it: no new edit, move or restore is taken, and a burst still
+ *    waiting when the archive is seen is dropped, saying so (crew would refuse it), until it is restored from Archived.
  */
 
 export type SessionEvent =
@@ -73,6 +74,8 @@ export class AppSession {
   private inFlight = 0;
   /** An undo or a redo in flight (its burst landing first included): edits and a second move wait for it. */
   private moving = false;
+  /** (G16) Resolves when the undo, redo or restore in flight has settled (a chat send waits for it: it names the head). */
+  private moveDone: Promise<void> | null = null;
   /** Bumped whenever the head this session holds changes: an answer begun under an older generation is dropped. */
   private gen = 0;
   private listeners = new Set<(e: SessionEvent) => void>();
@@ -187,6 +190,12 @@ export class AppSession {
     // A landing already in flight is part of what this flush stands for: if crew refused it, so does this (codex r2).
     while (this.landing !== null) if (!(await this.landing)) return false;
     if (this.burst.length === 0 || this.app === null || this.working === null) return true;
+    // Archived meanwhile (another tab): crew refuses every change, so the burst is dropped here and the person told.
+    if (this.archived) {
+      this.adopt(this.app);
+      this.emit({ kind: 'failed', message: `Not saved: ${ARCHIVED_WHY}`, app: this.app });
+      return false;
+    }
     const base = this.app.head.version;
     const spec = this.working;
     const landedOps = this.burst.length;
@@ -252,6 +261,8 @@ export class AppSession {
     if (this.moving) return { ok: false, code: 'refused', message: 'an undo or redo, or a restore, is already landing' };
     if (base !== this.app.head.version) return { ok: false, code: 'head_moved', message: 'the app changed since', head: this.app.head.version };
     this.moving = true;
+    let done!: () => void;
+    this.moveDone = new Promise<void>((res) => { done = res; });
     try {
       if (!(await this.flush())) return { ok: false, code: 'refused', message: `Not ${what}: your last change did not land`, ...(this.app !== null ? { head: this.app.head.version } : {}) };
       while (this.landing !== null) if (!(await this.landing)) return { ok: false, code: 'refused', message: `Not ${what}: your last change did not land` };
@@ -266,7 +277,14 @@ export class AppSession {
       return { ok: false, code: r.code, message: words(r, what), ...(this.app !== null ? { head: this.app.head.version } : {}) };
     } finally {
       this.moving = false;
+      this.moveDone = null;
+      done();
     }
+  }
+
+  /** (G16) Wait for an undo, redo or restore in flight to settle (at once when there is none). */
+  async settled(): Promise<void> {
+    while (this.moveDone !== null) await this.moveDone;
   }
 
   /** The view closes: a burst the runtime was told is pending still lands (it is not dropped); nothing is heard after. */
@@ -281,7 +299,9 @@ export class AppSession {
  * (K5) Before a chat message is sent: land every pending edit, those made while one landed included, and answer the
  * head they made; null when an edit could not be saved or edits keep arriving (the message then waits).
  */
-export async function drainForSend(s: { readonly pending: number; readonly head: number; flush(): Promise<boolean> }, rounds = 6): Promise<number | null> {
+export async function drainForSend(s: { readonly pending: number; readonly head: number; flush(): Promise<boolean>; settled?: () => Promise<void> }, rounds = 6): Promise<number | null> {
+  // (G16) An undo, redo or restore in flight lands first: the turn is sent on the head it made, never on the one before.
+  await s.settled?.();
   for (let i = 0; i < rounds && s.pending > 0; i += 1) if (!(await s.flush())) return null;
   return s.pending > 0 ? null : s.head;
 }

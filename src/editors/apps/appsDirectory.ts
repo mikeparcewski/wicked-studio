@@ -118,7 +118,11 @@ export interface AppTileData {
 }
 
 export type AppsDirectory =
-  | { source: 'crew' | 'sample'; apps: AppTileData[]; /** Listed apps whose address is not an app slug: not shown. */ skipped: number }
+  | {
+    source: 'crew' | 'sample'; apps: AppTileData[]; /** Listed apps whose address is not an app slug: not shown. */ skipped: number;
+    /** (G16) crew archives: its records carry `archived` (read from the whole list, so it holds when every app is archived). */
+    archives?: boolean;
+  }
   | { source: 'error'; message: string };
 
 /** Crew's apps get a preview (one detail read each) up to this many; the rest show from the list alone. */
@@ -223,14 +227,15 @@ export type AppsScope = 'active' | 'archived' | 'all';
 
 /**
  * crew's list of apps (`GET /apps`, or one project's: `?project=`), its entries with an app slug, and how many were not.
- * `scope` (crew api-types 0.196.0 `?archived=`): an older daemon ignores the parameter and lists every app, so the
- * entries are also kept to the scope here by their own `archived` field (none of an older daemon's is archived).
+ * (G16, crew#1396) The list is read whole (`?archived=all`) and kept to `scope` here by each entry's own `archived`
+ * field: whether crew archives at all is then known even when every app is archived (codex/pi r1), and an older daemon,
+ * which ignores the parameter and has no such field, lists no app as archived. `archives`: some entry carries the field.
  */
-async function crewList(project: string | null, scope: AppsScope = 'active'): Promise<{ listed: Array<Record<string, unknown>>; skipped: number } | { error: string }> {
+async function crewList(project: string | null, scope: AppsScope = 'active'): Promise<{ listed: Array<Record<string, unknown>>; skipped: number; archives: boolean } | { error: string }> {
   let list: AppsListResponse;
   const q = new URLSearchParams();
   if (project !== null) q.set('project', project);
-  if (scope !== 'active') q.set('archived', scope);
+  q.set('archived', 'all');
   const qs = q.toString();
   try {
     list = await apiFetch<AppsListResponse>(qs === '' ? '/apps' : `/apps?${qs}`);
@@ -239,9 +244,16 @@ async function crewList(project: string | null, scope: AppsScope = 'active'): Pr
   }
   // crew's answer is data too: a list that is not a list is an error to retry, never an empty store.
   if (typeof list !== 'object' || list === null || !Array.isArray((list as { apps?: unknown }).apps)) return { error: 'crew’s list of apps was not a list' };
-  const entries = (list.apps as unknown[]).filter((a) => scope === 'all' || (scope === 'archived') === (archivedOf(a) != null));
+  const all = list.apps as unknown[];
+  const archives = all.some((a) => archivedOf(a) !== undefined);
+  const entries = all.filter((a) => inScope(scope, archivedOf(a)));
   const listed = entries.filter((a): a is Record<string, unknown> => typeof a === 'object' && a !== null && isAppSlug((a as Record<string, unknown>)['slug']));
-  return { listed, skipped: entries.length - listed.length };
+  return { listed, skipped: entries.length - listed.length, archives };
+}
+
+/** Whether an app whose archived state is `archived` belongs in `scope` (unknown = active: an older daemon's). */
+function inScope(scope: AppsScope, archived: { at: number; by: string } | null | undefined): boolean {
+  return scope === 'all' || (scope === 'archived') === (archived != null);
 }
 
 /**
@@ -260,12 +272,15 @@ export async function loadAppsDirectory(hasStore: boolean, project: string | nul
   }
   const l = await crewList(project, scope);
   if ('error' in l) return { source: 'error', message: l.error };
-  const apps = await Promise.all(l.listed.map(async (a, i): Promise<AppTileData> => {
+  const read = await Promise.all(l.listed.map(async (a, i): Promise<AppTileData> => {
     const slug = a['slug'] as string;
     if (i >= PREVIEW_LIMIT) return summaryTile(a, slug, null);
     return (await crewTile(a, slug)).tile;
   }));
-  return { source: 'crew', apps, skipped: l.skipped };
+  // An app archived or restored (in another tab) between the list and its detail read is in the other list now: the
+  // detail is newer, so it decides (codex r1).
+  const apps = read.filter((t) => inScope(scope, t.archived));
+  return { source: 'crew', apps, skipped: l.skipped, archives: l.archives };
 }
 
 /** One app Report shows: its card, or `null` when crew no longer has it (gone); its project from crew's record. */

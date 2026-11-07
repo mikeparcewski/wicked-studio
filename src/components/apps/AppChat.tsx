@@ -54,7 +54,9 @@ function dropDraft(slug: string): void {
   try { sessionStorage.removeItem(DRAFT_KEY(slug)); } catch { /* nothing kept */ }
 }
 
-function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed, pending }: {
+function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed, pending, undoOff = false }: {
+  /** (G16) No Undo here (a phone: view + chat only). */
+  undoOff?: boolean;
   t: AppTurnRecord; view: SessionView | null; detail: AppDetail; onUndo: () => void; navigate: (p: string) => void; now: number; latestLanded: boolean;
   /** The person's own edits still saving: a turn's Undo waits (it would undo those instead). */
   pending: number;
@@ -87,7 +89,7 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
     );
   }
   if (t.state === 'landed') {
-    const undoable = !framed && pending === 0 && latestLanded && detail.head.version === t.version && detail.history.canUndo && detail.turn == null;
+    const undoable = !framed && !undoOff && pending === 0 && latestLanded && detail.head.version === t.version && detail.history.canUndo && detail.turn == null;
     return (
       <div className="wk-appchat-reply wk-appchat-reply--landed" data-testid="app-chat-landed">
         <p className="wk-appchat-change" data-testid="app-chat-change">{changeLine(t)}</p>
@@ -111,7 +113,9 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
   );
 }
 
-export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend, pending = 0 }: {
+export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend, pending = 0, undoOff = false }: {
+  /** (G16, operator ruling D5) A phone is view + chat: the chat offers no Undo there. */
+  undoOff?: boolean;
   slug: string;
   detail: AppDetail | null;
   runs: readonly SessionView[];
@@ -223,7 +227,7 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
                 <p className="wk-appchat-about">{t.about.map((id) => <span key={id} className="wk-source-chip">about: {componentWords(detail.spec, id) ?? id}</span>)}</p>
               )}
             </div>
-            <TurnReply t={t} view={runs.find((v) => v.session.id === t.runId) ?? null} detail={detail} onUndo={onUndo} navigate={navigate} now={now} latestLanded={t.runId === latestLandedRun} framed={framed} pending={pending} />
+            <TurnReply t={t} view={runs.find((v) => v.session.id === t.runId) ?? null} detail={detail} onUndo={onUndo} navigate={navigate} now={now} latestLanded={t.runId === latestLandedRun} framed={framed} pending={pending} undoOff={undoOff} />
           </article>
         ))}
       </div>

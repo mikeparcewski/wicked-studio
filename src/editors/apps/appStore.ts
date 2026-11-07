@@ -6,14 +6,15 @@ import type { AppCheckFinding, AppDetail, AppDetailResponse, AppErrorBody, AppLa
  * Where an app's versions live (DES-APPS-001 §6.4, §7.6; slice K4). Two stores answer the same calls:
  *
  *  - {@link CrewAppStore}: crew's app store, `GET /apps/:app`, `POST /apps/:app/edits | undo | redo | restore` (K2a,
- *    crew main), and (plugins G16, crew api-types 0.196.0) `GET /apps/:app/versions/:n`, an earlier version as it was.
+ *    crew main), and (plugins G16, crew#1396; api-types 0.196.0 once published, read field by field until then)
+ *    `GET /apps/:app/versions/:n`, an earlier version as it was.
  *    crew keeps the undo pointer, so every tab agrees, and refuses a stale base with `409 stale_base`.
  *  - {@link SampleAppStore}: an in-memory store with the SAME rules, for the editor test page on a daemon that has
  *    no app store (it stands where the sample page stands for the page editor). It never reaches a source; tabs of
  *    the same browser share it through `localStorage`, so they disagree exactly as crew's would refuse them.
  */
 
-/** `app_archived` (crew api-types 0.196.0): a change to an archived app. */
+/** `app_archived` (crew#1396; api-types 0.196.0 once published): a change to an archived app. */
 export type StoreRefusal = { ok: false; code: AppErrorBody['code'] | 'app_archived' | 'unavailable'; message: string; head?: number; findings?: AppCheckFinding[] };
 export type StoreResult = { ok: true; app: AppDetail; landed: AppVersion } | StoreRefusal;
 
@@ -54,8 +55,9 @@ export function versionViewOf(body: unknown, asked: number): AppVersionView | nu
   const r = v as { version?: unknown; spec?: unknown; receipt?: unknown };
   const spec = r.spec as AppSpec | undefined;
   if (typeof spec !== 'object' || spec === null || !Array.isArray(spec.pages) || !Array.isArray(spec.queries) || !Array.isArray(spec.actions)) return null;
-  const record = typeof r.version === 'object' && r.version !== null && (r.version as AppVersion).version === asked ? r.version as AppVersion : null;
-  if (record === null) return null;
+  // The record may be null (crew's answer for a commit that is no version); when there is one it must be the version asked.
+  const record = typeof r.version === 'object' && r.version !== null ? r.version as AppVersion : null;
+  if (record !== null && record.version !== asked) return null;
   const kind = typeof r.receipt === 'object' && r.receipt !== null ? (r.receipt as { kind?: unknown }).kind : undefined;
   if (kind !== 'you' && kind !== 'reviewed' && kind !== 'restored') return null;
   return { version: asked, spec, record, receipt: kind };

@@ -29,7 +29,7 @@ export { appPath } from './AppCard.js';
  *
  * (plugins G16, operator ruling D5) Archive with Restore, never a delete: a card's ⋯ menu holds Archive, which hides the
  * app from this list (crew keeps it, closed to changes); "Archived" lists those, each with Restore. A phone is view +
- * chat (the approved exception): its cards offer no Edit, Archive or Restore.
+ * chat (the approved exception): its cards offer no Edit, menu (Show on Report, Archive) or Restore.
  */
 
 /** A window under 640 px: the phone layout, where an app is view + chat only. */
@@ -76,8 +76,8 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   const [queriesOn, setQueriesOn] = useState(false);
   /** (G16) Which apps the page lists: the active ones, or the archived ones. */
   const [scope, setScope] = useState<'active' | 'archived'>('active');
-  /** What the last Archive or Restore did (with the way back), or why it did not. */
-  const [line, setLine] = useState<{ text: string; undo: AppTileData | null; fail: boolean } | null>(null);
+  /** What the last Archive or Restore did, with its way back (the inverse, fixed when it landed), or why it did not. */
+  const [line, setLine] = useState<{ text: string; undo: { tile: AppTileData; to: boolean } | null; fail: boolean } | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const phone = usePhone();
   // A framed studio changes nothing (§7.1, S8): no app is made from inside another page.
@@ -123,7 +123,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
     try {
       const r = await setArchived(t.slug, to);
       if (!r.ok) { setLine({ text: `${to ? 'Not archived' : 'Not restored'}: ${r.message}`, undo: null, fail: true }); return; }
-      setLine({ text: to ? `Archived “${t.name}”. It is under Archived; nothing was deleted.` : `Restored “${t.name}” to Apps.`, undo: undoable ? t : null, fail: false });
+      setLine({ text: to ? `Archived “${t.name}”. It is under Archived; nothing was deleted.` : `Restored “${t.name}” to Apps.`, undo: undoable ? { tile: t, to: !to } : null, fail: false });
       setAttempt((n) => n + 1);
     } finally {
       setActing(null);
@@ -133,8 +133,9 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   const crewDir = dir !== null && dir.source === 'crew';
   useEffect(() => { if (crewDir) void useReportShown.getState().loadShown(); }, [crewDir]);
   const apps = dir !== null && dir.source !== 'error' ? dir.apps : [];
-  // Archive is offered only where crew says it archives (its records carry `archived`); Archived is listed with it.
-  const archives = dir !== null && dir.source === 'crew' && (scope === 'archived' || apps.some((t) => t.archived !== undefined));
+  // Archive is offered only where crew says it archives (its records carry `archived`, read from the whole list, so the
+  // switch stays when every app is archived); Archived is listed with it.
+  const archives = dir !== null && dir.source === 'crew' && (scope === 'archived' || dir.archives === true);
   const skipped = dir !== null && dir.source !== 'error' ? dir.skipped : 0;
   // Opened from a Report: the cards (and Edit) carry the way back on to the app, whose crumb then leads there.
   const carry = back !== null ? origin : null;
@@ -170,7 +171,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
       {line !== null && (
         <p className={`wk-apps-dash-line${line.fail ? ' wk-apps-dash-line--fail' : ''}`} data-testid="apps-archive-line" aria-live="polite">
           {line.text}
-          {line.undo !== null && !phone && !framed && <> <button type="button" className="wk-btn wk-btn--link" data-testid="apps-archive-undo" disabled={acting !== null} onClick={() => void setTileArchived(line.undo!, scope === 'active' ? false : true, false)}>Undo</button></>}
+          {line.undo !== null && !phone && !framed && <> <button type="button" className="wk-btn wk-btn--link" data-testid="apps-archive-undo" disabled={acting !== null} onClick={() => void setTileArchived(line.undo!.tile, line.undo!.to, false)}>Undo</button></>}
         </p>
       )}
       {turnsOn && dir !== null && dir.source === 'crew' && scope === 'active' && (
@@ -211,10 +212,11 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
           ) : (
             <AppCard key={t.slug} tile={t} editor={editor} navigate={navigate} scheduler={dir?.source === 'crew' && queriesOn ? scheduler : null} origin={carry}
               badge={!t.sample && shown.includes(t.slug) ? <span className="wk-pill wk-pill--good" data-testid="apps-card-onreport">On Report</span> : null}
-              menu={dir?.source === 'crew' && !t.sample ? (
+              // A phone is view + chat: no menu (Show on Report and Archive both change something).
+              menu={dir?.source === 'crew' && !t.sample && !phone ? (
                 <>
                   <ShowOnReport slug={t.slug} name={t.name} projectId={t.projectId ?? null} variant="menu" navigate={navigate} framed={framed} />
-                  {t.archived === null && !phone && !framed && <ArchiveItem tile={t} onArchive={(x) => void setTileArchived(x, true, true)} />}
+                  {t.archived === null && !framed && <ArchiveItem tile={t} onArchive={(x) => void setTileArchived(x, true, true)} />}
                 </>
               ) : null}
               actions={(

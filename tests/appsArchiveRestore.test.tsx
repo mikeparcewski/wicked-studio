@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppDetail, AppSpec } from '../src/api/types.js';
 import { AppsPage } from '../src/components/apps/AppsPage.js';
 import { AppHostView } from '../src/components/editorHost/AppHostView.js';
-import { AppSession } from '../src/editors/apps/appSession.js';
+import { AppSession, drainForSend } from '../src/editors/apps/appSession.js';
 import { SampleAppStore, archivedOf, versionViewOf, type AppStorePort, type StoreResult } from '../src/editors/apps/appStore.js';
 import { ARCHIVED_NOTE, loadAppTiles, loadAppsDirectory } from '../src/editors/apps/appsDirectory.js';
 import { SAMPLE_APPS } from '../src/editors/apps/samples.js';
@@ -80,6 +80,62 @@ describe('restore an earlier version: through the session’s one-change-at-a-ti
     expect(await first).toMatchObject({ ok: true, version: 4 });
   });
 
+  it('the other way round: a restore is refused while an undo lands, and nothing is sent for it', async () => {
+    const { store, s } = await threeVersions();
+    let release!: () => void;
+    const gate = new Promise<void>((res) => { release = res; });
+    const realMove = store.move.bind(store);
+    vi.spyOn(store, 'move').mockImplementationOnce(async (d, b) => { await gate; return realMove(d, b); });
+    const restore = vi.spyOn(store, 'restore');
+    const undo = s.move('undo', 3);
+    await Promise.resolve();
+    expect(await s.restore(1, 3)).toMatchObject({ ok: false, message: expect.stringMatching(/already landing/) });
+    release();
+    expect(await undo).toMatchObject({ ok: true });
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it('an edit landing in flight: Restore waits for it, then restores on the head it made; if it is refused nothing is restored', async () => {
+    const { store, s } = await threeVersions();
+    let release!: () => void;
+    const gate = new Promise<void>((res) => { release = res; });
+    const realEdit = store.edit.bind(store);
+    vi.spyOn(store, 'edit').mockImplementationOnce(async (b, sp, sum) => { await gate; return realEdit(b, sp, sum); });
+    const restore = vi.spyOn(store, 'restore');
+    s.edit(3, [{ op: 'component-move', id: 'by_region', x: 6, y: 9 }]);
+    const landing = s.flush();
+    const r = s.restore(1, 3);
+    await Promise.resolve();
+    expect(restore).not.toHaveBeenCalled();
+    release();
+    await landing;
+    expect(await r).toMatchObject({ ok: true, version: 5 });
+    expect(restore).toHaveBeenCalledWith(4, 1);
+    // A refused landing: nothing is restored.
+    vi.spyOn(store, 'edit').mockResolvedValueOnce({ ok: false, code: 'stale_base', message: 'moved', head: 5 });
+    s.edit(5, [{ op: 'component-move', id: 'weekly', x: 0, y: 2 }]);
+    expect(await s.restore(2, 5)).toMatchObject({ ok: false, message: expect.stringMatching(/did not land/) });
+    expect(restore).toHaveBeenCalledTimes(1);
+  });
+
+  it('a chat message sent while a restore lands waits for it and names the head the restore made (codex r1)', async () => {
+    const { store, s } = await threeVersions();
+    let release!: () => void;
+    const gate = new Promise<void>((res) => { release = res; });
+    const real = store.restore.bind(store);
+    vi.spyOn(store, 'restore').mockImplementationOnce(async (b, v) => { await gate; return real(b, v); });
+    const r = s.restore(1, 3);
+    await Promise.resolve();
+    let base: number | null | undefined;
+    const sent = drainForSend(s).then((b) => { base = b; });
+    await new Promise((res) => setTimeout(res, 5));
+    expect(base).toBeUndefined();
+    release();
+    await r;
+    await sent;
+    expect(base).toBe(4);
+  });
+
   it('a stale base is head_moved before anything is sent; a turn in flight refuses it; crew’s 409 re-reads the head', async () => {
     const { store, s } = await threeVersions();
     const restore = vi.spyOn(store, 'restore');
@@ -113,6 +169,25 @@ describe('restore an earlier version: through the session’s one-change-at-a-ti
     expect(await s.move('undo', 1)).toMatchObject({ ok: false, message: expect.stringMatching(/archived/) });
     expect(port.edit).not.toHaveBeenCalled();
     expect(port.restore).not.toHaveBeenCalled();
+  });
+
+  it('a burst still waiting when the archive is seen is dropped, saying so, and never sent (codex r1)', async () => {
+    const store = new SampleAppStore('esc', SPEC(), new MemStorage());
+    const base = await store.detail();
+    let answer: AppDetail = { ...base, archived: null } as AppDetail;
+    const edit = vi.fn();
+    const port: AppStorePort = { slug: 'esc', kind: 'sample', detail: async () => structuredClone(answer), edit, move: vi.fn(), restore: vi.fn(), readVersion: vi.fn() };
+    const s = new AppSession(port, { burstMs: 1_000 });
+    await s.load();
+    const failed: string[] = [];
+    s.on((e) => { if (e.kind === 'failed') failed.push(e.message); });
+    expect(s.edit(1, [{ op: 'component-move', id: 'weekly', x: 0, y: 9 }])).toMatchObject({ ok: true });
+    answer = { ...base, archived: { at: 2, by: 'sam' } } as AppDetail;
+    await s.refresh();
+    expect(await s.flush()).toBe(false);
+    expect(edit).not.toHaveBeenCalled();
+    expect(s.pending).toBe(0);
+    expect(failed.at(-1)).toMatch(/Not saved: the app is archived/);
   });
 
   it('archived or restored in another tab: a refresh takes the new state though the head did not move', async () => {
@@ -192,7 +267,7 @@ describe('/apps: Archive with Restore (never a delete)', () => {
       if (c.path === '/health') return { status: 'ok', capabilities: CAPS };
       if (c.path === '/editors') return EDITORS;
       if (c.path === '/editors/wicked-apps/grants') return { grants: [] };
-      if (c.path === '/apps') return { apps: [{ slug: 'desk', name: 'Desk', archived: archived ? { at: 1, by: 'you' } : null }, { slug: 'ops', name: 'Ops', archived: null }].filter((a) => (c.query.includes('archived=archived') ? a.archived !== null : a.archived === null)) };
+      if (c.path === '/apps') return { apps: [{ slug: 'desk', name: 'Desk', archived: archived ? { at: 1, by: 'you' } : null }, { slug: 'ops', name: 'Ops', archived: null }] };
       if (c.path === '/apps/desk/archive' && c.method === 'POST') { archived = true; return { app: detail('desk', { archived: { at: 1, by: 'you' } }) }; }
       if (c.path === '/apps/desk/unarchive' && c.method === 'POST') { archived = false; return { app: detail('desk') }; }
       if (c.path === '/apps/desk') return { app: detail('desk', archived ? { archived: { at: 1, by: 'you' } } : {}) };
@@ -219,7 +294,7 @@ describe('/apps: Archive with Restore (never a delete)', () => {
       if (c.path === '/health') return { status: 'ok', capabilities: CAPS };
       if (c.path === '/editors') return EDITORS;
       if (c.path === '/editors/wicked-apps/grants') return { grants: [] };
-      if (c.path === '/apps') return { apps: c.query.includes('archived=archived') ? [{ slug: 'desk', name: 'Desk', archived: { at: 1, by: 'you' } }] : [{ slug: 'ops', name: 'Ops', archived: null }] };
+      if (c.path === '/apps') return { apps: [{ slug: 'desk', name: 'Desk', archived: { at: 1, by: 'you' } }, { slug: 'ops', name: 'Ops', archived: null }] };
       if (c.path === '/apps/desk') return { app: detail('desk', { archived: { at: 1, by: 'you' } }) };
       if (c.path === '/apps/ops') return { app: detail('ops') };
       if (c.path === '/apps/desk/unarchive') return { app: detail('desk') };
@@ -229,7 +304,8 @@ describe('/apps: Archive with Restore (never a delete)', () => {
     await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
     fireEvent.click(screen.getByTestId('apps-scope-archived'));
     await waitFor(() => expect(screen.queryByTestId('apps-card-archived')).not.toBeNull());
-    expect(calls.some((c) => c.path === '/apps' && c.query === '?archived=archived')).toBe(true);
+    // The whole list is read and kept to the scope here (so archive support is known when every app is archived).
+    expect(calls.filter((c) => c.path === '/apps').every((c) => c.query === '?archived=all')).toBe(true);
     const card = screen.getAllByTestId('apps-card')[0]!;
     expect(within(card).queryByTestId('apps-card-edit')).toBeNull();
     expect(within(card).queryByTestId('apps-card-share')).toBeNull();
@@ -269,8 +345,61 @@ describe('/apps: Archive with Restore (never a delete)', () => {
     render(<AppsPage navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
     expect(screen.queryByTestId('apps-card-edit')).toBeNull();
+    // No menu: Show on Report and Archive both change something (codex/pi r1).
+    expect(screen.queryByTestId('apps-card-menu')).toBeNull();
+  });
+
+  it('every app archived: the Archived switch is still there, so they can be restored (codex/pi r1)', async () => {
+    crew((c) => {
+      if (c.path === '/health') return { status: 'ok', capabilities: CAPS };
+      if (c.path === '/editors') return EDITORS;
+      if (c.path === '/editors/wicked-apps/grants') return { grants: [] };
+      if (c.path === '/apps') return { apps: [{ slug: 'desk', name: 'Desk', archived: { at: 1, by: 'you' } }] };
+      if (c.path === '/apps/desk') return { app: detail('desk', { archived: { at: 1, by: 'you' } }) };
+      return undefined;
+    });
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('apps-empty')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('apps-scope-archived'));
+    await waitFor(() => expect(screen.getAllByTestId('apps-card-archived')).toHaveLength(1));
+  });
+
+  it('an app archived between the list and its detail read shows in the list its detail says (codex r1)', async () => {
+    crew((c) => {
+      if (c.path === '/apps') return { apps: [{ slug: 'desk', name: 'Desk', archived: null }, { slug: 'ops', name: 'Ops', archived: null }] };
+      if (c.path === '/apps/desk') return { app: detail('desk', { archived: { at: 2, by: 'sam' } }) };
+      if (c.path === '/apps/ops') return { app: detail('ops') };
+      return undefined;
+    });
+    expect(await loadAppsDirectory(true)).toMatchObject({ source: 'crew', apps: [{ slug: 'ops' }], archives: true });
+  });
+
+  it('Undo after an archive that landed once the person switched lists still un-archives (the inverse is fixed)', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, 'http://studio.local');
+      const path = url.pathname.replace(/^\/api\/v1/u, '');
+      const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if ((init?.method ?? 'GET') === 'POST') calls.push(path);
+      if (path === '/health') return json({ status: 'ok', capabilities: CAPS });
+      if (path === '/editors') return json(EDITORS);
+      if (path === '/apps') return json({ apps: [{ slug: 'desk', name: 'Desk', archived: null }] });
+      if (path === '/apps/desk') return json({ app: detail('desk') });
+      if (path === '/apps/desk/archive') { await held; return json({ app: detail('desk', { archived: { at: 1, by: 'you' } }) }); }
+      if (path === '/apps/desk/unarchive') return json({ app: detail('desk') });
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch);
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
     fireEvent.click(screen.getByTestId('apps-card-menu'));
-    expect(screen.queryByTestId('apps-card-archive')).toBeNull();
+    fireEvent.click(screen.getByTestId('apps-card-archive'));
+    fireEvent.click(screen.getByTestId('apps-scope-archived'));
+    release();
+    await waitFor(() => expect(screen.getByTestId('apps-archive-undo')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('apps-archive-undo'));
+    await waitFor(() => expect(calls).toStrictEqual(['/apps/desk/archive', '/apps/desk/unarchive']));
   });
 
   it('Report: an archived app is not "gone": its card shows, saying it is archived', async () => {
@@ -322,6 +451,23 @@ describe('the app host: Versions with Restore, an archived app, a phone', () => 
     await waitFor(() => expect(screen.getByTestId('apps-status').textContent).toMatch(/Restored v1: now v4/));
   });
 
+  it('focus: the confirmation takes it; Escape closes it back to that Restore…, then the panel back to Versions (codex/pi r1)', async () => {
+    const d = detail('desk');
+    hostCrew(d, (c) => (c.path === '/apps/desk/versions/1' ? { version: { slug: 'desk', version: version(1), commit: 'c1', tree: 't1', receipt: { kind: 'you' }, spec: SPEC(), lock: {}, queryText: {} } } : undefined));
+    openHost();
+    await waitFor(() => expect((screen.getByTestId('apps-versions-open') as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('apps-versions-open'));
+    const row = screen.getAllByTestId('apps-versions-row').find((r) => r.getAttribute('data-version') === '1')!;
+    expect(within(row).getByTestId('apps-version-restore').getAttribute('aria-label')).toBe('Restore v1…');
+    fireEvent.click(within(row).getByTestId('apps-version-restore'));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('apps-version-confirm')));
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    await waitFor(() => expect(document.activeElement?.getAttribute('aria-label')).toBe('Restore v1…'));
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(screen.queryByTestId('apps-versions')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByTestId('apps-versions-open'));
+  });
+
   it('while a chat turn runs, Restore is off and says why', async () => {
     hostCrew(detail('desk', { turn: { runId: 'apps-desk-1', startedAt: 1, base: 3, actor: 'you' } }));
     openHost();
@@ -343,16 +489,30 @@ describe('the app host: Versions with Restore, an archived app, a phone', () => 
     expect((screen.getByTestId('apps-mode-edit') as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it('a phone is view + chat only: no Edit/Preview switch, no Undo, Redo or Versions, and the line says where they are', async () => {
+  it('a phone is view + chat only: no Edit switch, Undo, Redo, Versions, chat Undo or Show on Report; nothing is posted (codex r1)', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('max-width'), media: q, addEventListener: () => undefined, removeEventListener: () => undefined }));
-    hostCrew(detail('desk'));
-    openHost();
-    await waitFor(() => expect(screen.getByTestId('apps-version')).toBeTruthy());
+    const landed = { runId: 'apps-desk-aa', at: 1, actor: 'you', message: 'add a chart', about: [], base: 2, state: 'landed', endedAt: Date.now() - 1_000, version: 3, change: 'Added a chart', summary: 'Added a chart', builder: 'claude', reviewer: 'codex', code: null, reason: null };
+    const calls = hostCrew(detail('desk', { turns: [landed] }));
+    render(<AppHostView editor="wicked-apps" version="0.13.0" sha={'a'.repeat(64)} app="desk" sample={null} caps={{ apps: { ...CAPS.apps, turns: true } }} />);
+    await waitFor(() => expect(screen.getByTestId('app-chat-landed')).toBeTruthy());
+    expect(screen.queryByTestId('app-chat-undo')).toBeNull();
     expect(screen.queryByTestId('apps-mode-edit')).toBeNull();
     expect(screen.queryByTestId('apps-undo')).toBeNull();
     expect(screen.queryByTestId('apps-redo')).toBeNull();
     expect(screen.queryByTestId('apps-versions-open')).toBeNull();
     expect(screen.getByTestId('apps-phone-note').textContent).toMatch(/view the app and ask for changes in the chat/);
+    const props = screen.queryAllByRole('tab').find((t) => /Properties/u.test(t.textContent ?? ''));
+    if (props !== undefined) fireEvent.click(props);
+    expect(screen.queryByTestId('show-on-report')).toBeNull();
+    expect(calls.filter((c) => c.method !== 'GET')).toStrictEqual([]);
+  });
+
+  it('a phone with no chat says only that the app can be viewed', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('max-width'), media: q, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    hostCrew(detail('desk'));
+    openHost();
+    await waitFor(() => expect(screen.getByTestId('apps-phone-note')).toBeTruthy());
+    expect(screen.getByTestId('apps-phone-note').textContent).toBe('On a phone you can view the app. Edit, Undo and Versions are on a larger screen.');
   });
 });
 

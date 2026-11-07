@@ -120,7 +120,7 @@ function CardMenu({ name, children }: { name: string; children: React.ReactNode 
         aria-controls={open ? id : undefined} aria-label={`More for ${name}`} title="More" onClick={() => setOpen((v) => !v)}>
         <MoreHorizontal size={16} aria-hidden />
       </button>
-      {open && <div id={id} tabIndex={-1} className="wk-appcard-pop" role="dialog" aria-label={`${name}: Show on Report`} data-testid="apps-card-menu-pop">{children}</div>}
+      {open && <div id={id} tabIndex={-1} className="wk-appcard-pop" role="dialog" aria-label={`More for ${name}`} data-testid="apps-card-menu-pop">{children}</div>}
     </div>
   );
 }

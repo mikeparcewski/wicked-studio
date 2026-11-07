@@ -179,6 +179,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const modeRef = useRef<AppMode>(initialMode ?? 'preview');
   const [sharing, setSharing] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const versionsBtn = useRef<HTMLButtonElement | null>(null);
   const [unarchiving, setUnarchiving] = useState(false);
   // Read before `shown`: an archived app is Preview only (crew refuses every change until it is restored).
   const [detail, setDetail] = useState<AppDetail | null>(null);
@@ -432,7 +433,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           <span className="wk-apps-history" role="group" aria-label="History">
             <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-undo" disabled={history?.canUndo !== true || busy || framed || archived} onClick={() => void move('undo')} aria-label="Undo">Undo</button>
             <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-redo" disabled={history?.canRedo !== true || busy || framed || archived} onClick={() => void move('redo')} aria-label="Redo">Redo</button>
-            <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-versions-open" disabled={detail === null} aria-expanded={versionsOpen}
+            <button ref={versionsBtn} type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-versions-open" disabled={detail === null} aria-expanded={versionsOpen}
               onClick={() => setVersionsOpen((o) => !o)}>Versions</button>
           </span>
         )}
@@ -454,9 +455,16 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         </p>
       )}
       {versionsOpen && !phone && detail !== null && sessionRef.current !== null && (
-        <AppVersions detail={detail} session={sessionRef.current} disabledWhy={versionsWhy} onDone={(line) => setStatus(line)} onClose={() => setVersionsOpen(false)} />
+        <AppVersions detail={detail} session={sessionRef.current} pending={pending} disabledWhy={versionsWhy} onDone={(line) => setStatus(line)}
+          onClose={() => { setVersionsOpen(false); versionsBtn.current?.focus(); }} />
       )}
-      {narrow && <p className="wk-apps-line" data-testid="apps-phone-note">{phone ? 'On a phone you can view the app and ask for changes in the chat. Edit, Undo and Versions are on a larger screen.' : 'Edit on a larger screen. This is the app as a viewer sees it.'}</p>}
+      {narrow && (
+        <p className="wk-apps-line" data-testid="apps-phone-note">
+          {!phone ? 'Edit on a larger screen. This is the app as a viewer sees it.'
+            : chatOn ? 'On a phone you can view the app and ask for changes in the chat. Edit, Undo and Versions are on a larger screen.'
+              : 'On a phone you can view the app. Edit, Undo and Versions are on a larger screen.'}
+        </p>
+      )}
       {kind !== null && (kind.store === 'sample' || kind.queries === 'sample' || kind.actions === 'sample') && (
         <p className="wk-apps-line wk-apps-line--note" data-testid="apps-sample-note">
           {kind.store === 'sample'
@@ -531,11 +539,16 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
                 chat={!chatOn ? null : (
                   <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
                     onSent={() => { void sessionRef.current?.refresh(); }} prepareSend={prepareSend} pending={pending}
-                    onUndo={() => { if ((sessionRef.current?.pending ?? 0) > 0) { setStatus('Your last edit is still saving: Undo after it lands.'); return; } void move('undo'); }} />
+                    undoOff={phone}
+                    onUndo={() => {
+                      if (phone) return; // view + chat on a phone (operator ruling D5): no Undo, whatever drew the button
+                      if ((sessionRef.current?.pending ?? 0) > 0) { setStatus('Your last edit is still saving: Undo after it lands.'); return; }
+                      void move('undo');
+                    }} />
                 )}
                 properties={(
                   <AppProperties key={selId ?? ''} spec={sessionRef.current?.spec ?? detail.spec} selected={selId}
-                    app={<ShowOnReport slug={slug} name={detail.name} projectId={detail.projectId} variant="properties" framed={framed} {...(navigate !== undefined ? { navigate } : {})} />}
+                    app={phone ? null : <ShowOnReport slug={slug} name={detail.name} projectId={detail.projectId} variant="properties" framed={framed} {...(navigate !== undefined ? { navigate } : {})} />}
                     editable={shown === 'edit' && !framed && !narrow && !archived && detail.turn == null}
                     readOnlyWhy={framed ? 'This page is inside another page, so the app cannot be changed here.' : archived ? 'This app is archived: restore it to change it.' : narrow ? 'Edit on a larger screen: properties change in Edit.' : detail.turn != null ? 'A turn is changing the app: properties wait until it lands.' : shown !== 'edit' ? 'Open Edit, then select a component to change it here.' : null}
                     onOps={(ops) => {
