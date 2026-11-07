@@ -138,11 +138,21 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   // Only the newest read is applied (codex r1: a late answer for an older filter, an older minimum or another
   // repository never overwrites a newer one).
   const readGen = useRef(0);
-  useEffect(() => { setMinimum(null); }, [repoId]);
+  // A read in flight: the mapping poll skips a beat rather than start another (codex r2: reads longer than the poll
+  // interval would otherwise discard each other forever).
+  const inFlight = useRef(0); // the generation of the read in flight, 0 when none
+  // The repository the view is for now: a write that lands after a switch is not applied to another one.
+  const viewRepo = useRef(repoId);
+  useEffect(() => {
+    viewRepo.current = repoId;
+    readGen.current += 1; // reads for the previous repository are void from now, not from the next read
+    setMinimum(null);
+  }, [repoId]);
 
   const fetchPage = useCallback(
     (q: string, r: typeof risk, cat: typeof category, off: number, mm: boolean) => {
       const gen = ++readGen.current;
+      inFlight.current = gen;
       const params: Parameters<typeof api.listRequirements>[1] = { offset: off, limit: PAGE_SIZE };
       if (q.trim() !== '') params.q = q.trim();
       if (r !== 'all') params.risk = r;
@@ -151,6 +161,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
       api
         .listRequirements(repoId, params)
         .then((p) => {
+          if (inFlight.current === gen) inFlight.current = 0;
           if (gen !== readGen.current) return;
           setPage(p);
           setMinimum(minimumOf(p));
@@ -158,6 +169,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
           setNotGenerated(null);
         })
         .catch((e: unknown) => {
+          if (inFlight.current === gen) inFlight.current = 0;
           if (gen !== readGen.current) return;
           const missing = requirementsNotGenerated(e);
           setMinimum(missing !== null && e instanceof ApiError ? minimumOf(e.body) : null);
@@ -173,7 +185,9 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const mappingLive = mapping !== null && mapping !== undefined && mapping !== 'unknown';
   useEffect(() => {
     if (!mappingLive) return;
-    const t = setInterval(() => fetchPage(query, risk, category, offset, onlyMismatch), MAPPING_REFRESH_MS);
+    const t = setInterval(() => {
+      if (inFlight.current === 0) fetchPage(query, risk, category, offset, onlyMismatch);
+    }, MAPPING_REFRESH_MS);
     return () => clearInterval(t);
   }, [mappingLive, fetchPage, query, risk, category, offset, onlyMismatch]);
   // …and once more when the job it watched ends (codex r2 on the branch): the read that saw no graph may have come just
@@ -187,6 +201,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   // One debounced (250ms) server fetch covers search, filter, and pagination changes.
   useEffect(() => {
     if (debounceRef.current !== null) clearTimeout(debounceRef.current);
+    readGen.current += 1; // the view changed: an answer for the old one is void now (codex r2)
     debounceRef.current = setTimeout(() => fetchPage(query, risk, category, offset, onlyMismatch), 250);
     return () => {
       if (debounceRef.current !== null) clearTimeout(debounceRef.current);
@@ -264,8 +279,14 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               key={repoId}
               repoId={repoId}
               minimum={minimum}
-              onChanged={(m) => {
-                if (m !== null) setMinimum(m);
+              onChanged={(m, forRepo) => {
+                if (forRepo !== viewRepo.current) return;
+                if (m !== null) {
+                  setMinimum(m);
+                  // Every minimum on the page says the same number until the next read (codex r2).
+                  setPage((prev) => withMinPct(prev, m.pct));
+                  setNotGenerated((prev) => (prev === null || prev.share === null ? prev : { ...prev, share: { ...prev.share, minPct: m.pct } }));
+                }
                 refetchNow.current();
               }}
             />
@@ -515,6 +536,13 @@ function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement
   );
 }
 
+/** `page` with its coverage held to `pct`, or as it is when it carries no coverage. */
+function withMinPct(page: RequirementsPage | null, pct: number): RequirementsPage | null {
+  const cov = (page as { coverage?: unknown } | null)?.coverage;
+  if (page === null || cov === null || cov === undefined || typeof cov !== 'object') return page;
+  return { ...page, coverage: { ...(cov as object), minPct: pct } } as RequirementsPage;
+}
+
 /**
  * How old the code behind the listed graph is (operator ruling 2026-11-06): "Built from code N commits old (date)",
  * with Refresh map (the same mapping job "Keep mapping" opens). Nothing when the graph is current or the daemon cannot
@@ -545,7 +573,7 @@ function MinimumControl({
   repoId: string;
   minimum: RequirementsMinimum;
   /** After a write: the minimum the daemon answered with (applied at once), then a fresh read. */
-  onChanged: (minimum: RequirementsMinimum | null) => void;
+  onChanged: (minimum: RequirementsMinimum | null, forRepo: string) => void;
 }): React.ReactElement {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(String(minimum.pct));
@@ -566,7 +594,7 @@ function MinimumControl({
       .setRequirementsMinimum(repoId, pct)
       .then((out) => {
         setEditing(false);
-        onChanged(minimumOf(out));
+        onChanged(minimumOf(out), repoId);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setBusy(false));
