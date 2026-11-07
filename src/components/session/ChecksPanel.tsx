@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getDocChecks, type ChecksRead } from '../../api/docChecks.js';
 import { postEvent } from '../../api/interactive.js';
-import { checkRows, checksSummary, reviewLanded, reviewRequestOf } from '../../board/checksPanel.js';
+import { checkRows, checksSummary, floorRow, notesView, reviewLanded, reviewRequestOf } from '../../board/checksPanel.js';
 
 /** While a review asked for here runs: how often the panel re-reads, and for how long at most. */
 export const REVIEW_POLL_MS = 10_000;
@@ -96,6 +96,9 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
   }
   const rows = checkRows(read.checks, head);
   const mine = asked !== null && asked.version === head ? asked : null;
+  // PLAN G12 / A6: what crew measured on this version before it landed, and the writer's notes beside it.
+  const floor = floorRow(read.floor);
+  const notes = notesView(read.notes, head);
   return (
     <section data-testid="artifact-checks" data-state="ok" data-count={rows.length} className="wk-checks" aria-label="Checks">
       <p data-testid="artifact-checks-summary" className="wk-checks-head"><b>Checks</b> · {checksSummary(rows)} · {again}</p>
@@ -113,6 +116,14 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
         )}
       </p>
       {note !== null && <p data-testid="artifact-checks-note" role="status" className="wk-checks-note">{note}</p>}
+      {floor !== null && (
+        <div data-testid="artifact-checks-floor" data-state={floor.state} className={`wk-check wk-check--floor wk-check--${floor.state === 'pass' ? 'pass' : floor.state === 'none' ? 'none' : 'inconclusive'}`}>
+          <p className="wk-check-top"><b>Floor</b> · <span data-testid="artifact-checks-floor-state">{floor.stateWord}</span> <span className="wk-check-dim">· measured by the host, not a review</span></p>
+          {floor.pages !== null && <p data-testid="artifact-checks-floor-pages" className="wk-check-sentence">{floor.pages}</p>}
+          {floor.sentence !== '' && <p className="wk-check-dim">{floor.sentence}</p>}
+        </div>
+      )}
+      {notes !== null && <NotesFold notes={notes} />}
       {rows.length > 0 && (
         <ul className="wk-checks-list">
           {rows.map((r) => (
@@ -140,5 +151,36 @@ export function ChecksPanel({ projectId, docId, head, pointAt }: {
         </ul>
       )}
     </section>
+  );
+}
+
+/** The writer's notes, beside the page and never in it (DES-CHAT-ARTIFACTS-001 §11.2): folded; "from version N" when
+ *  they belong to an earlier version than the one on screen; an empty list is said as such, never as a clean one. */
+function NotesFold({ notes }: { notes: import('../../board/checksPanel.js').NotesView }): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const has = notes.leftOut.length + notes.assumptions.length + notes.struck.length + notes.unused.length > 0;
+  return (
+    <div data-testid="artifact-checks-notes" className="wk-checks-notes">
+      <p className="wk-check-top">
+        {has ? (
+          <button type="button" data-testid="artifact-checks-notes-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="wk-since-toggle">
+            {open ? '▾' : '▸'} {notes.head}
+          </button>
+        ) : <span data-testid="artifact-checks-notes-head">{notes.head}</span>}
+        {notes.from !== null && <span data-testid="artifact-checks-notes-from" className="wk-check-dim"> · {notes.from}</span>}
+      </p>
+      {has && open && (
+        <div data-testid="artifact-checks-notes-body" className="wk-checks-notes-body">
+          {notes.leftOut.length > 0 && (
+            <ul className="wk-check-findings">
+              {notes.leftOut.map((x, i) => <li key={i} data-testid="artifact-checks-notes-left-out"><b>{x.claim}</b> — {x.why}</li>)}
+            </ul>
+          )}
+          {notes.assumptions.length > 0 && <p className="wk-check-dim">Assumed: {notes.assumptions.join(' · ')}</p>}
+          {notes.unused.length > 0 && <p className="wk-check-dim">Given but not used: {notes.unused.join(', ')}</p>}
+          {notes.struck.length > 0 && <p className="wk-check-dim">Left out by crew before the run: {notes.struck.map((x) => `${x.token} (${x.reason})`).join('; ')}</p>}
+        </div>
+      )}
+    </div>
   );
 }
