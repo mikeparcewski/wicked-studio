@@ -131,7 +131,8 @@ describe('recording proof', () => {
       { id: 'screen', chapter: 'ch3', atSec: 16, text: 'Check Plan · <b>Wrong plan</b> · Evidence: plan/screen.png · vault proof-1', state: 'FAIL' },
     ] });
     expect(cutOfRecording(recordingOf({ ...proofWalkthrough(), state: 'passed' }), 'Run').proof?.verdict).toBe('PASS');
-    expect(cutOfRecording(recordingOfDemo(demo()), 'Run').proof).toBeUndefined();
+    // A demo's proof is its review's (plugins S4, G22): an accepting review with no findings is a PASS with no checks.
+    expect(cutOfRecording(recordingOfDemo(demo()), 'Run').proof).toEqual({ verdict: 'PASS', failedAtSec: null, checks: [] });
   });
   it('does not assign an absent chapter’s check or failing moment to another chapter', () => {
     const view = proofWalkthrough();
@@ -321,5 +322,62 @@ describe('a recording earns no Versions tab (codex final review P2)', () => {
     const { RecordingSurfaceAdapter } = await import('../src/editors/adapters/recording.js');
     const a = new RecordingSurfaceAdapter({ artifactKey: 'run:r1/walkthrough', title: 'Walkthrough', kind: 'walkthrough', source: 'walkthrough', projectId: '', composerKey: 'c', runId: 'r1' }, 'walkthrough');
     expect(a.capabilities()).not.toContain('versions');
+  });
+});
+
+describe('a demo’s review and contact sheets (plugins S4: G8, G22)', () => {
+  const sheets: DemoView['sheets'] = [{ name: 'chapters', path: 'review/chapters.png' }, { name: 'joins', path: 'review/joins.png' }, { name: 'end', path: 'review/end.png' }];
+  const changes = (): DemoView => demo({
+    stage: 'review_gate', sheets,
+    review: { verdict: 'changes', rejected: false, text: 'x', findings: [
+      { at: '0:07', chapter: 'ch1', issue: 'Blank app frame while it loads', verdict: 're-record' },
+      { at: '1:02', chapter: 'Plan', issue: 'Rig banner in frame', verdict: 'fix-app' },
+      { at: 'later', chapter: '?', issue: 'Too long', verdict: 're-encode' },
+    ] },
+  });
+  it('maps the review into the plugin’s proof: changes is FAIL, each finding a check on its chapter at its moment', () => {
+    const cut = cutOfRecording(recordingOfDemo(changes()), 'Demo');
+    expect(cut.proof).toEqual({ verdict: 'FAIL', failedAtSec: 7, checks: [
+      { id: 'finding-1', chapter: 'ch1', atSec: 7, text: 'Record again: Blank app frame while it loads', state: 'FAIL' },
+      { id: 'finding-2', chapter: 'ch2', atSec: 62, text: 'Fix the app: Rig banner in frame', state: 'FAIL' },
+      { id: 'finding-3', chapter: '', atSec: null, text: 'Re-encode: Too long', state: 'FAIL' },
+    ] });
+    expect(cut.review).toEqual({ by: 'model', line: 'reviewer asked for changes · 3 findings', sheets: [
+      { name: 'chapters', label: 'Each chapter, once it is ready' }, { name: 'joins', label: 'The joins between chapters' }, { name: 'end', label: 'The last frames' },
+    ] });
+  });
+  it('accept is PASS with findings as notes; a rejected review is FAIL; no review yet has no proof', () => {
+    const accepted = cutOfRecording(recordingOfDemo(demo({ review: { verdict: 'accept', rejected: false, text: 'x', findings: [{ at: '0:01', chapter: 'ch2', issue: 'Nit', verdict: 're-encode' }] } })), 'Demo');
+    expect(accepted.proof).toMatchObject({ verdict: 'PASS', failedAtSec: null, checks: [{ state: 'PENDING', chapter: 'ch2' }] });
+    expect(cutOfRecording(recordingOfDemo(demo({ review: { verdict: null, rejected: true, text: 'x', findings: [] } })), 'Demo').proof).toMatchObject({ verdict: 'FAIL' });
+    const pending = cutOfRecording(recordingOfDemo(demo({ stage: 'reviewing', review: { verdict: null, rejected: false, text: null, findings: [] } })), 'Demo');
+    expect(pending.proof).toBeUndefined();
+    expect(pending.review?.line).toBe('reviewer is reviewing the take');
+  });
+  it('no review seat in the view has no proof and never claims the take is private (only the run’s steps say that)', () => {
+    const cut = cutOfRecording(recordingOfDemo(demo({ stage: 'review_gate', sheets, seats: { recorder: null, reviewer: null }, review: { verdict: null, rejected: false, text: null, findings: [] } })), 'Demo');
+    expect(cut.proof).toBeUndefined();
+    expect(cut.review).toEqual({ by: 'unknown', line: 'Not reviewed yet', sheets: expect.any(Array) });
+  });
+  it('the host Checks list carries the findings', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(changes())));
+    expect(await new RecordingSurfaceAdapter(binding, 'demo').checks()).toMatchObject({ total: 3, checks: [{ id: 'ch1/finding-1', text: 'FAIL · Scope · Record again: Blank app frame while it loads' }, {}, {}] });
+  });
+  it('serves a contact sheet by name from crew’s demo file route, and refuses any other name', async () => {
+    const fetchMock = vi.fn(async (url: string) => (url.includes('/demo/file') ? new Response('png', { headers: { 'Content-Type': 'image/png' } }) : json(changes())));
+    vi.stubGlobal('fetch', fetchMock);
+    const a = new RecordingSurfaceAdapter(binding, 'demo'); await a.read();
+    const media = await a.media({ sheet: 'joins' });
+    expect(media).toMatchObject({ type: 'image/png' });
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain('/api/v1/runs/run%20one/demo/file?path=review%2Fjoins.png');
+    const before = fetchMock.mock.calls.length;
+    expect(await a.media({ sheet: '../demo-video/demo.mp4' })).toMatchObject({ error: 'unsupported' });
+    expect(await a.media({ sheet: 'plan' })).toMatchObject({ error: 'unsupported' });
+    expect(fetchMock.mock.calls.length).toBe(before);
+  });
+  it('a walkthrough serves no sheets', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(walkthrough())));
+    const a = new RecordingSurfaceAdapter({ ...binding, source: 'walkthrough', kind: 'walkthrough' }, 'walkthrough'); await a.read();
+    expect(await a.media({ sheet: 'chapters' })).toMatchObject({ error: 'unsupported' });
   });
 });

@@ -5,14 +5,19 @@ import type { AdapterResult, ArtifactRef, HostAdapter } from './host.js';
 import { chapterInventoryOf, checkOps, type WireItem } from './ops.js';
 import type { MediaRef } from './protocol.js';
 
-/** E1, through crew's per-document interactive proxy. Cut rev and render version are distinct. */
+/**
+ * E1, through crew's per-document interactive proxy. Cut rev and render version are distinct.
+ * History is interactive's (G7 piece 3): every render keeps its cut (`GET cut?version=N`), and Undo, Restore and a
+ * fork are one write, `POST restore {rev, from}` — a new version made from an earlier one's chapters and style. Nothing
+ * here lives only in this session, so a reload loses nothing.
+ */
 export class DemoCutAdapter implements HostAdapter {
   head = 0;
   private announcedHead: number | null = null;
   private readonly listeners = new Set<() => void>();
   private cut: DemoCut | null = null;
-  private snapshots = new Map<number, DemoCut>();
-  private parents = new Map<number, number>();
+  /** Read-through cache of rendered versions' cuts (write-once on interactive, so never stale). */
+  private versionCuts = new Map<number, DemoCut>();
   constructor(private projectId: string, private docId: string, private title: string, private kind = 'demo-video') {}
   subscribe(onChange: () => void): () => void { this.listeners.add(onChange); return () => { this.listeners.delete(onChange); }; }
   private setHead(head: number): void {
@@ -40,11 +45,23 @@ export class DemoCutAdapter implements HostAdapter {
     }
     return res.json() as Promise<T>;
   }
-  private async load(): Promise<DemoCut> {
-    const raw = await this.json<DemoCut>('cut');
+  private shaped(raw: DemoCut): DemoCut {
     // Preserve E1's resolvedTheme alongside the stored style: skin colours are resolved by crew per render.
-    const cut = timedCut({ ...raw, type: 'demo-cut', title: this.title, style: effectiveVideoStyle(this.title, raw.style) });
-    this.cut = cut; this.snapshots.set(cut.version, cut); this.setHead(cut.version);
+    return timedCut({ ...raw, type: 'demo-cut', title: this.title, style: effectiveVideoStyle(this.title, raw.style) });
+  }
+  private async load(): Promise<DemoCut> {
+    const cut = this.shaped(await this.json<DemoCut>('cut'));
+    this.cut = cut; this.versionCuts.set(cut.version, cut); this.setHead(cut.version);
+    return cut;
+  }
+  /** The cut a rendered version was made from (interactive keeps one per render). */
+  private async cutAt(version: number): Promise<DemoCut> {
+    const kept = this.versionCuts.get(version);
+    if (kept !== undefined) return kept;
+    const cut = this.shaped(await this.json<DemoCut>(`cut?version=${version}`));
+    // An interactive that keeps no cut history ignores the query and answers the head: never show that as version N.
+    if (cut.version !== version) throw new ApiError(404, 'no_history', { error: 'no_history' });
+    this.versionCuts.set(version, cut);
     return cut;
   }
   private async failure(e: unknown): Promise<{ error: 'head_moved' | 'unsupported' | 'bad_request' | 'unavailable'; message: string; head?: number; moved?: { head: number; kind: 'generated' } }> {
@@ -53,13 +70,20 @@ export class DemoCutAdapter implements HostAdapter {
       await this.load().catch(() => { this.cut = null; });
       return { error: 'head_moved', message: 'The cut changed; read it again before editing.', ...(this.cut === null ? {} : { head: this.head, moved: { head: this.head, kind: 'generated' as const } }) };
     }
+    const code = e instanceof ApiError ? (e.body as { error?: unknown } | undefined)?.error : undefined;
+    if (code === 'no_snapshot') return { error: 'unsupported', message: 'That version has no kept cut (it was made before the cut kept its history, or it is not a cut render); it can be looked at, not restored.' };
+    if (code === 'no_history' || (e instanceof ApiError && e.status === 404 && code === undefined)) return { error: 'unsupported', message: 'This wicked-interactive keeps no cut history; update it to look at or restore earlier cuts.' };
+    if (code === 'head_moved') {
+      const head = (e as ApiError).body as { head?: unknown };
+      return { error: 'head_moved', message: 'A newer version landed since.', ...(typeof head.head === 'number' ? { head: head.head } : {}) };
+    }
+    if (code === 'take_missing') return { error: 'unavailable', message: 'A recording that version used is no longer on disk.' };
     return { error: e instanceof ApiError && e.status === 404 ? 'unsupported' : e instanceof ApiError && e.status === 400 ? 'bad_request' : 'unavailable', message: e instanceof Error ? e.message : 'The cut is unavailable.' };
   }
   async read(version?: number): Promise<AdapterResult<{ version: number; content: DemoCut & Record<string, unknown> }>> {
     try {
       const cut = await this.load();
-      const content = version === undefined || version === cut.version || version === 0 ? cut : this.snapshots.get(version);
-      if (content === undefined) return { error: 'unsupported', message: 'This engine only exposes the current cut.' };
+      const content = version === undefined || version === cut.version || version === 0 ? cut : await this.cutAt(version);
       return { version: content.version, content: { ...content } };
     } catch (e) { return this.failure(e); }
   }
@@ -77,11 +101,26 @@ export class DemoCutAdapter implements HostAdapter {
     const stale = this.stale(base); if (stale !== null) return stale;
     const chapters = next.chapters.map(({ id, title, take, inSec, outSec }) => ({ id, title, take, inSec, outSec }));
     const result = await this.json<{ rev: number; version: number }>(styleOnly ? 'style' : 'recut', styleOnly ? 'PUT' : 'POST', styleOnly ? { rev: this.cut!.rev, style: next.style } : { rev: this.cut!.rev, chapters, ...(next.style === this.cut!.style ? {} : { style: next.style }) });
-    this.parents.set(result.version, base);
     this.cut = timedCut({ ...next, ...result });
-    this.snapshots.set(result.version, this.cut);
+    this.versionCuts.set(result.version, this.cut);
     this.setHead(result.version);
     return { version: result.version };
+  }
+  /**
+   * Make an earlier rendered version the working one again, as a new version (interactive renders it from that
+   * version's kept cut). `expectHead`: the head the caller saw; another version landed since is `head_moved`. Without
+   * it the cut read now is the base (interactive still refuses a cut that moves before the restore lands).
+   */
+  async restoreVersion(from: number, expectHead?: number): Promise<AdapterResult<{ version: number }>> {
+    try {
+      const cut = await this.load();
+      if (expectHead !== undefined) { const stale = this.stale(expectHead); if (stale !== null) return stale; }
+      if (from === cut.version) return { error: 'bad_request', message: 'That is the working version already.' };
+      // `expect_head`: the document's head, not only the cut's rev — a page version can land on a cut document.
+      const r = await this.json<{ rev: number; version: number }>('restore', 'POST', { rev: cut.rev, from, ...(expectHead !== undefined ? { expect_head: expectHead } : {}) });
+      this.cut = null; this.setHead(r.version);
+      return { version: r.version };
+    } catch (e) { return this.failure(e); }
   }
   async write(base: number, items: WireItem[]): Promise<AdapterResult<{ version: number }>> {
     try {
@@ -115,30 +154,19 @@ export class DemoCutAdapter implements HostAdapter {
       return { type: blob.type || (file.endsWith('.mp4') ? 'video/mp4' : 'video/webm'), blob };
     } catch (e) { return this.failure(e); }
   }
-  /** Called exclusively by the host's Re-record button. */
-  async retake(chapter: string): Promise<AdapterResult<{ version: number }>> {
-    try {
-      const cut = await this.load();
-      if (!cut.chapters.some(c => c.id === chapter)) return { error: 'bad_request', message: 'Chapter not in this cut.' };
-      const r = await this.json<{ rev: number; version: number }>('takes', 'POST', { chapter });
-      this.cut = null; this.setHead(r.version);
-      return { version: r.version };
-    } catch (e) { return this.failure(e); }
-  }
+  /** Undo `version` (the head): its parent in the document's own lineage becomes the working cut again, as a new
+   *  version — after a reload too. */
   async undo(version: number): Promise<AdapterResult<{ undone: true }>> {
-    const parent = this.parents.get(version);
-    const snapshot = parent === undefined ? undefined : this.snapshots.get(parent);
-    if (snapshot === undefined) return { error: 'unsupported', message: 'The previous cut is not available in this session.' };
     try {
-      await this.load();
-      const r = await this.save(version, snapshot);
+      const m = await getVersions(this.projectId, this.docId);
+      const parent = m.versions.find(v => v.version === version)?.parent ?? null;
+      if (parent === null) return { error: 'unsupported', message: 'There is no earlier cut to go back to.' };
+      const r = await this.restoreVersion(parent, version);
       return 'error' in r ? r : { undone: true, moved: { head: r.version, kind: 'fork' } };
     } catch (e) { return this.failure(e); }
   }
   async fork(from: number): Promise<AdapterResult<{ version: number }>> {
-    const snapshot = this.snapshots.get(from);
-    if (snapshot === undefined) return { error: 'unsupported', message: 'That cut is not available in this session.' };
-    try { await this.load(); return await this.save(this.head, snapshot); } catch (e) { return this.failure(e); }
+    return this.restoreVersion(from);
   }
   async exportAs(format: string): Promise<AdapterResult<{ started: true }>> {
     if (format !== 'mp4') return { error: 'unsupported', message: 'This cut exports as MP4.' };

@@ -4,6 +4,8 @@
     "Empty until the S16 deletion slices: before then a removal fails. Add entries as \"<removed>\": \"<successor>\" in the PR that removes the testid."
   ],
   "successors": {
+    "demo-retake-chapter": "demo-record-again",
+    "demo-retake-note": "demo-review-note",
     "desk-rail-home": "desk-rail-wordmark",
     "mcp-inspect-torn": "plugin-torn",
     "mcp-inspect-reload": "plugin-reload",

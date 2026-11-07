@@ -7,3 +7,14 @@
 .wk-match-theme .wk-btn { justify-self: start; }
 .wk-match-theme__line { margin: 0; font-size: 12px; color: var(--ink-muted); }
 .wk-match-theme__line--bad { color: var(--status-fail); }
+/* A demo's review at its review gate (plugins S4: G8, G22, G23): the verdict, findings, contact sheets, Record it again. */
+.wk-demo-review { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.wk-demo-findings { margin: 0; padding-left: 18px; font-size: var(--text-sm); color: var(--ink-high); display: grid; gap: 4px; overflow-wrap: anywhere; }
+.wk-demo-sheets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wk-demo-sheet { display: grid; gap: 4px; min-width: 0; text-decoration: none; color: inherit; border-radius: 6px; }
+.wk-demo-sheet img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-card); }
+.wk-demo-sheet:hover img { border-color: var(--accent); }
+.wk-demo-sheet:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.wk-demo-review label { display: grid; gap: 4px; }
+.wk-demo-review select { box-sizing: border-box; width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-base); color: var(--ink-high); font: inherit; font-size: var(--text-sm); }
+.wk-demo-verbs .wk-prop-btn { white-space: nowrap; }

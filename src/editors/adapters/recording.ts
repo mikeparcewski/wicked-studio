@@ -1,9 +1,9 @@
 import { demoFileUrl, getDemo, type DemoView } from '../../api/demo.js';
 import { interactiveUrl } from '../../api/interactive.js';
 import { walkthroughApi, walkthroughFileUrl } from '../../api/walkthrough.js';
-import { checksTrack, exportOptions, failedChapter, recordingOf, recordingOfDemo, takeFingerprint, type Recording } from '../../board/walkthroughModel.js';
+import { checksTrack, demoReviewLine, exportOptions, failedChapter, recordingOf, recordingOfDemo, SHEET_LABEL, takeFingerprint, type Recording } from '../../board/walkthroughModel.js';
 import { DemoCutAdapter } from '../demoCutAdapter.js';
-import { defaultVideoStyle, type DemoChapter, type DemoCut, type RecordingProof } from '../demoCutModel.js';
+import { defaultVideoStyle, type DemoChapter, type DemoCut, type RecordingProof, type RecordingReview } from '../demoCutModel.js';
 import type { AdapterResult, ArtifactRef } from '../host.js';
 import { registerAdapter, type AdapterCapability, type ArtifactBinding, type ExportOption, type ExportOutcome, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
 import type { MediaRef } from '../protocol.js';
@@ -16,10 +16,38 @@ import { publishRecording, withdrawRecording } from '../../store/recordings.js';
  *    {@link DemoCutAdapter} — every chapter edit and style change is a new rendered version, Undo from the host.
  *  - `demo` without one, and `walkthrough`: the run's own recording, read-only (crew's `GET /runs/:id/demo` and
  *    `/walkthrough`). The plugin shows its chapters and plays it; edits are refused `refused` in the host's words.
- *    Re-record and "Ask helpers to fix" stay the run's gate controls, never the plugin's.
+ *    Record it again, Edit the cut and "Ask helpers to fix" stay the run's gate controls (RecordingGateActions), never the plugin's.
  */
 
-const CUT_EXPORTS: readonly ExportOption[] = [{ format: 'mp4', label: 'Video' }];
+const CUT_EXPORTS: readonly ExportOption[] = [{ format: 'mp4', label: 'Video' }, { format: 'gif', label: 'GIF' }, { format: 'poster', label: 'Poster' }];
+
+const FINDING_VERB: Readonly<Record<string, string>> = { 're-record': 'Record again', 're-encode': 'Re-encode', 'fix-app': 'Fix the app' };
+
+/**
+ * A demo's model review in the plugin's proof shape (G22): accept is PASS, changes (or a review the engine rejected) is
+ * FAIL, and each finding is a check at its moment on its chapter. Null when no model has said anything yet — the
+ * plugin then shows no Checks (a person-reviewed demo has none).
+ */
+export function proofOfDemoReview(rec: Recording): RecordingProof | null {
+  const r = rec.review;
+  if (r === undefined || r.by !== 'model' || (r.verdict === null && !r.rejected && r.findings.length === 0)) return null;
+  const failed = r.rejected || r.verdict === 'changes';
+  const verdict = failed ? 'FAIL' : r.verdict === 'accept' ? 'PASS' : null;
+  const checks = r.findings.map((f, i) => ({
+    id: `finding-${i + 1}`, chapter: f.chapterKey ?? '', atSec: f.atSec,
+    text: `${FINDING_VERB[f.verdict] ?? f.verdict}: ${f.issue}`,
+    // A finding under an accepting review is a note, not a failure.
+    state: failed ? 'FAIL' as const : 'PENDING' as const,
+  }));
+  return { verdict, failedAtSec: failed ? checks.find((k) => k.atSec !== null)?.atSec ?? null : null, checks };
+}
+
+/** What the plugin's Review tab says about a demo, and which sheets it may ask for. */
+export function reviewOfRecording(rec: Recording): RecordingReview | null {
+  const line = demoReviewLine(rec);
+  if (line === null || rec.review === undefined) return null;
+  return { by: rec.review.by, line, sheets: (rec.sheets ?? []).map((sh) => ({ name: sh.name, label: SHEET_LABEL[sh.name] ?? sh.name })) };
+}
 
 function proofOfRecording(rec: Recording): RecordingProof {
   return {
@@ -46,8 +74,11 @@ export function cutOfRecording(rec: Recording, title: string): DemoCut {
   const style = defaultVideoStyle(title);
   style.theme.titleCard.on = false;
   style.theme.endCard.on = false;
+  const demoProof = rec.kind === 'demo-video' ? proofOfDemoReview(rec) : null;
+  const review = reviewOfRecording(rec);
   return { type: 'demo-cut', title, rev: 1, version: 1, chapters, takes: {}, style, ffmpeg: { ok: false, burnIn: false },
-    ...(rec.kind === 'walkthrough' ? { proof: proofOfRecording(rec) } : {}) };
+    ...(rec.kind === 'walkthrough' ? { proof: proofOfRecording(rec) } : demoProof !== null ? { proof: demoProof } : {}),
+    ...(review !== null ? { review } : {}) };
 }
 
 export class RecordingSurfaceAdapter implements SurfaceAdapter {
@@ -150,7 +181,8 @@ export class RecordingSurfaceAdapter implements SurfaceAdapter {
   async checks(): Promise<AdapterResult<{ checks: { id: string; text: string }[]; total: number }>> {
     try {
       const rec = this.rec ?? await this.load();
-      const checks = proofOfRecording(rec).checks.map(k => ({
+      const proof = rec.kind === 'walkthrough' ? proofOfRecording(rec) : proofOfDemoReview(rec) ?? { checks: [] };
+      const checks = proof.checks.map(k => ({
         id: `${k.chapter}/${k.id}`,
         text: `${k.state} · ${rec.chapters.find(c => c.key === k.chapter)?.title ?? k.chapter} · ${k.text}`,
       }));
@@ -161,17 +193,27 @@ export class RecordingSurfaceAdapter implements SurfaceAdapter {
   async media(ref: MediaRef): Promise<AdapterResult<{ type: string; blob: Blob }>> {
     const rec = this.rec ?? await this.load().catch(() => null);
     if (rec === null) return { error: 'unavailable', message: 'the recording could not be read' };
+    // A demo's contact sheet (G8): only one crew listed for this take, by name; the path is crew's, never the plugin's.
+    if (typeof ref === 'object' && 'sheet' in ref) {
+      const sheet = rec.kind === 'demo-video' ? rec.sheets?.find((sh) => sh.name === ref.sheet) : undefined;
+      if (sheet === undefined) return { error: 'unsupported', message: 'no such contact sheet for this recording' };
+      return this.fetchMedia(demoFileUrl(rec.runId, sheet.path), 'image/png');
+    }
     // A failed walkthrough's still is its failing frame (the poster only when it has none); otherwise the poster.
     const path = ref === 'video' ? rec.video : ref === 'poster' ? (rec.state === 'failed' ? failedChapter(rec)?.failedFrame ?? rec.poster : rec.poster ?? failedChapter(rec)?.failedFrame) ?? null : null;
     if (path === null) return { error: 'unsupported', message: ref === 'video' || ref === 'poster' ? 'no file for that yet' : 'a recording is one take' };
     const url = rec.kind === 'demo-video' ? demoFileUrl(rec.runId, path) : walkthroughFileUrl(rec.runId, rec.step, path);
+    return this.fetchMedia(url, ref === 'poster' ? 'image/png' : 'video/mp4');
+  }
+
+  private async fetchMedia(url: string, fallbackType: string): Promise<AdapterResult<{ type: string; blob: Blob }>> {
     const cached = this.mediaCache.get(url);
     if (cached !== undefined) return cached;
     const content = this.contentSeen;
     const res = await fetch(url);
     if (!res.ok) return { error: 'unavailable', message: `the file could not be read (${res.status})` };
     const blob = await res.blob();
-    const media = { type: blob.type || (ref === 'poster' ? 'image/png' : 'video/mp4'), blob };
+    const media = { type: blob.type || fallbackType, blob };
     // An older fetch may finish after refresh replaced the take at this same URL.
     if (this.contentSeen === content) this.mediaCache.set(url, media);
     return media;
@@ -192,12 +234,26 @@ export class DemoCutSurfaceAdapter extends DemoCutAdapter implements SurfaceAdap
     return caps;
   }
   exports(): readonly ExportOption[] { return this.binding.docId ? CUT_EXPORTS : []; }
+  /** A rendered version as MP4, GIF (interactive encodes it from that version's MP4, then caches it) or its poster
+   *  (every render writes one). */
   async exportFile(format: string, version: number): Promise<ExportOutcome> {
-    if (!this.exports().some(o => o.format === format)) return { ok: false, text: 'This cut exports as MP4.' };
+    const option = this.exports().find(o => o.format === format);
+    if (option === undefined) return { ok: false, text: 'This cut exports as a video, a GIF or a poster.' };
     if (!Number.isInteger(version) || version < 1) return { ok: false, text: 'Choose a rendered version to export.' };
-    const file = `_v${version}.mp4`;
-    const href = interactiveUrl(this.binding.projectId, `/d/${encodeURIComponent(this.binding.docId ?? '')}/api/demo/recording/${file}`);
-    return { ok: true, text: 'Video ready.', href, file };
+    const doc = `/d/${encodeURIComponent(this.binding.docId ?? '')}/api/demo`;
+    const fileHref = (file: string): string => interactiveUrl(this.binding.projectId, `${doc}/recording/${encodeURIComponent(file)}`);
+    if (format === 'gif') {
+      try {
+        const res = await fetch(interactiveUrl(this.binding.projectId, `${doc}/gif`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version }) });
+        const body = await res.json().catch(() => ({})) as { file?: unknown; error?: unknown };
+        if (!res.ok || typeof body.file !== 'string' || !/^[A-Za-z0-9._-]+$/.test(body.file)) {
+          return { ok: false, text: typeof body.error === 'string' ? `The GIF was not made: ${body.error}` : `The GIF was not made (${res.status}).` };
+        }
+        return { ok: true, text: 'GIF ready.', href: fileHref(body.file), file: body.file };
+      } catch (e: unknown) { return { ok: false, text: e instanceof Error ? e.message : String(e) }; }
+    }
+    const file = format === 'poster' ? `_v${version}-poster.jpg` : `_v${version}.mp4`;
+    return { ok: true, text: `${option.label} ready.`, href: fileHref(file), file };
   }
 }
 
