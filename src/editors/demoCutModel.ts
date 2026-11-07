@@ -26,8 +26,8 @@ export interface RecordingProof {
 export interface DemoChapter { id: string; title: string; say: string; take: string; inSec: number; outSec: number; durationSec: number; startSec: number; verdict?: RecordingVerdict }
 /** A demo recording's review (G8, G22): who reviews it, and the contact sheets the plugin can ask for as media. */
 export interface RecordingReview {
-  /** `model`: a review seat; `person`: no model reviews this take (its rows stay out of model context). */
-  by: 'model' | 'person';
+  /** `model`: a review seat reviewed it; `unknown`: no model review is known yet (never read as "no model sees it"). */
+  by: 'model' | 'unknown';
   /** One line: the verdict, or what is still to come. */
   line: string;
   /** Sheet names the plugin may ask for (`artifact.media {sheet}`), with their words. */

@@ -203,12 +203,18 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
       ...over,
     } as DemoView;
   }
-  function reviewServer(first: DemoView, later: DemoView = first) {
-    let reads = 0;
+  // The demo preset's steps (a model reviews it) and the human-review preset's (no review step: rows stay private).
+  const modelUnits: readonly UnitLike[] = [{ id: `${RUN}:plan`, ord: 4, status: 'done' }, { id: `${RUN}:record`, ord: 5, status: 'done' }, { id: `${RUN}:review`, ord: 6, status: 'done' }];
+  const personUnits: readonly UnitLike[] = [{ id: `${RUN}:plan`, ord: 4, status: 'done' }, { id: `${RUN}:record`, ord: 5, status: 'done' }];
+  function reviewServer(first: DemoView, later: DemoView = first, gateAt: (read: number) => string = () => '1970-01-01T00:00:00.001Z') {
+    let reads = 0, gateReads = 0;
+    // The review gate the card was drawn under (what the run's gate stream put in the store).
+    useGateStore.getState().setGate({ runId: RUN, ord: 6, prompt: 'Review the take', lifecycle: 'open', receivedAt: 1 });
     const fetchMock = vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
       if (url.endsWith('/gate')) {
         if (init?.method === 'POST') return json({ ok: true });
-        return json({ runId: RUN, ord: 3, prompt: 'Review the take', lifecycle: 'open', receivedAt: '1970-01-01T00:00:00.001Z' });
+        gateReads += 1;
+        return json({ runId: RUN, ord: 6, prompt: 'Review the take', lifecycle: 'open', receivedAt: gateAt(gateReads) });
       }
       if (url.endsWith('/demo/document') && init?.method === 'POST') return json({ projectId: 'p', docId: 'demo-runone', created: true });
       if (url.endsWith('/demo')) { reads += 1; return json(reads === 1 ? first : later); }
@@ -221,7 +227,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
 
   it('shows who reviewed, the findings and the three contact sheets, linked full size', async () => {
     reviewServer(reviewDemo());
-    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     expect((await screen.findByTestId('demo-review-line')).textContent).toBe('reviewer asked for changes · 1 finding');
     expect(screen.getByTestId('demo-review-finding').textContent).toBe('0:07 · Open the queue The app frame is blank while it loads');
     const sheets = screen.getAllByTestId('demo-review-sheet');
@@ -232,7 +238,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
 
   it('Record it again sends request_changes with the finding’s chapter: a whole new take, never one chapter', async () => {
     const { gatePosts } = reviewServer(reviewDemo());
-    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
     const note = (screen.getByTestId('demo-record-again-note') as HTMLTextAreaElement).value;
     expect(note).toBe('Record the demo again as a new take. Change the plan for chapter 01-open ("Open the queue"). The review found: The app frame is blank while it loads (at 0:07). Every chapter is recorded again from the plan you approve next.');
@@ -244,7 +250,7 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
 
   it('picks another chapter or the whole take; the note stays editable', async () => {
     const { gatePosts } = reviewServer(reviewDemo());
-    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
     const pick = screen.getByTestId('demo-record-again-pick') as HTMLSelectElement;
     expect(Array.from(pick.options).map((o) => o.textContent)).toEqual(['The whole take', '0:07 · Open the queue · The app frame is blank while it loads', 'Chapter 2: Assign a ticket']);
@@ -258,35 +264,73 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
 
   it('sends nothing when the take changed since it was shown', async () => {
     const { gatePosts } = reviewServer(reviewDemo(), reviewDemo({ video: { path: 'demo-video/demo.mp4', bytes: 99 } }));
-    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     fireEvent.click(await screen.findByTestId('demo-record-again'));
     fireEvent.click(screen.getByTestId('demo-record-again-send'));
     expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/nothing was sent/);
     expect(gatePosts()).toHaveLength(0);
   });
 
-  it('a person-reviewed demo (rows stay out of model context) says so, and its note carries no frame text', async () => {
-    const view = reviewDemo({ seats: { recorder: null, reviewer: null }, review: { verdict: null, rejected: false, text: null, findings: [] } });
-    reviewServer(view);
-    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+  it('a demo whose steps have no review (rows stay out of model context) says so, and its sent note carries no finding text', async () => {
+    // Even if a verdict or finding reached the view, the run's own steps decide: no review step, no frame text sent.
+    const view = reviewDemo({ seats: { recorder: null, reviewer: null } });
+    const { gatePosts } = reviewServer(view);
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={personUnits} />);
     expect((await screen.findByTestId('demo-review-line')).textContent).toMatch(/^No model reviews this demo/);
-    expect(screen.queryByTestId('demo-review-findings')).toBeNull();
     expect(screen.getAllByTestId('demo-review-sheet')).toHaveLength(3);
     fireEvent.click(screen.getByTestId('demo-record-again'));
-    expect((screen.getByTestId('demo-record-again-note') as HTMLTextAreaElement).value).toBe('Record the demo again as a new take. Every chapter is recorded again from the plan you approve next.');
+    const pick = screen.getByTestId('demo-record-again-pick') as HTMLSelectElement;
+    expect(Array.from(pick.options).map((o) => o.textContent).join('|')).not.toContain('blank');
+    const note = (screen.getByTestId('demo-record-again-note') as HTMLTextAreaElement).value;
+    expect(note).toBe('Record the demo again as a new take. Change the plan for chapter 01-open ("Open the queue"). See the take (at 0:07). Every chapter is recorded again from the plan you approve next.');
+    fireEvent.click(screen.getByTestId('demo-record-again-send'));
+    await waitFor(() => expect(gatePosts()).toHaveLength(1));
+    expect(String(gatePosts()[0]!['amend'])).not.toMatch(/blank/i);
+  });
+
+  it('a model-reviewed run whose reviewer is not assigned yet is never said to be private', async () => {
+    reviewServer(reviewDemo({ stage: 'reviewing', seats: { recorder: null, reviewer: null }, review: { verdict: null, rejected: false, text: null, findings: [] } }));
+    const { container } = render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    expect(container.textContent ?? '').not.toMatch(/No model reviews/);
+  });
+
+  it('sends nothing when the review gate was answered elsewhere since the box opened (a new gate instance)', async () => {
+    const { gatePosts } = reviewServer(reviewDemo(), reviewDemo(), () => '1970-01-01T00:00:09.000Z');
+    useGateStore.getState().setGate({ runId: RUN, ord: 6, prompt: 'Review the take', lifecycle: 'open', receivedAt: 1 });
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
+    fireEvent.click(await screen.findByTestId('demo-record-again'));
+    fireEvent.click(screen.getByTestId('demo-record-again-send'));
+    expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/nothing was sent/);
+    expect(gatePosts()).toHaveLength(0);
+  });
+
+  it('sends nothing when the plan changed under the same-size take (chapters are part of the take)', async () => {
+    const renamed = reviewDemo();
+    renamed.chapters = renamed.chapters.map((c, i) => (i === 1 ? { ...c, title: 'Assign two tickets' } : c));
+    const { gatePosts } = reviewServer(reviewDemo(), renamed);
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
+    fireEvent.click(await screen.findByTestId('demo-record-again'));
+    fireEvent.click(screen.getByTestId('demo-record-again-send'));
+    expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/nothing was sent/);
+    expect(gatePosts()).toHaveLength(0);
   });
 
   it('a rejected review offers the same host action', async () => {
     reviewServer(reviewDemo({ review: { verdict: null, rejected: true, text: 'x', findings: [] } }));
-    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
     expect((await screen.findByTestId('demo-review-line')).textContent).toBe('reviewer asked for changes');
     expect(screen.getByTestId('demo-record-again')).toBeTruthy();
   });
 
-  it('Edit the cut makes the run’s editable cut once the run is done, and is not offered before or after', async () => {
+  it('Edit the cut makes the run’s editable cut once the run is done, only where the host opens it', async () => {
     const done = reviewDemo({ stage: 'done', document: null });
     const { fetchMock } = reviewServer(done, { ...done, document: { projectId: 'p', docId: 'demo-runone' } });
-    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    const { rerender } = render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    // A host that cannot open the cut never offers a verb whose result the person cannot reach.
+    expect(screen.queryByTestId('demo-edit-cut')).toBeNull();
+    rerender(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} cutOpens />);
     expect(screen.queryByTestId('demo-record-again')).toBeNull();
     fireEvent.click(await screen.findByTestId('demo-edit-cut'));
     expect((await screen.findByTestId('demo-review-note')).textContent).toMatch(/^The cut is made/);
@@ -294,10 +338,11 @@ describe('a demo at its review gate: the review, the sheets, Record it again (pl
     await waitFor(() => expect(screen.queryByTestId('demo-edit-cut')).toBeNull());
     cleanup();
     reviewServer(reviewDemo({ stage: 'recording' }));
-    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={units} />);
+    render(<RecordingGateActions runId={RUN} kind="demo-video" step={null} units={modelUnits} cutOpens />);
     await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
     expect(screen.queryByTestId('demo-edit-cut')).toBeNull();
     expect(screen.queryByTestId('demo-review')).toBeNull();
+    expect(recordingGateActions(binding, modelUnits, undefined, true, true)).not.toBeNull();
   });
 });
 

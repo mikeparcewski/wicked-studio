@@ -149,9 +149,11 @@ export function approveDemoGate(runId: string): Promise<DecisionOutcome> {
 }
 
 /** Send the run back with a note: at either gate the planner runs again, and the engine records a new whole take of
- *  the plan approved next. */
-export function sendBackDemo(runId: string, note: string): Promise<DecisionOutcome> {
-  return decideDemoGate(runId, { approve: false, action: 'request_changes', amend: note });
+ *  the plan approved next. `expect`: the gate instance the caller has just re-read and checked; the decision is sent
+ *  only while it is still that instance (no second read in between). */
+export function sendBackDemo(runId: string, note: string, expect?: { ord: number; receivedAt: number }): Promise<DecisionOutcome> {
+  const decision = { approve: false, action: 'request_changes' as const, amend: note };
+  return expect === undefined ? decideDemoGate(runId, decision) : commitGateDecision(runId, decision, { expect });
 }
 
 /**

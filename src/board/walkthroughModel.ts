@@ -84,7 +84,9 @@ export interface Recording {
 }
 
 export interface DemoReview {
-  by: 'model' | 'person';
+  /** `model`: a review seat reviewed (or is reviewing) the take. `unknown`: no model review is known from the demo view
+   *  alone — never read as "no model sees it"; only the run's own steps say that (a run with no `review` step). */
+  by: 'model' | 'unknown';
   verdict: 'accept' | 'changes' | null;
   /** The engine judged the review not PASS: the gate is its escalation gate. */
   rejected: boolean;
@@ -113,14 +115,23 @@ function findingChapter(chapters: readonly { key: string; title: string }[], nam
 /** The contact sheets' words (crew's `DemoView.sheets` names). */
 export const SHEET_LABEL: Readonly<Record<string, string>> = { chapters: 'Each chapter, once it is ready', joins: 'The joins between chapters', end: 'The last frames' };
 
-/** One line on a demo's review: the verdict, who gave it, or that a person reviews this take. Null for a walkthrough. */
-export function demoReviewLine(r: Recording): string | null {
+/** Whether a model reviews this demo, from the run's own steps (the authority): the `demo` preset has a `review` step,
+ *  `demo-human-review` (the app's rows stay out of model context, DES-DEMO-RECORD-001 §3.7) has none. `unknown` before
+ *  the run has steps. */
+export function demoReviewPolicy(runId: string, units: readonly UnitLike[]): 'model' | 'person' | 'unknown' {
+  if (units.length === 0) return 'unknown';
+  return units.some((u) => u.id === `${runId}:review`) ? 'model' : 'person';
+}
+
+/** One line on a demo's review: the verdict, who gave it, or that a person reviews this take. Null for a walkthrough.
+ *  `policy` (from the run's steps, {@link demoReviewPolicy}) is the only source of the "no model reviews it" line. */
+export function demoReviewLine(r: Recording, policy: 'model' | 'person' | 'unknown' = 'unknown'): string | null {
   if (r.kind !== 'demo-video' || r.review === undefined) return null;
   const rv = r.review;
   const who = r.seat.evaluator ?? 'The review seat';
   const n = rv.findings.length;
   const findings = n === 0 ? '' : ` · ${n} finding${n === 1 ? '' : 's'}`;
-  if (rv.by === 'person') return 'No model reviews this demo: the app’s data stays out of model context. You review the take at the gate.';
+  if (policy === 'person') return 'No model reviews this demo: the app’s data stays out of model context. You review the take at the gate.';
   if (rv.rejected || rv.verdict === 'changes') return `${who} asked for changes${findings}`;
   if (rv.verdict === 'accept') return `${who} accepted the take${findings}`;
   return r.demoStage === 'reviewing' ? `${who} is reviewing the take` : 'Not reviewed yet';
@@ -131,7 +142,7 @@ export function demoReviewOf(view: DemoView): DemoReview {
   const r = view.review;
   const byModel = view.seats.reviewer !== null || r.verdict !== null || r.rejected || r.findings.length > 0;
   return {
-    by: byModel ? 'model' : 'person',
+    by: byModel ? 'model' : 'unknown',
     verdict: r.verdict,
     rejected: r.rejected,
     findings: r.findings.map((f) => ({ ...f, chapterKey: findingChapter(view.chapters, f.chapter), atSec: clockSec(f.at) })),
@@ -401,7 +412,8 @@ export function takeFingerprint(r: Recording): string {
  *  again" drawn from one take is never sent after another replaced it. */
 export function demoTakeFingerprint(r: Recording): string {
   const f = (r.review?.findings ?? []).map((x) => `${x.chapter}@${x.at}:${x.verdict}:${x.issue}`).join('|');
-  return `${r.runId}|${r.demoStage ?? ''}|${r.videoBytes ?? ''}|${r.review?.verdict ?? ''}|${r.review?.rejected === true ? 1 : 0}|${f}`;
+  const chapters = r.chapters.map((c) => `${c.key}:${c.title}`).join('|');
+  return `${r.runId}|${r.demoStage ?? ''}|${r.videoBytes ?? ''}|${r.review?.verdict ?? ''}|${r.review?.rejected === true ? 1 : 0}|${f}|${chapters}`;
 }
 
 /** Whether the recording is still moving (poll it) or settled. */

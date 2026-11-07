@@ -354,10 +354,10 @@ describe('a demo’s review and contact sheets (plugins S4: G8, G22)', () => {
     expect(pending.proof).toBeUndefined();
     expect(pending.review?.line).toBe('reviewer is reviewing the take');
   });
-  it('a person-reviewed demo (no review seat) has no proof and says why', () => {
+  it('no review seat in the view has no proof and never claims the take is private (only the run’s steps say that)', () => {
     const cut = cutOfRecording(recordingOfDemo(demo({ stage: 'review_gate', sheets, seats: { recorder: null, reviewer: null }, review: { verdict: null, rejected: false, text: null, findings: [] } })), 'Demo');
     expect(cut.proof).toBeUndefined();
-    expect(cut.review).toMatchObject({ by: 'person', line: expect.stringMatching(/^No model reviews this demo/) });
+    expect(cut.review).toEqual({ by: 'unknown', line: 'Not reviewed yet', sheets: expect.any(Array) });
   });
   it('the host Checks list carries the findings', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => json(changes())));
