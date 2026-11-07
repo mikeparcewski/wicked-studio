@@ -407,7 +407,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
       if (r.ok) {
         sessionRef.current?.take(r.app);
         // The line and its button are gone: the status line that says so takes the focus.
-        requestAnimationFrame(() => statusRef.current?.focus());
+        // ...only when the focus was lost with that button (never pulled from wherever the person has since gone).
+        requestAnimationFrame(() => { if (document.activeElement === null || document.activeElement === document.body) statusRef.current?.focus(); });
       }
     } finally {
       setUnarchiving(false);
@@ -554,7 +555,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
                     undoOff={phone || archived}
                     closedWhy={archived ? 'This app is archived: restore it to ask for changes.' : null}
                     onUndo={() => {
-                      if (phone) return; // view + chat on a phone (operator ruling D5): no Undo, whatever drew the button
+                      if (phone || archived) return; // view + chat on a phone (D5), nothing on an archived app: no Undo, whatever drew it
                       if ((sessionRef.current?.pending ?? 0) > 0) { setStatus('Your last edit is still saving: Undo after it lands.'); return; }
                       void move('undo');
                     }} />
