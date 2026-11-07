@@ -12,6 +12,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetPowerDefault, useReviewPlan } from '../src/store/reviewPlan.js';
 import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { catalogFromWire } from '../src/board/workflowCatalog.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
@@ -58,6 +59,10 @@ let holdHealth = false;
 /** What `GET /health` answers: power mode on the daemon, or a failed read. */
 let healthPower = true;
 let healthFails = false;
+/** `GET /settings`: the Power-mode default (operator ruling 2026-11-06). Off here = today's chat start. */
+let powerModeDefault: boolean | undefined = false;
+/** A `/settings` read that waits until released (the start's own read of the setting). */
+let settingsGate: Promise<void> | null = null;
 let read: string[] = [];
 const gets = (): string[] => read;
 let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
@@ -78,12 +83,13 @@ function stubWire(): void {
       return json({ ok: true });
     }
     read.push(path);
+    if (path === '/settings' && settingsGate !== null) return settingsGate.then(() => json({ settings: powerModeDefault === undefined ? {} : { powerModeDefault } }));
     if (path === '/health' && holdHealth) return new Promise<Response>(() => {});
     if (path === '/health') return healthFails ? json({ error: 'down' }, 503) : json({ capabilities: { powerMode: healthPower, chatIdOnLaunch: true } });
     if (path === '/workflows/catalog') return json(CATALOG);
     return json(path === '/workflows' ? { workflows: ['bug', 'feature', 'domain-extraction', 'review-recent-work'].map(def) }
       : path === '/roster' ? { roster: SEATS } : path === '/repos' ? { repos }
-        : path === '/presets' ? { presets } : path === '/projects' ? { projects: [PROJECT] } : path === '/settings' ? { settings: {} } : {});
+        : path === '/presets' ? { presets } : path === '/projects' ? { projects: [PROJECT] } : path === '/settings' ? { settings: powerModeDefault === undefined ? {} : { powerModeDefault } } : {});
   }));
 }
 
@@ -115,6 +121,11 @@ beforeEach(() => {
   holdHealth = false;
   healthPower = true;
   healthFails = false;
+  powerModeDefault = false;
+  settingsGate = null;
+  resetPowerDefault();
+  useReviewPlan.setState({ on: false });
+  try { window.localStorage.removeItem('studio.chatReviewPlan'); } catch { /* jsdom */ }
   stubWire();
   resetWorkflowCatalog();
   resetPlanCatalog();
@@ -485,4 +496,127 @@ describe('New job\'s card click starts the work in a chat, not in the modal', ()
     expect(useLaunchWizard.getState().open).toBe(true);
     expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('demo');
   });
+});
+
+
+describe('a chat start follows the Power-mode default, with Review plan (operator ruling 2026-11-06)', () => {
+  async function startBug(): Promise<void> {
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+  }
+
+  it('default on, Review plan off: a power run (power: true), said before Enter', async () => {
+    powerModeDefault = true;
+    render(<Harness navigate={() => {}} />);
+    await startBug();
+    const toggle = await screen.findByTestId('composer-start-review-plan-toggle');
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByTestId('composer-start-review-plan').textContent).toContain('Power run: no plan review.');
+    expect(screen.getByTestId('composer-start-line').textContent).toContain('one power run');
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]!['power']).toBe(true);
+  });
+
+  it('default on, Review plan on: phased, held at its plan (power: false); the choice is remembered', async () => {
+    powerModeDefault = undefined; // absent = on
+    render(<Harness navigate={() => {}} />);
+    await startBug();
+    fireEvent.click(await screen.findByTestId('composer-start-review-plan-toggle'));
+    expect(screen.getByTestId('composer-start-review-plan').textContent).toContain('You’ll review the plan first.');
+    expect(window.localStorage.getItem('studio.chatReviewPlan')).toBe('true');
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]).toMatchObject({ power: false, humanConfirm: 'before:1' });
+  });
+
+  it('default off: no toggle, and exactly today’s body (power: false)', async () => {
+    powerModeDefault = false;
+    render(<Harness navigate={() => {}} />);
+    await startBug();
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(screen.queryByTestId('composer-start-review-plan')).toBeNull();
+    expect(launches()[0]).toMatchObject({ power: false, humanConfirm: 'before:1' });
+  });
+
+  it('an older daemon without power mode: no toggle and no power word, whatever the setting', async () => {
+    powerModeDefault = true;
+    healthPower = false;
+    useCapabilities.setState({ powerMode: false });
+    render(<Harness navigate={() => {}} />);
+    await startBug();
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(screen.queryByTestId('composer-start-review-plan')).toBeNull();
+    expect(launches()[0]!['power']).toBeUndefined();
+  });
+});
+
+
+describe('Review plan: the setting the box showed is the one that starts (review fold)', () => {
+  async function startBug(): Promise<void> {
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+  }
+
+  it('a default turned on between the box and Enter starts nothing, and the box then offers Review plan', async () => {
+    powerModeDefault = false;
+    render(<Harness navigate={() => {}} />);
+    await startBug();
+    expect(screen.queryByTestId('composer-start-review-plan')).toBeNull();
+    powerModeDefault = true;
+    enter();
+    await waitFor(() => expect(screen.getByTestId('composer-start-error')).toHaveTextContent('Power mode for new jobs is on now'), { timeout: 10_000 });
+    expect(launches()).toEqual([]);
+    expect(await screen.findByTestId('composer-start-review-plan-toggle')).toBeTruthy();
+  }, 20_000);
+
+  it('a card removed while the start reads the setting launches nothing', async () => {
+    powerModeDefault = true;
+    render(<Harness navigate={() => {}} />);
+    await startBug();
+    await screen.findByTestId('composer-start-review-plan-toggle');
+    let release: () => void = () => undefined;
+    settingsGate = new Promise<void>((r) => { release = r; });
+    enter();
+    await waitFor(() => expect(gets().filter((g) => g === '/settings').length).toBeGreaterThan(1));
+    act(() => { useComposerChips.setState({ byComposer: {} }); });
+    await act(async () => { release(); await Promise.resolve(); });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(launches()).toEqual([]);
+  }, 20_000);
+});
+
+describe('Review plan: round 2 folds', () => {
+  it('a start whose capability read was stale redraws with Review plan, and the next Enter is the person’s choice', async () => {
+    powerModeDefault = true;
+    useCapabilities.setState({ powerMode: false }); // the startup read missed power mode
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    expect(screen.queryByTestId('composer-start-review-plan')).toBeNull();
+    enter();
+    await waitFor(() => expect(screen.getByTestId('composer-start-error')).toHaveTextContent('Power mode for new jobs is on now'), { timeout: 10_000 });
+    expect(launches()).toEqual([]);
+    await screen.findByTestId('composer-start-review-plan-toggle', {}, { timeout: 10_000 });
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1), { timeout: 10_000 });
+    expect(launches()[0]!['power']).toBe(true);
+  }, 30_000);
+
+  it('the start checks the setting with its own request, made after the press', async () => {
+    powerModeDefault = true;
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await screen.findByTestId('composer-start-review-plan-toggle', {}, { timeout: 10_000 });
+    const before = gets().filter((g) => g === '/settings').length;
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1), { timeout: 10_000 });
+    expect(gets().filter((g) => g === '/settings').length).toBeGreaterThan(before);
+  }, 30_000);
 });

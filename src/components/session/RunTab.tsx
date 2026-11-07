@@ -193,7 +193,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const delivered = (delivery.state !== 'none' && delivery.state !== 'in-flight') || receipt !== null;
 
   const goToQuestion = (): void => {
-    const block = [...document.querySelectorAll<HTMLElement>('[data-testid="session-run"]')].find((b) => b.dataset['runId'] === id);
+    const block = [...document.querySelectorAll<HTMLElement>('[data-testid="session-run"], [data-testid="job-passage"]')].find((b) => b.dataset['runId'] === id);
     const asking = block?.querySelector<HTMLElement>(ASKING) ?? block;
     if (asking === undefined) return;
     // The question is docked above the composer: its marker in the thread focuses the dock.

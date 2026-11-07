@@ -147,8 +147,11 @@ export interface ComposerSuggestion { id: string; label: string; title?: string;
 
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null,
+  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false,
 }: {
+  /** The box answers one thing (a job's bound reply, DES-CATALOG-002 §2.4): Send hands over the typed words alone —
+   *  no workflow chip, `/` command or about-chip context starts or decorates anything. */
+  answerOnly?: boolean;
   /** `desk`, or the session id. */
   composerKey: string;
   text: string;
@@ -188,7 +191,8 @@ export function Composer({
   const project = projectChip(chips);
   const presetsState = usePlanCatalog((s) => s.presets[project?.projectId ?? '']);
   const presets = Array.isArray(presetsState) ? presetsState : null;
-  const wfChip = (chips.find((c) => c.kind === 'workflow') as Extract<AboutChip, { kind: 'workflow' }> | undefined) ?? null;
+  // A bound box (answerOnly) suspends any workflow it was about to start: its chip, blockers and Start are not in play.
+  const wfChip = answerOnly ? null : (chips.find((c) => c.kind === 'workflow') as Extract<AboutChip, { kind: 'workflow' }> | undefined) ?? null;
   const askPathOn = useCapabilities((s) => s.askPath);
   const own = useRef<HTMLTextAreaElement | null>(null);
   // A one-row box on a phone shows only the placeholder's first clause, ended by an ellipsis —
@@ -217,7 +221,8 @@ export function Composer({
   const [note, setNote] = useState<string | null>(null);
 
   const token = menuToken(text, caret);
-  const menuOpen = token !== null && closedAt !== `${token.trigger}${token.start}`;
+  // A bound box takes `/` and `@` as the answer's own words: no command or helper menu opens, so none dispatches.
+  const menuOpen = !answerOnly && token !== null && closedAt !== `${token.trigger}${token.start}`;
   useEffect(() => {
     if (menuOpen && token?.trigger === '/') loadCatalog();
   }, [menuOpen, token?.trigger]);
@@ -324,7 +329,7 @@ export function Composer({
   // Whether the seat rules apply to this send — independent of whether the row is on screen, so an
   // open `@` menu never lets a send past the refusals below (codex r2 on S3).
   // A new app is made by crew's own helpers (the app's turn): no helpers row for it.
-  const seatsApply = eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
+  const seatsApply = !answerOnly && eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
   const showSeats = seatsApply && !atMenuOpen;
   // A job's helpers (New job's J4 rule, codex r1 on #982): one that cannot take work now (signed out, benched) is off
   // unless turned on by hand, and the row shows exactly what the launch sends.
@@ -344,7 +349,7 @@ export function Composer({
     : sendSeats.length === 0 ? NO_SEAT_PICKED
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
-  const canSend = (text.trim() !== '' || (wfChip !== null && wordsOptional)) && refusal === null && seatRefusal === null
+  const canSend = answerOnly ? text.trim() !== '' : (text.trim() !== '' || (wfChip !== null && wordsOptional)) && refusal === null && seatRefusal === null
     && (wfChip === null || startBlocker === null);
 
   const syncCaret = (el: HTMLTextAreaElement): void => setCaret(el.selectionStart ?? el.value.length);
@@ -447,6 +452,11 @@ export function Composer({
 
 
   const send = (): void => {
+    if (answerOnly) {
+      if (text.trim() === '') return;
+      onSend(text, {});
+      return;
+    }
     // A `/workflow-<key>` line typed whole (menu closed, a paste): Enter NAMES it — the options row
     // then asks for the repository. Nothing is sent until the next Enter.
     const typed = parseWorkflowCommand(text);

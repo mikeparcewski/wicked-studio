@@ -85,6 +85,12 @@ export function Docked({ dockKey, open, marker, dock, children }: {
   return <>{marker}</>;
 }
 
+/** Renderers inside it draw in place, never in the dock (DES-CATALOG-002 §2.8.1: a job's own decisions live in its
+ *  passage; the dock is not used for them). */
+export function Undocked({ children }: { children: React.ReactNode }): React.ReactElement {
+  return <Ctx.Provider value={null}>{children}</Ctx.Provider>;
+}
+
 /** The thread's one-line marker where the question was asked: "Codex asked for a decision · 3 h ago". Focuses the dock. */
 export function DecisionMarker({ dockKey, who, since, now = Date.now() }: { dockKey: string; who: string | null; since: number | null; now?: number }): React.ReactElement {
   const { focus } = useDockPlacement(dockKey, true);
