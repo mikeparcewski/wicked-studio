@@ -34,8 +34,11 @@ describe('the context document’s words', () => {
   it('a refused version is said with the engine’s reason, that the earlier context was taken out, and what to do', () => {
     const w = contextWords(ctx({ version: 5, sections: [], error: { version: 5, reason: 'the block renders to 16384 bytes of UTF-8 with its framing; at most 15360 (it must fit beside the largest judge prompt in one argument)', at: 2, cleared: true } }));
     expect(w?.bad).toBe(true);
-    expect(w?.text).toMatch(/^Version 5 is not in agents’ context: the block renders to 16384 bytes/u);
+    expect(w?.text).toMatch(/^Version 5 is not in agents’ context: it is too long once framed for the agents \(16,384 bytes; the most is 15,360\)\. /u);
     expect(w?.text).toMatch(/The earlier context was taken out, so agents do not follow words you replaced\. Shorten Goal, Approach or Constraints and save again\.$/u);
+    // A failed clear's own words are kept after the size.
+    expect(contextWords(ctx({ version: 4, error: { version: 5, reason: 'the block renders to 16384 bytes of UTF-8 with its framing; at most 15360 (x); the earlier context could not be taken out yet, trying again', at: 2, cleared: false } }))?.text)
+      .toBe('Version 5 is not in agents’ context: it is too long once framed for the agents (16,384 bytes; the most is 15,360); the earlier context could not be taken out yet, trying again. Shorten Goal, Approach or Constraints and save again.');
     // A later version in force: the old refusal is no longer the news.
     expect(contextWords(ctx({ version: 6, error: { version: 5, reason: 'x', at: 2, cleared: true } }))?.bad).toBe(false);
   });

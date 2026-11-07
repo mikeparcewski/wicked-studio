@@ -161,13 +161,22 @@ export function seenByWords(c: DocContext | undefined, stepOfOrd: (ord: number) 
   return `Seen by: ${listWords(names)}.`;
 }
 
+const n = (x: string): string => Number(x).toLocaleString('en-US');
+
+/** The engine's refusal in a person's words: its size limit as "too long" with the numbers; anything else as said. */
+function reasonWords(reason: string): string {
+  const framed = /renders to (\d+) bytes[^;]*; at most (\d+)/u.exec(reason);
+  if (framed !== null) return `it is too long once framed for the agents (${n(framed[1]!)} bytes; the most is ${n(framed[2]!)})${/; (.+)$/u.exec(reason.slice(framed.index + framed[0].length))?.[0] ?? ''}`;
+  return reason.replace(/[.\s]+$/u, '');
+}
+
 /** What the document says about the engine's context block, or null (no block engine, nothing to say). */
 export function contextWords(c: DocContext | undefined): { text: string; bad: boolean } | null {
   if (c === undefined || !c.engine) return null;
   if (c.error !== null && (c.version === null || c.error.version >= c.version)) {
     const tail = c.error.cleared ? ' The earlier context was taken out, so agents do not follow words you replaced.' : '';
     const fix = /too long|renders to|characters; at most/iu.test(c.error.reason) ? ' Shorten Goal, Approach or Constraints and save again.' : '';
-    return { text: `Version ${c.error.version} is not in agents’ context: ${c.error.reason.replace(/[.\s]+$/u, '')}.${tail}${fix}`, bad: true };
+    return { text: `Version ${c.error.version} is not in agents’ context: ${reasonWords(c.error.reason)}.${tail}${fix}`, bad: true };
   }
   if (c.version === null || c.sections.length === 0) return { text: 'Nothing of yours is in agents’ context yet. Write a Goal, Approach or Constraints to add it.', bad: false };
   const cut = c.cut.length > 0 ? ` ${listWords(c.cut.map((x) => SECTION_LABELS[x]))} ${c.cut.length === 1 ? 'was' : 'were'} cut to fit; the text says where.` : '';
