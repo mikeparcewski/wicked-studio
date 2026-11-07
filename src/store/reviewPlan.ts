@@ -63,48 +63,53 @@ export function chatStartPower(powerCap: boolean, defaultOn: boolean, reviewPlan
   return defaultOn ? !reviewPlan : false;
 }
 
-/** How long a Start waits for the daemon to say what it can do before it starts nothing. */
-export const START_LIMITS = { healthWaitMs: 15_000 };
-
-/** A job proposal can run as a power run (crew 0.196.0's rule): a workflow run on a repository. Crew also requires a
- *  preset workflow and refuses otherwise (409 `power_unavailable`, its words shown), never runs it phased. */
-export function proposalPowerFits(p: { launch?: string | null; repoRefs?: readonly string[] | null }): boolean {
-  return (p.launch === 'run' || p.launch === undefined || p.launch === null) && (p.repoRefs?.length ?? 0) > 0;
-}
+/** How long a Start's checks (the daemon's capabilities, then the setting) may take before it starts nothing. */
+export const START_LIMITS = { checkWaitMs: 15_000 };
 
 /**
- * (api-types 0.196.0) The `power` a chat job's Start sends, decided at the press like the `/` start's: the daemon's
- * capabilities and the Power-mode setting are read NOW, and must be the ones the passage showed (`shownOn`: the Review
- * plan choice was drawn). Review plan on sends `false` at once. A power run (Review plan off) is sent only when the
- * fresh reads still say power mode is on: a setting or capability that changed since, a choice flipped meanwhile, or a
- * read that fails starts nothing (the passage redraws with what was read). `undefined` = send no `power` (the job stops
- * at its plan, as on an older daemon).
+ * (api-types 0.196.0) The `power` a chat job's Start sends, for a job crew says can choose (`powerChoice`), decided at
+ * the press like the `/` start's: the daemon's capabilities and the Power-mode setting are read NOW, and Review plan
+ * must be offered (or not) as the passage showed it (`shownOffer`). A change since (the setting, power mode, crew's
+ * `chatJobPower`), a choice flipped meanwhile, a failed read or one slower than {@link START_LIMITS} starts nothing (the
+ * stores are updated, so the passage redraws with what was read). Where it was not offered and still is not:
+ * `undefined` (no `power`: it stops at its plan, exactly the body of before).
  */
-export async function jobStartPower(shownOn: boolean, reviewAsked: boolean, reviewNow: () => boolean): Promise<boolean | undefined> {
-  if (!shownOn) return undefined;
-  // Review plan on: it stops at its plan whatever was changed since (`false` holds on every daemon that took the field).
-  if (reviewAsked) return false;
-  let caps: Record<string, unknown>;
+export async function jobStartPower(shownOffer: boolean, reviewAsked: boolean, reviewNow: () => boolean): Promise<boolean | undefined> {
+  const check = async (): Promise<boolean | undefined> => {
+    let caps: Record<string, unknown>;
+    try {
+      caps = ((await api.getHealth()) as unknown as { capabilities?: Record<string, unknown> }).capabilities ?? {};
+    } catch (e) {
+      throw new Error(`Not started: the daemon did not say what it can do (${e instanceof Error ? e.message : String(e)}). Press Start again.`);
+    }
+    const powerNow = caps['powerMode'] === true;
+    const fieldNow = caps['chatJobPower'] === true;
+    const st = useCapabilities.getState();
+    if (st.powerMode !== powerNow || st.chatJobPower !== fieldNow) useCapabilities.setState({ powerMode: powerNow, chatJobPower: fieldNow });
+    let defaultNow = false;
+    if (powerNow && fieldNow) {
+      try { defaultNow = await readPowerDefault({ fresh: true }); } catch (e) {
+        throw new Error(`Not started: the Power-mode setting could not be read (${e instanceof Error ? e.message : String(e)}). Press Start again.`);
+      }
+    }
+    const offerNow = powerNow && fieldNow && defaultNow;
+    if (offerNow !== shownOffer) {
+      throw new Error(offerNow
+        ? 'Not started: Power mode for new jobs is on now. Choose Review plan, then press Start again.'
+        : 'Not started: power runs are off for this job now, so it reviews its plan. Press Start again.');
+    }
+    // Not offered, as shown: no `power` (it stops at its plan; exactly the body of before).
+    if (!offerNow) return undefined;
+    if (reviewNow() !== reviewAsked) throw new Error('Not started: Review plan changed while the job was being checked. Press Start again.');
+    return !reviewAsked;
+  };
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const giveUp = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Not started: no answer from the daemon in ${Math.round(START_LIMITS.checkWaitMs / 1000)} s. Press Start again.`)), START_LIMITS.checkWaitMs);
+  });
   try {
-    const giveUp = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer in ${Math.round(START_LIMITS.healthWaitMs / 1000)} s`)), START_LIMITS.healthWaitMs); });
-    caps = ((await Promise.race([api.getHealth(), giveUp])) as unknown as { capabilities?: Record<string, unknown> }).capabilities ?? {};
-  } catch (e) {
-    throw new Error(`Not started: the daemon did not say what it can do (${e instanceof Error ? e.message : String(e)}). Press Start again.`);
+    return await Promise.race([check(), giveUp]);
   } finally {
     clearTimeout(timer);
   }
-  const powerNow = caps['powerMode'] === true;
-  const fieldNow = caps['chatJobPower'] === true;
-  // What the passage draws from: a fresh answer that differs updates it, so the refusal's redraw shows what was read.
-  const s = useCapabilities.getState();
-  if (s.powerMode !== powerNow || s.chatJobPower !== fieldNow) useCapabilities.setState({ powerMode: powerNow, chatJobPower: fieldNow });
-  if (!powerNow || !fieldNow) throw new Error('Not started: power runs are off on this daemon now, so this job reviews its plan. Press Start again.');
-  let defaultNow: boolean;
-  try { defaultNow = await readPowerDefault({ fresh: true }); } catch (e) {
-    throw new Error(`Not started: the Power-mode setting could not be read (${e instanceof Error ? e.message : String(e)}). Press Start again.`);
-  }
-  if (!defaultNow) throw new Error('Not started: Power mode for new jobs is off now, so this job reviews its plan. Press Start again.');
-  if (reviewNow() !== reviewAsked) throw new Error('Not started: Review plan changed while the job was being checked. Press Start again.');
-  return true;
 }

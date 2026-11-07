@@ -967,7 +967,7 @@ describe('round 3 (coordinator): one step, one name', () => {
 
 describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
   /** A daemon with power mode, the setting as given (it may change between reads), and the decision POSTs recorded. */
-  function powerDaemon(o: { chatJobPower?: boolean; settings?: () => boolean } = {}) {
+  function powerDaemon(o: { chatJobPower?: () => boolean; settings?: () => boolean | 'fail'; health?: () => Promise<Response> } = {}) {
     let settingsReads = 0;
     vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
       const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
@@ -975,9 +975,18 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
         posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
         return Promise.resolve(ok({ view: {} }));
       }
-      if (path === '/settings') { settingsReads += 1; return Promise.resolve(ok({ settings: { powerModeDefault: (o.settings ?? (() => true))() } })); }
-      if (path === '/health') return Promise.resolve(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: o.chatJobPower ?? true } }));
-      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      if (path === '/settings') {
+        settingsReads += 1;
+        const on = (o.settings ?? (() => true))();
+        return Promise.resolve(on === 'fail' ? new Response('{}', { status: 500 }) : ok({ settings: { powerModeDefault: on } }));
+      }
+      if (path === '/health') return o.health?.() ?? Promise.resolve(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: (o.chatJobPower ?? (() => true))() } }));
+      if (path.startsWith('/chats/') && !path.includes('/considered')) {
+        reads += 1;
+        return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      }
+      if (path.endsWith('/team')) return Promise.resolve(ok(team));
+      if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
       return Promise.resolve(new Response('{}', { status: 404 }));
     }));
     return { reads: () => settingsReads };
@@ -1000,9 +1009,9 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
   it('Review plan off: Start sends a power run, checked against fresh reads', async () => {
     const d = powerDaemon();
     page();
-    const toggle = await screen.findByTestId('job-passage-review-plan-toggle');
+    await screen.findByTestId('job-passage-review-plan-toggle');
     expect(screen.getByTestId('job-passage-review-plan').textContent).toContain('Power run: no plan review.');
-    expect(toggle.getAttribute('aria-checked') ?? (toggle as HTMLInputElement).checked?.toString()).toMatch(/false/);
+    expect(screen.getByRole('switch', { name: /Review plan/ }).getAttribute('aria-checked')).toBe('false');
     const before = d.reads();
     fireEvent.click(reply('start'));
     await waitFor(() => expect(decisions()).toHaveLength(1));
@@ -1015,6 +1024,7 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
     page();
     fireEvent.click(await screen.findByTestId('job-passage-review-plan-toggle'));
     await waitFor(() => expect(screen.getByTestId('job-passage-review-plan').textContent).toContain('You’ll review the plan first.'));
+    expect(screen.getByRole('switch', { name: /Review plan/ }).getAttribute('aria-checked')).toBe('true');
     fireEvent.click(reply('start'));
     await waitFor(() => expect(decisions()).toHaveLength(1));
     expect(decisions()[0]!.body).toEqual({ decision: 'go', power: false });
@@ -1027,7 +1037,7 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
     await screen.findByTestId('job-passage-review-plan-toggle');
     on = false;
     fireEvent.click(reply('start'));
-    expect(await screen.findByText(/Power mode for new jobs is off now/)).toBeTruthy();
+    expect(await screen.findByText(/power runs are off for this job now/)).toBeTruthy();
     expect(decisions()).toHaveLength(0);
   });
 
@@ -1044,7 +1054,7 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
 
   it('an older daemon (no chatJobPower): no toggle, the plan-review note, and today’s body', async () => {
     useCapabilities.setState({ chatJobPower: false });
-    powerDaemon({ chatJobPower: false });
+    powerDaemon({ chatJobPower: () => false });
     page();
     expect((await screen.findByTestId('job-passage-review-plan-note')).textContent).toMatch(/^You’ll review the plan first/);
     expect(screen.queryByTestId('job-passage-review-plan-toggle')).toBeNull();
@@ -1053,14 +1063,115 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
     expect(decisions()[0]!.body).toEqual({ decision: 'go' });
   });
 
-  it('a job with no repository can’t run as a power run: the note, and no power sent', async () => {
-    messages = [USER, SEAT, { ...P1, proposal: jobProposal({ repoRefs: [] }) }];
+  it('a job crew says can’t choose (no powerChoice): the note, and no power sent', async () => {
+    const cannot: Record<string, unknown> = { ...jobProposal() };
+    delete cannot['powerChoice'];
+    messages = [USER, SEAT, { ...P1, proposal: cannot }];
     powerDaemon();
     page();
-    expect((await screen.findByTestId('job-passage-review-plan-note')).textContent).toContain('only a workflow run on a repository');
+    expect((await screen.findByTestId('job-passage-review-plan-note')).textContent).toContain('this job can’t run as a power run');
     fireEvent.click(reply('start'));
     await waitFor(() => expect(decisions()).toHaveLength(1));
     expect(decisions()[0]!.body).toEqual({ decision: 'go' });
+  });
+
+  it('the job changed while its Start was being checked: nothing is sent', async () => {
+    let release: () => void = () => undefined;
+    let held = false;
+    powerDaemon({ health: () => (held ? new Promise<Response>((r) => { release = () => r(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } })); }) : Promise.resolve(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } }))) });
+    page();
+    await screen.findByTestId('job-passage-review-plan-toggle');
+    held = true;
+    fireEvent.click(reply('start'));
+    // Crew re-resolved the same proposal meanwhile (its content changed under the same pid).
+    await frame({ ...P1, at: T0 + 5, proposal: jobProposal({ what: { entry: 'migrate', title: 'Get reporting off .NET Framework', label: 'Migrate · Move', outcome: null } }) });
+    await act(async () => { release(); });
+    expect(await screen.findByText(/this job changed while it was being checked/)).toBeTruthy();
+    expect(decisions()).toHaveLength(0);
+  });
+
+  it('a change in flight when the checks answer holds Start: nothing is sent', async () => {
+    let release: () => void = () => undefined;
+    let held = false;
+    powerDaemon({ health: () => (held ? new Promise<Response>((r) => { release = () => r(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } })); }) : Promise.resolve(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } }))) });
+    page();
+    await screen.findByTestId('job-passage-review-plan-toggle');
+    held = true;
+    fireEvent.click(reply('start'));
+    await frame({ at: T0 + 5, turnId: 't9', kind: 'user', seats: ['claude'], text: 'make it a move' }, { at: T0 + 6, turnId: 't9', kind: 'proposal_revising', pid: `${CHAT}:t1` });
+    await act(async () => { release(); });
+    expect(await screen.findByText(/still being applied/)).toBeTruthy();
+    expect(decisions()).toHaveLength(0);
+  });
+
+  it('the setting not yet read when Start is pressed, and on: nothing is sent; the choice appears', async () => {
+    let pressed = false;
+    const d = powerDaemon({ settings: () => (pressed ? true : 'fail') });
+    page();
+    await screen.findByTestId('job-passage');
+    await waitFor(() => expect(d.reads()).toBeGreaterThan(0));
+    expect(screen.queryByTestId('job-passage-review-plan-toggle')).toBeNull();
+    pressed = true;
+    fireEvent.click(reply('start'));
+    expect(await screen.findByText(/Power mode for new jobs is on now/)).toBeTruthy();
+    expect(decisions()).toHaveLength(0);
+    expect(await screen.findByTestId('job-passage-review-plan-toggle')).toBeTruthy();
+  });
+
+  it('crew stopped taking the choice since it was drawn: nothing is sent, and the toggle goes', async () => {
+    let field = true;
+    powerDaemon({ chatJobPower: () => field });
+    page();
+    await screen.findByTestId('job-passage-review-plan-toggle');
+    field = false;
+    fireEvent.click(reply('start'));
+    expect(await screen.findByText(/power runs are off for this job now/)).toBeTruthy();
+    expect(decisions()).toHaveLength(0);
+    await waitFor(() => expect(screen.queryByTestId('job-passage-review-plan-toggle')).toBeNull());
+  });
+
+  it('Review plan flipped while the Start was being checked: nothing is sent', async () => {
+    let release: () => void = () => undefined;
+    let held = false;
+    powerDaemon({ health: () => (held ? new Promise<Response>((r) => { release = () => r(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } })); }) : Promise.resolve(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } }))) });
+    page();
+    const toggle = await screen.findByTestId('job-passage-review-plan-toggle');
+    held = true;
+    fireEvent.click(reply('start'));
+    fireEvent.click(toggle);
+    await act(async () => { release(); });
+    expect(await screen.findByText(/Review plan changed while the job was being checked/)).toBeTruthy();
+    expect(decisions()).toHaveLength(0);
+  });
+
+  it('Not now carries no power, and reads nothing', async () => {
+    const d = powerDaemon();
+    page();
+    await screen.findByTestId('job-passage-review-plan-toggle');
+    const before = d.reads();
+    fireEvent.click(reply('not_now'));
+    await waitFor(() => expect(decisions()).toHaveLength(1));
+    expect(decisions()[0]!.body).toEqual({ decision: 'not_now' });
+    expect(d.reads()).toBe(before);
+  });
+
+  it('checks that never answer release Start and send nothing', async () => {
+    const { START_LIMITS } = await import('../src/store/reviewPlan.js');
+    const was = START_LIMITS.checkWaitMs;
+    START_LIMITS.checkWaitMs = 50;
+    let held = false;
+    powerDaemon({ health: () => (held ? new Promise<Response>(() => undefined) : Promise.resolve(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } }))) });
+    try {
+      page();
+      await screen.findByTestId('job-passage-review-plan-toggle');
+      held = true;
+      fireEvent.click(reply('start'));
+      expect(await screen.findByText(/no answer from the daemon/)).toBeTruthy();
+      await waitFor(() => expect(reply('start').disabled).toBe(false));
+      expect(decisions()).toHaveLength(0);
+    } finally {
+      START_LIMITS.checkWaitMs = was;
+    }
   });
 
   it('an interrupted Start’s Go again carries the choice too', async () => {
