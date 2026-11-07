@@ -13,6 +13,9 @@ import { PmSourceSheet, type PmSheetTarget } from './PmSourceSheet.js';
 import { hasPmMarker, pmSystemOf, systemName, trackerLinksListOf, useTrackerLinksSupported } from '../../api/trackers.js';
 import { agentAccessOf } from '../../api/sourceAgents.js';
 import { TrackerBadge } from '../trackers/TrackerParts.js';
+import { Globe } from 'lucide-react';
+import { readWebSetup, type WebSourceSetup } from '../../api/webSource.js';
+import { WebSourceSheet } from './WebSourceSheet.js';
 
 /** A declared row write as the page keeps it: granted FOR one connection descriptor of its source. */
 interface PageRowWrite extends Omit<PanelRowWrite, 'granted'> {
@@ -62,6 +65,17 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
   const pmOn = useTrackerLinksSupported();
   const [pmSources, setPmSources] = useState<McpServer[]>([]);
   const [pmSheet, setPmSheet] = useState<PmSheetTarget | null>(null);
+  /** (CS9) The web source: `null` = this crew has none (the box is not shown). */
+  const [web, setWeb] = useState<WebSourceSetup | 'unreadable' | null>(null);
+  const [webOpen, setWebOpen] = useState(false);
+  const readWeb = useCallback(async (): Promise<void> => {
+    try {
+      setWeb(await readWebSetup());
+    } catch {
+      setWeb('unreadable');
+    }
+  }, []);
+  useEffect(() => { void readWeb(); }, [readWeb]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
@@ -217,6 +231,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           actions={shownActions}
           onGrantAction={(id) => void grantAction(id)}
         />
+        {web !== null && <WebSourceBox setup={web} onOpen={() => { openGen.current++; setSheet(null); setPmSheet(null); setWebOpen(true); }} />}
         {pmOn && <PmSourcesList sources={pmSources} onOpen={(name) => open(name)} onAdd={(system) => { openGen.current++; setSheet(null); setPmSheet({ mode: 'new', system }); }} />}
       </div>
       {sheet !== null && (
@@ -259,6 +274,14 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           }}
           onAgents={(name, agents) => setPmSources((list) => list.map((s) => (s.name === name ? ({ ...s, agents } as McpServer) : s)))}
           onClose={() => { setPmSheet(null); if (deep !== null) navigate(sourcesPath()); }}
+        />
+      )}
+      {webOpen && web !== null && web !== 'unreadable' && (
+        <WebSourceSheet
+          initial={web}
+          onChanged={setWeb}
+          onReread={() => void readWeb()}
+          onClose={() => { setWebOpen(false); void readWeb(); }}
         />
       )}
       {dialog !== null && dialogSource !== null && (
@@ -316,6 +339,42 @@ function PmSourcesList({ sources, onOpen, onAdd }: { sources: readonly McpServer
           })}
         </ul>
       )}
+    </section>
+  );
+}
+
+/**
+ * (CS9) THE WEB on the Data sources page: whether the web source is installed, whether a container engine is here
+ * for its search, and whether agents may use it; it opens the web source's sheet (install consent, or its switches).
+ */
+function WebSourceBox({ setup, onOpen }: { setup: WebSourceSetup | 'unreadable'; onOpen: () => void }): React.ReactElement {
+  if (setup === 'unreadable') {
+    return (
+      <section className="wk-src-box wk-web-box" data-testid="web-source">
+        <p className="wk-src-note" data-testid="web-source-unreadable"><b>The web</b>: this crew’s web source answered in a way this studio can’t read. Update studio.</p>
+      </section>
+    );
+  }
+  const a = setup.agents;
+  const state = !setup.installed
+    ? setup.search.ready ? 'not installed' : 'needs a container engine'
+    : a === null || !a.see || (!a.everyProject && a.projects.length === 0) ? 'installed · agents can’t use it yet' : a.query ? 'installed · agents can search and read pages' : 'installed · agents can’t query it yet';
+  return (
+    <section className="wk-src-box wk-web-box" aria-labelledby="wk-web-box-title" data-testid="web-source" data-installed={setup.installed ? 'yes' : 'no'}>
+      <div className="wk-src-box-head">
+        <h2 id="wk-web-box-title" className="wk-src-strong wk-pm-list-title">The web</h2>
+        <span className="wk-src-sp" />
+        {!setup.installed && <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="web-add" onClick={onOpen}>Add the web source</button>}
+      </div>
+      <ul className="wk-src-list">
+        <li>
+          <button type="button" className="wk-src-row wk-src-row-main wk-pm-row" data-testid="web-source-row" onClick={onOpen}>
+            <Globe size={16} aria-hidden />
+            <span className="wk-src-row-name"><b>web</b> <span className="wk-src-cap" data-testid="web-source-state">Search and public pages, for research · {state}</span></span>
+          </button>
+        </li>
+      </ul>
+      {!setup.installed && !setup.search.ready && setup.search.reason !== null && <p className="wk-src-note wk-web-why" data-testid="web-source-why">{setup.search.reason}</p>}
     </section>
   );
 }
