@@ -67,3 +67,11 @@ button.wk-proposal-chip:focus-visible { outline: 2px solid var(--focus-ring, var
 /* Empty while it waits: still in the accessibility tree (a live region must exist before it speaks), no height. */
 .wk-proposal-outcome:empty { margin: 0; }
 .wk-proposal-outcome--failed { color: var(--ink-high); }
+
+/* The same card in a chat drawn beside something (the document's side chat, a page chat, the system chat): a narrow
+   column, so its choices stack and its facts read label over value. */
+.wk-dock-proposals { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; min-width: 0; }
+.wk-dock-proposals .wk-proposal { margin: 0; max-width: 100%; }
+.wk-dock-proposals .wk-ask-opts { grid-template-columns: minmax(0, 1fr); }
+.wk-dock-proposals .wk-proposal-lines { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
+.wk-dock-proposals .wk-proposal-row dd { margin-bottom: 6px; }

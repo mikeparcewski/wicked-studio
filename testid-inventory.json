@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 335,
-    "occurrences": 4973,
-    "static": 4181,
+    "files": 336,
+    "occurrences": 4974,
+    "static": 4182,
     "dynamic": 177,
     "computed": 53
   },
@@ -3281,6 +3281,12 @@
       "testId": "chat-plan-steps",
       "files": [
         "src/components/session/RunConversation.tsx"
+      ]
+    },
+    {
+      "testId": "chat-proposal-cards",
+      "files": [
+        "src/components/chat/ChatProposalCards.tsx"
       ]
     },
     {
