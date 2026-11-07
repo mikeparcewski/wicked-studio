@@ -830,5 +830,16 @@ describe('F39: the Requirements page’s "Generate it" files its job in the repo
     await waitFor(() => expect(nonGets().find((c) => c.path === '/chats')).toBeDefined());
     expect(nonGets().find((c) => c.path === '/chats')!.body!.projectId).toBeUndefined();
   });
+  it('a membership that could not be read picks no project for the person', async () => {
+    projectList = [{ id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }];
+    projectMembers = { p1: [{ member_kind: 'crew.repo', member_ref: 'repo-1' }] };
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/projects/p2/members')
+      ? Promise.resolve(new Response('{"error":"down"}', { status: 503, headers: { 'content-type': 'application/json' } }))
+      : (real as (u: string, i?: RequestInit) => Promise<Response>)(url, init))));
+    generate();
+    await waitFor(() => expect(nonGets().find((c) => c.path === '/chats')).toBeDefined());
+    expect(nonGets().find((c) => c.path === '/chats')!.body!.projectId).toBeUndefined();
+  });
 });
 

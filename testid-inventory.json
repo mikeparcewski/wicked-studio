@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 331,
-    "occurrences": 4938,
-    "static": 4152,
+    "occurrences": 4943,
+    "static": 4155,
     "dynamic": 177,
     "computed": 53
   },
@@ -8271,6 +8271,24 @@
     },
     {
       "testId": "job-passage-projects-more",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-open",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-retire",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-retry",
       "files": [
         "src/components/session/JobProjectChoices.tsx"
       ]

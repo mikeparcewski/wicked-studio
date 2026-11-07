@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ArtifactProposal, Project } from '../../api/types.js';
+import { openChat } from '../../store/chatFlow.js';
 import { postJob } from '../../store/inlineStart.js';
 import { projectsForRepo } from '../../store/repoProjects.js';
 
@@ -15,51 +16,105 @@ export function asksForProject(p: Pick<ArtifactProposal, 'question' | 'needs'>):
   return missing !== undefined && missing.id === 'project';
 }
 
+/** The job's repository: its met repository need, else the one repository it was proposed on. */
+export function jobRepo(p: Pick<ArtifactProposal, 'needs' | 'repoRefs'>): string | null {
+  const need = (p.needs ?? []).find((n) => n.id === 'repo' && n.status === 'met')?.value;
+  if (need !== undefined) return need;
+  return p.repoRefs?.length === 1 ? p.repoRefs[0]! : null;
+}
+
+/** The job's words as the person gave them: the first words, then the corrections carried as details (crew rebuilds the
+ *  brief from both). */
+export function jobWords(p: Pick<ArtifactProposal, 'words' | 'details'>): string {
+  return [p.words ?? '', ...(p.details ?? [])].map((w) => w.trim()).filter((w) => w !== '').join('. ');
+}
+
+type Choices = { repo: string | null; list: Project[]; holding: boolean } | { repo: string | null; failed: true } | null;
+
 /**
  * "WHICH PROJECT?" ON A JOB (F39, DES-CATALOG-002 §4.6). A job whose card needs a project, proposed in a chat in no
  * project, is asked "Project?" by crew with nothing to press: crew keeps the project the chat's own (a revision's
  * `project` edit is refused). So the answer is the inline start's: one chip per project (those holding the job's
- * repository first, else every project), and a press puts the same job, with its words and repository, in a new chat in
- * that project, where its project is met and Start is offered. The old proposal is set aside (Not now), so the old
- * chat never shows two of the same job. Reads are GETs; the only writes are the press's.
+ * repository first, else every project), and a press puts the same job (card, option, depth, words with their
+ * corrections, repository) in a new chat in that project, where its project is met and Start is offered. The old
+ * proposal is then set aside (Not now). Once moved, the chips give way to the moved job, so a second press never makes
+ * a second one. Reads are GETs; the only writes are the press's.
  */
 export function JobProjectChoices({ chatId, proposal, onError }: {
   chatId: string;
   proposal: ArtifactProposal;
-  onError: (words: string) => void;
+  onError: (words: string | null) => void;
 }): React.ReactElement | null {
-  const repo = (proposal.needs ?? []).find((n) => n.id === 'repo' && n.status === 'met')?.value ?? null;
-  const [choices, setChoices] = useState<{ list: Project[]; holding: boolean } | 'failed' | null>(null);
+  const repo = jobRepo(proposal);
+  const [choices, setChoices] = useState<Choices>(null);
+  const [tries, setTries] = useState(0);
   const [all, setAll] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const busyRef = useRef(false);
+  /** The job, once moved: where it went, and whether this one was set aside (else a retry that never seeds again). */
+  const [moved, setMoved] = useState<{ chatId: string; project: Project; retired: boolean } | null>(null);
   useEffect(() => {
     let live = true;
+    // Choices belong to one repository: a newer one reads afresh, and nothing is pressable meanwhile (codex r4).
+    setChoices(null);
     projectsForRepo(repo).then(
-      ({ all: every, holding }) => { if (live) setChoices(holding.length > 0 ? { list: holding, holding: true } : { list: every, holding: false }); },
-      () => { if (live) setChoices('failed'); },
+      ({ all: every, holding, certain }) => {
+        if (live) setChoices(certain && holding.length > 0 ? { repo, list: holding, holding: true } : { repo, list: every, holding: false });
+      },
+      () => { if (live) setChoices({ repo, failed: true }); },
     );
     return () => { live = false; };
-  }, [repo]);
+  }, [repo, tries]);
+
+  const retire = useCallback((to: { chatId: string; project: Project }): void => {
+    api.decideChatProposal(chatId, proposal.pid, { decision: 'not_now' }).then(
+      () => { setMoved({ ...to, retired: true }); onError(null); },
+      (e: unknown) => {
+        setMoved({ ...to, retired: false });
+        onError(`The job moved to ${to.project.name}, but this one was not set aside (${e instanceof Error ? e.message : String(e)}).`);
+      },
+    );
+  }, [chatId, proposal.pid, onError]);
 
   const shape = proposal.shape;
-  if (shape === undefined) return null;
+  if (shape === undefined) {
+    return <p data-testid="job-passage-projects" data-state="failed" role="alert" className="wk-pass-sub">This job can’t be moved to a project from here. Start it again from the / list in a project’s chat.</p>;
+  }
   const pick = (p: Project): void => {
-    if (busy !== null) return;
+    // A ref, not the render's state: two presses in one tick seed once (pi r4).
+    if (busyRef.current || moved !== null) return;
+    busyRef.current = true;
     setBusy(p.id);
+    onError(null);
     void postJob({
-      card: shape.card, option: shape.option, depth: shape.depth, words: proposal.words ?? '', source: 'pick',
+      card: shape.card, option: shape.option, depth: shape.depth, words: jobWords(proposal), source: 'pick',
       chatId: null, projectId: p.id, repoRef: repo, pickKey: `${proposal.pid}:project:${p.id}`,
     }).then(
-      (out) => {
-        // The job now lives in the project's chat: this one is set aside, best effort (its chat says "Not started").
-        if (out !== null) void api.decideChatProposal(chatId, proposal.pid, { decision: 'not_now' }).catch(() => undefined);
-      },
+      (out) => { if (out !== null) retire({ chatId: out.chatId, project: p }); },
       (e: unknown) => onError(`The job was not moved to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick a project again.`),
-    ).finally(() => setBusy(null));
+    ).finally(() => { busyRef.current = false; setBusy(null); });
   };
 
-  if (choices === null) return <p data-testid="job-passage-projects" data-state="loading" className="wk-pass-sub wk-pass-grey">Reading your projects…</p>;
-  if (choices === 'failed') return <p data-testid="job-passage-projects" data-state="failed" role="alert" className="wk-pass-sub">Your projects could not be read. Open the job again to pick one.</p>;
+  if (moved !== null) {
+    return (
+      <div data-testid="job-passage-projects" data-state="moved" role="status" className="wk-pass-sub wk-composer-start-need">
+        <span className="wk-composer-note">This job moved to {moved.project.name}{moved.retired ? '' : '; this copy is still here'}.</span>
+        <button type="button" data-testid="job-passage-projects-open" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => openChat(moved.chatId)}>Open it</button>
+        {!moved.retired && (
+          <button type="button" data-testid="job-passage-projects-retire" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => retire(moved)}>Set this one aside</button>
+        )}
+      </div>
+    );
+  }
+  if (choices === null || choices.repo !== repo) return <p data-testid="job-passage-projects" data-state="loading" className="wk-pass-sub wk-pass-grey">Reading your projects…</p>;
+  if ('failed' in choices) {
+    return (
+      <div data-testid="job-passage-projects" data-state="failed" role="alert" className="wk-pass-sub wk-composer-start-need">
+        <span className="wk-composer-note">Your projects could not be read.</span>
+        <button type="button" data-testid="job-passage-projects-retry" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => setTries((n) => n + 1)}>Try again</button>
+      </div>
+    );
+  }
   const shown = all ? choices.list : choices.list.slice(0, CHOICES_MAX);
   return (
     <div data-testid="job-passage-projects" role="group" aria-label="Which project?" className="wk-pass-sub wk-composer-start-need">

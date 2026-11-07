@@ -222,8 +222,9 @@ export async function startInChat(s: StartInChat, stillOpen: () => boolean = () 
   let projectId = s.projectId ?? null;
   if (projectId === null && s.repoRef != null && s.repoRef !== '') {
     try {
-      const { holding } = await projectsForRepo(s.repoRef);
-      if (holding.length === 1) projectId = holding[0]!.id;
+      const { holding, certain } = await projectsForRepo(s.repoRef);
+      // Only a certain, single owner is chosen for the person; an unread membership leaves it to them (codex r4).
+      if (certain && holding.length === 1) projectId = holding[0]!.id;
     } catch { /* the projects could not be read: the passage asks */ }
     if (!stillWanted()) return true;
   }
