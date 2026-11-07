@@ -78,5 +78,8 @@ describe('the context document’s words', () => {
     // The newest edit not answered yet: going in.
     const pending = trailLines(view({ trail, context: ctx({ version: 4 }) }));
     expect(pending[0]).toMatch(/· going into agents’ context$/u);
+    // An agent's later version (its id says so, whatever its kind) does not take the newest person's edit's place.
+    const agentAfter = trailLines(view({ trail: [...trail, { version: 6, author: { kind: 'human' as const, id: 'agent:codex' }, surface: null, sections: ['approach' as const], at: 0, steerId: null }], context: ctx({ version: 4 }) }));
+    expect(agentAfter[1]).toMatch(/^v5 · You · Approach · \d\d:\d\d · going into agents’ context$/u);
   });
 });

@@ -194,7 +194,7 @@ export function contextWords(c: DocContext | undefined): { text: string; bad: bo
 const isContextEdit = (t: TrailEntry): boolean => t.sections.some((x) => x === 'goal' || x === 'approach' || x === 'constraints');
 
 export function trailLines(view: DocView, max = 6, stepOfOrd?: (ord: number) => string | null): string[] {
-  const lastContextEdit = view.trail.reduce((m, t) => (t.author.kind === 'human' && isContextEdit(t) ? Math.max(m, t.version) : m), -1);
+  const lastContextEdit = view.trail.reduce((m, t) => (kindOf(t.author).kind === 'human' && isContextEdit(t) ? Math.max(m, t.version) : m), -1);
   return view.trail.slice(-max).reverse().map((t) => {
     const a = kindOf(t.author);
     const parts = [`v${t.version}`, authorWord(a), t.sections.map((s) => SECTION_LABELS[s]).join(', '), clock(t.at)];
