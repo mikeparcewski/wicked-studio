@@ -108,6 +108,7 @@ describe('requirements page: code age, minimum, code mismatches (operator ruling
     await user.type(input, '90{Enter}');
     expect(setRequirementsMinimum).toHaveBeenCalledWith('tiny-math', 90);
     await waitFor(() => expect(screen.getByTestId('requirements-minimum')).toHaveTextContent("Minimum 90%, this repository's own"));
+    expect(screen.getByTestId('requirements-coverage-headline')).toHaveTextContent('minimum 90%');
     setRequirementsMinimum.mockResolvedValueOnce({ minimum: cleared });
     await user.click(screen.getByTestId('requirements-minimum-clear'));
     expect(setRequirementsMinimum).toHaveBeenLastCalledWith('tiny-math', null);
@@ -157,5 +158,46 @@ describe('requirements page: code age, minimum, code mismatches (operator ruling
     const min = await screen.findByTestId('requirements-minimum');
     expect(min).toHaveTextContent('Minimum 80%, from Settings');
     expect(within(min).queryByTestId('requirements-minimum-clear')).not.toBeInTheDocument();
+  });
+});
+
+describe('a write or a read for another repository is never applied to this one (codex r2)', () => {
+  beforeEach(() => {
+    listRequirements.mockReset();
+    setRequirementsMinimum.mockReset();
+    resetLaunchWizard();
+  });
+  it("a save that lands after the view moved to another repository leaves that repository's minimum alone", async () => {
+    const user = userEvent.setup();
+    let land: (v: unknown) => void = () => {};
+    setRequirementsMinimum.mockImplementation(() => new Promise((r) => { land = r; }));
+    listRequirements.mockImplementation((repo: string) => Promise.resolve(pageWith(repo === 'b'
+      ? { minimum: { pct: 80, source: 'settings', repoPct: null, settingsPct: 80 } } : {})));
+    const { rerender } = render(<RequirementsModal repoId="a" repoName="a" onClose={() => {}} />);
+    const min = await screen.findByTestId('requirements-minimum');
+    await user.click(within(min).getByTestId('requirements-minimum-change'));
+    await user.clear(within(min).getByTestId('requirements-minimum-input'));
+    await user.type(within(min).getByTestId('requirements-minimum-input'), '90{Enter}');
+    rerender(<RequirementsModal repoId="b" repoName="b" onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('requirements-minimum')).toHaveTextContent('Minimum 80%, from Settings'));
+    land({ minimum: { pct: 90, source: 'repo', repoPct: 90, settingsPct: 80 } });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByTestId('requirements-minimum')).toHaveTextContent('Minimum 80%, from Settings');
+  });
+  it("an answer for the previous repository that lands before the next read starts is not shown", async () => {
+    let landA: (v: unknown) => void = () => {};
+    listRequirements
+      .mockResolvedValueOnce(pageWith())
+      .mockImplementationOnce(() => new Promise((r) => { landA = r; }))
+      .mockImplementation(() => Promise.resolve(pageWith({ minimum: { pct: 80, source: 'settings', repoPct: null, settingsPct: 80 } })));
+    const user = userEvent.setup();
+    const { rerender } = render(<RequirementsModal repoId="a" repoName="a" onClose={() => {}} />);
+    await screen.findByTestId('requirements-minimum');
+    await user.click(screen.getByTestId('requirements-mismatch-filter')); // a read for a, held
+    await waitFor(() => expect(listRequirements).toHaveBeenCalledTimes(2));
+    rerender(<RequirementsModal repoId="b" repoName="b" onClose={() => {}} />);
+    landA(pageWith()); // a's answer lands inside b's debounce window
+    await waitFor(() => expect(screen.getByTestId('requirements-minimum')).toHaveTextContent('Minimum 80%, from Settings'));
+    expect(screen.getByTestId('requirements-minimum')).not.toHaveTextContent('66%');
   });
 });
