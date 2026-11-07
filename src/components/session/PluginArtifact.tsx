@@ -7,6 +7,7 @@ import { focusBeside } from '../../editors/focus.js';
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
 import { InteractiveDocAdapter } from '../../editors/interactiveDocAdapter.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
+import { grantNote } from '../editorHost/GrantNote.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
@@ -62,7 +63,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
   const logRef = useRef<HostLogEntry[]>([]);
   const [line, setLine] = useState<Line | null>(null);
   const [torn, setTorn] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<React.ReactNode>(null);
   const [mountKey, setMountKey] = useState(0);
   const [busy, setBusy] = useState(false);
   // The version the plugin shows (the one it read), for the checks panel (EP-P3, codex r1): the reviews
@@ -92,7 +93,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
       const decided = await fetchGrants(editor.id, editor.version, editor.sha256, projectId);
       await adapter.refresh().catch(() => null);
       if (cancelled || frameBox.current === null) return;
-      setNote(decided.note);
+      setNote(grantNote(decided));
       const host = new EditorHost({
         container: frameBox.current,
         src: bundleUrl(apiBase(), editor.id, editor.version, editor.sha256),
@@ -123,7 +124,9 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
             else if (k === 'Tab' || k === 'Shift+Tab') focusBeside(hostRef.current?.frame ?? null, k === 'Shift+Tab');
           },
           morph: (to) => morphRef.current(to),
-          status: (l) => { if (live.current) setLine({ kind: 'status', text: l }); },
+          // F37: the host's "edited · Undo" line stays until the next write or undo: a plugin's own status line ("Saved as
+          // version 2") never takes the person's Undo away.
+          status: (l) => { if (live.current) setLine((cur) => (cur?.kind === 'edited' ? cur : { kind: 'status', text: l })); },
           notes: () => undefined,
           // The structured `written` draws the line with its Undo; the plain line is the dev page's.
           thread: () => undefined,

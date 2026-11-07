@@ -1,5 +1,6 @@
 import { apiFetch } from '../api/client.js';
 import { isRouteUnsupported } from '../api/errors.js';
+import { allowHref } from '../api/editors.js';
 import { APP_ONLY, LEDGER_ONLY, PERMISSIONS, RUN_THREAD_ONLY, type AnchorRef, type PermissionId } from './protocol.js';
 
 /**
@@ -135,15 +136,30 @@ export function grantedOf(raw: unknown): { grants: PermissionId[]; asking: Permi
 /** `GET /api/v1/editors/:id/grants?project=` (crew EP-C1): the engine's decided set (deny dominates).
  *  A daemon without the route grants a built-in editor its default set and a third-party editor
  *  NOTHING (fail closed). Any other failure grants nothing and says why. */
-export async function fetchGrants(editorId: string, version: string, sha: string, projectId: string | null): Promise<{ grants: PermissionId[]; note: string | null }> {
+export interface DecidedGrants {
+  grants: PermissionId[];
+  /** One plain line for the host (null = nothing to say). */
+  note: string | null;
+  /** F37: where the person allows what it asks for (the switch on the Plugins page); null = nothing they can allow. */
+  allow?: { href: string; permission: PermissionId } | null;
+}
+
+export async function fetchGrants(editorId: string, version: string, sha: string, projectId: string | null): Promise<DecidedGrants> {
   const q = new URLSearchParams({ version, sha });
   if (projectId !== null) q.set('project', projectId);
   try {
     const r = await apiFetch<{ grants?: unknown }>(`/editors/${encodeURIComponent(editorId)}/grants?${q.toString()}`);
     const { grants, asking } = grantedOf(r.grants);
+    if (asking.length === 0) return { grants, note: null, allow: null };
     // artifact-runs-fix: said in a person's words ("asks to load images and fonts from the internet"), never the
     // permission's id ("asks for network.media").
-    return { grants, note: asking.length === 0 ? null : `This editor asks to ${asking.map((p) => PERMISSION_WORDS[p] ?? p).join(' and ')} — allow it under Settings → Editors.` };
+    const asks = `This editor asks to ${asking.map((p) => PERMISSION_WORDS[p] ?? p).join(' and ')}.`;
+    // F37: the note's link goes straight to the switch that allows it (the Plugins page, this editor). The install
+    // consent's own grant (mcp.session) has no switch: it is allowed by installing the editor again.
+    const first = asking.find((p) => p !== 'mcp.session') ?? null;
+    return first === null
+      ? { grants, note: asks, allow: null }
+      : { grants, note: `${asks} Allow it in Plugins.`, allow: { href: allowHref(editorId, first), permission: first } };
   } catch (e) {
     if (isRouteUnsupported(e)) {
       return editorId.startsWith('wicked-')

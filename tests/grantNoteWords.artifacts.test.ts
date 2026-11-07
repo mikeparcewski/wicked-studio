@@ -14,7 +14,8 @@ describe('the editor’s pending-permission note', () => {
     ] });
     const got = await fetchGrants('wicked-doc', '0.13.0', 'a'.repeat(64), null);
     expect(got.grants).toEqual(['artifact.read']);
-    expect(got.note).toBe('This editor asks to load images and fonts from the internet — allow it under Settings → Editors.');
+    expect(got.note).toBe('This editor asks to load images and fonts from the internet. Allow it in Plugins.');
+    expect(got.allow).toEqual({ href: '/plugins?editor=wicked-doc&allow=network.media', permission: 'network.media' });
     expect(got.note).not.toContain('network.media');
   });
 });

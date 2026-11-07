@@ -1129,6 +1129,14 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   (e2e/editor-fixtures/changelog-entry.html, reading the page and adding entries as versions, G9), and its
          #   grants are crew's decided set for it after its install consent (artifact.read, artifact.write, ui.fullscreen).
          "installed_editor": False,
+         # writer_editor — (F37, e2e/desk_editor_grant_save_test.py; needs `editors`) GET /api/v1/editors also lists the
+         #   third-party page editor `acme-good` (e2e/editor-fixtures/good.html, source `pack`) that asks for
+         #   artifact.write. Its grants are crew's decided set over `writer_ledger` (the EDITOR-GRANTS stand-in):
+         #   artifact.write is `allow` (EDITOR-GRANTS) once allowed, else `ask`; POST /api/v1/editors/acme-good/grants
+         #   {permission, allow, version, sha256} is crew's human-only writer (409 build_changed on another build).
+         #   Every press lands in writer_grant_posts (GET /__fixture/editor-grant-posts). writer_protocol 2 lists it as
+         #   protocol [1, 2] with a card declaration, so the session hosts it in the protocol-2 card (PluginCard).
+         "writer_editor": False, "writer_ledger": [], "writer_protocol": 1,
          # apps — (DES-APPS-001 K4, e2e/apps_runtime_test.py) crew's app store and the app data routes, in
          #   e2e/apps_fixture.py: GET /api/v1/apps/<slug>, POST edits/undo/redo (409 stale_base, one undo pointer),
          #   query, actions/<id>/prepare and run; GET /health.capabilities.apps; GET /__fixture/apps-framer?src=
@@ -1136,6 +1144,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "apps": False,
          }
 state_lock = threading.Lock()
+# writer_editor (F37): what `acme-good` asks for — reading and pointing are allowed by default; changing it asks.
+WRITER_PERMISSIONS = [{"id": "artifact.read", "why": "to show the outline"},
+                      {"id": "artifact.write", "why": "to save your edits as versions you can undo"},
+                      {"id": "selection.chip", "why": "to point at a part"},
+                      {"id": "ui.fullscreen", "why": "to go full screen"}]
+# writer_editor: every POST /api/v1/editors/acme-good/grants body, in order.
+writer_grant_posts: list = []
 # mcp_inspect: the fake bridge's sessions (id -> dict) and the writes it received.
 mcp_inspect_cond = threading.Condition()
 mcp_inspect_sessions: dict = {}
@@ -8823,6 +8838,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"posts": posts})
         if self._mcp_inspect("GET", path, None):
             return None
+        if path == "/__fixture/editor-grant-posts":
+            with state_lock:
+                posts = list(writer_grant_posts)
+            return self._json(200, {"posts": posts})
         if path == "/__fixture/capture-posts":
             with state_lock:
                 posts = list(capture_post_log)
@@ -9004,6 +9023,25 @@ class W2Handler(SimpleHTTPRequestHandler):
             out.append({"manifest": manifest, "body": body, "sha256": hashlib.sha256(body).hexdigest()})
         return out
 
+    def _writer_grants(self, version: str, sha: str, project) -> bool:
+        """F37: crew's decided set for `acme-good` over the fixture's EDITOR-GRANTS stand-in."""
+        with state_lock:
+            ledger = set(state["writer_ledger"])
+        rules = {"artifact.read": "EDITOR-OPEN-DEFAULTS", "selection.chip": "EDITOR-OPEN-DEFAULTS", "ui.fullscreen": "EDITOR-OPEN-DEFAULTS"}
+        grants = []
+        for perm in (p["id"] for p in WRITER_PERMISSIONS):
+            if perm in rules:
+                grants.append({"permission": perm, "decision": "allow", "ruleIds": [rules[perm]]})
+            elif perm in ledger:
+                grants.append({"permission": perm, "decision": "allow", "ruleIds": ["EDITOR-GRANTS"]})
+            else:
+                grants.append({"permission": perm, "decision": "ask", "ruleIds": []})
+        for g in grants:
+            g["token"] = f"editor:acme-good@{version}#{sha}/{g['permission']}"
+        self._json(200, {"editorId": "acme-good", "version": version, "sha256": sha, "project": project,
+                         "firstParty": False, "grants": grants})
+        return True
+
     def _editor_routes(self, path: str) -> bool:
         """EP-C1 stand-in: the registry list, the editor bundle route (hash-pinned, with its CSP) and the
         grants route (crew's decided shape)."""
@@ -9045,8 +9083,19 @@ class W2Handler(SimpleHTTPRequestHandler):
                 installed_on = state["installed_editor"]
             if installed_on:
                 editors.append(json.loads((REPO / "e2e" / "editor-fixtures" / "changelog-entry.registry.json").read_text()))
+            with state_lock:
+                writer_on = state["writer_editor"]
+                writer_v2 = state["writer_protocol"] == 2
+            if writer_on:
+                body = (REPO / "e2e" / "editor-fixtures" / "good.html").read_bytes()
+                editors.append({"id": "acme-good", "title": "Acme outline", "version": "0.1.0", "protocol": [1, 2] if writer_v2 else [1],
+                                **({"surfaces": {"card": {"interactive": True, "aspect": "auto", "actions": []}}} if writer_v2 else {}),
+                                "kinds": ["page"], "sizes": ["inline", "pane", "full"],
+                                "permissions": WRITER_PERMISSIONS,
+                                "sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body), "first_party": False,
+                                "enabled": True, "source": "pack", "entry_url": "/api/v1/editors/acme-good/0.1.0/entry"})
             self._json(200, {"editors": editors,
-                             "installs": "conformance_required" if (mcp_on or installed_on) else "refused_until_conformance"})
+                             "installs": "conformance_required" if (mcp_on or installed_on or writer_on) else "refused_until_conformance"})
             return True
         # /api/v1/editors/<id>/grants — crew's DECIDED set: {permission, decision, ruleIds, token} per permission.
         if len(parts) == 6 and parts[5] == "grants":
@@ -9061,6 +9110,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             if parts[4] == "mpx-changelog-entry":
                 # Decided at its install consent: it reads the page, adds entries as versions, goes full screen (G9).
                 decided = [("artifact.read", "allow"), ("artifact.write", "allow"), ("ui.fullscreen", "allow")]
+            if parts[4] == "acme-good":
+                # crew answers for the build it serves, whatever the query names (studio's Plugins page sends none).
+                good = hashlib.sha256((REPO / "e2e" / "editor-fixtures" / "good.html").read_bytes()).hexdigest()
+                return self._writer_grants("0.1.0", good, (q.get("project") or [None])[0])
             self._json(200, {"editorId": parts[4], "version": version, "sha256": sha, "project": (q.get("project") or [None])[0],
                              "firstParty": parts[4].startswith("wicked-"),
                              "grants": [{"permission": g, "decision": d, "ruleIds": [],
@@ -9111,6 +9164,25 @@ class W2Handler(SimpleHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if path.startswith("/api/v1/mcp-inspect/") and self._mcp_inspect("POST", path, body):
             return None
+        if path == "/api/v1/editors/acme-good/grants":
+            with state_lock:
+                on = state["editors"] and state["writer_editor"]
+            if on:
+                good = hashlib.sha256((REPO / "e2e" / "editor-fixtures" / "good.html").read_bytes()).hexdigest()
+                with state_lock:
+                    writer_grant_posts.append(body)
+                    if body.get("version") != "0.1.0" or body.get("sha256") != good:
+                        status = 409
+                    else:
+                        status = 200
+                        ledger = [p for p in state["writer_ledger"] if p != body.get("permission")]
+                        if body.get("allow") is True:
+                            ledger.append(body.get("permission"))
+                        state["writer_ledger"] = ledger
+                if status == 409:
+                    return self._json(409, {"code": "build_changed", "error": "acme-good changed since this was shown"})
+                self._writer_grants("0.1.0", good, body.get("project"))
+                return None
         if path.startswith("/api/v1/apps/") or path.startswith("/__fixture/apps"):
             with state_lock:
                 apps_on = state["apps"]

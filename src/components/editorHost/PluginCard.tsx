@@ -8,6 +8,7 @@ import {
   type ArtifactBinding, type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
+import { grantNote } from './GrantNote.js';
 import type { PermissionId } from '../../editors/protocol.js';
 import type { CardAction, FullMode, Surfaces } from '../../editors/surfaces.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -155,7 +156,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const logRef = useRef<HostLogEntry[]>([]);
   const [decl, setDecl] = useState<Surfaces | null>(null);
   const [protocol, setProtocol] = useState(1);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<React.ReactNode>(null);
   const [torn, setTorn] = useState<string | null>(null);
   const [line, setLine] = useState<Line | null>(null);
   const [height, setHeight] = useState<number | null>(null);
@@ -269,7 +270,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       // frame included) the head as it stands, however it moved meanwhile (codex h2-r16/r17 P2).
       announced.current = null;
       if (cancelled || frameBox.current === null) return;
-      setNote(decided.note);
+      setNote(grantNote(decided));
       const src = srcProp ?? bundleUrl(apiBase(), editor.id, editor.version, editor.sha256);
       loaded.current = { src, grants: decided.grants };
       const bridge = adapter.mcpBridge?.();
@@ -310,7 +311,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
             if (to === 'inline') { if (clickedIn(hostRef.current?.frame)) leaveFull(); return; }
             if (live.current) setOffer(to === 'full' ? 'full' : 'options');
           },
-          status: (l) => { if (live.current) setLine({ kind: 'status', text: l }); },
+          // F37: the host's "edited · Undo" line stays until the next write or undo: a plugin's own status line ("Saved as
+          // version 2") never takes the person's Undo away.
+          status: (l) => { if (live.current) setLine((cur) => (cur?.kind === 'edited' ? cur : { kind: 'status', text: l })); },
           notes: () => undefined,
           advisory: (notes) => setAdvisoryNotes(group, notes),
           // A plugin's export.request becomes a host offer; the operator's press makes the file (G25).
