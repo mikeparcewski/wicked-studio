@@ -564,9 +564,14 @@ function digest(text: string): string {
   return (h >>> 0).toString(36);
 }
 
+/** What a Start launches beyond what it shows: a press is bound to these too (a re-resolution onto another repository
+ *  of the same name, another project, other inputs or another catalog revision is another target). */
+const LAUNCH_KEYS = ['repoRefs', 'repos', 'filedIn', 'brief', 'words', 'details', 'inputs', 'launch', 'catalogRev', 'resolution', 'skipQe', 'powerChoice'] as const;
+
 /** The press target of a proposal: its pid and a digest of everything a press on it answers. */
 export function proposalTarget(p: JobProposal): string {
-  return `${p.pid}#${digest(JSON.stringify([p.sentence, p.question ?? null, p.suggestions ?? [], p.blocked, p.sketch ?? null, p.gate ?? null, p.seats ?? null, p.what, p.shape ?? null]))}`;
+  const r = p as unknown as Record<string, unknown>;
+  return `${p.pid}#${digest(JSON.stringify([p.sentence, p.question ?? null, p.suggestions ?? [], p.blocked, p.sketch ?? null, p.gate ?? null, p.seats ?? null, p.what, p.shape ?? null, LAUNCH_KEYS.map((k) => r[k] ?? null)]))}`;
 }
 
 /** The plain words of the catalog's check ids. */

@@ -1090,6 +1090,34 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
     expect(decisions()).toHaveLength(0);
   });
 
+  it('a re-resolution onto another repository (same name, same sentence) while the Start was checked: nothing is sent', async () => {
+    let release: () => void = () => undefined;
+    let held = false;
+    powerDaemon({ health: () => (held ? new Promise<Response>((r) => { release = () => r(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } })); }) : Promise.resolve(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } }))) });
+    page();
+    await screen.findByTestId('job-passage-review-plan-toggle');
+    held = true;
+    fireEvent.click(reply('start'));
+    await frame({ ...P1, at: T0 + 5, proposal: jobProposal({ repoRefs: ['reporting-fork'] }) });
+    await act(async () => { release(); });
+    expect(await screen.findByText(/this job changed while it was being checked/)).toBeTruthy();
+    expect(decisions()).toHaveLength(0);
+  });
+
+  it('two presses while the checks run send one Start', async () => {
+    let release: () => void = () => undefined;
+    let held = false;
+    powerDaemon({ health: () => (held ? new Promise<Response>((r) => { release = () => r(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } })); }) : Promise.resolve(ok({ status: 'ok', capabilities: { powerMode: true, chatJobPower: true } }))) });
+    page();
+    await screen.findByTestId('job-passage-review-plan-toggle');
+    held = true;
+    fireEvent.click(reply('start'));
+    fireEvent.click(reply('start'));
+    await act(async () => { release(); });
+    await waitFor(() => expect(decisions()).toHaveLength(1));
+    expect(decisions()[0]!.body).toEqual({ decision: 'go', power: true });
+  });
+
   it('a change in flight when the checks answer holds Start: nothing is sent', async () => {
     let release: () => void = () => undefined;
     let held = false;
@@ -1128,6 +1156,28 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
     expect(await screen.findByText(/power runs are off for this job now/)).toBeTruthy();
     expect(decisions()).toHaveLength(0);
     await waitFor(() => expect(screen.queryByTestId('job-passage-review-plan-toggle')).toBeNull());
+  });
+
+  it('a setting read that never answers releases Start and sends nothing', async () => {
+    const { START_LIMITS } = await import('../src/store/reviewPlan.js');
+    const was = START_LIMITS.checkWaitMs;
+    START_LIMITS.checkWaitMs = 50;
+    let pressed = false;
+    const d = powerDaemon();
+    const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (pressed && new URL(url, 'http://x').pathname.endsWith('/settings') ? new Promise<Response>(() => undefined) : base(url, init))));
+    try {
+      page();
+      await screen.findByTestId('job-passage-review-plan-toggle');
+      expect(d.reads()).toBeGreaterThan(0);
+      pressed = true;
+      fireEvent.click(reply('start'));
+      expect(await screen.findByText(/no answer from the daemon/)).toBeTruthy();
+      await waitFor(() => expect(reply('start').disabled).toBe(false));
+      expect(decisions()).toHaveLength(0);
+    } finally {
+      START_LIMITS.checkWaitMs = was;
+    }
   });
 
   it('Review plan flipped while the Start was being checked: nothing is sent', async () => {
