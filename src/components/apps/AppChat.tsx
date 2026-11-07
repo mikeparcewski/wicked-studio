@@ -54,7 +54,9 @@ function dropDraft(slug: string): void {
   try { sessionStorage.removeItem(DRAFT_KEY(slug)); } catch { /* nothing kept */ }
 }
 
-function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed, pending }: {
+function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed, pending, undoOff = false }: {
+  /** (G16) No Undo here (a phone: view + chat only). */
+  undoOff?: boolean;
   t: AppTurnRecord; view: SessionView | null; detail: AppDetail; onUndo: () => void; navigate: (p: string) => void; now: number; latestLanded: boolean;
   /** The person's own edits still saving: a turn's Undo waits (it would undo those instead). */
   pending: number;
@@ -87,7 +89,7 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
     );
   }
   if (t.state === 'landed') {
-    const undoable = !framed && pending === 0 && latestLanded && detail.head.version === t.version && detail.history.canUndo && detail.turn == null;
+    const undoable = !framed && !undoOff && pending === 0 && latestLanded && detail.head.version === t.version && detail.history.canUndo && detail.turn == null;
     return (
       <div className="wk-appchat-reply wk-appchat-reply--landed" data-testid="app-chat-landed">
         <p className="wk-appchat-change" data-testid="app-chat-change">{changeLine(t)}</p>
@@ -111,7 +113,11 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
   );
 }
 
-export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend, pending = 0 }: {
+export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend, pending = 0, undoOff = false, closedWhy = null }: {
+  /** (G16) Why nothing can be sent now (an archived app), or null. The chat stays mounted, so a typed message is kept. */
+  closedWhy?: string | null;
+  /** (G16, operator ruling D5) A phone is view + chat: the chat offers no Undo there. */
+  undoOff?: boolean;
   slug: string;
   detail: AppDetail | null;
   runs: readonly SessionView[];
@@ -170,7 +176,7 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
 
   /** The composer's submit: true when the message was taken (the box and the chips then clear). */
   const send = async (words: string, about: string[]): Promise<boolean> => {
-    if (words === '' || detail === null || framed || sending) return false;
+    if (words === '' || detail === null || framed || closedWhy !== null || sending) return false;
     if (busy) { setNote('A turn is still running: your message waits in the box until it lands.'); return false; }
     setSending(true);
     setNote(null);
@@ -223,7 +229,7 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
                 <p className="wk-appchat-about">{t.about.map((id) => <span key={id} className="wk-source-chip">about: {componentWords(detail.spec, id) ?? id}</span>)}</p>
               )}
             </div>
-            <TurnReply t={t} view={runs.find((v) => v.session.id === t.runId) ?? null} detail={detail} onUndo={onUndo} navigate={navigate} now={now} latestLanded={t.runId === latestLandedRun} framed={framed} pending={pending} />
+            <TurnReply t={t} view={runs.find((v) => v.session.id === t.runId) ?? null} detail={detail} onUndo={onUndo} navigate={navigate} now={now} latestLanded={t.runId === latestLandedRun} framed={framed} pending={pending} undoOff={undoOff} />
           </article>
         ))}
       </div>
@@ -252,7 +258,7 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
       <div className="wk-appchat-composer">
         <AppComposer composerKey={key} text={text} setText={setText} onSubmit={send} busy={sending}
           placeholder={busy ? 'A change is being made… type the next one' : 'Ask for a change…'} ariaLabel="Ask for a change to this app"
-          suggestions={suggestions} readOnly={framed ? 'This page is inside another page, so the app cannot be changed here: open studio on its own.' : null} />
+          suggestions={suggestions} readOnly={framed ? 'This page is inside another page, so the app cannot be changed here: open studio on its own.' : closedWhy} />
       </div>
     </section>
   );

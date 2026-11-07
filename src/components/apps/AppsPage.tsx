@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { listEditors } from '../../api/editors.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { originOf, useOriginTarget } from '../../editors/apps/appOrigin.js';
-import { PREVIEW_LIMIT, loadAppsDirectory, type AppTileData, type AppsDirectory } from '../../editors/apps/appsDirectory.js';
+import { PREVIEW_LIMIT, loadAppsDirectory, setArchived, type AppTileData, type AppsDirectory } from '../../editors/apps/appsDirectory.js';
 import { fetchGrants } from '../../editors/model.js';
 import { APPS_EDITOR } from '../../editors/protocol.js';
 import { TileScheduler, TILE_TICK_MS } from '../../editors/apps/liveTiles.js';
@@ -26,7 +26,34 @@ export { appPath } from './AppCard.js';
  *
  * `?project=<id>` lists one project's apps (crew's `GET /apps?project=`), saying so with "Show all apps"; a Report's
  * "Choose what shows here" opens it with its origin, and the page then offers "Back to Report".
+ *
+ * (plugins G16, operator ruling D5) Archive with Restore, never a delete: a card's ⋯ menu holds Archive, which hides the
+ * app from this list (crew keeps it, closed to changes); "Archived" lists those, each with Restore. A phone is view +
+ * chat (the approved exception): its cards offer no Edit, menu (Show on Report, Archive) or Restore.
  */
+
+/** A window under 640 px: the phone layout, where an app is view + chat only. */
+function usePhone(): boolean {
+  const q = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 639px)') : null;
+  const [phone, setPhone] = useState(q?.matches ?? false);
+  useEffect(() => {
+    if (q === null) return undefined;
+    const on = (): void => setPhone(q.matches);
+    q.addEventListener('change', on);
+    return () => q.removeEventListener('change', on);
+  }, [q]);
+  return phone;
+}
+
+/** Archive in a card's ⋯ menu: one click (nothing is lost, Restore brings it back), saying what it does. */
+function ArchiveItem({ tile, onArchive }: { tile: AppTileData; onArchive: (t: AppTileData) => void }): React.ReactElement {
+  return (
+    <div className="wk-apps-archive-item" data-testid="apps-card-archive-item">
+      <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-card-archive" onClick={() => onArchive(tile)}>Archive</button>
+      <p className="wk-apps-archive-help">Hides it from Apps and stops changes. Nothing is deleted: restore it from Archived.</p>
+    </div>
+  );
+}
 
 /** The `?project=` filter, when it is an id-shaped value (anything else lists every app). */
 export function projectFilterOf(search: string): string | null {
@@ -47,6 +74,15 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   const [attempt, setAttempt] = useState(0);
   const [turnsOn, setTurnsOn] = useState(false);
   const [queriesOn, setQueriesOn] = useState(false);
+  /** (G16) Which apps the page lists: the active ones, or the archived ones. */
+  const [scope, setScope] = useState<'active' | 'archived'>('active');
+  /** What the last Archive or Restore did, with its way back (the inverse, fixed when it landed), or why it did not. */
+  const [line, setLine] = useState<{ text: string; undo: { tile: AppTileData; to: boolean } | null; fail: boolean } | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  const phone = usePhone();
+  /** crew archives (seen once, kept): the switch stays mounted while the list reloads, so its focus is not lost. */
+  const [archivesSeen, setArchivesSeen] = useState(false);
+  const lineRef = useRef<HTMLParagraphElement | null>(null);
   // A framed studio changes nothing (§7.1, S8): no app is made from inside another page.
   const framed = useMemo(() => { try { return window.top !== window.self; } catch { return true; } }, []);
   // ONE scheduler for the page: every card's live reads share its limit (at most 3 at once) and its stagger.
@@ -72,7 +108,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
         if (!cancelled) setDir({ source: 'error', message: `the daemon did not answer (${e instanceof Error ? e.message : String(e)})` });
         return;
       }
-      const [d, editors] = await Promise.all([loadAppsDirectory(hasStore, filter), listEditors().catch(() => null)]);
+      const [d, editors] = await Promise.all([loadAppsDirectory(hasStore, filter, scope), listEditors().catch(() => null)]);
       if (cancelled) return;
       setDir(d);
       const e = editors?.find((x) => x.id === APPS_EDITOR && x.enabled !== false) ?? null;
@@ -81,11 +117,31 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
       if (!cancelled) setEditor({ version: e.version, sha: e.sha256, grants: decided.grants });
     })();
     return () => { cancelled = true; };
-  }, [attempt, filter]);
+  }, [attempt, filter, scope]);
+
+  /** (G16) Archive (`to` true) or restore an app; the list is read again after it, and the line says what happened. */
+  const setTileArchived = async (t: AppTileData, to: boolean, undoable: boolean): Promise<void> => {
+    if (framed || acting !== null) return;
+    setActing(t.slug);
+    try {
+      const r = await setArchived(t.slug, to);
+      if (!r.ok) { setLine({ text: `${to ? 'Not archived' : 'Not restored'}: ${r.message}`, undo: null, fail: true }); return; }
+      setLine({ text: to ? `Archived “${t.name}”. It is under Archived; nothing was deleted.` : `Restored “${t.name}” to Apps.`, undo: undoable ? { tile: t, to: !to } : null, fail: false });
+      setAttempt((n) => n + 1);
+      // The card (and the control that was focused) leaves this list: the focus goes to the line that says so.
+      requestAnimationFrame(() => lineRef.current?.focus());
+    } finally {
+      setActing(null);
+    }
+  };
   // What shows on Report: the cards' "On Report" pill and their ⋯ menu's switch read it.
   const crewDir = dir !== null && dir.source === 'crew';
   useEffect(() => { if (crewDir) void useReportShown.getState().loadShown(); }, [crewDir]);
   const apps = dir !== null && dir.source !== 'error' ? dir.apps : [];
+  // Archive is offered only where crew says it archives (its records carry `archived`, read from the whole list, so the
+  // switch stays when every app is archived); Archived is listed with it.
+  const archives = archivesSeen || scope === 'archived' || (dir !== null && dir.source === 'crew' && dir.archives === true);
+  useEffect(() => { if (dir !== null && dir.source === 'crew' && dir.archives === true) setArchivesSeen(true); }, [dir]);
   const skipped = dir !== null && dir.source !== 'error' ? dir.skipped : 0;
   // Opened from a Report: the cards (and Edit) carry the way back on to the app, whose crumb then leads there.
   const carry = back !== null ? origin : null;
@@ -110,7 +166,21 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
           )}
         </p>
       )}
-      {turnsOn && dir !== null && dir.source === 'crew' && (
+      {archives && (
+        <p className="wk-apps-scope" data-testid="apps-scope">
+          <span className="wk-seg" role="group" aria-label="Which apps">
+            <button type="button" className={`wk-seg-btn${scope === 'active' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-scope-active" aria-pressed={scope === 'active'} onClick={() => { setScope('active'); setLine(null); }}>Apps</button>
+            <button type="button" className={`wk-seg-btn${scope === 'archived' ? ' wk-seg-btn--on' : ''}`} data-testid="apps-scope-archived" aria-pressed={scope === 'archived'} onClick={() => { setScope('archived'); setLine(null); }}>Archived</button>
+          </span>
+        </p>
+      )}
+      {line !== null && (
+        <p ref={lineRef} tabIndex={-1} className={`wk-apps-dash-line${line.fail ? ' wk-apps-dash-line--fail' : ''}`} data-testid="apps-archive-line" aria-live="polite">
+          {line.text}
+          {line.undo !== null && !phone && !framed && <> <button type="button" className="wk-btn wk-btn--link" data-testid="apps-archive-undo" disabled={acting !== null} onClick={() => void setTileArchived(line.undo!.tile, line.undo!.to, false)}>Undo</button></>}
+        </p>
+      )}
+      {turnsOn && dir !== null && dir.source === 'crew' && scope === 'active' && (
         <NewAppChat navigate={navigate} projectOfApps={filter ?? dir.apps.find((a) => a.detail !== null)?.detail?.projectId ?? null} framed={framed} />
       )}
       {dir === null && <div className="wk-apps-grid" data-testid="apps-loading">{[0, 1, 2].map((i) => <div key={i} className="wk-appcard wk-appcard--ghost" />)}</div>}
@@ -132,19 +202,33 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
         <div className="wk-apps-grid" data-testid="apps-empty">
           <div className="wk-appcard wk-appcard--ghost wk-appcard--empty">
             <div className="wk-appcard-prev wk-appcard-prev--ghost"><i /><i /><i /><i /></div>
-            <p className="wk-appcard-desc">{filter !== null ? `${filterName ?? 'This project'} has no app yet.` : 'Apps are dashboards and tools over your data: describe one above and it is built for you.'}</p>
+            <p className="wk-appcard-desc">{scope === 'archived' ? (phone ? 'No archived app. Archiving is on a larger screen.' : 'No archived app. Archive one from its card’s ⋯ menu; it comes back with Restore.') : filter !== null ? `${filterName ?? 'This project'} has no app yet.` : 'Apps are dashboards and tools over your data: describe one above and it is built for you.'}</p>
           </div>
         </div>
       )}
       {apps.length > 0 && (
         <div className="wk-apps-grid" data-testid="apps-grid">
-          {apps.map((t) => (
+          {apps.map((t) => t.archived != null ? (
+            // (G16) An archived app: open it to look (read-only), or Restore it to Apps. No Edit, Share or menu.
+            <AppCard key={t.slug} tile={t} editor={editor} navigate={navigate} scheduler={dir?.source === 'crew' && queriesOn ? scheduler : null} origin={carry}
+              badge={<span className="wk-pill" data-testid="apps-card-archived">Archived</span>}
+              actions={!phone && !framed ? (
+                <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-card-unarchive" disabled={acting !== null} onClick={() => void setTileArchived(t, false, true)}>Restore</button>
+              ) : null} />
+          ) : (
             <AppCard key={t.slug} tile={t} editor={editor} navigate={navigate} scheduler={dir?.source === 'crew' && queriesOn ? scheduler : null} origin={carry}
               badge={!t.sample && shown.includes(t.slug) ? <span className="wk-pill wk-pill--good" data-testid="apps-card-onreport">On Report</span> : null}
-              menu={dir?.source === 'crew' && !t.sample ? <ShowOnReport slug={t.slug} name={t.name} projectId={t.projectId ?? null} variant="menu" navigate={navigate} framed={framed} /> : null}
+              // A phone is view + chat: no menu (Show on Report and Archive both change something).
+              menu={dir?.source === 'crew' && !t.sample && !phone ? (
+                <>
+                  <ShowOnReport slug={t.slug} name={t.name} projectId={t.projectId ?? null} variant="menu" navigate={navigate} framed={framed} />
+                  {t.archived === null && !framed && <ArchiveItem tile={t} onArchive={(x) => void setTileArchived(x, true, true)} />}
+                </>
+              ) : null}
               actions={(
                 <>
-                  <a href={appPath(t.slug, 'edit', carry)} className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-card-edit" onClick={(e) => { e.preventDefault(); navigate(appPath(t.slug, 'edit', carry)); }}>Edit</a>
+                  {/* A phone is view + chat (operator ruling D5): no Edit there. */}
+                  {!phone && <a href={appPath(t.slug, 'edit', carry)} className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-card-edit" onClick={(e) => { e.preventDefault(); navigate(appPath(t.slug, 'edit', carry)); }}>Edit</a>}
                   {/* Share says whether a published copy exists, which only the app's detail tells. */}
                   {t.detail !== null && <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="apps-card-share" onClick={() => setSharing(t)}>Share</button>}
                 </>

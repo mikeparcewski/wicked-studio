@@ -3,17 +3,24 @@ import { ApiError } from '../../api/errors.js';
 import type { AppCheckFinding, AppDetail, AppDetailResponse, AppErrorBody, AppLandedResponse, AppReceipt, AppSpec, AppVersion } from '../../api/types.js';
 
 /**
- * Where an app's versions live (DES-APPS-001 §6.4, §7.6; slice K4). Two stores answer the same three calls:
+ * Where an app's versions live (DES-APPS-001 §6.4, §7.6; slice K4). Two stores answer the same calls:
  *
- *  - {@link CrewAppStore}: crew's app store, `GET /apps/:app`, `POST /apps/:app/edits | undo | redo` (K2a, crew main).
+ *  - {@link CrewAppStore}: crew's app store, `GET /apps/:app`, `POST /apps/:app/edits | undo | redo | restore` (K2a,
+ *    crew main), and (plugins G16, crew#1396; api-types 0.196.0 once published, read field by field until then)
+ *    `GET /apps/:app/versions/:n`, an earlier version as it was.
  *    crew keeps the undo pointer, so every tab agrees, and refuses a stale base with `409 stale_base`.
  *  - {@link SampleAppStore}: an in-memory store with the SAME rules, for the editor test page on a daemon that has
  *    no app store (it stands where the sample page stands for the page editor). It never reaches a source; tabs of
  *    the same browser share it through `localStorage`, so they disagree exactly as crew's would refuse them.
  */
 
-export type StoreRefusal = { ok: false; code: AppErrorBody['code'] | 'unavailable'; message: string; head?: number; findings?: AppCheckFinding[] };
+/** `app_archived` (crew#1396; api-types 0.196.0 once published): a change to an archived app. */
+export type StoreRefusal = { ok: false; code: AppErrorBody['code'] | 'app_archived' | 'unavailable'; message: string; head?: number; findings?: AppCheckFinding[] };
 export type StoreResult = { ok: true; app: AppDetail; landed: AppVersion } | StoreRefusal;
+
+/** (G16) An earlier accepted version as it was: its record, its spec and the receipt it holds. */
+export interface AppVersionView { version: number; spec: AppSpec; record: AppVersion | null; receipt: AppReceipt['kind'] }
+export type VersionReadResult = { ok: true; read: AppVersionView } | StoreRefusal;
 
 export interface AppStorePort {
   readonly slug: string;
@@ -22,6 +29,38 @@ export interface AppStorePort {
   detail(): Promise<AppDetail>;
   edit(base: number, spec: AppSpec, summary: string): Promise<StoreResult>;
   move(direction: 'undo' | 'redo', base: number): Promise<StoreResult>;
+  /** (G16) Land an accepted version's tree as a new version, made on `base` (crew's CAS); redo is cleared. */
+  restore(base: number, version: number): Promise<StoreResult>;
+  /** (G16, G3) Read an earlier accepted version as it was (the historical read); nothing changes. */
+  readVersion(version: number): Promise<VersionReadResult>;
+}
+
+/**
+ * (G16) Whether crew says the app is archived, read field by field: `{at, by}` when archived, `null` when active, and
+ * `undefined` when the record has no such field (a daemon that does not archive: studio offers no Archive there).
+ */
+export function archivedOf(app: unknown): { at: number; by: string } | null | undefined {
+  if (typeof app !== 'object' || app === null || !Object.hasOwn(app, 'archived')) return undefined;
+  const a = (app as { archived?: unknown }).archived;
+  if (a === null) return null;
+  if (typeof a !== 'object' || a === undefined) return undefined;
+  const { at, by } = a as { at?: unknown; by?: unknown };
+  return { at: typeof at === 'number' && Number.isFinite(at) ? at : 0, by: typeof by === 'string' ? by.slice(0, 120) : '' };
+}
+
+/** crew's version read, field by field: a version number and a spec with pages, queries and actions, or null. */
+export function versionViewOf(body: unknown, asked: number): AppVersionView | null {
+  const v = typeof body === 'object' && body !== null ? (body as { version?: unknown }).version : undefined;
+  if (typeof v !== 'object' || v === null) return null;
+  const r = v as { version?: unknown; spec?: unknown; receipt?: unknown };
+  const spec = r.spec as AppSpec | undefined;
+  if (typeof spec !== 'object' || spec === null || !Array.isArray(spec.pages) || !Array.isArray(spec.queries) || !Array.isArray(spec.actions)) return null;
+  // The record may be null (crew's answer for a commit that is no version); when there is one it must be the version asked.
+  const record = typeof r.version === 'object' && r.version !== null ? r.version as AppVersion : null;
+  if (record !== null && record.version !== asked) return null;
+  const kind = typeof r.receipt === 'object' && r.receipt !== null ? (r.receipt as { kind?: unknown }).kind : undefined;
+  if (kind !== 'you' && kind !== 'reviewed' && kind !== 'restored') return null;
+  return { version: asked, spec, record, receipt: kind };
 }
 
 function refusalOf(e: unknown): StoreRefusal {
@@ -54,6 +93,18 @@ export class CrewAppStore implements AppStorePort {
     try {
       const r = await apiFetch<AppLandedResponse>(this.path(`/${direction}`), { method: 'POST', body: JSON.stringify({ base }) });
       return { ok: true, app: r.app, landed: r.landed };
+    } catch (e) { return refusalOf(e); }
+  }
+  async restore(base: number, version: number): Promise<StoreResult> {
+    try {
+      const r = await apiFetch<AppLandedResponse>(this.path('/restore'), { method: 'POST', body: JSON.stringify({ base, version }) });
+      return { ok: true, app: r.app, landed: r.landed };
+    } catch (e) { return refusalOf(e); }
+  }
+  async readVersion(version: number): Promise<VersionReadResult> {
+    try {
+      const read = versionViewOf(await apiFetch<unknown>(this.path(`/versions/${encodeURIComponent(String(version))}`)), version);
+      return read === null ? { ok: false, code: 'unavailable', message: `crew’s answer for v${version} was not a version studio reads` } : { ok: true, read };
     } catch (e) { return refusalOf(e); }
   }
 }
@@ -194,5 +245,42 @@ export class SampleAppStore implements AppStorePort {
     return this.land(spec, `${direction === 'undo' ? 'Undo' : 'Redo'} to v${target.version}`, (version, tree, at) => ({
       kind: 'restored', tree, version, at, actor: SAMPLE_ACTOR, restoredFrom: { version: target.version, originKind: origin.originKind, originVersion: origin.originVersion },
     }), () => { this.mem.detail.history.pointer = to; });
+  }
+
+  /** The accepted version `n`, or the refusal crew would answer for it. */
+  private accepted(n: number): { target: AppVersion; spec: AppSpec } | StoreRefusal {
+    const target = Number.isSafeInteger(n) && n >= 1 ? this.mem.detail.versions[n - 1] : undefined;
+    const spec = target === undefined ? undefined : this.mem.specs[target.version];
+    if (target === undefined || spec === undefined) return { ok: false, code: 'unknown_version', message: `${this.slug} has no version ${n}` };
+    if (target.receipt === null || !ACCEPTED.has(target.receipt.kind)) return { ok: false, code: 'not_accepted', message: `v${n} is not in ${this.slug}'s accepted history; it cannot be restored` };
+    return { target, spec };
+  }
+
+  async restore(base: number, version: number): Promise<StoreResult> {
+    await this.ready;
+    return this.tx(() => {
+      this.sync();
+      const stale = this.stale(base, 'this restore');
+      if (stale !== null) return stale;
+      const got = this.accepted(version);
+      if ('ok' in got) return got;
+      const { target, spec } = got;
+      const origin = target.receipt!.restoredFrom ?? { version: target.version, originKind: target.receipt!.kind === 'reviewed' ? 'reviewed' as const : 'you' as const, originVersion: target.version };
+      return this.land(spec, `Restored v${target.version}`, (v, tree, at) => ({
+        kind: 'restored', tree, version: v, at, actor: SAMPLE_ACTOR, restoredFrom: { version: target.version, originKind: origin.originKind, originVersion: origin.originVersion },
+      }), (v) => {
+        const h = this.mem.detail.history;
+        h.states = [...h.states.slice(0, h.pointer + 1), v];
+        h.pointer = h.states.length - 1;
+      });
+    });
+  }
+
+  async readVersion(version: number): Promise<VersionReadResult> {
+    await this.ready;
+    this.sync();
+    const got = this.accepted(version);
+    if ('ok' in got) return got;
+    return { ok: true, read: { version, spec: structuredClone(got.spec), record: structuredClone(got.target), receipt: got.target.receipt!.kind } };
   }
 }
