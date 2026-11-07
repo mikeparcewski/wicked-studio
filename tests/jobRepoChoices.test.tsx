@@ -20,7 +20,7 @@ const { resetJobLocal } = await import('../src/hooks/useJobStream.js');
 const { resetDecisionsForTest } = await import('../src/board/undoQueue.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { asksForRepo, repoChoices } = await import('../src/components/session/JobRepoChoices.js');
-const { putMove, readMoves, resetJobMoves, useJobMoves } = await import('../src/store/jobMoves.js');
+const { adoptMove, loadMoves, moveOf, MOVE_KEY_PREFIX, putMove, resetJobMoves, useJobMoves } = await import('../src/store/jobMoves.js');
 const { reposNamedIn } = await import('../src/store/repoProjects.js');
 const { postJob } = await import('../src/store/inlineStart.js');
 const { takesRepo } = await import('../src/board/slashCatalog.js');
@@ -222,6 +222,17 @@ describe('F41: a job seeded from a new chat opens on the repository its words na
     expect(seeds()[1]!.body['repoRefs']).toEqual(['rg1']);
     expect(seeds()[1]!.body['requestId']).toBe(seeds()[0]!.body['requestId']);
   });
+  it('a retry with edited words reads its own repository (the first read is kept only for the same words)', async () => {
+    seedStatuses = [503];
+    const post = (words: string) => postJob({ card: 'analyze-codebase', option: 'domain', depth: null, words, source: 'command', chatId: null, projectId: null, repoRef: null, pickKey: 'k:edit', repoFromWords: true });
+    await expect(post('Map the domain of rg1')).rejects.toThrow();
+    await post('Map the domain of rg2');
+    expect(seeds()[1]!.body['repoRefs']).toEqual(['rg2']);
+  });
+  it('a box in Unfiled files the named repository in the project that solely holds it', async () => {
+    await seed('Map the domain of rg1', true, 'default');
+    expect(seeds()[0]!.body).toMatchObject({ repoRefs: ['rg1'], projectId: 'p1' });
+  });
   it('one named repository: the seed is scoped on it, in the project that solely holds it', async () => {
     await seed('Map the domain of rg1: what it does', true);
     expect(seeds()[0]!.body).toMatchObject({ repoRefs: ['rg1'], projectId: 'p1' });
@@ -273,16 +284,14 @@ describe('F39/F41 minor: the old chat says where the job moved, not only "You ch
   it('the move outlives a reload (kept in localStorage); a set-aside still out reads as not confirmed', () => {
     putMove('a:1', { chatId: 'c1', where: 'reqgraph', retired: 'done', error: null });
     putMove('a:2', { chatId: 'c2', where: 'other', retired: 'pending', error: null });
-    const kept = readMoves(globalThis.localStorage.getItem('wk.jobMoves.v1'));
+    const kept = loadMoves(globalThis.localStorage);
     expect(kept['a:1']).toMatchObject({ chatId: 'c1', where: 'reqgraph', retired: 'done' });
     expect(kept['a:2']).toMatchObject({ retired: 'failed', error: 'This one may not have been set aside.' });
-    expect(readMoves('not json')).toEqual({});
-    expect(readMoves(JSON.stringify({ x: { chatId: 1 } }))).toEqual({});
     expect(Object.keys(useJobMoves.getState().moves)).toEqual(['a:1', 'a:2']);
   });
 });
 
-describe('F41 review folds (r7)', () => {
+describe('F41 review folds (r7, r8)', () => {
   it('while the project chips’ move is out, nothing else can start one: Another repository and the chips are held', async () => {
     let release!: () => void;
     seedGate = new Promise((r) => { release = r; });
@@ -337,21 +346,85 @@ describe('F41 review folds (r7)', () => {
     expect(repoChips()).toHaveLength(0);
     expect(posts).toEqual([]);
   });
-  it('kept moves are untrusted: a bad error field is dropped, a prototype key never lands, another tab’s moves survive a save', () => {
-    const k = 'wk.jobMoves.v1';
-    const bad = readMoves(JSON.stringify({ x: { chatId: 'c', where: 'w', at: 1, retired: 'failed', error: { message: 'bad' } } }));
-    expect(bad['x']!.error).toBeNull();
-    const proto = readMoves('{"__proto__": {"chatId": "c", "where": "w", "at": 1, "retired": "done", "chat-j:t1": {"where": {}}}}');
-    expect(Object.keys(proto)).toEqual([]);
-    expect(Object.getPrototypeOf(proto)).toBe(Object.prototype);
-    // Another tab saved b:1 after this one loaded; this tab's save of a:1 keeps it.
-    globalThis.localStorage.setItem(k, JSON.stringify({ 'b:1': { chatId: 'cb', where: 'other', retired: 'done', error: null, at: 5 } }));
-    putMove('a:1', { chatId: 'ca', where: 'reqgraph', retired: 'done', error: null });
-    expect(Object.keys(readMoves(globalThis.localStorage.getItem(k))).sort()).toEqual(['a:1', 'b:1']);
+  it('kept moves are untrusted: bad fields dropped, prototype names never land or answer, the newest 100 load', () => {
+    const ls = globalThis.localStorage;
+    ls.setItem(`${MOVE_KEY_PREFIX}x`, JSON.stringify({ chatId: 'c', where: 'w', at: 1, retired: 'failed', error: { message: 'bad' } }));
+    ls.setItem(`${MOVE_KEY_PREFIX}__proto__`, JSON.stringify({ chatId: 'c', where: 'w', at: 1, retired: 'done' }));
+    ls.setItem(`${MOVE_KEY_PREFIX}y`, 'not json');
+    ls.setItem(`${MOVE_KEY_PREFIX}z`, JSON.stringify({ chatId: 'c', where: {}, at: 1, retired: 'done' }));
+    const kept = loadMoves(ls);
+    expect(Object.keys(kept)).toEqual(['x']);
+    expect(kept['x']!.error).toBeNull();
+    expect(Object.getPrototypeOf(kept)).toBe(Object.prototype);
+    expect(moveOf(kept, 'toString')).toBeNull();
+    expect(moveOf(kept, '__proto__')).toBeNull();
+    resetJobMoves();
+    for (let i = 0; i < 105; i += 1) ls.setItem(`${MOVE_KEY_PREFIX}m:${i}`, JSON.stringify({ chatId: `c${i}`, where: 'w', at: i, retired: 'done' }));
+    const many = loadMoves(ls);
+    expect(Object.keys(many)).toHaveLength(100);
+    expect(many['m:4']).toBeUndefined();
+    expect(many['m:104']).toBeDefined();
   });
-  it('another tab’s move reaches this one', () => {
-    const k = 'wk.jobMoves.v1';
-    act(() => { window.dispatchEvent(new StorageEvent('storage', { key: k, newValue: JSON.stringify({ 'c:1': { chatId: 'cc', where: 'reqgraph', retired: 'pending', error: null, at: 9 } }) })); });
-    expect(useJobMoves.getState().moves['c:1']).toMatchObject({ chatId: 'cc', retired: 'pending' });
+  it('tabs writing at once keep each other’s moves (one key each); a save past 100 drops the oldest kept', () => {
+    const ls = globalThis.localStorage;
+    // Tab B wrote its move after this tab loaded; this tab's write never touches it.
+    ls.setItem(`${MOVE_KEY_PREFIX}b:1`, JSON.stringify({ chatId: 'cb', where: 'other', retired: 'done', error: null, at: 500 }));
+    putMove('a:1', { chatId: 'ca', where: 'reqgraph', retired: 'done', error: null, at: 600 });
+    expect(Object.keys(loadMoves(ls)).sort()).toEqual(['a:1', 'b:1']);
+    for (let i = 0; i < 99; i += 1) ls.setItem(`${MOVE_KEY_PREFIX}o:${i}`, JSON.stringify({ chatId: 'co', where: 'w', at: i, retired: 'done' }));
+    putMove('a:2', { chatId: 'ca2', where: 'reqgraph', retired: 'done', error: null, at: 700 });
+    const keys = Array.from({ length: ls.length }, (_, i) => ls.key(i)).filter((k) => k?.startsWith(MOVE_KEY_PREFIX));
+    expect(keys).toHaveLength(100);
+    expect(ls.getItem(`${MOVE_KEY_PREFIX}o:0`)).toBeNull();
+    expect(ls.getItem(`${MOVE_KEY_PREFIX}a:2`)).not.toBeNull();
+  });
+  it('another tab’s word on a move reaches this one: pending, then failed, then done; a done one never goes back', () => {
+    const ev = (pid: string, m: unknown) => act(() => { window.dispatchEvent(new StorageEvent('storage', { key: `${MOVE_KEY_PREFIX}${pid}`, newValue: m === null ? null : JSON.stringify(m) })); });
+    const base = { chatId: 'cc', where: 'reqgraph', error: null, at: 9 };
+    ev('c:1', { ...base, retired: 'pending' });
+    expect(useJobMoves.getState().moves['c:1']).toMatchObject({ retired: 'pending' });
+    ev('c:1', { ...base, retired: 'failed', error: 'This one was not set aside (503).' });
+    expect(useJobMoves.getState().moves['c:1']).toMatchObject({ retired: 'failed', error: 'This one was not set aside (503).' });
+    ev('c:1', { ...base, retired: 'done' });
+    expect(useJobMoves.getState().moves['c:1']).toMatchObject({ retired: 'done' });
+    ev('c:1', { ...base, retired: 'failed', error: 'stale' });
+    expect(useJobMoves.getState().moves['c:1']).toMatchObject({ retired: 'done' });
+    ev('c:1', null);
+    adoptMove('c:2', { ...base, chatId: 'other', retired: 'done' });
+    adoptMove('c:2', { ...base, chatId: 'another', retired: 'done' });
+    expect(useJobMoves.getState().moves['c:2']).toMatchObject({ chatId: 'other' });
+  });
+  it('a remount while a move is out finds the chips held: no second seed', async () => {
+    let release!: () => void;
+    seedGate = new Promise((r) => { release = r; });
+    const v = page();
+    await waitFor(() => expect(repoChips()).toHaveLength(4));
+    fireEvent.click(repoChips()[1]!); // rg1: one project holds it, so the move starts
+    await waitFor(() => expect(seeds()).toHaveLength(1));
+    v.unmount();
+    page();
+    await waitFor(() => expect(repoChips()).toHaveLength(4));
+    expect(repoChips().every((c) => c.disabled)).toBe(true);
+    fireEvent.click(repoChips()[2]!);
+    release();
+    await waitFor(() => expect(notNows()).toHaveLength(1));
+    expect(seeds()).toHaveLength(1);
+  });
+  it('the person went elsewhere while the catalog was read for the move: nothing is moved', async () => {
+    let releaseCat!: () => void;
+    const held = new Promise<void>((r) => { releaseCat = r; });
+    catalog = { version: 2, categories: [], cards: [] };
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/workflows/catalog')
+      ? held.then(() => (real as (u: string, i?: RequestInit) => Promise<Response>)(url, init))
+      : (real as (u: string, i?: RequestInit) => Promise<Response>)(url, init))));
+    page();
+    await waitFor(() => expect(repoChips()).toHaveLength(4));
+    fireEvent.click(repoChips()[1]!); // rg1
+    await new Promise((r) => setTimeout(r, 30));
+    act(() => { useChatFlow.setState({ request: { chatId: 'elsewhere', nonce: 99 } as never }); });
+    releaseCat();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(posts).toEqual([]);
   });
 });

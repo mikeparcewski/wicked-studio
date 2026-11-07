@@ -109,7 +109,7 @@ export function JobRepoChoices({ chatId, proposal, onError }: {
           return;
         }
       }
-      await moveJob({ fromChatId: chatId, proposal, projectId, repoRef: r.id, where, pickKey: `${proposal.pid}:repo:${r.id}` });
+      await moveJob({ fromChatId: chatId, proposal, projectId, repoRef: r.id, where, pickKey: `${proposal.pid}:repo:${r.id}`, here });
     })().catch(
       (e: unknown) => onError(`The job was not moved to ${r.name}: ${e instanceof Error ? e.message : String(e)}. Pick a repository again.`),
     ).finally(() => { busyRef.current = false; setBusy(null); });

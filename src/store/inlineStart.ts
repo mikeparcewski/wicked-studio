@@ -110,7 +110,7 @@ interface Envelope {
 }
 const envelopes = new Map<string, Envelope>();
 /** The repository a request's words named, as first read, kept until the request is answered (F41). */
-const prepicked = new Map<string, Awaited<ReturnType<typeof repoNamedInWords>>>();
+const prepicked = new Map<string, { words: string; named: Awaited<ReturnType<typeof repoNamedInWords>> }>();
 
 /** The scope a seeded chat opens in: the project, and the repository when one is named. */
 function seedScope(projectId: string | null, repoRef: string | null | undefined): Pick<ChatOpenBody, 'projectId' | 'repoRefs'> {
@@ -151,11 +151,13 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
       // its repository (a revision cannot add one outside the chat's scope). None or several named: the passage asks.
       // Read once per request: a retry sends the same scope under the same request id (codex r7), so a seed crew took
       // whose answer was lost is recovered, never doubled.
-      let named = prepicked.get(p.pickKey);
+      // Kept for these words only: an edited request reads its own words again (codex r8).
+      const kept = prepicked.get(p.pickKey);
+      let named = kept !== undefined && kept.words === p.words ? kept.named : undefined;
       if (named === undefined) {
         named = await repoNamedInWords(p.words);
         if (!wanted()) return null;
-        prepicked.set(p.pickKey, named);
+        prepicked.set(p.pickKey, { words: p.words, named });
       }
       if (named !== null) {
         repoRef = named.repo.id;

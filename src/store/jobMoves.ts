@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from '../api/client.js';
 import type { ArtifactProposal } from '../api/types.js';
 import { catalogV2Now } from './catalogV2.js';
-import { postJob } from './inlineStart.js';
+import { placeToken, postJob } from './inlineStart.js';
 
 /**
  * A job moved to a new chat (F39: a project it lacked; F41: a repository its chat had none of), by the moved proposal's
@@ -22,7 +22,8 @@ export interface JobMove {
   at: number;
 }
 
-const KEY = 'wk.jobMoves.v1';
+/** One storage key per moved proposal (`<prefix><pid>`): tabs that write at once never overwrite each other's moves. */
+export const MOVE_KEY_PREFIX = 'wk.jobMove.v1:';
 /** How many moves are kept (the newest), in this tab and across reloads. */
 const KEEP = 100;
 /** Keys that would reach an object's prototype: never a proposal id. */
@@ -38,29 +39,9 @@ function asMove(v: unknown): JobMove | null {
   return { chatId, where, at, retired, error: typeof error === 'string' ? error : null };
 }
 
-/** The moves kept in storage, as they are (validated, own keys only, never a prototype key). */
-function parseMoves(raw: string | null): Record<string, JobMove> {
-  if (raw === null) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const out: Array<[string, JobMove]> = [];
-    for (const [pid, v] of Object.entries(parsed as Record<string, unknown>)) {
-      const m = UNSAFE.has(pid) ? null : asMove(v);
-      if (m !== null) out.push([pid, m]);
-    }
-    return Object.fromEntries(out);
-  } catch { return {}; }
-}
-
-/** The moves a previous load of this tab (or another tab) kept. A set-aside still out when the page went is not known
- *  to have landed: it reads as not confirmed, and the passage's own phase (asking, or not started) says which. */
-export function readMoves(raw: string | null): Record<string, JobMove> {
-  const out = parseMoves(raw);
-  for (const [pid, m] of Object.entries(out)) {
-    if (m.retired === 'pending') out[pid] = { ...m, retired: 'failed', error: 'This one may not have been set aside.' };
-  }
-  return out;
+function parseMove(raw: string | null): JobMove | null {
+  if (raw === null) return null;
+  try { return asMove(JSON.parse(raw) as unknown); } catch { return null; }
 }
 
 /** The newest {@link KEEP}. */
@@ -71,20 +52,48 @@ function bound(moves: Record<string, JobMove>): Record<string, JobMove> {
 
 const storage = (): Storage | null => { try { return globalThis.localStorage ?? null; } catch { return null; } };
 
-function load(): Record<string, JobMove> {
-  try { return readMoves(storage()?.getItem(KEY) ?? null); } catch { return {}; }
+/** The kept moves' keys, by proposal id (never a prototype name). */
+function keptKeys(st: Storage): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  for (let i = 0; i < st.length; i += 1) {
+    const k = st.key(i);
+    if (k === null || !k.startsWith(MOVE_KEY_PREFIX)) continue;
+    const pid = k.slice(MOVE_KEY_PREFIX.length);
+    if (pid !== '' && !UNSAFE.has(pid)) out.push([pid, k]);
+  }
+  return out;
 }
 
-/** Write one move into what storage holds NOW (another tab's moves are kept, never overwritten by this tab's copy). */
+/** The moves a previous load of this tab (or another tab) kept, the newest {@link KEEP}. A set-aside still out when the
+ *  page went is not known to have landed: it reads as not confirmed, and the passage's own phase says which. */
+export function loadMoves(st: Storage | null = storage()): Record<string, JobMove> {
+  if (st === null) return {};
+  try {
+    const out: Array<[string, JobMove]> = [];
+    for (const [pid, k] of keptKeys(st)) {
+      const m = parseMove(st.getItem(k));
+      if (m !== null) out.push([pid, m.retired === 'pending' ? { ...m, retired: 'failed', error: 'This one may not have been set aside.' } : m]);
+    }
+    return bound(Object.fromEntries(out));
+  } catch { return {}; }
+}
+
+/** Write one move under its own key, then drop the oldest kept beyond {@link KEEP}. */
 function save(pid: string, m: JobMove): void {
   const st = storage();
   if (st === null) return;
-  try { st.setItem(KEY, JSON.stringify(bound({ ...parseMoves(st.getItem(KEY)), [pid]: m }))); } catch { /* storage blocked: this tab only */ }
+  try {
+    st.setItem(MOVE_KEY_PREFIX + pid, JSON.stringify(m));
+    const kept = keptKeys(st);
+    if (kept.length <= KEEP) return;
+    const aged = kept.map(([, k]) => [k, parseMove(st.getItem(k))?.at ?? 0] as const).sort((x, y) => y[1] - x[1]);
+    for (const [k] of aged.slice(KEEP)) st.removeItem(k);
+  } catch { /* storage blocked or full: this tab only */ }
 }
 
 /** `moves`: by the moved proposal's id. `moving`: a move out now, by that id (a remount or another control's press
  *  never starts a second one). */
-export const useJobMoves = create<{ moves: Record<string, JobMove>; moving: Record<string, true> }>(() => ({ moves: load(), moving: {} }));
+export const useJobMoves = create<{ moves: Record<string, JobMove>; moving: Record<string, true> }>(() => ({ moves: loadMoves(), moving: {} }));
 
 /** The move kept for a proposal (own entries only). */
 export function moveOf(moves: Readonly<Record<string, JobMove>>, pid: string): JobMove | null {
@@ -92,33 +101,39 @@ export function moveOf(moves: Readonly<Record<string, JobMove>>, pid: string): J
 }
 
 export function putMove(pid: string, m: Omit<JobMove, 'at'> & { at?: number }): void {
-  if (UNSAFE.has(pid)) return;
+  if (UNSAFE.has(pid) || pid === '') return;
   const entry: JobMove = { ...m, at: m.at ?? moveOf(useJobMoves.getState().moves, pid)?.at ?? Date.now() };
   useJobMoves.setState((s) => ({ moves: bound({ ...s.moves, [pid]: entry }) }));
   save(pid, entry);
 }
 
-// Another tab's moves reach this one: a move this tab has not seen, or one the other tab saw set aside.
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (e) => {
-    if (e.key !== KEY) return;
-    const theirs = parseMoves(e.newValue);
-    useJobMoves.setState((s) => {
-      const next = { ...s.moves };
-      let changed = false;
-      for (const [pid, m] of Object.entries(theirs)) {
-        const mine = moveOf(next, pid);
-        if (mine === null || (m.retired === 'done' && mine.retired !== 'done' && m.chatId === mine.chatId)) { next[pid] = m; changed = true; }
-      }
-      return changed ? { moves: bound(next) } : s;
-    });
+/** Another tab's word on a move: taken when this tab has none, or has the same move not yet set aside (its pending,
+ *  failed or done reaches this tab; a move this tab saw set aside never goes back). */
+export function adoptMove(pid: string, theirs: JobMove | null): void {
+  if (theirs === null || UNSAFE.has(pid) || pid === '') return;
+  useJobMoves.setState((s) => {
+    const mine = moveOf(s.moves, pid);
+    if (mine !== null && (mine.retired === 'done' || mine.chatId !== theirs.chatId)) return s;
+    return { moves: bound({ ...s.moves, [pid]: theirs }) };
   });
 }
 
-/** Tests: forget every move (this tab and the kept copy). */
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === null || !e.key.startsWith(MOVE_KEY_PREFIX)) return;
+    adoptMove(e.key.slice(MOVE_KEY_PREFIX.length), parseMove(e.newValue));
+  });
+}
+
+/** Tests: forget every move (this tab and the kept copies). */
 export function resetJobMoves(): void {
   useJobMoves.setState({ moves: {}, moving: {} });
-  try { storage()?.removeItem(KEY); } catch { /* nothing kept */ }
+  const st = storage();
+  if (st === null) return;
+  try {
+    const all = Array.from({ length: st.length }, (_, i) => st.key(i)).filter((k): k is string => k !== null && k.startsWith(MOVE_KEY_PREFIX));
+    for (const k of all) st.removeItem(k);
+  } catch { /* nothing kept */ }
 }
 
 /** Set the old proposal aside (Not now) once its job has moved; its outcome is kept with the move. */
@@ -149,16 +164,23 @@ export async function moveJob(m: {
   repoRef: string | null;
   where: string;
   pickKey: string;
+  /** Where the person was at the press ({@link placeToken}); default: now. Moved elsewhere since: nothing is moved. */
+  here?: string;
 }): Promise<boolean> {
+  const here = m.here ?? placeToken();
+  const stillWanted = (): boolean => placeToken() === here;
   const shape = m.proposal.shape;
   const pid = m.proposal.pid;
   const st = useJobMoves.getState();
   if (shape === undefined || st.moving[pid] === true || moveOf(st.moves, pid) !== null) return false;
   useJobMoves.setState((s) => ({ moving: { ...s.moving, [pid]: true } }));
   try {
+    const card = await wireCardOf(shape);
+    // The catalog read is a wait of its own: a person who went elsewhere meanwhile is not moved over (codex r8).
+    if (!stillWanted()) return false;
     const out = await postJob({
-      card: await wireCardOf(shape), option: shape.option, depth: shape.depth, words: jobWords(m.proposal), source: 'pick',
-      chatId: null, projectId: m.projectId, repoRef: m.repoRef, pickKey: m.pickKey,
+      card, option: shape.option, depth: shape.depth, words: jobWords(m.proposal), source: 'pick',
+      chatId: null, projectId: m.projectId, repoRef: m.repoRef, pickKey: m.pickKey, stillWanted,
     });
     if (out === null) return false;
     retireMoved(m.fromChatId, pid, { chatId: out.chatId, where: m.where });
