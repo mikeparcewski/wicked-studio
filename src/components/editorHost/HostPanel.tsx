@@ -229,6 +229,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
   const tab0 = useMemo(() => initialTab, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (box.current === null) return undefined;
+    let closing = false;
     const e = group.editor;
     const bridge = group.adapter.mcpBridge?.();
     const host = new EditorHost({
@@ -280,7 +281,9 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
         written: (write) => relay(group.key, 'options', { type: 'write', ok: true, write }),
         writeFailed: (message) => relay(group.key, 'options', { type: 'write', ok: false, message }),
         surfaces: () => replayGroupSelection(group.key, 'options'),
-        torn: (r) => cb.current.onTorn(r),
+        // Only a tear the frame suffered while open: this instance's own close (and React StrictMode's dev re-mount, which
+        // closes it once and makes it again) is not the frame failing to start.
+        torn: (r) => { if (!closing) cb.current.onTorn(r); },
         log: () => undefined,
         optionsValues: (t, v) => cb.current.onValues(t, v),
         selected: (anchors) => relay(group.key, 'options', { type: 'selection', anchors }),
@@ -293,7 +296,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
       else if (ev.type === 'changed') host.artifactChanged(ev.head, ev.kind);
       else if (ev.type === 'wrote') host.artifactChanged(ev.version, 'theme');
     }, () => host.connected);
-    return () => { leave(); host.teardown('The options were closed'); if (hostRef.current === host) hostRef.current = null; };
+    return () => { closing = true; leave(); host.teardown('The options were closed'); if (hostRef.current === host) hostRef.current = null; };
   }, [group, hostRef, tab0]);
   return <div ref={box} data-testid="host-panel-frame" hidden={!visible} className="wk-hpanel-frame" />;
 }
