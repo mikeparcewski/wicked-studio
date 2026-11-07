@@ -33,23 +33,22 @@ export interface DocFloorCheck {
 
 /** `notes` / `floor`: `undefined` = the daemon does not serve them (before 0.197.0); `null` = none for this version. */
 export type ChecksRead =
-  | { state: 'ok'; checks: DocCheck[]; notes?: DocNotes | null; floor?: DocFloorCheck | null }
+  | { state: 'ok'; checks: DocCheck[]; notes?: DocNotes | null | 'unreadable'; floor?: DocFloorCheck | null | 'unreadable' }
   | { state: 'absent' }
   | { state: 'failed'; why: string };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-/** A notes record the panel can draw, else `null` (a malformed one is never drawn half). */
+/** A notes record the panel can draw, exactly as crew sent it; `null` when any part of it is not that shape (never a
+ *  reduced copy that would read as cleaner than it is). */
 export function notesOf(v: unknown): DocNotes | null {
   if (!isObj(v) || typeof v['from_version'] !== 'number' || typeof v['run_id'] !== 'string') return null;
-  const list = (k: string): unknown[] => (Array.isArray(v[k]) ? (v[k] as unknown[]) : []);
-  return {
-    from_version: v['from_version'],
-    run_id: v['run_id'],
-    left_out: list('left_out').filter((x): x is { claim: string; why: string } => isObj(x) && typeof x['claim'] === 'string' && typeof x['why'] === 'string'),
-    sources: list('sources').filter((x): x is { token: string; used: boolean } => isObj(x) && typeof x['token'] === 'string' && typeof x['used'] === 'boolean'),
-    assumptions: list('assumptions').filter((x): x is string => typeof x === 'string'),
-    struck: list('struck').filter((x): x is { token: string; reason: string } => isObj(x) && typeof x['token'] === 'string' && typeof x['reason'] === 'string'),
-  };
+  const all = <T>(k: string, ok: (x: unknown) => boolean): T[] | null => (Array.isArray(v[k]) && (v[k] as unknown[]).every(ok) ? (v[k] as T[]) : null);
+  const leftOut = all<{ claim: string; why: string }>('left_out', (x) => isObj(x) && typeof x['claim'] === 'string' && typeof x['why'] === 'string');
+  const sources = all<{ token: string; used: boolean }>('sources', (x) => isObj(x) && typeof x['token'] === 'string' && typeof x['used'] === 'boolean');
+  const assumptions = all<string>('assumptions', (x) => typeof x === 'string');
+  const struck = all<{ token: string; reason: string }>('struck', (x) => isObj(x) && typeof x['token'] === 'string' && typeof x['reason'] === 'string');
+  if (leftOut === null || sources === null || assumptions === null || struck === null) return null;
+  return { from_version: v['from_version'], run_id: v['run_id'], left_out: leftOut, sources, assumptions, struck };
 }
 /** A floor record the panel can draw, else `null`. */
 export function floorOf(v: unknown): DocFloorCheck | null {
@@ -69,8 +68,8 @@ export async function getDocChecks(projectId: string, docId: string, version: nu
       state: 'ok',
       checks: Array.isArray(r.checks) ? r.checks : [],
       // Present only where the daemon serves them; `null` there is a real answer ("none for this version").
-      ...('notes' in r ? { notes: r.notes === null ? null : notesOf(r.notes) } : {}),
-      ...('floor' in r ? { floor: r.floor === null ? null : floorOf(r.floor) } : {}),
+      ...('notes' in r ? { notes: r.notes === null ? null : notesOf(r.notes) ?? 'unreadable' } : {}),
+      ...('floor' in r ? { floor: r.floor === null ? null : floorOf(r.floor) ?? 'unreadable' } : {}),
     };
   } catch (e) {
     if (isRouteAbsent(e)) return { state: 'absent' };
