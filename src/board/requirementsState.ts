@@ -229,3 +229,92 @@ export function corroborationSentence(c: Corroboration): string {
   if (c.extraExtractors > 0) parts.push(plural(c.extraExtractors, 'more extractor agreeing', 'more extractors agreeing'));
   return `Validated by ${plural(c.sources, 'independent source', 'independent sources')}: ${parts.join(', ')}.`;
 }
+
+/**
+ * How old the code behind the listed build is (crew api-types 0.197.0 `codeDrift`; operator ruling 2026-11-06): the
+ * engine counted it with git in the registered checkout. `commitsBehind`/`builtAt` are null when it could not tell.
+ */
+export interface CodeDrift {
+  builtFromCommit: string;
+  builtAt: string | null;
+  commitsBehind: number | null;
+}
+
+/** A page's `codeDrift`, or null when absent or malformed (an older daemon: the view claims nothing). */
+export function codeDriftOf(page: unknown): CodeDrift | null {
+  const d = (page as { codeDrift?: unknown } | null)?.codeDrift as Record<string, unknown> | null | undefined;
+  if (d === null || d === undefined || typeof d !== 'object') return null;
+  const commit = d['builtFromCommit'];
+  if (typeof commit !== 'string' || !/^[0-9a-f]{4,64}$/u.test(commit)) return null;
+  const at = d['builtAt'];
+  const behind = d['commitsBehind'];
+  return {
+    builtFromCommit: commit,
+    builtAt: typeof at === 'string' && at !== '' ? at : null,
+    commitsBehind: isCount(behind) ? behind : null,
+  };
+}
+
+/** "Nov 1" (with the year when it is not `now`'s), or null for a date that does not parse. */
+function shortDate(iso: string, now: Date): string | null {
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return null;
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  if (t.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+  return t.toLocaleDateString('en-US', opts);
+}
+
+/**
+ * "Built from code 69 commits old (Nov 1)": said only when the code has moved on (null at 0 commits, and when the
+ * daemon could not count: an unknown age is not a claim either way).
+ */
+export function codeDriftLine(d: CodeDrift | null, now: Date = new Date()): string | null {
+  if (d === null || d.commitsBehind === null || d.commitsBehind === 0) return null;
+  const date = d.builtAt !== null ? shortDate(d.builtAt, now) : null;
+  const n = d.commitsBehind;
+  return `Built from code ${count(n)} ${n === 1 ? 'commit' : 'commits'} old${date !== null ? ` (${date})` : ''}`;
+}
+
+/** The minimum in force and where it comes from (crew api-types 0.197.0 `minimum`). */
+export interface RequirementsMinimum {
+  pct: number;
+  source: 'repo' | 'settings';
+  repoPct: number | null;
+  settingsPct: number | null;
+}
+
+const isPct = (v: unknown): v is number => isCount(v) && v >= 1 && v <= 100;
+
+/** The `minimum` a page (or crew's notGenerated 404 body) carries, or null when absent or malformed. */
+export function minimumOf(holder: unknown): RequirementsMinimum | null {
+  const m = (holder as { minimum?: unknown } | null)?.minimum as Record<string, unknown> | null | undefined;
+  if (m === null || m === undefined || typeof m !== 'object') return null;
+  const { pct, source, repoPct, settingsPct } = m;
+  if (!isPct(pct) || (source !== 'repo' && source !== 'settings')) return null;
+  return {
+    pct,
+    source,
+    repoPct: isPct(repoPct) ? repoPct : null,
+    settingsPct: isPct(settingsPct) ? settingsPct : null,
+  };
+}
+
+/** "Minimum 66%, this repository's own (Settings: 80%)" / "Minimum 80%, from Settings". */
+export function minimumLine(m: RequirementsMinimum): string {
+  if (m.source === 'repo') {
+    return `Minimum ${m.pct}%, this repository's own${m.settingsPct !== null ? ` (Settings: ${m.settingsPct}%)` : ''}`;
+  }
+  return `Minimum ${m.pct}%, from Settings`;
+}
+
+/** An item's `codeMismatch` (crew api-types 0.197.0): how the code does not meet it, or null. */
+export function codeMismatchOf(item: unknown): string | null {
+  const v = (item as { codeMismatch?: unknown } | null)?.codeMismatch;
+  return typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
+}
+
+/** How many rows of the corpus have a code mismatch (crew api-types 0.197.0 `mismatches`), or null when not said. */
+export function mismatchCountOf(page: unknown): number | null {
+  const v = (page as { mismatches?: unknown } | null)?.mismatches;
+  return isCount(v) ? v : null;
+}

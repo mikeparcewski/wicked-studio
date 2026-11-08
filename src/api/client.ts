@@ -622,9 +622,10 @@ export const api = {
     }),
 
   /** Server-side requirements search: tokenized AND-match + risk/domain filters + pagination. */
-  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; category?: 'functional' | 'config-data'; domain?: string; offset?: number; limit?: number }, opts: { signal?: AbortSignal } = {}) => {
+  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; category?: 'functional' | 'config-data'; mismatch?: 'yes' | 'no'; domain?: string; offset?: number; limit?: number }, opts: { signal?: AbortSignal } = {}) => {
     const qs = new URLSearchParams();
     if (params.q) qs.set('q', params.q);
+    if (params.mismatch) qs.set('mismatch', params.mismatch);
     if (params.risk) qs.set('risk', params.risk);
     if (params.category) qs.set('category', params.category);
     if (params.domain) qs.set('domain', params.domain);
@@ -632,6 +633,14 @@ export const api = {
     qs.set('limit', String(params.limit ?? 50));
     return apiFetch<import('./types.js').RequirementsPage>(`/repos/${encodeURIComponent(repoId)}/requirements?${qs.toString()}`, opts.signal !== undefined ? { signal: opts.signal } : undefined);
   },
+  /** Set (1..100) or clear (`null`: the Settings minimum applies) a repository's own requirements minimum (crew
+   *  api-types 0.197.0 `PUT /repos/:id/requirements/minimum`). */
+  setRequirementsMinimum: (repoId: string, minPct: number | null) =>
+    apiFetch<{ minimum: unknown }>(`/repos/${encodeURIComponent(repoId)}/requirements/minimum`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ minPct }),
+    }),
   getRequirement: (repoId: string, key: string) =>
     apiFetch<{ requirement: import('./types.js').RequirementDetail }>(`/repos/${encodeURIComponent(repoId)}/requirements/${encodeURIComponent(key)}`),
   patchRequirement: (repoId: string, key: string, patch: import('./types.js').RequirementPatch) =>
