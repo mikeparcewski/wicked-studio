@@ -752,6 +752,9 @@ export function jobView(l: JobLineage, run: JobRunInputs, opts: {
     replies.push({ id: 'not_now', label: 'Not now', target: pt, enabled: !busy, tone: 'plain' });
   } else if (phase === 'interrupted') {
     replies.push({ id: 'go_again', label: 'Go again', target: pt, enabled: !busy, tone: 'go' });
+    // F43: Go again can be refused for good (a helper that can't work, which an interrupted job can't change); crew
+    // takes Not now for an interrupted job, so the passage is never a dead end.
+    replies.push({ id: 'not_now', label: 'Not now', target: pt, enabled: !busy, tone: 'quiet' });
   } else if (phase === 'planHeld' && run.view !== null) {
     const p = run.plan;
     const key = p === null ? `plan:${run.view.session.id}:?` : `plan:${run.view.session.id}:${p.ord}:${p.planRev}`;

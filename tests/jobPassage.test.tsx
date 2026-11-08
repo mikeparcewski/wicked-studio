@@ -1246,3 +1246,80 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
     expect(decisions()[0]!.body).toEqual({ decision: 'go', power: true });
   });
 });
+
+describe('F43: a refusal of Go again is said in crew’s words, never as "Interrupted · Go again"', () => {
+  const ACCEPTING = { at: T0 + 3, turnId: 't1', kind: 'proposal_accepting', pid: `${CHAT}:t1`, actor: 'me', edits: null, resolution: jobProposal(), identity: { runId: 'run-x', artifactRef: null } };
+  const refuseGo = (): void => {
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        const body = JSON.parse(String(init.body)) as { decision?: string };
+        if (body.decision === 'not_now') {
+          messages = [...messages, { at: T0 + 9, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'not_now', result: null }];
+          return Promise.resolve(ok({ view: { proposal: jobProposal(), state: 'decided', decision: 'not_now' } }));
+        }
+        return Promise.resolve(ok({ code: 'helper_unavailable', error: "opencode can't work now; change who works on it" }, 409));
+      }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      if (path.endsWith('/team')) return Promise.resolve(ok(team));
+      if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+  };
+
+  it('helper_unavailable replaces the Interrupted line with crew’s sentence, and Not now is offered', async () => {
+    setCachedRoster([{ key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true } as never, { key: 'opencode', display_name: 'OpenCode', binary: 'opencode', enabled_for_council: true } as never]);
+    messages = [USER, SEAT, P1, ACCEPTING];
+    refuseGo();
+    page();
+    await screen.findByText(/Interrupted before it was recorded as started/);
+    fireEvent.click(reply('go_again'));
+    const refused = await screen.findByTestId('job-passage-refused');
+    // crew's sentence, the helper by its display name, and no "change who works on it" an interrupted job can't do.
+    expect(refused.textContent).toContain('Not started: OpenCode can’t work now.');
+    expect(refused.textContent).not.toContain('change who works on it');
+    expect(refused.textContent).toContain('Not now ends it');
+    expect(refused).toHaveAttribute('data-code', 'helper_unavailable');
+    expect(screen.queryByText(/Interrupted before it was recorded as started/)).toBeNull();
+    expect(screen.getByTestId('job-passage').textContent).not.toContain('Go again resumes the same job');
+    // Said once: not again under the passage.
+    expect(screen.getAllByText(/can’t work now|can't work now/)).toHaveLength(1);
+    // The way out crew takes for an interrupted job.
+    fireEvent.click(reply('not_now'));
+    await waitFor(() => expect(posts.filter((p) => p.body['decision'] === 'not_now')).toHaveLength(1));
+    expect(posts.at(-1)!.path).toBe(`/chats/${CHAT}/proposals/${encodeURIComponent(`${CHAT}:t1`)}`);
+    // Crew takes it: the job reads not started, and the refusal goes with the interrupted state.
+    await screen.findByTestId('job-passage-not-started');
+    expect(screen.queryByTestId('job-passage-refused')).toBeNull();
+  });
+
+  it('a gateway failure on Go again (5xx) never claims "Not started": the Interrupted line stays, crew\'s words under it', async () => {
+    messages = [USER, SEAT, P1, ACCEPTING];
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') { posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> }); return Promise.resolve(ok({ error: 'upstream timed out' }, 504)); }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      if (path.endsWith('/team')) return Promise.resolve(ok(team));
+      if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page();
+    await screen.findByText(/Interrupted before it was recorded as started/);
+    fireEvent.click(reply('go_again'));
+    await screen.findByTestId('job-passage-error');
+    expect(screen.queryByTestId('job-passage-refused')).toBeNull();
+    expect(screen.getByText(/Interrupted before it was recorded as started/)).toBeTruthy();
+  });
+});
+
+describe('F43: helperRefusalWords', () => {
+  it('names the helpers by display name; another sentence is crew\'s, whole', async () => {
+    const { helperRefusalWords } = await import('../src/components/session/JobPassage.js');
+    const names: Record<string, string> = { opencode: 'OpenCode', pi: 'Pi CLI', copilot: 'GitHub Copilot CLI' };
+    const nameOf = (k: string): string => names[k] ?? k;
+    expect(helperRefusalWords("opencode can't work now; change who works on it", nameOf)).toBe('OpenCode can’t work now.');
+    expect(helperRefusalWords("opencode and pi can't work now; change who works on it", nameOf)).toBe('OpenCode and Pi CLI can’t work now.');
+    expect(helperRefusalWords('something else happened', nameOf)).toBe('something else happened.');
+  });
+});
