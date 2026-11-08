@@ -133,7 +133,8 @@ describe('NeedsBanner — shown only while something waits; hover or focus gives
     render(<SessionPage sessionId="run:a" runs={[asked]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     expect(screen.getByTestId('session-status')).toHaveTextContent('Answered');
     expect(screen.getByTestId('session-status')).toHaveAttribute('data-tone', 'ok');
-    expect(screen.getByTestId('session')).toHaveAttribute('data-state', 'done');
+    // The session's state stays the engine's (the rail's ring and the ask journeys read it); only the word changes.
+    expect(screen.getByTestId('session')).toHaveAttribute('data-state', 'waiting');
     expect(screen.queryByTestId('session-stop')).toBeNull();
     // The Details panel says the same: no Stop, never "Waiting on you" (codex on e2e-1105).
     expect(screen.getByTestId('run-tab-glance-progress')).toBeInTheDocument();

@@ -540,12 +540,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // The closed line above the entries is crew's: the first crew entry under it needs no second label.
   const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
-  // An answered ask parked at its turn (`ask_turn`) waits on no one: the page's header reads it as done, as its word
-  // says "Answered" (e2e-1105: the header said "Waiting" beside a red Stop run). The rail keeps its ring (railClean).
-  const headState = (v: RunView): SessionState => (v.session.status === 'awaiting_human' && isAskTurnRun(v.session) && runState(v) === 'waiting' ? 'done' : runState(v));
-  const state: SessionState = mine.some((v) => headState(v) === 'waiting') ? 'waiting'
-    : mine.some((v) => headState(v) === 'working') ? 'working'
-      : mine.length > 0 ? headState(mine[mine.length - 1]!) : 'quiet';
+  const state: SessionState = mine.some((v) => runState(v) === 'waiting') ? 'waiting'
+    : mine.some((v) => runState(v) === 'working') ? 'working'
+      : mine.length > 0 ? runState(mine[mine.length - 1]!) : 'quiet';
+  // An answered ask parked at its turn (`ask_turn`) waits on no one: when it is all that waits here, the header's word
+  // is its own ("Answered"), never "Waiting" (e2e-1105: "Waiting" beside a red Stop run). The session's state stays the
+  // engine's (`data-state`, the rail's ring and the ask journeys read it).
+  const answeredOnly = state === 'waiting' && mine.every((v) => runState(v) !== 'waiting' || (v.session.status === 'awaiting_human' && isAskTurnRun(v.session)));
   // (J4 0.16.6) A step silent past crew's quiet mark is not "Working": the header says how long it has said nothing.
   const silent = useSilentStep(mine.length > 0 ? mine[mine.length - 1] : undefined);
   const silentRunId = silent !== null ? mine[mine.length - 1]!.session.id : null;
@@ -555,7 +556,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
   const powerRun = mine.length === 1 ? mine[0]! : null;
   const power = usePower(powerRun);
-  const badge = mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(mine, state)) : null;
+  const badge = mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(mine, answeredOnly ? 'done' : state)) : null;
   // The banner below the header: each thing here that waits on the operator (the Needs-you rows about these runs).
   const gates = useGateStore((s) => s.gates);
   const waiting = useMemo(() => waitingItems(needRows, mine, gates, Date.now()), [needRows, mine, gates]);
