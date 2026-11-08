@@ -287,6 +287,26 @@ export type CommandListState =
  *  - free words (`/upgrade node to 22`): the cards the one scorer ranks, best first, each with its sub-commands.
  */
 export function commandList(view: WorkflowCatalogV2Response, text: string, looks: ShapeGuess | null = null): CommandListState {
+  const st = commandListRows(view, text, looks);
+  if (!st.open) return st;
+  // A full command typed exactly (`/plugin phase`, however it is spaced) wins the highlight: its row leads, so Enter
+  // picks what was typed and never the card it belongs to (e2e-1105 CJ9).
+  const at = st.rows.findIndex((r) => r.kind !== 'looks' && exactCommand(r, text));
+  if (at <= 0) return st;
+  const rows = [...st.rows];
+  rows.unshift(rows.splice(at, 1)[0]!);
+  return { ...st, rows };
+}
+
+/** A command's words, lower-cased, with the slash and spacing taken out (`/Plugin  phase` → `plugin phase`). */
+const commandWords = (s: string): string => lower(s).replace(/^\s*\/\s*/u, '').trim().split(/\s+/u).join(' ');
+
+/** Whether the line is exactly a row's command (its card command, option command or alias), nothing more. */
+export function exactCommand(row: Pick<CommandRow, 'command'>, text: string): boolean {
+  return row.command !== null && commandWords(text) !== '' && commandWords(text) === commandWords(row.command);
+}
+
+function commandListRows(view: WorkflowCatalogV2Response, text: string, looks: ShapeGuess | null): CommandListState {
   const query = text.startsWith('/') ? text.slice(1) : text;
   const all = allCommandRows(view);
   if (query.trim() === '') return { open: true, rows: all, freeWords: null, query };
