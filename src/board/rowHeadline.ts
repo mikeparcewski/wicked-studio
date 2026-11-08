@@ -19,16 +19,12 @@ export function rowLead(item: SystemAttention, cause: string | null = null): str
   return text === null ? null : healthText(text);
 }
 
-/** Health and attention prose is safe even when full technical paths are enabled elsewhere. */
+/**
+ * Health and attention prose, as crew wrote it, made safe to show (first-run, 2026-11-08): no home folder (`~/…`, also
+ * JSON-escaped Windows paths) and no 32+ character hex id (its first 8 characters + "…"). Crew's words are its own:
+ * the plain causes are crew's to write (lane fr-crew), so no wording is rewritten here.
+ */
 export function healthText(text: string): string {
-  // A technical disclosure may contain JSON with escaped Windows separators.
   return displayText(text.replace(/\\\\/g, '\\'))
-    .replace(/[0-9a-f]{32,}/gi, (id) => `${id.slice(0, 8)}…`)
-    .replace(/\bclis\b/gi, 'helpers').replace(/\bcli\b/gi, 'helper')
-    .replace(/\bagents\b/gi, 'helpers').replace(/\bagent\b/gi, 'helper')
-    .replace(/\bseats\b/gi, 'helpers').replace(/\bseat\b/gi, 'helper')
-    .replace(/\bcredentials?\b/gi, 'sign-in information')
-    .replace(/\bbroker\b/gi, 'helper service')
-    .replace(/\bsigned_out\b/g, 'not signed in')
-    .replace(/\bsnapshot\b/gi, 'system check').replace(/\bvenv\b/g, 'Python environment');
+    .replace(/[0-9a-f]{32,}/gi, (id) => `${id.slice(0, 8)}…`);
 }

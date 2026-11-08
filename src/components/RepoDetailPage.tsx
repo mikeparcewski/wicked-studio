@@ -374,7 +374,9 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                 <div data-testid="repo-onboard-error" role="status" className="wk-state-banner wk-state-banner--warn">
                   <div className="wk-state-banner-row">
                     <p className="wk-state-banner-text">
-                      Couldn’t map this repository. {estateMissing ? mappingWords : 'Try again, or open the details below.'}
+                      {rerunError !== null ? 'Couldn’t start onboarding: ' : 'Registered. Onboarding couldn’t start: '}
+                      {/* first-run C2: a missing code map service is said plainly; crew's words move under Technical details. */}
+                      {estateMissing ? mappingWords : showText(onboardErrorText)}
                     </p>
                     {!findingOffersOnboard && (
                       <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="repo-onboard-error-rerun" disabled={onboarding} onClick={() => void startOnboarding()}>
@@ -383,7 +385,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     )}
                     <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={dismissOnboardError}>Dismiss</button>
                   </div>
-                  <TechDetails text={healthText(onboardErrorText)} />
+                  {estateMissing && <TechDetails text={healthText(onboardErrorText)} />}
                 </div>
               )}
               {/* studio#251: the engine's checkout findings, with "Re-run onboarding" wired to this page's trigger. */}
@@ -425,11 +427,11 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                   <h2 id="repo-know-title" className="wk-section-title">What we know</h2>
                   <KnowMarks variant="band" testId="repo-know" marks={marks} onOpen={openMark} />
                   {notMapped && (
-                    <div role="status" className="wk-empty">
+                    <div role="status" className="wk-empty" data-testid="repo-not-mapped">
                       <h3>Not mapped yet</h3>
-                      <p>{mappingWords}</p>
+                      <p data-testid="repo-not-mapped-why">{mappingWords}</p>
                       {estateMissing && <a href="/watch" className="wk-link" onClick={(e) => { if (modified(e)) return; e.preventDefault(); navigate('/watch'); }}>Open Nerve Center</a>}
-                      <button type="button" className="wk-btn wk-btn--primary" disabled={onboarding} onClick={() => void startOnboarding()}>
+                      <button type="button" className="wk-btn wk-btn--primary" data-testid="repo-map-now" disabled={onboarding} onClick={() => void startOnboarding()}>
                         {onboarding ? 'Starting…' : 'Map this repository'}
                       </button>
                     </div>

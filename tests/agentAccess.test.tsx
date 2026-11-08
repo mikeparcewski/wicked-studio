@@ -627,7 +627,7 @@ describe('NEGATIVE CONTROL (review r1): crew\'s switches reach the box after a w
     cleanup();
     servers = [pgServer()];
     render(<SourcesPage navigate={vi.fn()} search="" />);
-    await waitFor(() => expect(screen.getByTestId('sources-page').textContent).toMatch(/agents see their structure, never their rows/));
+    await waitFor(() => expect(screen.getByTestId('sources-page').textContent).toMatch(/helpers see their structure, never their rows/));
   });
 });
 

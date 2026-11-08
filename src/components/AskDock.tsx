@@ -724,7 +724,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
               // B-C6a: ONE plain line, no per-helper list in the words (the drawer's notice carries the
               // Sign-one-in link and the reasons under a disclosure); nothing is sent.
               const notice = noHelperNotice(options);
-              throw new Error(notice?.line ?? 'No helper is set up to answer yet — add one on the Agents page.');
+              throw new Error(notice?.line ?? 'No helper is set up to answer yet — add one on the Helpers page.');
             }
             // Under the team path the chat records the eligible seats (studio#631's composer choice) and
             // the picked CLI is its primary; without it every seat sent answers, so only the pick is sent.

@@ -323,7 +323,7 @@ describe('against a crew with the system snapshot', () => {
     expect(within(copilot).getByTestId('nc-cli-pin')).toHaveAttribute('data-matched', 'false');
     const pi = cards[2]!;
     expect(within(pi).getByTestId('nc-cli-state')).toHaveTextContent('signed out');
-    expect(within(pi).getByTestId('nc-cli-reason')).toHaveTextContent('No sign-in information found');
+    expect(within(pi).getByTestId('nc-cli-reason')).toHaveTextContent('No credential found');
     // No stats: said why, and every number reads "—", never 0.
     expect(within(pi).getByTestId('nc-cli-statsnote')).toHaveTextContent('no event-log read binding');
     expect(within(pi).getByTestId('nc-cli-units')).toHaveTextContent('—');
@@ -579,9 +579,9 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
     const tile = screen.getByTestId('desk-rail-nerve');
     await waitFor(() => expect(tile).toHaveAttribute('data-read', 'fresh'));
     expect(tile).toHaveAttribute('data-tone', 'yellow');
-    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('sign in a second helper');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('sign in a second agent');
     const slow = await screen.findByTestId('nc-slow');
-    expect(slow).toHaveTextContent('Sign in a second helper so a different one can review');
+    expect(slow).toHaveTextContent('Sign in a second agent so a different one can review');
     // While too few agents are signed in, none of the others is "optional".
     expect(screen.queryByTestId('nc-not-set-up')).toBeNull();
     expect(tile).not.toHaveAttribute('data-info');
@@ -624,7 +624,7 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
     expect(tileOf('pi')).toHaveAttribute('data-tone', 'warn');
     expect(within(tileOf('copilot')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
     expect(tileOf('copilot')).toHaveAttribute('data-tone', 'quiet');
-    expect(screen.getByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode · Signed out: GitHub Copilot helper — optional');
+    expect(screen.getByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode · Signed out: GitHub Copilot CLI — optional');
   });
 
   it('an optional CLI never signed in never turns the CLIs chip yellow, against an older crew too', async () => {

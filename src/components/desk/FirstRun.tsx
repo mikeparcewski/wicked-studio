@@ -89,7 +89,7 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
       } else if (key === 'agents') {
         const yes = a.option === 'yes';
         const who = signedOut[0];
-        await record(key, { line, done: yes, words: yes && who !== undefined ? `${who.name}: ${who.login ?? 'sign in on Agents'}; I’ll notice` : `${ready.length} of ${agents.length} ready · later` });
+        await record(key, { line, done: yes, words: yes && who !== undefined ? `${who.name}: ${who.login ?? 'sign in on Helpers'}; I’ll notice` : `${ready.length} of ${agents.length} ready · later` });
         if (yes && who !== undefined && who.login === null) navigate('/agents?setup=1');
       } else if (key === 'style') {
         if (a.option?.startsWith('repo:') === true) {
@@ -144,7 +144,7 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
     persona: answers.persona?.words ?? 'not chosen yet',
     brand: answers.brand?.words ?? 'studio’s colours',
   };
-  const ROW_LABEL: Record<SetupAskKey, string> = { repos: 'Repositories', agents: 'Agents', style: 'Style sources', rules: 'Rules', persona: 'Personality', brand: 'Brand' };
+  const ROW_LABEL: Record<SetupAskKey, string> = { repos: 'Repositories', agents: 'Helpers', style: 'Style sources', rules: 'Rules', persona: 'Personality', brand: 'Brand' };
 
   if (ignored) {
     return (

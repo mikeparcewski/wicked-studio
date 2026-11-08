@@ -140,7 +140,7 @@ describe('Desk views after the sidebar regroup (ui-v2, 2026-10-26): pages on the
     const navigate = vi.fn();
     render(<DeskV2 {...props(navigate)} projectId="p1" search="" />);
     const tabs = within(screen.getByTestId('desk-tabs')).getAllByRole('tab').map((t) => t.textContent);
-    expect(tabs).toEqual(['Work', 'Jobs', 'Repositories', 'Report', 'Understand', 'Steering', 'Memory', 'Agents', 'Evaluate']);
+    expect(tabs).toEqual(['Work', 'Jobs', 'Repositories', 'Report', 'Understand', 'Steering', 'Memory', 'Helpers', 'Evaluate']);
     expect(tabs).toEqual(DESK_TABS.map((t) => t.label));
     expect(screen.queryByTestId('desk-tabs-more')).toBeNull();
     fireEvent.click(screen.getByTestId('desk-tab-steer'));

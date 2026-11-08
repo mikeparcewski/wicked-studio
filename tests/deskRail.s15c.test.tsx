@@ -40,7 +40,7 @@ describe('the rail, top to bottom', () => {
     expect(order).toEqual(ids);
     // The groups, their small-caps labels and their pages, in the mockup's words.
     expect(NAV_GROUPS.map((g) => [g.label, g.items.map((i) => i.label)])).toEqual([
-      ['Work', ['Projects', 'Jobs', 'Apps', 'Repositories']], ['Insight', ['Report', 'Understand', 'Evaluate']], ['Govern', ['Steering', 'Memory', 'Agents']],
+      ['Work', ['Projects', 'Jobs', 'Apps', 'Repositories']], ['Insight', ['Report', 'Understand', 'Evaluate']], ['Govern', ['Steering', 'Memory', 'Helpers']],
     ]);
     for (const g of navGroups()) {
       const group = screen.getByRole('group', { name: g.label });

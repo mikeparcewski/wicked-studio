@@ -10,19 +10,14 @@ import { TechDetails } from './TechDetails.js';
 export type StateKind = 'offline' | 'error' | 'partial' | 'stale';
 
 function sentence(kind: StateKind, what: string | undefined, asOf: number | null | undefined, error?: string | null): string {
-  // Existing callers retain ApiError.message when storing a failed read. Its prefix preserves
-  // the distinction between an HTTP refusal and a browser failure after that conversion.
-  const answered = error?.startsWith('the daemon refused this') === true;
+  // first-run P5: crew answered, and the read names the missing piece: say what is missing, not "can't reach".
+  // Any other error keeps the plain sentence below; crew's own words stay under Technical details.
   if (kind === 'error') {
     if (/memor/i.test(what ?? '') && /\b(?:wicked-)?estate\b/i.test(error ?? '')) {
       return 'Memory needs the code map service (wicked-estate), which isn’t installed or running.';
     }
     if (/skill/i.test(what ?? '') && /\b(?:wicked-)?garden\b/i.test(error ?? '')) {
       return 'Skills need wicked-garden, which isn’t installed or running.';
-    }
-    if (answered) {
-      const first = error!.replace(/^the daemon refused this[^—]*—\s*/, '').split(/[\r\n]/)[0]!.trim();
-      return `Studio’s service answered with an error: ${healthText(first)}`;
     }
   }
   const when = asOf != null ? new Date(asOf).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null;

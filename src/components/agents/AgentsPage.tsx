@@ -7,6 +7,7 @@ import { agentTiles, authOf, fixLabel, readyNote, type AgentRow, type Cell } fro
 import { agentStatus, agentsSentence, agentWeekLine } from '../../board/calmAgents.js';
 import { relTime } from '../../board/relTime.js';
 import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
+import { PAGE_NAMES } from '../../board/pageNames.js';
 import { StateBanner } from '../ui/StateBanner.js';
 import { OverflowMenu } from '../ui/OverflowMenu.js';
 import { TechDetails } from '../ui/TechDetails.js';
@@ -189,7 +190,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
       )
       : (
         <>
-          <StateBanner kind="error" what="agents" error={v.rosterError instanceof Error ? v.rosterError.message : null} onRetry={retry} retrying={retrying} data-testid="agents-banner" />
+          <StateBanner kind="error" what="helpers" error={v.rosterError instanceof Error ? v.rosterError.message : null} onRetry={retry} retrying={retrying} data-testid="agents-banner" />
           <p className="wk-calm-foot">If it keeps failing, Health shows whether studio’s service is working.</p>
           <div><a href="/watch" className="wk-calm-btn wk-calm-btn--secondary" data-testid="agents-health-link" onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('/watch'); }}>Open Nerve Center</a></div>
         </>
@@ -209,7 +210,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
     );
   } else {
     sentence = agentsSentence(v.rows);
-    const missing = [v.diagState === 'failed' ? 'how often each agent has to start fresh' : null, v.recordState === 'failed' ? 'this week’s steps' : null].filter((x): x is string => x !== null);
+    const missing = [v.diagState === 'failed' ? 'how often each helper has to start fresh' : null, v.recordState === 'failed' ? 'this week’s steps' : null].filter((x): x is string => x !== null);
     const qeShared = v.rows.every((r) => r.qe === null);
     const checked = v.readAt !== null ? relTime(v.readAt) : null;
     const t = agentTiles(v.rows);
@@ -219,7 +220,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
         {rosterFailed && <StateBanner kind="stale" asOf={v.readAt} onRetry={retry} retrying={retrying} data-testid="agents-banner" />}
         {missing.length > 0 && <StateBanner kind="partial" what={missing.join(' and ')} data-testid="agents-partial" />}
         <CalmSection label="Your agents" tools={menu} data-testid="agents-list-sec">
-          <CalmRows data-testid="agents-list" label="Agents">
+          <CalmRows data-testid="agents-list" label="Helpers">
             {v.rows.map((r) => <AgentLine key={r.key} r={r} open={open} />)}
           </CalmRows>
         </CalmSection>
@@ -243,7 +244,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
 
   return (
     <div data-testid="agents-panel" className="wk-agents-panel wk-calm-col">
-      <CalmHead title="Agents" titleAside={<PageAskButton kind="agents" testId="agents-page-ask" />} sentence={sentence} sentenceTestId={/* testid */ 'agents-sentence'} action={v.hasRoster && v.rows.length > 0 ? undefined : null} />
+      <CalmHead title={PAGE_NAMES.agents} titleAside={<PageAskButton kind="agents" testId="agents-page-ask" />} sentence={sentence} sentenceTestId={/* testid */ 'agents-sentence'} action={v.hasRoster && v.rows.length > 0 ? undefined : null} />
       {setup && <SetupPanel rows={v.rows} helpersKnown={v.rosterState === 'ok'} open={open} navigate={navigate} />}
       {body}
       {fix !== null && known && <AgentModal agentKey={fix} onClose={close} />}
