@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 338,
-    "occurrences": 5002,
-    "static": 4207,
+    "files": 339,
+    "occurrences": 5015,
+    "static": 4216,
     "dynamic": 177,
     "computed": 53
   },
@@ -21123,6 +21123,60 @@
       "testId": "skills-upgrade-badge",
       "files": [
         "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skills-usage",
+      "files": [
+        "src/components/SkillUsage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-usage-chip",
+      "files": [
+        "src/components/SkillUsage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-usage-cli",
+      "files": [
+        "src/components/SkillUsage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-usage-cli-stack",
+      "files": [
+        "src/components/SkillUsage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-usage-not-observable",
+      "files": [
+        "src/components/SkillUsage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-usage-stack",
+      "files": [
+        "src/components/SkillUsage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-usage-summary",
+      "files": [
+        "src/components/SkillUsage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-usage-table",
+      "files": [
+        "src/components/SkillUsage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-usage-unused",
+      "files": [
+        "src/components/SkillUsage.tsx"
       ]
     },
     {

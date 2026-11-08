@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SkillUsagePanel } from './SkillUsage.js';
+import type { SkillUsageResponse, SkillUsageUnavailable } from '../api/skillUsage.js';
 import {
   listSkillFiles,
   portabilityReasonCopy,
@@ -91,8 +93,10 @@ function textOf(f: SkillReadResult): string {
   return f.content ?? '';
 }
 
-export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveTo, top = 0, onClose, onLeave, onDirtyChange, onToggle, onChanged }: {
+export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveTo, top = 0, onClose, onLeave, onDirtyChange, onToggle, onChanged, usage }: {
   skill: SkillRow;
+  /** Skill usage (`GET /skills/usage`): `undefined` while it is read, or why it is not shown. */
+  usage?: SkillUsageResponse | SkillUsageUnavailable | undefined;
   /** studio#515: the viewport y where the page header ends — the drawer starts there, never over
    *  the header's verbs. */
   top?: number;
@@ -627,6 +631,8 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           </button>
         </div>
       )}
+
+      <SkillUsagePanel usage={usage} name={skill.name} now={Date.now()} />
 
       {/* The two trees' tabs — locked while the open file is dirty (save or discard first). */}
       <div role="tablist" aria-label="File trees" className="flex items-center gap-1">
