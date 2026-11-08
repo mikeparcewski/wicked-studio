@@ -168,3 +168,14 @@
   .wk-src-ask-q { flex-wrap: wrap; }
   .wk-src-ask-q .wk-btn { flex: 1 1 auto; }
 }
+
+/* (CS9) The web source: its sheet's lists and the lock's packages with their hashes. */
+.wk-web-does { margin: 0 0 var(--space-3); padding-left: 1.2em; list-style: disc; display: grid; gap: var(--space-1); font-size: var(--text-body); color: var(--ink-body); line-height: 1.45; }
+.wk-web-pkg { display: grid; gap: var(--space-1); padding-top: var(--space-2); }
+.wk-web-pkg + .wk-web-pkg { border-top: 1px solid var(--border-subtle); margin-top: var(--space-2); }
+.wk-web-pkg code { overflow-wrap: anywhere; }
+.wk-web-lock-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); max-height: 22rem; overflow: auto; }
+.wk-web-lock-list li { display: grid; gap: 2px; min-width: 0; }
+.wk-web-hashes { display: grid; gap: 1px; }
+.wk-web-hashes code { font-size: var(--text-caption); color: var(--ink-muted); overflow-wrap: anywhere; word-break: break-all; }
+.wk-web-why { padding: 0 var(--space-2) var(--space-1); }
