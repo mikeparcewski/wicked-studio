@@ -20,6 +20,10 @@ npm publish dates. Every version listed here exists on
   in through a login container. "Not installed" now means the helper can't be used on the floor that runs it: the
   engine found it missing at run time, or this computer lacks it on the host floor, or on the container floor for a
   helper whose sign-in runs here (crew's `sign_in_on: 'host'`: codex, pi, opencode) and that isn't signed in yet.
+  The setup guide offers "Fix" (not "Sign in") for such a helper. Its step 4, "Start the container runtime", reads the
+  runtime the way the Helpers rows do: done once a container helper's sign-in check answered, and "Docker isn't running:
+  start it" while the rows say so. It used to read only a seat-image probe that times out on a loaded host, so it said
+  "Not checked yet." with Docker up or down and the guide could never finish (first-run N3).
 
 - **A pull request link names its repository (CJ13).** `/review-change https://github.com/<owner>/<repo>/pull/9` from a
   new chat opens on that repository instead of asking "Which repository?". A pull request, tree, blob, commit or clone

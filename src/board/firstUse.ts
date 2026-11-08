@@ -1,5 +1,5 @@
 import type { SystemSnapshot } from '../api/system.js';
-import { helperRuntimeDown } from './agentsCopy.js';
+import { helperNotInstalled, helperRuntimeDown } from './agentsCopy.js';
 import { boundaryHolds, type AgentRow } from './agentsModel.js';
 
 /** First use stays open until the live helper, skills, code map and runtime checks pass,
@@ -136,6 +136,8 @@ export function setupSteps(f: SetupFacts): SetupSteps {
 export function setupMove(r: AgentRow, counted: readonly AgentRow[]): { kind: 'sign-in' | 'fix' | 'use'; label: string } | null {
   if (counted.some((c) => c.key === r.key)) return null;
   if (r.optIn) return null;
+  // A helper that can't be used on this floor can't be signed in yet: its modal says what to install.
+  if (helperNotInstalled(r)) return { kind: 'fix', label: `Fix ${r.name}` };
   // The top issue decides (issues are sorted): a sign-in offered first only when signing in is the next move (codex #759 r1).
   if (r.issues[0]?.code === 'signed_out') return { kind: 'sign-in', label: `Sign in ${r.name}` };
   if (!r.picked && r.usable && r.issues.every((i) => i.severity === 'note')) return { kind: 'use', label: `Use ${r.name} for new work` };

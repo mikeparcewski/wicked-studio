@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useEffect } from 'react';
 import type { RosterSeat } from '../src/api/types.js';
 import { normalizeSnapshot } from '../src/api/system.js';
-import { goodEnough, setupChecks, setupSettled } from '../src/board/firstUse.js';
+import { goodEnough, setupChecks, setupMove, setupSettled } from '../src/board/firstUse.js';
 import { agentRows } from '../src/board/agentsModel.js';
 import { agentStatus } from '../src/board/calmAgents.js';
 import { issueCopy } from '../src/board/agentsCopy.js';
@@ -176,6 +176,9 @@ describe('A-C9 missing helper', () => {
     expect(agentStatus(codex({ auth: 'signed_out', signed_in: true })).word).toBe('Not installed');
     // Docker down comes first: the runtime is the thing to start.
     expect(agentStatus(codex({ auth: 'unknown', health: { status: 'inactive', message: 'Docker isn’t running.', since: new Date().toISOString() } })).word).not.toBe('Not installed');
+    // The setup guide never offers a sign-in that needs the missing program.
+    expect(setupMove(codex({}), [])).toEqual({ kind: 'fix', label: 'Fix Codex' });
+    expect(setupMove(row!, [])).toEqual({ kind: 'sign-in', label: 'Sign in Claude Code' });
     // The host floor still calls a missing program not installed.
     const hostSeat = helper({ version: missing });
     delete hostSeat.sign_in;
