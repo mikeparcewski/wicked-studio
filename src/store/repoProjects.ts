@@ -39,9 +39,17 @@ function names(words: string, term: string): boolean {
   return new RegExp(`(?:^|[^\\p{L}\\p{N}_./-])${escapeRe(term)}(?=$|[^\\p{L}\\p{N}_./-]|\\.(?:$|[^\\p{L}\\p{N}_./-]))`, 'iu').test(words);
 }
 
+/** A link names its repository by its path (`https://github.com/<owner>/<repo>/pull/9`, `…/<repo>.git`; CJ13): the
+ *  words read with each link's repository segment beside them. A bare path (`my/rg1`) names nothing. */
+function withLinkedRepos(words: string): string {
+  const linked = [...words.matchAll(/https?:\/\/[^\s/]+\/[^\s/]+\/([^\s/?#]+)/giu)].map((m) => m[1]!.replace(/\.git$/iu, ''));
+  return linked.length === 0 ? words : `${words} ${linked.join(' ')}`;
+}
+
 /** The registered repositories the words name (by name or id), in registry order (F41). */
 export function reposNamedIn<R extends Pick<RepoEntry, 'id' | 'name'>>(words: string, repos: readonly R[]): R[] {
-  return repos.filter((r) => names(words, r.name) || (r.id !== r.name && names(words, r.id)));
+  const read = withLinkedRepos(words);
+  return repos.filter((r) => names(read, r.name) || (r.id !== r.name && names(read, r.id)));
 }
 
 /** A name distinct enough to be read as a repository rather than a word: it carries something other than letters (a
@@ -62,7 +70,8 @@ export async function repoNamedInWords(words: string): Promise<{ repo: RepoEntry
   try { repos = (await api.listRepos()).repos; } catch { return null; }
   const named = reposNamedIn(words, repos);
   // Named by a distinct name or id; two named (or one distinct and one plain) is not clear: the person picks.
-  const clear = named.filter((r) => (distinctName(r.name) && names(words, r.name)) || (r.id !== r.name && distinctName(r.id) && names(words, r.id)));
+  const read = withLinkedRepos(words);
+  const clear = named.filter((r) => (distinctName(r.name) && names(read, r.name)) || (r.id !== r.name && distinctName(r.id) && names(read, r.id)));
   if (named.length !== 1 || clear.length !== 1) return null;
   const repo = clear[0]!;
   try {

@@ -12,6 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- **A pull request link names its repository (CJ13).** `/review-change https://github.com/<owner>/<repo>/pull/9` from a
+  new chat opens on that repository instead of asking "Which repository?": the words are read with each link's
+  repository segment beside them (a bare `owner/repo` path still names nothing).
+
 ### Changed
 
 - **`testid-inventory.json` commits no aggregates.** The `counts` header changed with every testid, so every open

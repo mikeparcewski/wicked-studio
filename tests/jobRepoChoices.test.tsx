@@ -200,6 +200,12 @@ describe('F41: the words name a repository as a whole token', () => {
     expect(names('rg1-old or rg1.old or rg1_x or my/rg1')).toEqual([]);
     expect(names('')).toEqual([]);
   });
+  it('a pull request, tree or clone link names its repository by its path (CJ13)', () => {
+    const names = (w: string) => reposNamedIn(w, REPOS).map((r) => r.id);
+    expect(names('/review-change https://github.com/acme/rg1/pull/9')).toEqual(['rg1']);
+    expect(names('review https://github.com/acme/rg2.git and http://git.example/o/rg10/tree/main')).toEqual(['rg2', 'rg10']);
+    expect(names('https://github.com/rg1/other/pull/9')).toEqual([]);
+  });
   it('orders the named ones first, the rest by name', () => {
     expect(repoChoices('zeta and rg1', REPOS).list.map((r) => r.id)).toEqual(['zeta', 'rg1', 'rg10', 'rg2']);
   });
@@ -232,6 +238,11 @@ describe('F41: a job seeded from a new chat opens on the repository its words na
   it('a box in Unfiled files the named repository in the project that solely holds it', async () => {
     await seed('Map the domain of rg1', true, 'default');
     expect(seeds()[0]!.body).toMatchObject({ repoRefs: ['rg1'], projectId: 'p1' });
+  });
+  it('a pull request link scopes the seed on its repository (CJ13)', async () => {
+    repos = [...REPOS, { id: 'e2e-j6', name: 'wicked-e2e-j6-plugins', root_path: '/r/j6', default_branch: 'main', registered_at: 1 }];
+    await seed('/review-change https://github.com/acme/wicked-e2e-j6-plugins/pull/9', true);
+    expect(seeds()[0]!.body['repoRefs']).toEqual(['e2e-j6']);
   });
   it('one named repository: the seed is scoped on it, in the project that solely holds it', async () => {
     await seed('Map the domain of rg1: what it does', true);
