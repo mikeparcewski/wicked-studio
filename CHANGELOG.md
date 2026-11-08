@@ -38,6 +38,11 @@ npm publish dates. Every version listed here exists on
   link, or a repository link on a known git host, names its repository whatever its name; other links and a bare
   `owner/repo` path name nothing.
 
+- **A published app's check renders again (CJ2).** The standalone Apps fixture used by the publish check shipped
+  React's unreplaced `process.env.NODE_ENV` read, so the check page threw "process is not defined" and reported
+  `render_unavailable`. Every editor, run-plugin and standalone Apps script is now built with `NODE_ENV` set to
+  `production`, and a test fails if any of them still reads `process`.
+
 ### Changed
 
 - **`testid-inventory.json` commits no aggregates.** The `counts` header changed with every testid, so every open
