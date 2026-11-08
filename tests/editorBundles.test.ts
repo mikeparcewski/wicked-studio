@@ -1,12 +1,12 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import docSurfaces from '../src/plugins/wicked-doc/surfaces.json';
 import { canonicalSurfaces, parseSurfaces } from '../src/editors/surfaces.js';
 import deckSurfaces from '../src/plugins/wicked-deck/surfaces.json';
 import videoSurfaces from '../src/plugins/wicked-video/surfaces.json';
-import { buildEditors, EDITORS, externalReferences } from '../scripts/build-editors.mjs';
+import { buildEditors, EDITORS, externalReferences, RUN_PLUGINS, runPluginHtml } from '../scripts/build-editors.mjs';
 
 /**
  * EP-P2 — the first-party editor bundles as crew's registry reads them (DES-EDITOR-PLUGINS-001 §5.2,
@@ -72,6 +72,13 @@ describe('the first-party editor bundles', () => {
       expect(html).toContain(`type:"plugin.ready"`.replace(/"/g, '"')); // the one window message is in the bundle
     }
   });
+  it('no bundle reads Node\'s `process`: editors, run plugins and the standalone Apps scripts run in a page (CJ2)', async () => {
+    const bundles: Array<[string, string]> = written.map((w) => [w.id, readFileSync(join(w.dir, 'index.html'), 'utf8')]);
+    for (const f of readdirSync(join(out, 'apps-standalone')).filter((n) => n.endsWith('.js'))) bundles.push([`apps-standalone/${f}`, readFileSync(join(out, 'apps-standalone', f), 'utf8')]);
+    for (const id of RUN_PLUGINS) bundles.push([id, (await runPluginHtml(id, { version: '9.9.9' })).html]);
+    expect(bundles.map(([name]) => name)).toEqual(expect.arrayContaining(['apps-standalone/fixture.js', 'apps-standalone/runtime.js']));
+    expect(bundles.filter(([, code]) => /\bprocess\./.test(code)).map(([name]) => name)).toEqual([]);
+  }, 120_000);
   it('the deck manifest declares protocol 2, its unchanged surfaces and theme permission', () => {
     const deck = written.find((w) => w.id === 'wicked-deck')!;
     const manifest = JSON.parse(readFileSync(join(deck.dir, 'editor.json'), 'utf8'));

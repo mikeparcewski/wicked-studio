@@ -174,6 +174,9 @@ async function bundleScript(entry, name = 'wickedEditor') {
     configFile: false,
     root,
     logLevel: 'silent',
+    // Library mode leaves `process.env.NODE_ENV` in place (only an app build replaces it), and React reads it at load:
+    // a page that runs the script throws "process is not defined" before it is ready (e2e CJ2 publish check).
+    define: { 'process.env.NODE_ENV': JSON.stringify('production') },
     build: {
       write: false,
       minify: true,
