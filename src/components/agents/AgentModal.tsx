@@ -15,7 +15,6 @@ import { setPickedForNewWork, useAgentRows } from './useAgentRows.js';
 import { api } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
 import { displayText, homeDirsIn } from '../../board/homePath.js';
-import { useViewPrefsStore } from '../../store/viewPrefs.js';
 import { Switch } from '../ui/Switch.js';
 import { Terminal } from '../Terminal.js';
 
@@ -260,7 +259,6 @@ export function AgentModal({ agentKey, onClose, intent }: {
   const [logoutRun, setLogoutRun] = useState(false);
   const [noLogout, setNoLogout] = useState(false);
   useEffect(() => { setLogoutRun(false); setNoLogout(false); }, [agentKey]);
-  const techDetails = useViewPrefsStore((s) => s.prefs.technical_details);
   /** Which button asked: a card's check block, or the footer's Check now (its result shows beside it). */
   const [from, setFrom] = useState<'card' | 'foot'>('card');
   /** A check in flight, read synchronously (a retired check frees it at once, codex S4 r8). */
@@ -483,7 +481,7 @@ export function AgentModal({ agentKey, onClose, intent }: {
                     <p className="wk-field-note">Complete any prompt below, then check again.</p>
                     <Terminal key={row.key} cwd="." open={(cols, rowsN) => api.seatLogout(row.key, { cols, rows: rowsN }).then((r) => ({ id: r.terminalId }))}
                       onOpenError={(err) => { if (err instanceof ApiError && err.status === 404) { setNoLogout(true); setLogoutRun(false); } }}
-                      concealHome={techDetails ? [] : homeDirsIn(row.logout)} />
+                      concealHome={homeDirsIn(row.logout)} />
                   </div>
                 )}
               </details>
