@@ -38,7 +38,7 @@ import type { GateAnswer } from './gateActions.js';
 import { repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from './repeatProgress.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { isInconclusiveQePrompt, offersQeRedo, qeGateOf, qeRecordedOutcome, QE_REDO_ACTION, QE_REDO_CONSEQUENCE, QE_REDO_KEY, QE_REDO_LABEL, QE_REDO_TITLE, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
-import { ruleHolds, rulesHoldAt, waitsForJudge, type RuleRow } from './assuranceModel.js';
+import { ruleSkippable, rulesHoldAt, waitsForJudge, type RuleRow } from './assuranceModel.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_ACTION, REJUDGE_LABEL, rejudgeTitle, type RejudgeOffer } from './rejudge.js';
 import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, offersDeliverFloorOverride, offersFloorOverride } from './floorOverride.js';
 import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
@@ -76,6 +76,8 @@ export interface GateRowChoice {
   /** (DES-RULE-CHECK-001) The unchecked steering rules this choice skips: the note is each one's reason
    *  (`skipRules`), never an `amend`. */
   skipRuleIds?: string[];
+  /** (e2e-1105 CJ9) The note field's placeholder when this choice asks for a particular one. */
+  notePlaceholder?: string;
   /** Hover text explaining the consequence of this choice. */
   title: string;
   /** True when the engine value has no known wire meaning; rendered as a disabled button. */
@@ -939,8 +941,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     }
     if (skipQeAtDelivery(gate.prompt)) whyNot.push('Skipping QE is offered at the hand-over, not here.');
     if (landHeld) {
-      whyNot.push(rulesHold.rows.some(ruleHolds)
-        ? 'Landing with carried items isn’t offered while a steering rule is open: re-check it, or confirm or skip it, first.'
+      // A broken rule that cannot be skipped (error or critical) still needs the send-back, whatever else is open.
+      const reworkOnly = rulesHold.rows.some((r) => r.blocking && r.status === 'broken' && !ruleSkippable(r));
+      whyNot.push(!reworkOnly && rulesHold.rows.some(ruleSkippable)
+        ? `Landing with carried items isn’t offered while a steering rule is open: re-check it, or ${rulesHold.rows.filter(ruleSkippable).every((r) => r.status === 'broken') ? 'skip it with a reason' : 'confirm or skip it'}, first.`
         : 'Landing with carried items isn’t offered while a steering rule is broken: re-check the rules, or send the work back.');
     }
 
@@ -1097,24 +1101,35 @@ export function namedSendBackNote(fresh: readonly string[]): string {
  * (DES-RULE-CHECK-001) The steering-rule actions at a gate whose denial record holds a rule layer
  * ({@link rulesHoldAt}): "Re-check the rules" (`retry_rules`; a disputed rule goes to the council again), and
  * "Confirm or skip" (`skip_rules`, each with the person's reason) for the rows that hold — a blocking unchecked,
- * waived or disputed row, never a broken row (the engine refuses it) or a process row (it holds nothing). None where
- * no rule layer is in the record.
+ * waived or disputed row — and (e2e-1105 CJ9) a broken warning the engine marked `waivable`; never a broken error or
+ * critical rule (the engine refuses it) or a process row (it holds nothing). None where no rule layer is in the record.
  */
-function ruleChoicesAt(hold: { held: boolean; rows: readonly RuleRow[]; behind: boolean }): GateRowChoice[] {
+function ruleChoicesAt(hold: { held: boolean; rows: readonly RuleRow[]; behind: boolean; otherCause?: boolean }): GateRowChoice[] {
   if (!hold.held) return [];
   const out: GateRowChoice[] = [{ key: 'retry-rules', label: RETRY_RULES_LABEL, decision: { approve: true, action: 'retry_rules' } as unknown as GateAnswer, needsNote: false, title: 'Run the steering-rule check again on the same work (a disputed rule goes to the council again). The step does not run again, and every verdict on an unchanged rule and evidence is kept.' }];
-  const held = hold.rows.filter(ruleHolds).map((r) => r.ruleId);
+  const skippable = hold.rows.filter(ruleSkippable);
+  const held = skippable.map((r) => r.ruleId);
   if (held.length > 0) {
+    // A broken warning is skipped, not confirmed: say "Skip" when every row offered is one.
+    const brokenOnly = skippable.every((r) => r.status === 'broken');
+    const verb = brokenOnly ? 'Skip' : 'Confirm or skip';
+    // (e2e-1105 CJ9, coord) "Every other reason … still stands" only when there IS another one: a rule this skip
+    // leaves (broken or held), or a layer that is not a steering rule (a reviewer's FAIL, a failed check).
+    const othersOpen = hold.otherCause === true
+      || hold.rows.some((r) => r.blocking && !held.includes(r.ruleId) && (r.status === 'broken' || ruleSkippable(r)));
     out.push({
       key: 'skip-rules',
-      label: held.length === 1 ? `Confirm or skip ${held[0]!}` : `Confirm or skip ${held.length} rules`,
+      label: held.length === 1 ? `${verb} ${held[0]!}` : `${verb} ${held.length} rules`,
       decision: { approve: true, action: 'skip_rules' } as unknown as GateAnswer,
       needsNote: true,
       skipRuleIds: held,
-      title: `Skip ${held.join(', ')} with your written reason. The skip is labelled on the run, the gate and the delivery; a broken rule cannot be skipped.${hold.behind ? ' Every other reason this step was stopped still stands.' : ''}`,
+      ...(brokenOnly ? { notePlaceholder: SKIP_WARNING_PLACEHOLDER } : {}),
+      title: `Skip ${held.join(', ')} with your written reason. The skip is labelled on the run, the gate and the delivery; a broken warning can be skipped, a broken error or critical rule cannot.${othersOpen ? ' Every other reason this step was stopped still stands.' : ''}`,
     });
   }
   return out;
 }
 
 export const RETRY_RULES_LABEL = 'Re-check the rules';
+/** (e2e-1105 CJ9, coord) The reason box's placeholder when the skip is of broken warnings only. */
+export const SKIP_WARNING_PLACEHOLDER = 'Why this rule doesn’t apply to this job…';

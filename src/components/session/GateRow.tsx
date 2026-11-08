@@ -853,7 +853,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     // The derived move's note names what to fix (the new failure); still the person's to edit before it is sent.
     if (o.id === 'send-back') return { label: 'What to fix', placeholder: 'Explain what to fix…', prefill: leadChoice?.key === 'send-back' && lead?.prefill !== undefined ? lead.prefill : model.noteDefault, send: o.label };
     // (DES-RULE-CHECK-001) A rule skip's words are the skipped rules' recorded reason: asked for, never prefilled.
-    if (c?.skipRuleIds !== undefined) return { label: 'Your reason (required, labelled on the run, the gate and the delivery)', labelTestId: /* testid */ 'session-gate-skip-rules-label', placeholder: 'Why this can go without a check…', send: o.label };
+    if (c?.skipRuleIds !== undefined) return { label: 'Your reason (required, labelled on the run, the gate and the delivery)', labelTestId: /* testid */ 'session-gate-skip-rules-label', placeholder: c.notePlaceholder ?? 'Why this can go without a check…', send: o.label };
     return { label: 'Your answer', placeholder: 'Add a note…', prefill: model.noteDefault, send: 'Send' };
   };
   const split = model.failingTests?.split;

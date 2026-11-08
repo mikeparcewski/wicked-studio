@@ -14,6 +14,14 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- **A broken warning can be skipped with a reason (e2e-1105 CJ9).** A gate held on a broken steering rule offered
+  only Send back, Re-check, Retry with a note and Stop, so a warning that cannot be met (a pull request with no issue
+  to name) stranded the run at delivery. When the engine marks a broken row `waivable` (a rule of severity warn or
+  info; core-ts 0.15.34), the gate offers "Skip <rule>" with your written reason beside "Re-check the rules"; the
+  skip is labelled on the run, the gate and the delivery. A broken error or critical rule, or a row from an older
+  engine, still gets only the re-check (fail-closed). The reason box asks "Why this rule doesn't apply to this job…", and
+  "Every other reason this step was stopped still stands" shows only when another reason is really open.
+
 - **A helper on the container floor is not "Not installed" because this computer lacks its program (first-run).**
   With no `claude` on this computer's PATH, every helper read "Not installed" and "Sign in Claude Code" opened "Claude
   Code isn't installed on this computer" with no Sign in button, although the seat runs from its image and claude signs
