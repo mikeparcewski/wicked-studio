@@ -221,10 +221,12 @@ function Chip({ testId, onClick, href, children }: { testId: string; onClick?: (
     : <button type="button" data-testid={testId} onClick={onClick} className="wk-chat-chip">{children}</button>;
 }
 
-export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
+export function RunBlock({ view, badge, sessionId, navigate, solo = null, madeElsewhere = false }: {
   view: RunView;
   badge: number;
   sessionId: string;
+  /** A4 (DES-CHAT-ARTIFACTS-001 §7): what this run made is drawn at the proposal that started it (its slot), not here. */
+  madeElsewhere?: boolean;
   /** The session's title when this is its ONLY run (the header already says it). */
   solo?: string | null;
   navigate?: Navigate;
@@ -498,9 +500,9 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
       {/* What the run made — a page, a deck, a document, a walkthrough, a demo video: preview cards in the producing
           agent's message bubble, each morphing inline → pane → full screen and back (the one ArtifactMorph /
           PluginArtifact mechanism; pointing at a part still puts an "about:" chip on this chat's composer). */}
-      <RunArtifacts view={view} composerKey={sessionId} chain={chain} only="made" frame={(who, suffix, cards) => (
+      {!madeElsewhere && <RunArtifacts view={view} composerKey={sessionId} chain={chain} only="made" frame={(who, suffix, cards) => (
         <AssistantMessage who={who.role === 'seat' ? who : STUDIO} runId={id} suffix={suffix} at={madeAt} testId="chat-artifacts" wide>{cards}</AssistantMessage>
-      )} />
+      )} />}
 
       {/* 4. The hand-over it asks for, or the one final message once it ended. */}
       {deliverOpen && (

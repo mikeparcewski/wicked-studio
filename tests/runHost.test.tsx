@@ -12,8 +12,8 @@ import { makeUnit, makeView } from './factories.js';
 // The recording verbs (H6) are their own component; here only the wiring is under test: which binding
 // and which run's units reach them.
 vi.mock('../src/components/editorPorts/RecordingGateActions.js', () => ({
-  recordingGateActions: (b: { source: string; runId?: string }, units: readonly unknown[]) => (b.source === 'walkthrough' || b.source === 'demo')
-    ? <span data-testid="rec-actions" data-run={b.runId} data-units={units.length} /> : null,
+  recordingGateActions: (b: { source: string; runId?: string }, units: readonly unknown[], _onEdit?: unknown, _script?: boolean, cutOpens?: boolean) => (b.source === 'walkthrough' || b.source === 'demo')
+    ? <span data-testid="rec-actions" data-run={b.runId} data-units={units.length} data-cut-opens={String(cutOpens === true)} /> : null,
 }));
 
 const run = (id: string, status: string, over: Record<string, unknown> = {}): SessionView => makeView({ id, status: status as never, unit_ix: 1, ...over }, [
@@ -97,6 +97,12 @@ describe('the run host context', () => {
     expect(rec).toHaveAttribute('data-run', 'r1');
     expect(rec).toHaveAttribute('data-units', '2');
     expect(screen.getByTestId('run-gate-open')).toBeTruthy();
+  });
+
+  it('G7 piece 2: the run host binds a demo\'s made cut to its card, so it tells the verbs a cut opens (Edit the cut)', () => {
+    render(<Harness runs={[run('r1', 'completed')]} />);
+    render(<>{ctx!.gateActions!({ ...binding('r1:run/demo-video'), kind: 'demo-video', source: 'demo' })}</>);
+    expect(screen.getByTestId('rec-actions')).toHaveAttribute('data-cut-opens', 'true');
   });
 
   it('a page artifact gets no recording verbs', () => {

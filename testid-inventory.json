@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 332,
-    "occurrences": 4956,
-    "static": 4164,
+    "files": 335,
+    "occurrences": 4966,
+    "static": 4174,
     "dynamic": 177,
     "computed": 53
   },
@@ -7816,7 +7816,7 @@
     {
       "testId": "insights-accept",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
@@ -7834,49 +7834,49 @@
     {
       "testId": "insights-decide",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
       "testId": "insights-decide-runs",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
       "testId": "insights-decide-title",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
       "testId": "insights-decide-why",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
       "testId": "insights-decided",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
       "testId": "insights-dismiss",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
       "testId": "insights-dismiss-confirm",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
       "testId": "insights-dismiss-reason",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
@@ -7936,7 +7936,7 @@
     {
       "testId": "insights-said",
       "files": [
-        "src/components/insights/InsightsPage.tsx"
+        "src/components/insights/InsightsDecide.tsx"
       ]
     },
     {
@@ -15323,6 +15323,18 @@
       ]
     },
     {
+      "testId": "proposal-slot",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-slot-older",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "proposal-source-run",
       "files": [
         "src/components/ProposalsList.tsx"
@@ -17430,6 +17442,36 @@
       ]
     },
     {
+      "testId": "run-app-card",
+      "files": [
+        "src/components/session/RunAppCard.tsx"
+      ]
+    },
+    {
+      "testId": "run-app-line",
+      "files": [
+        "src/components/session/RunAppCard.tsx"
+      ]
+    },
+    {
+      "testId": "run-app-open",
+      "files": [
+        "src/components/session/RunAppCard.tsx"
+      ]
+    },
+    {
+      "testId": "run-app-preview",
+      "files": [
+        "src/components/session/RunAppCard.tsx"
+      ]
+    },
+    {
+      "testId": "run-app-version",
+      "files": [
+        "src/components/session/RunAppCard.tsx"
+      ]
+    },
+    {
       "testId": "run-archive-row",
       "files": [
         "src/components/FinishedRunRow.tsx"
@@ -17615,6 +17657,24 @@
       "testId": "run-gate-open",
       "files": [
         "src/components/session/RunHost.tsx"
+      ]
+    },
+    {
+      "testId": "run-insights",
+      "files": [
+        "src/components/insights/RunInsightsSlot.tsx"
+      ]
+    },
+    {
+      "testId": "run-insights-frame",
+      "files": [
+        "src/components/insights/RunInsightsSlot.tsx"
+      ]
+    },
+    {
+      "testId": "run-insights-state",
+      "files": [
+        "src/components/insights/RunInsightsSlot.tsx"
       ]
     },
     {
