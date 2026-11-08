@@ -808,22 +808,34 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
   const listRef = useRef<HTMLUListElement | null>(null);
   // The open list stays inside the area that shows it (a token at the end of a line on a phone pushed it past the
-  // thread's edge, and the thread scrolled sideways). Placed before paint and before its first row takes focus.
+  // thread's edge, and the thread scrolled sideways). Placed before paint and before its first row takes focus, and
+  // placed again when the thread scrolls, the window resizes, or the list or its token changes size.
   useLayoutEffect(() => {
     const ul = listRef.current;
     if (!open || ul === null) return undefined;
     const place = (): void => {
-      ul.style.transform = '';
+      ul.style.transform = ''; ul.style.maxHeight = ''; ul.style.maxWidth = '';
       ul.classList.remove('wk-pass-swap--above');
       const p = swapPlacement(ul.getBoundingClientRect(), (ref.current ?? ul).getBoundingClientRect(), clipBounds(ul));
       ul.classList.toggle('wk-pass-swap--above', p.above);
+      ul.style.maxWidth = `${p.maxWidth}px`;
+      if (p.maxHeight !== null) ul.style.maxHeight = `${p.maxHeight}px`;
       if (p.dx !== 0) ul.style.transform = `translateX(${p.dx}px)`;
     };
     place();
+    // A scroll inside the list (a capped one) is its own: placing it again would clear its cap and its scroll position.
+    const onScroll = (e: Event): void => { if (!(e.target instanceof Node && ul.contains(e.target))) place(); };
+    const opts: AddEventListenerOptions = { capture: true, passive: true };
     window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
+    window.addEventListener('scroll', onScroll, opts);
+    // Rows that reflow (a font that loads late, a longer label) change the list's size: place it again. Its first
+    // callback lands after this placement and finds the same place.
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => place()) : null;
+    ro?.observe(ul);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', onScroll, opts); ro?.disconnect(); };
   }, [open, choices.length, unavailable.length]);
-  useEffect(() => { if (open) { setCursor(0); queueMicrotask(() => optionRefs.current[0]?.focus()); } }, [open]);
+  // The list is already inside the visible area, so focusing its first row must not scroll the thread under it.
+  useEffect(() => { if (open) { setCursor(0); queueMicrotask(() => optionRefs.current[0]?.focus({ preventScroll: true })); } }, [open]);
   // The listbox closed (a pick, or crew's next version closed it): focus that was in it comes back to the token, never
   // to the page; focus the pick sent elsewhere (Something else… → the composer) stays there.
   const wasOpen = useRef(open);
