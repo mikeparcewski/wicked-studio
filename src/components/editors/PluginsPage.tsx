@@ -11,6 +11,7 @@ import { EmptyState, PageFrame, Skeleton, StateBanner } from '../ui/index.js';
 import { OpenDocumentList } from './OpenDocumentList.js';
 import { PluginLivePreview } from './PluginLivePreview.js';
 import { kindsInWords, openHref, permissionsInWords, startCreateEditorPlugin, useEditorList } from './EditorPluginsSettings.js';
+import { allowedOf, EditorGrantSwitches, useEditorGrants } from './EditorGrantSwitches.js';
 
 /**
  * THE PLUGINS PAGE AS CARDS (program DES-LEARN §2; operator 2026-10-30: "Settings > Plugins as cards with visuals").
@@ -217,14 +218,22 @@ export function removableCard(card: Pick<PluginCardModel, 'source' | 'editor'> |
   return card?.editor !== undefined && !card.editor.first_party && card.source === 'installed';
 }
 
-function PluginDetails({ card, onClose, onSwitch, switching, switchError, navigate, remove, onRemove, onRemoveAsk }: {
+function PluginDetails({ card, onClose, onSwitch, switching, switchError, navigate, remove, onRemove, onRemoveAsk, focusGrant }: {
   card: PluginCardModel; onClose: () => void; onSwitch: (on: boolean) => void; switching: boolean; switchError: string | null; navigate: (p: string) => void;
   remove: RemoveState; onRemove: () => void; onRemoveAsk: (asking: boolean) => void;
+  /** F37: the permission a host note's "Allow it in Plugins" pointed at (its switch takes the keyboard). */
+  focusGrant: string | null;
 }): React.ReactElement {
   const close = useRef<HTMLButtonElement | null>(null);
   useEffect(() => { close.current?.focus({ preventScroll: true }); }, [card.key]);
   const e = card.editor;
-  const words = e !== undefined ? permissionsInWords(e.permissions) : null;
+  const grants = useEditorGrants(e);
+  // "May do" ticks only what crew decided it may do (F37, codex r1): a permission still asking (or denied) is under
+  // "Asks for"; while crew's answer is unknown, an installed editor is ticked for nothing.
+  const allowed = e !== undefined ? allowedOf(e, grants.load) : null;
+  const mayDo = e !== undefined && allowed !== null ? e.permissions.filter((p) => allowed.has(p.id)) : null;
+  // An empty decided set is "nothing yet", not the manifest's "Asks for nothing" (codex r2).
+  const words = mayDo === null ? null : mayDo.length === 0 ? { can: 'Nothing yet: it does only what you allow.', internet: null } : permissionsInWords(mayDo);
   const opensDocuments = e !== undefined && e.enabled && e.first_party && e.kinds.some((k) => DOCUMENT_KINDS.includes(k));
   // The app runtime's door is the Apps page (DES-APPS-001: an app is made and opened there), in place of a sample.
   const appsDoor = e !== undefined && e.enabled && e.first_party && e.kinds.includes(APP_KIND);
@@ -262,6 +271,8 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
       </div>
       {switchError !== null && <p role="alert" data-testid="plugin-details-switch-error" className="wk-plugdetail-bad">Not changed: {switchError}</p>}
 
+      {e !== undefined && <EditorGrantSwitches key={`${e.id}@${e.version}#${e.sha256}`} editor={e} title={card.title} grants={grants} focus={focusGrant} />}
+
       {card.run !== undefined && card.run.panels.length > 0 && (
         <section className="wk-plugdetail-sec" data-testid="plugin-details-slot">
           <h3>Shows in</h3>
@@ -289,6 +300,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
         <ul className="wk-plugdetail-grants">
           {card.run?.permissions.map((g) => <li key={g.id} data-permission={g.id}>{CHECK}<span>It {permissionWords(g.id)} <code>{g.id}</code></span></li>)}
           {e !== undefined && words !== null && <li>{CHECK}<span data-testid="editor-plugin-permissions">{words.can}</span></li>}
+          {e !== undefined && words === null && <li>{CHECK}<span data-testid="editor-plugin-permissions">{grants.load.state === 'changed' ? 'Updated since this page was read: reload it to see what it may do.' : grants.load.state === 'error' ? 'Not known: what it may do could not be read.' : 'Reading what it may do from studio’s service…'}</span></li>}
           {words?.internet != null && <li data-testid="editor-plugin-internet">{CHECK}<span>{words.internet}</span></li>}
           <li className="wk-plugdetail-never">{CROSS}<span>{card.run !== undefined ? 'Never answers a decision, lowers rigor or skips a review; only you send a step anything.' : 'Never starts an agent, answers a decision or sends your work anywhere.'}</span></li>
         </ul>
@@ -357,8 +369,16 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
  * THE PLUGINS PAGE (`/plugins`): the cards, the filter, and one card's details. "Create a plugin" opens the launch
  * wizard on the editor-plugin workflow; the editor test page and the MCP inspector stay one click away.
  */
-export function PluginsPage({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+/** F37: `?editor=<id>&allow=<permission>` (a host note's "Allow it in Plugins") opens that editor's details at that switch. */
+export function deepLinkOf(search: string | undefined): { editor: string; allow: string | null } | null {
+  const q = new URLSearchParams(search ?? '');
+  const editor = q.get('editor');
+  return editor === null || editor === '' ? null : { editor, allow: q.get('allow') };
+}
+
+export function PluginsPage({ navigate, search }: { navigate: (p: string) => void; search?: string }): React.ReactElement {
   const { load, retry, retrying } = useEditorList();
+  const link = useMemo(() => deepLinkOf(search), [search]);
   const [switched, setSwitched] = useState<Record<string, boolean>>({});
   const [removed, setRemoved] = useState<ReadonlySet<string>>(() => new Set());
   const editors = useMemo(() => (load.state === 'ready'
@@ -376,6 +396,18 @@ export function PluginsPage({ navigate }: { navigate: (p: string) => void }): Re
   const [removes, setRemoves] = useState<Record<string, RemoveState>>({});
   // Where the keyboard goes once React has committed a Remove step (never a node that is about to go).
   const [focusNext, setFocusNext] = useState<{ to: 'remove' | 'confirm' | 'grid'; gone: string | null } | null>(null);
+  // The deep link opens its editor once the list has it (once per link: closing the details is not undone).
+  const linked = useRef<string | null>(null);
+  useEffect(() => {
+    // Leaving the link forgets it (codex r1): arriving on it again opens the details again.
+    if (link === null) { linked.current = null; return; }
+    if (load.state !== 'ready') return;
+    const key = `editor:${link.editor}`;
+    if (linked.current === `${search ?? ''}`) return;
+    if (!cards.some((c) => c.key === key)) return;
+    linked.current = `${search ?? ''}`;
+    setPicked(key);
+  }, [link, load.state, cards, search]);
   const shown = filterCards(cards, filter);
   const card = picked !== null ? cards.find((c) => c.key === picked) ?? null : null;
   const removeOf = (id: string | undefined): RemoveState => (id !== undefined ? removes[id] ?? IDLE : IDLE);
@@ -480,7 +512,8 @@ export function PluginsPage({ navigate }: { navigate: (p: string) => void }): Re
         )}
         {card !== null && <PluginDetails card={card} onClose={closeDetails} onSwitch={onSwitch} switching={switching}
           switchError={switchError !== null && switchError.id === card.editor?.id ? switchError.error : null} navigate={navigate}
-          remove={removeOf(card.editor?.id)} onRemove={onRemove} onRemoveAsk={onRemoveAsk} />}
+          remove={removeOf(card.editor?.id)} onRemove={onRemove} onRemoveAsk={onRemoveAsk}
+          focusGrant={link !== null && card.editor?.id === link.editor ? link.allow : null} />}
       </div>
     </PageFrame>
   );

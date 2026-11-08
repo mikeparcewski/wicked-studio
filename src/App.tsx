@@ -728,7 +728,7 @@ export function App(): React.ReactElement {
     if (panel === 'plugins') {
       return (
         <div className="flex-1 overflow-y-auto">
-          <PluginsPage navigate={navigate} />
+          <PluginsPage navigate={navigate} search={search} />
         </div>
       );
     }

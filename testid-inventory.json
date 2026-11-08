@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 327,
-    "occurrences": 4845,
-    "static": 4069,
+    "files": 329,
+    "occurrences": 4857,
+    "static": 4078,
     "dynamic": 177,
     "computed": 53
   },
@@ -5978,6 +5978,12 @@
       "testId": "editor-frame",
       "files": [
         "src/editors/host.ts"
+      ]
+    },
+    {
+      "testId": "editor-grants-allow",
+      "files": [
+        "src/components/editorHost/GrantNote.tsx"
       ]
     },
     {
@@ -12180,6 +12186,13 @@
       ]
     },
     {
+      "testId": "page-line-status",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx",
+        "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
       "testId": "page-note",
       "files": [
         "src/plugins/_shared/pageEditor.ts"
@@ -12812,6 +12825,12 @@
       ]
     },
     {
+      "testId": "plugin-details-grants",
+      "files": [
+        "src/components/editors/EditorGrantSwitches.tsx"
+      ]
+    },
+    {
       "testId": "plugin-details-hears",
       "files": [
         "src/components/editors/PluginsPage.tsx"
@@ -12911,6 +12930,42 @@
       "testId": "plugin-documents-reading",
       "files": [
         "src/components/editors/OpenDocumentList.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-grant-error",
+      "files": [
+        "src/components/editors/EditorGrantSwitches.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-grant-row",
+      "files": [
+        "src/components/editors/EditorGrantSwitches.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-grant-switch",
+      "files": [
+        "src/components/editors/EditorGrantSwitches.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-grants-changed",
+      "files": [
+        "src/components/editors/EditorGrantSwitches.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-grants-error",
+      "files": [
+        "src/components/editors/EditorGrantSwitches.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-grants-loading",
+      "files": [
+        "src/components/editors/EditorGrantSwitches.tsx"
       ]
     },
     {

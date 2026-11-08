@@ -8,6 +8,7 @@ import {
   type ArtifactBinding, type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
+import { grantNote } from './GrantNote.js';
 import type { PermissionId } from '../../editors/protocol.js';
 import type { CardAction, FullMode, Surfaces } from '../../editors/surfaces.js';
 import { readThemeTokens } from '../../editors/theme.js';
@@ -36,12 +37,17 @@ import { useRunHost } from './RunHostContext.js';
 const IDLE_MS = 5_000;
 
 type Line =
-  | { kind: 'edited'; version: number; base: number; what: string; verb: WriteVerb }
+  | { kind: 'edited'; version: number; base: number; what: string; verb: WriteVerb; status?: string }
   | { kind: 'undone'; version: number }
   | { kind: 'not-undone'; head: number }
   | { kind: 'working' | 'failed' | 'status'; text: string }
   | { kind: 'drafted'; editor: string; text: string }
   | { kind: 'export'; out: ExportOutcome };
+
+/** F37: a status line over the current one. Over "edited · Undo" it rides beside it, so Undo is never taken away. */
+function statusOver(cur: Line | null, text: string): Line {
+  return cur?.kind === 'edited' ? { ...cur, status: text } : { kind: 'status', text };
+}
 
 /** A plugin's own request to change a host surface (`ui.morph`, `ui.fullscreen`) is honoured only under the
  *  operator's real click INSIDE that plugin's frame (codex h2a-r1 P1): never a scripted morph. */
@@ -155,7 +161,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const logRef = useRef<HostLogEntry[]>([]);
   const [decl, setDecl] = useState<Surfaces | null>(null);
   const [protocol, setProtocol] = useState(1);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<React.ReactNode>(null);
   const [torn, setTorn] = useState<string | null>(null);
   const [line, setLine] = useState<Line | null>(null);
   const [height, setHeight] = useState<number | null>(null);
@@ -269,7 +275,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       // frame included) the head as it stands, however it moved meanwhile (codex h2-r16/r17 P2).
       announced.current = null;
       if (cancelled || frameBox.current === null) return;
-      setNote(decided.note);
+      setNote(grantNote(decided));
       const src = srcProp ?? bundleUrl(apiBase(), editor.id, editor.version, editor.sha256);
       loaded.current = { src, grants: decided.grants };
       const bridge = adapter.mcpBridge?.();
@@ -310,7 +316,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
             if (to === 'inline') { if (clickedIn(hostRef.current?.frame)) leaveFull(); return; }
             if (live.current) setOffer(to === 'full' ? 'full' : 'options');
           },
-          status: (l) => { if (live.current) setLine({ kind: 'status', text: l }); },
+          // F37: a status line ("Saved as version 2", or the host's own "not changed yet") is shown beside the host's
+          // "edited · Undo" line, never instead of it: the person's Undo stays until the next write or undo.
+          status: (l) => { if (live.current) setLine((cur) => statusOver(cur, l)); },
           notes: () => undefined,
           advisory: (notes) => setAdvisoryNotes(group, notes),
           // A plugin's export.request becomes a host offer; the operator's press makes the file (G25).
@@ -365,7 +373,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           hostRef.current?.artifactChanged(e.write.version, e.write.verb === 'restyled' ? 'theme' : 'deterministic');
           written(e.write);
         } else if (live.current) setLine({ kind: 'failed', text: e.message });
-      } else if (e.type === 'status') { if (live.current) setLine({ kind: 'status', text: e.text }); }
+      } else if (e.type === 'status') { if (live.current) setLine((cur) => statusOver(cur, e.text)); }
       else {
         // A version the host's own chrome wrote for this artifact (Match a website): this card owns its Undo — offered
         // only once the adapter has re-read the manifest, so Undo knows the version's parent (codex h2-r11 P2).
@@ -708,6 +716,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
             <>
               {editor.first_party ? editedLine(line.version, line.what, line.verb) : `${editor.title} ${line.verb} ${line.what} — version ${line.version}.`}{' '}
               <button type="button" data-testid="page-undo" disabled={busy} onClick={() => void undo()} className="wk-since-toggle">Undo</button>
+              {line.status !== undefined && line.status !== '' && <span data-testid="page-line-status"> · {line.status}</span>}
             </>
           )}
           {line.kind === 'undone' && undoneLine(line.version)}

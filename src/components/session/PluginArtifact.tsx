@@ -7,6 +7,7 @@ import { focusBeside } from '../../editors/focus.js';
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
 import { InteractiveDocAdapter } from '../../editors/interactiveDocAdapter.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
+import { grantNote } from '../editorHost/GrantNote.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
@@ -25,11 +26,16 @@ import { ChecksPanel } from './ChecksPanel.js';
 const IDLE_MS = 5_000;
 
 type Line =
-  | { kind: 'edited'; version: number; base: number; what: string; verb: WriteVerb }
+  | { kind: 'edited'; version: number; base: number; what: string; verb: WriteVerb; status?: string }
   | { kind: 'undone'; version: number }
   | { kind: 'not-undone'; head: number }
   | { kind: 'working' | 'failed' | 'status'; text: string }
   | { kind: 'drafted'; editor: string; text: string };
+
+/** F37: a status line over the current one. Over "edited · Undo" it rides beside it, so Undo is never taken away. */
+function statusOver(cur: Line | null, text: string): Line {
+  return cur?.kind === 'edited' ? { ...cur, status: text } : { kind: 'status', text };
+}
 
 /** The session composer this artifact's chips go to: the typed character lands there, with the focus. */
 function focusComposer(composerKey: string): void {
@@ -62,7 +68,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
   const logRef = useRef<HostLogEntry[]>([]);
   const [line, setLine] = useState<Line | null>(null);
   const [torn, setTorn] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<React.ReactNode>(null);
   const [mountKey, setMountKey] = useState(0);
   const [busy, setBusy] = useState(false);
   // The version the plugin shows (the one it read), for the checks panel (EP-P3, codex r1): the reviews
@@ -92,7 +98,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
       const decided = await fetchGrants(editor.id, editor.version, editor.sha256, projectId);
       await adapter.refresh().catch(() => null);
       if (cancelled || frameBox.current === null) return;
-      setNote(decided.note);
+      setNote(grantNote(decided));
       const host = new EditorHost({
         container: frameBox.current,
         src: bundleUrl(apiBase(), editor.id, editor.version, editor.sha256),
@@ -123,7 +129,9 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
             else if (k === 'Tab' || k === 'Shift+Tab') focusBeside(hostRef.current?.frame ?? null, k === 'Shift+Tab');
           },
           morph: (to) => morphRef.current(to),
-          status: (l) => { if (live.current) setLine({ kind: 'status', text: l }); },
+          // F37: a status line ("Saved as version 2", or the host's own "not changed yet") is shown beside the host's
+          // "edited · Undo" line, never instead of it: the person's Undo stays until the next write or undo.
+          status: (l) => { if (live.current) setLine((cur) => statusOver(cur, l)); },
           notes: () => undefined,
           // The structured `written` draws the line with its Undo; the plain line is the dev page's.
           thread: () => undefined,
@@ -202,6 +210,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
             <>
               {editor.first_party ? editedLine(line.version, line.what, line.verb) : `${editor.title} ${line.verb} ${line.what} — version ${line.version}.`}{' '}
               <button type="button" data-testid="page-undo" disabled={busy} onClick={() => void undo()} className="wk-since-toggle">Undo</button>
+              {line.status !== undefined && line.status !== '' && <span data-testid="page-line-status"> · {line.status}</span>}
             </>
           )}
           {line.kind === 'undone' && undoneLine(line.version)}

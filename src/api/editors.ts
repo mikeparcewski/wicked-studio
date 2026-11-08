@@ -2,8 +2,8 @@ import { apiFetch } from './client.js';
 import { isRouteUnsupported } from './errors.js';
 import { PROTOCOL_VERSION } from '../editors/protocol.js';
 
-import type { EditorView, ListEditorsResponse } from 'wicked-crew-api-types';
-export type { EditorView, ListEditorsResponse };
+import type { EditorGrantsResponse, EditorView, ListEditorsResponse } from 'wicked-crew-api-types';
+export type { EditorGrantsResponse, EditorView, ListEditorsResponse };
 
 const SHA = /^[0-9a-f]{64}$/;
 
@@ -68,4 +68,36 @@ export async function setEditorEnabled(id: string, enabled: boolean): Promise<Ed
  */
 export async function removeEditor(id: string): Promise<{ removed: true; id: string }> {
   return apiFetch<{ removed: true; id: string }>(`/editors/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+/**
+ * `GET /editors/:id/grants` (crew EP-C1): the engine's decided set for this editor's build, for every project (no
+ * project scope: the ledger allow is per build). `null` = this daemon has no grants route (an older crew).
+ */
+export async function readEditorGrants(id: string): Promise<EditorGrantsResponse | null> {
+  try {
+    return await apiFetch<EditorGrantsResponse>(`/editors/${encodeURIComponent(id)}/grants`);
+  } catch (e) {
+    if (isRouteUnsupported(e)) return null;
+    throw e;
+  }
+}
+
+/**
+ * `POST /editors/:id/grants {permission, allow, version, sha256}` (HUMAN-only, crew F37; api-types
+ * `SetEditorGrantBody`): the person allows or revokes one permission the editor asks for, for the build they were
+ * shown (`shown` = the decided set's version and hash; crew answers 409 `build_changed` when the editor was updated
+ * meanwhile). crew builds the token from its own record and answers the decided set after the write, so a rule that
+ * denies it still reads as denied.
+ */
+export async function setEditorGrant(id: string, permission: string, allow: boolean, shown: { version: string; sha256: string }): Promise<EditorGrantsResponse> {
+  return apiFetch<EditorGrantsResponse>(`/editors/${encodeURIComponent(id)}/grants`, {
+    method: 'POST',
+    body: JSON.stringify({ permission, allow, version: shown.version, sha256: shown.sha256 }),
+  });
+}
+
+/** Where a host note's "Allow it" goes: the editor's details on the Plugins page, at that permission's switch. */
+export function allowHref(editorId: string, permission: string): string {
+  return `/plugins?${new URLSearchParams({ editor: editorId, allow: permission }).toString()}`;
 }

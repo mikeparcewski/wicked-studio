@@ -4,6 +4,7 @@ import { EditorHost, sizeOfSurface, type HostLogEntry, type Surface } from '../.
 import type { FullMode } from '../../editors/surfaces.js';
 import { FakeDocAdapter, SAMPLE_DECK, SAMPLE_PAGE } from '../../editors/fakeAdapter.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
+import { grantNote } from '../editorHost/GrantNote.js';
 import { PERMISSIONS, SIZES, type PermissionId, type Size } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { EditorTestPagePicker } from './EditorPluginsSettings.js';
@@ -99,7 +100,7 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
   const [sizeFor, setSizeFor] = useState(page);
   if (sizeFor !== page) { setSizeFor(page); setSize(page.surface !== null ? sizeOfSurface(page.surface) : 'pane'); }
   const [torn, setTorn] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<React.ReactNode>(null);
   const [chips, setChips] = useState<Chip[]>([]);
   const [drafted, setDrafted] = useState<{ text: string; chips: Chip[] }[]>([]);
   const [thread, setThread] = useState<string[]>([]);
@@ -123,7 +124,7 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
     const start = async (): Promise<void> => {
       const decided = page.grants !== null ? { grants: page.grants, note: null } : await fetchGrants(page.editor, page.version, page.sha, null);
       if (cancelled || frameBox.current === null) return;
-      setNote(decided.note);
+      setNote(grantNote(decided, navigate));
       const host = new EditorHost({
         container: frameBox.current,
         src: bundleUrl(apiBase(), page.editor, page.version, page.sha),
