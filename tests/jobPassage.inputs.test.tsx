@@ -80,15 +80,18 @@ describe('job passage input tokens', () => {
   describe('list placement at 390x844', () => {
     // The sources token sits at `at` (x, y, 70 x 20); the 220 x 180 list hangs 4 px under it from its left edge.
     const at = { x: 300, y: 300 };
+    /** Called when the list is measured (a test emulates browser layout effects there). */
+    let onMeasureList: ((el: HTMLElement) => void) | null = null;
     const rect = (left: number, top: number, width: number, height: number) =>
       ({ left, top, right: left + width, bottom: top + height, x: left, y: top, width, height, toJSON: () => ({}) }) as DOMRect;
     let rects: { mockRestore: () => void };
     beforeEach(() => {
-      at.x = 300; at.y = 300;
+      at.x = 300; at.y = 300; onMeasureList = null;
       vi.stubGlobal('innerWidth', 390);
       vi.stubGlobal('innerHeight', 844);
       rects = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
         if (this.getAttribute('role') === 'listbox') {
+          onMeasureList?.(this as HTMLElement);
           // Measured where it hangs, plus whatever shift is applied (each placement clears it before measuring).
           const dx = Number(/translateX\((-?\d+)px\)/.exec((this as HTMLElement).style.transform)?.[1] ?? 0);
           return rect(at.x + dx, at.y + 24, 220, 180);
@@ -143,15 +146,30 @@ describe('job passage input tokens', () => {
       expect(list).toHaveClass('wk-pass-swap--above');
     });
 
-    it('keeps a capped list’s own scroll when placed again, and closes when its token scrolls out of view', () => {
-      at.x = 60;
+    it('keeps a capped list’s own scroll when placed again', () => {
+      // A short viewport: 168 px below the token and 88 above, so the 180-px list opens below, capped at 168.
+      vi.stubGlobal('innerHeight', 300);
+      at.x = 60; at.y = 100;
       render(passage(proposal()));
       fireEvent.click(token('the web, sources'));
       const list = screen.getByRole('listbox', { name: 'Change sources' });
+      expect(list.style.maxHeight).toBe('168px');
+      // As in a browser: measuring the list with its cap cleared lays it out unscrollable, which resets its scroll.
+      let scrolled = 0;
+      Object.defineProperty(list, 'scrollTop', { configurable: true, get: () => scrolled, set: (v: number) => { scrolled = v; } });
+      onMeasureList = (el) => { if (el === list && list.style.maxHeight === '') scrolled = 0; };
       list.scrollTop = 40;
       fireEvent.scroll(document.body);
+      expect(list.style.maxHeight).toBe('168px');
       expect(list.scrollTop).toBe(40);
-      // The thread scrolls the token above the viewport: the list closes, and focus is not left in a removed list.
+    });
+
+    it('closes when its token scrolls out of view', () => {
+      at.x = 60;
+      render(passage(proposal()));
+      fireEvent.click(token('the web, sources'));
+      expect(screen.getByRole('listbox', { name: 'Change sources' })).toBeInTheDocument();
+      // The thread scrolls the token above the viewport: the list closes.
       at.y = -60;
       fireEvent.scroll(document.body);
       expect(screen.queryByRole('listbox')).toBeNull();
