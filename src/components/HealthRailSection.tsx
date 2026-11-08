@@ -1,3 +1,4 @@
+import { healthText } from '../board/rowHeadline.js';
 import { useEffect, useRef, useState } from 'react';
 import { seatLabel, seatRoleWord } from '../board/seatNames.js';
 import { api } from '../api/client.js';
@@ -70,8 +71,8 @@ export function CheckRow({ label, ok, detail, since, testId, state, action }: {
   return (
     <div data-testid={testId} data-state={state} className="wk-health-row" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '5px' }}>
       <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{icon}</span>
-      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)', flex: 1 }}>{label}</span>
-      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)' }}>{detail}</span>
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)', flex: 1 }}>{healthText(label)}</span>
+      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)' }}>{healthText(detail)}</span>
       {since !== undefined && (
         <span data-testid="rail-probe-checked" data-at={since} title="when this probe last answered" style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>
           checked {clockWord(since)}
@@ -84,7 +85,7 @@ export function CheckRow({ label, ok, detail, since, testId, state, action }: {
           onClick={action.onClick}
           style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)', textDecoration: 'underline', cursor: 'pointer' }}
         >
-          {action.label}
+          {healthText(action.label)}
         </button>
       )}
     </div>
@@ -127,7 +128,7 @@ export const SIGNED_OUT_DETAIL = 'signed out — it may be skipped for checks';
 export const SIGNED_OUT_TITLE =
   'Studio\'s service saw no sign-in for this helper. A helper that cannot sign in fails when it starts '
   + 'and is skipped — but a provider free tier may still answer; Studio cannot tell yet. '
-  + 'Sign it in on the Agents page.';
+  + 'Sign it in on the Helpers page.';
 
 /** The roster's word on one seat's standing, read for what the WIRE says (never inferred). */
 export type SeatStanding =
@@ -207,27 +208,27 @@ export function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat
       data-standing={standing.kind}
       {...(quota !== null ? { 'data-quota': quota } : {})}
       {...(standing.auth !== null ? { 'data-auth': standing.auth } : {})}
-      title={message ?? standing.title ?? undefined}
+      title={message !== null ? healthText(message) : standing.title != null ? healthText(standing.title) : undefined}
       style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginBottom: '5px', minWidth: 0 }}
     >
       <div className="wk-health-row" style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', minWidth: 0 }}>
         <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{glyph}</span>
         <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', flexShrink: 0 }}>
-          {seatLabel(seat)}
+          {healthText(seatLabel(seat))}
         </span>
         {/* UI-CONTRACT §5: a reviewer-only helper, where it must be shown, says so (one name, no "(judge)"). */}
-        {seatRoleWord(seat) !== null && <span data-testid="rail-seat-role" className="wk-tag">{seatRoleWord(seat)}</span>}
+        {seatRoleWord(seat) !== null && <span data-testid="rail-seat-role" className="wk-tag">{healthText(seatRoleWord(seat) ?? '')}</span>}
         {message === null && (
           <span style={{ marginLeft: 'auto', fontSize: 'var(--text-2xs)', color: detailColor, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
-            {detail}
+            {healthText(detail)}
           </span>
         )}
       </div>
       {/* Why it is not picked, reachable by keyboard and touch (not only a hover title). */}
-      {standing.kind === 'ineligible' && <div style={{ paddingLeft: '20px' }}><TechDetails data-testid="rail-seat-why" summary="Why" text={standing.title} /></div>}
+      {standing.kind === 'ineligible' && <div style={{ paddingLeft: '20px' }}><TechDetails data-testid="rail-seat-why" summary="Why" text={healthText(standing.title)} /></div>}
       {message !== null && quota === null && (
         <p data-testid="rail-seat-error" style={{ ...MONO_2XS, margin: 0, paddingLeft: '20px', color: detailColor, overflowWrap: 'anywhere' }}>
-          {detail}
+          {healthText(detail)}
         </p>
       )}
       {quota !== null && (
@@ -245,7 +246,7 @@ export function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat
             data-testid="rail-seat-signin"
             data-seat={seat.key}
             onClick={() => onSignIn(seat)}
-            aria-label={`Sign in ${seat.display_name || seat.key}`}
+            aria-label={`Sign in ${healthText(seat.display_name || seat.key)}`}
             style={{ ...MONO_2XS, padding: '0 6px', borderRadius: 'var(--radius-md)', border: '1px solid var(--status-gate-dim)', background: 'var(--status-gate-dim)', color: 'var(--status-gate)', cursor: 'pointer' }}
           >
             Sign in
@@ -271,21 +272,21 @@ export function SeatWeek({ seat, record, move, state, onMove }: {
   return (
     <div data-testid="rail-seat-week" data-seat={seat.key} style={{ paddingLeft: '20px', marginBottom: '6px', minWidth: 0 }}>
       <div data-testid="rail-seat-week-line" style={{ ...MONO_2XS, color: 'var(--ink-body)', overflowWrap: 'anywhere' }}>
-        {seatWeekLine(record)}
+        {healthText(seatWeekLine(record))}
       </div>
       <div data-testid="rail-seat-move" data-kind={move.kind} data-seat={seat.key} style={{ marginTop: '2px' }}>
         {move.consequence === null ? (
-          <div title={move.why} style={{ ...MONO_2XS, color: 'var(--ink-muted)' }}>
-            {move.label}
+          <div title={healthText(move.why)} style={{ ...MONO_2XS, color: 'var(--ink-muted)' }}>
+            {healthText(move.label)}
           </div>
         ) : (
           <>
             <p data-testid="rail-seat-move-consequence" style={{ ...MONO_2XS, margin: '0 0 3px', color: 'var(--ink-body)', overflowWrap: 'anywhere' }}>
-              <span style={{ color: 'var(--status-gate)' }}>{move.why}.</span> {move.consequence}
+              <span style={{ color: 'var(--status-gate)' }}>{healthText(move.why)}.</span> {healthText(move.consequence)}
             </p>
             {/* studio#702: the raw phase key (a step address) only behind Technical details. */}
             {move.kind === 'route-away' && move.phase !== phaseWords(move.phase) && (
-              <TechDetails data-testid="rail-seat-move-detail" text={`phase key: ${move.phase}`} />
+              <TechDetails data-testid="rail-seat-move-detail" text={healthText(`phase key: ${move.phase}`)} />
             )}
             {state?.status === 'done' || state?.status === 'error' ? (
               <p
@@ -293,7 +294,7 @@ export function SeatWeek({ seat, record, move, state, onMove }: {
                 data-status={state.status}
                 style={{ ...MONO_2XS, margin: 0, color: state.status === 'done' ? 'var(--status-run)' : 'var(--status-fail)', overflowWrap: 'anywhere' }}
               >
-                {state.note}
+                {healthText(state.note)}
               </p>
             ) : (
               <button
@@ -304,7 +305,7 @@ export function SeatWeek({ seat, record, move, state, onMove }: {
                 className="rounded px-1.5 py-0.5"
                 style={{ ...MONO_2XS, color: 'var(--ink-high)', background: 'var(--surface-raised)', border: '1px solid var(--surface-raised)', cursor: state?.status === 'busy' ? 'wait' : 'pointer' }}
               >
-                {move.label}
+                {healthText(move.label)}
               </button>
             )}
           </>
@@ -346,8 +347,8 @@ const FINDING_COLOR: Record<DiagnosticsGovernanceFinding['severity'], string> = 
 export function DetailLine({ label, value, color, testId }: { label: string; value: string; color?: string; testId?: string }): React.ReactElement {
   return (
     <div data-testid={testId} style={{ display: 'flex', gap: 'var(--space-2)', paddingLeft: '20px', marginBottom: '3px', minWidth: 0 }}>
-      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{label}</span>
-      <span className="truncate" title={value} style={{ fontSize: 'var(--text-2xs)', color: color ?? 'var(--ink-body)', fontFamily: 'var(--font-mono)', minWidth: 0 }}>{value}</span>
+      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{healthText(label)}</span>
+      <span className="truncate" title={healthText(value)} style={{ fontSize: 'var(--text-2xs)', color: color ?? 'var(--ink-body)', fontFamily: 'var(--font-mono)', minWidth: 0 }}>{healthText(value)}</span>
     </div>
   );
 }
@@ -381,7 +382,7 @@ export function GovernanceRows({ read, overdue = 0, onReprobe }: {
     return (
       <div data-testid="rail-governance" data-state="error">
         <CheckRow label="Governance" ok={false} detail="couldn't be read" />
-        <TechDetails data-testid="rail-governance-error" text={read.message} />
+        <TechDetails data-testid="rail-governance-error" text={healthText(read.message)} />
       </div>
     );
   }
@@ -445,7 +446,7 @@ export function GovernanceRows({ read, overdue = 0, onReprobe }: {
           {plainFinding(f.message)}
         </p>
       ))}
-      <TechDetails data-testid="rail-governance-detail" text={tech} />
+      <TechDetails data-testid="rail-governance-detail" text={tech.map(healthText)} />
     </div>
   );
 }
@@ -459,7 +460,7 @@ function kb(bytes: number): string {
 /** A finding's message in the default layer: its first sentence, cut before any path, command or
  *  `key=value` token; the whole message is in Technical details. */
 export function plainFinding(message: string): string {
-  const first = message.split(/(?<=[.!?])\s/u)[0] ?? message;
+  const first = healthText(message).split(/(?<=[.!?])\s/u)[0] ?? message;
   const cut = /\s+(?:at|in|under|from|to|with|via|run|open)?\s*(?:~|\$TMPDIR|\/|[A-Z][A-Z0-9]*_[A-Z0-9_]+|[\w.-]+\/[\w./-]+|`)|\s+\(|\s*:\s|\s+—\s|\s+[\w.-]+=/u.exec(first);
   const line = (cut !== null && cut.index > 0 ? first.slice(0, cut.index) : first).trim().replace(/[\s,;:—-]+$/u, '');
   const text = line === '' ? 'See Technical details.' : line;
@@ -714,16 +715,16 @@ export function WeekRegistry({ registry }: { registry: HealthRegistry }): React.
     <>
       {cap !== null && (
         <p data-testid="rail-seat-week-window" data-state={week.kind} style={{ ...MONO_2XS, margin: '0 0 4px', color: cap.color, overflowWrap: 'anywhere' }}>
-          {cap.text}
+          {healthText(cap.text)}
         </p>
       )}
       {roster.map((seat) => {
         const record = weekRecords?.get(seat.key);
         const move = week.kind === 'ok' ? coachSeat(record, seat, week.record) : null;
         return (
-          <div key={seat.key} data-testid="rail-week-seat" data-seat={seat.key} aria-label={move !== null ? `${seat.display_name || seat.key} this week` : undefined} role={move !== null ? 'group' : undefined}>
+          <div key={seat.key} data-testid="rail-week-seat" data-seat={seat.key} aria-label={move !== null ? `${healthText(seat.display_name || seat.key)} this week` : undefined} role={move !== null ? 'group' : undefined}>
             {/* Its own card now, so each record names its seat (codex review r1). */}
-            {move !== null && <p data-testid="rail-week-seat-name" className="wk-health-week-seat">{seat.display_name || seat.key}</p>}
+            {move !== null && <p data-testid="rail-week-seat-name" className="wk-health-week-seat">{healthText(seat.display_name || seat.key)}</p>}
             {move !== null && (
               <SeatWeek
                 seat={seat}

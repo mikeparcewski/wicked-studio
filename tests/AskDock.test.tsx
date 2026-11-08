@@ -300,7 +300,39 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     await waitFor(() => expect(screen.getByTestId('chat-cli')).toBeDisabled());
   });
 
-  it('when no CLI can answer, the send refuses and names each one and why; a signed-out one offers Sign in', async () => {
+  it('review r2: a PAGE chat (Understand) says the same one no-helper line as the floating chat', async () => {
+    setCachedRoster([
+      { key: 'claude', binary: 'claude', display_name: 'Claude Code', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: { ok: false, reason: 'signed out' }, scoped: { ok: false, reason: 'signed out' } } },
+    ] as unknown as RosterSeat[]);
+    wireDiagnostics('present');
+    render(<AskDock runs={[]} pathname="/understand" onClose={() => undefined}
+      page={{ kind: 'understand', knows: 'Knows this page.', data: () => [], focus: null, onSent: () => undefined } as never} />);
+    expect(await screen.findByTestId('ask-no-helper')).toHaveTextContent('No helper is signed in yet.');
+  });
+
+  it('B-C6a: every helper signed out shows EXACTLY ONE line “No helper is signed in yet.” with a link to /agents — never “cannot take a turn” per helper', async () => {
+    const out = (reason: string) => ({ ok: false, reason });
+    setCachedRoster([
+      { key: 'claude', binary: 'claude', display_name: 'Claude Code', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: out('signed out — it cannot take a turn until it is signed in from the Agents page'), scoped: out('signed out — it cannot take a turn until it is signed in from the Agents page') } },
+      { key: 'codex', binary: 'codex', display_name: 'Codex', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: out('signed out'), scoped: out('signed out') } },
+      { key: 'pi', binary: 'pi', display_name: 'Pi', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: out('signed out'), scoped: out('signed out') } },
+      { key: 'copilot', binary: 'copilot', display_name: 'GitHub Copilot CLI', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: out('signed out'), scoped: out('signed out') } },
+      { key: 'gemini', binary: 'gemini', display_name: 'Gemini', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: out('signed out'), scoped: out('signed out') } },
+    ] as unknown as RosterSeat[]);
+    wireDiagnostics('present');
+    dock();
+    const notice = await screen.findByTestId('ask-no-helper');
+    // ONE plain line, said once — not a red monospace paragraph repeated per helper.
+    expect(notice.firstChild?.textContent).toBe('No helper is signed in yet.');
+    expect(screen.getAllByTestId('ask-no-helper')).toHaveLength(1);
+    expect(screen.getByTestId('ask-no-helper-signin')).toHaveAttribute('href', '/agents');
+    // The per-helper reason (“cannot take a turn…”) is NOT in the main line, and never repeated 5×.
+    expect(notice.firstChild?.textContent).not.toMatch(/cannot take a turn/);
+    const occurrences = (notice.textContent ?? '').split('cannot take a turn').length - 1;
+    expect(occurrences).toBeLessThanOrEqual(1); // at most once, inside the Details disclosure
+  });
+
+  it('B-C6a: a mix of signed-out and benched helpers shows ONE plain line + Sign one in, never the per-helper list; the send is refused', async () => {
     const quota = { ok: false, reason: 'out of quota' };
     setCachedRoster([
       { key: 'claude', binary: 'claude', display_name: 'Claude Code', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: { ok: false, reason: 'signed out' }, scoped: { ok: false, reason: 'signed out' } } },
@@ -309,13 +341,18 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     const user = userEvent.setup();
     wireDiagnostics('present');
     dock();
-    await user.click(screen.getByTestId('chat-cli'));
-    expect(screen.getAllByTestId('chat-cli-option').every((o) => (o as HTMLButtonElement).disabled)).toBe(true);
-    expect(screen.getByTestId('chat-cli-signin')).toHaveAttribute('href', '/agents?fix=claude');
+    // ONE plain line (not monospace, not a per-helper paragraph), with a link to the Agents page.
+    const notice = await screen.findByTestId('ask-no-helper');
+    expect(notice).toHaveTextContent('No helper can answer right now.');
+    expect(screen.getByTestId('ask-no-helper-signin')).toHaveAttribute('href', '/agents');
     await user.type(screen.getByTestId('assist-input'), 'hello');
     await user.click(screen.getByTestId('assist-send'));
+    // A refused send keeps the draft and sends nothing; the note is one short line, never the raw list.
     await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) =>
-      (n.textContent ?? '').includes('No CLI can answer right now — Claude Code (signed out), GitHub Copilot CLI (out of quota). Sign one in on the Agents page.'))).toBe(true));
+      (n.textContent ?? '').includes('No helper can answer right now.'))).toBe(true));
+    const note = screen.getAllByTestId('assist-note').find((n) => (n.textContent ?? '').includes('No helper can answer'))!;
+    expect(note.textContent).not.toMatch(/out of quota|signed out/i); // no per-helper list in the note
+    expect(screen.getByTestId('assist-input')).toHaveValue('hello');
     expect(openChat).not.toHaveBeenCalled();
   });
 
@@ -352,7 +389,7 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     await user.click(screen.getByTestId('assist-send'));
 
     const note = await screen.findByTestId('assist-note');
-    expect(note).toHaveTextContent('No agent seat came up — claude: no ACP config');
+    expect(note).toHaveTextContent('No helper can answer right now.');
     expect(sendChatMessage).not.toHaveBeenCalled();
   });
 });

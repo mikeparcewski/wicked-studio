@@ -43,3 +43,13 @@ describe('WatchRunLines', () => {
     expect(screen.queryByTestId('watch-coverage-reasons')).toBeNull();
   });
 });
+
+it('slice C: watch reasons abbreviate long IDs and home paths', async () => {
+  const id = 'a'.repeat(40);
+  vi.spyOn(api, 'getWatch').mockResolvedValue({ findings: [], coverage: [{ entry_id: 'scope-drift', state: 'not_checked', reason: `Read failed in ${['', 'home', 'alice', 'repo'].join('/')} for ${id}` }] });
+  render(<WatchRunLines runId="r1" jumped={false} isTerminal={false} endedMs={null} />);
+  const reasons = await screen.findByTestId('watch-coverage-reasons');
+  expect(reasons).toHaveTextContent('~/repo');
+  expect(reasons).toHaveTextContent(id.slice(0, 8) + '…');
+  expect(reasons).not.toHaveTextContent(id);
+});

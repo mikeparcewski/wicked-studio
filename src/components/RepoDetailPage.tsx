@@ -1,3 +1,4 @@
+import { healthText } from '../board/rowHeadline.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useTrackerLinksSupported } from '../api/trackers.js';
@@ -250,6 +251,24 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   // A re-run failure takes precedence without overwriting the current entry's registration notice.
   const onboardError = rerunError ?? registrationError;
   const onboardErrorText = onboardError === null ? null : onboardError instanceof Error ? onboardError.message : String(onboardError);
+  const notMapped = !runsFailed && onboard.state !== 'onboarding' && (
+    graphGap !== null || graphStateNow.kind === 'none' ||
+    (graph === null && (onboard.state === 'never' || onboard.state === 'failed'))
+  );
+  // RepoEntry has findings but no saved launch error; SessionView includes each step's last refusal.
+  const recordedReason = onboard.state === 'failed'
+    ? [...(onboard.run?.units ?? [])].reverse().find((u) => u.denial_reason)?.denial_reason ?? null
+    : null;
+  const mappingReason = onboardErrorText ?? recordedReason ?? repo.findings?.[0]?.message ?? graphFailed;
+  const estateMissing = mappingReason !== null && /\b(?:wicked[-_])?estate\b/i.test(mappingReason) && /not (?:installed|found)|missing|no module|ENOENT|cannot find|could not find/i.test(mappingReason);
+  const mappingWords = estateMissing
+    ? "The code map service (wicked-estate) isn't installed. Install it, then map this repository."
+    : mappingReason === null ? 'Map this repository so you can explore its code and connections.'
+      : `The last mapping attempt failed: ${healthText(mappingReason.replace(/^the daemon refused this[^—]*—\s*/, '').split(/[\r\n]/)[0]!)}`;
+  // first-run C2 (review): the banner's main text is crew's first line, without the client's "the daemon refused this —"
+  // prefix, home paths masked (also JSON-escaped Windows ones); the whole text stays under Technical details.
+  const plainFirstLine = (text: string | null): string =>
+    text === null ? '' : healthText(text.replace(/^the daemon refused this[^—]*—\s*/, '').split(/[\r\n]/)[0]!.trim());
   const marks = knowledgeMarks(repo, runsFailed ? null : runs, knowledgeOf(knowledge, repo.id), now);
   const trackerCount = links !== null && links.state === 'ok' ? links.trackers : null;
   const projects = links !== null && links.state === 'ok' ? links.projects : null;
@@ -360,7 +379,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                   <div className="wk-state-banner-row">
                     <p className="wk-state-banner-text">
                       {rerunError !== null ? 'Couldn’t start onboarding: ' : 'Registered. Onboarding couldn’t start: '}
-                      {showText(onboardErrorText)}
+                      {/* first-run C2: a missing code map service is said plainly; crew's words move under Technical details. */}
+                      {estateMissing ? mappingWords : plainFirstLine(onboardErrorText)}
                     </p>
                     {!findingOffersOnboard && (
                       <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="repo-onboard-error-rerun" disabled={onboarding} onClick={() => void startOnboarding()}>
@@ -369,6 +389,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     )}
                     <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={dismissOnboardError}>Dismiss</button>
                   </div>
+                  {onboardErrorText !== null && <TechDetails text={healthText(onboardErrorText)} />}
                 </div>
               )}
               {/* studio#251: the engine's checkout findings, with "Re-run onboarding" wired to this page's trigger. */}
@@ -409,6 +430,16 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                 <section className="wk-card wk-know-sec" aria-labelledby="repo-know-title" data-testid="repo-know-band">
                   <h2 id="repo-know-title" className="wk-section-title">What we know</h2>
                   <KnowMarks variant="band" testId="repo-know" marks={marks} onOpen={openMark} />
+                  {notMapped && (
+                    <div role="status" className="wk-empty" data-testid="repo-not-mapped">
+                      <h3>Not mapped yet</h3>
+                      <p data-testid="repo-not-mapped-why">{mappingWords}</p>
+                      {estateMissing && <a href="/watch" className="wk-link" onClick={(e) => { if (modified(e)) return; e.preventDefault(); navigate('/watch'); }}>Open Nerve Center</a>}
+                      <button type="button" className="wk-btn wk-btn--primary" data-testid="repo-map-now" disabled={onboarding} onClick={() => void startOnboarding()}>
+                        {onboarding ? 'Starting…' : 'Map this repository'}
+                      </button>
+                    </div>
+                  )}
                 </section>
                 <div className="wk-rp-two">
                   <div>

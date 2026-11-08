@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { healthText } from '../../board/rowHeadline.js';
 import { ChevronDown } from 'lucide-react';
 import type { CliOption } from '../../board/chatCli.js';
 import { OPT_IN_NOTE } from '../../store/composerSeats.js';
@@ -43,7 +44,7 @@ export function ChatCliPicker({ options, value, onChange, locked, onSignIn }: {
   }, [open]);
 
   const chosen = options.find((o) => o.key === value) ?? null;
-  const name = chosen?.label ?? (options.length === 0 ? 'No CLI' : 'Pick a CLI');
+  const name = chosen?.label ?? (options.length === 0 ? 'No helper' : 'Pick a helper');
   return (
     <div ref={boxRef} className="wk-chatcli" data-no-drag>
       <button
@@ -52,8 +53,8 @@ export function ChatCliPicker({ options, value, onChange, locked, onSignIn }: {
         data-key={value ?? ''}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Answering CLI: ${name}${locked ? ' (set for this chat)' : ''}`}
-        title={locked ? `${name} answers this chat — start a new chat to ask another CLI` : 'Which CLI answers'}
+        aria-label={`Answering helper: ${name}${locked ? ' (set for this chat)' : ''}`}
+        title={locked ? `${name} answers this chat — start a new chat to ask another helper` : 'Which helper answers'}
         disabled={locked}
         onClick={() => setOpen((v) => !v)}
         className="wk-chatcli-btn"
@@ -62,7 +63,7 @@ export function ChatCliPicker({ options, value, onChange, locked, onSignIn }: {
         {!locked && <ChevronDown size={12} aria-hidden />}
       </button>
       {open && (
-        <div role="menu" aria-label="Answering CLI" data-testid="chat-cli-menu" className="wk-chatcli-menu" style={menuW !== null ? { width: menuW } : undefined}>
+        <div role="menu" aria-label="Answering helper" data-testid="chat-cli-menu" className="wk-chatcli-menu" style={menuW !== null ? { width: menuW } : undefined}>
           {options.map((o) => (
             <div key={o.key} className="wk-chatcli-row" data-ok={o.ok ? 'true' : 'false'}>
               <button
@@ -79,7 +80,7 @@ export function ChatCliPicker({ options, value, onChange, locked, onSignIn }: {
                 <span aria-hidden className="wk-chatcli-check">{o.key === value ? '✓' : ''}</span>
                 <span className="wk-chatcli-label">{o.label}</span>
                 {o.optIn && o.ok && <span className="wk-chatcli-why">{OPT_IN_NOTE}</span>}
-                {o.reason !== null && <span id={`chat-cli-why-${o.key}`} data-testid="chat-cli-why" className="wk-chatcli-why">{o.reason}</span>}
+                {o.reason !== null && <span id={`chat-cli-why-${o.key}`} data-testid="chat-cli-why" className="wk-chatcli-why">{healthText(o.reason)}</span>}
               </button>
               {o.signInPath !== null && (
                 <a

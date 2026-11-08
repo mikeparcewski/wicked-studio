@@ -58,11 +58,11 @@ describe('ruleReach and steerSentence', () => {
     expect(ruleReach(rule({ language: 'TypeScript' }), () => null)).toBe('applies to TypeScript');
   });
   it('says the live counts in one sentence', () => {
-    expect(steerSentence({ live: 42, type: null, pending: 3 })).toBe('42 rules guide your agents. 3 proposals are waiting for you.');
-    expect(steerSentence({ live: 1, type: 'security', pending: 1 })).toBe('1 security rule guides your agents. 1 proposal is waiting for you.');
-    expect(steerSentence({ live: 0, type: null, pending: 0 })).toBe('No rules guide your agents yet. Nothing is waiting for you.');
+    expect(steerSentence({ live: 42, type: null, pending: 3 })).toBe('42 rules guide your helpers. 3 proposals are waiting for you.');
+    expect(steerSentence({ live: 1, type: 'security', pending: 1 })).toBe('1 security rule guides your helpers. 1 proposal is waiting for you.');
+    expect(steerSentence({ live: 0, type: null, pending: 0 })).toBe('No rules guide your helpers yet. Nothing is waiting for you.');
     expect(steerSentence({ live: null, type: null, pending: null })).toBe('Reading your rules…');
-    expect(steerSentence({ live: 5, type: null, pending: 'unsupported' })).toBe('5 rules guide your agents.');
+    expect(steerSentence({ live: 5, type: null, pending: 'unsupported' })).toBe('5 rules guide your helpers.');
   });
 });
 
@@ -75,10 +75,10 @@ describe('memory words', () => {
     expect(memoryOrigin({ scope: 'project:wicked', facets: { area: 'floor' } })).toBeNull();
   });
   it('says the totals and what is waiting', () => {
-    expect(memorySentence({ total: 333, pending: 2, coverage: 'ok' })).toBe('Your agents remember 333 things, and where each came from. 2 proposals are waiting for you.');
+    expect(memorySentence({ total: 333, pending: 2, coverage: 'ok' })).toBe('Your helpers remember 333 things, and where each came from. 2 proposals are waiting for you.');
     expect(memorySentence({ total: 0, pending: 0, coverage: 'ok' })).toBe('Nothing learned yet.');
-    expect(memorySentence({ total: null, pending: null, coverage: 'loading' })).toBe('Reading what your agents have learned…');
-    expect(memorySentence({ total: null, pending: 'unsupported', coverage: 'unsupported' })).toBe('What your agents have learned, and where it came from.');
+    expect(memorySentence({ total: null, pending: null, coverage: 'loading' })).toBe('Reading what your helpers have learned…');
+    expect(memorySentence({ total: null, pending: 'unsupported', coverage: 'unsupported' })).toBe('What your helpers have learned, and where it came from.');
   });
   it('dates a row briefly', () => {
     expect(shortDate(Date.parse('2026-10-23T15:00:00Z'), NOW)).toBe('Oct 23');
@@ -90,6 +90,7 @@ describe('agent words', () => {
   const row = (over: Partial<AgentRow>): AgentRow => ({
     key: 'claude', name: 'Claude Code', ready: { word: 'Ready', tone: 'ok', sub: null }, sign: { word: 'Signed in', tone: 'ok', sub: null },
     governed: { word: 'Every action checked', tone: 'ok', sub: null },
+    seat: { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
     bench: null, week: { units: 61, gated: 53, firstPass: 45 }, usable: true, issues: [], ...over,
   } as AgentRow);
   it('gives each agent one status word', () => {
@@ -117,6 +118,6 @@ describe('agent words', () => {
     const out = row({ key: 'pi', ready: { word: 'Not ready', tone: 'fail', sub: null }, usable: false });
     expect(agentsSentence([ready, ready, out])).toBe('2 of 3 are ready to work.');
     expect(agentsSentence([ready, ready])).toBe('All 2 are ready to work.');
-    expect(agentsSentence([])).toBe('No AI agents found on this computer yet.');
+    expect(agentsSentence([])).toBe('No helpers found on this computer yet.');
   });
 });

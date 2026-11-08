@@ -13,6 +13,7 @@ import { chosenSeats, resetComposerSeats, useComposerSeats } from '../src/store/
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
+import { makeUnit, makeView } from './factories.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { resetLaunchWizard } from '../src/store/launchWizard.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
@@ -117,6 +118,42 @@ describe('studio#631: the composer helpers row', () => {
     key('Enter');
     expect(onSend).not.toHaveBeenCalled();
     expect(posts).toEqual([]);
+  });
+
+  it('B-C6b: every helper signed out shows ONE line + Sign one in, and never “turn one on in the helpers row”', () => {
+    const out = (reason: string) => ({ ok: false, reason });
+    const signedOut = (key: string, name: string): RosterSeat => ({
+      key, display_name: name, binary: key, enabled_for_council: true, auth: 'signed_out', signed_in: false,
+      chat_admission: { unscoped: out('signed out'), scoped: out('signed out') },
+    } as unknown as RosterSeat);
+    clearCachedRoster();
+    setCachedRoster([signedOut('claude', 'Claude Code'), signedOut('codex', 'Codex')]);
+    const onSend = vi.fn();
+    render(<Harness onSend={onSend} />);
+    type('what changed in the ledger?');
+    const refused = screen.getByTestId('composer-refused');
+    expect(refused.firstChild?.textContent).toBe('No helper is signed in yet.');
+    expect(screen.getByTestId('composer-refused-signin')).toHaveAttribute('href', '/agents');
+    // When NONE can be turned on, never tell the person to turn one on in the helpers row.
+    expect(screen.queryByTestId('composer-seats-refused')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/turn one on in the helpers row/);
+    key('Enter');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('B-P7: a running helper-free job (index + annotate by wicked-estate) shows no no-helper warning, even with nobody signed in', () => {
+    const out = (reason: string) => ({ ok: false, reason });
+    clearCachedRoster();
+    setCachedRoster([{ key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: out('signed out'), scoped: out('signed out') } } as unknown as RosterSeat]);
+    const runs = [makeView({ status: 'executing' }, [
+      makeUnit({ ord: 0, assigned_cli: 'wicked-estate', status: 'done' }),
+      makeUnit({ ord: 1, assigned_cli: 'wicked-estate', status: 'distributed' }),
+    ])];
+    render(<Composer composerKey="s1" text="" setText={() => {}} onSend={() => {}} runs={runs} started placeholder="p" ariaLabel="a" variant="session" navigate={() => {}} />);
+    // Never "No helper can take this": the job runs fine; only asking about it needs a helper (review r2).
+    const line = screen.queryByTestId('composer-refused');
+    expect(line?.textContent ?? '').not.toMatch(/No helper can take this|cannot take a turn/);
+    if (line !== null) expect(line).toHaveTextContent('This job runs without a helper. Asking about it needs one.');
   });
 
   it('the choice persists per viewer, and the Ask reads the same choice', () => {

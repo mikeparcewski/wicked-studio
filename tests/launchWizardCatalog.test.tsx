@@ -81,6 +81,12 @@ async function openCatalog(init: Parameters<typeof openLaunchWizard>[0] = {}): P
   await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).not.toBe('loading'));
 }
 const search = (q: string): void => { fireEvent.change(screen.getByTestId('launch-catalog-search'), { target: { value: q } }); };
+/** first-run P6 (2026-11-08): what cannot start here is hidden until "Show coming soon" is checked. */
+const showSoon = (): void => {
+  const box = screen.getByTestId('launch-catalog-soon-toggle');
+  expect(box).not.toBeChecked();
+  fireEvent.click(box);
+};
 
 describe('an older daemon (no catalog)', () => {
   it('today’s list, uncategorised: the daemon’s workflows in order, then studio’s own; no system workflow, no top', async () => {
@@ -149,6 +155,10 @@ describe('a daemon with the catalog', () => {
 
   it('Your top first, then Create, Resolve, Analyze, Test and More, each with its cards', async () => {
     await openCatalog();
+    // By default only what can start is offered (first-run P6): no coming-soon or unavailable card.
+    expect(cardIds(section('create'))).not.toContain('phase-plugin');
+    expect(document.querySelector('[data-testid^="launch-catalog-soon-"]:not([data-testid="launch-catalog-soon-tag"]):not([data-testid="launch-catalog-soon-toggle"])')).toBeNull();
+    showSoon();
     const sections = [...document.querySelectorAll<HTMLElement>('[data-section]')].map((s) => s.dataset.section);
     expect(sections).toEqual(['top', 'create', 'resolve', 'analyze', 'test', 'more']);
     expect(cardIds(section('top'))).toEqual(['bug', 'feature', 'review-recent-work']);
@@ -166,8 +176,9 @@ describe('a daemon with the catalog', () => {
     expect(within(section('resolve')).getByTestId('launch-wizard-workflow-bug')).not.toHaveTextContent('Resolve');
   });
 
-  it('a coming-soon workflow is shown, never offered: not a button, a click picks nothing', async () => {
+  it('a coming-soon workflow is shown (Show coming soon), never offered: not a button, a click picks nothing', async () => {
     await openCatalog();
+    showSoon();
     const vibe = screen.getByTestId('launch-catalog-soon-apps');
     expect(vibe.tagName).not.toBe('BUTTON');
     expect(vibe).toHaveAttribute('aria-disabled', 'true');
@@ -223,9 +234,9 @@ describe('a daemon with the catalog', () => {
     fireEvent.change(screen.getByTestId('launch-catalog-repo'), { target: { value: 'without' } });
     expect(screen.queryByTestId('launch-catalog-top')).toBeNull();
     const shown = cardIds(screen.getByTestId('launch-catalog-results'));
-    expect(shown).toEqual(['apps', 'document:document-interactive', 'document:document-static', 'document:presentation', 'demo-video', 'review-recent-work', 'learn', 'draft-epics', 'chat:start-chat']);
-    fireEvent.click(screen.getByTestId('launch-catalog-soon-toggle'));
-    expect(cardIds(screen.getByTestId('launch-catalog-results'))).not.toContain('apps');
+    expect(shown).toEqual(['document:document-interactive', 'document:document-static', 'document:presentation', 'demo-video', 'review-recent-work', 'learn', 'draft-epics', 'chat:start-chat']);
+    showSoon();
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))[0]).toBe('apps');
     search('migrate');
     expect(screen.getByTestId('launch-catalog-noresults')).toHaveTextContent('with these filters');
     fireEvent.click(screen.getByTestId('launch-catalog-clear-filters'));
@@ -310,8 +321,9 @@ describe('a daemon with the catalog', () => {
     expect(useLaunchWizard.getState().draft?.workflowId ?? null).toBeNull();
   });
 
-  it('an unavailable workflow is shown with why, never offered', async () => {
+  it('an unavailable workflow is shown with why (Show coming soon), never offered', async () => {
     await openCatalog();
+    showSoon();
     const v = screen.getByTestId('launch-catalog-soon-validate-docs');
     expect(v.tagName).not.toBe('BUTTON');
     expect(v).toHaveTextContent('Not available Needs the next engine release');

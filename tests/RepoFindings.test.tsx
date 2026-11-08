@@ -246,6 +246,21 @@ describe('the project page repo rows (ProjectRepositories)', () => {
   });
 });
 
+describe('first-run C2 (review): the banner says crew\'s first line, never a home path', () => {
+  it('a non-estate failure shows its first line plainly; the whole text (masked) stays under Technical details', async () => {
+    const win = 'C:' + '\\\\' + ['Users', 'alice', 'repo'].join('\\\\');
+    const reason = `the daemon refused this (500) — spawn wicked-core ENOENT {"path":"${win}"}\nstack line 2`;
+    window.history.replaceState({ onboardError: reason }, '', '/repo-detail/billing');
+    render(<RepoDetailPage repoId="billing" onSelectRun={vi.fn()} navigate={() => undefined} onOpenGraph={() => undefined} search="?tab=settings" />);
+    const notice = await screen.findByTestId('repo-onboard-error');
+    const lead = notice.querySelector('.wk-state-banner-text')!;
+    expect(lead.textContent).toBe('Registered. Onboarding couldn’t start: spawn wicked-core ENOENT {"path":"~\\repo"}');
+    expect(lead.textContent).not.toContain('stack line 2');
+    expect(notice.textContent).not.toMatch(/Users[\\/]+alice/);
+    expect(notice.textContent).toContain('Technical details');
+  });
+});
+
 describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', () => {
   const ONBOARD_REASON =
     "workflow 'onboarding' cannot start — unresolved tool dependencies: phase 'index' requires tool 'wicked-estate' (not found on PATH /Users/alice/.local/bin)";

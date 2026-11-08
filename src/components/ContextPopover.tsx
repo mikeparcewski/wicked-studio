@@ -104,7 +104,7 @@ export function ContextPopover({
                   <span
                     className="rounded-full border px-1.5 text-xs"
                     style={{ color: 'var(--status-fail)', borderColor: 'var(--status-fail-dim)' }}
-                    title={`${seatLabel(seat)} isn't signed in — runs routed there will fall back or fail. Sign it in on the Agents page.`}
+                    title={`${seatLabel(seat)} isn't signed in — runs routed there will fall back or fail. Sign it in on the Helpers page.`}
                     data-testid={`seat-signin-${seat.key}`}
                   >
                     sign in needed

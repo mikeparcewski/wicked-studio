@@ -78,12 +78,12 @@ export function firesWord(n: number | undefined): string {
   return `Fired ${n}× this week`;
 }
 
-/** The page's one sentence: "42 rules guide your agents. 3 proposals are waiting for you." */
+/** The page's one sentence: "42 rules guide your helpers. 3 proposals are waiting for you." */
 export function steerSentence({ live, type, pending }: { live: number | null; type: SteeringType | null; pending: number | null | 'unsupported' }): string {
   const kind = type === null ? '' : `${STEERING_TYPE_LABELS[type].toLowerCase()} `;
   const rules = live === null ? 'Reading your rules…'
-    : live === 0 ? (type === null ? 'No rules guide your agents yet.' : `No ${kind}rules guide your agents yet.`)
-    : `${live} ${kind}${live === 1 ? 'rule guides' : 'rules guide'} your agents.`;
+    : live === 0 ? (type === null ? 'No rules guide your helpers yet.' : `No ${kind}rules guide your helpers yet.`)
+    : `${live} ${kind}${live === 1 ? 'rule guides' : 'rules guide'} your helpers.`;
   const waiting = typeof pending !== 'number' ? ''
     : pending === 0 ? ' Nothing is waiting for you.'
     : ` ${pending} ${pending === 1 ? 'proposal is' : 'proposals are'} waiting for you.`;

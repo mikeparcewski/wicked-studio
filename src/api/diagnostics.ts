@@ -51,7 +51,7 @@ export interface Diagnostics {
     crew: string;
     studioBundle: string | null;
     coreTs: string | null;
-    /** Engine binary versions by name; `null` = the binary is present but unversionable. */
+    /** Engine binary versions by name; `null` = the binary could not be resolved. */
     engineBinaries: Record<string, string | null>;
   };
   daemon: {

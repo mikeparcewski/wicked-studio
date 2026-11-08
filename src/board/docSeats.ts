@@ -1,6 +1,7 @@
 import { defaultOn } from '../store/composerSeats.js';
 import type { RosterSeat } from '../api/types.js';
 import { seatStandingWord } from '../components/HealthRailSection.js';
+import { healthText } from './rowHeadline.js';
 
 // studio#302: the New document council, chosen before Create.
 //
@@ -48,4 +49,57 @@ export function chosenSeats(roster: readonly RosterSeat[], selected: ReadonlySet
 /** The create body's `clisJson`: the chosen roster rows, as `POST /runs` carries them (crew#631). */
 export function docClisJson(roster: readonly RosterSeat[], selected: ReadonlySet<string>): string {
   return JSON.stringify(chosenSeats(roster, selected));
+}
+
+/** Why the default left helpers out, in plain words (first-run C7): who is not signed in, and who can't work now. */
+export interface LeftOutWords {
+  /** Display names of the helpers that are not signed in. */
+  signedOut: string[];
+  /** Display names of the helpers that are signed in but can't take work now, each with the service's reason (hover). */
+  unavailable: Array<{ name: string; why: string | null }>;
+}
+
+const nameOf = (roster: readonly RosterSeat[], key: string): string => {
+  const s = roster.find((x) => x.key === key);
+  return s === undefined ? key : s.display_name || s.key;
+};
+
+/** A helper with no sign-in, whatever the service says about checks (its reason then only repeats "signed out"). */
+function notSignedIn(seat: RosterSeat | undefined): boolean {
+  if (seat === undefined) return false;
+  const auth = (seat as Record<string, unknown>)['auth'];
+  return auth === 'signed_out' || (auth !== 'signed_in' && auth !== 'not_required' && seat.signed_in === false);
+}
+
+export function leftOutWords(roster: readonly RosterSeat[], leftOut: readonly LeftOutSeat[]): LeftOutWords {
+  const out: LeftOutWords = { signedOut: [], unavailable: [] };
+  for (const x of leftOut) {
+    const seat = roster.find((s) => s.key === x.key);
+    if (notSignedIn(seat)) out.signedOut.push(nameOf(roster, x.key));
+    else {
+      // The service's own reason ("usage limit reached until 18:00"), shown as text (a hover alone is unreachable by keyboard).
+      const reason = seat !== undefined && typeof (seat as Record<string, unknown>)['council_ineligible_reason'] === 'string'
+        ? ((seat as Record<string, unknown>)['council_ineligible_reason'] as string).trim() : '';
+      out.unavailable.push({ name: nameOf(roster, x.key), why: reason === '' ? null : healthText(reason) });
+    }
+  }
+  return out;
+}
+
+/** How many helpers could take a document's work now, and how many the roster can't say yet (an older crew with no
+ *  sign-in reading, `auth: 'unknown'`): a helper that is not known to be out is never counted as out. */
+export function docHelperCounts(roster: readonly RosterSeat[]): { ready: number; unknown: number } {
+  let ready = 0;
+  let unknown = 0;
+  for (const s of roster) {
+    const k = seatStandingWord(s).kind;
+    if (k === 'signed-in' || k === 'no-sign-in-needed') ready += 1;
+    else if (k === 'unknown') unknown += 1;
+  }
+  return { ready, unknown };
+}
+
+/** "A, B and C". */
+export function andList(names: readonly string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }

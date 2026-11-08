@@ -195,11 +195,12 @@ describe('the PA is still answering (§8 F6)', () => {
     expect(useAskThreadStore.getState().turns[chatId]!.filter((t) => t.who === 'you')).toHaveLength(1);
   });
 
-  it('no eligible helper: the refusal names it', async () => {
+  it('no eligible helper: the refusal is one plain line', async () => {
     openChat.mockResolvedValue({ chatId: 'c-2', seats: [], refused: [], scope: null });
     render(<AskDock runs={[]} pathname="/" onClose={() => undefined} />);
     await ask('hello');
-    await screen.findByText(/No helper can answer — no signed-in helper is eligible to answer/);
+    await waitFor(() => expect(screen.getAllByTestId('assist-note').some((n) =>
+      (n.textContent ?? '').includes('No helper can answer right now.'))).toBe(true));
     expect(sendChatMessage).not.toHaveBeenCalled();
   });
 });

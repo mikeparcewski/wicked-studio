@@ -1,8 +1,8 @@
 import { useEffect, useId, useState } from 'react';
 import { Check } from 'lucide-react';
 import { setPickedForNewWork } from './useAgentRows.js';
-import { goodEnough, setupAgents, setupMove, setupSettled, setupSteps } from '../../board/firstUse.js';
-import type { AgentRow } from '../../board/agentsModel.js';
+import { goodEnough, setupAgents, setupMove, setupSteps } from '../../board/firstUse.js';
+import { authOf, type AgentRow } from '../../board/agentsModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useFirstUseReads } from '../../store/firstUseReads.js';
 import { NewProjectModal } from '../NewProjectModal.js';
@@ -33,8 +33,9 @@ function Step({ n, done, testId, children }: { n: number; done: boolean; testId:
   );
 }
 
-export function SetupPanel({ rows, open, navigate }: {
+export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   rows: readonly AgentRow[];
+  helpersKnown?: boolean;
   /** Open one agent's modal (keeps the setup steps open behind it). */
   open: (key: string) => void;
   navigate: Navigate;
@@ -42,16 +43,16 @@ export function SetupPanel({ rows, open, navigate }: {
   const titleId = useId();
   const f = useFirstUseReads();
   const [creating, setCreating] = useState(false);
-  useEffect(() => { void f.load(true); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const facts = { rows, repos: f.repos, projects: f.projects };
+  const facts = { rows, repos: f.repos, projects: f.projects, checks: f.checks };
   const steps = setupSteps(facts);
   const counted = setupAgents(rows);
-  const ready = f.state === 'ok' && f.counted && goodEnough(facts);
+  const helperReadingKnown = helpersKnown && (steps.agentsDone || rows.every((r) => authOf(r.seat) !== 'unknown'));
+  const ready = helperReadingKnown && f.state === 'ok' && f.counted && goodEnough(facts);
   // Good enough, reached here: persist it once (§5.1); from then on studio opens on the Desk.
   // A failed write is not retried on its own (no loop): the steps say so, and the next app load tries again.
   useEffect(() => {
-    if (ready && !setupSettled(f.setup) && !f.saveFailed) void f.save({ completedAt: Date.now() });
+    if (ready && f.setup.completedAt === undefined && f.setup.skippedAt === undefined && !f.saveFailed) void f.save({ completedAt: Date.now() });
   }, [ready, f]);
 
   // The counts are a reading like any other (real-data gate, 2026-10-13): until they answer, step 3 says
@@ -67,12 +68,12 @@ export function SetupPanel({ rows, open, navigate }: {
   return (
     <section className="wk-card wk-agents-setup" data-testid="agents-setup" aria-labelledby={titleId}>
       <div className="wk-agents-setup-main">
-        <h2 id={titleId} className="wk-agents-setup-title">Welcome to studio. Let’s get your agents ready.</h2>
-        <p className="wk-agents-sub">Studio gives your work to the AI coding tools on this computer. Once one agent is ready and you have a project or repository, studio opens on your Desk.</p>
+        <h2 id={titleId} className="wk-agents-setup-title">Welcome to studio. Let’s get your helpers ready.</h2>
+        <p className="wk-agents-sub">Studio gives your work to your coding helpers. These steps check what they need before you start work.</p>
         <ol className="wk-agents-setup-steps">
-          <Step n={1} done={steps.agentsDone} testId="agents-setup-step-agents">
-            <b>Get one agent ready.</b>{' '}
-            <span data-testid="agents-setup-count">{steps.ready === 0 ? 'No agent can take new jobs yet.' : `${steps.ready} ${steps.ready === 1 ? 'agent can' : 'agents can'} take new jobs now.`}</span>
+          <Step n={1} done={helperReadingKnown && steps.agentsDone} testId="agents-setup-step-agents">
+            <b>Get one helper ready.</b>{' '}
+            <span data-testid="agents-setup-count">{!helperReadingKnown ? 'Not checked yet.' : steps.ready === 0 ? 'No helper can take new jobs yet.' : `${steps.ready} ${steps.ready === 1 ? 'helper can' : 'helpers can'} take new jobs now.`}</span>
             {/* The moves only while the step is open: once one agent counts, the table carries the rest. */}
             {!steps.agentsDone && (
               <>
@@ -89,17 +90,34 @@ export function SetupPanel({ rows, open, navigate }: {
                     );
                   })}
                 </div>
-                <span className="wk-agents-sub">Each sign-in is a command for your terminal; studio never sees your password.</span>
+                <span className="wk-agents-sub">Each sign-in opens the helper’s own sign-in; studio never sees your password.</span>
               </>
             )}
           </Step>
-          <Step n={2} done={false} testId="agents-setup-step-defaults">
-            <b>Choose the agents new work uses</b> (optional).{' '}
+          <Step n={2} done={f.checks.skills === true} testId="agents-setup-step-skills">
+            <b>Get skills ready.</b>{' '}
+            {f.checks.skills === null ? 'Not checked yet.' : f.checks.skills ? 'Done. Skills are published and ready for work.' : 'Not done. Publish skills before starting work.'}{' '}
+            <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/skills')}>Open Skills</button>
+          </Step>
+          <Step n={3} done={f.checks.estate === true} testId="agents-setup-step-estate">
+            <b>Set up the code map service.</b>{' '}
+            {f.checks.estate === null ? 'Not checked yet.' : f.checks.estate ? 'Done. The code map service is ready.' : 'Not done. Install the code map service (wicked-estate) to add a repository.'}{' '}
+            <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/watch')}>Open Nerve Center</button>
+          </Step>
+          <Step n={4} done={f.checks.runtimeRequired === false || f.checks.runtime === true} testId="agents-setup-step-runtime">
+            <b>Start the container runtime.</b>{' '}
+            {f.checks.runtimeRequired === false ? 'Done. Helpers run on this computer without containers.'
+              : f.checks.runtime === null || f.checks.runtimeRequired === null ? 'Not checked yet.'
+              : f.checks.runtime ? 'Done. The container runtime is running.' : 'Not done. Start Docker Desktop or Rancher Desktop, then check again.'}{' '}
+            <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/watch')}>Open Nerve Center</button>
+          </Step>
+          <Step n={5} done={false} testId="agents-setup-step-defaults">
+            <b>Choose the helpers new work uses</b> (optional).{' '}
             {picked.length > 0 ? `Right now: ${names(picked)}.` : 'Right now: none.'}
             {off.length > 0 ? ` ${names(off)} ${off.length === 1 ? 'is' : 'are'} off until you pick ${off.length === 1 ? 'it' : 'them'}.` : ''}{' '}
             <button type="button" data-testid="agents-setup-change" className="wk-btn wk-btn--link" onClick={() => navigate('/system')}>Change</button>
           </Step>
-          <Step n={3} done={placeKnown && steps.placeDone} testId="agents-setup-step-project">
+          <Step n={6} done={placeKnown && steps.placeDone} testId="agents-setup-step-project">
             <b>Create your first project.</b>{' '}
             {!placeKnown
               ? <span data-testid="agents-setup-place-reading" data-state={placeFailed ? 'failed' : 'reading'} role="status">
@@ -124,9 +142,10 @@ export function SetupPanel({ rows, open, navigate }: {
       </div>
       <aside className="wk-agents-setup-aside" data-testid="agents-setup-ready">
         <b>What “ready” means</b>
-        <span>At least one agent signed in and working.</span>
+        <span>At least one helper signed in and working.</span>
+        <span>Skills published, the code map service ready, and the container runtime running when needed.</span>
         <span>A project or a repository added.</span>
-        <span className="wk-agents-sub">These steps stay on the Agents tab: “Setup guide” opens them again.</span>
+        <span className="wk-agents-sub">These steps stay on this page: “Setup guide” opens them again.</span>
       </aside>
       {creating && <NewProjectModal navigate={navigate} onClose={() => setCreating(false)} deskMode />}
     </section>

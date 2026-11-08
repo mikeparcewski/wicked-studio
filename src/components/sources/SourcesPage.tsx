@@ -217,7 +217,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     <CalmPage data-testid="sources-page" className="wk-src-page">
       <CalmHead
         title={PAGE_NAMES.sources}
-        sentence={loading ? 'Reading sources…' : `${count === 0 ? 'No sources yet' : `${count} source${count === 1 ? '' : 's'}`} plus crew’s own API. Apps read them through queries crew checks; agents see ${anyAgentSwitches ? 'a source’s structure, and its rows only where you let them query it' : 'their structure, never their rows'}.`}
+        sentence={loading ? 'Reading sources…' : `${count === 0 ? 'No data sources yet. Crew’s own data is always here.' : `${count} source${count === 1 ? '' : 's'}, plus crew’s own data.`} Apps read them through queries crew checks; helpers see ${anyAgentSwitches ? 'a source’s structure, and its rows only where you let them query it' : 'their structure, never their rows'}.`}
         action={<CalmAction label="Add a data source" onClick={openAdd} testId="sources-add" />}
       />
       <div className="wk-src-page-body">

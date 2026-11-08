@@ -108,11 +108,11 @@ export function isRouteUnsupported(e: unknown): boolean {
 
 /**
  * Which state banner a failed read gets (design/UI-CONTRACT.md §4.7; studio#684): `offline` when the
- * service could not be reached at all (the browser's fetch TypeError, or a gateway/unavailable
- * status), else `error`. The raw message never renders in prose — only inside TechDetails.
+ * service could not be reached at all (the browser's fetch TypeError or no response), else `error`.
+ * Any HTTP response, including a gateway/unavailable status, proves the service answered. The raw message never renders in prose — only inside TechDetails.
  */
 export function readErrorKind(e: unknown): 'offline' | 'error' {
-  if (e instanceof ApiError) return e.status === 0 || e.status === 502 || e.status === 503 || e.status === 504 ? 'offline' : 'error';
+  if (e instanceof ApiError) return e.status === 0 ? 'offline' : 'error';
   if (e instanceof TypeError) return 'offline';
   const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : '';
   return /failed to fetch|networkerror|load failed|network request failed|econnrefused/i.test(msg) ? 'offline' : 'error';

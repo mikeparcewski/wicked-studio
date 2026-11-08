@@ -1,10 +1,12 @@
 import { benchRetry, commandDisplay, otherReady, qeAvailable, workAdmissionOf, type AgentIssue, type AgentRow } from './agentsModel.js';
+import { displayText } from './homePath.js';
 import { relTime } from './relTime.js';
 
 /**
  * THE AGENTS MODAL'S WORDS (DES-seats-page §4.1): one entry per issue code, studio-owned. The only
  * interpolations are the allowlist of §4.3 — agent and binary names, version strings, counts and
- * relative times. Crew's own sentences go to `tech` (Technical details) and nowhere else. Copy
+ * relative times. Error prose goes to `tech` (Technical details); the stopped-runtime status
+ * is shown directly after masking paths. Copy
  * buttons copy only `login_invocation`, `logout_invocation` or `<binary> --version` (§4.4).
  */
 
@@ -63,11 +65,40 @@ function jobs(n: number): string {
   return `${n} ${n === 1 ? 'job' : 'jobs'}`;
 }
 
+/** A null source explicitly means the program was not found on this computer. */
+export function helperNotInstalled(row: AgentRow): boolean {
+  return row.seat.version?.install_source === null && row.seat.version.installed === null
+    || row.seat.recent_bench?.kind === 'not_installed';
+}
+
+/** A stopped runtime prevents the sign-in probe itself, rather than reporting a signed-out helper. */
+export function helperRuntimeDown(row: AgentRow): string | null {
+  const health = row.seat.health;
+  const message = health?.status === 'inactive' ? health.message ?? row.seat.council_ineligible_reason : null;
+  return typeof message === 'string' && /^(?:Docker(?: Desktop)?|Rancher(?: Desktop)?) (?:isn.t|is not) running[.!]?$/i.test(message.trim())
+    ? displayText(message) : null;
+}
+
 /**
  * `containerSignIn`: studio signs this agent in with a button (the container hooks, crew#1006), so its
  * sign-in steps say so and never name a terminal command.
  */
 export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly AgentRow[], now: number, containerSignIn = false): IssueCopy {
+  const runtime = helperRuntimeDown(row);
+  if (runtime !== null) return {
+    title: runtime,
+    what: `Studio can’t check ${row.name} while Docker or Rancher is stopped.`,
+    why: 'This helper can’t take work yet.',
+    fix: [step('Start Docker Desktop or Rancher Desktop,', 'then check again.')],
+    tech: null,
+  };
+  if (helperNotInstalled(row)) return {
+    title: `${row.name} isn’t installed on this computer`,
+    what: `Studio can’t start ${row.name} here yet.`,
+    why: 'It can’t take work until it is installed.',
+    fix: [step(`Install ${row.name} on this computer,`, 'or turn it off in the helpers choice.')],
+    tech: null,
+  };
   const code = issue.code;
   const name = row.name;
   // The bench facts come from the issue itself (crew's params), so a folded reviewer's issue speaks for its own
@@ -93,7 +124,9 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
     case 'signed_out': {
       const others = otherReady(rows, row.key);
       const signIn = containerSignIn
-        ? { ...step('Sign in here.', `Studio opens ${name}’s sign-in in a disposable login container; follow its steps there.`), signIn: true }
+        ? { ...step('Sign in here.', row.seat['sign_in_on'] === 'host' || row.seat.sign_in !== 'container'
+          ? `Studio opens ${name}’s own sign-in on this computer; follow its steps there.`
+          : `Studio opens ${name}’s sign-in; follow its steps there.`), signIn: true }
         : row.login !== null
         ? step('Sign in from your terminal.', `Run this, then follow ${name}’s own sign-in steps (it may open your browser).`, cmd(row.login, 'sign-in'),
           'Studio never sees your password or token: the sign-in happens between your terminal and the provider.')
@@ -201,6 +234,13 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
     case 'version_unproven': {
       const v = row.version.word;
       const proven = /\(approved: (.+)\)/.exec(row.version.sub ?? '')?.[1] ?? null;
+      if (v === 'Not found' && row.sign.word === 'Signed out') return {
+        title: 'Its version hasn’t been confirmed',
+        what: `Studio couldn’t read ${name}’s version. It is signed out and can’t take work right now.`,
+        why: 'Studio needs to confirm its version before it can say which safety checks are available.',
+        fix: [step(`Check that ${name} is installed,`, 'then sign in and check again.')],
+        tech: row.tech.disclosure,
+      };
       if (v === 'Not found') {
         const pv = row.seat.version_pin?.pinned ?? null;
         const pb = pv === null ? null : /\d+(?:\.\d+)+/.exec(pv)?.[0] ?? pv;

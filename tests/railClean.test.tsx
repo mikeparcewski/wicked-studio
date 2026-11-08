@@ -141,7 +141,7 @@ describe('the top of the rail (operator IA 2026-10-13)', () => {
     expect(home).toHaveAttribute('href', '/');
     expect(home).toHaveAttribute('aria-current', 'page');
     expect(home).toHaveAccessibleName('Home');
-    expect(home).toHaveAccessibleDescription('1 needs you');
+    expect(home).toHaveAccessibleDescription('1 thing needs a look');
     expect(within(home).getByTestId('desk-rail-badge')).toHaveTextContent('1');
     expect(within(within(home).getByTestId('desk-rail-brand')).getByRole('img', { name: 'Wicked Studio' })).toBeInTheDocument();
     expect(screen.getByTestId('session-rail').querySelectorAll('a[href="/"]')).toHaveLength(1);
@@ -149,10 +149,11 @@ describe('the top of the rail (operator IA 2026-10-13)', () => {
     expect(screen.queryByTestId('desk-rail-home')).toBeNull();
   });
 
-  it('a partial count says so: "2+ need you"', () => {
+  it('a partial count waits for all inputs', () => {
     settledPhase = 'partial';
     render(<SessionRail runs={RUNS} needRows={[...NEED, { ...NEED[0]!, key: 'fail:u1' }] as never} navigate={() => {}} pathname="/" />);
-    expect(screen.getByTestId('desk-rail-wordmark')).toHaveAccessibleDescription('2+ need you');
+    expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
+    expect(screen.getByTestId('desk-rail-wordmark')).not.toHaveAttribute('aria-describedby');
   });
 
   it('with nothing waiting the wordmark is just "Home" and carries no badge', () => {
@@ -236,4 +237,15 @@ describe('the action row works from any page, in the project on screen', () => {
     fireEvent.click(screen.getByTestId('desk-rail-new-job'));
     expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { projectId: null } });
   });
+});
+
+it('slice C: header badge shares Nerve Center wording and withholds partial counts', () => {
+  const p = { runs: RUNS, needRows: [...NEED, { ...NEED[0]!, key: 'fail:u1' }] as never, navigate: () => {}, pathname: '/' };
+  settledPhase = 'partial';
+  const view = render(<SessionRail {...p} />);
+  expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
+  settledPhase = 'complete';
+  view.rerender(<SessionRail {...p} />);
+  expect(screen.getByTestId('desk-rail-wordmark')).toHaveAccessibleDescription('2 things need a look');
+  expect(screen.getByTestId('desk-rail-badge')).toHaveTextContent('2');
 });

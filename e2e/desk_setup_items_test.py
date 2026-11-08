@@ -6,7 +6,7 @@ when nothing needs you (headed "Set up studio").
 
 States, each on a fresh Desk at 1440x700 (light and dark captured):
   fresh       no agent signed in, memory empty, one repository never indexed →
-              the card is "Set up your agents — none can work yet (0 of N ready)" [Set up agents → the Agents
+              the card is "Set up your helpers — none can work yet (0 of N ready)" [Set up agents → the Agents
               tab's setup] (the memory item waits behind it);
   memory-empty agents fine, no memories → "Your memory is empty — …" [Build memory];
   one-agent   only claude can work → "Only claude can work — jobs need a second agent to review the work" [Sign in another];

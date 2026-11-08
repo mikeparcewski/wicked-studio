@@ -376,10 +376,11 @@ export interface CatalogFilters {
   /** null = every category. */
   category: string | null;
   repo: RepoFilter;
-  /** Show the workflows that cannot start here (unavailable on this daemon, or marked coming soon by its catalog); on by default. */
+  /** Show the workflows that cannot start here (unavailable on this daemon, or marked coming soon by its catalog); off by
+   *  default (first-run P6: a new user's first screen offers only what can start). */
   showSoon: boolean;
 }
-export const NO_FILTERS: CatalogFilters = { category: null, repo: 'any', showSoon: true };
+export const NO_FILTERS: CatalogFilters = { category: null, repo: 'any', showSoon: false };
 
 export function needsRepo(e: Pick<CatalogEntry, 'needs'>): boolean {
   return e.needs.includes('repo');
@@ -406,7 +407,7 @@ export function needsProject(e: Pick<CatalogEntry, 'needs' | 'launchKind'>): boo
 }
 
 export function filtersActive(f: CatalogFilters): boolean {
-  return f.category !== null || f.repo !== 'any' || !f.showSoon;
+  return f.category !== null || f.repo !== 'any' || f.showSoon !== NO_FILTERS.showSoon;
 }
 
 export function applyFilters(entries: readonly CatalogEntry[], f: CatalogFilters): CatalogEntry[] {
@@ -558,6 +559,8 @@ export function scoreEntry(e: CatalogEntry, query: string, categoryTitle = ''): 
   // The whole-query prefix bonus is for a query still being typed ("auth " and "auth for" are not "Author").
   const target = (e.launchKind === 'run' ? e.launchId : e.id).toLowerCase();
   if (typingLast && whole.length >= 2 && (title.startsWith(whole) || target.startsWith(whole))) score += 4;
+  // first-run C7: the query IS a card's whole title ("document" is Document, not Interactive document): it leads.
+  if (whole.replace(/[\s.!?]+$/, '') === title) score += 8;
   return score;
 }
 

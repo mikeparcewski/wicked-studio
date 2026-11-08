@@ -251,7 +251,10 @@ describe('studio#315 still blocks send', () => {
     const sent: string[] = [];
     render(<Harness runs={[]} onSend={(m) => sent.push(m)} />);
     type('hello');
-    expect(screen.getByTestId('composer-refused').textContent).toMatch(/No helper can take this right now — claude: benched/);
+    // B-C6b: the visible line is one short plain sentence; the per-helper reason sits under a Details disclosure.
+    const refused = screen.getByTestId('composer-refused');
+    expect(refused.firstChild?.textContent).toBe('No helper can answer right now.');
+    expect(screen.getByTestId('composer-refused-why').textContent).toMatch(/Claude: benched/);
     expect((screen.getByTestId('session-composer-send') as HTMLButtonElement).disabled).toBe(true);
     key('Enter');
     expect(sent).toStrictEqual([]);

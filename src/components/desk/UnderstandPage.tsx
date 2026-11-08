@@ -393,7 +393,7 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [], sea
           <form className="wk-ue-ask wk-uc-measure" role="search" aria-label="Ask about your code" onSubmit={ask} data-testid="understand-ask">
             <label htmlFor={boxId} className="wk-visually-hidden">Your question</label>
             <input id={boxId} ref={inputRef} type="text" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off"
-              placeholder="e.g. Who calls the deliver step?" className="wk-ue-ask-input" data-testid="understand-ask-input" />
+              placeholder="e.g. Where is the login handled?" className="wk-ue-ask-input" data-testid="understand-ask-input" />
             <VoiceMicButton size="xs" testId="understand-ask-voice" />
             <button type="submit" className="wk-ue-btn wk-ue-btn--primary" data-testid="understand-ask-send">Ask</button>
           </form>

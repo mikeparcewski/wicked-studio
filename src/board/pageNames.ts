@@ -17,7 +17,7 @@ export const PAGE_NAMES = {
   report: 'Report',
   understand: 'Understand',
   build: 'Build & settings',
-  agents: 'Agents',
+  agents: 'Helpers',
   /** `/watch` — the system dashboard (DES-SYSTEM-VIEW); `/health` redirects there. */
   watch: 'Nerve Center',
   skills: 'Skills',

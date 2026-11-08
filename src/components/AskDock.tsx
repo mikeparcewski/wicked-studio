@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { chatOpened, chatOpenFailed } from '../store/chatFlow.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
-import type { ChatOpenBody, ChatScope, RepoEntry, RosterSeat, SessionView } from '../api/types.js';
+import type { ChatOpenBody, ChatScope, ChatSeatOutcome, ChatSeatRefusal, RepoEntry, RosterSeat, SessionView } from '../api/types.js';
+import { healthText } from '../board/rowHeadline.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { useFailureClocks } from '../store/failureClocks.js';
 import { forgetAskSession, readAskSession, rememberChatChoices, writeAskSession, type AskSession } from '../store/askSession.js';
@@ -32,7 +33,9 @@ import { useCapabilities } from '../store/capabilities.js';
 import { isReviewerOnly } from '../board/seatNames.js';
 import { analysisScopeChips, chatWorkflowFor, indexOfferFor } from '../board/analyzeChat.js';
 import { addChip, chipsOpenFields, chipsScoped, chipsSignature, chosenChips, clickChip, defaultScopeChips, type ScopeChip } from '../board/chatScopes.js';
-import { cliOptions, defaultChatCli, saveChatCli } from '../board/chatCli.js';
+import { cliOptions, defaultChatCli, saveChatCli, type CliOption } from '../board/chatCli.js';
+import { NO_HELPER_AVAILABLE, NO_HELPER_SIGNED_IN, SIGN_ONE_IN } from '../board/launchModel.js';
+import { AGENTS_PATH } from '../hooks/useRoute.js';
 import { cliName, pageContext, pagePlaceholder, pagePrompts } from '../board/pagePrompts.js';
 import { jobTitle } from '../board/deskWords.js';
 import { reopenSystemChat, systemChatEpoch } from '../store/askDock.js';
@@ -235,6 +238,51 @@ export function answerFooterWords(cli: string, sources: number): string {
 }
 
 /**
+ * B-C6a: when NO helper can answer a chat, studio says it in ONE plain line — never a red per-helper
+ * paragraph repeated once per helper. All signed out → "No helper is signed in yet."; a mix of signed-out
+ * and benched → "No helper can answer right now." The per-helper reasons ride a disclosure, never the line.
+ * `null` when at least one helper can answer (or none is set up at all — a different surface says that).
+ */
+export function noHelperNotice(clis: readonly CliOption[]): { line: string; reasons: string[] } | null {
+  if (clis.length === 0) return null;
+  const unavailable = clis.filter((o) => !o.ok);
+  if (unavailable.length !== clis.length) return null;
+  const allSignedOut = unavailable.every((o) => o.signInPath !== null);
+  return {
+    line: allSignedOut ? NO_HELPER_SIGNED_IN : NO_HELPER_AVAILABLE,
+    // B-P1 (privacy): a per-helper reason may carry a home path — sanitize every reason that reaches
+    // the disclosure's DOM, closed or not.
+    reasons: unavailable.map((o) => healthText(`${o.label}: ${o.reason ?? 'unavailable'}`)),
+  };
+}
+
+/**
+ * B-1: when the roster admitted a helper but the open itself refused every seat (`ChatSeatOutcome.ok:
+ * false`, and the response's `refused[]`), keep each failed start's reason — sanitized — for the drawer's
+ * disclosure, beside the plain "No helper can answer right now." line. The `label` maps a seat key to
+ * its one helper name. Deduped by key (the warm-outcome error wins over a `refused` row for the same
+ * seat); empty when nothing carried a reason.
+ */
+export function startFailureReasons(
+  seats: readonly ChatSeatOutcome[],
+  refused: readonly ChatSeatRefusal[] | undefined,
+  label: (key: string) => string,
+): string[] {
+  const rows: string[] = [];
+  const seen = new Set<string>();
+  for (const s of seats) {
+    if (!s.ok && typeof s.error === 'string' && s.error.trim() !== '') {
+      rows.push(healthText(`${label(s.cliKey)}: ${s.error}`));
+      seen.add(s.cliKey);
+    }
+  }
+  for (const r of refused ?? []) {
+    if (!seen.has(r.cliKey) && r.reason.trim() !== '') rows.push(healthText(`${label(r.cliKey)}: ${r.reason}`));
+  }
+  return rows;
+}
+
+/**
  * A PAGE CHAT (DES-LEARN §6.2): this dock drawn inside a page instead of the floating window. It keeps its own
  * conversation (per page), tells the chat what the page shows, asks about the item the person clicked, and
  * follows each answer with the page's guided "What next?" (the `threadTail`, drawn by `PageChat`).
@@ -431,6 +479,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const [workflowRun, setWorkflowRun] = useState<string | null>(null);
   /** The repository the analysis could not ground (no code graph): "Index this repository". */
   const [indexOffer, setIndexOffer] = useState<{ repoId: string; name: string; state: 'offer' | 'starting' | 'started' | 'failed' } | null>(null);
+  /** B-1: the per-helper reasons the last chat open refused with (sanitized), for the drawer's disclosure
+   *  beside "No helper can answer right now.". Cleared at the next send; `null` when no open has refused. */
+  const [startFail, setStartFail] = useState<string[] | null>(null);
   /** The session's first question — its /chats handle, re-persisted with the flag. */
   const titleRef = useRef(resumed?.title ?? '');
 
@@ -493,6 +544,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const scoped = chipsScoped(chips) || seedPlanned;
   const clis = useMemo(() => cliOptions(roster, scoped), [roster, scoped]);
   const [cliPick, setCliPick] = useState<string | null>(() => sendPrimary ?? resumed?.cli ?? null);
+  // review r2: a failed start belongs to the helper and scope it tried; another pick or scope starts clean.
+  useEffect(() => { setStartFail(null); }, [cliPick, pathname]);
   const cli = openedScope !== undefined
     ? cliPick
     : cliPick !== null && clis.some((o) => o.key === cliPick && o.ok) ? cliPick : defaultChatCli(clis);
@@ -642,6 +695,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const verbs: AssistVerbs = useMemo(
     () => ({
       send: async (text, _documents, files = []) => {
+        // A fresh send clears any stale open-failure reasons (B-1): the next open decides anew.
+        setStartFail(null);
         // Uploads (DES-SYSTEM-CHAT §8) are checked against crew's caps before anything is opened.
         if (files.length > 0) checkUpload(files);
         // What this message is about is chosen now, before anything below awaits; then the daemon's capabilities are
@@ -702,10 +757,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const options = cliOptions(roster, scoped);
             const pick = cliRef.current !== null && options.some((o) => o.key === cliRef.current && o.ok) ? cliRef.current : defaultChatCli(options);
             if (pick === null) {
-              const why = options.filter((o) => !o.ok).map((o) => `${o.label} (${o.reason ?? 'unavailable'})`).join(', ');
-              throw new Error(options.length === 0
-                ? 'No CLI is set up to answer — add one on the Agents page.'
-                : `No CLI can answer right now — ${why}. Sign one in on the Agents page.`);
+              // B-C6a: ONE plain line, no per-helper list in the words (the drawer's notice carries the
+              // Sign-one-in link and the reasons under a disclosure); nothing is sent.
+              const notice = noHelperNotice(options);
+              throw new Error(notice?.line ?? 'No helper is set up to answer yet — add one on the Helpers page.');
             }
             // Under the team path the chat records the eligible seats (studio#631's composer choice) and
             // the picked CLI is its primary; without it every seat sent answers, so only the pick is sent.
@@ -730,7 +785,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             if (askPath) body.primary = pick;
             // A refused open reads as the retired chat page's does (codex on #327): a pre-0.39.0 daemon's
             // "unknown field `scopeKind`" names the upgrade, never the raw wire.
-            const { seats: warmed, scope } = await api.openChat(body).catch((e: unknown) => {
+            const { seats: warmed, scope, refused } = await api.openChat(body).catch((e: unknown) => {
               throw new Error(describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e)));
             });
             // Closed while the open was in flight: end the chat it opened (keeping its history) and send
@@ -741,12 +796,13 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             }
             const ready = warmed.filter((s) => s.ok).map((s) => s.cliKey);
             if (ready.length === 0) {
-              const detail =
-                warmed.length > 0
-                  ? warmed.map((s) => `${s.cliKey}: ${s.error ?? 'failed'}`).join('; ')
-                  : askPath ? 'no signed-in helper is eligible to answer' : 'the daemon warmed no seats';
-              throw new Error(`${askPath ? 'No helper can answer' : 'No agent seat came up'} — ${detail}`);
+              // B-1/B-C6a: one plain line in the words; the roster admitted a helper but the open refused
+              // every seat — keep each failed start's reason (sanitized) under the drawer's disclosure.
+              setStartFail(startFailureReasons(warmed, refused, (k) => cliName(k, roster)));
+              throw new Error(NO_HELPER_AVAILABLE);
             }
+            // The open seated a helper: any stale open-failure reasons stand down.
+            setStartFail(null);
             chatIdRef.current = id;
             setShownId(id);
             workflowAsk.current = undefined;
@@ -813,6 +869,36 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   }, [projects, repos, runs, docsByProject]);
 
   const locked = openedScope !== undefined;
+  // B-C6a: before a chat is open, say in ONE plain line when no helper can answer (with a Sign-one-in link);
+  // once the chat is open its one helper is fixed, so the notice stands down.
+  // B-1: once a chat is open its one helper is fixed, so no notice; before that, the roster notice, else
+  // the last open-failure's reasons under the plain line (the open refused every admitted seat).
+  const noHelper = openedScope === undefined
+    ? (noHelperNotice(clis) ?? (startFail !== null && startFail.length > 0 ? { line: NO_HELPER_AVAILABLE, reasons: startFail } : null))
+    : null;
+  const noHelperNode = noHelper === null ? null : (
+    <p data-testid="ask-no-helper" className="wk-syschat-nohelper">
+      {noHelper.line}{' '}
+      <a
+        href={AGENTS_PATH}
+        data-testid="ask-no-helper-signin"
+        className="wk-link"
+        onClick={(e) => {
+          if (navigate === undefined || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          navigate(AGENTS_PATH);
+        }}
+      >
+        {SIGN_ONE_IN}
+      </a>
+      {noHelper.reasons.length > 0 && (
+        <details data-testid="ask-no-helper-why" className="wk-syschat-nohelper-why">
+          <summary>Details</summary>
+          {noHelper.reasons.map((r) => <span key={r} className="wk-syschat-nohelper-row">{r}</span>)}
+        </details>
+      )}
+    </p>
+  );
   // A replayed answer says who answered; how much it saw is not on record, so it is not claimed.
   const answerFooter = useCallback((key: string, replayed?: boolean) => (replayed === true
     ? `Answered by ${cliName(key, getCachedRoster())}`
@@ -892,6 +978,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           prompts,
           composerControls: (
             <>
+              {/* review r2: a page chat says the same one line (and its reasons) as the floating chat. */}
+              {noHelperNode}
               {indexOffer !== null && (
                 <p className="wk-syschat-index" data-testid="analysis-index-offer" data-state={indexOffer.state}>
                   <span>{indexOffer.name} is not indexed yet, so this answer reads the files directly.</span>{' '}
@@ -933,6 +1021,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             ) : undefined,
           composerControls: (
             <>
+              {noHelperNode}
               {/* crew#1157: an analysis that could not ground its one repository offers to index it. */}
               {indexOffer !== null && (
               <p className="wk-syschat-index" data-testid="analysis-index-offer" data-state={indexOffer.state}>

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { RepoEntry } from '../src/api/types.js';
-import { makeView } from './factories.js';
+import { makeUnit, makeView } from './factories.js';
 
 /**
  * The Repositories redesign (operator 2026-11-05: "just a giant list of boxes ... break into tabs or not have all the
@@ -500,5 +500,54 @@ describe('withApps: the sentence when some repositories belong to apps', () => {
     expect(withApps(5, 2, 'Three repositories, all indexed and ready.')).toBe('5 repositories, 2 belong to apps. The other 3 are all indexed and ready.');
     expect(withApps(3, 3, '')).toBe('3 repositories, all belong to apps.');
     expect(withApps(14, 7, 'Seven repositories. Three are indexed.')).not.toMatch(/’/u);
+  });
+});
+
+describe('slice C: mapping recovery after reload', () => {
+  it('offers Map this repository in the body with no registration banner', async () => {
+    window.history.replaceState({}, '', '/repo-detail/studio-api');
+    listRuns.mockResolvedValueOnce({ runs: [] });
+    await page();
+    expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
+    const know = screen.getByTestId('repo-know-band');
+    expect(within(know).getByText('Not mapped yet')).toBeVisible();
+    fireEvent.click(within(know).getByRole('button', { name: 'Map this repository' }));
+    await waitFor(() => expect(rerunOnboarding).toHaveBeenCalled());
+  });
+
+  it('reads a saved failed step and explains the missing code map service', async () => {
+    listRuns.mockResolvedValueOnce({ runs: [makeView({ id: 'failed-map', repo_ref: 'studio-api', workflow_id: 'onboarding', status: 'failed' }, [
+      makeUnit({ status: 'rejected', denial_reason: `wicked-estate not installed in ${['', 'Users', 'alice', 'tools'].join('/')}` }),
+    ])] });
+    await page();
+    const know = screen.getByTestId('repo-know-band');
+    expect(know).toHaveTextContent("The code map service (wicked-estate) isn't installed. Install it, then map this repository.");
+    expect(within(know).getByRole('link', { name: 'Open Nerve Center' })).toHaveAttribute('href', '/watch');
+  });
+
+  it('shows a plain recorded reason through the home-path formatter', async () => {
+    listRuns.mockResolvedValueOnce({ runs: [makeView({ id: 'failed-map', repo_ref: 'studio-api', workflow_id: 'onboarding', status: 'failed' }, [
+      makeUnit({ status: 'rejected', denial_reason: `Could not read ${['', 'home', 'alice', 'repo'].join('/')}` }),
+    ])] });
+    await page();
+    expect(screen.getByTestId('repo-know-band')).toHaveTextContent('The last mapping attempt failed: Could not read ~/repo');
+  });
+
+  it('does not offer a second mapping job while one is running', async () => {
+    listRuns.mockResolvedValueOnce({ runs: [makeView({ repo_ref: 'studio-api', workflow_id: 'onboarding', status: 'executing' })] });
+    await page();
+    expect(screen.queryByRole('button', { name: 'Map this repository' })).toBeNull();
+  });
+});
+
+describe('slice C: one repository empty-state action', () => {
+  it('shows one Add a repository button and opens registration', async () => {
+    listRepos.mockResolvedValueOnce({ repos: [] });
+    render(<RepositoriesPanel navigate={vi.fn()} />);
+    await screen.findByTestId('repos-empty');
+    const buttons = screen.getAllByRole('button', { name: 'Add a repository' });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]!);
+    expect(screen.getByRole('heading', { name: 'Add a repository' })).toBeVisible();
   });
 });

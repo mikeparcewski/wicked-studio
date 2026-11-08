@@ -497,7 +497,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       ) : unseeded ? (
         <CalmEmpty data-testid="steering-unseeded" title="No steering rules yet."
           body={<>
-            <p>Rules tell your agents how this team works. Add one, import a doctrine doc, or describe them in a chat. Or seed from the runbook at{' '}
+            <p>Rules tell your helpers how this team works. Add one, import a doctrine doc, or describe them in a chat. Or seed from the runbook at{' '}
               <a href={SEED_RUNBOOK_URL} target="_blank" rel="noreferrer" className="wk-link">{SEED_RUNBOOK_PATH}</a>.</p>
             <TechDetails summary="Seed command" text={SEED_COMMAND} />
           </>}

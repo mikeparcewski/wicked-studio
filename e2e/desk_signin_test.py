@@ -17,7 +17,7 @@ later re-check:
      seat signs in, the next check says the sign-in worked, the problem card is gone, and the row's
      fix clears without a reload. It never opens a terminal (no POST /terminals).
   4. HEALTH: the rail's Health registry offers the same modal for a benched signed-out seat.
-  5. FIRST RUN: with every seat signed out, the landing's one card is "Set up your agents".
+  5. FIRST RUN: with every seat signed out, the landing's one card is "Set up your helpers".
   6. 0 page errors.
 
 Captures: e2e/shots/desk-signin-*.png. Env: FEEDBACK_PORT (default 4368).
@@ -163,7 +163,7 @@ with sync_playwright() as p:
     set_fixture(origin, seat_week=False, roster_signed_in={"claude": False, "codex": False, "agy": False, "pi": False})
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    # Home v2: nothing can run, so the landing's one card is the pinned setup item "Set up your agents"
+    # Home v2: nothing can run, so the landing's one card is the pinned setup item "Set up your helpers"
     # (a live item, gone once one is signed in), above every waiting decision.
     page.locator('[data-testid="desk-card"][data-setup="agents"]').wait_for(state="visible", timeout=10000)
     lead = page.evaluate("""() => {
@@ -173,7 +173,7 @@ with sync_playwright() as p:
     }""")
     page.screenshot(path=str(SHOTS / "desk-signin-firstrun.png"))
     check("first-run", lead["setup"] == "agents"
-          and "Set up your agents" in (lead["text"] or "") and lead["act"] == "Set up agents", **lead)
+          and "Set up your helpers" in (lead["text"] or "") and lead["act"] == "Set up agents", **lead)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

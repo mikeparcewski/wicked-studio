@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { GovernanceScopeKind, RosterSeat, SeatGovernanceMode } from '../src/api/types.js';
 import { agentRows } from '../src/board/agentsModel.js';
 import { goodEnough, readSetup, realProjects, setupAgents, setupMove } from '../src/board/firstUse.js';
@@ -16,12 +16,13 @@ const listProjects = vi.fn();
 const putSetup = vi.fn();
 vi.mock('../src/api/client.js', () => ({
   api: {
+    getHealth: () => Promise.resolve({ capabilities: { system: true } }),
     getRoster: (k?: string) => getRoster(k), getSeatRecord: () => Promise.resolve({ days: 7, since: 0, until: 0, runsRead: 0, truncated: false, seats: [] }),
     getAppearanceSettings: () => getSettings(), listRepos: () => listRepos(), listProjects: () => listProjects(), putSetupSettings: (s: unknown) => putSetup(s),
   },
-  apiFetch: () => Promise.resolve({}),
+  apiFetch: () => Promise.resolve({ infra: [{ key: 'skills', state: 'ok' }, { key: 'seat_images', state: 'off' }] }),
 }));
-vi.mock('../src/api/diagnostics.js', () => ({ getDiagnostics: () => Promise.resolve({ acp: { byCli: {} } }), isDiagnosticsUnsupported: () => false }));
+vi.mock('../src/api/diagnostics.js', () => ({ getDiagnostics: () => Promise.resolve({ acp: { byCli: {} }, components: { engineBinaries: { 'wicked-estate': '1.0.0' } } }), isDiagnosticsUnsupported: () => false }));
 
 const { useFirstUseLanding, SETUP_PATH } = await import('../src/components/agents/useFirstUseLanding.js');
 const { AgentsPage } = await import('../src/components/agents/AgentsPage.js');
@@ -48,15 +49,17 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
+const checks = { skills: true, estate: true, runtime: false, runtimeRequired: false };
+
 describe('the rule (§5.1)', () => {
   const rows = (roster: RosterSeat[]) => agentRows({ roster, defaults: null, now: Date.now() });
 
   it('good enough = one agent ready for repository work and a repository or a real project', () => {
     // Codex alone is benched on repository jobs (studio's constant until work_admission): not enough.
     expect(setupAgents(rows([signedOut('claude', 'Claude Code'), CODEX]))).toHaveLength(0);
-    expect(goodEnough({ rows: rows([ready('claude', 'Claude Code')]), repos: 0, projects: 0 })).toBe(false);
-    expect(goodEnough({ rows: rows([ready('claude', 'Claude Code')]), repos: 1, projects: 0 })).toBe(true);
-    expect(goodEnough({ rows: rows([ready('claude', 'Claude Code')]), repos: 0, projects: 1 })).toBe(true);
+    expect(goodEnough({ rows: rows([ready('claude', 'Claude Code')]), repos: 0, projects: 0, checks })).toBe(false);
+    expect(goodEnough({ rows: rows([ready('claude', 'Claude Code')]), repos: 1, projects: 0, checks })).toBe(true);
+    expect(goodEnough({ rows: rows([ready('claude', 'Claude Code')]), repos: 0, projects: 1, checks })).toBe(true);
     expect(realProjects([{ id: 'default' }, { id: 'p1' }])).toBe(1);
     expect(readSetup({ 'studio.setup': { completedAt: 5, junk: 1 } })).toEqual({ completedAt: 5 });
   });
@@ -118,8 +121,8 @@ describe('the setup steps (§5.2)', () => {
   it('shows the steps on ?setup=1, a modal keeps them open, and Skip persists skippedAt', async () => {
     const navigate = vi.fn();
     render(<AgentsPage search="?setup=1" navigate={navigate} />);
-    expect(await screen.findByTestId('agents-setup')).toHaveTextContent('Welcome to studio. Let’s get your agents ready.');
-    await waitFor(() => expect(screen.getByTestId('agents-setup-count')).toHaveTextContent('No agent can take new jobs yet.'));
+    expect(await screen.findByTestId('agents-setup')).toHaveTextContent('Welcome to studio. Let’s get your helpers ready.');
+    await waitFor(() => expect(screen.getByTestId('agents-setup-count')).toHaveTextContent('No helper can take new jobs yet.'));
     fireEvent.click(screen.getByRole('button', { name: 'Sign in Claude Code' }));
     expect(navigate).toHaveBeenCalledWith('/agents?setup=1&fix=claude');
     expect(screen.queryByTestId('agents-setup-guide')).toBeNull();
@@ -137,47 +140,42 @@ describe('the setup steps (§5.2)', () => {
     expect(screen.getByTestId('agents-setup-step-project')).toHaveAttribute('data-done', 'true');
   });
 
-  it('the Setup guide on a finished install reads the real counts and never writes studio.setup again', async () => {
+  it('the Setup guide reads real counts and can explicitly skip an incomplete saved setup', async () => {
     getSettings.mockResolvedValue({ settings: { 'studio.setup': { completedAt: 1 } } });
     listRepos.mockResolvedValue({ repos: [{ id: 'r' }, { id: 's' }] });
     render(<AgentsPage search="?setup=1" navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('agents-setup-step-project')).toHaveTextContent('You already have 2 repositories.'));
     fireEvent.click(screen.getByTestId('agents-setup-skip'));
-    expect(putSetup).not.toHaveBeenCalled();
+    expect(putSetup).toHaveBeenCalledWith({ completedAt: 1, skippedAt: expect.any(Number) });
   });
 
-  it('while the counts are out, step 3 says it is checking, never "not done" (real-data gate)', async () => {
+  it('keeps the guide hidden until the counts answer (real-data gate)', async () => {
     let answer: (v: { repos: unknown[] }) => void = () => undefined;
     listRepos.mockReturnValue(new Promise((r) => { answer = r; }));
     listProjects.mockResolvedValue({ projects: [{ id: 'default' }, { id: 'p1' }] });
     render(<AgentsPage search="?setup=1" navigate={vi.fn()} />);
-    const step = await screen.findByTestId('agents-setup-step-project');
-    await waitFor(() => expect(screen.getByTestId('agents-setup-place-reading')).toHaveAttribute('data-state', 'reading'));
-    expect(step).toHaveAttribute('data-done', 'false');
-    expect(step).toHaveTextContent('Checking your projects and repositories…');
-    expect(step).not.toHaveTextContent('Name it;');
-    expect(screen.getByTestId('agents-setup-skip')).toBeDisabled();
-    answer({ repos: [] });
-    await waitFor(() => expect(screen.getByTestId('agents-setup-step-project')).toHaveTextContent('You already have 1 project.'));
+    expect(screen.queryByTestId('agents-setup')).toBeNull();
+    await act(async () => { answer({ repos: [] }); });
+    expect(await screen.findByTestId('agents-setup-step-project')).toHaveTextContent('You already have 1 project.');
     expect(screen.queryByTestId('agents-setup-place-reading')).toBeNull();
   });
 
-  it('a failed count read says so, and Skip still goes to the Desk without writing studio.setup', async () => {
+  it('keeps the guide hidden after a failed count read, without writing studio.setup', async () => {
     listRepos.mockRejectedValue(new Error('down'));
-    const navigate = vi.fn();
-    render(<AgentsPage search="?setup=1" navigate={navigate} />);
-    await waitFor(() => expect(screen.getByTestId('agents-setup-place-reading')).toHaveAttribute('data-state', 'failed'));
-    expect(screen.getByTestId('agents-setup-step-project')).toHaveTextContent('Studio couldn’t read your projects and repositories just now.');
-    const skip = screen.getByTestId('agents-setup-skip');
-    expect(skip).toBeEnabled();
-    fireEvent.click(skip);
-    expect(navigate).toHaveBeenCalledWith('/');
+    const { useFirstUseReads } = await import('../src/store/firstUseReads.js');
+    render(<AgentsPage search="?setup=1" navigate={vi.fn()} />);
+    await waitFor(() => expect(useFirstUseReads.getState().state).toBe('failed'));
+    expect(screen.queryByTestId('agents-setup')).toBeNull();
     expect(putSetup).not.toHaveBeenCalled();
   });
 
-  it('without ?setup the page carries a quiet Setup guide back to the steps', async () => {
+  it('without ?setup a ready install carries a quiet Setup guide back to the steps', async () => {
+    getRoster.mockResolvedValue({ roster: [ready('claude', 'Claude Code')] });
+    getSettings.mockResolvedValue({ settings: { 'studio.setup': { completedAt: 1 } } });
+    listRepos.mockResolvedValue({ repos: [{ id: 'r' }] });
     const navigate = vi.fn();
     render(<AgentsPage search="" navigate={navigate} />);
+    await waitFor(() => expect(screen.queryByTestId('agents-setup')).toBeNull());
     // It sits behind the page's one quiet menu.
     fireEvent.click(await screen.findByTestId('agents-more-button'));
     fireEvent.click(await screen.findByTestId('agents-setup-guide'));

@@ -1,3 +1,4 @@
+import { attentionCountWords } from '../../board/needsQueue.js';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -114,10 +115,10 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
 }): React.ReactElement {
   const { items, unfiled } = useMovableBoardModel(runs);
   const settled = useSettledNeeds(needRows, runsKnown, runsFailed);
-  const count = settled.count ?? 0;
-  const badgeText = settled.phase === 'partial' ? `${count}+` : String(count);
-  // The wordmark is named "Home"; its badge is said as the link's description: "22 need you".
-  const needWords = `${badgeText} ${badgeText === '1' ? 'needs' : 'need'} you`;
+  const count = settled.phase === 'complete' ? settled.count ?? 0 : 0;
+  const badgeText = String(count);
+  // The wordmark’s description uses Nerve Center’s count words.
+  const needWords = attentionCountWords(count);
   const needsId = useId();
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
@@ -158,6 +159,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const [moreBelow, setMoreBelow] = useState(false);
   const measureGroups = useRef<(() => void) | null>(null);
   const dropGroups = useRef<(() => void) | null>(null);
+  const groupsEl = useRef<HTMLDivElement | null>(null);
   const groupsRef = useCallback((el: HTMLDivElement | null): void => {
     dropGroups.current?.();
     dropGroups.current = null;
@@ -168,8 +170,15 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
     ro?.observe(el);
     measureGroups.current = check;
-    dropGroups.current = () => { el.removeEventListener('scroll', check); ro?.disconnect(); };
+    groupsEl.current = el;
+    dropGroups.current = () => { el.removeEventListener('scroll', check); ro?.disconnect(); groupsEl.current = null; };
   }, []);
+  // first-run P1: on a short window (1440x700 with Insight and Govern open) the page you are on could sit below the
+  // fold, under the footer. Each new page scrolls the list just enough to show its entry (never on a re-render).
+  useEffect(() => {
+    const here = groupsEl.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    here?.scrollIntoView?.({ block: 'nearest' });
+  }, [pathname]);
   // What the list holds changed (its rows, its open headings, the page): its height may have moved while its
   // box did not, so measure again, with the same observer.
   useEffect(() => { measureGroups.current?.(); }, [groups, collapsed, open, icons, shutHere, pathname]);
@@ -179,15 +188,19 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const capsLoaded = useCapabilities((s) => s.loaded);
   useEffect(() => { if (!capsLoaded) void useCapabilities.getState().load(); }, [capsLoaded]);
   const on = navCurrent(pathname, { sources: dataSources });
+  // first-run P1: the primary entry's mark and weight show only while no other page is current (Home, or Projects
+  // itself); beside another current page it read as a second selection.
+  const primaryShown = on === null || on === 'home' || on === 'projects';
   const navLink = (item: NavItem): React.ReactElement => {
     const Icon = ITEM_ICON[item.id];
+    const primary = item.primary === true && primaryShown;
     return (
       <a key={item.id} href={item.path} onClick={go(item.path)} data-testid={item.testId} data-nav-dest={`page:${item.id}`}
         data-primary={item.primary === true ? 'true' : undefined}
         aria-current={on === item.id ? 'page' : undefined}
         {...(icons ? { 'aria-label': item.label, title: item.label, 'data-rail-heading': item.id } : {})}
-        className={`wk-rail-link wk-rail-nav-item${item.primary === true ? ' wk-rail-nav-item--primary' : ''}${Icon !== undefined ? ' wk-rail-nav-item--icon' : ''}`}>
-        {item.primary === true && <span aria-hidden className="wk-rail-nav-mark" />}
+        className={`wk-rail-link wk-rail-nav-item${primary ? ' wk-rail-nav-item--primary' : ''}${Icon !== undefined ? ' wk-rail-nav-item--icon' : ''}`}>
+        {primary && <span aria-hidden className="wk-rail-nav-mark" />}
         {Icon !== undefined && <Icon size={icons ? 18 : 15} aria-hidden className="wk-rail-nav-icon" />}
         {!icons && <span className="wk-rail-nav-label">{item.label}</span>}
       </a>

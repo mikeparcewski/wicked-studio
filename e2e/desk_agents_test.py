@@ -241,7 +241,7 @@ with sync_playwright() as p:
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     page.keyboard.press("ControlOrMeta+k")
-    page.get_by_test_id("palette-input").fill("Agents")
+    page.get_by_test_id("palette-input").fill("Helpers")
     page.wait_for_timeout(400)
     row = page.locator('[data-testid="palette-row"][href="/agents"]').first
     dest["cmdk_label"] = row.inner_text().split("\n")[0]
@@ -270,7 +270,7 @@ with sync_playwright() as p:
         dest["chore_modal"] = page.get_by_test_id("agents-modal").get_attribute("data-agent")
         dest["chore_stays"] = address(page)
         page.keyboard.press("Escape")
-    check("dest", dest["cmdk"] == "/agents" and dest["cmdk_label"].startswith("Agents —") and dest["helpers_tab"] == "/agents"
+    check("dest", dest["cmdk"] == "/agents" and dest["cmdk_label"].startswith("Helpers —") and dest["helpers_tab"] == "/agents"
           and dest["unknown_fix"] == "/agents" and dest["unknown_modal"] == 0
           and dest["landing_chores"] == 0
           and dest["chore"] >= 1 and dest.get("chore_modal") == "claude" and ((dest.get("chore_stays") or "").startswith("/agents") or dest.get("chore_stays") == "/?tab=agents"), **dest)
@@ -312,7 +312,7 @@ with sync_playwright() as p:
     pf.close()
     set_fixture(origin, setup={"completedAt": 1})
     mode["roster"] = "ok"
-    check("first-use", first["landed"] == "/agents?setup=1" and first["count"] == "No agent can take new jobs yet."
+    check("first-use", first["landed"] == "/agents?setup=1" and first["count"] == "No helper can take new jobs yet."
           and "Sign in Pi CLI" in first["moves"] and first["modal_at"] == "/agents?setup=1&fix=pi"
           and first["back_at"] == "/agents?setup=1" and first["still_steps"] == 1, **first)
 
@@ -328,7 +328,7 @@ with sync_playwright() as p:
       count: !!document.querySelector('[data-testid="agents-tiles"]'), action: !!document.querySelector('[data-testid="agents-check-all"]'),
       health: document.querySelector('[data-testid="desk-rail-nerve"]').dataset.tone })""")
     page2.screenshot(path=str(SHOTS / "desk-agents-error.png"))
-    check("error", "Couldn’t load agents." in st["banner"] and not st["count"] and not st["action"] and st["health"] == healthy_before, **st)
+    check("error", "Couldn’t load helpers." in st["banner"] and not st["count"] and not st["action"] and st["health"] == healthy_before, **st)
     page2.close()
     mode["roster"] = "empty"
     page3 = ctx.new_page()
@@ -337,7 +337,7 @@ with sync_playwright() as p:
     page3.goto(f"{origin}/agents", wait_until="networkidle")
     page3.get_by_test_id("agents-empty").wait_for(state="visible", timeout=10000)
     em = page3.get_by_test_id("agents-empty").inner_text()
-    check("empty", "No AI agents found on this computer." in em and "Claude Code, Codex" in em
+    check("empty", "No helpers found on this computer." in em and "Claude Code, Codex" in em
           and page3.get_by_test_id("agents-tiles").count() == 0, text=em)
     page3.close()
     mode["roster"] = "ok"

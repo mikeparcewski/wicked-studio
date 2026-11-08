@@ -436,7 +436,7 @@ export function DeadSeatLine({ seat, label, canReassign, withheld, navigate }: {
             Sign another helper in ›
           </button>
         )
-        : <span data-testid="session-gate-dead-seat-signin">Sign one in on the Agents page.</span>}
+        : <span data-testid="session-gate-dead-seat-signin">Sign one in on the Helpers page.</span>}
     </p>
   );
 }
@@ -539,7 +539,7 @@ export function JudgeWaitLine({ offer, operatorJudgment = true, name = (s) => s,
         Sign another helper in ›
       </button>
     )
-    : <span data-testid="session-gate-judge-signin">Sign one in on the Agents page.</span>;
+    : <span data-testid="session-gate-judge-signin">Sign one in on the Helpers page.</span>;
   if (!operatorJudgment) {
     return (
       <p data-testid="session-gate-judge-wait" data-rejudge="member-step" role="status" className="wk-gate-consequence">

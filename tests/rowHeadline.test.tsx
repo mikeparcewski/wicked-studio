@@ -137,3 +137,15 @@ describe('live nits 2026-10-27: one dot rule, a plain governance cause, the hand
     expect(result.current.size).toBe(0);
   });
 });
+
+describe('healthText (first-run: no home folder from health text)', () => {
+  it('masks a home path behind a URL scheme (the docker socket), and still elsewhere', async () => {
+    const { healthText } = await import('../src/board/rowHeadline.js');
+    const mac = ['', 'Users', 'alice', '.rd', 'docker.sock'].join('/');
+    const linux = ['', 'home', 'alice', 'repo'].join('/');
+    const out = healthText(`failed to connect to the docker API at unix://${mac}; dial unix ${mac}: no such file; see file://${linux}/log`);
+    expect(out).toBe('failed to connect to the docker API at unix://~/.rd/docker.sock; dial unix ~/.rd/docker.sock: no such file; see file://~/repo/log');
+    expect(out).not.toContain(['', 'Users', ''].join('/'));
+    expect(out).not.toContain(['', 'home', ''].join('/'));
+  });
+});

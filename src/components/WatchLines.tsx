@@ -1,3 +1,4 @@
+import { healthText } from '../board/rowHeadline.js';
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { isRouteUnsupported } from '../api/errors.js';
@@ -20,7 +21,7 @@ export const reviewerName = (key: string): string => seatLabel({ key });
 export function WatchGateLine({ runId, ord }: { runId: string; ord?: number | null }): React.ReactElement | null {
   const line = useWatchStore((s) => gateLine(s.fold, runId, ord));
   if (line === null) return null;
-  return <p data-testid="watch-gate-line" className="wk-watch-gate-line">{line}</p>;
+  return <p data-testid="watch-gate-line" className="wk-watch-gate-line">{healthText(line)}</p>;
 }
 
 const entryLabel = (id: string): string => id.replace(/[-_]+/g, ' ');
@@ -69,11 +70,11 @@ export function WatchRunLines({ runId, jumped, onBack, isTerminal, endedMs }: {
         </p>
       )}
       {errorLine !== null && <p data-testid="watch-coverage" className="wk-watch-coverage">{errorLine}</p>}
-      {error !== null && <TechDetails data-testid="watch-coverage-error" text={error} />}
+      {error !== null && <TechDetails data-testid="watch-coverage-error" text={healthText(error)} />}
       {summary !== null && (
         <>
-          <p data-testid="watch-coverage" className="wk-watch-coverage">{summary.line}</p>
-          <TechDetails data-testid="watch-coverage-reasons" summary="Which checks didn’t run" text={summary.reasons} />
+          <p data-testid="watch-coverage" className="wk-watch-coverage">{healthText(summary.line)}</p>
+          <TechDetails data-testid="watch-coverage-reasons" summary="Which checks didn’t run" text={typeof summary.reasons === 'string' ? healthText(summary.reasons) : summary.reasons.map(healthText)} />
         </>
       )}
     </div>

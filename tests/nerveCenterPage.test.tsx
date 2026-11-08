@@ -1,3 +1,4 @@
+import { useViewPrefsStore } from '../src/store/viewPrefs.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -109,6 +110,7 @@ const SNAPSHOT = {
 };
 
 beforeEach(() => {
+  useViewPrefsStore.setState({ prefs: { technical_details: false } });
   resetSystemStore();
   clearCachedRoster();
   caps = { system: true };
@@ -644,4 +646,46 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
       });
     }
   });
+});
+
+it('slice C: no home paths or long IDs in the page, rail tile or their attributes', async () => {
+  const paths = [
+    ['', 'Users', 'alice', 'repo'].join('/'),
+    ['', 'home', 'alice', 'repo'].join('/'),
+    'C:' + '\\' + ['Users', 'alice', 'repo'].join('\\'),
+  ];
+  const id = 'abcdef0123456789'.repeat(3);
+  const words = `A helper needs a look in ${paths.join(' and ')} (${id})`;
+  useViewPrefsStore.setState({ prefs: { technical_details: true } });
+  rosterAnswer = () => Promise.resolve({ roster: SEATS.map((seat) => ({ ...seat, display_name: words, health: { status: 'inactive', since: iso(NOW), message: words } })) });
+  systemAnswer = () => Promise.resolve({
+    ...SNAPSHOT,
+    attention: SNAPSHOT.attention.map((a) => ({ ...a, title: words, reason: words + ' (estate is optional)', remedy: words, action: a.action === null ? null : { ...a.action, label: words } })),
+    clis: [cli({ cli: 'claude', label: words, state: 'benched', stateReason: words, version: words, sandbox: words, statsNote: words, stats: null, lastError: { at: iso(NOW), message: words }, versionPin: { pinned: words, observed: words, matched: false } })],
+    runs: [run({ runId: 'r-safe', title: words, liveness: 'held', reason: words, phase: words, seat: words })],
+    infra: SNAPSHOT.infra.map((r) => ({ ...r, label: words, reason: words, remedy: words, details: { note: words } })),
+    governance: SNAPSHOT.governance.map((g) => ({ ...g, label: words, reason: words, remedy: words, details: { note: words } })),
+  });
+  renderBoth();
+  await screen.findAllByTestId('nc-slow');
+  const assertSafe = (): void => {
+    const roots = [screen.getByTestId('nerve-center-page'), screen.getByTestId('desk-rail-nerve')];
+    for (const root of roots) {
+      const text = [root.textContent ?? '', ...[root, ...root.querySelectorAll('*')].flatMap((el) => [...el.attributes].map((a) => a.value))].join(' ');
+      for (const path of paths) {
+        expect(text).not.toContain(path.split('alice')[0]);
+        expect(text).not.toContain(JSON.stringify(path).slice(1, -1));
+      }
+      expect(text).not.toContain(id);
+    }
+  };
+  assertSafe();
+  expect(screen.getAllByTestId('nc-slow')[0]).toHaveAttribute('data-level', 'red');
+  expect(screen.getAllByTestId('nc-slow')[0]).toHaveTextContent('(estate is optional)');
+  expect(screen.getByTestId('nerve-center-page')).toHaveTextContent(id.slice(0, 8) + '…');
+  for (const tab of ['attention', 'clis', 'runs', 'infra', 'governance']) {
+    openTab(tab);
+    assertSafe();
+  }
+  useViewPrefsStore.setState({ prefs: { technical_details: false } });
 });

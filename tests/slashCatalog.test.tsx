@@ -94,6 +94,8 @@ async function newJobCards(): Promise<Array<[string, string]>> {
   const view = render(<LaunchWizard navigate={() => {}} />);
   act(() => openLaunchWizard({}));
   await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).toBe('catalog'));
+  // first-run P6: New job hides what cannot start until asked; the menu is compared with the whole catalog.
+  fireEvent.click(screen.getByTestId('launch-catalog-soon-toggle'));
   const seen = new Set<string>();
   const out: Array<[string, string]> = [];
   for (const el of document.querySelectorAll<HTMLElement>('[data-testid="launch-catalog-results"] [data-job]')) {
@@ -112,6 +114,8 @@ async function newJobSectionIds(): Promise<Record<string, string[]>> {
   const view = render(<LaunchWizard navigate={() => {}} />);
   act(() => openLaunchWizard({}));
   await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).toBe('catalog'));
+  // first-run P6: New job hides what cannot start until asked; the menu is compared with the whole catalog.
+  fireEvent.click(screen.getByTestId('launch-catalog-soon-toggle'));
   const out: Record<string, string[]> = {};
   for (const sec of document.querySelectorAll<HTMLElement>('[data-testid="launch-catalog-results"] section')) {
     const title = sec.querySelector('.wk-catalog-section-title')?.textContent ?? '';

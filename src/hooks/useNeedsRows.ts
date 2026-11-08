@@ -1,3 +1,5 @@
+import { nerveState } from '../board/nerveCenter.js';
+import { useConnectionStore } from '../store/connection.js';
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import type { SessionView } from '../api/types.js';
@@ -14,8 +16,7 @@ import { useMembershipStore } from '../store/membership.js';
 import { useDecisionsStore } from '../store/decisions.js';
 import { useNeedsSources, type NeedsSource } from '../store/needsSources.js';
 import { attentionBadge } from '../board/attention.js';
-import { useRankedNeeds } from './useRankedNeeds.js';
-import { useSystemStore } from '../store/systemSnapshot.js';
+import { useSystemPoll, useSystemStore } from '../store/systemSnapshot.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { useStallEscalationStore } from '../store/stallEscalations.js';
 import { orphanedRuns, useWatchStore } from '../store/watch.js';
@@ -204,10 +205,12 @@ export function resetSettledNeedsForTest(): void { settledScopes.clear(); }
  */
 export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean, runsFailed = false, scope: string = ALL_NEEDS_SCOPE): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
   const s = useNeedsSources();
-  const ranked = useRankedNeeds();
+  useSystemPoll();
   // Crew has not answered its first read yet: a ranked crew's number may be on its way, so the
   // app-wide number is held (never the fold's count flashing before crew's, coordinator 2026-10-27).
-  const crewPending = useSystemStore((st) => st.mode === 'unknown' && st.healthError === null);
+  const signals = useSystemStore();
+  const ws = useConnectionStore((st) => st.status);
+  const crewPending = signals.mode === 'unknown' && signals.healthError === null;
   const rec = settledScope(scope);
   const [since] = useState(() => Date.now());
   const [, tick] = useState(0);
@@ -251,7 +254,13 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   }, [wakeAt]);
   // A ranked crew's list is ONE settled read: its length is the number for every run (a project's
   // Desk still counts its own rows).
-  if (ranked !== null && scope === ALL_NEEDS_SCOPE && !runsFailed) return { phase: 'complete', count: ranked.attention.length, missing: [] };
+  if (signals.mode === 'system' && scope === ALL_NEEDS_SCOPE) {
+    // One complete system read, exactly the items Nerve Center displays, never a page's partial fold.
+    const state = nerveState(signals, ws, 0, now);
+    return state.read === 'fresh'
+      ? { phase: 'complete', count: state.attention.length, missing: [] }
+      : { phase: 'loading', count: null, missing: [] };
+  }
   if (crewPending && scope === ALL_NEEDS_SCOPE && !runsFailed) return { phase: 'loading', count: null, missing: [] };
   return out;
 }

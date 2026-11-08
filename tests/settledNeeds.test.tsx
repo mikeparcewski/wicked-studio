@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import type { NeedRow } from '../src/board/needsYou.js';
 import { NEEDS_QUIET_MS, resetSettledNeedsForTest, useSettledNeeds } from '../src/hooks/useNeedsRows.js';
+import { normalizeSnapshot } from '../src/api/system.js';
+import { useConnectionStore } from '../src/store/connection.js';
+import { nerveState } from '../src/board/nerveCenter.js';
 import { useNeedsSources } from '../src/store/needsSources.js';
 import { resetSystemStore, useSystemStore } from '../src/store/systemSnapshot.js';
 
@@ -90,4 +93,26 @@ describe('the app-wide number waits for crew', () => {
     act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS + 50); });
     expect(result.current.count).toBe(3);
   });
+});
+
+it('slice C: no badge before the complete system read; then the same items as Nerve Center', () => {
+  useConnectionStore.setState({ status: 'connected' });
+  useSystemStore.setState({ mode: 'system', healthAt: Date.now(), snapshot: null, snapshotAt: null });
+  const { result, rerender } = renderHook(({ r }) => useSettledNeeds(r, true), { initialProps: { r: rows(4) } });
+  act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS + 100); });
+  expect(result.current.count).toBeNull();
+  const now = Date.now();
+  const snapshot = normalizeSnapshot({
+    checkedAt: new Date(now).toISOString(), level: 'red',
+    attention: [{ id: 'estate', severity: 'red', source: 'infra', title: 'Code map service missing', reason: 'Install it.', target: { kind: 'infra', key: 'estate' } }],
+    clis: [], runs: [], infra: [], governance: [],
+  });
+  act(() => useSystemStore.setState({ snapshot, snapshotAt: now, healthAt: now }));
+  expect(result.current.count).toBe(nerveState(useSystemStore.getState(), 'connected', 0, now).attention.length);
+  expect(result.current.count).toBe(1);
+  for (const n of [3, 2, 0]) {
+    rerender({ r: rows(n) });
+    act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS + 100); });
+    expect(result.current.count).toBe(1);
+  }
 });

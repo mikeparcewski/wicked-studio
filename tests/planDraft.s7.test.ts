@@ -95,9 +95,14 @@ describe('the launch rules, extracted (launchModel)', () => {
   it('studio#315: no seat that can carry the work refuses the send and says why', () => {
     expect(launchSubmit({ problem: 'x', selectedClis: new Set(['codex']), submitting: false, targetRequired: false, roster: [benched] }))
       .toMatchObject({ canSubmit: false, noSeatReason: expect.stringMatching(/codex: benched/) });
-    expect(composerSendRefusal([benched], false)).toMatch(/^No helper can take this right now — codex: benched/);
+    // B-C6b: the line is short and plain; the per-helper reason rides a separate `reasons` list, never the line.
+    const r = composerSendRefusal([benched], false);
+    expect(r?.line).toBe('No helper can answer right now.');
+    expect(r?.signIn).toBe(true);
+    expect(r?.reasons[0]).toMatch(/^Codex: benched/);
+    expect(r?.line).not.toMatch(/benched/);
     expect(composerSendRefusal(null, false)).toBeNull();
-    expect(composerSendRefusal([], false)).toMatch(/No helper is set up/);
+    expect(composerSendRefusal([], false)?.line).toMatch(/No helper is set up/);
   });
   it('DES-CATALOG-002 §8.6: studio no longer reads a workflow off the words (detectWorkflow is deleted)', async () => {
     const mod = await import('../src/board/launchModel.js');

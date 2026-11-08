@@ -1,11 +1,8 @@
+import type { SystemSnapshot } from '../api/system.js';
 import { boundaryHolds, type AgentRow } from './agentsModel.js';
 
-/**
- * FIRST USE (DES-seats-page §5): studio opens on the Agents tab's setup steps until the computer is
- * "good enough" — at least one agent ready for new work in a repository, and a repository or a
- * project — and then on the Desk for good (sticky, Q2: a later sign-out never hijacks the landing).
- * Pure; `useFirstUse` feeds it the reads and persists `studio.setup`.
- */
+/** First use stays open until the live helper, skills, code map and runtime checks pass,
+ * and there is somewhere to work. Only an explicit skip hides incomplete setup. */
 
 /** `settings['studio.setup']` — a studio-owned key the daemon stores as-is. */
 export interface SetupState { completedAt?: number; skippedAt?: number }
@@ -22,8 +19,63 @@ export function readSetup(settings: Record<string, unknown> | null | undefined):
   };
 }
 
-export function setupSettled(s: SetupState): boolean {
-  return s.completedAt !== undefined || s.skippedAt !== undefined;
+export function setupSettled(s: SetupState, facts?: SetupFacts): boolean {
+  // Landing decisions use the saved choice. The guide may reopen for a confirmed failure,
+  // but an older service or a probe that did not answer cannot undo a completed setup.
+  if (s.skippedAt !== undefined) return true;
+  if (s.completedAt === undefined) return false;
+  if (facts === undefined) return true;
+  const checks = facts.checks;
+  return checks?.skills !== false && checks?.estate !== false
+    && !(checks?.runtimeRequired === true && checks.runtime === false);
+}
+
+export interface SetupChecks {
+  skills: boolean | null;
+  estate: boolean | null;
+  runtime: boolean | null;
+  runtimeRequired: boolean | null;
+}
+
+export const UNCHECKED_SETUP: SetupChecks = { skills: null, estate: null, runtime: null, runtimeRequired: null };
+
+/** Reuse the Nerve Center's normalized probes, never their raw error prose. */
+export function setupChecks(snapshot: SystemSnapshot | null, health?: unknown, diagnostics?: unknown): SetupChecks {
+  const infra = snapshot?.infra ?? [];
+  const state = (key: string): boolean | null => {
+    const s = infra.find((r) => r.key === key)?.state;
+    return s === undefined || s === 'unknown' ? null : s === 'ok';
+  };
+  const images = infra.find((r) => r.key === 'seat_images');
+  // seat_images is explicitly off when helpers run on this computer. An answered image probe
+  // (ok/degraded) reached the runtime; degraded can mean an image needs preparing, not a stopped runtime.
+  const runtimeRequired = images === undefined || images.state === 'unknown' ? null : images.state !== 'off';
+  const runtime = images === undefined || images.state === 'unknown' ? null
+    : images.state === 'ok' || images.state === 'degraded';
+  const h = health !== null && typeof health === 'object' ? health as Record<string, unknown> : {};
+  const warnings = Array.isArray(h['warnings']) ? h['warnings'] : [];
+  const skillsBlocked = warnings.some((w: unknown) => {
+    if (w === null || typeof w !== 'object') return false;
+    const b = w as Record<string, unknown>;
+    return typeof b['kind'] === 'string' && b['kind'].startsWith('skills.') && b['severity'] === 'error';
+  });
+  const d = diagnostics !== null && typeof diagnostics === 'object' ? diagnostics as Record<string, unknown> : {};
+  const skills = d['skills'] !== null && typeof d['skills'] === 'object' ? d['skills'] as Record<string, unknown> : {};
+  const skillState = typeof skills['state'] === 'string' ? skills['state'] : null;
+  const components = d['components'] !== null && typeof d['components'] === 'object' ? d['components'] as Record<string, unknown> : {};
+  const binaries = components['engineBinaries'] !== null && typeof components['engineBinaries'] === 'object' ? components['engineBinaries'] as Record<string, unknown> : {};
+  const estateVersion = binaries['wicked-estate'];
+  // A missing binary is null in diagnostics. Newer services also name a missing installation
+  // in the estate row; other down states can describe its data store and do not prove absence.
+  const estateRow = infra.find((r) => r.key === 'estate');
+  const estateMissing = estateRow?.state === 'down' && /isn.t installed|not installed/i.test(estateRow.reason ?? '');
+  const estate = estateMissing || estateVersion === null ? false : typeof estateVersion === 'string' && estateVersion.trim() !== '' ? true : null;
+  const skillsReady = skillState === null ? state('skills')
+    : skillState !== 'published' ? false : skills['current'] === undefined ? null : skills['current'] !== null;
+  return {
+    skills: skillsBlocked || state('skills') === false ? false : skillsReady,
+    estate, runtime, runtimeRequired,
+  };
 }
 
 /**
@@ -41,10 +93,12 @@ export function realProjects(projects: readonly { id: string }[]): number {
   return projects.filter((p) => p.id !== 'default').length;
 }
 
-export interface SetupFacts { rows: readonly AgentRow[]; repos: number; projects: number }
+export interface SetupFacts { rows: readonly AgentRow[]; repos: number; projects: number; checks?: SetupChecks }
 
 export function goodEnough(f: SetupFacts): boolean {
-  return setupAgents(f.rows).length >= 1 && (f.repos >= 1 || f.projects >= 1);
+  return setupAgents(f.rows).length >= 1 && (f.repos >= 1 || f.projects >= 1)
+    && f.checks?.skills === true && f.checks.estate === true
+    && (f.checks.runtimeRequired === false || f.checks.runtimeRequired === true && f.checks.runtime === true);
 }
 
 /** One setup step's state, read from the same predicates as the completion rule (§5.1). */

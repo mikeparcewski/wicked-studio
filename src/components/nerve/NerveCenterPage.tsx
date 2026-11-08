@@ -1,3 +1,4 @@
+import { healthText } from '../../board/rowHeadline.js';
 import { InsightsLine } from '../insights/InsightsLine.js';
 import { PageAskButton, pageTextLines, useAskableItems, usePageChatHostPage } from '../chat/PageChat.js';
 import { useEffect, useRef, useState } from 'react';
@@ -38,8 +39,8 @@ function headline(state: NerveState): string {
   if (state.read === 'checking') return 'Checking crew…';
   if (state.read !== 'fresh') return "Can't reach crew — what you see below may be out of date.";
   if (state.tone === 'green') return 'All clear — nothing is stopping work.';
-  if (state.tone === 'red') return `Work is stopped: ${state.words}.`;
-  return `Work still flows: ${state.words}.`;
+  if (state.tone === 'red') return `Work is stopped: ${healthText(state.words)}.`;
+  return `Work still flows: ${healthText(state.words)}.`;
 }
 
 /**
@@ -176,7 +177,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
     body = system ? (
       <>
         <section data-testid="nc-panel-clis" className="wk-nc-panel" aria-labelledby="nc-clis-title">
-          <h2 id="nc-clis-title" className="wk-nc-panel-title">CLIs</h2>
+          <h2 id="nc-clis-title" className="wk-nc-panel-title">Helpers</h2>
           <CliCards clis={snapshot.clis} onSignIn={(key) => act({ kind: 'sign-in', target: key })} />
         </section>
         {/* With the snapshot, the CLI cards carry each CLI's state; the roster's sign-in rows and the
@@ -188,7 +189,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
       </>
     ) : (
       <section data-testid="nc-panel-clis" className="wk-nc-panel" aria-labelledby="nc-clis-title">
-        <h2 id="nc-clis-title" className="wk-nc-panel-title">CLIs</h2>
+        <h2 id="nc-clis-title" className="wk-nc-panel-title">Helpers</h2>
         {helpers}
       </section>
     );
@@ -201,7 +202,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
             ? <RunRows runs={snapshot.runs} now={now} navigate={navigate} />
             : mode === 'fallback'
               ? <p data-testid="nc-runs-fallback" className="wk-health-absent">This crew does not report run liveness yet. The feed below shows what needs you, what went quiet and what finished.</p>
-              : <p data-testid="nc-runs-pending" className="wk-health-absent">{snapshotError !== null ? "Crew's system snapshot could not be read. Re-check, or see the feed below." : 'Checking crew…'}</p>}
+              : <p data-testid="nc-runs-pending" className="wk-health-absent">{snapshotError !== null ? "Crew’s system check could not be read. Re-check, or see the feed below." : 'Checking crew…'}</p>}
         </section>
         {feed !== null && <section data-testid="nc-feed" className="wk-nc-feed" aria-label="Feed">{feed}</section>}
       </>
@@ -239,7 +240,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
     <>
       {mode === 'fallback' && (
         <p data-testid="nc-upgrade-note" className="wk-nc-note">
-          This version of crew does not report the full system yet (each CLI&apos;s week, run liveness, infra probes, governance cards).
+          This version of crew does not report every helper’s week, job activity, service checks and review results yet.
           Upgrade crew to see them. Below are studio&apos;s own checks and the feed.
         </p>
       )}
@@ -283,10 +284,10 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
         <div className="wk-nc-verdict-row">
           <span data-testid="nc-verdict" data-tone={state.tone} className="wk-nc-verdict">
             <span aria-hidden className="wk-nc-verdict-light" />
-            {state.words}<span className="sr-only"> — {toneWord(state.tone)}</span>
+            {healthText(state.words)}<span className="sr-only"> — {toneWord(state.tone)}</span>
           </span>
           <p data-testid="nc-headline" className="wk-nc-headline">
-            {headline(state)}
+            {healthText(headline(state))}
             {answeredAt !== null && <span data-testid="nc-checked" className="wk-nc-checked"> Crew answered at {clock(answeredAt)}.</span>}
           </p>
         </div>
@@ -296,8 +297,8 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
               <button type="button" data-testid="nc-chip" data-area={a.id} data-tone={a.tone} data-stale={a.stale ? 'true' : undefined}
                 className="wk-nc-chip" aria-current={a.id === tab ? 'true' : undefined} onClick={() => openTab(a.id)}>
                 <span aria-hidden className="wk-nc-chip-dot" data-tone={a.tone} />
-                <span className="wk-nc-chip-label">{a.label}</span>
-                <span data-testid="nc-chip-words" className="wk-nc-chip-words">{a.words}</span>
+                <span className="wk-nc-chip-label">{healthText(a.label)}</span>
+                <span data-testid="nc-chip-words" className="wk-nc-chip-words">{healthText(a.words)}</span>
                 <span className="sr-only">, {AREA_TONE_WORD[a.tone]}{a.stale ? ' (not current)' : ''}</span>
               </button>
             </li>
@@ -315,7 +316,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
           tabTestId="nc-tab"
           maxVisible={NERVE_TABS.length}
           tabs={areas.map((a) => ({
-            id: a.id, label: a.label, ...(a.count !== undefined ? { count: a.count } : {}),
+            id: a.id, label: healthText(a.label), ...(a.count !== undefined ? { count: a.count } : {}),
             dot: { tone: a.tone, word: AREA_TONE_WORD[a.tone] + (a.stale ? ', not current' : '') },
           }))}
           active={tab}
@@ -381,19 +382,19 @@ function AttentionList({ items, read, answeredAt, onAct, onOpen }: {
             <span aria-hidden className="wk-nc-glyph" data-level={a.level}>{LEVEL_GLYPH[a.level]}</span>
             <div className="wk-nc-attention-body">
               <span className="wk-nc-attention-text">
-                <span className="sr-only">{a.level === 'red' ? 'Blocking: ' : 'Needs a look: '}</span>{a.text}
+                <span className="sr-only">{a.level === 'red' ? 'Blocking: ' : 'Needs a look: '}</span>{healthText(a.text)}
               </span>
-              {a.reason !== null && <span className="wk-nc-attention-line wk-nc-attention-why">{a.reason}</span>}
-              {a.remedy !== null && <span data-testid="nc-attention-remedy" className="wk-nc-attention-line wk-nc-remedy">{a.remedy}</span>}
+              {a.reason !== null && <span className="wk-nc-attention-line wk-nc-attention-why">{healthText(a.reason)}</span>}
+              {a.remedy !== null && <span data-testid="nc-attention-remedy" className="wk-nc-attention-line wk-nc-remedy">{healthText(a.remedy)}</span>}
             </div>
             <div className="wk-nc-attention-acts">
               {a.action !== null && (
                 <button type="button" data-testid="nc-attention-action" data-kind={a.action.kind} className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => onAct(a.action!)}>
-                  {a.action.label ?? ACTION_WORD[a.action.kind]}
+                  {healthText(a.action.label ?? ACTION_WORD[a.action.kind])}
                 </button>
               )}
               <button type="button" data-testid="nc-attention-goto" data-tab={PANEL_TAB[a.panel]} className="wk-link wk-nc-goto" onClick={() => onOpen(PANEL_TAB[a.panel])}>
-                See {NERVE_TAB_LABEL[PANEL_TAB[a.panel]]}
+                See {healthText(NERVE_TAB_LABEL[PANEL_TAB[a.panel]])}
               </button>
             </div>
           </li>
@@ -426,7 +427,7 @@ const CLI_STATE: Record<SystemCli['state'], { word: string; tone: 'ok' | 'warn' 
 };
 
 function CliCards({ clis, onSignIn }: { clis: SystemCli[]; onSignIn: (key: string) => void }): React.ReactElement {
-  if (clis.length === 0) return <p className="wk-health-absent">Crew reports no CLIs.</p>;
+  if (clis.length === 0) return <p className="wk-health-absent">Crew reports no helpers.</p>;
   return (
     <ul className="wk-nc-cards">
       {clis.map((c) => {
@@ -436,11 +437,11 @@ function CliCards({ clis, onSignIn }: { clis: SystemCli[]; onSignIn: (key: strin
           <li key={c.key} data-testid="nc-cli" data-cli={c.key} data-state={c.state} className="wk-nc-card">
             <div className="wk-nc-card-head">
               <span aria-hidden className="wk-nc-dot" data-tone={st.tone} />
-              <span className="wk-nc-card-name">{c.name}</span>
+              <span className="wk-nc-card-name">{healthText(c.name)}</span>
               <span data-testid="nc-cli-state" className="wk-nc-card-state" data-tone={st.tone}>{st.word}</span>
             </div>
-            {c.reason !== null && <p data-testid="nc-cli-reason" className="wk-nc-line wk-nc-why">{c.reason}{c.benchedUntil !== null ? ` — back ${clock(c.benchedUntil)}` : ''}</p>}
-            {c.units === null && c.statsNote !== null && <p data-testid="nc-cli-statsnote" className="wk-nc-line">{c.statsNote}</p>}
+            {c.reason !== null && <p data-testid="nc-cli-reason" className="wk-nc-line wk-nc-why">{healthText(c.reason)}{c.benchedUntil !== null ? ` — back ${clock(c.benchedUntil)}` : ''}</p>}
+            {c.units === null && c.statsNote !== null && <p data-testid="nc-cli-statsnote" className="wk-nc-line">{healthText(c.statsNote)}</p>}
             {/* The week in one dense line: the number first, its word after (scans as a row). */}
             <dl className="wk-nc-stats">
               <div><dd data-testid="nc-cli-units">{c.units ?? '—'}</dd><dt>units</dt></div>
@@ -454,19 +455,19 @@ function CliCards({ clis, onSignIn }: { clis: SystemCli[]; onSignIn: (key: strin
               <Sparkline days={c.perDay} />
               <span className="wk-nc-line wk-nc-facts">
                 {[
-                  c.version !== null ? <span key="v" data-testid="nc-cli-version">{c.version}</span> : null,
+                  c.version !== null ? <span key="v" data-testid="nc-cli-version">{healthText(c.version)}</span> : null,
                   pin !== null ? (
-                    <span key="p" data-testid="nc-cli-pin" data-matched={pin.matched === null ? 'unknown' : String(pin.matched)} title={pin.pinned !== null ? `pinned ${pin.pinned}${pin.observed !== null ? `, running ${pin.observed}` : ''}` : undefined}>
+                    <span key="p" data-testid="nc-cli-pin" data-matched={pin.matched === null ? 'unknown' : String(pin.matched)} title={pin.pinned !== null ? healthText(`pinned ${pin.pinned}${pin.observed !== null ? `, running ${pin.observed}` : ''}`) : undefined}>
                       {pin.matched === true ? '✓ version pin' : pin.matched === false ? '✗ version pin' : '? version pin'}
                     </span>
                   ) : null,
-                  c.governanceMode !== null ? <span key="g" data-testid="nc-cli-gov">{c.governanceMode}</span> : null,
-                  c.sandbox !== null ? <span key="s" data-testid="nc-cli-sandbox">{c.sandbox}</span> : null,
+                  c.governanceMode !== null ? <span key="g" data-testid="nc-cli-gov">{healthText(c.governanceMode)}</span> : null,
+                  c.sandbox !== null ? <span key="s" data-testid="nc-cli-sandbox">{healthText(c.sandbox)}</span> : null,
                 ].filter((x) => x !== null).flatMap((x, i) => (i === 0 ? [x] : [' · ', x]))}
               </span>
             </div>
             {c.lastError !== null && (
-              <TechDetails data-testid="nc-cli-error" summary="Last error" text={c.lastError.at !== null ? `${new Date(c.lastError.at).toISOString()} — ${c.lastError.message}` : c.lastError.message} />
+              <TechDetails data-testid="nc-cli-error" summary="Last error" text={healthText(c.lastError.at !== null ? `${new Date(c.lastError.at).toISOString()} — ${c.lastError.message}` : c.lastError.message)} />
             )}
             {c.canSignIn && c.state !== 'signed_in' && (
               <button type="button" data-testid="nc-cli-signin" data-cli={c.key} className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => onSignIn(c.key)}>
@@ -491,12 +492,12 @@ function RunRows({ runs, now, navigate }: { runs: SystemRun[]; now: number; navi
           <li key={r.runId} data-testid="nc-run" data-run-id={r.runId} data-liveness={r.liveness} className="wk-nc-run">
             <span data-testid="nc-run-liveness" className="wk-nc-liveness" data-liveness={r.liveness}>{LIVENESS_WORD[r.liveness]}</span>
             <div className="wk-nc-run-body">
-              <span className="wk-nc-run-title" title={r.title}>{r.title}</span>
+              <span className="wk-nc-run-title" title={healthText(r.title)}>{healthText(r.title)}</span>
               <span className="wk-nc-line">
-                {[r.phase, r.seat].filter((x): x is string => x !== null).join(' · ')}
+                {healthText([r.phase, r.seat].filter((x): x is string => x !== null).join(' · '))}
                 {r.lastEventAt !== null && <>{r.phase !== null || r.seat !== null ? ' · ' : ''}<span data-testid="nc-run-last">last event {relTime(r.lastEventAt, now)}</span></>}
               </span>
-              {r.reason !== null && <span className="wk-nc-line wk-nc-why">{r.reason}</span>}
+              {r.reason !== null && <span className="wk-nc-line wk-nc-why">{healthText(r.reason)}</span>}
             </div>
             <a href={path} data-testid={atGate ? 'nc-run-gate' : 'nc-run-open'} className="wk-btn wk-btn--secondary wk-btn--sm"
               onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate(path); }}>
@@ -517,15 +518,15 @@ function InfraRows({ rows, onRecheck }: { rows: SystemInfra[]; onRecheck: () => 
         <li key={r.key} data-testid="nc-infra" data-key={r.key} data-state={r.state} className="wk-nc-infra-row">
           <span aria-hidden className="wk-nc-glyph" data-state={r.state}>{STATE_GLYPH[r.state]}</span>
           <span className="wk-nc-infra-name">
-            {r.name}
+            {healthText(r.name)}
             <span data-testid="nc-infra-state" className="wk-nc-infra-state" data-state={r.state}>{STATE_WORD[r.state]}{r.state === 'unknown' && r.timeoutMs !== null ? ` — no answer in ${duration(r.timeoutMs)}` : ''}</span>
           </span>
           <div className="wk-nc-infra-body">
-            {r.reason !== null && <span className="wk-nc-line">{r.reason}</span>}
-            {r.remedy !== null && r.state !== 'ok' && <span data-testid="nc-infra-remedy" className="wk-nc-line wk-nc-remedy">{r.remedy}</span>}
-            {r.detail !== null && <TechDetails data-testid="nc-infra-detail" text={r.detail} />}
+            {r.reason !== null && <span className="wk-nc-line">{healthText(r.reason)}</span>}
+            {r.remedy !== null && r.state !== 'ok' && <span data-testid="nc-infra-remedy" className="wk-nc-line wk-nc-remedy">{healthText(r.remedy)}</span>}
+            {r.detail !== null && <TechDetails data-testid="nc-infra-detail" text={healthText(r.detail)} />}
           </div>
-          <button type="button" data-testid="nc-infra-recheck" data-key={r.key} className="wk-btn wk-btn--secondary wk-btn--sm wk-nc-infra-recheck" onClick={onRecheck} aria-label={`Re-check ${r.name}`}>
+          <button type="button" data-testid="nc-infra-recheck" data-key={r.key} className="wk-btn wk-btn--secondary wk-btn--sm wk-nc-infra-recheck" onClick={onRecheck} aria-label={`Re-check ${healthText(r.name)}`}>
             Re-check
           </button>
         </li>
@@ -553,13 +554,13 @@ function GovernanceCards({ cards }: { cards: SystemGovernanceCard[] }): React.Re
     <ul className="wk-nc-govcards">
       {cards.map((g) => (
         <li key={g.key} data-testid="nc-gov" data-key={g.key} data-state={g.state} className="wk-nc-govcard">
-          <span className="wk-nc-govcard-name">{g.name}</span>
+          <span className="wk-nc-govcard-name">{healthText(g.name)}</span>
           <span className="wk-nc-govcard-value" data-state={g.state}>
-            <span aria-hidden className="wk-nc-glyph" data-state={g.state}>{STATE_GLYPH[g.state]}</span> {governanceValue(g, cards)}
+            <span aria-hidden className="wk-nc-glyph" data-state={g.state}>{STATE_GLYPH[g.state]}</span> {healthText(governanceValue(g, cards))}
           </span>
-          {g.breakdown !== null && <span data-testid="nc-gov-breakdown" className="wk-nc-line">{g.breakdown}</span>}
-          {g.detail !== null && <span className="wk-nc-line">{g.detail}</span>}
-          {g.remedy !== null && g.state !== 'ok' && <span className="wk-nc-line wk-nc-remedy">{g.remedy}</span>}
+          {g.breakdown !== null && <span data-testid="nc-gov-breakdown" className="wk-nc-line">{healthText(g.breakdown)}</span>}
+          {g.detail !== null && <span className="wk-nc-line">{healthText(g.detail)}</span>}
+          {g.remedy !== null && g.state !== 'ok' && <span className="wk-nc-line wk-nc-remedy">{healthText(g.remedy)}</span>}
         </li>
       ))}
     </ul>

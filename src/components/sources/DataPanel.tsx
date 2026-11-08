@@ -182,7 +182,7 @@ export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onTe
       )}
       <section className="wk-src-sec" aria-label="Actions">
         <div className="wk-src-sech"><span>Actions</span><span className="wk-src-sp" /><span className="wk-src-cap">asks every time</span></div>
-        {actions.length === 0 && <p className="wk-src-cap" data-testid="data-panel-no-actions">None yet. Declare a row write from a table’s ⋯ menu.</p>}
+        {actions.length === 0 && <p className="wk-src-cap" data-testid="data-panel-no-actions">None yet. Once a source has tables, use a table’s ⋯ menu to allow an app to change rows.</p>}
         <ul className="wk-src-list">
           {actions.map((a) => (
             <li key={a.id} className="wk-src-row" data-testid="data-panel-action" data-granted={a.granted ? 'yes' : 'no'}>

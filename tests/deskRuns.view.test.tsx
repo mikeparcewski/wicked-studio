@@ -186,3 +186,12 @@ describe('Jobs by project (operator 2026-11-01: "display (and allow for filterin
     expect(within(working).getByTestId('desk-runs-line').textContent).not.toMatch(/Studio Desk/);
   });
 });
+
+ it.each([false, true])('slice C: one primary action on an empty Jobs list (finished jobs: %s)', (hasFinished) => {
+   const p = props();
+   render(<DeskRuns {...p} runs={hasFinished ? p.runs.filter((r) => r.session.status === 'completed') : []} />);
+   const actions = screen.getAllByRole('button', { name: /^(New job|Start a job)$/ });
+   expect(actions).toHaveLength(1);
+   fireEvent.click(actions[0]!);
+   expect(p.onNewJob).toHaveBeenCalledOnce();
+ });

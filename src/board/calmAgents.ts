@@ -1,3 +1,4 @@
+import { helperNotInstalled } from './agentsCopy.js';
 import { benchWord, type AgentRow, type Tone, agentTiles } from './agentsModel.js';
 
 /**
@@ -21,6 +22,7 @@ function clock(iso: string): string | null {
 
 /** The status word: the row's own readiness, in the page's fewer words. */
 export function agentStatus(row: AgentRow): AgentStatus {
+  if (helperNotInstalled(row)) return { word: 'Not installed', tone: 'fail', move: null };
   if (row.sign.word === 'Signed out') return { word: 'Not signed in', tone: 'quiet', move: 'signin' };
   if (row.bench !== null) {
     const at = clock(row.bench.lifts_at);
@@ -41,7 +43,7 @@ export function agentWeekLine(row: AgentRow): string | null {
 
 /** The page's one sentence: "3 of 5 are ready to work." */
 export function agentsSentence(rows: readonly AgentRow[]): string {
-  if (rows.length === 0) return 'No AI agents found on this computer yet.';
+  if (rows.length === 0) return 'No helpers found on this computer yet.';
   const t = agentTiles(rows);
   if (rows.length === 1) return t.ready === 1 ? 'Your one agent is ready to work.' : 'Your one agent isn’t ready to work yet.';
   if (t.ready === rows.length) return `All ${rows.length} are ready to work.`;

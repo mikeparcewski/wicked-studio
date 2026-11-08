@@ -64,8 +64,8 @@ export const PAGE_CHAT_SPECS: Record<PageChatKind, PageChatSpec> = {
     hint: 'Ask what studio has learned about your style, rules and brand, and what to teach it next.',
   },
   agents: {
-    title: 'Agents', placeholder: 'Ask about your agents…',
-    hint: 'Ask about your agents: who is signed in, how each has done, which to use for what. The chat sees this page.',
+    title: 'Helpers', placeholder: 'Ask about your helpers…',
+    hint: 'Ask about your helpers: who is signed in, how each has done, which to use for what. The chat sees this page.',
   },
   repos: {
     title: 'Repositories', placeholder: 'Ask about your repositories…',
@@ -145,7 +145,7 @@ export function nextOptions(ctx: NextContext): AskOption[] {
       return [
         { ...FOLLOW, recommended: true },
         opt('recheck', 'Check again', 'Reads the system again now; this page updates with what it finds.'),
-        opt('agents', 'Open Agents', 'Opens the Agents page: each helper’s sign-in, health and record.'),
+        opt('agents', 'Open Helpers', 'Opens the Helpers page: each helper’s sign-in, health and record.'),
         NONE,
       ];
     case 'evaluate':

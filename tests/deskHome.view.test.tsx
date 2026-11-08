@@ -93,7 +93,7 @@ describe('the landing', () => {
 
   it('nothing can run: the agents setup item leads the card; other setup only when nothing waits', () => {
     mount({ needRows: [need('g', 'gate')], runs: [deskRun('g', { status: 'awaiting_human' })],
-      setup: [{ key: 'agents', tone: 'fail', title: 'Set up your agents', line: 'None can work yet.', action: { label: 'Set up agents', path: '/?tab=agents' } }] });
+      setup: [{ key: 'agents', tone: 'fail', title: 'Set up your helpers', line: 'None can work yet.', action: { label: 'Set up agents', path: '/?tab=agents' } }] });
     expect(screen.getByTestId('desk-card')).toHaveAttribute('data-setup', 'agents');
     expect(screen.getByTestId('desk-needs-more')).toHaveTextContent('1 more waiting');
     cleanup();

@@ -34,7 +34,7 @@ export function useFirstUseLanding(pathname: string, search: string, navigate: N
     if (a.rosterState !== 'ok' || a.roster === null) return;
     decided.current = true;
     const rows = agentRows({ roster: a.roster, acpByCli: a.acpByCli, record: a.record, defaults: storedDefaults(), now: Date.now() });
-    if (goodEnough({ rows, repos: f.repos, projects: f.projects })) { void f.save({ completedAt: Date.now() }); return; }
+    if (goodEnough({ rows, repos: f.repos, projects: f.projects, checks: f.checks })) { void f.save({ completedAt: Date.now() }); return; }
     // Only while the user is still where the app opened (they may have moved on).
     if (pathname === '/' && search === '') navigate(SETUP_PATH, { replace: true });
   }, [f, a.rosterState, a.roster, a.acpByCli, a.record, pathname, search, navigate]);

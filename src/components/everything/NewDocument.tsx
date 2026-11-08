@@ -6,7 +6,8 @@ import type { ArtifactProposal, ProposalEdits } from '../../api/chatArtifacts-wi
 import { formSources, proposalFormEdits, proposalFormOf, proposalHelperEligible, repoKeysOf, type ProposalForm } from '../../board/artifactProposal.js';
 import { apiStatus } from '../../api/errors.js';
 import type { Project, RosterSeat } from '../../api/types.js';
-import { chosenSeats, defaultDocSeats, docClisJson } from '../../board/docSeats.js';
+import { andList, chosenSeats, defaultDocSeats, docClisJson, docHelperCounts, leftOutWords } from '../../board/docSeats.js';
+import { AGENTS_PATH } from '../../hooks/useRoute.js';
 import { newDocBody, newDocName } from '../../board/newDocument.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { docSlug } from '../../interactive/docSlug.js';
@@ -54,7 +55,7 @@ export function NewDocument(props: Parameters<typeof NewDocumentForm>[0] | { ans
  * document with "Open it"; any other refusal keeps the form with the daemon's words verbatim;
  * nothing is retried by itself. On success the door closes onto the new document (`open=`).
  */
-function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose, onCreated, onOpen }: {
+function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose, onCreated, onOpen, navigate }: {
   projects: readonly Project[];
   /** The ambient project (`?project=`), preselected; null = Unfiled. */
   initialProject: string | null;
@@ -65,6 +66,8 @@ function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose
   onCreated: (projectId: string, name: string, format: DocFormat) => void;
   /** "Open it" on a collision: the existing document's project and name. */
   onOpen: (projectId: string, name: string) => void;
+  /** first-run C7: "Sign one in" goes to the Agents page in the app (absent: a plain link). */
+  navigate?: (path: string) => void;
 }): React.ReactElement {
   const [projectId, setProjectId] = useState<string>(initialProject ?? UNFILED_MOUNT);
   // slash-catalog: the words a catalog pick (New job's card, a `/` row) carried here are the brief — when
@@ -98,6 +101,17 @@ function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose
   // the create succeeded and the draft then failed at plan, leaving an empty page. Said up front.
   const seatBlocked = chosen === null || chosen.length < MIN_DOC_SEATS;
   const leftOut = (defaults?.leftOut ?? []).filter((x) => selected === null || !selected.has(x.key));
+  // first-run C7: why helpers were left out, in plain words (never the service's "(broker credential signed_out)"),
+  // and the two-helper rule said up front when fewer than two can work at all.
+  const why = roster !== null ? leftOutWords(roster, leftOut) : null;
+  const counts = roster !== null ? docHelperCounts(roster) : { ready: 0, unknown: 0 };
+  const ready = counts.ready;
+  // Said only when the roster KNOWS fewer than two can work (an unknown reading is not counted out).
+  const tooFew = roster !== null && counts.ready + counts.unknown < MIN_DOC_SEATS;
+  const signInLink = (
+    <a href={AGENTS_PATH} data-testid="made-new-document-signin" className="wk-link"
+      onClick={navigate === undefined ? undefined : (e) => { e.preventDefault(); navigate(AGENTS_PATH); }}>Sign one in</a>
+  );
   const toggleSeat = (key: string): void => {
     if (selected === null) return;
     const next = new Set(selected);
@@ -187,13 +201,25 @@ function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose
             })}
           </span>
           <span data-testid="made-new-document-council" role={seatBlocked ? 'alert' : undefined}>
-            {seatBlocked
-              ? (chosen ?? []).length === 0
-                ? 'Choose two helpers: one writes the document and another checks it.'
-                : 'Add a second helper: one writes the document and another checks it.'
-              : `Helpers: ${(chosen ?? []).map((s) => s.display_name || s.key).join(' · ')}`}
-            {leftOut.length > 0 && ` — left out: ${leftOut.map((x) => `${x.key} (${x.detail})`).join(', ')}`}
+            {tooFew
+              ? `A document needs two helpers that can work now: one writes it and another checks it.${counts.unknown > 0 ? '' : ready === 0 ? ' None can work now.' : ' Only one can work now.'}`
+              : seatBlocked
+                ? (chosen ?? []).length === 0
+                  ? 'Choose two helpers: one writes the document and another checks it.'
+                  : 'Add a second helper: one writes the document and another checks it.'
+                : `Helpers: ${(chosen ?? []).map((s) => s.display_name || s.key).join(' · ')}`}
           </span>
+          {why !== null && why.signedOut.length > 0 && (
+            <span data-testid="made-new-document-signed-out">
+              Not signed in: {andList(why.signedOut)}. {signInLink}
+            </span>
+          )}
+          {why !== null && why.unavailable.length > 0 && (
+            <span data-testid="made-new-document-unavailable">
+              Can’t take work right now:{' '}
+              {why.unavailable.map((u, i) => `${i > 0 ? (i === why.unavailable.length - 1 ? ' and ' : ', ') : ''}${u.name}${u.why !== null ? ` (${u.why})` : ''}`).join('')}.
+            </span>
+          )}
         </div>
       )}
       {collision !== null && (

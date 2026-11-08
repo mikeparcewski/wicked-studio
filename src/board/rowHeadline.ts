@@ -1,3 +1,4 @@
+import { displayPath, displayText } from './homePath.js';
 import type { SystemAttention } from '../api/system.js';
 
 /**
@@ -9,10 +10,23 @@ import type { SystemAttention } from '../api/system.js';
  * Slowing work now) reads it here.
  */
 export function rowHeadline(item: SystemAttention, cause: string | null = null): string {
-  return cause ?? item.text;
+  return healthText(cause ?? item.text);
 }
 
 /** The row's first muted words: the job's title under a cause headline, else crew's reason. */
 export function rowLead(item: SystemAttention, cause: string | null = null): string | null {
-  return cause !== null && cause !== item.text ? item.text : item.reason;
+  const text = cause !== null && cause !== item.text ? item.text : item.reason;
+  return text === null ? null : healthText(text);
+}
+
+/**
+ * Health and attention prose, as crew wrote it, made safe to show (first-run, 2026-11-08): no home folder (`~/…`, also
+ * JSON-escaped Windows paths) and no 32+ character hex id (its first 8 characters + "…"). Crew's words are its own:
+ * the plain causes are crew's to write (lane fr-crew), so no wording is rewritten here.
+ */
+export function healthText(text: string): string {
+  // A path behind a URL scheme (a `unix://` docker socket or a `file://` path under a home folder) has no prose delimiter before it.
+  const unescaped = text.replace(/\\\\/g, '\\').replace(/\b([a-z][a-z0-9+.-]*:\/\/)(\/[^\s"'`)\]>,;]+)/gi, (_m, scheme: string, path: string) => scheme + displayPath(path));
+  return displayText(unescaped)
+    .replace(/[0-9a-f]{32,}/gi, (id) => `${id.slice(0, 8)}…`);
 }

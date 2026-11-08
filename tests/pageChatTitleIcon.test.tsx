@@ -14,11 +14,11 @@ afterEach(() => { cleanup(); usePageChat.setState({ open: {} }); });
 describe('the page chat title icon', () => {
   it('sits right after the title in each page head, an icon with a name, no Ask label', () => {
     render(<>
-      <CalmHead title="Agents" titleAside={<PageAskButton kind="agents" testId="a" />} sentence="s" />
+      <CalmHead title="Helpers" titleAside={<PageAskButton kind="agents" testId="a" />} sentence="s" />
       <QuietHead title="Repositories" titleAside={<PageAskButton kind="repos" testId="r" />} sentence="s" />
       <PageFrame title="Learn" titleAside={<PageAskButton kind="learn" testId="l" />}><p>x</p></PageFrame>
     </>);
-    for (const [id, title] of [['a', 'Agents'], ['r', 'Repositories'], ['l', 'Learn']] as const) {
+    for (const [id, title] of [['a', 'Helpers'], ['r', 'Repositories'], ['l', 'Learn']] as const) {
       const icon = screen.getByTestId(id);
       expect(icon.previousElementSibling?.textContent).toBe(title);
       expect(icon.parentElement?.className).toBe('wk-pagetitle');

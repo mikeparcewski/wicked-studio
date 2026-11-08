@@ -76,10 +76,10 @@ describe('the page and its states (§3.3)', () => {
     expect(screen.queryByTestId('agents-check-all')).toBeNull();
   });
 
-  it('error: "Couldn’t load agents." with Retry, and no header action', async () => {
+  it('error: "Couldn’t load helpers." with Retry, and no header action (first-run P8: one word, helpers)', async () => {
     getRoster.mockRejectedValue(new ApiError(500, 'boom'));
     renderPage();
-    expect(await screen.findByTestId('agents-banner')).toHaveTextContent('Couldn’t load agents.');
+    expect(await screen.findByTestId('agents-banner')).toHaveTextContent('Couldn’t load helpers.');
     expect(screen.queryByTestId('agents-check-all')).toBeNull();
   });
 
@@ -92,14 +92,14 @@ describe('the page and its states (§3.3)', () => {
   it('empty: names the agents to install, with the install docs and Check again', async () => {
     getRoster.mockResolvedValue({ roster: [] });
     renderPage();
-    expect(await screen.findByTestId('agents-empty')).toHaveTextContent('No AI agents found on this computer.');
+    expect(await screen.findByTestId('agents-empty')).toHaveTextContent('No helpers found on this computer.');
     expect(screen.getByRole('link', { name: 'How to install an agent' })).toHaveAttribute('href', expect.stringContaining('wicked-crew'));
   });
 
   it('partial: diagnostics failed — the table renders, a banner names what is missing', async () => {
     getDiagnostics.mockRejectedValue(new ApiError(500, 'x'));
     renderPage();
-    expect(await screen.findByTestId('agents-partial')).toHaveTextContent('how often each agent has to start fresh');
+    expect(await screen.findByTestId('agents-partial')).toHaveTextContent('how often each helper has to start fresh');
     expect(screen.getAllByTestId('agents-row')).toHaveLength(3);
   });
 });

@@ -274,7 +274,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
           {note.text} <button type="button" className="wk-link wk-se-x" onClick={() => setNote(null)} aria-label="Dismiss">Dismiss</button>
         </CalmNote>
       )}
-      {coverage.kind === 'failed' && <StateBanner kind={coverage.error.kind} what="the memory totals" error={coverage.error.message} onRetry={loadCoverage} />}
+      {coverage.kind === 'failed' && error === null && <StateBanner kind={coverage.error.kind} what="the memory totals" error={coverage.error.message} onRetry={loadCoverage} />}
       {view === 'proposals' ? (
         <div className="wk-se-proposals wk-calm-proposals" data-testid="memory-proposals">
           <ProposalsSection kind="memory" heading="Memory proposals" editable revision={proposalsRev} runId={runFilter}
@@ -284,7 +284,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         <NotAcceptedList kind="memory" revision={rejectedRev} projectName={projectName} />
       ) : loading && memories.length === 0 ? (
         // A re-read after a write keeps the rows on screen (no flash to the loading shape); the first read shows it.
-        <CalmLoading data-testid="memories-loading" rows={4} label="Reading what your agents learned" />
+        <CalmLoading data-testid="memories-loading" rows={4} label="Reading what your helpers learned" />
       ) : unsupported ? (
         <CalmEmpty data-testid="memories-unsupported" title="This crew can’t browse its memories yet." body={<p>Memory proposals still show under Proposed.</p>} />
       ) : error !== null ? (
@@ -294,12 +294,12 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
           title={filtered ? (memories.length > 0 ? 'No memory matches these filters.' : `No memory matches “${query}”.`)
             // The store's own total says otherwise (#406): never call a non-empty store empty.
             : total !== null && total > 0 ? `The store holds ${total} ${total === 1 ? 'memory' : 'memories'}, but none were listed. Try a search.`
-            : 'When your agents learn something, it shows up here.'}
+            : 'When your helpers learn something, it shows up here.'}
           body={filtered || (total !== null && total > 0) ? undefined
             : <p>It may come from a session, or from something you tell them. Agents propose what to keep; you approve it.</p>}
           action={filtered
             ? <CalmButton onClick={clearFilters} testId="memories-clear">Clear filters</CalmButton>
-            : <CalmButton onClick={addIt}>Tell your agents something</CalmButton>} />
+            : <CalmButton onClick={addIt}>Tell your helpers something</CalmButton>} />
       ) : (
         <CalmRows data-testid="memories-list" label="Memories">{visible.map(memoryRow)}</CalmRows>
       )}

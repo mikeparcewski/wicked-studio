@@ -802,6 +802,7 @@ function MadeTab({ runs, runsLoaded = true, q, navigate, go }: { runs: SessionVi
           // on a filter that says "No documents yet" beside it; an existing one opens on All.
           onCreated={(pid, name, format) => navigate(everythingPath({ tab: 'made', kind: madeKindForFormat(format), project: pid, open: name }), { replace: true })}
           onOpen={(pid, name) => navigate(everythingPath({ tab: 'made', kind: 'all', project: pid, open: name }))}
+          navigate={(path) => navigate(path)}
         />
       )}
       {deleting !== null && (

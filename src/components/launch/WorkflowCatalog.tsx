@@ -3,7 +3,7 @@ import {
   applyFilters, filtersActive, needsLine, NO_FILTERS, searchCatalog, topEntries,
   type CatalogEntry, type CatalogFilters, type CatalogView, type RepoFilter,
 } from '../../board/workflowCatalog.js';
-import { hasWorkflowArt, WorkflowArt } from './WorkflowArt.js';
+import { artShapeOf, hasWorkflowArt, WorkflowArt } from './WorkflowArt.js';
 
 /**
  * NEW JOB'S FIRST STEP: THE WORKFLOW CATALOG (operator 2026-11-01). Search on top, filters under it,
@@ -115,7 +115,7 @@ export function WorkflowCatalog({ view, failed = false, pickedId, pickedEntryId 
     const metaText = meta.join(' · ');
     const body = (
       <>
-        <span className="wk-catalog-card-art"><WorkflowArt workflowKey={en.artKey} /></span>
+        <span className="wk-catalog-card-art"><WorkflowArt workflowKey={en.artKey} shape={artShapeOf(en)} /></span>
         <span className="wk-catalog-card-words">
           <span className="wk-catalog-card-name">
             <span className="wk-launch-wizard-choice-name">{en.title}</span>
@@ -149,7 +149,7 @@ export function WorkflowCatalog({ view, failed = false, pickedId, pickedEntryId 
         data-catalog-card={place}
         data-job={en.id}
         data-testid={place === 'fit' ? `launch-catalog-fit-${en.launchId}` : place === 'top' ? `launch-catalog-top-${en.launchId}` : `launch-wizard-workflow-${en.launchId}`}
-        data-art={hasWorkflowArt(en.artKey) ? en.artKey : 'fallback'}
+        data-art={hasWorkflowArt(en.artKey) ? en.artKey : artShapeOf(en) ?? 'fallback'}
         data-autofocus={on && place === 'cat' ? 'true' : undefined}
         aria-pressed={on}
         className={`wk-launch-wizard-choice wk-catalog-card${on ? ' wk-launch-wizard-choice--on' : ''}`}
@@ -171,7 +171,7 @@ export function WorkflowCatalog({ view, failed = false, pickedId, pickedEntryId 
   const total = view?.entries.length ?? 0;
   const noResults = view !== null && total > 0 && (searching ? results.length === 0 : sections.length === 0);
   const pickedOnLoad = view?.entries.some((e) => isPicked(e) && e.status === 'ready') ?? false;
-  const extraFilters = (filters.repo !== 'any' ? 1 : 0) + (filters.showSoon ? 0 : 1);
+  const extraFilters = (filters.repo !== 'any' ? 1 : 0) + (filters.showSoon !== NO_FILTERS.showSoon ? 1 : 0);
 
   return (
     <div className="wk-catalog" data-testid="launch-catalog" data-source={view?.source ?? 'loading'}>
