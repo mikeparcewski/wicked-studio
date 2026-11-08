@@ -187,11 +187,14 @@ describe('search ranking', () => {
 describe('filters', () => {
   it('by category, by repository need and by status', () => {
     const v = view();
-    expect(ids(applyFilters(v.entries, { ...NO_FILTERS, category: 'resolve' }))).toEqual(['bug', 'migration']);
-    expect(ids(applyFilters(v.entries, { ...NO_FILTERS, repo: 'without' }))).toEqual([
+    // first-run P6: the default hides what cannot start; these cases look at everything.
+    expect(NO_FILTERS.showSoon).toBe(false);
+    const ALL = { ...NO_FILTERS, showSoon: true };
+    expect(ids(applyFilters(v.entries, { ...ALL, category: 'resolve' }))).toEqual(['bug', 'migration']);
+    expect(ids(applyFilters(v.entries, { ...ALL, repo: 'without' }))).toEqual([
       'apps', 'document-interactive', 'document-static', 'presentation', 'demo-video', 'review-recent-work', 'learn', 'draft-epics', 'start-chat',
     ]);
-    expect(applyFilters(v.entries, { ...NO_FILTERS, repo: 'needs' }).every((e) => e.needs.includes('repo'))).toBe(true);
+    expect(applyFilters(v.entries, { ...ALL, repo: 'needs' }).every((e) => e.needs.includes('repo'))).toBe(true);
     const ready = applyFilters(v.entries, { ...NO_FILTERS, showSoon: false });
     expect(ready.every((e) => e.status === 'ready')).toBe(true);
     expect(ids(applyFilters(v.entries, { category: 'test', repo: 'needs', showSoon: false }))).toEqual(['test-plan', 'test-analysis', 'qe-author-tests']);

@@ -173,6 +173,45 @@ function StartChatArt(): ReactElement {
   );
 }
 
+/** A document: a page with lines, its title in the accent (first-run P6: documents had the neutral drawing). */
+function DocumentArt(): ReactElement {
+  return (
+    <Frame>
+      <path className={W} d="M30 8h26l12 12v36a4 4 0 0 1-4 4H30a4 4 0 0 1-4-4V12a4 4 0 0 1 4-4z" />
+      <path d="M56 8v12h12" />
+      <path className={A} d="M33 22h16" />
+      <path d="M33 31h28M33 38h28M33 45h20" />
+    </Frame>
+  );
+}
+
+/** Slides: a 16:9 frame with a chart bar in the accent. */
+function DeckArt(): ReactElement {
+  return (
+    <Frame>
+      <rect className={W} x="14" y="10" width="68" height="40" rx="4" />
+      <path d="M48 50v8M40 58h16" />
+      <path d="M22 20h22" />
+      <path d="M26 42v-8M36 42v-14" />
+      <path className={A} d="M46 42v-18" />
+      <path d="M56 28h18M56 34h14" />
+    </Frame>
+  );
+}
+
+/** An app: a dashboard of tiles, one tile in the accent. */
+function AppArt(): ReactElement {
+  return (
+    <Frame>
+      <rect x="12" y="8" width="72" height="48" rx="5" />
+      <path d="M12 17h72" />
+      <rect className={W} x="18" y="23" width="26" height="14" rx="2" />
+      <rect className={A} x="50" y="23" width="28" height="14" rx="2" />
+      <path d="M18 45h60M18 50h40" />
+    </Frame>
+  );
+}
+
 /** A workflow studio has no drawing for: a plain run of steps. */
 function FallbackArt(): ReactElement {
   return (
@@ -205,8 +244,20 @@ export function hasWorkflowArt(key: string): boolean {
   return Object.prototype.hasOwnProperty.call(ART, key);
 }
 
-/** The drawing for a workflow key; the neutral one for a key studio does not know. */
-export function WorkflowArt({ workflowKey }: { workflowKey: string }): ReactElement {
-  const Art = hasWorkflowArt(workflowKey) ? ART[workflowKey]! : FallbackArt;
+/** What a card makes, when its key has no drawing of its own (first-run P6): a document, slides or an app. */
+export type ArtShape = 'document' | 'deck' | 'app' | null;
+
+/** The shape a catalog entry makes, from its launch kind and document style. */
+export function artShapeOf(e: { launchKind: string; docStyle?: string | null }): ArtShape {
+  if (e.launchKind === 'app') return 'app';
+  if (e.launchKind === 'document') return e.docStyle === 'ppt' ? 'deck' : 'document';
+  return null;
+}
+
+const SHAPE_ART: Readonly<Record<Exclude<ArtShape, null>, () => ReactElement>> = { document: DocumentArt, deck: DeckArt, app: AppArt };
+
+/** The drawing for a workflow key; else the drawing for what it makes; else the neutral one. */
+export function WorkflowArt({ workflowKey, shape = null }: { workflowKey: string; shape?: ArtShape }): ReactElement {
+  const Art = hasWorkflowArt(workflowKey) ? ART[workflowKey]! : shape !== null ? SHAPE_ART[shape] : FallbackArt;
   return <Art />;
 }

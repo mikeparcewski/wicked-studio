@@ -517,7 +517,11 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
           <div>
             <h2 id={titleId} className="wk-launch-wizard-title">{title}</h2>
             <p className="wk-launch-wizard-progress" data-testid="launch-wizard-progress">
-              Step {order.indexOf(step) + (draft.workflowId === null || step === 'workflow' ? 1 : 0)} of {draft.workflowId === null || step === 'workflow' ? order.length : order.length - 1}: {STEP_TITLE[step]}
+              {/* first-run C6: a pick here usually continues in a chat (or a form), so the first screen promises no
+                  step count it can't keep; the steps a workflow does walk here are counted from its own first one. */}
+              {step === 'workflow' && cardsStartInChat
+                ? 'Pick what to do. Most jobs continue in a chat, where you say what you want and approve the plan before anything runs.'
+                : <>Step {order.indexOf(step) + (draft.workflowId === null || step === 'workflow' ? 1 : 0)} of {draft.workflowId === null || step === 'workflow' ? order.length : order.length - 1}: {STEP_TITLE[step]}</>}
             </p>
           </div>
           <button type="button" className="wk-btn wk-btn--icon wk-btn--quiet" aria-label="Close (your choices are kept)" title="Close (your choices are kept)" data-testid="launch-wizard-close" disabled={launching} onClick={close}>×</button>

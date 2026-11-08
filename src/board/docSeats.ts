@@ -49,3 +49,46 @@ export function chosenSeats(roster: readonly RosterSeat[], selected: ReadonlySet
 export function docClisJson(roster: readonly RosterSeat[], selected: ReadonlySet<string>): string {
   return JSON.stringify(chosenSeats(roster, selected));
 }
+
+/** Why the default left helpers out, in plain words (first-run C7): who is not signed in, and who can't work now. */
+export interface LeftOutWords {
+  /** Display names of the helpers that are not signed in. */
+  signedOut: string[];
+  /** Display names of the helpers that are signed in but can't take work now, each with the service's reason (hover). */
+  unavailable: Array<{ name: string; title: string | null }>;
+}
+
+const nameOf = (roster: readonly RosterSeat[], key: string): string => {
+  const s = roster.find((x) => x.key === key);
+  return s === undefined ? key : s.display_name || s.key;
+};
+
+/** A helper with no sign-in, whatever the service says about checks (its reason then only repeats "signed out"). */
+function notSignedIn(seat: RosterSeat | undefined): boolean {
+  if (seat === undefined) return false;
+  const auth = (seat as Record<string, unknown>)['auth'];
+  return auth === 'signed_out' || (auth !== 'signed_in' && auth !== 'not_required' && seat.signed_in === false);
+}
+
+export function leftOutWords(roster: readonly RosterSeat[], leftOut: readonly LeftOutSeat[]): LeftOutWords {
+  const out: LeftOutWords = { signedOut: [], unavailable: [] };
+  for (const x of leftOut) {
+    const seat = roster.find((s) => s.key === x.key);
+    if (notSignedIn(seat)) out.signedOut.push(nameOf(roster, x.key));
+    else out.unavailable.push({ name: nameOf(roster, x.key), title: seatStandingWord(seat ?? ({ key: x.key } as RosterSeat)).title });
+  }
+  return out;
+}
+
+/** How many helpers on the roster could take a document's work now (signed in, or needing no sign-in, and picked for checks). */
+export function readyDocHelpers(roster: readonly RosterSeat[]): number {
+  return roster.filter((s) => {
+    const k = seatStandingWord(s).kind;
+    return k === 'signed-in' || k === 'no-sign-in-needed';
+  }).length;
+}
+
+/** "A, B and C". */
+export function andList(names: readonly string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}

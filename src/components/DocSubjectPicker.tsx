@@ -24,7 +24,7 @@ import { UNFILED_MOUNT } from '../api/interactive.js';
 export type DocFormat = '' | 'web' | 'doc' | 'ppt' | 'brochure';
 
 export const DOC_FORMATS: ReadonlyArray<{ value: DocFormat; label: string }> = [
-  { value: '', label: 'Format: from the brief' },
+  { value: '', label: 'From what you wrote' },
   { value: 'web', label: 'Web page' },
   { value: 'doc', label: 'Document' },
   { value: 'ppt', label: 'Slides' },
@@ -334,19 +334,22 @@ export function DocSubjectPicker({
           could not add it to the project: {addFailure}
         </span>
       )}
-      {(
+      {/* first-run C7: the format is its own labelled row, never read as part of the grounding line beside it. */}
+      <label data-testid="doc-format-row" className="flex items-center gap-1.5" style={{ flexBasis: '100%', minWidth: 0 }}>
+        <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>Format</span>
         <select
           data-testid="doc-format"
           aria-label="Document format"
           value={format}
           onChange={(e) => onFormat(e.target.value as DocFormat)}
           className="wk-field"
+          style={{ maxWidth: '100%', minWidth: 0 }}
         >
           {DOC_FORMATS.map((f) => (
             <option key={f.value || 'auto'} value={f.value}>{f.label}</option>
           ))}
         </select>
-      )}
+      </label>
     </div>
   );
 }
