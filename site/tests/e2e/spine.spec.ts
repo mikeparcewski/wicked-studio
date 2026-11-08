@@ -216,15 +216,15 @@ test.describe("What's new: the tab row is one line", () => {
     await page.goto('/');
     await goTo(page, 'new');
     const row = page.locator('.news-tabs');
-    await row.getByRole('tab', { name: 'Apps' }).click();
+    await row.getByRole('tab', { name: 'Documents' }).click();
     const y = await page.evaluate(() => window.scrollY);
-    for (const name of ['Data sources', 'Agents box', 'Trackers', 'Dashboards', 'Knowledge map']) {
+    for (const name of ['Sources', 'Reports', 'Review', 'Publish', 'Plugins']) {
       await page.keyboard.press('ArrowRight');
       await expect(row.getByRole('tab', { name })).toBeFocused();
       await expect.poll(() => clearOfFades(page), { message: `${name} clear of the fades` }).toBe(true);
     }
     await page.keyboard.press('End');
-    await expect(row.getByRole('tab', { name: 'Sidebar' })).toBeFocused();
+    await expect(row.getByRole('tab', { name: 'Demo video' })).toBeFocused();
     await expect.poll(() => clearOfFades(page)).toBe(true);
     expect(await page.evaluate(() => window.scrollY)).toBe(y);
   });
@@ -238,8 +238,8 @@ test.describe("What's new: the tab row is one line", () => {
     const y = await page.evaluate(() => window.scrollY);
     const before = await page.evaluate(() => document.activeElement && document.activeElement.tagName);
     const shown = () => page.locator('.news-tabs [aria-selected="true"]').innerText();
-    await expect.poll(shown, { timeout: 12_000 }).toBe('Data sources');
-    await expect.poll(shown, { timeout: 12_000 }).toBe('Agents box');
+    await expect.poll(shown, { timeout: 12_000 }).toBe('Sources');
+    await expect.poll(shown, { timeout: 12_000 }).toBe('Reports');
     expect(await page.evaluate(() => window.scrollY)).toBe(y);
     expect(await page.evaluate(() => document.activeElement && document.activeElement.tagName)).toBe(before);
     await expect.poll(() => clearOfFades(page)).toBe(true);
@@ -249,7 +249,7 @@ test.describe("What's new: the tab row is one line", () => {
     await page.setViewportSize({ width: 1024, height: 800 });
     await page.goto('/');
     await goTo(page, 'new');
-    await page.locator('.news-tabs').getByRole('tab', { name: 'Sidebar' }).click();
+    await page.locator('.news-tabs').getByRole('tab', { name: 'Demo video' }).click();
     await page.setViewportSize({ width: 800, height: 800 });
     await expect(page.locator('.news-tabs')).toHaveAttribute('data-more-l', '');
     await expect.poll(() => clearOfFades(page)).toBe(true);

@@ -127,7 +127,7 @@ test.describe('the reviewed messaging', () => {
     const news = page.locator('.new');
     await expect(news.getByRole('tab')).toHaveCount(8);
     await expect(news.getByRole('tabpanel', { includeHidden: true })).toHaveCount(8);
-    await expect(news.getByRole('heading', { level: 2 })).toHaveText('What’s new in 0.15');
+    await expect(news.getByRole('heading', { level: 2 })).toHaveText('What’s new in 0.16');
     // nothing is labelled by a future release (operator rule, 2026-11-05)
     await expect(news.locator('.soon')).toHaveCount(0);
     expect((await page.content()).toLowerCase()).not.toContain('coming soon');
@@ -159,28 +159,39 @@ test.describe('the reviewed messaging', () => {
     expect(await page.locator('.review .receipt').innerText()).not.toMatch(/Skipped\s*review|stopped before review/i);
   });
 
-  test('rules are suggested by Learn, never by an agent; the Agents box is explained before it is named', async ({ page }) => {
+  test('rules are suggested by Learn, never by an agent', async ({ page }) => {
     await page.goto('/');
     const from = page.locator('.steer [data-drawer="rule"] .dr-from');
     await expect(from).toHaveCount(3);
     for (const t of await from.allTextContents()) expect(t).toMatch(/^Suggested by Learn, from your /);
-    // DECISIONS N3: the benefit first, then the on-screen name
-    const access = page.getByRole('tabpanel', { name: 'What agents can read', includeHidden: true });
-    await expect(access.locator('p').first()).toHaveText(
-      'Decide what agents may read from each database: its structure, its rows, and for which projects. Jobs and chats read it only in the projects you tick, or everywhere once you choose “Every project”.',
-    );
-    // the switches are a SQL source's (studio's Agents box), with their defaults; rows are Postgres-only in
-    // this release and go to the agent's model provider; Ask's rows are the person's only
-    const box = access.locator('p').nth(1);
-    await expect(box).toContainText('The Agents box on a SQL source');
-    await expect(box).toContainText('see the structure (on)');
-    await expect(box).toContainText('query the rows (off; Postgres only');
-    await expect(box).toContainText('rows go to the agent’s model provider');
-    await expect(box).toContainText('the projects (none until you tick one)');
-    const ask = page.locator('.new').getByRole('tabpanel', { name: 'Data sources', includeHidden: true });
-    // Ask is the person's own act, and it hands one agent the structure (whatever the Agents box says)
-    await expect(ask).toContainText('Ask a question of this data hands one agent the structure alone');
-    await expect(ask).toContainText('The rows are shown to you only.');
+  });
+
+  test("what's new in 0.16 states each item's scope plainly", async ({ page }) => {
+    await page.goto('/');
+    const panel = (name: string) => page.locator('.new').getByRole('tabpanel', { name, includeHidden: true });
+    // documents: Respond and Rework, and the fidelity check that a failed draft never skips
+    await expect(panel('Documents in a job')).toContainText('Respond answers an RFP, RFI or questionnaire from them');
+    await expect(panel('Documents in a job')).toContainText('a failed check never lands silently');
+    await expect(panel('Documents in a job')).toContainText('A PDF with no readable text (a scan) is set aside, with the reason.');
+    // the pick narrows what agents read; it never widens a source's switch
+    await expect(panel('Sources you pick')).toContainText('Its agents query only the sources you picked; your repository keeps its usual access.');
+    await expect(panel('Sources you pick')).toContainText('A source whose “Agents can query” switch is off cannot be picked, and the job says so.');
+    // review-change is judged off the authors' seats and posts nothing
+    await expect(panel('Review a change')).toContainText('judged by agents that wrote none of the change');
+    await expect(panel('Review a change')).toContainText('Nothing is posted to the pull request.');
+    // publish builds an image on this machine; the embed is only for a public app with no actions
+    await expect(panel('Publish an app')).toContainText('signed-in viewers by default');
+    await expect(panel('Publish an app')).toContainText('for a public app (every query public, no actions), an embed snippet');
+    // phase plugins observe a job's events; they never add a step (intercept hooks are not in this release)
+    await expect(panel('Phase plugins').locator('p').first()).toHaveText('Type /plugin phase and what you want to see. It builds a plugin that adds a section to every job’s details, drawn from the job’s events.');
+    await expect(panel('Phase plugins').locator('p').nth(1)).toHaveText('Installing it asks you to approve each event topic it reads. Plugins lists it, with off and Remove.');
+    // a demo whose data stays out of model context has no model review: the person reviews it
+    await expect(panel('Demo videos you can review')).toContainText('a demo whose app data stays out of model context is reviewed by you');
+    const all = ((await page.locator('.new').textContent()) || '').toLowerCase();
+    for (const never of ['intercept', 'teams', 'deploys your', 'coming soon']) expect(all).not.toContain(never);
+    expect(all).not.toMatch(/adds? an? (step|check|review|gate|approval)/);
+    // the install needs follow crew 0.18.0's garden floor
+    expect(((await page.locator('#get').textContent()) || '').replace(/\s+/g, ' ')).toContain('wicked-garden 12.66.0 or later');
   });
 });
 
