@@ -77,6 +77,33 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('job passage input tokens', () => {
+  it('a list opened from a token at the end of a phone line is moved back inside the viewport, before paint', () => {
+    // 390-px viewport; the sources token ends the line at x 300-370, and the 220-px list hangs from its left edge.
+    vi.stubGlobal('innerWidth', 390);
+    vi.stubGlobal('innerHeight', 844);
+    const rects = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const at = (left: number, top: number, width: number, height: number) =>
+        ({ left, top, right: left + width, bottom: top + height, x: left, y: top, width, height, toJSON: () => ({}) }) as DOMRect;
+      if (this.getAttribute('role') === 'listbox') {
+        // Measured where it hangs, plus whatever shift is applied (the layout effect clears it before measuring).
+        const dx = Number(/translateX\((-?\d+)px\)/.exec((this as HTMLElement).style.transform)?.[1] ?? 0);
+        return at(300 + dx, 324, 220, 180);
+      }
+      if (this.getAttribute('data-token') === 'sources') return at(300, 300, 70, 20);
+      return at(0, 0, 0, 0);
+    });
+    try {
+      render(passage(proposal()));
+      fireEvent.click(token('the web, sources'));
+      const list = screen.getByRole('listbox', { name: 'Change sources' });
+      // 300 - 138 + 220 = 382: inside the 390-px edge with an 8-px margin, so nothing scrolls sideways.
+      expect(list.style.transform).toBe('translateX(-138px)');
+      expect(list).not.toHaveClass('wk-pass-swap--above');
+    } finally {
+      rects.mockRestore();
+    }
+  });
+
   it('opens documents with leave-out choices, struck reasons, and Something else last', () => {
     render(passage(proposal()));
     fireEvent.click(token('2 documents, documents'));

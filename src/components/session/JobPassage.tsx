@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { api } from '../../api/client.js';
 import type { ChatPlanOffer, ProposalRevisionEdits, ProposalToken, SessionView } from '../../api/types.js';
@@ -6,6 +6,7 @@ import { ApiError } from '../../api/errors.js';
 import { proposalRefusal } from '../../board/artifactProposal.js';
 import { inputTokenChoices, type InputTokenChoice, type InputTokenUnavailable } from '../../board/jobInputs.js';
 import { commitGateDecision, type GateAnswer } from '../../board/gateActions.js';
+import { clipBounds, swapPlacement } from '../../board/swapPlacement.js';
 import {
   announceOf, changedTokenIds, foldLine, jobSettled, needsWords, proposalTarget, regionName, sentenceParts, settledLine, withWords,
   type JobLineage, type JobReply, type JobView,
@@ -805,6 +806,23 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
   const elseAt = choices.length + unavailable.length;
   const count = elseAt + 1;
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
+  const listRef = useRef<HTMLUListElement | null>(null);
+  // The open list stays inside the area that shows it (a token at the end of a line on a phone pushed it past the
+  // thread's edge, and the thread scrolled sideways). Placed before paint and before its first row takes focus.
+  useLayoutEffect(() => {
+    const ul = listRef.current;
+    if (!open || ul === null) return undefined;
+    const place = (): void => {
+      ul.style.transform = '';
+      ul.classList.remove('wk-pass-swap--above');
+      const p = swapPlacement(ul.getBoundingClientRect(), (ref.current ?? ul).getBoundingClientRect(), clipBounds(ul));
+      ul.classList.toggle('wk-pass-swap--above', p.above);
+      if (p.dx !== 0) ul.style.transform = `translateX(${p.dx}px)`;
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open, choices.length, unavailable.length]);
   useEffect(() => { if (open) { setCursor(0); queueMicrotask(() => optionRefs.current[0]?.focus()); } }, [open]);
   // The listbox closed (a pick, or crew's next version closed it): focus that was in it comes back to the token, never
   // to the page; focus the pick sent elsewhere (Something else… → the composer) stays there.
@@ -833,7 +851,7 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
       >{label}{checks && <span aria-hidden className="wk-pass-lock" />}</span>
       {open && !checks && (
-        <ul id={listId} role="listbox" aria-label={`Change ${TOKEN_KIND[token.kind]}`} data-testid="job-passage-swap" className="wk-pass-swap"
+        <ul ref={listRef} id={listId} role="listbox" aria-label={`Change ${TOKEN_KIND[token.kind]}`} data-testid="job-passage-swap" className="wk-pass-swap"
           onFocus={() => { focusIn.current = true; }}
           onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) focusIn.current = false; }}
           onKeyDown={(e) => {

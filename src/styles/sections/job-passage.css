@@ -74,11 +74,12 @@
   border: 1.5px solid currentColor; border-bottom: 0; border-radius: 4px 4px 0 0;
 }
 .wk-pass-swap {
-  position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; min-width: 220px;
+  position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; min-width: 220px; max-width: calc(100vw - 16px);
   list-style: none; margin: 0; padding: 4px; font-size: var(--text-body); font-weight: var(--weight-regular); line-height: 1.4;
   background: var(--surface-overlay, var(--surface-card)); color: var(--ink-high);
   border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-overlay);
 }
+.wk-pass-swap--above { top: auto; bottom: calc(100% + 4px); }
 .wk-pass-swap li { padding: 6px 10px; border-radius: 7px; cursor: pointer; }
 .wk-pass-swap li[aria-selected="true"], .wk-pass-swap li:not([aria-disabled="true"]):hover { background: var(--accent-wash); }
 .wk-pass-swap li[aria-disabled="true"] { color: var(--ink-muted); cursor: default; }
