@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 338,
-    "occurrences": 5000,
-    "static": 4205,
+    "occurrences": 5002,
+    "static": 4207,
     "dynamic": 177,
     "computed": 53
   },
@@ -8240,6 +8240,12 @@
       ]
     },
     {
+      "testId": "job-passage-interrupted",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-live",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8421,6 +8427,12 @@
     },
     {
       "testId": "job-passage-queued",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-refused",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
