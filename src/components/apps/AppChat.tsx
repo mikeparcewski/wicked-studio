@@ -10,6 +10,7 @@ import { AppComposer } from './AppComposer.js';
 import { LiveActivity } from '../session/LiveActivity.js';
 import { RunQuestions } from '../session/ThreadQuestions.js';
 import { GateRow } from '../session/GateRow.js';
+import { useGateStore } from '../../store/gates.js';
 import { useTurnRulesHold } from '../../editors/apps/turnHold.js';
 
 /**
@@ -56,6 +57,14 @@ function peekDraft(slug: string): string {
 }
 function dropDraft(slug: string): void {
   try { sessionStorage.removeItem(DRAFT_KEY(slug)); } catch { /* nothing kept */ }
+}
+
+/** A publish run's gates (consent, QE acceptance) are answered in the app's thread, as on the run page. A turn's are
+ *  not: TurnReply answers only a verified rules hold (F22) and every other gate keeps See the job, one gate row each. */
+function AppRunQuestions({ view, navigate }: { view: SessionView; navigate: (p: string) => void }): React.ReactElement | null {
+  const gate = useGateStore((s) => s.gates[view.session.id]);
+  if (['completed', 'failed', 'cancelled'].includes(view.session.status)) return null;
+  return <><GateRow view={view} gate={gate} navigate={navigate} /><RunQuestions view={view} /></>;
 }
 
 function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed, pending, undoOff = false }: {
