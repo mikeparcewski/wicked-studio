@@ -1,3 +1,4 @@
+import { isAskTurnRun } from './askTurn.js';
 import { isHeldRun } from './heldRuns.js';
 import type { SessionView } from '../api/types.js';
 import { jobTitle, plainRunTitle } from './deskWords.js';
@@ -29,9 +30,13 @@ export function sessionState(status: string): SessionState {
   }
 }
 
-/** A run's session state: its status's, except a live run Needs you holds, which waits (studio#805). */
+/** A run's session state: its status's, except a live run Needs you holds, which waits (studio#805), and an answered
+ *  ask parked at its turn (crew's `ask_turn`), which waits on no one: it reads done, as its word says "Answered"
+ *  (e2e-1105: an answered chat's header said "Waiting" beside a red Stop run). */
 export function runState(view: Pick<SessionView, 'session'>): SessionState {
-  return isHeldRun(view.session) ? 'waiting' : sessionState(view.session.status);
+  if (isHeldRun(view.session)) return 'waiting';
+  if (view.session.status === 'awaiting_human' && isAskTurnRun(view.session)) return 'done';
+  return sessionState(view.session.status);
 }
 
 /** The chat a run was launched from (C1, api-types 0.71.0), or `null` (absent, or an older daemon). */

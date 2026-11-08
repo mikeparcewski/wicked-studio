@@ -1,7 +1,7 @@
 // What we know (round 10): a code-graph finding's message is the engine's own words and names a path under the
 // operator's home directory (desk_home_paths, the fixture's core#406 finding). The marks on Repositories and the
 // repository page, and Understand's graph links, carry that sentence in their title and accessible name, so both
-// go through the default layer's formatter: `~/…`, the full path only with "Show technical details" on (studio#458).
+// go through the default layer's formatter: `~/…`, technical details on or off (studio#458; e2e-1105 privacy).
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { knowledgeMarks, kindsRead } from '../src/board/repoKnowledge.js';
@@ -71,7 +71,7 @@ describe('what we know: no home directory in a mark’s title or name', () => {
     expect(marks().find((m) => m.id === 'code')!.title).toContain('/Users/reel-operator/');
   });
 
-  it('Repositories and the repository page: the code mark reads ~/… by default, the full path with technical details', () => {
+  it('Repositories and the repository page: the code mark reads ~/…, technical details on or off (e2e-1105 privacy)', () => {
     const { unmount } = render(<KnowMarks marks={marks()} onOpen={vi.fn()} repoName="studio-api" />);
     const code = screen.getAllByTestId('repo-know-mark').find((el) => el.getAttribute('data-mark') === 'code')!;
     expect(code.getAttribute('title')).toContain('~/w2/studio-api/.codegraph');
@@ -84,7 +84,8 @@ describe('what we know: no home directory in a mark’s title or name', () => {
     technical(true);
     render(<KnowMarks marks={marks()} onOpen={vi.fn()} repoName="studio-api" />);
     const full = screen.getAllByTestId('repo-know-mark').find((el) => el.getAttribute('data-mark') === 'code')!;
-    expect(full.getAttribute('title')).toContain('/Users/reel-operator/w2/studio-api/.codegraph');
+    expect(full.getAttribute('title')).toContain('~/w2/studio-api/.codegraph');
+    expect(full.getAttribute('title')).not.toContain('/Users/');
   });
 
   it('Understand’s graph links: the code graph button reads ~/… in its title and name', async () => {

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { Markdown } from '../src/components/Markdown.js';
 
 describe('Markdown', () => {
@@ -41,5 +41,27 @@ describe('Markdown', () => {
   it('renders a blockquote', () => {
     render(<Markdown>{'> some quote'}</Markdown>);
     expect(screen.getByText('some quote')).toBeInTheDocument();
+  });
+});
+
+describe('Markdown: no home folder renders (e2e-1105 privacy)', () => {
+  it('text, inline code and code blocks read ~/…; a file link opens by its real path', () => {
+    const open = vi.fn();
+    const md = [
+      '[wicked-crew] EXPECTED: /Users/reel-operator/.wicked/reviews/r1/out/report.json',
+      '',
+      'Read `/home/alice/repo/src/a.ts` and [the report](/Users/reel-operator/.wicked/reviews/r1/out/report.json).',
+      '',
+      '```',
+      'cat /Users/reel-operator/notes.md',
+      '```',
+    ].join('\n');
+    const { container } = render(<Markdown onOpenFile={open}>{md}</Markdown>);
+    expect(container.textContent).toContain('EXPECTED: ~/.wicked/reviews/r1/out/report.json');
+    expect(container.textContent).toContain('~/repo/src/a.ts');
+    expect(container.textContent).toContain('cat ~/notes.md');
+    expect(container.innerHTML).not.toMatch(/reel-operator|alice/);
+    fireEvent.click(screen.getByTestId('evidence-ref'));
+    expect(open).toHaveBeenCalledWith('/Users/reel-operator/.wicked/reviews/r1/out/report.json');
   });
 });

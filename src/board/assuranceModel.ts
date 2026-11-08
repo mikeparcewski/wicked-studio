@@ -1,6 +1,7 @@
 import { actorWords } from './actorWords.js';
 import type { CoreEvent, RuleCouncilRecord, RuleCouncilVote, RulePosition, RuleVerdictOrigin, RuleVerdictStatus, SessionView, WorkUnit } from '../api/types.js';
 import { floorOverrideOf, type FloorOverrideView } from './floorOverride.js';
+import { isCommandPath } from './responder.js';
 
 /**
  * The assurance receipt (wicked-core#850 / #852, core-ts 0.7.46): what a run REQUIRES, and for each
@@ -834,13 +835,23 @@ export interface ReceiptWords {
   where: string | null;
 }
 
+/** A receipt's seat list (`"claude, codex"`) without program paths; `null` when no seat is left. */
+function seatNames(list: string | null): string | null {
+  if (list === null) return null;
+  const kept = list.split(', ').filter((x) => x.trim() !== '' && !isCommandPath(x.trim()));
+  return kept.length === 0 ? null : kept.join(', ');
+}
+
 /** `passed`: the decision the receipt is for passed (`true`), did not (`false`), or is unknown (`null`). */
 export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null): ReceiptWords {
   const kind = assuranceKind(r);
   const list = (xs: readonly string[]): string => (xs.length === 0 ? 'nothing' : xs.map(instrumentWord).join(', '));
   const seats: string[] = [];
-  if (r.creator !== null) seats.push(`built by ${r.creator}`);
-  if (r.evaluator !== null) seats.push(`evaluated by ${r.evaluator}`);
+  // A program's path in a seat list (crew's tool step runs a binary) is crew's machinery: never named as a seat.
+  const creator = seatNames(r.creator);
+  const evaluator = seatNames(r.evaluator);
+  if (creator !== null) seats.push(`built by ${creator}`);
+  if (evaluator !== null) seats.push(`evaluated by ${evaluator}`);
   // A fallback judge is named by the engine's own line, never as a plain "judged by" (operator ruling 2026-10-14);
   // every other judge keeps its plain words (a delivery can mix the run's own judges and a fallback).
   const fallbacks = r.judgeFallbacks ?? [];

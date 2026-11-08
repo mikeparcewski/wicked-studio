@@ -162,7 +162,8 @@ export function plainRecommendation(rec: InsightsRecommendation, metrics: readon
       const v = fmt(def?.unit, e.value);
       const b = fmt(def?.unit, e.baseline);
       title = words.title(whereWords(e.segment));
-      say = words.say(v, b, of(e.value, n), n);
+      // Rounded to the same words ("$0.16" both), "up from $0.16" says nothing: the change is too small to show (e2e-1105).
+      say = v === b && v !== 'none' ? `About the same as before (${v}).` : words.say(v, b, of(e.value, n), n);
       if (!interpreted) { effect = words.effect; changeMind = words.changeMind; }
       if (e.interval != null) why.push(`This window: ${v}, likely between ${fmt(def?.unit, e.interval.lo)} and ${fmt(def?.unit, e.interval.hi)}.`);
       why.push(`Based on ${runs(n)} in this window, against ${b} before.`);

@@ -65,6 +65,22 @@ npm publish dates. Every version listed here exists on
 ### Removed
 - Studio's own guess of a workflow from a launch's words (`detectWorkflow`): reading what words ask for is crew's.
 
+### Fixed
+
+- **No home folder prints anywhere in Studio (e2e-1105, privacy).** A path under the home directory reads `~/…` in
+  the thread (a run's first message, a step's output, every reply drawn as Markdown, the title) and on every surface
+  that already did so by default. "Show technical details" no longer shows the full path: a screen share with it on
+  printed the account name. A file link still opens by its real path.
+- **An edit the document engine refuses says so, and why.** A page edit wicked-interactive refuses (for example, one
+  that would remove parts nested inside it) now reads "Not changed: the page refused this edit: it would remove 2
+  parts nested inside what you edited", at once, instead of timing out.
+- **An answered chat no longer reads "Waiting" with a red Stop run.** A chat whose ask is parked at its turn reads
+  "Answered", and there is nothing to stop.
+- **Run insights never say "$0.16, up from $0.16".** When a change rounds away, the line says "About the same as
+  before ($0.16)".
+- **A program's path is never shown as a helper.** A step crew runs on a binary (a node path) is crew's own step: it is
+  not listed among the helpers, in the run's agents or in the receipt's "built by".
+
 ## [0.15.0] — 2026-11-05
 
 A feature release for crew 0.17.0: Apps by chat (K5) on the data sources sheet and panel (K3), Ask a question of a

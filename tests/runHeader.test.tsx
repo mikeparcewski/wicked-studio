@@ -123,6 +123,24 @@ describe('NeedsBanner — shown only while something waits; hover or focus gives
     { key: 'gate:a', runId: 'a', kind: 'Plan approval', step: 'Research', question: 'Approve the plan (5 steps)', age: '4 minutes ago' },
     { key: 'fail:b', runId: 'b', kind: 'Failed run', step: null, question: 'The build step failed.', age: null },
   ];
+  it('e2e-1105: an answered chat (its ask parked at the turn, ask_turn) reads Answered, with no Stop run', () => {
+    const asked = run('a', 'awaiting_human');
+    (asked.session as unknown as { ask_turn: boolean }).ask_turn = true;
+    render(<SessionPage sessionId="run:a" runs={[asked]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    expect(screen.getByTestId('session-status')).toHaveTextContent('Answered');
+    expect(screen.getByTestId('session-status')).toHaveAttribute('data-tone', 'ok');
+    expect(screen.getByTestId('session')).toHaveAttribute('data-state', 'done');
+    expect(screen.queryByTestId('session-stop')).toBeNull();
+  });
+
+  it('e2e-1105 privacy: a run asked with a home path never prints it (title, first message, its hover)', () => {
+    const asked = run('a', 'completed');
+    (asked.session as unknown as { problem: string }).problem = 'Review recent work: read the handoff file at /Users/reel-operator/.wicked/reviews/r1/handoff.json and report.';
+    render(<SessionPage sessionId="run:a" runs={[asked]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    expect(screen.getByTestId('session').outerHTML).not.toMatch(/reel-operator/);
+    expect(screen.getByTestId('session').textContent).toContain('~/.wicked/reviews/r1/handoff.json');
+  });
+
   it('nothing waits: no banner', () => {
     render(<NeedsBanner items={[]} onJump={() => {}} />);
     expect(screen.queryByTestId('session-needs-banner')).toBeNull();

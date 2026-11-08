@@ -47,7 +47,7 @@ describe('SystemSettings — Show technical details (S3)', () => {
     const toggle = screen.getByRole('switch', { name: 'Show technical details' });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
     expect(toggle).toHaveAccessibleName('Show technical details');
-    expect(screen.getByTestId('view-settings')).toHaveTextContent(/full file locations in technical details/i);
+    expect(screen.getByTestId('view-settings')).toHaveTextContent(/A path in your home folder always reads ~\/…/i);
   });
 
   it('turning it on saves `studio.view` = { technical_details: true } through PUT /settings', async () => {

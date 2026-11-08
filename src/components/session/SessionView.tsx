@@ -96,6 +96,8 @@ import { useRunEventStore } from '../../store/events.js';
 import { headlineProgress } from '../../board/repeatProgress.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { needTone } from '../../board/needTone.js';
+import { displayText } from '../../board/homePath.js';
+import { isAskTurnRun } from '../../board/askTurn.js';
 
 /** The project a chat's scope (`GET /chats/:id` `scope.projectId`) files it in, or null. */
 function chatScopeProject(scope: unknown): string | null {
@@ -412,7 +414,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // A chat whose transcript has not been read back yet (just opened from its fresh page) is titled by
   // the operator's first live words; a fresh chat with nothing said is "New chat".
   const firstLiveWords = messages.length === 0 && mine.length === 0 ? liveTurns?.find((t) => t.who === 'you' && t.text.trim() !== '')?.text ?? null : null;
-  const title = firstLiveWords !== null ? plainRunTitle(firstLiveWords) : fresh !== null && messages.length === 0 && mine.length === 0 ? 'New chat' : sessionTitle(messages, mine);
+  // Privacy (e2e-1105): a title cut from crew's intent never names a home folder.
+  const title = displayText(firstLiveWords !== null ? plainRunTitle(firstLiveWords) : fresh !== null && messages.length === 0 && mine.length === 0 ? 'New chat' : sessionTitle(messages, mine));
   const replySeq = useAskThreadStore((s) => (chatId === null ? 0 : s.replySeq[chatId] ?? 0));
   const linkedRun = useAskThreadStore((s) => (chatId === null ? undefined : s.runByChat[chatId]));
   const askRunsKnown = useAskThreadStore((s) => s.runs);
@@ -970,7 +973,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     && !waitingForKept && keptError === null;
   // studio#631 (2): a chat's thread has its own Stop — the same 10 s-undo stop ⌘K offers ("Stop this
   // session"), on every run of the chat still going. Hidden when nothing in it is running.
-  const liveRuns = useMemo(() => mine.filter((v) => !['completed', 'cancelled', 'failed'].includes(v.session.status)).map((v) => v.session.id), [mine]);
+  // An answered ask parked at its turn (`ask_turn`) is not work going on: nothing to stop (e2e-1105).
+  const liveRuns = useMemo(() => mine.filter((v) => !['completed', 'cancelled', 'failed'].includes(v.session.status)
+    && !(v.session.status === 'awaiting_human' && isAskTurnRun(v.session))).map((v) => v.session.id), [mine]);
   const stopping = useSheets((s) => liveRuns.length > 0 && liveRuns.every((id) => s.stopping[id] !== undefined));
   const [confirmStop, setConfirmStop] = useState(false);
   const stopWords = liveRuns.length > 1 ? `Stop ${liveRuns.length} runs` : 'Stop run';
@@ -1343,7 +1348,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 : e.kind === 'turn'
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})}
-                {...(e.kickoff ? { 'data-kickoff': 'true', title: e.text } : {})}
+                {...(e.kickoff ? { 'data-kickoff': 'true', title: displayText(e.text) } : {})}
                 className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}${e.kickoff ? ' wk-session-turn--kickoff' : ''}${e.kickoff && kickoffOpen === e.key ? ' wk-session-turn--kickoff-open' : ''}`}>
                 {/* DES-CHAT-NATIVE-RUN: what started the run is your first message, a bubble like any other; a very long
                     one shows its first lines with Show all (studio#663). */}

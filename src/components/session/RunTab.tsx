@@ -10,7 +10,7 @@ import { seatLabel } from '../../board/seatNames.js';
 import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
-import { builderResponder, isHelperSeat, isReviewUnit } from '../../board/responder.js';
+import { builderResponder, isCommandPath, isHelperSeat, isReviewUnit } from '../../board/responder.js';
 import { executingOrd } from '../../api/run-state.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
@@ -74,8 +74,9 @@ function currentStep(view: SessionView, chain: ChainModel): ChainStep | undefine
 }
 
 function assignedClis(view: SessionView): string[] {
+  // A program's path (crew's tool step runs a binary) is not an agent, and its path is never shown as a name.
   return [...new Set(view.units.map((unit) => unit.assigned_cli)
-    .filter((cli): cli is string => typeof cli === 'string' && cli.trim() !== ''))];
+    .filter((cli): cli is string => typeof cli === 'string' && cli.trim() !== '' && !isCommandPath(cli)))];
 }
 
 function agentsWord(n: number): string {

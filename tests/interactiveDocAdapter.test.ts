@@ -171,3 +171,45 @@ describe('InteractiveDocAdapter', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('InteractiveDocAdapter: the engine refused the edit (e2e-1105 P10)', () => {
+  const processed = (payload: Record<string, unknown>) => ({ type: 'interactiveEvent', event: { event_type: 'wicked.interactive.feedback.processed', payload } });
+  const dropWids = { document_id: 'plan', version: 2, base_version: 1, applied: [], rejected: [{ selector: 'slide-1-list-item-1', reason: 'inv2-would-drop-wids:slide-1-paragraph-2,slide-1-paragraph-3' }], stale: [], landed: false, unchanged: true };
+
+  it('says the edit was refused and why, at once, instead of a timeout', async () => {
+    const { publishCoreEvent } = await import('../src/hooks/eventTap.js');
+    // A long window: without the refusal the write would sit here for the whole 20 s and then say "no new version".
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 20_000 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }];
+    await a.refresh();
+    const t0 = Date.now();
+    const writing = a.write(1, [{ selector: 'slide-1-list-item-1', type: 'content-edit', value: 'Done', before: 'Todo' }]);
+    await vi.waitFor(() => expect(api.events).toHaveLength(1));
+    publishCoreEvent(processed(dropWids) as never);
+    const r = await writing;
+    expect(r).toEqual({ error: 'refused', message: 'the page refused this edit: it would remove 2 parts nested inside what you edited.' });
+    expect(Date.now() - t0).toBeLessThan(5_000);
+    expect(a.writes.size).toBe(0);
+    expect(a.head).toBe(1);
+  });
+
+  it('another document\'s refusal, or one against another base, is not this edit\'s', async () => {
+    const { publishCoreEvent } = await import('../src/hooks/eventTap.js');
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 900 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }];
+    await a.refresh();
+    const writing = a.write(1, [{ selector: 'h', type: 'content-edit', value: 'New', before: 'Old' }]);
+    await vi.waitFor(() => expect(api.events).toHaveLength(1));
+    publishCoreEvent(processed({ ...dropWids, document_id: 'other' }) as never);
+    publishCoreEvent(processed({ ...dropWids, base_version: 3 }) as never);
+    expect(await writing).toEqual({ error: 'unavailable', message: 'The change was sent, but no new version appeared.' });
+  });
+
+  it('the reasons read in plain words', async () => {
+    const { editRefusalWords } = await import('../src/editors/interactiveDocAdapter.js');
+    expect(editRefusalWords({ rejected: [{ selector: 'a', reason: 'inv2-would-drop-wids:x' }], stale: [], unchanged: true })).toBe('the page refused this edit: it would remove a part nested inside what you edited');
+    expect(editRefusalWords({ rejected: [{ selector: 'a', reason: 'selector-not-found' }], stale: ['b'], unchanged: false })).toBe('the page refused this edit: the part you edited is not in this version; the part you edited changed since you opened it');
+    expect(editRefusalWords({ rejected: [{ selector: 'a', reason: 'something-new:x' }], stale: [], unchanged: false })).toBe('the page refused this edit');
+    expect(editRefusalWords({ rejected: [], stale: [], unchanged: true })).toBe('the page already says that, so nothing changed');
+  });
+});

@@ -4,6 +4,23 @@ import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 import type { ChatCitationItem } from '../api/chat-wire.js';
 import { CitationBadge } from './citations.js';
+import { displayPath, displayText } from '../board/homePath.js';
+
+/** A markdown node, as far as {@link remarkHomePaths} reads it. */
+interface MdNode { type: string; value?: unknown; children?: MdNode[] }
+
+/**
+ * Privacy (e2e-1105, 2026-11-08): crew relays agent text, step output and run intents that name folders under the
+ * home directory. No home folder renders: every text, inline code and code block value reads `~/…`. A link's target is
+ * left as written (a file reference opens by its real path); its visible text is collapsed like any other text.
+ */
+export function remarkHomePaths() {
+  const walk = (n: MdNode): void => {
+    if ((n.type === 'text' || n.type === 'inlineCode' || n.type === 'code' || n.type === 'html') && typeof n.value === 'string') n.value = displayText(n.value);
+    for (const c of n.children ?? []) walk(c);
+  };
+  return (tree: MdNode): void => walk(tree);
+}
 
 /**
  * A file reference, as agents write them into transcripts: any href that is not
@@ -231,7 +248,9 @@ export function Markdown({ children, className, onOpenFile, marks }: Props): Rea
             code: ({ className: codeClass, children: codeChildren }) => {
               const rendered = codeElement({ className: codeClass, children: codeChildren });
               const raw = typeof codeChildren === 'string' ? codeChildren.trim() : '';
-              const item = raw === '' || isCodeBlock(codeClass, codeChildren) ? undefined : marks.get(raw);
+              // The token reads `~/…` once home folders are collapsed (remarkHomePaths): its verdict is found either way.
+              const item = raw === '' || isCodeBlock(codeClass, codeChildren) ? undefined
+                : marks.get(raw) ?? [...marks].find(([k]) => displayText(k) === raw)?.[1];
               return item === undefined ? rendered : <CitationBadge item={item}>{rendered}</CitationBadge>;
             },
           };
@@ -242,7 +261,7 @@ export function Markdown({ children, className, onOpenFile, marks }: Props): Rea
         if (typeof href === 'string' && isFileRef(href)) {
           return (
             <a
-              href={href}
+              href={displayPath(href)}
               data-testid="evidence-ref"
               className="underline"
               style={{ color: 'var(--accent)' }}
@@ -269,7 +288,7 @@ export function Markdown({ children, className, onOpenFile, marks }: Props): Rea
       className={`text-sm leading-relaxed ${className ?? ''}`}
       style={{ color: 'var(--ink-high)' }}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={resolved}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkHomePaths]} components={resolved}>
         {normaliseTables(children)}
       </ReactMarkdown>
     </div>
