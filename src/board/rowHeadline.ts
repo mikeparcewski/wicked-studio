@@ -25,7 +25,7 @@ export function rowLead(item: SystemAttention, cause: string | null = null): str
  * the plain causes are crew's to write (lane fr-crew), so no wording is rewritten here.
  */
 export function healthText(text: string): string {
-  // A path behind a URL scheme (`unix:///Users/…/docker.sock`, `file:///home/…`) has no prose delimiter before it.
+  // A path behind a URL scheme (a `unix://` docker socket or a `file://` path under a home folder) has no prose delimiter before it.
   const unescaped = text.replace(/\\\\/g, '\\').replace(/\b([a-z][a-z0-9+.-]*:\/\/)(\/[^\s"'`)\]>,;]+)/gi, (_m, scheme: string, path: string) => scheme + displayPath(path));
   return displayText(unescaped)
     .replace(/[0-9a-f]{32,}/gi, (id) => `${id.slice(0, 8)}…`);

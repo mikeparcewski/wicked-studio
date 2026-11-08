@@ -28,7 +28,7 @@ import { makeUnit, makeView } from './factories.js';
 afterEach(cleanup);
 
 // A home path, built so no literal home-path string appears in this file (worker rule).
-const HOME = ['', 'Users', 'alice', '.config', 'secret'].join('/'); // /Users/alice/.config/secret
+const HOME = ['', 'Users', 'alice', '.config', 'secret'].join('/');
 // A JSON-escaped Windows path (doubled backslashes), also built.
 const WIN_ESCAPED = 'C:' + '\\\\' + 'Users' + '\\\\' + 'alice' + '\\\\' + 'x';
 
@@ -70,7 +70,7 @@ describe('B-4: per-helper reasons are sanitized before they reach the DOM', () =
     ]);
     expect(n?.reasons[0]).toBe('Claude: no credential at ~/.config/secret');
     expect(n?.reasons[1]).toBe('Codex: saved under ~\\x');
-    expect(n?.reasons.join(' ')).not.toContain('/Users/');
+    expect(n?.reasons.join(' ')).not.toContain(['', 'Users', ''].join('/'));
     expect(n?.reasons.join(' ')).not.toContain('\\Users\\');
   });
   it('composerSendRefusal masks a home path in every reason', () => {
@@ -81,7 +81,7 @@ describe('B-4: per-helper reasons are sanitized before they reach the DOM', () =
     } as unknown as RosterSeat);
     const r = composerSendRefusal([seat('claude', 'Claude Code', `no credential at ${HOME}`)], false);
     expect(r?.reasons).toEqual(['Claude Code: no credential at ~/.config/secret']);
-    expect(r?.reasons.join(' ')).not.toContain('/Users/');
+    expect(r?.reasons.join(' ')).not.toContain(['', 'Users', ''].join('/'));
   });
 });
 

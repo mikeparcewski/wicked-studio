@@ -104,7 +104,7 @@ export function composerSendRefusal(roster: readonly RosterSeat[] | null, scoped
     const reason = !admission.ok
       ? admission.reason ?? 'the daemon would not seat it'
       : (noCarryingSeatReason([seat.key], roster) ?? 'unavailable').replace(new RegExp(`^${seat.key}:\\s*`), '');
-    // B-P1 (privacy): a per-helper reason may carry a home path (/Users/alice/.config/…) — sanitize
+    // B-P1 (privacy): a per-helper reason may carry a home path (a macOS, Linux or Windows home folder) — sanitize
     // every reason that reaches the disclosure's DOM, closed or not.
     reasons.push(healthText(`${seatLabel(seat)}: ${reason}`));
     if (!seatReadsSignedOut(seat, reason)) allSignedOut = false;
