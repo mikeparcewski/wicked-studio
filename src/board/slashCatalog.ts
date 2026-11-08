@@ -285,6 +285,8 @@ export type CommandListState =
  *  - `/migrate up`: that card's sub-commands whose option word starts so; `/migrate upgrade ` (a space after a whole
  *    command and option word) closes the list: what follows is the job's words, and Enter posts it.
  *  - free words (`/upgrade node to 22`): the cards the one scorer ranks, best first, each with its sub-commands.
+ *  - a full command typed exactly, however it is spaced (`/ plugin phase`): the row the parser reads it as leads, so
+ *    Enter picks it, and its pick keeps no words.
  */
 export function commandList(view: WorkflowCatalogV2Response, text: string, looks: ShapeGuess | null = null): CommandListState {
   const st = commandListRows(view, text, looks);

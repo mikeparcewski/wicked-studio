@@ -663,7 +663,7 @@ describe('review folds (r1): the path holds under failure, races and edge input'
     expect(parseCommandLine(sub, '/migrate bump to 22')).toMatchObject({ option: 'upgrade', words: 'to 22' });
   });
 
-  it('a card command and option typed whole, key by key, then Enter picks that option, not the card (e2e-1105 CJ9)', async () => {
+  it('guard: a card command and option typed whole, key by key, then Enter picks that option, not the card (e2e-1105 CJ9)', async () => {
     const sub = structuredClone(V2);
     sub.cards.find((c) => c.id === 'studio-plugin')!.variant!.options.find((o) => o.id === 'phase')!.status = 'available';
     v2 = sub;
