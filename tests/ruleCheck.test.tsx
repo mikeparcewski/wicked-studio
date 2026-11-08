@@ -558,6 +558,14 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
       expect(clean.whyNot ?? []).toEqual([]);
     });
 
+    it('(e2e-1105 CJ9) at adjudication the why-not says skip for a broken warning, send-back when a broken error stands beside it', () => {
+      const g = { runId: RUN, ord: 5, prompt: ADJ, gateKind: 'review_adjudication', lifecycle: 'open', receivedAt: 1 } as OpenGate;
+      const why = (rules: unknown[]) => sessionGateChoices({ runId: RUN, gate: g, units, events: log(rules), pool: ['pi', 'codex'], roster: null })!.whyNot?.join(' ') ?? '';
+      const warn = { ...row('W', 'broken'), waivable: true };
+      expect(why([warn])).toMatch(/re-check it, or skip it with a reason, first/);
+      expect(why([warn, row('B', 'broken')])).toMatch(/a steering rule is broken: re-check the rules, or send the work back/);
+    });
+
     it('an escalation older than the newest evaluation (a re-check re-evaluates) never decides', () => {
       const evalOf = (denial: string, rules: unknown[]) => ({ type: 'gateEvaluated', session: RUN, ord: 5, ts: 3, combined: false, denial: { source: denial, reason: 'x' }, assurance: { ...base, attempt: 1, rules } });
       const esc = (source: string) => ({ type: 'gateEscalated', session: RUN, ord: 5, ts: 2, attempt: 1, condition: source, denialSource: source, verdictSummary: 'x' });
@@ -678,5 +686,53 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
     const rows = screen.getAllByTestId('assurance-rule');
     expect(rows[0]!.textContent).toContain('settled by council 2-1 (agy, pi, opencode)');
     expect(rows[1]!.textContent).toContain('skipped D2 by the operator: skipped by you: the reviewer is right');
+  });
+});
+
+describe('(e2e-1105 CJ9) a broken warning the engine marks waivable is skipped with a reason', () => {
+  const RUN = 'r-deliver';
+  const PROMPT = 'Unit 11 BROKE steering rule(s): 1 steering rule(s) broken: learn-linked-issue — names no issue it closes. learn-linked-issue is a warning: skip it with a written reason (action `skip_rules`: labelled on the run, the gate and the delivery), or request changes to send it back for rework, approve to run the step again, or reject to cancel the run';
+  const gate: OpenGate = { runId: RUN, ord: 11, prompt: PROMPT, gateKind: 'escalation', lifecycle: 'open', receivedAt: 1 };
+  const units = [
+    makeUnit({ id: `${RUN}:build`, session_id: RUN, ord: 4, role: 'creator', status: 'done', assigned_cli: 'claude' }),
+    makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 11, role: 'creator', status: 'rejected', assigned_cli: 'bash' }),
+  ] as WorkUnit[];
+  const log = (rules: unknown[]): CoreEvent[] => [
+    { type: 'unitDispatched', session: RUN, ord: 11, ts: 1 },
+    { type: 'gateEvaluated', session: RUN, ord: 11, ts: 2, combined: false, denial: { source: 'rule_check', reason: '1 steering rule(s) broken', ruleIds: ['learn-linked-issue'] }, assurance: { ...base, attempt: 1, rules } },
+    { type: 'gateEscalated', session: RUN, ord: 11, ts: 3, attempt: 1, condition: 'rule_broken', denialSource: 'rule_check', verdictSummary: '1 steering rule(s) broken' },
+  ] as unknown as CoreEvent[];
+  const offered = (events: CoreEvent[]) => {
+    const m = sessionGateChoices({ runId: RUN, gate, units, events, pool: ['claude', 'codex'], roster: null })!;
+    return [...m.choices, ...(m.overflow ?? [])] as Array<{ key: string; label: string; needsNote: boolean; skipRuleIds?: string[]; decision: unknown }>;
+  };
+
+  it('offers "Skip learn-linked-issue" with your reason beside the re-check', () => {
+    const all = offered(log([row('learn-small-prs', 'kept'), { ...row('learn-linked-issue', 'broken', 'names no issue it closes'), waivable: true }]));
+    expect(all.map((c) => c.key)).toEqual(expect.arrayContaining(['retry-rules', 'skip-rules']));
+    const skip = all.find((c) => c.key === 'skip-rules')!;
+    expect(skip).toMatchObject({ label: 'Skip learn-linked-issue', needsNote: true, skipRuleIds: ['learn-linked-issue'], decision: { approve: true, action: 'skip_rules' } });
+  });
+
+  it('a broken rule the engine did not mark waivable (error or critical, or an older engine) gets only the re-check', () => {
+    for (const waivable of [undefined, false]) {
+      const keys = offered(log([{ ...row('learn-linked-issue', 'broken'), ...(waivable === undefined ? {} : { waivable }) }])).map((c) => c.key);
+      expect(keys).toContain('retry-rules');
+      expect(keys).not.toContain('skip-rules');
+    }
+  });
+
+  it('only a literal true marks it: a string, null, number or object does not (fail-closed)', () => {
+    for (const waivable of ['true', null, 1, {}]) {
+      const keys = offered(log([{ ...row('learn-linked-issue', 'broken'), waivable }])).map((c) => c.key);
+      expect(keys, JSON.stringify(waivable)).not.toContain('skip-rules');
+    }
+  });
+
+  it('a waivable broken row beside a disputed one: both are offered, confirm or skip', () => {
+    const all = offered(log([{ ...row('learn-linked-issue', 'broken'), waivable: true }, row('POL-2101', 'disputed')]));
+    const skip = all.find((c) => c.key === 'skip-rules')!;
+    expect(skip.label).toBe('Confirm or skip 2 rules');
+    expect(skip.skipRuleIds).toEqual(['learn-linked-issue', 'POL-2101']);
   });
 });

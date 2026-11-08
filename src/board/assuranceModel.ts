@@ -193,6 +193,9 @@ export interface RuleRow {
   reviewer: RulePosition | null;
   /** (api-types 0.193.0) The council a dispute on this rule went to: its ruling, or why there is none. */
   council: RuleCouncilRecord | null;
+  /** (e2e-1105 CJ9, core-ts 0.15.34) `true` on a broken row of a rule the person may waive (severity warn or info): the
+   *  gate's skip takes it with a written reason. `false` from an older engine and on every other row (fail-closed). */
+  waivable: boolean;
 }
 
 const RULE_STATUSES = ['kept', 'broken', 'n_a', 'unchecked', 'skipped', 'waived', 'deferred', 'disputed'] as const;
@@ -261,6 +264,7 @@ function rulesOf(v: unknown): RuleRow[] {
         blocking: r['blocking'] !== false,
         reviewer: positionOf(r['reviewer']),
         council: councilOf(r['council']),
+        waivable: r['waivable'] === true,
       }];
     })
     : [];
@@ -269,6 +273,12 @@ function rulesOf(v: unknown): RuleRow[] {
 /** Whether a row holds its gate until the person acts: a blocking `unchecked`, `waived` or `disputed` row. */
 export function ruleHolds(r: RuleRow): boolean {
   return r.blocking && OPEN_RULE_STATUSES.includes(r.status);
+}
+
+/** (e2e-1105 CJ9) Whether the person may skip a row with a reason: one that holds ({@link ruleHolds}), or a broken
+ *  warning the engine marked `waivable` (a broken error or critical rule is reworked). */
+export function ruleSkippable(r: RuleRow): boolean {
+  return ruleHolds(r) || (r.blocking && r.status === 'broken' && r.waivable);
 }
 
 /** A council's ruling on a row, with the engine's tally (`RuleCouncil::tally`: the counted votes for the ruling,

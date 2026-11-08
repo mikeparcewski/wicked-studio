@@ -312,7 +312,7 @@ const ESCALATION_PREVIEW: Record<string, string> = {
     "The run's acceptance list changes: every phase from here on — the evaluator included — is judged against your amendment instead of the withdrawn launch item. It is recorded on the run.",
   // (DES-RULE-CHECK-001 S2) A rules hold's answers: the step does not run again, so never "the run resumes".
   retry_rules: 'The steering-rule check runs again on the same work; the step does not run again.',
-  skip_rules: 'The unchecked rules are skipped with your reason, labelled on the run, the gate and the delivery; then the rule check runs again.',
+  skip_rules: 'The selected rules are skipped with your reason, labelled on the run, the gate and the delivery; then the rule check runs again.',
 };
 
 export function describeDecision(
