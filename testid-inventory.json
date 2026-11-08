@@ -6,17 +6,11 @@
     "The build also emits this file as dist/testid-inventory.json (vite.config.ts), so generators verify against the BUILT dist actually served — never source recon alone.",
     "Drift strategy: a selector miss in the deterministic executor FAILS the run — the model-free runner never decides what to click, so there is NO agentic fallback inside it. On failure the authoring agent re-authors the spec against the live DOM, the runner re-records deterministically, and the selector substitution lands in the spec diff for review.",
     "Entry kinds: `static` values appear verbatim in the DOM; `dynamic` are template-literal testids with each ${expr} normalised to '*'; `computed` carry the raw JSX expression — dynamic/computed resolve only against a live DOM.",
+    "No aggregates are committed: counts and totals change with every testid, so every open branch conflicted on them. A change touches only its own entries; dist/testid-inventory.json carries `counts`, computed at build (vite.config.ts, withCounts).",
     "Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show."
   ],
   "version": 1,
   "studioVersion": "0.15.0",
-  "counts": {
-    "files": 340,
-    "occurrences": 5020,
-    "static": 4221,
-    "dynamic": 177,
-    "computed": 53
-  },
   "static": [
     {
       "testId": "accent-lgt",

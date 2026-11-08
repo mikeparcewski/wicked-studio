@@ -27,9 +27,16 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import {
   collectTestidInventory,
+  collectTestidScan,
   INVENTORY_VERSION,
+  withCounts,
   type TestidInventory,
 } from '../scripts/testid-inventory.mjs';
 
@@ -74,18 +81,17 @@ describe('testid-inventory.json (TH-13)', () => {
     expect(ids.has('connection-dot')).toBe(false);
   });
 
-  it('covers the whole declared surface and stays deterministically ordered', () => {
+  // A src/ scan (the counts are computed on read): the same budget as the drift test.
+  it('covers the whole declared surface and stays deterministically ordered', { timeout: 120_000 }, () => {
     const inv = committed();
     // The UI declares a large surface; a sudden shrink to a handful of rows means the
     // scanner walked the wrong tree.
-    expect(inv.counts.static).toBeGreaterThan(400);
-    expect(inv.counts.occurrences).toBeGreaterThanOrEqual(
-      inv.counts.static + inv.counts.dynamic,
-    );
-    // counts must agree with the lists they summarise.
-    expect(inv.static).toHaveLength(inv.counts.static);
-    expect(inv.dynamic).toHaveLength(inv.counts.dynamic);
-    expect(inv.computed).toHaveLength(inv.counts.computed);
+    expect(inv.static.length).toBeGreaterThan(400);
+    // The counts are computed on read (the dist copy): they agree with the lists and the scan.
+    const scan = collectTestidScan(ROOT);
+    const { counts } = withCounts(inv, scan);
+    expect(counts.static).toBe(inv.static.length);
+    expect(counts.occurrences).toBeGreaterThanOrEqual(counts.static + counts.dynamic);
     // Stable codepoint ordering — what makes drift diffs reviewable and byte-identical
     // across macOS/Linux/Windows (no localeCompare anywhere).
     const codepointSorted = (xs: string[]) =>
@@ -106,5 +112,49 @@ describe('testid-inventory.json (TH-13)', () => {
     // `gate-escalation-${o.action}` went with it, S16a-4i).
     expect(patterns.has('editor-size-*')).toBe(true);
     for (const p of patterns) expect(p).toContain('*');
+  });
+
+  it('commits no aggregate: nothing in the file changes with every testid (studio PRs conflicted on the counts)', () => {
+    const raw = JSON.parse(readFileSync(INVENTORY_PATH, 'utf8')) as Record<string, unknown>;
+    expect(Object.keys(raw)).toEqual(['$doc', 'version', 'studioVersion', 'static', 'dynamic', 'computed']);
+    expect(raw).not.toHaveProperty('counts');
+  });
+
+  it('two branches that each add a disjoint testid merge without a conflict', { timeout: 60_000 }, () => {
+    // A tiny repo: the same scanner and the same serialisation the generator writes.
+    const tmp = mkdtempSync(join(tmpdir(), 'testid-inv-'));
+    try {
+      const write = (files: Record<string, string>): string => {
+        rmSync(join(tmp, 'src'), { recursive: true, force: true });
+        mkdirSync(join(tmp, 'src'), { recursive: true });
+        writeFileSync(join(tmp, 'package.json'), JSON.stringify({ version: '0.0.0' }));
+        for (const [name, text] of Object.entries(files)) writeFileSync(join(tmp, 'src', name), text);
+        return `${JSON.stringify(collectTestidInventory(tmp), null, 2)}\n`;
+      };
+      const el = (id: string): string => `<div data-testid="${id}" />\n`;
+      const base = { 'a.tsx': el('apple') + el('banana'), 'm.tsx': el('mango') + el('melon'), 'z.tsx': el('yam') + el('zucchini') };
+      const baseJson = write(base);
+      // Branch A adds one testid in a.tsx, branch B two in z.tsx — disjoint in the sorted list. (With the old
+      // committed counts both branches rewrote the same header lines to different numbers: a conflict every time.)
+      // Two ids adjacent in sort order still meet at the same place, as any sorted list does.
+      const ours = write({ ...base, 'a.tsx': base['a.tsx'] + el('cherry') });
+      const theirs = write({ ...base, 'z.tsx': base['z.tsx'] + el('tomato') + el('turnip') });
+      const both = write({ ...base, 'a.tsx': base['a.tsx'] + el('cherry'), 'z.tsx': base['z.tsx'] + el('tomato') + el('turnip') });
+      for (const [name, text] of [['base.json', baseJson], ['ours.json', ours], ['theirs.json', theirs]]) writeFileSync(join(tmp, name!), text!);
+      // git merge-file exits with the number of conflicts (0 = clean) and prints the merge.
+      let merged = '';
+      let conflicts = 0;
+      try {
+        merged = execFileSync('git', ['merge-file', '-p', join(tmp, 'ours.json'), join(tmp, 'base.json'), join(tmp, 'theirs.json')], { encoding: 'utf8' });
+      } catch (e) {
+        conflicts = (e as { status?: number }).status ?? -1;
+        merged = String((e as { stdout?: unknown }).stdout ?? '');
+      }
+      expect(conflicts).toBe(0);
+      // …and the clean merge is exactly what regenerating with both changes writes.
+      expect(merged).toBe(both);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
