@@ -262,12 +262,12 @@ test('what is new: eight items, arrows move, one stacked panel', async ({ page }
   await frozen(page, '.new');
   const stage = news.locator('.news-stage');
   const h0 = await box(stage);
-  await news.getByRole('tab', { name: 'Apps' }).click();
+  await news.getByRole('tab', { name: 'Documents' }).click();
   await page.keyboard.press('ArrowRight');
-  await expect(news.getByRole('tab', { name: 'Data sources' })).toBeFocused();
-  await expect(news.getByRole('tabpanel', { name: 'Data sources' })).toContainText('Test connection checks a database or GraphQL source');
+  await expect(news.getByRole('tab', { name: 'Sources' })).toBeFocused();
+  await expect(news.getByRole('tabpanel', { name: 'Sources you pick' })).toContainText('reading the web and support-pg');
   await page.keyboard.press('End');
-  await expect(page.getByRole('tabpanel', { name: 'A sidebar that folds' })).toBeVisible();
+  await expect(page.getByRole('tabpanel', { name: 'Demo videos you can review' })).toBeVisible();
   expect(await box(stage)).toEqual(h0);
 });
 
@@ -735,11 +735,11 @@ test('a paused search stops its caret, and a paused tour stops its chart', async
   await news.evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await page.mouse.move(5, 690);
   await news.getByRole('button', { name: 'Pause the tour of what is new' }).click();
-  // pick Apps again while paused: its chart grows in again, and it must be held, not running
-  await news.getByRole('tab', { name: 'Data sources' }).click();
-  await news.getByRole('tab', { name: 'Apps' }).click();
+  // pick Run cost while paused: its chart grows in, and it must be held, not running
+  await news.getByRole('tab', { name: 'Sources' }).click();
+  await news.getByRole('tab', { name: 'Run cost' }).click();
   await page.mouse.move(5, 690);
-  const bar = news.locator('.art-appchat .ax-bars i').first();
+  const bar = news.locator('.art-cost .ax-bars i').first();
   const states = await bar.evaluate((el) => el.getAnimations().map((a) => a.playState));
   expect(states.length, 'the chart has an animation to hold').toBeGreaterThan(0);
   expect(states.every((st) => st === 'paused'), states.join(',')).toBe(true);

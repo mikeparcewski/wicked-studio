@@ -14,14 +14,14 @@
  * files it touched (knowledge), its sandbox (agents). Each section is one frame on a desktop window
  * and carries one thing you can watch or drive. Frames: hook + demo → what it does for you → the
  * sidebar → a different agent checks → rules / memory / knowledge → agents + projects → what's new
- * in 0.15 → the platform map → get it.
+ * in 0.16 → the platform map → get it.
  *
  * MOTION: every scene plays only while it is on screen, pauses on hover or focus, has a visible
  * Pause button where it loops, and shows its final state under prefers-reduced-motion. Every state a
  * scene or a control can reach is laid out up front (one grid cell per stack, fixed heights), so no
  * hover, focus, tap or animation moves anything outside its own box (src/scripts/page.js).
  *
- * ACCURACY (studio 0.15 / crew 0.17.0, the ui-v3 line). Every label in the demo is a real studio label:
+ * ACCURACY (studio 0.16 / crew 0.18.0, the ui-v3 line). Every label in the demo is a real studio label:
  *  - A job's page is a chat: your messages right-aligned, each agent's turn under its name, the
  *    plan card's "Approve plan" / "Not now", one "Working on Build…" line, and the final message
  *    "Done. Tests pass (38), and codex reviewed and approved it. Pull request #12 is open." with
@@ -33,15 +33,19 @@
  *    serves them; Insight: Report, Understand, Evaluate; Govern: Steering, Memory, Agents) + LEARN_ITEM at
  *    the rail's foot, above Build & settings, with no "Start here" mark (src/board/navModel.ts; names:
  *    src/board/pageNames.ts). The explorer and the demo strip list them in that order.
- *  - What's new in 0.15 (CHANGELOG [Unreleased] plus the release scope): Apps chat-first (K5: a message is
- *    one apps-turn job, reviewed by a distinct agent; Chat | Properties in one panel); Data sources (Postgres,
- *    MySQL, REST, GraphQL, MCP, CSV/XLSX/SQLite uploads; Test connection; Ask runs only on Run, rows to you
- *    only); the Agents box (see on, query off and Postgres only with a confirmation, projects none; "Agents
- *    read data" on gate cards and deliveries); Linked trackers (PM-1: GitHub Issues + Jira on a project or a
- *    repo; start a job from an issue); Show on Report (DES-REPORT-DASHBOARDS-001 slice 1: Properties or the
- *    card's menu, at most 4, Build a dashboard on Report); Understand's Knowledge map (approved shapes only;
- *    Profile reads counts, never a value); New job's catalog and the / menu (studio#972: one list, one
- *    order); the sidebar folds (localStorage, the icon rail). Nothing unreleased is named (operator rule
+ *  - What's new in 0.16 (CHANGELOG [0.16.0], crew 0.18.0, DES-CATALOG-002 rev 8): documents as a job input
+ *    (chat attachments: pdf, text, images; on Respond/Rework a pdf with no usable text is struck with its reason and
+ *    Start waits; Respond = RFP/RFI/questionnaire, Rework = condense/re-audience/
+ *    generalize/convert/refresh; a fidelity check before landing, a FAIL never lands silently); the per-job source
+ *    pick (the sources token in JobPassage, swap list, a switched-off source is unpickable; units query only the
+ *    picked registered sources, while the repository graph, rules and mcp:estate stay available);
+ *    the sourced-report cards (research, competitive, due diligence, analyze documents, critique, estimate: claims
+ *    cite sources, re-checked); review-change (seats that wrote none of it; nothing posted to the PR); apps publish
+ *    (Share -> Publish sheet; signed-in viewers by default; check + QE + consent; local container image, docker run
+ *    line, embed snippet only for a public app with no actions; wicked deploys nothing); phase plugins (the observe
+ *    tier: "From plugin · <name>" in every job's Details; consent per event topic; Plugins lists it with off and
+ *    Remove); run cost (comparable terminal runs, 90 days, median/p75/p90); demo video review/record again/edit/export
+ *    (plugins S4; a demo whose app data stays out of model context gets no model review: the person reviews it). Not in it: plugin intercept hooks, Teams publishing. Nothing unreleased is named (operator rule
  *    2026-11-05).
  *  - Themes: Wicked Light, Wicked Dark, Ambient (src/theming/appearance.ts, AppearanceSettings.tsx).
  *  - Voice: the mic beside Send when crew has voice, local transcription (src/components/voice/).
@@ -57,7 +61,7 @@
  *  - Studio grades nothing: the checks are crew's, the store is estate's. Studio is a pure client
  *    of crew's /api/v1 + /ws; the wire contract wicked-crew-api-types is the only shared code.
  * Never hardcode the installed version in prose: the install stamp is injected at build time (DT-7).
- * The one exception is the "What's new in 0.15" frame, which names the release it describes.
+ * The one exception is the "What's new in 0.16" frame, which names the release it describes.
  * Schematics in the sidebar explorer are labelled "illustration"; the search table is labelled an
  * example. No numbers appear apart from the demo's and the example table's.
  */
@@ -133,28 +137,29 @@ const BEATS = [
   { id: 'reach', name: 'Agents' },
 ];
 
-// Three benefits, right under the demo (studio 0.15 / crew 0.17.0).
+// Three benefits, right under the demo (studio 0.16 / crew 0.18.0).
 const BENEFITS = [
   { h: 'Start with a chat, not a form.', p: 'Describe what you want; the chat proposes a plan, and nothing starts until you confirm it.' },
   { h: 'Gate decisions come to you as one card.', p: 'The card shows the choices, marks the recommended one when there is one, and, when given, what each would do. Confirm, then undo within 10 seconds if you change your mind.' },
   { h: 'It learns how you work.', p: 'Learn turns your team docs, your best repos and your writing into suggested rules and memories, and sets the tone the lead agent takes with you. You choose which suggestions become active.' },
 ];
 
-// What's new in 0.15, one line each. `tab` is the item's short name on its tab (the row stays one line at
-// every width); the panel's heading carries the full name and labels the panel.
+// What's new in 0.16, one line each. `tab` is the item's short name on its tab (the row stays one line at
+// every width); the panel's heading carries the full name and labels the panel. Each item is one shipped piece of
+// the release (DES-CATALOG-002 rev 8 CS2-CS12, plugins S4); an item is cut, never softened, if it did not ship.
 const NEW = [
-  { name: 'Apps, built by chat', tab: 'Apps', line: 'Every app has its chat beside it. A message is one job: an agent builds the change, crew checks it, and a different agent reviews it before it lands.',
-    more: 'Make a new app by chat from the Apps page. In Edit, drag, resize and retitle in place; Undo and Redo step through its versions.' },
-  { name: 'Data sources', tab: 'Data sources', line: 'Postgres, MySQL, REST, GraphQL, MCP servers, or a CSV, XLSX or SQLite upload. Test connection checks a database or GraphQL source with its saved login.',
-    more: 'On a SQL source, Ask a question of this data hands one agent the structure alone; it drafts one read query, and nothing runs until you click Run. The rows are shown to you only.' },
-  // DECISIONS N3: lead with the benefit, then the on-screen name once.
-  { name: 'What agents can read', tab: 'Agents box', lead: 'Decide what agents may read from each database: its structure, its rows, and for which projects. Jobs and chats read it only in the projects you tick, or everywhere once you choose “Every project”.',
-    line: 'The Agents box on a SQL source: see the structure (on), query the rows (off; Postgres only; turning it on asks you to confirm, since rows go to the agent’s model provider), and the projects (none until you tick one). Gates and deliveries say which sources a job’s agents read.' },
-  { name: 'Linked trackers', tab: 'Trackers', line: 'Link GitHub Issues and Jira projects to a project or a repository. Jobs and chats there see those trackers, under the source’s Agents box, and you can start a job from an issue.' },
-  { name: 'Dashboards on Report', tab: 'Dashboards', line: 'Turn on Show on Report in an app’s Properties, and its live numbers show on Report, up to four at a time. Build a dashboard starts a new one by chat, right from Report.' },
-  { name: 'The Knowledge map', tab: 'Knowledge map', line: 'Understand draws your data sources and their tables beside your code, with the data shapes you approved and the tracker links. Profiling a source reads counts, never a value.' },
-  { name: 'New job, and the / menu', tab: 'New job', line: 'New job opens on a searchable catalog of what your agents can do, and a composer’s / menu lists the same entries, in the same order.' },
-  { name: 'A sidebar that folds', tab: 'Sidebar', line: 'Work, Insight, Govern and Recent each fold, and the rail folds to its icons; this browser remembers both. Learn sits at the foot, above Build & settings.' },
+  { name: 'Documents in a job', tab: 'Documents', line: 'Attach PDFs, text or images in the chat, and the job’s sentence lists them. Respond answers an RFP, RFI or questionnaire from them; Rework makes a new document from them.',
+    more: 'A PDF with no readable text (a scan) is set aside, with the reason. A fidelity check runs before either lands, and a failed check never lands silently.' },
+  { name: 'Sources you pick', tab: 'Sources', line: 'A job that reads data sources names them in its sentence: “reading the web and support-pg”. Tap it to swap from your project’s sources, the web included. Its agents query only the sources you picked; your repository keeps its usual access.',
+    more: 'A source whose “Agents can query” switch is off cannot be picked, and the job says so.' },
+  { name: 'Reports with sources', tab: 'Reports', line: 'Research, Competitive, Due diligence, Analyze documents, Critique and Estimate return a report where every claim cites its source, and a check re-reads each claim at that source before you see it.' },
+  { name: 'Review a change', tab: 'Review', line: 'Type /review-change and a pull request link. You get approve, conditional or reject, with cited findings, judged by agents that wrote none of the change. Nothing is posted to the pull request.' },
+  { name: 'Publish an app', tab: 'Publish', line: 'Publish from an app’s Share sheet: choose who can see it (signed-in viewers by default), and crew checks it, runs QE and asks for your consent before it builds the container image on your machine.',
+    more: 'You get the image, its docker run line and, for a public app (every query public, no actions), an embed snippet. You run it where you choose.' },
+  { name: 'Phase plugins', tab: 'Plugins', line: 'Type /plugin phase and what you want to see. It builds a plugin that adds a section to every job’s details, drawn from the job’s events.',
+    more: 'Installing it asks you to approve each event topic it reads. Plugins lists it, with off and Remove.' },
+  { name: 'Run cost', tab: 'Run cost', line: 'Ask what 40 bug fixes a month would cost. The answer comes from your own comparable runs (median, p75 and p90 spend and time), with every assumption named.' },
+  { name: 'Demo videos you can review', tab: 'Demo video', line: 'A demo video’s review gate shows who reviewed the take, what they found and its contact sheets; a demo whose app data stays out of model context is reviewed by you. Record it again with a note, then edit the cut and export it as a video, a GIF or a poster.' },
 ];
 
 // The example search in the projects card: one project, three repos.
@@ -709,17 +714,17 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  {/* ── 7. What's new in 0.15 ─────────────────────────────────────────────── */}
+  {/* ── 7. What's new in 0.16 ─────────────────────────────────────────────── */}
   <section class="new frame snap-section" id="new" aria-labelledby="new-h" data-autoplay>
     <div class="wrap">
       <div class="sec-head sec-head--row">
         <div>
-          <h2 id="new-h">What’s new in 0.15</h2>
+          <h2 id="new-h">What’s new in 0.16</h2>
         </div>
         <button type="button" class="play-toggle" data-play-toggle aria-pressed="false" aria-label="Pause the tour of what is new"><span class="pt-ic" aria-hidden="true"></span><span class="pt-l" aria-hidden="true"><span class="pt-pause">Pause</span><span class="pt-play">Play</span></span></button>
       </div>
       <div class="news" data-tour data-tour-ms="4500">
-        <div class="news-tabs" role="tablist" aria-label="What is new in 0.15" data-news-row>
+        <div class="news-tabs" role="tablist" aria-label="What is new in 0.16" data-news-row>
           {NEW.map((n, k) => (
             <button type="button" role="tab" class={`news-tab${k === 0 ? ' is-on' : ''}`} id={`new-tab-${k}`} aria-controls={`new-panel-${k}`} aria-selected={k === 0 ? 'true' : 'false'} tabindex={k === 0 ? '0' : '-1'}>{n.tab}</button>
           ))}
@@ -728,7 +733,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           {NEW.map((n, k) => (
             <div class={`news-panel ex-panel${k === 0 ? ' is-on' : ''}`} role="tabpanel" id={`new-panel-${k}`} aria-labelledby={`new-h3-${k}`}>
               <div class="news-copy">
-                <span class="news-n" aria-hidden="true">{String(k + 1).padStart(2, '0')} / 08</span>
+                <span class="news-n" aria-hidden="true">{String(k + 1).padStart(2, '0')} / {String(NEW.length).padStart(2, '0')}</span>
                 <h3 id={`new-h3-${k}`}>{n.name}</h3>
                 {n.lead && <p>{n.lead}</p>}
                 <p class={n.lead ? 'news-sub' : undefined}>{n.line}</p>
@@ -736,77 +741,64 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
               </div>
               <div class="ex-art news-art" aria-hidden="true">
                 {k === 0 && (
-                  <div class="art art-appchat">
-                    <div class="ac-app"><b>Support desk</b><span class="ax-kpis"><span><i></i></span><span><i></i></span><span><i></i></span></span><span class="ax-bars"><i style="--h:.5"></i><i style="--h:.8"></i><i style="--h:.6"></i><i style="--h:.95"></i></span></div>
-                    <div class="ac-chat">
-                      <span class="ac-tabs"><b>Chat</b><span>Properties</span></span>
-                      <span class="au-q">Add a chart of tickets by week</span>
-                      <span class="au-a">Added the chart and its query. Reviewed by Codex. <span class="au-cite">Undo</span></span>
-                    </div>
+                  <div class="art art-catalog art-docs">
+                    <div class="av-bar"><span class="av-text">answer this RFP from our security docs</span></div>
+                    <div class="al-row"><b>Documents</b><span>rfp-acme.pdf · security-faq.md</span></div>
+                    <div class="al-row"><b>Job</b><span>Respond to an RFP</span></div>
+                    <p class="aa-read">Fidelity check: every answer traces to a document</p>
                   </div>
                 )}
                 {k === 1 && (
-                  <div class="art art-ask">
-                    <div class="al-row"><b>support-pg</b><span>Connected · TLS verified · read-only login</span></div>
-                    <div class="ak-q">Which ticket statuses are most common?</div>
-                    <pre class="ak-sql">SELECT status, count(*)
-FROM support.tickets
-GROUP BY status</pre>
-                    <div class="s-acts"><span class="s-btn s-btn--yes">Run</span><span class="ak-note">crew checked this text</span></div>
+                  <div class="art art-sources art-pick">
+                    <div class="av-bar"><span class="av-text">compare our pricing with our top three rivals</span></div>
+                    <div class="al-row"><b>Reading</b><span class="as-chip">the web</span><span class="as-chip">support-pg</span></div>
+                    <div class="al-row"><b>Can’t pick</b><span class="as-chip">billing-mysql</span><span>Agents can’t query it</span></div>
+                    <p class="aa-read">Every step queries only these data sources</p>
                   </div>
                 )}
                 {k === 2 && (
-                  <div class="art art-access">
-                    <div class="al-row"><span>Agents can see this structure</span><i class="tog on"></i></div>
-                    <div class="al-row"><span>Agents can query this source</span><i class="tog"></i></div>
-                    <div class="al-row"><span>Projects</span><span class="as-chip">Public API</span></div>
-                    <p class="aa-read">Agents read data: support-pg</p>
+                  <div class="art art-apps art-cited">
+                    <span class="tk-k">Competitive report</span>
+                    <div class="au-a">C1 Two of the three price per seat. <span class="au-cite">src: rival-a.example/pricing</span></div>
+                    <div class="au-a">C2 One has a free tier. <span class="au-cite">src: rival-b.example/plans</span></div>
+                    <p class="aa-read">Check: each claim re-read at its source</p>
                   </div>
                 )}
                 {k === 3 && (
-                  <div class="art art-trackers">
-                    <span class="tk-k">Linked trackers · Public API</span>
-                    <div class="al-row"><b>Jira</b><span>PAY · Payments</span></div>
-                    <div class="al-row"><b>GitHub</b><span>acme/public-api issues</span></div>
-                    <div class="al-row tk-via"><b>From a repo</b><span>acme/web issues</span></div>
-                    <span class="tk-start">Start a job from an issue</span>
+                  <div class="art art-catalog art-review">
+                    <div class="av-bar"><span class="av-text">/review-change github.com/acme/api/pull/412</span></div>
+                    <div class="al-row"><b>Verdict</b><span>Conditional · 2 findings, each cited</span></div>
+                    <div class="al-row"><b>Judged by</b><span>agents that wrote none of it</span></div>
+                    <p class="aa-read">Nothing posted to the pull request</p>
                   </div>
                 )}
                 {k === 4 && (
-                  <div class="art art-report">
-                    <div class="rp-head"><span><em>Throughput</em><i></i></span><span><em>Time to PR</em><i></i></span></div>
-                    <span class="rp-k">Your dashboards</span>
-                    <div class="rp-dash">
-                      <div class="rp-card"><b>Support desk</b><span class="ax-kpis"><span><i></i></span><span><i></i></span></span></div>
-                      <div class="rp-card rp-card--add"><b>Build a dashboard</b></div>
-                    </div>
-                    <div class="al-row"><span>Show on Report</span><i class="tog on"></i></div>
+                  <div class="art art-catalog art-publish">
+                    <span class="tk-k">Publish · Support desk</span>
+                    <div class="al-row"><b>Who sees it</b><span>Signed-in viewers · support group</span></div>
+                    <div class="al-row"><b>Before</b><span>Check · QE · your consent</span></div>
+                    <pre class="ak-sql">docker run -p 8080:8080 support-desk:v3</pre>
                   </div>
                 )}
                 {k === 5 && (
-                  <div class="art art-kmap">
-                    <div class="km-row"><span class="km-n">support.tickets</span><em>joins</em><span class="km-n">support.customers</span></div>
-                    <div class="km-row"><span class="km-n km-n--code">src/tickets.ts</span><em>describes</em><span class="km-n">support.tickets</span></div>
-                    <div class="km-row"><span class="km-n">Jira · PAY</span><em>tracked in</em><span class="km-n">Public API</span></div>
-                    <div class="km-wait"><span>A data shape is waiting for you</span><span class="s-btn s-btn--yes">Approve</span><span class="s-btn">Reject</span></div>
+                  <div class="art art-catalog art-plugin">
+                    <div class="av-bar"><span class="av-text">/plugin phase list each phase as it starts and ends</span></div>
+                    <div class="km-wait"><span>Install: approve each event topic it reads</span><span class="s-btn s-btn--yes">Approve</span></div>
+                    <div class="al-row"><b>Details</b><span>From plugin · phase log</span></div>
                   </div>
                 )}
                 {k === 6 && (
-                  <div class="art art-catalog">
-                    <div class="av-bar"><span class="av-text">write docs for the auth service</span></div>
-                    <div class="al-row"><b>Best fit</b><span>Write documentation</span></div>
-                    <div class="al-row"><b>Your top</b><span>Fix a bug · Build a feature</span></div>
-                    <div class="ct-slash"><code>/</code><span>the same list, in the same order</span></div>
+                  <div class="art art-catalog art-cost">
+                    <div class="av-bar"><span class="av-text">what would 40 bug fixes a month cost?</span></div>
+                    <div class="al-row"><b>From</b><span>your bug-fix runs, last 90 days</span></div>
+                    <div class="ac-app"><span class="ax-bars"><i style="--h:.55"></i><i style="--h:.72"></i><i style="--h:.95"></i></span><span class="ak-note">median · p75 · p90</span></div>
                   </div>
                 )}
                 {k === 7 && (
-                  <div class="art art-rail">
-                    <div class="rl-full">
-                      <span class="rl-h">Work <i>▾</i></span><span>Projects</span><span>Jobs</span><span>Apps</span>
-                      <span class="rl-h">Insight <i>▸</i></span><span class="rl-h">Govern <i>▸</i></span>
-                      <span class="rl-foot rl-foot--top">Learn</span><span class="rl-foot">Build &amp; settings</span>
-                    </div>
-                    <div class="rl-icons"><i></i><i></i><i></i><i></i><i class="rl-gap"></i><i></i></div>
+                  <div class="art art-catalog art-demo">
+                    <span class="tk-k">Demo video · review gate</span>
+                    <div class="al-row"><b>Reviewed</b><span>1 finding · 3 contact sheets</span></div>
+                    <div class="al-row"><b>Then</b><span>Record it again · Edit the cut · Export</span></div>
                   </div>
                 )}
               </div>
@@ -833,7 +825,7 @@ GROUP BY status</pre>
           <ul class="needs" role="list">
             <li>Node 22 or later (24.12, 25.1 or later to upload files as data sources)</li>
             <li>A container runtime: Docker, Podman, Rancher Desktop, Colima or OrbStack</li>
-            <li>wicked-garden 12.64.0 or later, for the skills every agent follows</li>
+            <li>wicked-garden 12.66.0 or later, for the skills every agent follows</li>
             <li>The whole family instead? <code>npx wicked-installer</code></li>
           </ul>
         </div>
