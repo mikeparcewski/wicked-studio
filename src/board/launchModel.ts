@@ -1,6 +1,7 @@
 import type { BaseSkillPosture, BaseSkillRefusedResponse, LaunchBodyWithDeliver, RosterSeat } from '../api/types.js';
 import { ApiError } from '../api/errors.js';
 import { chatAdmissionOf } from './chatOpen.js';
+import { seatLabel } from './seatNames.js';
 import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictModel.js';
 
 /**
@@ -40,27 +41,56 @@ export function launchSubmit(input: LaunchSubmitInput): { canSubmit: boolean; no
   return { canSubmit, noSeatReason, planNote };
 }
 
+/** B-C6: the ONE plain line shown when no helper can answer — never the per-helper list, never jargon.
+ *  Both the chat dock and the composer read these, so the words never drift. */
+export const NO_HELPER_SIGNED_IN = 'No helper is signed in yet.';
+export const NO_HELPER_AVAILABLE = 'No helper can answer right now.';
+export const NO_HELPER_SET_UP = 'No helper is set up on this daemon yet — add one under Settings.';
+/** The link that sits beside a no-helper line (to the Agents page). */
+export const SIGN_ONE_IN = 'Sign one in';
+
+/** A refusal in plain words: ONE short line, an optional Sign-one-in link, and the per-helper reasons
+ *  kept apart for a disclosure — never put in the line itself. */
+export interface HelperRefusal {
+  line: string;
+  /** Show the "Sign one in" link to the Agents page (signing in could fix it). */
+  signIn: boolean;
+  /** Per-helper reasons, for an optional disclosure only. */
+  reasons: string[];
+}
+
+/** Whether a daemon's refusal reason reads as a signed-out one (signing in is the fix). */
+function readsAsSignedOut(reason: string): boolean {
+  return /sign(?:ed)? out|sign(?:ed)? in|not logged in|log in|unauthori[sz]ed|401/i.test(reason);
+}
+
 /**
  * The Desk's and a session's composer (S7): the message opens (or continues) a chat whose seats are
  * the roster's. When the roster SAYS not one seat can carry it — each benched, not council-eligible,
  * or refused by the daemon's own chat admission for this scope — the composer refuses to send and
- * names why (studio#315): the send would only fail at the daemon. A cold (unread) roster is never a
- * refusal; an empty one is.
+ * says so in ONE plain line (studio#315, B-C6): the per-helper reasons never go in the line (they ride
+ * a disclosure). A cold (unread) roster is never a refusal; an empty one is.
  * `null`: send.
  */
-export function composerSendRefusal(roster: readonly RosterSeat[] | null, scoped: boolean): string | null {
+export function composerSendRefusal(roster: readonly RosterSeat[] | null, scoped: boolean): HelperRefusal | null {
   if (roster === null) return null;
   // A roster the daemon ANSWERED with no seats is an answer, not a cold read (codex on S7).
-  if (roster.length === 0) return 'No helper is set up on this daemon yet — add one under Settings.';
+  if (roster.length === 0) return { line: NO_HELPER_SET_UP, signIn: false, reasons: [] };
   const reasons: string[] = [];
+  let allSignedOut = true;
   for (const seat of roster) {
     const admission = chatAdmissionOf(seat, scoped);
     if (admission.ok && seatCanCarry(seat)) return null;
-    reasons.push(!admission.ok
-      ? `${seat.key}: ${admission.reason ?? 'the daemon would not seat it'}`
-      : noCarryingSeatReason([seat.key], roster) ?? `${seat.key}: unavailable`);
+    // `noCarryingSeatReason` already leads with the seat key ("codex: benched …"); strip it so the row
+    // reads with the seat's ONE name (`seatLabel`) and never doubles it.
+    const reason = !admission.ok
+      ? admission.reason ?? 'the daemon would not seat it'
+      : (noCarryingSeatReason([seat.key], roster) ?? 'unavailable').replace(new RegExp(`^${seat.key}:\\s*`), '');
+    reasons.push(`${seatLabel(seat)}: ${reason}`);
+    if (!readsAsSignedOut(reason)) allSignedOut = false;
   }
-  return `No helper can take this right now — ${reasons.join(' · ')}.`;
+  // Signing in always goes somewhere useful (the Agents page), so the link rides every no-helper line.
+  return { line: allSignedOut ? NO_HELPER_SIGNED_IN : NO_HELPER_AVAILABLE, signIn: true, reasons };
 }
 
 /** THE WORKFLOW COMMAND (DES-STUDIO-REBUILD-001 §5.5/§5.7, slice S19a): a workflow is named with a

@@ -32,7 +32,9 @@ import { useCapabilities } from '../store/capabilities.js';
 import { isReviewerOnly } from '../board/seatNames.js';
 import { analysisScopeChips, chatWorkflowFor, indexOfferFor } from '../board/analyzeChat.js';
 import { addChip, chipsOpenFields, chipsScoped, chipsSignature, chosenChips, clickChip, defaultScopeChips, type ScopeChip } from '../board/chatScopes.js';
-import { cliOptions, defaultChatCli, saveChatCli } from '../board/chatCli.js';
+import { cliOptions, defaultChatCli, saveChatCli, type CliOption } from '../board/chatCli.js';
+import { NO_HELPER_AVAILABLE, NO_HELPER_SIGNED_IN, SIGN_ONE_IN } from '../board/launchModel.js';
+import { AGENTS_PATH } from '../hooks/useRoute.js';
 import { cliName, pageContext, pagePlaceholder, pagePrompts } from '../board/pagePrompts.js';
 import { jobTitle } from '../board/deskWords.js';
 import { reopenSystemChat, systemChatEpoch } from '../store/askDock.js';
@@ -232,6 +234,23 @@ async function upload(chatId: string, files: readonly File[]): Promise<string[] 
 /** The footer under a landed answer: who answered and how many chosen sources it could see. */
 export function answerFooterWords(cli: string, sources: number): string {
   return `Answered by ${cli} · saw ${sources} source${sources === 1 ? '' : 's'}`;
+}
+
+/**
+ * B-C6a: when NO helper can answer a chat, studio says it in ONE plain line — never a red per-helper
+ * paragraph repeated once per helper. All signed out → "No helper is signed in yet."; a mix of signed-out
+ * and benched → "No helper can answer right now." The per-helper reasons ride a disclosure, never the line.
+ * `null` when at least one helper can answer (or none is set up at all — a different surface says that).
+ */
+export function noHelperNotice(clis: readonly CliOption[]): { line: string; reasons: string[] } | null {
+  if (clis.length === 0) return null;
+  const unavailable = clis.filter((o) => !o.ok);
+  if (unavailable.length !== clis.length) return null;
+  const allSignedOut = unavailable.every((o) => o.signInPath !== null);
+  return {
+    line: allSignedOut ? NO_HELPER_SIGNED_IN : NO_HELPER_AVAILABLE,
+    reasons: unavailable.map((o) => `${o.label}: ${o.reason ?? 'unavailable'}`),
+  };
 }
 
 /**
@@ -702,10 +721,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const options = cliOptions(roster, scoped);
             const pick = cliRef.current !== null && options.some((o) => o.key === cliRef.current && o.ok) ? cliRef.current : defaultChatCli(options);
             if (pick === null) {
-              const why = options.filter((o) => !o.ok).map((o) => `${o.label} (${o.reason ?? 'unavailable'})`).join(', ');
-              throw new Error(options.length === 0
-                ? 'No CLI is set up to answer — add one on the Agents page.'
-                : `No CLI can answer right now — ${why}. Sign one in on the Agents page.`);
+              // B-C6a: ONE plain line, no per-helper list in the words (the drawer's notice carries the
+              // Sign-one-in link and the reasons under a disclosure); nothing is sent.
+              const notice = noHelperNotice(options);
+              throw new Error(notice?.line ?? 'No helper is set up to answer yet — add one on the Agents page.');
             }
             // Under the team path the chat records the eligible seats (studio#631's composer choice) and
             // the picked CLI is its primary; without it every seat sent answers, so only the pick is sent.
@@ -741,11 +760,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             }
             const ready = warmed.filter((s) => s.ok).map((s) => s.cliKey);
             if (ready.length === 0) {
-              const detail =
-                warmed.length > 0
-                  ? warmed.map((s) => `${s.cliKey}: ${s.error ?? 'failed'}`).join('; ')
-                  : askPath ? 'no signed-in helper is eligible to answer' : 'the daemon warmed no seats';
-              throw new Error(`${askPath ? 'No helper can answer' : 'No agent seat came up'} — ${detail}`);
+              // B-C6a: one plain line (the raw per-helper reasons belong to a disclosure, not the words).
+              throw new Error(NO_HELPER_AVAILABLE);
             }
             chatIdRef.current = id;
             setShownId(id);
@@ -813,6 +829,32 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   }, [projects, repos, runs, docsByProject]);
 
   const locked = openedScope !== undefined;
+  // B-C6a: before a chat is open, say in ONE plain line when no helper can answer (with a Sign-one-in link);
+  // once the chat is open its one helper is fixed, so the notice stands down.
+  const noHelper = openedScope === undefined ? noHelperNotice(clis) : null;
+  const noHelperNode = noHelper === null ? null : (
+    <p data-testid="ask-no-helper" className="wk-syschat-nohelper">
+      {noHelper.line}{' '}
+      <a
+        href={AGENTS_PATH}
+        data-testid="ask-no-helper-signin"
+        className="wk-link"
+        onClick={(e) => {
+          if (navigate === undefined || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          navigate(AGENTS_PATH);
+        }}
+      >
+        {SIGN_ONE_IN}
+      </a>
+      {noHelper.reasons.length > 0 && (
+        <details data-testid="ask-no-helper-why" className="wk-syschat-nohelper-why">
+          <summary>Details</summary>
+          {noHelper.reasons.map((r) => <span key={r} className="wk-syschat-nohelper-row">{r}</span>)}
+        </details>
+      )}
+    </p>
+  );
   // A replayed answer says who answered; how much it saw is not on record, so it is not claimed.
   const answerFooter = useCallback((key: string, replayed?: boolean) => (replayed === true
     ? `Answered by ${cliName(key, getCachedRoster())}`
@@ -933,6 +975,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             ) : undefined,
           composerControls: (
             <>
+              {noHelperNode}
               {/* crew#1157: an analysis that could not ground its one repository offers to index it. */}
               {indexOffer !== null && (
               <p className="wk-syschat-index" data-testid="analysis-index-offer" data-state={indexOffer.state}>

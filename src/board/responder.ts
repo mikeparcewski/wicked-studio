@@ -106,8 +106,9 @@ export function responderKey(r: Responder): string {
   return r.role === 'seat' ? `seat:${r.cli ?? r.name}` : r.role;
 }
 
-/** Seats that are crew's own machinery (a deliver script, a tool step), never a helper building the work. */
-const NOT_A_HELPER = new Set(['bash', 'tool', 'shell', 'script', 'crew']);
+/** Seats that are crew's own machinery (a deliver script, a tool step, estate's index/annotate), never a
+ *  helper building the work. (B-P7: `wicked-estate` runs the onboarding index + annotate with no helper.) */
+const NOT_A_HELPER = new Set(['bash', 'tool', 'shell', 'script', 'crew', 'wicked-estate', 'estate']);
 
 /** Whether a unit's seat is a helper (a coding-agent CLI), not crew's own machinery (a deliver script, a tool step, a
  *  program's path). */

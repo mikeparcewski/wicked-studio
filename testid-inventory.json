@@ -387,7 +387,25 @@
       ]
     },
     {
+      "testId": "agents-setup-step-estate",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
       "testId": "agents-setup-step-project",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-step-runtime",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-step-skills",
       "files": [
         "src/components/agents/SetupPanel.tsx"
       ]
@@ -2125,6 +2143,24 @@
       ]
     },
     {
+      "testId": "ask-no-helper",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "ask-no-helper-signin",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
+      "testId": "ask-no-helper-why",
+      "files": [
+        "src/components/AskDock.tsx"
+      ]
+    },
+    {
       "testId": "ask-option",
       "files": [
         "src/components/ask/AskCard.tsx"
@@ -3634,6 +3670,18 @@
     },
     {
       "testId": "composer-refused",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-refused-signin",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-refused-why",
       "files": [
         "src/components/session/Composer.tsx"
       ]

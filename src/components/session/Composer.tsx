@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import { artifactOfChips, chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
 import { inViewFor } from '../../store/artifactInView.js';
-import { composerSendRefusal } from '../../board/launchModel.js';
+import { composerSendRefusal, SIGN_ONE_IN } from '../../board/launchModel.js';
+import { isHelperSeat } from '../../board/responder.js';
+import { AGENTS_PATH } from '../../hooks/useRoute.js';
 import { parseWorkflowCommand, WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
 import { allCommandRows, catalogRows, commandList, notOfferedLine, parseCommandLine, takesRepo, workflowEntry, type CatalogRow, type CommandRow } from '../../board/slashCatalog.js';
 import { contentWords } from '../../board/commandSearch.js';
@@ -339,7 +341,15 @@ export function Composer({
     () => (token?.trigger === '/' ? slashItems(token.query, target, catalog) : []),
     [token?.trigger, token?.query, target, catalog],
   );
-  const refusal = composerSendRefusal(roster, project !== null);
+  // B-P7: a running job whose steps are all crew's / estate's own tools needs no helper, so the
+  // no-helper line is noise under its composer — an index + annotate run fine with nobody signed in.
+  const liveRun = useMemo(() => [...runs].reverse().find((v) => !TERMINAL.has(v.session.status)) ?? null, [runs]);
+  const jobHelperFree = useMemo(() => {
+    if (liveRun === null) return false;
+    const assigned = liveRun.units.map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== '');
+    return assigned.length > 0 && assigned.every((c) => !isHelperSeat(c));
+  }, [liveRun]);
+  const refusal = jobHelperFree ? null : composerSendRefusal(roster, project !== null);
   // studio#631: which seats THIS send uses — the launch form's rule (every eligible seat, minus the
   // ones you turned off), shown and editable here. A workflow launch convenes the council seats; an
   // Ask's first send opens a chat with the seats the daemon would admit to it. A reply into a started
@@ -416,7 +426,10 @@ export function Composer({
     ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:'))
     : undefined;
   const namedDropped = namedHelper !== undefined && seatOff(namedHelper.key.slice(2), dropped, picked);
-  const seatRefusal = !seatsApply ? null
+  // B-C6b: when NO helper can be turned on (the roster refusal already stands), never tell the person
+  // to "turn one on in the helpers row" — the one line + Sign-one-in link says it. NO_SEAT_PICKED is only
+  // for when a helper COULD be turned on but every one was dropped.
+  const seatRefusal = !seatsApply || refusal !== null ? null
     : sendSeats.length === 0 ? NO_SEAT_PICKED
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
@@ -681,7 +694,34 @@ export function Composer({
               <button type="button" data-testid="composer-chip-remove" aria-label={`Remove ${chipText(c)}`} onClick={() => { removeAboutChip(composerKey, c.key); box.current?.focus(); }} className="wk-composer-chip-x">×</button>
             </span>
           ))}
-          {refusal !== null && <span data-testid="composer-refused" role="status" className="wk-composer-note wk-composer-note--bad">{refusal}</span>}
+          {refusal !== null && (
+            <span data-testid="composer-refused" role="status" className="wk-composer-note wk-composer-note--bad">
+              {refusal.line}
+              {refusal.signIn && (
+                <>
+                  {' '}
+                  <a
+                    href={AGENTS_PATH}
+                    data-testid="composer-refused-signin"
+                    className="wk-link"
+                    onClick={(e) => {
+                      if (navigate === undefined || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                      e.preventDefault();
+                      navigate(AGENTS_PATH);
+                    }}
+                  >
+                    {SIGN_ONE_IN}
+                  </a>
+                </>
+              )}
+              {refusal.reasons.length > 0 && (
+                <details data-testid="composer-refused-why" className="wk-composer-why">
+                  <summary>Details</summary>
+                  {refusal.reasons.map((r) => <span key={r} className="wk-composer-why-row">{r}</span>)}
+                </details>
+              )}
+            </span>
+          )}
           {/* A command's own answer shows even beside a seat refusal: it is the reason that applies (pi r2). */}
           {note !== null && (refusal === null || commandLine || jobChip !== null) && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
           {jobChip !== null && refusal === null && (

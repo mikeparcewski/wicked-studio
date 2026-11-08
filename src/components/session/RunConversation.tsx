@@ -170,6 +170,20 @@ function YouBubble({ text, testId }: { text: string; testId: string }): React.Re
   );
 }
 
+/**
+ * B-P7: estate's own index / annotate steps stream raw tool output ("annotated 6 member(s) across 1
+ * community/communities … modularity=0.000") — not words for a person. Show a plain summary; the raw
+ * output stays under Show all. `null` for any other step.
+ */
+export function estateStepSummary(cli: string | null, label: string | null, raw: string): string | null {
+  if (cli !== 'wicked-estate' && cli !== 'estate') return null;
+  const l = (label ?? '').toLowerCase();
+  const t = raw.toLowerCase();
+  if (l.includes('annotat') || /annotated\b|modularity|communit/.test(t)) return 'Annotated the code map';
+  if (l.includes('index') || /\bindexed\b|member\(s\)|members? across/.test(t)) return 'Mapped the code';
+  return null;
+}
+
 function StepMessageView({ runId, step, who, checkWord, onOpen, at, evaluator = null }: {
   runId: string; step: StepMessage; who: Responder; checkWord: string | null; onOpen: () => void; at: MessageTime | null;
   /** An evaluator's step (review, security, QE): its face is one sentence and one verdict line ("QE: 2 of 2 items
@@ -182,6 +196,8 @@ function StepMessageView({ runId, step, who, checkWord, onOpen, at, evaluator = 
   const read = useMemo<OutputRead>(() => (raw.state === 'text' ? { state: 'text', text: showText(raw.text) } : raw.state === 'none' ? { state: 'none', why: showText(raw.why) } : raw), [raw, showText]);
   const [all, setAll] = useState(false);
   const concise = useMemo(() => (read.state === 'text' ? conciseOutput(read.text) : null), [read]);
+  // B-P7: an estate index / annotate step shows a plain summary; its raw output opens under Show all.
+  const estateSummary = useMemo(() => (read.state === 'text' ? estateStepSummary(who.cli, step.label, read.text) : null), [read, who.cli, step.label]);
   const face = useMemo(() => (evaluator !== null && read.state === 'text' ? evaluatorFace(read.text, evaluator) : null), [evaluator, read]);
   const verdict = face === null ? concise?.verdict ?? null : null;
   return (
@@ -200,10 +216,10 @@ function StepMessageView({ runId, step, who, checkWord, onOpen, at, evaluator = 
         </>
       )}
       {read.state === 'text' && concise !== null && (face === null || all) && (
-        <div className="wk-chat-md"><Markdown>{all ? read.text : concise.text}</Markdown></div>
+        <div className="wk-chat-md"><Markdown>{all ? read.text : estateSummary ?? concise.text}</Markdown></div>
       )}
       <p className="wk-chat-actions">
-        {(face !== null || concise?.more === true) && (
+        {(face !== null || concise?.more === true || estateSummary !== null) && (
           <button type="button" data-testid="chat-step-more" onClick={() => setAll((a) => !a)} className="wk-chat-link">{all ? 'Show less' : 'Show all'}</button>
         )}
         {checkWord !== null && <span data-testid="chat-step-check" className="wk-chat-chip wk-chat-chip--quiet">{checkWord}</span>}

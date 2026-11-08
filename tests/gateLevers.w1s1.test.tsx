@@ -75,7 +75,7 @@ describe('studio#315 — Send with no seat that can take the work', () => {
     const user = userEvent.setup();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     const reason = await screen.findByTestId('launch-no-seat');
-    expect(reason).toHaveTextContent('no selected seat can take this run');
+    expect(reason).toHaveTextContent('no selected helper can take this run');
     expect(reason).toHaveTextContent('claude: not council-eligible — signed out');
     expect(reason).toHaveTextContent('copilot: benched — quota exhausted');
     // The "the other seats carry the run" sentence would be false here.

@@ -1095,3 +1095,11 @@
   .wk-desk2 .wk-segmented-option { flex-shrink: 0; white-space: nowrap; }
 }
 .wk-dr-acts { width: 1%; text-align: right; }
+
+/* B-P12: the floating chat button (the Ask launcher) stands down on a page that already owns the
+   bottom-right corner with its OWN composer (Understand's Ask), at a phone width (<= 640 px) where the
+   round button overlaps that composer's edge and its Ask button. Scoped to the launcher's selector; the
+   page's own composer is the way to ask there. */
+@media (max-width: 640px) {
+  [data-shell="desk"]:has([data-testid="understand-page"]) [data-testid="ask-launcher"] { display: none !important; }
+}
