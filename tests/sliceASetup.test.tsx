@@ -172,6 +172,10 @@ describe('A-C9 missing helper', () => {
     const codex = (extra: Partial<RosterSeat>) => agentRows({ roster: [helper({ key: 'codex', binary: 'codex', display_name: 'Codex', sign_in_on: 'host', version: missing, ...extra })], defaults: null, now: Date.now() })[0]!;
     expect(agentStatus(codex({})).word).toBe('Not installed');
     expect(agentStatus(codex({ auth: 'signed_in', signed_in: true, issues: [] })).word).not.toBe('Not installed');
+    // crew's auth wins over a stale boolean: a rejected credential still needs this computer's codex to sign in again.
+    expect(agentStatus(codex({ auth: 'signed_out', signed_in: true })).word).toBe('Not installed');
+    // Docker down comes first: the runtime is the thing to start.
+    expect(agentStatus(codex({ auth: 'unknown', health: { status: 'inactive', message: 'Docker isn’t running.', since: new Date().toISOString() } })).word).not.toBe('Not installed');
     // The host floor still calls a missing program not installed.
     const hostSeat = helper({ version: missing });
     delete hostSeat.sign_in;
@@ -204,13 +208,14 @@ describe('A-C4 complete setup guide', () => {
     expect(guide).toHaveTextContent('Get one helper ready.');
     expect(guide).toHaveTextContent('Each sign-in opens the helper’s own sign-in; studio never sees your password.');
     expect(screen.getByTestId('agents-setup-step-estate')).toHaveTextContent('Install the code map service (wicked-estate) to add a repository.');
-    expect(screen.getByTestId('agents-setup-step-runtime')).toHaveTextContent('Start Docker Desktop or Rancher Desktop');
+    // The container helper's sign-in check answered, so the runtime did (N3: the rows win over the image probe).
+    expect(screen.getByTestId('agents-setup-step-runtime')).toHaveTextContent('Done. The container runtime is running.');
     expect(within(guide).getByRole('button', { name: 'Open Skills' })).toBeInTheDocument();
     expect(within(guide).getAllByRole('button', { name: 'Open Nerve Center' })).toHaveLength(2);
-    for (const key of ['skills', 'estate', 'runtime']) expect(screen.getByTestId(`agents-setup-step-${key}`)).toHaveAttribute('data-done', 'false');
+    for (const key of ['skills', 'estate']) expect(screen.getByTestId(`agents-setup-step-${key}`)).toHaveAttribute('data-done', 'false');
   });
   it('treats absent readings as not checked, never done', async () => {
-    infra = []; estateVersion = undefined;
+    infra = []; estateVersion = undefined; roster = [helper({ auth: 'unknown', issues: [] })];
     page('?setup=1');
     for (const key of ['skills', 'estate', 'runtime']) {
       const step = await screen.findByTestId(`agents-setup-step-${key}`);
@@ -226,6 +231,22 @@ describe('A-C4 complete setup guide', () => {
     await act(async () => { await useFirstUseReads.getState().load(true); });
     for (const key of ['skills', 'estate', 'runtime']) expect(screen.getByTestId(`agents-setup-step-${key}`)).toHaveAttribute('data-done', 'true');
     expect(writes).toHaveLength(0); // A helper still needs to sign in.
+  });
+  // first-run N3: step 4 read only the system snapshot's image probe, which a loaded host times out ("unknown"),
+  // so it said "Not checked yet." with Docker up, and the same with Docker down while the rows said so.
+  it('reads the container runtime the way the Helpers rows do', async () => {
+    infra = [{ key: 'skills', state: 'ok' }, { key: 'seat_images', state: 'unknown' }];
+    page('?setup=1');
+    const step = await screen.findByTestId('agents-setup-step-runtime');
+    await waitFor(() => expect(step).toHaveTextContent('Done. The container runtime is running.'));
+    expect(step).toHaveAttribute('data-done', 'true');
+    cleanup(); resetAgentsReads(); resetFirstUseReads(); clearCachedRoster();
+    roster = [helper({ auth: 'unknown', health: { status: 'inactive', message: 'Docker isn’t running.', since: new Date().toISOString() }, issues: [] })];
+    infra = [{ key: 'skills', state: 'ok' }, { key: 'seat_images', state: 'ok' }];
+    page('?setup=1');
+    const down = await screen.findByTestId('agents-setup-step-runtime');
+    await waitFor(() => expect(down).toHaveTextContent('Not done. Docker isn’t running: start it, then check again.'));
+    expect(down).toHaveAttribute('data-done', 'false');
   });
   it('calls an unread helper sign-in not checked yet', async () => {
     roster = [helper({ auth: 'unknown', issues: [] })];

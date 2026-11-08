@@ -1,4 +1,5 @@
 import type { SystemSnapshot } from '../api/system.js';
+import { helperRuntimeDown } from './agentsCopy.js';
 import { boundaryHolds, type AgentRow } from './agentsModel.js';
 
 /** First use stays open until the live helper, skills, code map and runtime checks pass,
@@ -76,6 +77,21 @@ export function setupChecks(snapshot: SystemSnapshot | null, health?: unknown, d
     skills: skillsBlocked || state('skills') === false ? false : skillsReady,
     estate, runtime, runtimeRequired,
   };
+}
+
+/**
+ * The container runtime as the Helpers rows read it (first-run N3): a container helper whose check says the runtime
+ * is stopped ("Docker isn't running") means it is down; a container helper whose sign-in check answered (signed in
+ * or out) means it answered. The system snapshot's seat-image probe can time out on a loaded host and is read once,
+ * so it only fills in when no row has said either. `downReason` is the rows' own sentence.
+ */
+export function withRowRuntime(checks: SetupChecks, rows: readonly AgentRow[]): SetupChecks & { downReason: string | null } {
+  const container = rows.filter((r) => r.seat.sign_in === 'container');
+  if (container.length === 0) return { ...checks, downReason: null };
+  const down = container.map(helperRuntimeDown).find((m) => m !== null) ?? null;
+  if (down !== null) return { ...checks, runtime: false, runtimeRequired: true, downReason: down };
+  const answered = container.some((r) => r.seat.auth === 'signed_in' || r.seat.auth === 'signed_out');
+  return { ...checks, runtime: answered ? true : checks.runtime, runtimeRequired: true, downReason: null };
 }
 
 /**

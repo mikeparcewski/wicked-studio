@@ -1,4 +1,4 @@
-import { benchRetry, commandDisplay, otherReady, qeAvailable, workAdmissionOf, type AgentIssue, type AgentRow } from './agentsModel.js';
+import { authOf, benchRetry, commandDisplay, otherReady, qeAvailable, workAdmissionOf, type AgentIssue, type AgentRow } from './agentsModel.js';
 import { displayText } from './homePath.js';
 import { relTime } from './relTime.js';
 
@@ -81,7 +81,10 @@ export function helperNotInstalled(row: AgentRow): boolean {
   if (row.seat.recent_bench?.kind === 'not_installed') return true;
   if (!(row.seat.version?.install_source === null && row.seat.version.installed === null)) return false;
   if (row.seat.sign_in !== 'container') return true;
-  return row.seat['sign_in_on'] === 'host' && row.seat.auth !== 'signed_in' && row.seat.signed_in !== true;
+  // A stopped runtime is the first thing to fix on the container floor (its own card says so).
+  if (helperRuntimeDown(row) !== null) return false;
+  // crew's `auth` wins over the legacy boolean (a rejected credential can read signed_out with signed_in true).
+  return row.seat['sign_in_on'] === 'host' && authOf(row.seat) !== 'signed_in';
 }
 
 /** A stopped runtime prevents the sign-in probe itself, rather than reporting a signed-out helper. */
