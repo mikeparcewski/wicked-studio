@@ -80,7 +80,8 @@
   border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-overlay);
 }
 .wk-pass-swap li { padding: 6px 10px; border-radius: 7px; cursor: pointer; }
-.wk-pass-swap li[aria-selected="true"], .wk-pass-swap li:hover { background: var(--accent-wash); }
+.wk-pass-swap li[aria-selected="true"], .wk-pass-swap li:not([aria-disabled="true"]):hover { background: var(--accent-wash); }
+.wk-pass-swap li[aria-disabled="true"] { color: var(--ink-muted); cursor: default; }
 .wk-pass-swap li:focus-visible { outline: 2px solid var(--ink-high); outline-offset: -2px; }
 
 .wk-pass-aside { margin: 0; font-size: var(--text-body); color: var(--ink-high); font-style: italic; padding-left: 10px; border-left: 2px solid var(--wk-pass-rule); }

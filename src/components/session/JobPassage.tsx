@@ -4,6 +4,7 @@ import { api } from '../../api/client.js';
 import type { ChatPlanOffer, ProposalRevisionEdits, ProposalToken, SessionView } from '../../api/types.js';
 import { ApiError } from '../../api/errors.js';
 import { proposalRefusal } from '../../board/artifactProposal.js';
+import { inputTokenChoices, type InputTokenChoice, type InputTokenUnavailable } from '../../board/jobInputs.js';
 import { commitGateDecision, type GateAnswer } from '../../board/gateActions.js';
 import {
   announceOf, changedTokenIds, foldLine, jobSettled, needsWords, proposalTarget, regionName, sentenceParts, settledLine, withWords,
@@ -72,9 +73,9 @@ export function helperRefusalWords(words: string, nameOf: (key: string) => strin
 /** What a queued decision does, in its own words (a Stop is never called an Approve). */
 const QUEUED_WORD: Readonly<Record<string, string>> = { approve: 'Approve', 'request-changes': 'Send back', reject: 'Reject', stop: 'Stop the job', 'edit-plan': 'Add a step' };
 
-const TOKEN_KIND: Readonly<Record<ProposalToken['kind'], string>> = {
+const TOKEN_KIND: Readonly<Record<ProposalToken['kind'] | 'documents' | 'sources', string>> = {
   card: 'kind of job', option: 'kind of job', repo: 'repository', project: 'project', seats: 'who works on it',
-  depth: 'how deep', checks: 'what checks it', detail: 'detail',
+  depth: 'how deep', checks: 'what checks it', detail: 'detail', documents: 'documents', sources: 'sources',
 };
 
 export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, navigate, say, onChanged }: {
@@ -413,7 +414,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   /** The version the open listbox was opened on: a pick counts only for it (§2.7.3 rule 6). */
   const swapOpenedOn = useRef<string | null>(null);
   const tokenRefs = useRef(new Map<string, HTMLSpanElement | null>());
-  const pickSwap = (t: ProposalToken, i: number | 'else'): void => {
+  const pickSwap = (t: ProposalToken, choices: InputTokenChoice[], i: number | 'else'): void => {
     setOpenSwap(null);
     // Focus stays on the token the person was changing (it stays focusable while the change is in flight).
     if (swapOpenedOn.current !== pt) { press.say('The job changed while you picked. Nothing was sent.'); return; }
@@ -427,7 +428,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       focusSessionComposer();
       return;
     }
-    const c = t.swap?.choices[i];
+    const c = choices[i];
     if (c !== undefined) revise(c.edit, 'swap', undefined, t.id);
   };
   const lineageHead = useRef<string | null>(pt);
@@ -437,14 +438,16 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {parts.map((x, i) => {
         if ('text' in x) return <Fragment key={i}>{x.text}</Fragment>;
         const t = x.token;
+        const input = inputTokenChoices(t, v.proposal);
+        const choices = input?.choices ?? t.swap?.choices ?? [];
         const pending = v.phase === 'swapPending' && swapToken === t.id;
         const label = pending ? '…' : t.label;
         const wash = washed.has(t.id) ? ' wk-pass-tok--chg' : '';
-        if (!v.tokensLive || (t.swap === null && t.kind !== 'checks')) {
+        if (!v.tokensLive || (input === null && t.swap === null && t.kind !== 'checks')) {
           return <b key={i} data-testid="job-passage-fact" data-token={t.id} className={`wk-pass-fact${wash}`}>{label}{t.kind === 'checks' && <span aria-hidden className="wk-pass-lock" />}</b>;
         }
         return (
-          <TokenButton key={i} token={t} label={label} wash={wash} open={openSwap === t.id} held={v.tokensHeld}
+          <TokenButton key={i} token={t} choices={choices} unavailable={input?.unavailable ?? []} label={label} wash={wash} open={openSwap === t.id} held={v.tokensHeld}
             tokenRef={(el) => { tokenRefs.current.set(t.id, el); }} explainId={`${lineage.lineage}-why`}
             onOpen={() => {
               if (v.tokensHeld) return;
@@ -452,7 +455,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
               swapOpenedOn.current = pt;
               setOpenSwap((o) => (o === t.id ? null : t.id));
             }}
-            onPick={(c) => pickSwap(t, c)} onClose={() => setOpenSwap(null)} expanded={t.kind === 'checks' ? explain : openSwap === t.id} />
+            onPick={(c) => pickSwap(t, choices, c)} onClose={() => setOpenSwap(null)} expanded={t.kind === 'checks' ? explain : openSwap === t.id} />
         );
       })}
       {v.tokensLive && sentence?.ask != null && v.question === null && <> {sentence.ask}</>}
@@ -775,8 +778,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
 
 /** A swappable token: an inline `role="button"` (a native button cannot break across lines, §8.7) opening a listbox
  *  of crew's choices plus "Something else…". The checks token opens an explanation instead. */
-function TokenButton({ token, label, wash, open, expanded, held, tokenRef, explainId, onOpen, onPick, onClose }: {
+function TokenButton({ token, choices, unavailable, label, wash, open, expanded, held, tokenRef, explainId, onOpen, onPick, onClose }: {
   token: ProposalToken; label: string; wash: string; open: boolean; expanded: boolean;
+  choices: InputTokenChoice[]; unavailable: InputTokenUnavailable[];
   /** A change is in flight: the token stays focusable, says it is held, and opens nothing. */
   held: boolean;
   tokenRef: (el: HTMLSpanElement | null) => void;
@@ -786,7 +790,6 @@ function TokenButton({ token, label, wash, open, expanded, held, tokenRef, expla
 }): React.ReactElement {
   const ref = useRef<HTMLSpanElement | null>(null);
   const listId = useId();
-  const choices = token.swap?.choices ?? [];
   const [cursor, setCursor] = useState(0);
   const count = choices.length + 1;
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
@@ -822,6 +825,7 @@ function TokenButton({ token, label, wash, open, expanded, held, tokenRef, expla
           onFocus={() => { focusIn.current = true; }}
           onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) focusIn.current = false; }}
           onKeyDown={(e) => {
+            if ((e.target as HTMLElement).closest('[aria-disabled="true"]') !== null) return;
             if (e.key === 'ArrowDown') { e.preventDefault(); const n = (cursor + 1) % count; setCursor(n); optionRefs.current[n]?.focus(); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); const n = (cursor - 1 + count) % count; setCursor(n); optionRefs.current[n]?.focus(); }
             else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(cursor < choices.length ? cursor : 'else'); }
@@ -830,6 +834,9 @@ function TokenButton({ token, label, wash, open, expanded, held, tokenRef, expla
           {choices.map((c, i) => (
             <li key={i} ref={(el) => { optionRefs.current[i] = el; }} role="option" tabIndex={-1} aria-selected={cursor === i}
               data-testid="job-passage-swap-option" onClick={() => onPick(i)}>{c.label}</li>
+          ))}
+          {unavailable.map((c, i) => (
+            <li key={`unavailable-${i}`} role="option" aria-disabled="true" aria-selected="false">{c.label} · {c.reason}</li>
           ))}
           <li ref={(el) => { optionRefs.current[choices.length] = el; }} role="option" tabIndex={-1} aria-selected={cursor === choices.length}
             data-testid="job-passage-swap-else" onClick={() => onPick('else')}>Something else…</li>
