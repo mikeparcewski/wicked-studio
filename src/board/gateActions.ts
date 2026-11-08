@@ -8,6 +8,7 @@ import type { GateDecision, SessionView } from '../api/types.js';
 import { jobTitle, plainGateQuestion } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
+import { PLAN_UNSEEN_TEXT, seenPlanRev } from './planRevBinding.js';
 import { beginGateRead, gateFromInfo, gateGen, useGateStore, type GateReadTicket } from '../store/gates.js';
 import { recordShown } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -276,6 +277,14 @@ export function commitGateDecision(
       return Promise.resolve('cancelled');
     }
   }
+  // DES-CATALOG-002: a run launched from a chat proposal takes a plan answer only with the revision the person was
+  // shown, bound here at the moment they decided (never the newest one at send time).
+  const rev = seenPlanRev(runId, decision);
+  if (rev === null) {
+    reportDecision('not-sent', PLAN_UNSEEN_TEXT);
+    return Promise.resolve('cancelled');
+  }
+  if (rev !== undefined) decision = { ...decision, planRev: rev };
   patch(runId, { queued: true, ...NO_ERROR });
   // studio#368: a deliver gate's approve pushes — the host names the branch and repo when it knows
   // them; any other caller (palette, triage keys) still gets the push line off the gate's kind.

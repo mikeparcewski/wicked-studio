@@ -20,6 +20,8 @@ import { useRoster } from '../../hooks/useRoster.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import { launchChatId } from '../launch/launchChatId.js';
 import { ReducedAssuranceOptIn } from './AssuranceReceipt.js';
+import { Switch } from '../ui/Switch.js';
+import { chatStartPower, readPowerDefault, usePowerDefaultOn, useReviewPlan } from '../../store/reviewPlan.js';
 
 /** What the composer calls on Enter while a card is on it: true when the work started (the composer then clears). */
 export interface InlineStartHandle {
@@ -75,6 +77,10 @@ export function InlineStart({
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
   const reducedCap = useCapabilities((s) => s.reducedAssurance);
   const [reduced, setReduced] = useState(false);
+  // Power mode (operator ruling 2026-11-06): with the default on, the chat box asks whether to review the plan first.
+  const powerDefaultOn = usePowerDefaultOn();
+  const reviewPlan = useReviewPlan((s) => s.on);
+  const setReviewPlan = useReviewPlan((s) => s.set);
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
   const [pickedRepo, setPickedRepo] = useState<string | null>(null);
   const [pickedProject, setPickedProject] = useState<string | null>(null);
@@ -131,6 +137,12 @@ export function InlineStart({
   const seats: RosterSeat[] = seatKeys.flatMap((key) => (roster ?? []).filter((x) => x.key === key));
 
   const offerReduced = reducedCap && entry !== null && entry.launchKind === 'run' && seats.length === 1;
+  const offerReview = powerDefaultOn === true && entry !== null && entry.launchKind === 'run';
+  // What the box shows now (the setting and the person's choice), for the start to check against.
+  const shownDefault = useRef<boolean | null>(powerDefaultOn);
+  shownDefault.current = powerDefaultOn;
+  const reviewNow = useRef(reviewPlan);
+  reviewNow.current = reviewPlan;
   const { label: wordsLabel, optional: wordsOptional } = entry === null ? { label: 'What do you want done?', optional: false } : entryWords(entry);
   const blocker: string | null = entry === null
     ? (catalogState === 'loading' ? WORKFLOWS_LOADING_LINE : catalogState === 'error' ? WORKFLOWS_FAILED_LINE : 'This workflow is not listed now. Remove it and pick another.')
@@ -158,6 +170,9 @@ export function InlineStart({
       if (busy || inFlight.has(composerKey)) return false;
       if (blocker !== null || entry === null) { setError(blocker); return false; }
       const asked = requestNow.current;
+      // What the box showed at the press (the setting and Review plan), captured before any read can redraw it.
+      const shownAtPress = shownDefault.current === true;
+      const reviewAsked = reviewNow.current;
       const chip = chipsOf(useComposerChips.getState(), composerKey).find((c) => c.kind === 'workflow');
       inFlight.add(composerKey);
       setBusy(true);
@@ -188,10 +203,27 @@ export function InlineStart({
           throw new Error(`the daemon did not say what it can do (${e instanceof Error ? e.message : String(e)}); try again`);
         }
         const chatId = launchChatId(composerKey, caps['chatIdOnLaunch'] === true);
+        // The Power-mode default, read NOW and before the last checks (operator ruling 2026-11-06). It must be the one
+        // the box showed: a setting that changed since (or that can't be read) starts nothing, and the box redraws
+        // with it, so a power run never starts behind a line that promised a plan review.
+        const powerCapNow = caps['powerMode'] === true;
+        // The box draws from the capability store: a fresh answer that differs (a startup read that failed) updates it,
+        // so a refused start's redraw shows what this start was checked against.
+        if (useCapabilities.getState().powerMode !== powerCapNow) useCapabilities.setState({ powerMode: powerCapNow });
+        let defaultNow = false;
+        if (powerCapNow) {
+          try { defaultNow = await readPowerDefault({ fresh: true }); } catch (e) {
+            throw new Error(`the Power-mode setting could not be read (${e instanceof Error ? e.message : String(e)}); try again`);
+          }
+          if (defaultNow !== shownAtPress) {
+            throw new Error(defaultNow ? 'Power mode for new jobs is on now: choose Review plan, then press Enter again.' : 'Power mode for new jobs is off now: this job reviews its plan. Press Enter again.');
+          }
+        }
         const humanConfirm = await preview.resolveHumanConfirm();
         if (!mounted.current) return false;
         if (blockerNow.current !== null) throw new Error(blockerNow.current);
         if (requestNow.current !== asked) throw new Error('This job changed while it was being checked. Look it over and press Enter again.');
+        if (reviewNow.current !== reviewAsked) throw new Error('Review plan changed while the job was being checked. Press Enter again.');
         const stillOn = chipsOf(useComposerChips.getState(), composerKey).some((c) => c.kind === 'workflow' && c.key === chip?.key && c.workflowId === entry.launchId);
         if (!stillOn) return false;
         const body = workflowLaunchBody({
@@ -209,8 +241,9 @@ export function InlineStart({
           skipQeReason: null,
           chatId,
           primary: null,
-          // The plan gate holds: a power run has none.
-          power: caps['powerMode'] === true ? false : null,
+          // The Power-mode default, with the person's Review plan choice (operator ruling 2026-11-06): read NOW; a
+          // failed read of the setting is no default, and the start holds at its plan (phased), never guesses a power run.
+          power: chatStartPower(powerCapNow, defaultNow, reviewAsked),
         });
         const { runId } = await api.launchRun(body);
         useProvenanceStore.getState().markLaunchedHere(runId);
@@ -231,7 +264,7 @@ export function InlineStart({
   const line = entry === null ? null
     : entry.launchKind === 'app'
       ? `Enter makes the app${projectName !== null ? ` in project ${projectName}` : ''}: your words are its first message, and its page opens on that turn.`
-      : `Enter starts ${entry.title}${where !== '' ? ` ${where}` : ''}${launchChatId(composerKey, chatIdOnLaunch) !== null ? ' in this chat' : ' as its own job'}. It asks you to approve the plan before any step runs.`;
+      : `Enter starts ${entry.title}${where !== '' ? ` ${where}` : ''}${launchChatId(composerKey, chatIdOnLaunch) !== null ? ' in this chat' : ' as its own job'}.${offerReview && !reviewPlan ? ' It runs as one power run: no plan review, and it asks you at hand-off.' : ' It asks you to approve the plan before any step runs.'}`;
   const repoChoices = allChoices ? registered : registered.slice(0, CHOICES_MAX);
   const projectChoices = allChoices ? filed : filed.slice(0, CHOICES_MAX);
   return (
@@ -272,6 +305,12 @@ export function InlineStart({
         </span>
       )}
       {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="composer-start-reduced" />}
+      {offerReview && (
+        <span data-testid="composer-start-review-plan" className="wk-composer-start-need">
+          <Switch label="Review plan" checked={reviewPlan} onChange={setReviewPlan} data-testid="composer-start-review-plan-toggle"
+            hint={reviewPlan ? 'You’ll review the plan first.' : 'Power run: no plan review.'} />
+        </span>
+      )}
       {entry !== null && entry.launchKind === 'run' && presetsFailed && (
         <button type="button" data-testid="composer-start-retry" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => invalidatePresets()}>Try again</button>
       )}
