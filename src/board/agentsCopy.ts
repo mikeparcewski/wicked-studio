@@ -65,10 +65,23 @@ function jobs(n: number): string {
   return `${n} ${n === 1 ? 'job' : 'jobs'}`;
 }
 
-/** A null source explicitly means the program was not found on this computer. */
+/**
+ * Whether the helper truly can't be used on the floor that runs it.
+ *
+ * The engine benching it as `not_installed` always counts (the program that runs it was missing). Crew's
+ * version reading probes THIS computer (a null source: not on the daemon's PATH), which decides only when
+ * this computer's program is the one used: on the host floor, or on the container floor for a helper whose
+ * sign-in runs on this computer (`sign_in_on: 'host'`: codex, pi, opencode) and isn't signed in yet. On the
+ * container floor a helper runs from its seat image and claude and copilot sign in through a login container,
+ * so a missing host program is not "not installed" there. A crew that doesn't say where sign-in runs leaves a
+ * container helper signable: a sign-in that needs this computer's program then says so (crew's
+ * `cli_not_installed`, C3).
+ */
 export function helperNotInstalled(row: AgentRow): boolean {
-  return row.seat.version?.install_source === null && row.seat.version.installed === null
-    || row.seat.recent_bench?.kind === 'not_installed';
+  if (row.seat.recent_bench?.kind === 'not_installed') return true;
+  if (!(row.seat.version?.install_source === null && row.seat.version.installed === null)) return false;
+  if (row.seat.sign_in !== 'container') return true;
+  return row.seat['sign_in_on'] === 'host' && row.seat.auth !== 'signed_in' && row.seat.signed_in !== true;
 }
 
 /** A stopped runtime prevents the sign-in probe itself, rather than reporting a signed-out helper. */

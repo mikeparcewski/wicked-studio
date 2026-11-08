@@ -140,7 +140,7 @@ describe('A-C3 sign-in opening failures', () => {
 
 describe('A-C9 missing helper', () => {
   it('shows one install problem for missing opencode, without safety or version warnings', async () => {
-    roster = [helper({ key: 'opencode', binary: 'opencode', display_name: 'opencode',
+    roster = [helper({ key: 'opencode', binary: 'opencode', display_name: 'opencode', sign_in_on: 'host',
       version: { installed: null, install_source: null, checked_at: new Date().toISOString(), status: 'unproven', proven: '1.17.18', why: 'no_answer' },
       issues: [{ code: 'version_unproven', severity: 'warning', params: {}, message: 'not found' },
         { code: 'signed_out', severity: 'problem', params: {}, message: 'signed out' }],
@@ -153,6 +153,29 @@ describe('A-C9 missing helper', () => {
     const [row] = agentRows({ roster, defaults: null, now: Date.now() });
     expect(agentStatus(row!)).toEqual({ word: 'Not installed', tone: 'fail', move: null });
     expect(modal).not.toHaveTextContent(/Safety checks are off|didn’t answer when studio asked|actions run unchecked/);
+  });
+  // fix-notinstalled (first-run-2): on the container floor the helper runs from its seat image and claude signs in
+  // through a login container, so no claude on this computer's PATH is not "not installed".
+  it('offers Sign in for claude on the container floor with no claude on this computer', async () => {
+    const missing = { installed: null, install_source: null, checked_at: new Date().toISOString(), status: 'no_pin' as const, proven: null };
+    roster = [helper({ sign_in_on: 'container', version: missing })];
+    const [row] = agentRows({ roster, defaults: null, now: Date.now() });
+    expect(agentStatus(row!).word).not.toBe('Not installed');
+    page('?fix=claude');
+    const modal = await screen.findByTestId('agents-modal');
+    expect(modal).not.toHaveTextContent('isn’t installed');
+    expect(within(modal).getByTestId('agents-signin')).toBeInTheDocument();
+    // A crew that doesn't say where sign-in runs leaves a container helper signable (its refusal is C3's).
+    const [older] = agentRows({ roster: [helper({ version: missing })], defaults: null, now: Date.now() });
+    expect(agentStatus(older!).word).not.toBe('Not installed');
+    // A host-sign-in helper (codex) already signed in keeps working from its image; signed out, it needs this computer's codex.
+    const codex = (extra: Partial<RosterSeat>) => agentRows({ roster: [helper({ key: 'codex', binary: 'codex', display_name: 'Codex', sign_in_on: 'host', version: missing, ...extra })], defaults: null, now: Date.now() })[0]!;
+    expect(agentStatus(codex({})).word).toBe('Not installed');
+    expect(agentStatus(codex({ auth: 'signed_in', signed_in: true, issues: [] })).word).not.toBe('Not installed');
+    // The host floor still calls a missing program not installed.
+    const hostSeat = helper({ version: missing });
+    delete hostSeat.sign_in;
+    expect(agentStatus(agentRows({ roster: [hostSeat], defaults: null, now: Date.now() })[0]!).word).toBe('Not installed');
   });
   it('does not claim a signed-out helper with an unreadable version is taking unchecked actions', () => {
     const [row] = agentRows({ roster: [helper({ version: { installed: null, install_source: 'other', checked_at: new Date().toISOString(), status: 'unproven', proven: '1.17.18', why: 'no_answer' },
