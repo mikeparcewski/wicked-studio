@@ -179,7 +179,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
   let sentence: string;
   let body: React.ReactNode;
   if (rosterFailed && !v.hasRoster) {
-    sentence = 'Studio couldn’t ask your agents just now.';
+    sentence = 'Studio couldn’t ask your helpers just now.';
     body = kind === 'offline'
       ? (
         <>
@@ -201,7 +201,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
   } else if (v.rows.length === 0) {
     sentence = agentsSentence(v.rows);
     body = (
-      <CalmEmpty data-testid="agents-empty" title="No AI agents found on this computer."
+      <CalmEmpty data-testid="agents-empty" title="No helpers found on this computer."
         body={<p>Install one of Claude Code, Codex, Pi, GitHub Copilot CLI or opencode, then check again.</p>}
         action={<>
           <a href={INSTALL_DOCS} target="_blank" rel="noreferrer" className="wk-calm-btn wk-calm-btn--primary">How to install an agent</a>
@@ -219,7 +219,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
       <>
         {rosterFailed && <StateBanner kind="stale" asOf={v.readAt} onRetry={retry} retrying={retrying} data-testid="agents-banner" />}
         {missing.length > 0 && <StateBanner kind="partial" what={missing.join(' and ')} data-testid="agents-partial" />}
-        <CalmSection label="Your agents" tools={menu} data-testid="agents-list-sec">
+        <CalmSection label="Your helpers" tools={menu} data-testid="agents-list-sec">
           <CalmRows data-testid="agents-list" label="Helpers">
             {v.rows.map((r) => <AgentLine key={r.key} r={r} open={open} />)}
           </CalmRows>

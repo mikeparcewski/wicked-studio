@@ -1,4 +1,3 @@
-import { attentionCountWords } from '../../board/needsQueue.js';
 import type { SystemAction, SystemAttention, SystemSnapshot } from '../../api/system.js';
 import type { RosterSeat } from '../../api/types.js';
 import type { NerveState } from '../../board/nerveCenter.js';
@@ -146,7 +145,6 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
         sentenceTestId="nc-headline"
         sentence={<>
           <span className="wk-ncv-lead" data-tone={sentence.tone}>{healthText(sentence.lead)}</span>
-          {state.read === 'fresh' && state.attention.length > 0 && <> <span>{attentionCountWords(state.attention.length)}.</span></>}
           {sentence.rest !== '' && <> <span>{healthText(sentence.rest)}</span></>}
         </>}
         titleAside={<PageAskButton kind="nerve" testId="nc-chat" />}

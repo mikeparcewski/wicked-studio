@@ -337,7 +337,7 @@ with sync_playwright() as p:
     page3.goto(f"{origin}/agents", wait_until="networkidle")
     page3.get_by_test_id("agents-empty").wait_for(state="visible", timeout=10000)
     em = page3.get_by_test_id("agents-empty").inner_text()
-    check("empty", "No AI agents found on this computer." in em and "Claude Code, Codex" in em
+    check("empty", "No helpers found on this computer." in em and "Claude Code, Codex" in em
           and page3.get_by_test_id("agents-tiles").count() == 0, text=em)
     page3.close()
     mode["roster"] = "ok"

@@ -15,7 +15,7 @@ export function BuildPage({ navigate }: { navigate: Navigate }): React.ReactElem
   // The calm page pattern (Steering, Memory, Agents): a title and one sentence, then roomy rows.
   return (
     <CalmPage data-testid="build-page">
-      <CalmHead title={PAGE_NAMES.build} sentence="What your agents can use, and how studio runs on this computer." />
+      <CalmHead title={PAGE_NAMES.build} sentence="What your helpers can use, and how studio runs on this computer." />
       <CalmRows label={PAGE_NAMES.build}>
         {BUILD_LINKS.map((l) => (
           <CalmRow key={l.id} tone="quiet" title={l.label} sub={l.hint} href={l.path} openTestId={l.testId} onOpen={() => navigate(l.path)}

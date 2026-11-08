@@ -151,7 +151,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   const agentsUnread = kind === 'agents' && agentsRead !== 'done';
   const agentsUnavailable = kind === 'agents' && filterWorkflow !== null;
   const suggestions = [
-    { id: 'agents', label: 'Compare your agents', go: () => { setKind('agents'); setPicked((p) => ({ ...p, agents: agents.slice(0, 3).map((a) => a.cli) })); } },
+    { id: 'agents', label: 'Compare your helpers', go: () => { setKind('agents'); setPicked((p) => ({ ...p, agents: agents.slice(0, 3).map((a) => a.cli) })); } },
     { id: 'workflows', label: 'Compare your two busiest workflows', go: () => { setKind('workflows'); setPicked((p) => ({ ...p, workflows: workflows.slice(0, 2).map((w) => w.key) })); } },
     { id: 'jobs', label: 'A failed job against a finished one', go: () => {
       const ended = [...kept].filter((v) => typeof v.session.ended_at === 'number');

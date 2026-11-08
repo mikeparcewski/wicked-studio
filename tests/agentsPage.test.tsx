@@ -92,7 +92,7 @@ describe('the page and its states (§3.3)', () => {
   it('empty: names the agents to install, with the install docs and Check again', async () => {
     getRoster.mockResolvedValue({ roster: [] });
     renderPage();
-    expect(await screen.findByTestId('agents-empty')).toHaveTextContent('No AI agents found on this computer.');
+    expect(await screen.findByTestId('agents-empty')).toHaveTextContent('No helpers found on this computer.');
     expect(screen.getByRole('link', { name: 'How to install an agent' })).toHaveAttribute('href', expect.stringContaining('wicked-crew'));
   });
 

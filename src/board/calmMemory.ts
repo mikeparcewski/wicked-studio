@@ -27,13 +27,13 @@ export function memoryOrigin(m: Pick<MemoryItem, 'scope' | 'facets'>): MemoryOri
   return null;
 }
 
-/** The page's one sentence: "Your agents remember 333 things. 2 proposals are waiting for you." */
+/** The page's one sentence: "Your helpers remember 333 things. 2 proposals are waiting for you." */
 export function memorySentence({ total, pending, coverage }: {
   total: number | null; pending: number | null | 'unsupported'; coverage: 'loading' | 'ok' | 'unsupported' | 'failed';
 }): string {
   const kept = total !== null
-    ? total === 0 ? 'Nothing learned yet.' : `Your agents remember ${total} ${total === 1 ? 'thing' : 'things'}, and where each came from.`
-    : coverage === 'loading' ? 'Reading what your agents have learned…' : 'What your agents have learned, and where it came from.';
+    ? total === 0 ? 'Nothing learned yet.' : `Your helpers remember ${total} ${total === 1 ? 'thing' : 'things'}, and where each came from.`
+    : coverage === 'loading' ? 'Reading what your helpers have learned…' : 'What your helpers have learned, and where it came from.';
   const waiting = typeof pending !== 'number' || pending === 0 ? '' : ` ${pending} ${pending === 1 ? 'proposal is' : 'proposals are'} waiting for you.`;
   return `${kept}${waiting}`;
 }

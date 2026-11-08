@@ -65,7 +65,7 @@ export const PAGE_CHAT_SPECS: Record<PageChatKind, PageChatSpec> = {
   },
   agents: {
     title: 'Helpers', placeholder: 'Ask about your helpers…',
-    hint: 'Ask about your agents: who is signed in, how each has done, which to use for what. The chat sees this page.',
+    hint: 'Ask about your helpers: who is signed in, how each has done, which to use for what. The chat sees this page.',
   },
   repos: {
     title: 'Repositories', placeholder: 'Ask about your repositories…',

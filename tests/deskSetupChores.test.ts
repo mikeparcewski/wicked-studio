@@ -13,8 +13,8 @@ const agents = (usable: string[], total: number, known = true) => ({ known, usab
 describe('setupChores', () => {
   it('no agent able to work: set them up, with how many are signed in', () => {
     const [c] = setupChores(agents([], 4), ok(10), PATHS);
-    expect(c).toMatchObject({ key: 'agents', tone: 'fail', title: 'Set up your agents — none can work yet (0 of 4 ready)', action: { label: 'Set up agents', path: PATHS.agents } });
-    expect(setupChores(agents([], 0), ok(10), PATHS)[0]!.title).toBe('Set up your agents — none is set up yet');
+    expect(c).toMatchObject({ key: 'agents', tone: 'fail', title: 'Set up your helpers — none can work yet (0 of 4 ready)', action: { label: 'Set up agents', path: PATHS.agents } });
+    expect(setupChores(agents([], 0), ok(10), PATHS)[0]!.title).toBe('Set up your helpers — none is set up yet');
   });
 
   it('exactly one able agent: a second to review the work', () => {

@@ -144,7 +144,7 @@ describe('MemoryPage — the store, read honestly', () => {
     const user = userEvent.setup();
     const rows = await screen.findAllByTestId('memory-row');
     expect(rows.map((r) => r.getAttribute('data-memory-id'))).toEqual(['m1', 'm2']);
-    await waitFor(() => expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Your agents remember 2 things'));
+    await waitFor(() => expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Your helpers remember 2 things'));
     // Only MEMORY proposals are this page's to review: the Proposed pill says how many.
     await waitFor(() => expect(screen.getByTestId('memory-view-proposals')).toHaveTextContent('Proposed (1)'));
     expect(screen.getByTestId('memory-view-memories')).toHaveAttribute('aria-checked', 'true');
@@ -192,7 +192,7 @@ describe('MemoryPage — the store, read honestly', () => {
     const empty = await screen.findByTestId('memories-empty');
     expect(empty).toHaveTextContent('No memory matches “quantum sigils”.');
     // The sentence still says what the store holds.
-    expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Your agents remember 2 things');
+    expect(screen.getByTestId('memory-sentence')).toHaveTextContent('Your helpers remember 2 things');
     await user.click(within(empty).getByRole('button', { name: 'Clear filters' }));
     expect(await screen.findAllByTestId('memory-row')).toHaveLength(2);
   });
@@ -208,7 +208,7 @@ describe('MemoryPage — the store, read honestly', () => {
     page();
     const empty = await screen.findByTestId('memories-empty');
     await waitFor(() => expect(empty).toHaveTextContent('The store holds 3 memories, but none were listed. Try a search.'));
-    expect(empty).not.toHaveTextContent('When your agents learn something');
+    expect(empty).not.toHaveTextContent('When your helpers learn something');
   });
 
   it('a daemon that predates the memory routes gets the honest unsupported state', async () => {
