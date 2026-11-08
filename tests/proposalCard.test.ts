@@ -526,3 +526,14 @@ describe('S16a-1a: the finished run\'s card off its delivery verdict (no gate, n
     });
   });
 });
+
+describe('e2e-1105: an answered ask parked at its turn', () => {
+  it('reads Answered, with or without its turn gate cached', () => {
+    const asked = run('r', 'awaiting_human');
+    (asked.session as unknown as { ask_turn: boolean }).ask_turn = true;
+    const turn: OpenGate = { runId: 'r', ord: 1, prompt: 'Your turn', lifecycle: 'open', receivedAt: 1 };
+    expect(statusSentence(asked, EMPTY, undefined)).toBe('Answered');
+    expect(statusSentence(asked, EMPTY, turn)).toBe('Answered');
+    expect(statusSentence(run('r', 'awaiting_human'), EMPTY, turn)).toMatch(/^Waiting on you/);
+  });
+});

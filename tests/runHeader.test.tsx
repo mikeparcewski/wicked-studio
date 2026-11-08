@@ -136,6 +136,7 @@ describe('NeedsBanner — shown only while something waits; hover or focus gives
     expect(screen.getByTestId('session')).toHaveAttribute('data-state', 'done');
     expect(screen.queryByTestId('session-stop')).toBeNull();
     // The Details panel says the same: no Stop, never "Waiting on you" (codex on e2e-1105).
+    expect(screen.getByTestId('run-tab-glance-progress')).toBeInTheDocument();
     expect(screen.queryByTestId('run-tab-glance-stop')).toBeNull();
     expect(screen.queryByTestId('run-tab-stop')).toBeNull();
     expect(screen.getByTestId('session').textContent).not.toMatch(/Waiting on you/);

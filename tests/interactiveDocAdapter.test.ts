@@ -213,6 +213,18 @@ describe('InteractiveDocAdapter: the engine refused the edit (e2e-1105 P10)', ()
     expect(await writing).toMatchObject({ error: 'refused' });
   });
 
+  it('an Unfiled document\'s refusal carries no project, and is its own', async () => {
+    const { publishCoreEvent } = await import('../src/hooks/eventTap.js');
+    const a = new InteractiveDocAdapter('default', 'plan', 'The plan', 'page', undefined, { pollForMs: 20_000 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }];
+    await a.refresh();
+    const writing = a.write(1, [{ selector: 'h', type: 'content-edit', value: 'New', before: 'Old' }]);
+    await vi.waitFor(() => expect(api.events).toHaveLength(1));
+    publishCoreEvent(processed({ ...dropWids, project_id: 'notes' }) as never);
+    publishCoreEvent(processed({ ...dropWids }) as never);
+    expect(await writing).toMatchObject({ error: 'refused' });
+  });
+
   it('the reasons read in plain words', async () => {
     const { editRefusalWords } = await import('../src/editors/interactiveDocAdapter.js');
     expect(editRefusalWords({ rejected: [{ selector: 'a', reason: 'inv2-would-drop-wids:x' }], stale: [], unchanged: true })).toBe('the page refused this edit: it would remove a part nested inside what you edited');

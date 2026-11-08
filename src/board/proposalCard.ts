@@ -125,8 +125,9 @@ export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenG
     if (action.busy) return `Sending your answer${count}`;
     if (action.answered === 'approved') return `Answered — starting${count}`;
   }
-  // An answered ask parked at its turn waits on no one (e2e-1105): the panel says what the header says.
-  if (s === 'awaiting_human' && gate === undefined && isAskTurnRun(view.session)) return `Answered${count}`;
+  // An answered ask parked at its turn waits on no one (e2e-1105): the panel says what the header says, whether or not
+  // its turn gate is still cached here (a late join learns the ask history after the gate).
+  if (s === 'awaiting_human' && isAskTurnRun(view.session)) return `Answered${count}`;
   if (s === 'awaiting_human' || gate !== undefined) {
     const kind = proposalKindOf(view.session.id, gate, view.units);
     // Run clarity: a plain wait names the step it waits at ("Waiting on you at Test"), when known.
