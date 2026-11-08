@@ -145,6 +145,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // A swap listbox open on one version closes when crew's next version lands; a press note about an old version goes.
   const clearNote = press.clearNote;
   useEffect(() => { setOpenSwap(null); clearNote(); }, [pt, v.plan?.planRev, clearNote]);
+  // A list open when a change starts (crew's hold for a typed correction, or this tab's own) closes: a held token offers
+  // nothing, so its list doesn't either.
+  useEffect(() => { if (v.tokensHeld || !v.tokensLive) setOpenSwap(null); }, [v.tokensHeld, v.tokensLive]);
   // Leaving the passage leaves no binding behind it (a binding answers only what this passage drew).
   useEffect(() => () => { const b = useJobBinding.getState().binding; if (b !== null && b.replyKey.startsWith(`${lineage.lineage}:`)) useJobBinding.getState().clear(b.replyKey); }, [lineage.lineage]);
 
@@ -418,6 +421,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     setOpenSwap(null);
     // Focus stays on the token the person was changing (it stays focusable while the change is in flight).
     if (swapOpenedOn.current !== pt) { press.say('The job changed while you picked. Nothing was sent.'); return; }
+    // A change began while the list was open (before the close effect ran): this pick waits for it, so nothing is sent.
+    if (!v.tokensLive) { press.say('The job changed while you picked. Nothing was sent.'); return; }
+    if (v.tokensHeld) { press.say('A change to this job is still being applied. Nothing was sent.'); return; }
     if (i === 'else') {
       // Something else…: the composer, with the token named (a typed correction is the seat's revision).
       useJobBinding.getState().bind({
@@ -791,7 +797,10 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
   const ref = useRef<HTMLSpanElement | null>(null);
   const listId = useId();
   const [cursor, setCursor] = useState(0);
-  const count = choices.length + 1;
+  // The roving set: the choices, then the rows that can't be picked (focusable, so a keyboard or screen reader reaches
+  // their reason, but never picked), then Something else….
+  const elseAt = choices.length + unavailable.length;
+  const count = elseAt + 1;
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
   useEffect(() => { if (open) { setCursor(0); queueMicrotask(() => optionRefs.current[0]?.focus()); } }, [open]);
   // The listbox closed (a pick, or crew's next version closed it): focus that was in it comes back to the token, never
@@ -825,10 +834,9 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
           onFocus={() => { focusIn.current = true; }}
           onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) focusIn.current = false; }}
           onKeyDown={(e) => {
-            if ((e.target as HTMLElement).closest('[aria-disabled="true"]') !== null) return;
             if (e.key === 'ArrowDown') { e.preventDefault(); const n = (cursor + 1) % count; setCursor(n); optionRefs.current[n]?.focus(); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); const n = (cursor - 1 + count) % count; setCursor(n); optionRefs.current[n]?.focus(); }
-            else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(cursor < choices.length ? cursor : 'else'); }
+            else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (cursor < choices.length) onPick(cursor); else if (cursor === elseAt) onPick('else'); }
             else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
           }}>
           {choices.map((c, i) => (
@@ -836,9 +844,10 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
               data-testid="job-passage-swap-option" onClick={() => onPick(i)}>{c.label}</li>
           ))}
           {unavailable.map((c, i) => (
-            <li key={`unavailable-${i}`} role="option" aria-disabled="true" aria-selected="false">{c.label} · {c.reason}</li>
+            <li key={`unavailable-${i}`} ref={(el) => { optionRefs.current[choices.length + i] = el; }} role="option" tabIndex={-1}
+              aria-disabled="true" aria-selected="false" data-testid="job-passage-swap-unavailable">{c.reason === '' ? c.label : `${c.label} · ${c.reason}`}</li>
           ))}
-          <li ref={(el) => { optionRefs.current[choices.length] = el; }} role="option" tabIndex={-1} aria-selected={cursor === choices.length}
+          <li ref={(el) => { optionRefs.current[elseAt] = el; }} role="option" tabIndex={-1} aria-selected={cursor === elseAt}
             data-testid="job-passage-swap-else" onClick={() => onPick('else')}>Something else…</li>
         </ul>
       )}

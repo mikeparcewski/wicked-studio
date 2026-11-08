@@ -44,9 +44,17 @@ const say = vi.fn();
 const onChanged = vi.fn();
 const posts: Array<{ path: string; body: Record<string, unknown> }> = [];
 function passage(...proposals: ArtifactProposal[]): React.ReactElement {
-  const lineage = foldJobLineages(proposals.map((p, i) => ({ at: i + 1, turnId: p.turnId, kind: 'proposal', proposal: p })))[0]!;
+  return passageOf(proposals.map((p, i) => ({ at: i + 1, turnId: p.turnId, kind: 'proposal', proposal: p })));
+}
+function passageOf(records: Parameters<typeof foldJobLineages>[0]): React.ReactElement {
+  const lineage = foldJobLineages(records)[0]!;
   return <JobPassage chatId={CHAT} lineage={lineage} runs={[]} sessionId={CHAT} say={say} onChanged={onChanged} />;
 }
+/** crew's hold for a typed correction (`proposal_revising`) on `p`, as the record stream carries it. */
+const revising = (p: ArtifactProposal): Parameters<typeof foldJobLineages>[0] => [
+  { at: 1, turnId: p.turnId, kind: 'proposal', proposal: p },
+  { at: 2, turnId: 't9', kind: 'proposal_revising', pid: p.pid },
+] as Parameters<typeof foldJobLineages>[0];
 const token = (name: string): HTMLElement => screen.getByRole('button', { name });
 const start = (): HTMLButtonElement => screen.getAllByTestId('job-passage-reply').find((b) => b.dataset['reply'] === 'start') as HTMLButtonElement;
 const next = (p: ArtifactProposal, tokens: InputToken[] = [documents, sources]): ArtifactProposal => proposal(tokens, {
@@ -105,14 +113,27 @@ describe('job passage input tokens', () => {
     expect(token('1 document, documents')).toHaveTextContent('1 document');
   });
 
-  it('allows leaving out the last document', () => {
+  it('the last usable document is shown with why it stays, and picking it sends nothing (crew takes one at least)', () => {
     render(passage(proposal([{ ...documents, label: '1 document', documents: [{ token: 'brief', label: 'Brief.pdf', status: 'ok' }] }])));
     fireEvent.click(token('1 document, documents'));
-    fireEvent.click(screen.getByRole('option', { name: 'Leave out Brief.pdf' }));
-    expect(posts[0]?.body['edits']).toEqual({ inputs: { documents: { kind: 'documents', tokens: [] } } });
+    const list = screen.getByRole('listbox', { name: 'Change documents' });
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(['Brief.pdf · the job’s only document', 'Something else…']);
+    const only = within(list).getByRole('option', { name: 'Brief.pdf · the job’s only document' });
+    expect(only).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(only);
+    fireEvent.keyDown(only, { key: 'Enter' });
+    expect(posts).toEqual([]);
   });
 
-  it('cannot pick a struck row by click or keys, and arrow keys skip it in both directions', async () => {
+  it('a struck document crew gave no reason for shows its name alone', () => {
+    render(passage(proposal([{ ...documents, documents: [
+      { token: 'brief', label: 'Brief.pdf', status: 'ok' }, { token: 'notes', label: 'Notes.txt', status: 'ok' }, { token: 'old', label: 'Old.pdf', status: 'struck' },
+    ] }])));
+    fireEvent.click(token('2 documents, documents'));
+    expect(screen.getAllByTestId('job-passage-swap-unavailable').map((o) => o.textContent)).toEqual(['Old.pdf']);
+  });
+
+  it('arrow keys reach a struck row (its reason is heard), and neither a click nor Enter/Space on it picks anything', async () => {
     render(passage(proposal()));
     fireEvent.keyDown(token('2 documents, documents'), { key: 'Enter' });
     const first = screen.getByRole('option', { name: 'Leave out Brief.pdf' });
@@ -120,23 +141,84 @@ describe('job passage input tokens', () => {
     const struck = screen.getByRole('option', { name: 'Old.pdf · This file expired' });
     const otherwise = screen.getByRole('option', { name: 'Something else…' });
     await waitFor(() => expect(first).toHaveFocus());
-    expect(struck).not.toHaveAttribute('tabindex');
+    expect(struck).toHaveAttribute('tabindex', '-1');
     fireEvent.click(struck);
+    expect(posts).toEqual([]);
+    fireEvent.keyDown(first, { key: 'ArrowDown' });
+    expect(second).toHaveFocus();
+    fireEvent.keyDown(second, { key: 'ArrowDown' });
+    expect(struck).toHaveFocus();
     for (const key of ['Enter', ' ']) fireEvent.keyDown(struck, { key });
     expect(posts).toEqual([]);
     expect(useJobBinding.getState().binding).toBeNull();
     expect(screen.getByRole('listbox')).toBeInTheDocument();
-    fireEvent.keyDown(first, { key: 'ArrowDown' });
-    expect(second).toHaveFocus();
-    fireEvent.keyDown(second, { key: 'ArrowDown' });
+    fireEvent.keyDown(struck, { key: 'ArrowDown' });
     expect(otherwise).toHaveFocus();
     fireEvent.keyDown(otherwise, { key: 'ArrowUp' });
+    expect(struck).toHaveFocus();
+    fireEvent.keyDown(struck, { key: 'ArrowUp' });
     expect(second).toHaveFocus();
     fireEvent.keyDown(second, { key: 'ArrowDown' });
+    fireEvent.keyDown(struck, { key: 'ArrowDown' });
     fireEvent.keyDown(otherwise, { key: 'ArrowDown' });
     expect(first).toHaveFocus();
     fireEvent.keyDown(first, { key: 'Enter' });
     expect(posts[0]?.body['edits']).toEqual({ inputs: { documents: { kind: 'documents', tokens: ['notes'] } } });
+  });
+
+  it('every source unpickable: the list still opens with each reason, and Something else is reachable', async () => {
+    render(passage(proposal([{ ...sources, label: 'no sources', sources: [{ id: 'private', label: 'Private support', picked: false, reason: 'Connect it first' }] }])));
+    fireEvent.click(token('no sources, sources'));
+    const blocked = screen.getByRole('option', { name: 'Private support · Connect it first' });
+    await waitFor(() => expect(blocked).toHaveFocus());
+    fireEvent.keyDown(blocked, { key: 'Enter' });
+    expect(posts).toEqual([]);
+    fireEvent.keyDown(blocked, { key: 'ArrowDown' });
+    const otherwise = screen.getByRole('option', { name: 'Something else…' });
+    expect(otherwise).toHaveFocus();
+    fireEvent.keyDown(otherwise, { key: 'Enter' });
+    expect(useJobBinding.getState().binding?.label).toBe('Answering: something else for “no sources”');
+  });
+
+  it('crew’s hold arriving while a list is open closes it and focus goes back to the held token', async () => {
+    const p = proposal();
+    const view = render(passage(p));
+    const t = token('the web, sources');
+    fireEvent.click(t);
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Leave out the web' })).toHaveFocus());
+    view.rerender(passageOf(revising(p)));
+    expect(screen.queryByRole('listbox')).toBeNull();
+    await waitFor(() => expect(t).toHaveFocus());
+    expect(t).toHaveAttribute('aria-disabled', 'true');
+    expect(posts).toEqual([]);
+  });
+
+  it('crew’s hold arriving while a list is open closes it, and a pick in that window sends nothing', async () => {
+    const p = proposal();
+    let pressed = false;
+    function Arrival({ held }: { held: boolean }): React.ReactElement {
+      // Press during the commit of the hold, before JobPassage's passive effect closes the list.
+      useLayoutEffect(() => {
+        if (!held) return;
+        const list = screen.queryByRole('listbox');
+        if (list !== null) {
+          pressed = true;
+          fireEvent.click(within(list).getByRole('option', { name: 'Leave out Brief.pdf' }));
+          fireEvent.keyDown(within(list).getByRole('option', { name: 'Leave out Notes.txt' }), { key: 'Enter' });
+        }
+      }, [held]);
+      return held ? passageOf(revising(p)) : passage(p);
+    }
+    const view = render(<Arrival held={false} />);
+    const t = token('2 documents, documents');
+    fireEvent.click(t);
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Leave out Brief.pdf' })).toHaveFocus());
+    view.rerender(<Arrival held />);
+    expect(pressed).toBe(true);
+    expect(posts).toEqual([]);
+    expect(screen.queryByRole('listbox')).toBeNull();
+    await waitFor(() => expect(t).toHaveFocus());
+    expect(t).toHaveAttribute('aria-disabled', 'true');
   });
 
   it.each([
@@ -247,8 +329,9 @@ describe('job passage input tokens', () => {
   });
 
   it('a revision crew refuses releases the hold and keeps the original input facts', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'That file cannot be left out', code: 'proposal_stale' }), {
-      status: 409, headers: { 'content-type': 'application/json' },
+    // crew refuses a person's revision with a 400 `edits_invalid` and its words (chat-proposals refusalOf), not a new version.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'That file cannot be left out', code: 'edits_invalid' }), {
+      status: 400, headers: { 'content-type': 'application/json' },
     })));
     render(passage(proposal()));
     fireEvent.click(token('2 documents, documents'));

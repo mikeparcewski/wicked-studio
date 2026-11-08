@@ -39,11 +39,23 @@ describe('inputTokenChoices — documents', () => {
     expect(res.unavailable).toEqual([{ label: 'the old plan', reason: 'not in this chat' }]);
   });
 
-  it('leaving out the last ok document is allowed (an empty list; crew then asks for documents)', () => {
-    const one = { ...token, documents: [{ token: 'doc:_unfiled/brief', label: 'the brief', status: 'ok' }] };
+  it('the last ok document is not a choice (crew’s documents input takes one token at least): it is shown with why', () => {
+    const one = { ...token, documents: [
+      { token: 'doc:_unfiled/brief', label: 'the brief', status: 'ok' },
+      { token: 'doc:_unfiled/old', label: 'the old plan', status: 'struck', reason: 'not in this chat' },
+    ] };
     const res = inputTokenChoices(asToken(one), withToken(one, { documents: { kind: 'documents', tokens: ['doc:_unfiled/brief'] } }))!;
-    expect(res.choices).toHaveLength(1);
-    expect(res.choices[0]!.edit).toEqual({ inputs: { documents: { kind: 'documents', tokens: [] } } });
+    expect(res.choices).toEqual([]);
+    expect(res.unavailable).toEqual([
+      { label: 'the brief', reason: 'the job’s only document' }, { label: 'the old plan', reason: 'not in this chat' },
+    ]);
+  });
+
+  it('a token listed twice (one ok, one struck) is no list at all: no edit can name a struck token', () => {
+    const dup = { ...token, documents: [
+      { token: 'a', label: 'A', status: 'ok' }, { token: 'a', label: 'A', status: 'struck', reason: 'gone' }, { token: 'b', label: 'B', status: 'ok' },
+    ] };
+    expect(inputTokenChoices(asToken(dup), withToken(dup))).toBeNull();
   });
 
   it('falls back to the ok documents when the proposal carries no inputs arm (an older daemon)', () => {
@@ -75,6 +87,27 @@ describe('inputTokenChoices — sources', () => {
     const res = inputTokenChoices(asToken(token), withToken(token, { sources: { kind: 'sources', ids: ['web'] } }))!;
     expect(res.choices.some((c) => c.label.includes('the intranet'))).toBe(false);
     expect(res.unavailable).toEqual([{ label: 'the intranet', reason: 'not reachable from here' }]);
+  });
+
+  it('the proposal’s inputs decide what is picked, not the token’s flags; stale and unpickable ids never go back', () => {
+    const inputs = { sources: { kind: 'sources', ids: ['support-pg', 'gone', 'intranet'] } };
+    const res = inputTokenChoices(asToken(token), withToken(token, inputs))!;
+    expect(res.choices.map((c) => c.label)).toEqual(['Add the web', 'Leave out support-pg']);
+    expect(res.choices[0]!.edit).toEqual({ inputs: { sources: { kind: 'sources', ids: ['web', 'support-pg'] } } });
+    expect(res.choices[1]!.edit).toEqual({ inputs: { sources: { kind: 'sources', ids: [] } } });
+  });
+
+  it.each([undefined, { kind: 'text', value: 'web' }, { kind: 'sources', ids: [3] }])('without a valid inputs arm (%j) the token’s picked flags decide', (arm) => {
+    const res = inputTokenChoices(asToken(token), withToken(token, arm === undefined ? {} : { sources: arm }))!;
+    expect(res.choices.map((c) => c.label)).toEqual(['Leave out the web', 'Add support-pg']);
+    expect(res.choices[1]!.edit).toEqual({ inputs: { sources: { kind: 'sources', ids: ['web', 'support-pg'] } } });
+  });
+
+  it('a source id listed twice (one pickable, one not) is no list at all: no pick can name a source crew refuses', () => {
+    const dup = { ...token, sources: [
+      { id: 'web', label: 'the web', picked: true }, { id: 'web', label: 'the web', picked: false, reason: 'switched off' },
+    ] };
+    expect(inputTokenChoices(asToken(dup), withToken(dup))).toBeNull();
   });
 
   it('keeps the token’s own order when adding, not the current pick’s order', () => {
