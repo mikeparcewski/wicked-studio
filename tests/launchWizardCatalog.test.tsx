@@ -90,7 +90,9 @@ describe('an older daemon (no catalog)', () => {
     expect(screen.getByTestId('launch-catalog-older')).toHaveTextContent('not grouped');
     expect(document.querySelector('[data-testid="launch-catalog-cat"]')).toBeNull();
     expect(screen.queryByTestId('launch-catalog-top')).toBeNull();
-    expect(cardIds(panel)).toEqual(['bug', 'feature', 'qe-author-tests', 'review-recent-work', 'acme-release', 'demo-video', 'draft-epics', 'apps']);
+    expect(cardIds(panel)).toEqual(['bug', 'feature', 'qe-author-tests', 'review-recent-work', 'acme-release', 'demo-video', 'draft-epics']);
+    // Studio adds no "Apps · Coming soon" of its own (operator 2026-11-06: what is shown as coming is built, not promised).
+    expect(screen.queryByTestId('launch-catalog-soon-apps')).toBeNull();
     // Every card says what it gives and that it needs a repository (today's rule).
     const bug = screen.getByTestId('launch-wizard-workflow-bug');
     expect(bug).toHaveTextContent('Reproduce a bug, fix it and prove the fix');
@@ -138,7 +140,7 @@ describe('an older daemon (no catalog)', () => {
     expect(document.querySelector('[data-section="all"]')).toBeNull();
     expect(screen.getByTestId('launch-catalog-noresults')).toHaveTextContent('No workflow fits these filters.');
     fireEvent.click(screen.getByTestId('launch-catalog-clear-filters'));
-    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual(['demo-video', 'draft-epics', 'apps']);
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual(['demo-video', 'draft-epics']);
   });
 });
 
@@ -328,7 +330,7 @@ describe('an older daemon whose workflow list never comes', () => {
     render(<LaunchWizard cardsStartInChat={false} />);
     act(() => openLaunchWizard({}));
     await waitFor(() => expect(screen.getByTestId('launch-catalog').dataset.source).toBe('fallback'));
-    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual(['demo-video', 'draft-epics', 'apps']);
+    expect(cardIds(screen.getByTestId('launch-catalog-results'))).toEqual(['demo-video', 'draft-epics']);
     act(() => setCachedWorkflows(WF));
     expect(cardIds(screen.getByTestId('launch-catalog-results'))).toContain('feature');
   });
