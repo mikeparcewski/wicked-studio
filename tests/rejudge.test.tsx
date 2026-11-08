@@ -146,7 +146,9 @@ describe('the judge-unavailable gate row', () => {
     await waitFor(() => expect(labels()).toContain(REJUDGE_LABEL));
     expect(labels()).toEqual([REJUDGE_LABEL, 'Send back', OPERATOR_JUDGMENT_LABEL, 'Stop']);
     expect(screen.getAllByTestId('session-gate-choice')[0]!.dataset['recommended']).toBe('true');
-    expect(screen.getAllByTestId('session-gate-choice')[0]!.getAttribute('aria-checked')).toBe('true');
+    // The card follows its start in an effect after the offer's render lands (AskCard `start`): wait for it, not the
+    // DOM mutation that drew the label (a CI race seen on studio#1042).
+    await waitFor(() => expect(screen.getAllByTestId('session-gate-choice')[0]!.getAttribute('aria-checked')).toBe('true'));
     const line = screen.getByTestId('session-gate-judge-wait');
     expect(line.getAttribute('data-rejudge')).toBe('available');
     expect(line.textContent).toMatch(/Pi, Copilot can run it now/);
