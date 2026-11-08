@@ -5,7 +5,33 @@ import { PROTOCOL_VERSION } from '../editors/protocol.js';
 import type { EditorGrantsResponse, EditorView, ListEditorsResponse } from 'wicked-crew-api-types';
 export type { EditorGrantsResponse, EditorView, ListEditorsResponse };
 
+/** Additive CS7 fields, until the published wire package carries them. Read as unknown at the boundary. */
+export interface RunPluginView extends EditorView {
+  inline?: unknown;
+  observe?: unknown;
+  granted_topics?: unknown;
+  run_panels?: unknown;
+}
+
+type RegistryChange = { editors: EditorView[]; none?: true } | { id: string; enabled: boolean } | { removed: string };
+const registryListeners = new Set<(change: RegistryChange) => void>();
+export function subscribeEditorRegistry(on: (change: RegistryChange) => void): () => void {
+  registryListeners.add(on);
+  return () => { registryListeners.delete(on); };
+}
+function publish(change: RegistryChange): void { for (const on of registryListeners) on(change); }
+
 const SHA = /^[0-9a-f]{64}$/;
+
+/**
+ * Bumped when a switch or a removal starts and when it ends: a list read that overlapped one may hold the registry
+ * from before it, so it does not publish (it would put back a plugin just switched off or removed). The next read does.
+ */
+let mutations = 0;
+
+/** When the registry was last read (ms): the run-plugin refresh skips a read while this one is still fresh. */
+let lastRead = Number.NEGATIVE_INFINITY;
+export function lastEditorsRead(): number { return lastRead; }
 
 function isEditorView(v: unknown): v is EditorView {
   if (typeof v !== 'object' || v === null) return false;
@@ -16,12 +42,25 @@ function isEditorView(v: unknown): v is EditorView {
 }
 
 /** The registry, or `null` when this daemon has no editors route (an older crew): nothing is hosted then. */
-export async function listEditors(): Promise<EditorView[] | null> {
+/** One registry read at a time: callers that ask while a read is in flight share it (the shell reads once per tab). */
+let inflight: Promise<EditorView[] | null> | null = null;
+export function listEditors(): Promise<EditorView[] | null> {
+  if (inflight !== null) return inflight;
+  const read = readEditors().finally(() => { if (inflight === read) inflight = null; });
+  inflight = read;
+  return read;
+}
+
+async function readEditors(): Promise<EditorView[] | null> {
   try {
+    const seen = mutations;
     const r = await apiFetch<ListEditorsResponse>('/editors');
-    return Array.isArray(r.editors) ? r.editors.filter(isEditorView) : [];
+    lastRead = Date.now();
+    const editors = Array.isArray(r.editors) ? r.editors.filter(isEditorView) : [];
+    if (seen === mutations) publish({ editors });
+    return editors;
   } catch (e) {
-    if (isRouteUnsupported(e)) return null;
+    if (isRouteUnsupported(e)) { publish({ editors: [], none: true }); return null; }
     throw e;
   }
 }
@@ -58,7 +97,14 @@ export const MCP_SERVER_KIND = 'mcp-server';
 
 /** `POST /editors/:id/enabled` (human-only): switch an editor on or off. Answers the editor as it is now. */
 export async function setEditorEnabled(id: string, enabled: boolean): Promise<EditorView> {
-  return apiFetch<EditorView>(`/editors/${encodeURIComponent(id)}/enabled`, { method: 'POST', body: JSON.stringify({ enabled }) });
+  mutations += 1;
+  try {
+    const row = await apiFetch<EditorView>(`/editors/${encodeURIComponent(id)}/enabled`, { method: 'POST', body: JSON.stringify({ enabled }) });
+    publish({ id, enabled: typeof row?.enabled === 'boolean' ? row.enabled : enabled });
+    return row;
+  } finally {
+    mutations += 1;
+  }
 }
 
 /**
@@ -67,7 +113,14 @@ export async function setEditorEnabled(id: string, enabled: boolean): Promise<Ed
  * fails is a 503 and the editor stays installed, so the press can be repeated.
  */
 export async function removeEditor(id: string): Promise<{ removed: true; id: string }> {
-  return apiFetch<{ removed: true; id: string }>(`/editors/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  mutations += 1;
+  try {
+    const removed = await apiFetch<{ removed: true; id: string }>(`/editors/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    publish({ removed: id });
+    return removed;
+  } finally {
+    mutations += 1;
+  }
 }
 
 /**

@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/api/client.js', () => ({ api: { getRunEvents: vi.fn(async () => ({ events: [] })), listClis: vi.fn(async () => []) } }));
 
+import { EditorHost } from '../src/editors/host.js';
+import { publishCoreEvent } from '../src/hooks/eventTap.js';
+import type { CoreEvent } from '../src/api/types.js';
+import { api } from '../src/api/client.js';
 import { RunPhaseRows, RunPluginJumpRows, RunPluginSection, attributionLine, showInDetails } from '../src/components/session/RunThreadPlugin.js';
 import { useConnectionStore } from '../src/store/connection.js';
 import { useHostPanel } from '../src/editors/hostApi.js';
@@ -49,6 +53,33 @@ describe('a run plugin as a Details panel section', () => {
     expect(screen.getByTestId('run-plugin-title').textContent).toBe('Phase report');
     expect(screen.getByTestId('run-plugin-grant').textContent).toContain('Plugin');
     expect(screen.getByTestId('run-plugin-attribution').textContent).toMatch(/^From plugin · Phase report \S+ · observes run events$/u);
+  });
+
+  it('frames an installed entry with no grants and still handshakes without reading history', async () => {
+    vi.mocked(api.getRunEvents).mockClear();
+    const installed = { ...plugin, id: 'acme-cost', title: 'Cost', firstParty: false, grantedBy: 'install' as const,
+      permissions: [], granted: [], html: '', entryUrl: '/api/v1/editors/acme-cost/1.0.0/entry?sha=pin', version: '1.0.0' };
+    const changed = vi.spyOn(EditorHost.prototype, 'docChanged');
+    const view = render(<RunPluginSection runId={RUN} plugin={installed} section={pluginSections([installed], [])[0]!} live />);
+    const frame = screen.getByTestId('run-plugin-iframe') as HTMLIFrameElement;
+    expect(frame.getAttribute('src')).toBe(installed.entryUrl);
+    const hello: unknown[] = [];
+    let port: MessagePort | undefined;
+    vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(((msg: unknown, _origin: unknown, transfer?: Transferable[]) => {
+      hello.push(msg);
+      port = transfer?.[0] as MessagePort;
+    }) as never);
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+      data: { p: 'wicked.editor', v: 1, type: 'plugin.ready', payload: { editor: installed.id, version: installed.version, protocol: [3],
+        surfaces: { card: { interactive: true, aspect: 'auto', actions: [] } } } } })));
+    expect(hello[0]).toMatchObject({ payload: { grants: [], protocol: 3, observe: { topics: [] } } });
+    await Promise.resolve();
+    expect(api.getRunEvents).not.toHaveBeenCalled();
+    act(() => publishCoreEvent({ type: 'workingDocChanged', session: RUN, head: 2 } as CoreEvent));
+    expect(changed).not.toHaveBeenCalled();
+    changed.mockRestore();
+    view.unmount();
+    port?.close();
   });
 
   it('a finished run’s section starts folded; the heading folds and opens it, remembered for THIS run only', () => {

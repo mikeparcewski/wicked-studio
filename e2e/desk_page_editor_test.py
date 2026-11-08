@@ -202,8 +202,10 @@ with sync_playwright() as p:
     # The run's Phase report block (DES-PLUGIN-EVENTS spike 1) is a frame too: the host loads it from a blob: URL of
     # studio's own bundle. It is not the page editor, so it is not counted here.
     page.on("request", lambda r: frame_requests.append(r.url) if r.frame is not None and r.frame != page.main_frame and not r.url.startswith("blob:") else None)
-    registry_reads: list[str] = []
-    page.on("request", lambda r: registry_reads.append(r.url) if r.url.endswith("/api/v1/editors") else None)
+    # (url, when): the shell reads the registry once; an open job re-reads it no oftener than every 15 s (CS7: a run
+    # plugin installed elsewhere appears without a reload), so a long journey may see a timed re-read.
+    registry_reads: list[tuple[str, float]] = []
+    page.on("request", lambda r: registry_reads.append((r.url, time.monotonic())) if r.url.endswith("/api/v1/editors") else None)
 
     # The document exists on the bridge (v1), a run is drafting it, and the daemon lists its editors.
     post_json(f"{origin}/api/v1/projects/{PID}/interactive/api/docs", {"name": DOC, "brief": "the offsite plan"})
@@ -330,8 +332,10 @@ with sync_playwright() as p:
     # ── 8. nothing left the plugin: 0 requests beyond the bundle entry; one registry read ──
     page.wait_for_timeout(300)
     beyond = [u for u in frame_requests if "/api/v1/editors/" not in u or "/entry?" not in u]
-    check("no-network", beyond == [] and len(registry_reads) == 1 and all("/api/v1/editors/wicked-page/" in u for u in frame_requests),
-          beyond_the_bundle=beyond, frame_requests=len(frame_requests), registry_reads=len(registry_reads))
+    gaps = [round(b[1] - a[1], 1) for a, b in zip(registry_reads, registry_reads[1:])]
+    check("no-network", beyond == [] and len(registry_reads) >= 1 and all(g >= 14.5 for g in gaps)
+          and all("/api/v1/editors/wicked-page/" in u for u in frame_requests),
+          beyond_the_bundle=beyond, frame_requests=len(frame_requests), registry_reads=len(registry_reads), read_gaps_s=gaps)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

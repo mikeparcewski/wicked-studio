@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CoreEvent } from '../../api/types.js';
+import { listEditors, type RunPluginView } from '../../api/editors.js';
+import { parsePanels } from '../../board/runPluginPanels.js';
+import { RunEventFeed, type EventsBatch } from '../../editors/runEvents.js';
+import { runPattern } from '../../store/runPlugins.js';
 import { apiBase } from '../../api/client.js';
 import { EditorHost, sizeOfSurface, type HostLogEntry, type Surface } from '../../editors/host.js';
 import type { FullMode } from '../../editors/surfaces.js';
@@ -20,6 +25,8 @@ import { AppHostView } from '../editorHost/AppHostView.js';
  *  - `/editors/conformance?…&grants=a,b` is the conformance host the harness drives (§12.1): the same
  *    host, with the grant set given in the address and `window.__wickedEditor` exposing the log,
  *    the adapter and host-side controls (size, theme, an agent version, raw messages for fuzzing).
+ *  - `/editors/conformance?plugin=&version=&sha=&observe=&samples=` drives protocol-3 run events,
+ *    with replay and remount controls exposed through `window.__wickedRunPlugin`.
  *
  * Everything around the frame is host-drawn: the header, the size controls, the composer the chips
  * and typing land in, the thread lines, and "Reload it".
@@ -69,6 +76,14 @@ function readPage(search: string, mode: 'dev' | 'conformance'): Page {
 
 declare global {
   interface Window {
+    __wickedRunPlugin?: {
+      log: HostLogEntry[];
+      delivered: Array<{ mount: number; replay: boolean; gap?: string; rows: Array<{ id: string; topic: string }> }>;
+      host(): { alive: boolean; negotiated: number | null } | null;
+      feed(): { history: number; held: number; emitted: number };
+      emit(n?: number): number;
+      remount(): void;
+    };
     __wickedEditor?: {
       log: HostLogEntry[];
       adapter: FakeDocAdapter;
@@ -84,7 +99,7 @@ declare global {
   }
 }
 
-export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; navigate?: (path: string) => void }): React.ReactElement {
+function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; navigate?: (path: string) => void }): React.ReactElement {
   // The page is its address: a different query (back/forward between two editors) is a different page.
   const search = window.location.search;
   const page = useMemo(() => readPage(search, mode), [search, mode]);
@@ -281,4 +296,123 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
       </>)}
     </div>
   );
+}
+
+
+/** The harness uses the same host, bundle route and filtered feed as a job's Details panel. */
+function RunPluginConformancePage(): React.ReactElement {
+  const search = window.location.search;
+  const frameBox = useRef<HTMLDivElement | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(search);
+    const id = q.get('plugin') ?? '';
+    const version = q.get('version') ?? '';
+    const sha = q.get('sha') ?? '';
+    const topics = [...new Set((q.get('observe') ?? '').split(',').filter(runPattern))];
+    const log: HostLogEntry[] = [];
+    const delivered: NonNullable<Window['__wickedRunPlugin']>['delivered'] = [];
+    let cancelled = false;
+    let loaded = false;
+    let host: EditorHost | null = null;
+    let mount = 0;
+    let history: CoreEvent[] = [];
+    let held: CoreEvent[] = [];
+    let emitted = 0;
+    const listeners = new Set<(e: CoreEvent) => void>();
+    let panel = 'main';
+    const start = (): void => {
+      if (!loaded || cancelled || frameBox.current === null) return;
+      host?.teardown('The conformance frame was remounted');
+      setError(null);
+      mount += 1;
+      const thisMount = mount;
+      const next = new EditorHost({
+        container: frameBox.current, src: bundleUrl(apiBase(), id, version, sha),
+        editor: id, version, name: id, title: `${id}: run events`, size: 'inline', surface: 'card',
+        firstParty: false, grants: [], adapter: new FakeDocAdapter(SAMPLE_PAGE),
+        theme: readThemeTokens(), prefs: { reducedMotion: true, techDetails: false, locale: navigator.language },
+        events: {
+          runId: 'conformance-run', topics, panel: { slot: 'run.details', id: panel },
+          subscribe: (deliver) => {
+            const feed = new RunEventFeed({
+              runId: 'conformance-run', granted: topics,
+              history: async (types) => history.filter((e) => types.includes(e.type)),
+              live: (on) => { listeners.add(on); return () => { listeners.delete(on); }; },
+              deliver: (batch: EventsBatch) => {
+                if (!next.connected) return;
+                deliver(batch);
+                delivered.push({ mount: thisMount, replay: batch.replay,
+                  ...(batch.gap !== undefined ? { gap: batch.gap } : {}), rows: batch.rows.map(({ id: rowId, topic }) => ({ id: rowId, topic })) });
+              },
+            });
+            feed.start();
+            return () => feed.stop();
+          },
+        },
+        ui: {
+          chips: () => undefined, draft: () => undefined, typed: () => undefined, key: () => undefined,
+          morph: () => undefined, status: () => undefined, notes: () => undefined, thread: () => undefined,
+          // Only the current mount reports: a torn earlier mount (remounted past it) never sets this one's error.
+          fullscreen: async () => false, torn: (reason) => { if (!cancelled && host === next) setError(reason); },
+          log: (entry) => { log.push(entry); },
+          surfaces: (_surfaces, protocol) => { if (protocol !== 3) queueMicrotask(() => { if (host === next) next.teardown('This plugin can’t hear run events'); }); },
+        },
+      });
+      host = next;
+      next.mount();
+    };
+    const controls: NonNullable<Window['__wickedRunPlugin']> = {
+      log, delivered,
+      host: () => host === null ? null : { alive: host.alive, negotiated: host.connected ? host.negotiated : null },
+      feed: () => ({ history: history.length, held: held.length, emitted }),
+      emit: (n = held.length) => {
+        const count = Number.isFinite(n) ? Math.max(0, Math.min(held.length, Math.floor(n))) : 0;
+        const events = held.splice(0, count);
+        for (const e of events) { history.push(e); emitted += 1; for (const on of listeners) on(e); }
+        return events.length;
+      },
+      remount: start,
+    };
+    window.__wickedRunPlugin = controls;
+    const load = async (): Promise<void> => {
+      if (id === '' || version === '' || !/^[0-9a-f]{64}$/u.test(sha)) throw new Error('Choose a plugin, version and entry hash.');
+      const samples = new URL(q.get('samples') ?? '', window.location.href);
+      if (!q.get('samples') || samples.origin !== window.location.origin) throw new Error('Samples must come from this page’s origin.');
+      const [response, editors] = await Promise.all([fetch(samples.href), listEditors().catch(() => null)]);
+      if (!response.ok) throw new Error('The sample events could not be read.');
+      const text = await response.text();
+      const seqs = new Set<number>();
+      const events = text.split(/\r?\n/u).filter((line) => line.trim() !== '').map((line) => {
+        const e = JSON.parse(line) as Record<string, unknown>;
+        if (e === null || typeof e !== 'object' || e['session'] !== 'conformance-run' || typeof e['type'] !== 'string'
+          || typeof e['seq'] !== 'number' || !Number.isFinite(e['seq']) || seqs.has(e['seq']) || typeof e['ts'] !== 'number' || !Number.isFinite(e['ts'])) {
+          throw new Error('The sample events need a run, unique sequence numbers and timestamps.');
+        }
+        seqs.add(e['seq']);
+        return e as unknown as CoreEvent;
+      });
+      if (cancelled) return;
+      const row = editors?.find((e) => e.id === id && e.version === version) as RunPluginView | undefined;
+      // A standalone harness may serve the entry before registering it; the scaffold's default section is main.
+      panel = parsePanels(row?.run_panels).find((p) => p.slot === 'run.details')?.id ?? 'main';
+      const half = Math.ceil(events.length / 2);
+      history = events.slice(0, half);
+      held = events.slice(half);
+      loaded = true;
+      start();
+    };
+    void load().catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
+    return () => {
+      cancelled = true;
+      host?.teardown('The conformance page was closed');
+      if (window.__wickedRunPlugin === controls) delete window.__wickedRunPlugin;
+    };
+  }, [search]);
+  return <main><h1>Run plugin test</h1>{error !== null && <p role="alert">{error}</p>}<div ref={frameBox} /></main>;
+}
+
+export function EditorHostPage(props: { mode: 'dev' | 'conformance'; navigate?: (path: string) => void }): React.ReactElement {
+  return props.mode === 'conformance' && new URLSearchParams(window.location.search).has('plugin')
+    ? <RunPluginConformancePage /> : <ArtifactHostPage {...props} />;
 }
