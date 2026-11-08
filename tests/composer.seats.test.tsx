@@ -17,6 +17,10 @@ import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { resetLaunchWizard } from '../src/store/launchWizard.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 
+// An older daemon whose capabilities are read (cat2-commands: New job and the `/` list wait for them; a daemon that
+// takes job proposals gets the v2 command list instead, pinned in tests/commandList.e2.test.tsx).
+beforeEach(() => { useCapabilities.setState({ loaded: true, chatJobProposals: false, workflowCatalogV2: false }); });
+
 const seat = (key: string): RosterSeat =>
   ({ key, display_name: key, binary: key, enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true }) as RosterSeat;
 const ROSTER = [seat('claude'), seat('codex'), seat('pi'), seat('copilot')];

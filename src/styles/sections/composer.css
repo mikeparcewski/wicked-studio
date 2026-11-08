@@ -186,3 +186,21 @@
 /* ux-tonight: the start row under a card on the composer (what Enter starts, and the choices it still needs). */
 .wk-composer-start-need { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .wk-composer-start-need .wk-link { font-size: var(--text-xs); }
+
+/* DES-CATALOG-002 §8.4 (Lane E2): the v2 command list. A row is its command (the wire's spelling), the card's title and
+   its one line; a variant is an indented sub-command under its card. */
+.wk-composer-menu-item--cmd .wk-composer-cmd--v2 { gap: 8px; min-width: 0; }
+.wk-composer-cmd-name { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--accent); white-space: nowrap; }
+.wk-composer-cmd--v2 .wk-composer-cmd-title { color: var(--ink-high); font-weight: var(--weight-semi); white-space: nowrap; }
+.wk-composer-menu-item--sub { padding-left: 24px; }
+.wk-composer-menu-item--sub .wk-composer-cmd-title { font-weight: var(--weight-regular); }
+.wk-composer-menu-item--sub .wk-composer-cmd-name { color: var(--ink-muted); }
+.wk-composer-menu-item--on.wk-composer-menu-item--sub .wk-composer-cmd-name { color: var(--accent); }
+/* A phone: the command over its title and line, so neither is cut to a few letters. */
+@media (max-width: 600px) {
+  .wk-composer-menu-item--cmd { flex-direction: column; align-items: flex-start; gap: 1px; padding-block: 6px; white-space: normal; }
+  .wk-composer-menu-item--cmd .wk-composer-cmd-desc { width: 100%; }
+  .wk-composer-menu-item--cmd .wk-composer-cmd--v2 { flex-wrap: wrap; column-gap: 8px; row-gap: 0; max-width: 100%; }
+  .wk-composer-cmd--v2 .wk-composer-cmd-title { white-space: normal; }
+  .wk-composer-menu-item--sub { padding-left: 20px; }
+}

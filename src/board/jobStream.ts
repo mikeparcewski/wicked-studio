@@ -418,7 +418,13 @@ export function replanningOnRecord(rows: readonly Row[], units: ReadonlyArray<{ 
 }
 
 /** A tick: one dim line for a state the job reached or an act of the person's (rev 6 §2.7.1), from crew's records. */
-export interface JobTick { key: string; at: number; text: string }
+export interface JobTick {
+  key: string;
+  at: number;
+  text: string;
+  /** A Not now's proposal: when its job was moved to a new chat (F39/F41), the line says where instead. */
+  notNowPid?: string;
+}
 
 /**
  * The job's ticks, in time order, each from a record: the proposal's decision ("You started the job"), and from the
@@ -439,7 +445,7 @@ function jobDecisionTicks(l: JobLineage): JobTick[] {
   // Every decision the lineage recorded (a reshape's replacement keeps its predecessor's), keyed by its own pid.
   for (const d of l.decisions) {
     if (d.decision === 'go' && d.stub) continue; // the test configuration started nothing: no "started" tick
-    out.push({ key: `${l.lineage}:${d.decision}:${d.pid}`, at: d.at, text: d.decision === 'go' ? 'You started the job' : 'You chose Not now' });
+    out.push({ key: `${l.lineage}:${d.decision}:${d.pid}`, at: d.at, text: d.decision === 'go' ? 'You started the job' : 'You chose Not now', ...(d.decision === 'not_now' ? { notNowPid: d.pid } : {}) });
   }
   return out;
 }

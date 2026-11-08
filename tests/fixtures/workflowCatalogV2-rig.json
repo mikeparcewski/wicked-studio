@@ -1,0 +1,6702 @@
+{
+ "version": 2,
+ "rev": "bb0e86338992dfe4",
+ "categories": [
+  {
+   "id": "plan",
+   "title": "Plan",
+   "summary": "Work out what to do before anyone builds it."
+  },
+  {
+   "id": "build",
+   "title": "Build",
+   "summary": "Change a repository: a pull request after QE acceptance, judged on a seat that did not build it."
+  },
+  {
+   "id": "test",
+   "title": "Test",
+   "summary": "Plan tests, write them, and keep the suite healthy."
+  },
+  {
+   "id": "investigate",
+   "title": "Investigate",
+   "summary": "Find out what happened or why, read-only and cited. A fix goes to Bug."
+  },
+  {
+   "id": "analyze",
+   "title": "Analyze",
+   "summary": "Understand code and requirements, read-only, every claim cited."
+  },
+  {
+   "id": "judge",
+   "title": "Judge",
+   "summary": "Get a verdict on a change, a risk or a choice, from a seat that did not make it."
+  },
+  {
+   "id": "create",
+   "title": "Create",
+   "summary": "Documents, pages, demos and messages, grounded in your work."
+  },
+  {
+   "id": "estimate",
+   "title": "Estimate",
+   "summary": "Estimate effort and price, and model what runs will cost."
+  },
+  {
+   "id": "organize",
+   "title": "Organize",
+   "summary": "Turn requirements into a backlog, and set out who does what."
+  },
+  {
+   "id": "improve",
+   "title": "Improve",
+   "summary": "Learn from your runs. Everything here is a proposal you approve."
+  },
+  {
+   "id": "yours",
+   "title": "Yours",
+   "summary": "Your saved steps, and workflows no card offers yet."
+  }
+ ],
+ "cards": [
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "plan"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "nothing"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "specify",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "552beddad47ff79d",
+   "id": "plan-it",
+   "category": "plan",
+   "title": "Plan it",
+   "summary": "Turn an ask into a checked plan of jobs, each with its risk and how it will be checked.",
+   "outcome": "A plan with its steps, risks and open questions, and each step as a job you can start.",
+   "useWhen": [
+    "plan a larger piece of work",
+    "break an idea into jobs"
+   ],
+   "tags": [],
+   "words": [
+    "plan",
+    "planning",
+    "roadmap",
+    "break down",
+    "approach",
+    "how should we",
+    "work out",
+    "scope",
+    "strategy for",
+    "steps to"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/plan-it",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "feature"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "qe-acceptance"
+   ],
+   "requiresQe": true,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": true,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "build",
+   "typicalMinutes": [
+    60,
+    240
+   ],
+   "cost": "high",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "4d22c08c7b7eaef3",
+   "id": "feature",
+   "category": "build",
+   "title": "Build a feature",
+   "summary": "Clarify, design, build, review and test a change to your application.",
+   "outcome": "A pull request with the change, checked by tests and a review, after QE acceptance.",
+   "useWhen": [
+    "add new behaviour to an app",
+    "a new screen, endpoint or option",
+    "a change that needs a design and tests"
+   ],
+   "tags": [],
+   "words": [
+    "build",
+    "implement",
+    "add",
+    "new feature",
+    "enhancement",
+    "story",
+    "support for",
+    "endpoint",
+    "screen",
+    "option",
+    "allow users"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/feature",
+   "aliases": [
+    {
+     "command": "/workflow-feature",
+     "option": null
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 5,
+    "lastUsedAt": "2026-11-06T08:55:41.000Z",
+    "medianMinutes": 166.4,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "bug"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "qe-acceptance"
+   ],
+   "requiresQe": true,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": true,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "build",
+   "typicalMinutes": [
+    10,
+    60
+   ],
+   "cost": "medium",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "9873ad536fbe9234",
+   "id": "bug",
+   "category": "build",
+   "title": "Fix a bug",
+   "summary": "Find the cause of a bug, reproduce it, fix it and check that the fix holds.",
+   "outcome": "A pull request with the fix and the checks that show it holds, after QE acceptance.",
+   "useWhen": [
+    "something is broken",
+    "an error or crash to fix",
+    "something that used to work no longer does"
+   ],
+   "tags": [],
+   "words": [
+    "bug",
+    "fix",
+    "broken",
+    "error",
+    "crash",
+    "regression",
+    "defect",
+    "fails",
+    "wrong result",
+    "throws",
+    "returns",
+    "instead of",
+    "exception"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/bug",
+   "aliases": [
+    {
+     "command": "/workflow-bug",
+     "option": null
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 60,
+    "lastUsedAt": "2026-11-07T04:27:54.000Z",
+    "medianMinutes": 40.4,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "migration"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "qe-acceptance",
+    "parity"
+   ],
+   "requiresQe": true,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": true,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "migrate",
+   "typicalMinutes": null,
+   "cost": "high",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "506342dbded65827",
+   "id": "migrate",
+   "category": "build",
+   "title": "Migrate or modernize",
+   "summary": "Change a shape in place: a schema, an API, a library, with expand, cutover and contract.",
+   "outcome": "A planned move with a confirmed cutover, proof the new path behaves like the old one, and the old path removed.",
+   "useWhen": [
+    "move to a new library, service or schema",
+    "replace an old system step by step",
+    "a change that needs a cutover"
+   ],
+   "tags": [],
+   "words": [
+    "migrate",
+    "migration",
+    "modernize",
+    "port",
+    "move to",
+    "move off",
+    "replace",
+    "cutover",
+    "deprecate",
+    "upgrade",
+    "bump",
+    "rewrite in",
+    "legacy",
+    "schema change",
+    "backfill"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "kind",
+    "label": "Kind of move",
+    "default": "in-place",
+    "options": [
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "modernize"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance",
+       "parity"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "modernize",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "5b5f6d7ec5daf6c6",
+      "id": "move",
+      "title": "Move",
+      "summary": "Port to a new stack or platform; the old one is retired.",
+      "words": [
+       "port",
+       "rewrite",
+       "rewrite in",
+       "move to",
+       "move off",
+       "new stack",
+       "legacy",
+       "modernize",
+       "re-platform",
+       "replatform",
+       "cobol",
+       "monolith"
+      ],
+      "command": "/migrate move",
+      "optionWord": "move"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "migration"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance",
+       "parity"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "migrate",
+      "typicalMinutes": null,
+      "cost": "high",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "506342dbded65827",
+      "id": "in-place",
+      "title": "In place",
+      "summary": "Change a shape in place: a schema, an API, a library, with expand, cutover and contract.",
+      "words": [
+       "schema",
+       "column",
+       "table",
+       "backfill",
+       "rename",
+       "api version",
+       "replace library",
+       "swap",
+       "expand",
+       "contract",
+       "cutover",
+       "deprecate",
+       "breaking change"
+      ],
+      "command": "/migrate in-place",
+      "optionWord": "in-place"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "migration"
+      },
+      "brief": "Kind: upgrade. Move to the newer version named in the ask; the cutover is switching the pin, the cleanup removes compatibility shims.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance",
+       "parity"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "migrate",
+      "typicalMinutes": null,
+      "cost": "high",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "eea990a69cf50fa4",
+      "id": "upgrade",
+      "title": "Upgrade",
+      "summary": "Move to a newer version of a dependency, framework or runtime.",
+      "words": [
+       "upgrade",
+       "bump",
+       "version",
+       "major version",
+       "node",
+       "python",
+       "java",
+       "react",
+       "angular",
+       "spring",
+       "dependency",
+       "dependencies",
+       "eol",
+       "end of life",
+       "to 22",
+       "to 3"
+      ],
+      "command": "/migrate upgrade",
+      "optionWord": "upgrade"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/migrate",
+   "aliases": [
+    {
+     "command": "/workflow-migration",
+     "option": "in-place"
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-11-06T11:23:50.000Z",
+    "medianMinutes": null,
+    "byOption": {
+     "in-place": 1
+    }
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "refactor"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "qe-acceptance",
+    "parity"
+   ],
+   "requiresQe": true,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": true,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "build",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "ee96dedfe50a0ea6",
+   "id": "refactor",
+   "category": "build",
+   "title": "Refactor or polish",
+   "summary": "Restructure without changing behaviour.",
+   "outcome": "A pull request that restructures or tidies code with its behaviour unchanged, after QE acceptance.",
+   "useWhen": [
+    "clean up or restructure code",
+    "rename or simplify without behaviour change"
+   ],
+   "tags": [],
+   "words": [
+    "refactor",
+    "restructure",
+    "clean up",
+    "cleanup",
+    "tidy",
+    "polish",
+    "simplify",
+    "extract",
+    "split",
+    "dead code",
+    "rename",
+    "lint",
+    "tech debt",
+    "duplication"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "kind",
+    "label": "Kind",
+    "default": "refactor",
+    "options": [
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "refactor"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance",
+       "parity"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "ee96dedfe50a0ea6",
+      "id": "refactor",
+      "title": "Refactor",
+      "summary": "Restructure without changing behaviour.",
+      "words": [
+       "refactor",
+       "restructure",
+       "extract",
+       "split",
+       "simplify",
+       "decouple",
+       "duplication",
+       "module"
+      ],
+      "command": "/refactor refactor",
+      "optionWord": "refactor"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "refactor"
+      },
+      "brief": "Kind: polish. Small, safe quality fixes only; no restructuring.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance",
+       "parity"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "db0abbb4742c7dc9",
+      "id": "polish",
+      "title": "Polish",
+      "summary": "Small quality fixes: naming, dead code, lint, small UI fixes.",
+      "words": [
+       "polish",
+       "tidy",
+       "lint",
+       "dead code",
+       "naming",
+       "typos",
+       "warnings",
+       "spacing",
+       "alignment"
+      ],
+      "command": "/refactor polish",
+      "optionWord": "polish"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/refactor",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "release"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "qe-acceptance",
+    "fidelity-to-source"
+   ],
+   "requiresQe": true,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": true,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "ship",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "624247d099ef9624",
+   "id": "release",
+   "category": "build",
+   "title": "Prepare a release",
+   "summary": "Check release readiness, bump versions and write the changelog in a pull request; never tags.",
+   "outcome": "A release pull request: versions bumped, changelog cut from what merged, and a GO or NO-GO readiness verdict.",
+   "useWhen": [
+    "prepare the next release",
+    "bump versions and write the changelog"
+   ],
+   "tags": [],
+   "words": [
+    "release",
+    "cut a release",
+    "ship",
+    "version bump",
+    "changelog",
+    "tag",
+    "release notes",
+    "release candidate",
+    "go no go",
+    "publish"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/release",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "scaffold"
+   },
+   "brief": "Kind: service.",
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "qe-acceptance"
+   ],
+   "requiresQe": true,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": true,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "build",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "d4f3f6c334c2eb1a",
+   "id": "start-new",
+   "category": "build",
+   "title": "Start something new",
+   "summary": "An HTTP or worker service.",
+   "outcome": "A new CLI, service, library or MCP server in a pull request, tested and reviewed; an MCP server is installed after your consent.",
+   "useWhen": [
+    "start a new CLI, service or library",
+    "scaffold a new project"
+   ],
+   "tags": [],
+   "words": [
+    "new",
+    "start",
+    "scaffold",
+    "bootstrap",
+    "greenfield",
+    "from scratch",
+    "skeleton",
+    "starter",
+    "create a"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "kind",
+    "label": "What are you starting?",
+    "default": "service",
+    "options": [
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "scaffold"
+      },
+      "brief": "Kind: CLI.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "05ab63742938ac30",
+      "id": "cli",
+      "title": "CLI",
+      "summary": "A command-line tool.",
+      "words": [
+       "cli",
+       "command line",
+       "command-line",
+       "terminal tool",
+       "script",
+       "subcommand"
+      ],
+      "command": "/new cli",
+      "optionWord": "cli"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "scaffold"
+      },
+      "brief": "Kind: service.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "d4f3f6c334c2eb1a",
+      "id": "service",
+      "title": "Service",
+      "summary": "An HTTP or worker service.",
+      "words": [
+       "service",
+       "api",
+       "microservice",
+       "server",
+       "backend",
+       "worker",
+       "endpoint",
+       "rest"
+      ],
+      "command": "/new service",
+      "optionWord": "service"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "scaffold"
+      },
+      "brief": "Kind: library.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "e4b3fb56b9f158b2",
+      "id": "library",
+      "title": "Library",
+      "summary": "A package other code imports.",
+      "words": [
+       "library",
+       "package",
+       "sdk",
+       "module",
+       "npm package",
+       "crate",
+       "pip"
+      ],
+      "command": "/new library",
+      "optionWord": "library"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "mcp-server"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance",
+       "install-consent"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": "high",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "18f7d8c61f2b8fd3",
+      "id": "mcp-server",
+      "title": "MCP server",
+      "summary": "Tools for agents, installed after your consent.",
+      "words": [
+       "mcp",
+       "mcp server",
+       "tools for agents",
+       "agent tool",
+       "connector",
+       "integration",
+       "give agents"
+      ],
+      "command": "/new mcp",
+      "optionWord": "mcp"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/new",
+   "aliases": [
+    {
+     "command": "/workflow-mcp-server",
+     "option": "mcp-server"
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "editor-plugin"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "qe-acceptance",
+    "install-consent"
+   ],
+   "requiresQe": true,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": true,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "build",
+   "typicalMinutes": [
+    30,
+    120
+   ],
+   "cost": "high",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "c3db6510f28a7c4a",
+   "id": "studio-plugin",
+   "category": "build",
+   "title": "Studio plugin",
+   "summary": "Edit a kind of file in studio.",
+   "outcome": "A studio editor plugin designed, built, tested and installed after your consent.",
+   "useWhen": [
+    "edit a new kind of file in studio",
+    "change how studio edits an artifact"
+   ],
+   "tags": [],
+   "words": [
+    "plugin",
+    "studio plugin",
+    "editor",
+    "viewer",
+    "file type",
+    "extension",
+    "phase plugin",
+    "custom step"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "kind",
+    "label": "Kind of plugin",
+    "default": "editor",
+    "options": [
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "editor-plugin"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance",
+       "install-consent"
+      ],
+      "requiresQe": true,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": [
+       30,
+       120
+      ],
+      "cost": "high",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "c3db6510f28a7c4a",
+      "id": "editor",
+      "title": "Editor",
+      "summary": "Edit a kind of file in studio.",
+      "words": [
+       "editor",
+       "viewer",
+       "file type",
+       "edit",
+       "open in studio"
+      ],
+      "command": "/plugin editor",
+      "optionWord": "editor"
+     },
+     {
+      "launch": {
+       "kind": "none"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "qe-acceptance"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": true,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "coming_soon",
+      "statusNote": "Plugging in your own step is not built yet.",
+      "release": "1.0",
+      "source": "none",
+      "resolution": "458bc4fb4feeaab9",
+      "id": "phase",
+      "title": "Phase",
+      "summary": "A new kind of step workflows can use.",
+      "words": [
+       "phase",
+       "step",
+       "custom step"
+      ],
+      "command": "/plugin phase",
+      "optionWord": "phase"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/plugin",
+   "aliases": [
+    {
+     "command": "/workflow-editor-plugin",
+     "option": "editor"
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 5,
+    "lastUsedAt": "2026-11-07T05:08:13.000Z",
+    "medianMinutes": 64.5,
+    "byOption": {
+     "editor": 5
+    }
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "test-plan"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "specify",
+   "typicalMinutes": null,
+   "cost": "medium",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "92998240f755a882",
+   "id": "plan-tests",
+   "category": "test",
+   "title": "Plan tests",
+   "summary": "Write a risk-ranked test plan for a change or an area of the code, ready to automate.",
+   "outcome": "The test gaps in the code, then a risk-ranked test plan file in a pull request, ready to automate.",
+   "useWhen": [
+    "decide what to test before building",
+    "a test strategy for a feature or release"
+   ],
+   "tags": [],
+   "words": [
+    "test plan",
+    "test strategy",
+    "what to test",
+    "scenarios",
+    "qa plan",
+    "test gaps",
+    "coverage",
+    "untested",
+    "under-tested",
+    "test coverage"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/plan-tests",
+   "aliases": [
+    {
+     "command": "/workflow-test-plan",
+     "option": null
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 2,
+    "lastUsedAt": "2026-11-06T18:20:42.000Z",
+    "medianMinutes": 19.7,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "test-analysis"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "specify",
+   "typicalMinutes": null,
+   "cost": "low",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "f17e0bd7d7313166",
+   "id": "test-analysis",
+   "category": "test",
+   "title": "Test analysis (the gaps only)",
+   "summary": "Find the risky code with no tests, weak or flaky tests and what would close each gap, changing nothing.",
+   "outcome": "The existing test-analysis workflow, unchanged: the test gaps, without the plan.",
+   "useWhen": [
+    "where are we under-tested",
+    "audit the quality of a test suite",
+    "find flaky or empty tests"
+   ],
+   "tags": [],
+   "words": [],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": null,
+   "aliases": [
+    {
+     "command": "/workflow-test-analysis",
+     "option": null
+    }
+   ],
+   "hidden": true,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "qe-author-tests"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "evidence-floor"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "build",
+   "typicalMinutes": null,
+   "cost": "medium",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "99236a12593266b8",
+   "id": "write-tests",
+   "category": "test",
+   "title": "Write and run tests",
+   "summary": "Write tests for how existing code behaves and run them with the repository's own test setup.",
+   "outcome": "A pull request with behaviour tests that ran green under your own test setup.",
+   "useWhen": [
+    "add missing tests",
+    "cover existing behaviour with tests"
+   ],
+   "tags": [],
+   "words": [
+    "write tests",
+    "add tests",
+    "unit tests",
+    "e2e",
+    "integration tests",
+    "test automation",
+    "automate tests",
+    "cover with tests"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/write-tests",
+   "aliases": [
+    {
+     "command": "/workflow-qe-author-tests",
+     "option": null
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 3,
+    "lastUsedAt": "2026-11-07T08:02:24.000Z",
+    "medianMinutes": 36.7,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "suite-health"
+   },
+   "brief": "Focus: flaky tests.",
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "pr",
+   "writes": "repo",
+   "gate": [
+    "cited-findings",
+    "evidence-floor"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "build",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "d9f15e681785d5f8",
+   "id": "suite-health",
+   "category": "test",
+   "title": "Keep the suite healthy",
+   "summary": "Find and fix flaky, weak, stale-snapshot or slow tests without touching the code under test.",
+   "outcome": "A pull request that fixes flaky, weak, rotten or slow tests, with the suite run green under your own setup.",
+   "useWhen": [
+    "fix flaky tests",
+    "strengthen weak tests",
+    "speed up a slow test suite"
+   ],
+   "tags": [],
+   "words": [
+    "flaky",
+    "flake",
+    "flakes",
+    "intermittent",
+    "slow tests",
+    "snapshot",
+    "snapshots",
+    "weak tests",
+    "test smells",
+    "assertion-free",
+    "test suite",
+    "test health",
+    "quarantine"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "kind",
+    "label": "What needs attention?",
+    "default": "flaky",
+    "options": [
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "suite-health"
+      },
+      "brief": "Focus: flaky tests.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "cited-findings",
+       "evidence-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "d9f15e681785d5f8",
+      "id": "flaky",
+      "title": "Flaky",
+      "summary": "",
+      "words": [
+       "flaky",
+       "flake",
+       "intermittent",
+       "random failures",
+       "sometimes fails",
+       "retry"
+      ],
+      "command": "/suite-health flaky",
+      "optionWord": "flaky"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "suite-health"
+      },
+      "brief": "Focus: weak or empty tests.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "cited-findings",
+       "evidence-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "ac749e1b6b178b5e",
+      "id": "weak",
+      "title": "Weak",
+      "summary": "",
+      "words": [
+       "weak",
+       "assertion",
+       "tautological",
+       "smells",
+       "empty tests",
+       "mocks everything"
+      ],
+      "command": "/suite-health weak",
+      "optionWord": "weak"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "suite-health"
+      },
+      "brief": "Focus: snapshot rot.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "cited-findings",
+       "evidence-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "aa32eaf29280aebe",
+      "id": "snapshots",
+      "title": "Snapshots",
+      "summary": "",
+      "words": [
+       "snapshot",
+       "snapshots",
+       "golden",
+       "cassettes",
+       "stale snapshots"
+      ],
+      "command": "/suite-health snapshots",
+      "optionWord": "snapshots"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "suite-health"
+      },
+      "brief": "Focus: slow tests.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "cited-findings",
+       "evidence-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "build",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "777bcaa311afe8e4",
+      "id": "slow",
+      "title": "Slow",
+      "summary": "",
+      "words": [
+       "slow",
+       "takes forever",
+       "minutes",
+       "speed up",
+       "too long",
+       "parallel"
+      ],
+      "command": "/suite-health slow",
+      "optionWord": "slow"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/suite-health",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "investigate-incident"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "nothing"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "incident",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "e771e4d0f1ac9bbf",
+   "id": "incident",
+   "category": "investigate",
+   "title": "Incident or root cause",
+   "summary": "Find the root cause of an incident from its error, logs and timeline, cited, changing nothing.",
+   "outcome": "What broke and why, each cause cited to a code or log line, with the fix handed to Bug.",
+   "useWhen": [
+    "why did this break in production",
+    "find the root cause of an outage",
+    "explain this error from its logs"
+   ],
+   "tags": [],
+   "words": [
+    "incident",
+    "outage",
+    "down",
+    "root cause",
+    "rca",
+    "post-mortem",
+    "postmortem",
+    "why did",
+    "paged",
+    "5xx",
+    "spike",
+    "error rate",
+    "sev",
+    "quick look",
+    "deep dive",
+    "thorough"
+   ],
+   "depth": true,
+   "variant": null,
+   "handoff": {
+    "card": "bug",
+    "option": null
+   },
+   "nearest": null,
+   "later": [
+    {
+     "release": "1.2",
+     "adds": "sources",
+     "note": "The source picker (ITSM, logs, the web you register) comes in 1.2. Today: paste the error, logs or timeline."
+    }
+   ],
+   "command": "/incident",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [
+    "sources"
+   ],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "explore",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Coming in 1.2: it reads the web and other sources you register.",
+   "release": "1.2",
+   "source": "none",
+   "resolution": "5e9259613d32ef2b",
+   "id": "competitive",
+   "category": "investigate",
+   "title": "Competitive or market analysis",
+   "summary": "How others do it, with every claim cited to a source.",
+   "outcome": "How others do it, with every claim cited to a source.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "competitor",
+    "competitive",
+    "market",
+    "landscape",
+    "alternatives",
+    "vendors",
+    "who else"
+   ],
+   "depth": true,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "plan-it",
+    "option": null
+   },
+   "later": [],
+   "command": "/competitive",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [
+    "documents"
+   ],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Coming in 1.1: it reads documents you upload.",
+   "release": "1.1",
+   "source": "none",
+   "resolution": "738c7925dfad82f6",
+   "id": "due-diligence",
+   "category": "investigate",
+   "title": "Due diligence",
+   "summary": "A cited review of a target's documents: what holds, what is missing, what is a risk.",
+   "outcome": "A cited review of a target's documents: what holds, what is missing, what is a risk.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "due diligence",
+    "diligence",
+    "data room",
+    "vendor assessment",
+    "acquisition",
+    "evaluate a vendor"
+   ],
+   "depth": true,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "security",
+    "option": null
+   },
+   "later": [],
+   "command": "/due-diligence",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [
+    "sources"
+   ],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "explore",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Coming in 1.2: it reads the web and other sources you register.",
+   "release": "1.2",
+   "source": "none",
+   "resolution": "5e9259613d32ef2b",
+   "id": "research",
+   "category": "investigate",
+   "title": "Research a question",
+   "summary": "A cited answer from outside sources.",
+   "outcome": "A cited answer from outside sources.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "research",
+    "find out",
+    "look into",
+    "what is the best",
+    "state of the art",
+    "read up"
+   ],
+   "depth": true,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "decide",
+    "option": null
+   },
+   "later": [],
+   "command": "/find-out",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "reconstruct"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "65ea4a2472ec5111",
+   "id": "reconstruct",
+   "category": "investigate",
+   "title": "Reconstruct what happened",
+   "summary": "Build a cited timeline of what changed and how it led to an outcome, changing nothing.",
+   "outcome": "A timeline of what changed and why, each event cited to a commit, pull request or run.",
+   "useWhen": [
+    "what changed before this broke",
+    "reconstruct the history of a decision"
+   ],
+   "tags": [],
+   "words": [
+    "what happened",
+    "reconstruct",
+    "timeline",
+    "history",
+    "who changed",
+    "when did",
+    "why did this change",
+    "blame",
+    "how did we get here",
+    "sequence of events"
+   ],
+   "depth": true,
+   "variant": null,
+   "handoff": {
+    "card": "bug",
+    "option": null
+   },
+   "nearest": null,
+   "later": [],
+   "command": "/reconstruct",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "analyze-codebase"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": false
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "explore",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "69525fda0f1b3622",
+   "id": "analyze-codebase",
+   "category": "analyze",
+   "title": "Analyze a codebase",
+   "summary": "Architecture and flows, cited (search narrate/service-map; engineering arch action).",
+   "outcome": "A cited account of the code: how it works, what it does as requirements, or where its docs are wrong.",
+   "useWhen": [
+    "how does this part of the system work",
+    "map the flows and modules of a service"
+   ],
+   "tags": [],
+   "words": [
+    "analyze",
+    "understand",
+    "explain",
+    "how does",
+    "how it works",
+    "architecture",
+    "overview",
+    "walk me through",
+    "map the domain",
+    "requirements from code",
+    "docs drift",
+    "check docs",
+    "stale docs"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "lens",
+    "label": "Lens",
+    "default": "overview",
+    "options": [
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "analyze-codebase"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": false
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "report",
+      "writes": "nothing",
+      "gate": [
+       "cited-findings"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "explore",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "69525fda0f1b3622",
+      "id": "overview",
+      "title": "How it works",
+      "summary": "Architecture and flows, cited (search narrate/service-map; engineering arch action).",
+      "words": [
+       "how does",
+       "how it works",
+       "architecture",
+       "overview",
+       "explain",
+       "walk me through",
+       "structure",
+       "flow"
+      ],
+      "command": "/analyze overview",
+      "optionWord": "overview"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "domain-extraction"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": false
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "report",
+      "writes": "domain-artifacts",
+      "gate": [],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "explore",
+      "typicalMinutes": [
+       10,
+       30
+      ],
+      "cost": "high",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "daf8c4973ed983d6",
+      "id": "domain",
+      "title": "Domain",
+      "summary": "What the code does as requirements, with coverage. Writes its requirements map to the project graph, never the repository.",
+      "words": [
+       "domain",
+       "business rules",
+       "requirements from code",
+       "reverse engineer",
+       "what does it do",
+       "map the domain",
+       "extract rules"
+      ],
+      "command": "/analyze domain",
+      "optionWord": "domain"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "validate-docs"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": false
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "report",
+      "writes": "nothing",
+      "gate": [
+       "cited-findings"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "explore",
+      "typicalMinutes": null,
+      "cost": "low",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "190c1c5f07b0a144",
+      "id": "docs",
+      "title": "Docs vs code",
+      "summary": "Every wrong or stale claim in the docs.",
+      "words": [
+       "docs",
+       "readme",
+       "documentation",
+       "stale",
+       "drift",
+       "out of date",
+       "fact check",
+       "are the docs"
+      ],
+      "command": "/analyze docs",
+      "optionWord": "docs"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/analyze",
+   "aliases": [
+    {
+     "command": "/workflow-domain-extraction",
+     "option": "domain"
+    },
+    {
+     "command": "/workflow-validate-docs",
+     "option": "docs"
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "map-requirements"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "requirements",
+     "label": "Requirements",
+     "kind": "requirements",
+     "required": true
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo",
+    "project",
+    "requirements"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "specify",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "01046f605d5b0b73",
+   "id": "map-requirements",
+   "category": "analyze",
+   "title": "Map requirements",
+   "summary": "Trace each requirement to the code and tests that satisfy it, and name what is missing.",
+   "outcome": "Each requirement you pick traced to the code that meets it, or marked unmet, cited.",
+   "useWhen": [
+    "which requirements are implemented",
+    "build a traceability matrix"
+   ],
+   "tags": [],
+   "words": [
+    "traceability",
+    "trace requirements",
+    "requirements coverage",
+    "which requirements",
+    "satisfied by",
+    "acceptance criteria met",
+    "map requirements",
+    "rtm"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/requirements",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [
+    "documents"
+   ],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings",
+    "fidelity-to-source"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "explore",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Coming in 1.1: it reads documents you upload.",
+   "release": "1.1",
+   "source": "none",
+   "resolution": "2bc86b6956736eab",
+   "id": "analyze-documents",
+   "category": "analyze",
+   "title": "Analyze documents",
+   "summary": "What a set of documents says, compared and cited to the page.",
+   "outcome": "What a set of documents says, compared and cited to the page.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "analyze documents",
+    "summarize these",
+    "compare documents",
+    "contracts",
+    "pdfs",
+    "spreadsheet"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "document",
+    "option": null
+   },
+   "later": [],
+   "command": "/analyze-docs",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "review-change"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": true,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "unavailable",
+   "statusNote": "Comes once crew excludes the authors of every run that contributed to the change from its reviewers; today, Risk analysis or Security review read a change on a seat that did not build it.",
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "97a28deebfd1d38e",
+   "id": "review-change",
+   "category": "judge",
+   "title": "Review a change",
+   "summary": "Review a pull request, branch or commit and recommend approve, conditions or reject.",
+   "outcome": "A verdict on a pull request or branch: approve, conditional or reject, with every finding cited.",
+   "useWhen": [
+    "review this pull request",
+    "is this change safe to merge"
+   ],
+   "tags": [],
+   "words": [
+    "review",
+    "code review",
+    "review pr",
+    "pull request",
+    "look at this pr",
+    "pr",
+    "diff",
+    "branch",
+    "second opinion",
+    "approve"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/review-change",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [
+    "documents"
+   ],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings",
+    "fidelity-to-source"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Coming in 1.1: it reads documents you upload.",
+   "release": "1.1",
+   "source": "none",
+   "resolution": "2bc86b6956736eab",
+   "id": "critique",
+   "category": "judge",
+   "title": "Critique a document, proposal or claim",
+   "summary": "Where an argument holds and where it does not, cited to the page.",
+   "outcome": "Where an argument holds and where it does not, cited to the page.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "critique",
+    "poke holes",
+    "red team",
+    "challenge",
+    "is this right",
+    "review this proposal",
+    "feedback on"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "review-change",
+    "option": null
+   },
+   "later": [],
+   "command": "/critique-doc",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "risk-analysis"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "36ce36b1581ddca7",
+   "id": "risk",
+   "category": "judge",
+   "title": "Risk analysis",
+   "summary": "Assess the risks of a change or area from its blast radius, tests and churn, as a risk matrix.",
+   "outcome": "A risk matrix for a change or an area: failure modes, likelihood, impact and mitigations, cited.",
+   "useWhen": [
+    "what could go wrong with this change",
+    "assess the risk of touching this code"
+   ],
+   "tags": [],
+   "words": [
+    "risk",
+    "risks",
+    "risky",
+    "failure modes",
+    "what could go wrong",
+    "blast radius",
+    "impact",
+    "fmea",
+    "mitigations"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/risk",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "security-review"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "77cf67a880ec2dc2",
+   "id": "security",
+   "category": "judge",
+   "title": "Security and compliance review",
+   "summary": "Review the code for vulnerabilities and weaknesses, each cited with its fix.",
+   "outcome": "Security, privacy or compliance findings, each cited to code, with the fix to make.",
+   "useWhen": [
+    "review this code for security issues",
+    "check our attack surface"
+   ],
+   "tags": [],
+   "words": [
+    "security",
+    "vulnerability",
+    "owasp",
+    "secrets",
+    "pentest",
+    "privacy",
+    "pii",
+    "gdpr",
+    "hipaa",
+    "soc2",
+    "soc 2",
+    "pci",
+    "compliance",
+    "audit"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "kind",
+    "label": "Kind of review",
+    "default": "security",
+    "options": [
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "security-review"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "report",
+      "writes": "nothing",
+      "gate": [
+       "cited-findings"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "review",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "77cf67a880ec2dc2",
+      "id": "security",
+      "title": "Security",
+      "summary": "",
+      "words": [
+       "security",
+       "vulnerability",
+       "vulnerabilities",
+       "owasp",
+       "secrets",
+       "injection",
+       "auth",
+       "pentest",
+       "cve"
+      ],
+      "command": "/audit security",
+      "optionWord": "security"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "privacy-review"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "report",
+      "writes": "nothing",
+      "gate": [
+       "cited-findings"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "review",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "976dd187f292116e",
+      "id": "privacy",
+      "title": "Privacy",
+      "summary": "",
+      "words": [
+       "privacy",
+       "pii",
+       "phi",
+       "personal data",
+       "gdpr",
+       "data protection"
+      ],
+      "command": "/audit privacy",
+      "optionWord": "privacy"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "compliance-review"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "report",
+      "writes": "nothing",
+      "gate": [
+       "cited-findings"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "review",
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "ed1188836fc26e18",
+      "id": "compliance",
+      "title": "Compliance",
+      "summary": "",
+      "words": [
+       "compliance",
+       "soc2",
+       "soc 2",
+       "hipaa",
+       "pci",
+       "controls",
+       "regulatory",
+       "audit"
+      ],
+      "command": "/audit compliance",
+      "optionWord": "compliance"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/audit",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "decide"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "nothing"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "cited-findings",
+    "pick"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "decide",
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "7d479ae6fd48c0b8",
+   "id": "decide",
+   "category": "judge",
+   "title": "Decide (ADR)",
+   "summary": "Lay out the options for a decision, score them with evidence, and record the option you pick.",
+   "outcome": "Options scored by seats that did not write them, and your pick; the ADR is then written by Document \u00b7 Docs in the repo, filled in.",
+   "useWhen": [
+    "choose between two or more approaches",
+    "write up an architecture decision"
+   ],
+   "tags": [],
+   "words": [
+    "decide",
+    "decision",
+    "adr",
+    "should we use",
+    "which",
+    "or",
+    "trade-off",
+    "tradeoff",
+    "choose between",
+    "pick between",
+    "versus",
+    "vs"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": {
+    "card": "document",
+    "option": "repo-docs"
+   },
+   "nearest": null,
+   "later": [],
+   "command": "/decide",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "document",
+    "style": "doc"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "project"
+   ],
+   "delivers": "document",
+   "writes": "documents",
+   "gate": [
+    "draft-floor"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": [
+    10,
+    20
+   ],
+   "cost": "medium",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "studio",
+   "resolution": "7e95497678e52de5",
+   "id": "document",
+   "category": "create",
+   "title": "Document",
+   "summary": "Prose you edit in studio and export as PDF.",
+   "outcome": "A document, a deck or Markdown docs in your repository, grounded in your work.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "document",
+    "doc",
+    "write up",
+    "memo",
+    "white paper",
+    "report",
+    "proposal",
+    "deck",
+    "slides",
+    "presentation",
+    "readme",
+    "docs",
+    "guide",
+    "api reference",
+    "pdf"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "docStyle",
+    "label": "Style",
+    "default": "document",
+    "options": [
+     {
+      "launch": {
+       "kind": "document",
+       "style": "doc"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "project"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "draft-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": [
+       10,
+       20
+      ],
+      "cost": "medium",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "7e95497678e52de5",
+      "id": "document",
+      "title": "Document",
+      "summary": "Prose you edit in studio and export as PDF.",
+      "words": [
+       "memo",
+       "white paper",
+       "write up",
+       "report",
+       "pdf",
+       "word",
+       "docx",
+       "document",
+       "brief"
+      ],
+      "command": "/document doc",
+      "optionWord": "doc"
+     },
+     {
+      "launch": {
+       "kind": "document",
+       "style": "ppt"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "project"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "draft-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": [
+       10,
+       20
+      ],
+      "cost": "medium",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "c0dae7b761c3e76b",
+      "id": "presentation",
+      "title": "Presentation",
+      "summary": "16:9 slides you edit in studio.",
+      "words": [
+       "deck",
+       "slides",
+       "slide deck",
+       "presentation",
+       "pitch",
+       "keynote",
+       "powerpoint",
+       "pptx"
+      ],
+      "command": "/document deck",
+      "optionWord": "deck"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "docs"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "fidelity-to-source"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": true,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": null,
+      "cost": "medium",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "b94629413ccdd2ae",
+      "id": "repo-docs",
+      "title": "Docs in the repo",
+      "summary": "Markdown in your repository, every claim checked against the code, as a pull request.",
+      "words": [
+       "readme",
+       "docs",
+       "documentation",
+       "guide",
+       "api reference",
+       "markdown",
+       "md",
+       "contributing"
+      ],
+      "command": "/document repo",
+      "optionWord": "repo"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/document",
+   "aliases": [
+    {
+     "command": "/workflow-docs",
+     "option": "repo-docs"
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "document",
+    "style": "web"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "project"
+   ],
+   "delivers": "document",
+   "writes": "documents",
+   "gate": [
+    "draft-floor"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": [
+    10,
+    20
+   ],
+   "cost": "medium",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "studio",
+   "resolution": "69b1c4827d60bdca",
+   "id": "interactive-page",
+   "category": "create",
+   "title": "Interactive page",
+   "summary": "A versioned web page document in studio that you can edit in place and export as PDF.",
+   "outcome": "A versioned web page document in studio that you can edit in place and export as PDF.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "web page",
+    "html",
+    "interactive",
+    "explainer",
+    "one pager",
+    "living spec",
+    "page",
+    "microsite"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/page",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "demo"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "url",
+     "label": "The running app",
+     "kind": "url",
+     "required": true
+    },
+    {
+     "id": "audience",
+     "label": "Who it is for",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "show",
+     "label": "What to show",
+     "kind": "text",
+     "required": true
+    }
+   ],
+   "needs": [
+    "project",
+    "running_app"
+   ],
+   "delivers": "video",
+   "writes": "documents",
+   "gate": [
+    "walkthrough"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": true,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": "medium",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "studio",
+   "resolution": "f6c00a361d0196f2",
+   "id": "demo-video",
+   "category": "create",
+   "title": "Demo video",
+   "summary": "A captioned video of your app, recorded and reviewed by a second seat.",
+   "outcome": "A captioned video of your app, recorded and reviewed by a second seat.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "video",
+    "demo",
+    "screencast",
+    "recording",
+    "walkthrough video",
+    "record"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/demo",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Design in progress.",
+   "release": "as-is",
+   "source": "none",
+   "resolution": "2c2ca594f27cf906",
+   "id": "app",
+   "category": "create",
+   "title": "App",
+   "summary": "Live apps and dashboards over your APIs and databases.",
+   "outcome": "Live apps and dashboards over your APIs and databases.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "app",
+    "dashboard",
+    "internal tool",
+    "data app"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": null,
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [
+    "documents"
+   ],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [
+    "fidelity-to-source"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Coming in 1.1: it reads documents you upload.",
+   "release": "1.1",
+   "source": "none",
+   "resolution": "3d6b3b68dc6297bd",
+   "id": "respond",
+   "category": "create",
+   "title": "Respond to an ask",
+   "summary": "A response to an RFP, RFI or questionnaire, every answer traced to its source.",
+   "outcome": "A response to an RFP, RFI or questionnaire, every answer traced to its source.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "rfp",
+    "rfi",
+    "questionnaire",
+    "tender",
+    "bid",
+    "security questionnaire",
+    "respond to"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "document",
+    "option": null
+   },
+   "later": [],
+   "command": "/respond",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [
+    "documents"
+   ],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [
+    "fidelity-to-source"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Coming in 1.1: it reads documents you upload.",
+   "release": "1.1",
+   "source": "none",
+   "resolution": "3d6b3b68dc6297bd",
+   "id": "rework",
+   "category": "create",
+   "title": "Rework an artifact",
+   "summary": "An artifact condensed, re-aimed, generalized, converted or refreshed, faithful to its source.",
+   "outcome": "An artifact condensed, re-aimed, generalized, converted or refreshed, faithful to its source.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "condense",
+    "shorten",
+    "re-audience",
+    "rewrite for",
+    "generalize",
+    "convert",
+    "refresh",
+    "update this deck",
+    "turn this into"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "document",
+    "option": null
+   },
+   "later": [],
+   "command": "/rework",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "document",
+    "style": "doc"
+   },
+   "brief": "Kind: message.",
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "project"
+   ],
+   "delivers": "document",
+   "writes": "documents",
+   "gate": [
+    "draft-floor"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": [
+    10,
+    20
+   ],
+   "cost": "medium",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "studio",
+   "resolution": "26fb6131a2d9cd5f",
+   "id": "communicate",
+   "category": "create",
+   "title": "Communicate",
+   "summary": "A narrative, meeting prep, demo script, status update or message, grounded in your work.",
+   "outcome": "A narrative, meeting prep, demo script, status update or message, grounded in your work.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "status update",
+    "update",
+    "email",
+    "message",
+    "announcement",
+    "narrative",
+    "story",
+    "meeting prep",
+    "talking points",
+    "demo script",
+    "summary for",
+    "write to",
+    "slack"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "kind",
+    "label": "Kind",
+    "default": "message",
+    "options": [
+     {
+      "launch": {
+       "kind": "document",
+       "style": "doc"
+      },
+      "brief": "Kind: narrative.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "project"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "draft-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": [
+       10,
+       20
+      ],
+      "cost": "medium",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "572d213961cbf5dd",
+      "id": "narrative",
+      "title": "Narrative",
+      "summary": "",
+      "words": [
+       "narrative",
+       "story",
+       "storyline",
+       "why we"
+      ],
+      "command": "/communicate narrative",
+      "optionWord": "narrative"
+     },
+     {
+      "launch": {
+       "kind": "document",
+       "style": "doc"
+      },
+      "brief": "Kind: meeting prep.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "project"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "draft-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": [
+       10,
+       20
+      ],
+      "cost": "medium",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "6166a87f58763cb1",
+      "id": "meeting-prep",
+      "title": "Meeting prep",
+      "summary": "",
+      "words": [
+       "meeting",
+       "meeting prep",
+       "talking points",
+       "agenda",
+       "prep for",
+       "briefing"
+      ],
+      "command": "/communicate meeting",
+      "optionWord": "meeting"
+     },
+     {
+      "launch": {
+       "kind": "document",
+       "style": "doc"
+      },
+      "brief": "Kind: demo script.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "project"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "draft-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": [
+       10,
+       20
+      ],
+      "cost": "medium",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "6034875b3a8236a0",
+      "id": "demo-script",
+      "title": "Demo script",
+      "summary": "",
+      "words": [
+       "demo script",
+       "script for the demo",
+       "run of show"
+      ],
+      "command": "/communicate demo-script",
+      "optionWord": "demo-script"
+     },
+     {
+      "launch": {
+       "kind": "document",
+       "style": "doc"
+      },
+      "brief": "Kind: status update.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "project"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "draft-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": [
+       10,
+       20
+      ],
+      "cost": "medium",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "6faa081c6ab25da3",
+      "id": "status-update",
+      "title": "Status update",
+      "summary": "",
+      "words": [
+       "status",
+       "status update",
+       "weekly update",
+       "progress",
+       "where are we",
+       "report out"
+      ],
+      "command": "/communicate status",
+      "optionWord": "status"
+     },
+     {
+      "launch": {
+       "kind": "document",
+       "style": "doc"
+      },
+      "brief": "Kind: message.",
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "project"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "draft-floor"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": [
+       10,
+       20
+      ],
+      "cost": "medium",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "26fb6131a2d9cd5f",
+      "id": "message",
+      "title": "Message",
+      "summary": "",
+      "words": [
+       "email",
+       "message",
+       "slack",
+       "announcement",
+       "note to",
+       "reply"
+      ],
+      "command": "/communicate message",
+      "optionWord": "message"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/communicate",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [
+    "documents"
+   ],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [
+    "fidelity-to-source"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Coming in 1.1: it reads the scope documents you upload.",
+   "release": "1.1",
+   "source": "none",
+   "resolution": "3d6b3b68dc6297bd",
+   "id": "estimate-price",
+   "category": "estimate",
+   "title": "Estimate and price",
+   "summary": "Effort and price from a scope document, with the assumptions named.",
+   "outcome": "Effort and price from a scope document, with the assumptions named.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "estimate",
+    "estimation",
+    "how long",
+    "effort",
+    "pricing",
+    "price",
+    "quote",
+    "sizing",
+    "cost of the work"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "plan-it",
+    "option": null
+   },
+   "later": [],
+   "command": "/estimate",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [
+    "documents"
+   ],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [
+    "fidelity-to-source"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Coming in 1.1: it reads documents you upload.",
+   "release": "1.1",
+   "source": "none",
+   "resolution": "3d6b3b68dc6297bd",
+   "id": "run-cost",
+   "category": "estimate",
+   "title": "Model run cost",
+   "summary": "What a planned body of work will cost to run, from its documents and your run history.",
+   "outcome": "What a planned body of work will cost to run, from its documents and your run history.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "run cost",
+    "token cost",
+    "how much will it cost to run",
+    "spend",
+    "budget for runs"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "analyze-runs",
+    "option": null
+   },
+   "later": [],
+   "command": "/run-cost",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "compose"
+   },
+   "brief": null,
+   "compose": {
+    "level": "stories"
+   },
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "requirements",
+     "label": "Requirements",
+     "kind": "requirements",
+     "required": true
+    }
+   ],
+   "needs": [
+    "project",
+    "requirements"
+   ],
+   "delivers": "document",
+   "writes": "documents",
+   "gate": [
+    "traces-to-requirements"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "specify",
+   "typicalMinutes": null,
+   "cost": "low",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "studio",
+   "resolution": "71ce935d34684e2d",
+   "id": "backlog",
+   "category": "organize",
+   "title": "Backlog from requirements",
+   "summary": "Epics, stories and tasks drafted from the requirements you pick, each traced to its requirement.",
+   "outcome": "Epics, stories and tasks drafted from the requirements you pick, each traced to its requirement.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "backlog",
+    "epics",
+    "stories",
+    "user stories",
+    "tasks",
+    "tickets",
+    "break into stories",
+    "jira tickets"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "kind",
+    "label": "Down to",
+    "default": "stories",
+    "options": [
+     {
+      "launch": {
+       "kind": "compose"
+      },
+      "brief": null,
+      "compose": {
+       "level": "epics"
+      },
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "requirements",
+        "label": "Requirements",
+        "kind": "requirements",
+        "required": true
+       }
+      ],
+      "needs": [
+       "project",
+       "requirements"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "traces-to-requirements"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "specify",
+      "typicalMinutes": null,
+      "cost": "low",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "8c9379ddd6129aab",
+      "id": "epics",
+      "title": "Epics",
+      "summary": "",
+      "words": [
+       "epics",
+       "epic"
+      ],
+      "command": "/backlog epics",
+      "optionWord": "epics"
+     },
+     {
+      "launch": {
+       "kind": "compose"
+      },
+      "brief": null,
+      "compose": {
+       "level": "stories"
+      },
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "requirements",
+        "label": "Requirements",
+        "kind": "requirements",
+        "required": true
+       }
+      ],
+      "needs": [
+       "project",
+       "requirements"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "traces-to-requirements"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "specify",
+      "typicalMinutes": null,
+      "cost": "low",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "71ce935d34684e2d",
+      "id": "stories",
+      "title": "Stories",
+      "summary": "",
+      "words": [
+       "stories",
+       "user stories",
+       "story"
+      ],
+      "command": "/backlog stories",
+      "optionWord": "stories"
+     },
+     {
+      "launch": {
+       "kind": "compose"
+      },
+      "brief": null,
+      "compose": {
+       "level": "tasks"
+      },
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": true
+       },
+       {
+        "id": "requirements",
+        "label": "Requirements",
+        "kind": "requirements",
+        "required": true
+       }
+      ],
+      "needs": [
+       "project",
+       "requirements"
+      ],
+      "delivers": "document",
+      "writes": "documents",
+      "gate": [
+       "traces-to-requirements"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": false,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": "specify",
+      "typicalMinutes": null,
+      "cost": "low",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "studio",
+      "resolution": "d0a0b0c1cc088205",
+      "id": "tasks",
+      "title": "Tasks",
+      "summary": "",
+      "words": [
+       "tasks",
+       "subtasks",
+       "tickets"
+      ],
+      "command": "/backlog tasks",
+      "optionWord": "tasks"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/backlog",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "document",
+    "style": "doc"
+   },
+   "brief": "Kind: operating model.",
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "project"
+   ],
+   "delivers": "document",
+   "writes": "documents",
+   "gate": [
+    "draft-floor"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": [
+    10,
+    20
+   ],
+   "cost": "medium",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "studio",
+   "resolution": "e90968937a5ff981",
+   "id": "operating-model",
+   "category": "organize",
+   "title": "Roles and operating model",
+   "summary": "Who does what: roles, responsibilities, decision rights and cadences, as a document.",
+   "outcome": "Who does what: roles, responsibilities, decision rights and cadences, as a document.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "roles",
+    "raci",
+    "operating model",
+    "responsibilities",
+    "who does what",
+    "team structure",
+    "org",
+    "ways of working",
+    "cadence",
+    "governance model"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/roles",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Deferred: setting up a project is the Projects page and its guided first run, not a job.",
+   "release": "deferred",
+   "source": "none",
+   "resolution": "2c2ca594f27cf906",
+   "id": "setup-project",
+   "category": "organize",
+   "title": "Set up a project",
+   "summary": "",
+   "outcome": "",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "set up a project",
+    "new project",
+    "onboard"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": null,
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "run-evals"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "runs"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "proposal-only"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": [
+    1,
+    5
+   ],
+   "cost": "low",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "crew",
+   "resolution": "4d7f911e0782ed58",
+   "id": "analyze-runs",
+   "category": "improve",
+   "title": "Analyze runs",
+   "summary": "Checks how well the system's own judgments agree with what really happened in your runs, per project and across projects.",
+   "outcome": "How well the system's own judgments held on the runs you pick: needs-you, floors, QE verdicts, who built it, routing.",
+   "useWhen": [
+    "You want to know whether what needs you, floor decisions, QE verdicts or who built the work are being judged right",
+    "Every 2 days, on its schedule, after the review of recent work"
+   ],
+   "tags": [],
+   "words": [
+    "evals",
+    "evaluate runs",
+    "judge quality",
+    "accuracy",
+    "how good are",
+    "analyze runs",
+    "run quality",
+    "routing accuracy"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/evals",
+   "aliases": [
+    {
+     "command": "/workflow-run-evals",
+     "option": null
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-11-06T18:17:59.000Z",
+    "medianMinutes": 1.9,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "review-recent-work"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "runs"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "proposal-only"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": [
+    1,
+    5
+   ],
+   "cost": "low",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "crew",
+   "resolution": "3c0d8cdf183c3fe6",
+   "id": "review-recent-work",
+   "category": "improve",
+   "title": "Review recent work",
+   "summary": "Looks across every run since the last review and recommends what to improve, with the numbers behind each recommendation.",
+   "outcome": "Recommendations across every run since the last review, with the numbers behind each.",
+   "useWhen": [
+    "You want to know what is slowing runs down, costing the most, or failing again and again",
+    "Every 2 days, on its schedule"
+   ],
+   "tags": [],
+   "words": [
+    "review recent work",
+    "what went wrong",
+    "insights",
+    "slow runs",
+    "cost",
+    "recommendations",
+    "how are runs going"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/review-recent",
+   "aliases": [
+    {
+     "command": "/workflow-review-recent-work",
+     "option": null
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-11-06T18:14:44.000Z",
+    "medianMinutes": 2.2,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "steering-author"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "repo"
+   ],
+   "delivers": "proposals",
+   "writes": "proposals",
+   "gate": [
+    "proposal-only"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": true,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "builtin",
+   "resolution": "c6774c8b22af93ad",
+   "id": "propose",
+   "category": "improve",
+   "title": "Propose rules and memories",
+   "summary": "Steering rules, memories or knowledge, proposed for you to approve; nothing applies until you do.",
+   "outcome": "Steering rules, memories or knowledge, proposed for you to approve; nothing applies until you do.",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "rules",
+    "steering",
+    "policy",
+    "memories",
+    "remember",
+    "learn",
+    "learnings",
+    "knowledge",
+    "capture",
+    "lessons",
+    "conventions"
+   ],
+   "depth": false,
+   "variant": {
+    "axis": "kind",
+    "label": "Propose",
+    "default": "rules",
+    "options": [
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "steering-author"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": false,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "proposals",
+      "writes": "proposals",
+      "gate": [
+       "proposal-only"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": true,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "c6774c8b22af93ad",
+      "id": "rules",
+      "title": "Rules",
+      "summary": "",
+      "words": [
+       "rules",
+       "steering",
+       "policy",
+       "policies",
+       "conventions",
+       "guardrails"
+      ],
+      "command": "/propose rules",
+      "optionWord": "rules"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "capture-learnings"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "proposals",
+      "writes": "proposals",
+      "gate": [
+       "proposal-only"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": true,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": null,
+      "cost": null,
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "3d0a33c730eea10a",
+      "id": "memories",
+      "title": "Memories from recent work",
+      "summary": "",
+      "words": [
+       "memories",
+       "lessons",
+       "capture",
+       "learnings",
+       "what we learned"
+      ],
+      "command": "/propose memories",
+      "optionWord": "memories"
+     },
+     {
+      "launch": {
+       "kind": "run",
+       "workflow": "learn"
+      },
+      "brief": null,
+      "compose": null,
+      "changesPlan": true,
+      "inputs": [
+       {
+        "id": "intent",
+        "label": "What should it do?",
+        "kind": "text",
+        "required": true
+       },
+       {
+        "id": "repo",
+        "label": "Repository",
+        "kind": "repo",
+        "required": true
+       },
+       {
+        "id": "project",
+        "label": "Project",
+        "kind": "project",
+        "required": false
+       },
+       {
+        "id": "seats",
+        "label": "Who works on it",
+        "kind": "seats",
+        "required": false
+       }
+      ],
+      "needs": [
+       "repo"
+      ],
+      "delivers": "pr",
+      "writes": "repo",
+      "gate": [
+       "proposal-only",
+       "review"
+      ],
+      "requiresQe": false,
+      "seats": {
+       "distinctEvaluator": false,
+       "distinctJudge": false,
+       "excludeChangeAuthors": false,
+       "proposalOnly": true,
+       "notRunSeat": false,
+       "council": false
+      },
+      "archetype": null,
+      "typicalMinutes": null,
+      "cost": "medium",
+      "status": "available",
+      "statusNote": null,
+      "release": "1.0",
+      "source": "builtin",
+      "resolution": "40cf0a1f5f7b988a",
+      "id": "knowledge",
+      "title": "Knowledge on a topic",
+      "summary": "",
+      "words": [
+       "learn",
+       "topic",
+       "library",
+       "standard",
+       "catch up on",
+       "knowledge"
+      ],
+      "command": "/propose knowledge",
+      "optionWord": "knowledge"
+     }
+    ]
+   },
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/propose",
+   "aliases": [
+    {
+     "command": "/workflow-learn",
+     "option": "knowledge"
+    }
+   ],
+   "hidden": false,
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-11-06T05:46:02.000Z",
+    "medianMinutes": 9.7,
+    "byOption": {
+     "rules": 1
+    }
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "run-evals"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    }
+   ],
+   "needs": [
+    "nothing"
+   ],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "proposal-only"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": [
+    1,
+    5
+   ],
+   "cost": "low",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "crew",
+   "resolution": "892d2f5724b29062",
+   "id": "evaluate-rules",
+   "category": "improve",
+   "title": "Evaluate rules",
+   "summary": "Checks how well the system's own judgments agree with what really happened in your runs, per project and across projects.",
+   "outcome": "Which steering rules catch what they should, which miss, and which fire on good work.",
+   "useWhen": [
+    "You want to know whether what needs you, floor decisions, QE verdicts or who built the work are being judged right",
+    "Every 2 days, on its schedule, after the review of recent work"
+   ],
+   "tags": [],
+   "words": [
+    "evaluate rules",
+    "test rules",
+    "steering evals",
+    "do the rules work",
+    "false positive",
+    "rule coverage"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/evaluate-rules",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "review-recent-work"
+   },
+   "brief": "Kind: retro over the scope named in the ask; file the actions as proposals.",
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [
+    "runs"
+   ],
+   "delivers": "proposals",
+   "writes": "proposals",
+   "gate": [
+    "proposal-only"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": "review",
+   "typicalMinutes": [
+    1,
+    5
+   ],
+   "cost": "low",
+   "status": "available",
+   "statusNote": null,
+   "release": "1.0",
+   "source": "crew",
+   "resolution": "67c6d6ebe201148d",
+   "id": "retro",
+   "category": "improve",
+   "title": "Retro",
+   "summary": "Looks across every run since the last review and recommends what to improve, with the numbers behind each recommendation.",
+   "outcome": "What went well and badly over a stretch of work, and the actions as proposals you approve.",
+   "useWhen": [
+    "You want to know what is slowing runs down, costing the most, or failing again and again",
+    "Every 2 days, on its schedule"
+   ],
+   "tags": [],
+   "words": [
+    "retro",
+    "retrospective",
+    "lessons learned",
+    "post-project",
+    "what went well",
+    "after action"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": "/retro",
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "none"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [],
+   "needs": [],
+   "delivers": "none",
+   "writes": "nothing",
+   "gate": [],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "coming_soon",
+   "statusNote": "Deferred: a change to a workflow or skill needs seat evals to show it helped.",
+   "release": "deferred",
+   "source": "none",
+   "resolution": "2c2ca594f27cf906",
+   "id": "tune",
+   "category": "improve",
+   "title": "Tune a workflow or skill",
+   "summary": "",
+   "outcome": "",
+   "useWhen": [],
+   "tags": [],
+   "words": [
+    "tune",
+    "improve the workflow",
+    "tweak the skill"
+   ],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": {
+    "card": "analyze-runs",
+    "option": null
+   },
+   "later": [],
+   "command": null,
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "demo-human-review"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "as-is",
+   "source": "builtin",
+   "resolution": "d91a790e049b6d3d",
+   "id": "demo-human-review",
+   "category": "yours",
+   "title": "Demo video (reviewed by you)",
+   "summary": "Plan and record a narrated demo video of an app whose data stays out of model context; you review the take.",
+   "outcome": "Plan and record a narrated demo video of an app whose data stays out of model context; you review the take.",
+   "useWhen": [],
+   "tags": [],
+   "words": [],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": null,
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 0,
+    "lastUsedAt": null,
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  },
+  {
+   "launch": {
+    "kind": "run",
+    "workflow": "sourced-report"
+   },
+   "brief": null,
+   "compose": null,
+   "changesPlan": false,
+   "inputs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": false
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false
+    },
+    {
+     "id": "seats",
+     "label": "Who works on it",
+     "kind": "seats",
+     "required": false
+    }
+   ],
+   "needs": [],
+   "delivers": "report",
+   "writes": "nothing",
+   "gate": [
+    "fidelity-to-source"
+   ],
+   "requiresQe": false,
+   "seats": {
+    "distinctEvaluator": false,
+    "distinctJudge": false,
+    "excludeChangeAuthors": false,
+    "proposalOnly": false,
+    "notRunSeat": false,
+    "council": false
+   },
+   "archetype": null,
+   "typicalMinutes": null,
+   "cost": null,
+   "status": "available",
+   "statusNote": null,
+   "release": "as-is",
+   "source": "builtin",
+   "resolution": "e9ab0f4df43406bd",
+   "id": "sourced-report",
+   "category": "yours",
+   "title": "Sourced report",
+   "summary": "A report from cited sources, every claim re-checked at its source by a seat that did not gather it, changing nothing.",
+   "outcome": "A report from cited sources, every claim re-checked at its source by a seat that did not gather it, changing nothing.",
+   "useWhen": [],
+   "tags": [],
+   "words": [],
+   "depth": false,
+   "variant": null,
+   "handoff": null,
+   "nearest": null,
+   "later": [],
+   "command": null,
+   "aliases": [],
+   "hidden": false,
+   "usage": {
+    "launches": 1,
+    "lastUsedAt": "2026-11-07T10:46:06.000Z",
+    "medianMinutes": null,
+    "byOption": {}
+   }
+  }
+ ],
+ "top": [
+  "bug",
+  "studio-plugin:editor",
+  "feature",
+  "write-tests",
+  "plan-tests",
+  "sourced-report"
+ ],
+ "inputKinds": [
+  "text",
+  "repo",
+  "project",
+  "url",
+  "requirements",
+  "seats"
+ ],
+ "usage": {
+  "scope": "operator",
+  "projectId": null,
+  "actorId": "local",
+  "launches": 79
+ }
+}

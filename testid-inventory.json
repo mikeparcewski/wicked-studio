@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 330,
-    "occurrences": 4929,
-    "static": 4147,
+    "files": 332,
+    "occurrences": 4956,
+    "static": 4164,
     "dynamic": 177,
     "computed": 53
   },
@@ -3453,6 +3453,12 @@
       ]
     },
     {
+      "testId": "composer-job-line",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-menu",
       "files": [
         "src/components/session/SlashMenu.tsx"
@@ -3534,6 +3540,12 @@
       "testId": "composer-start-more",
       "files": [
         "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-note",
+      "files": [
+        "src/components/session/Composer.tsx"
       ]
     },
     {
@@ -8156,6 +8168,18 @@
       ]
     },
     {
+      "testId": "job-passage-moved",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-moved-open",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-next",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8246,6 +8270,48 @@
       ]
     },
     {
+      "testId": "job-passage-project",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-error",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-more",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-open",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-retire",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-projects-retry",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-question",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8273,6 +8339,42 @@
       "testId": "job-passage-reply",
       "files": [
         "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repo",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repo-picked",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repos",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repos-back",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repos-more",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-repos-retry",
+      "files": [
+        "src/components/session/JobRepoChoices.tsx"
       ]
     },
     {

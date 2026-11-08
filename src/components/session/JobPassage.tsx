@@ -37,6 +37,10 @@ import { LiveActivity } from './LiveActivity.js';
 import { RunQuestions } from './ThreadQuestions.js';
 import { OrphanedRow } from './RunConversation.js';
 import { RunArtifacts } from './RunArtifacts.js';
+import { asksForProject, JobProjectChoices } from './JobProjectChoices.js';
+import { asksForRepo, JobRepoChoices } from './JobRepoChoices.js';
+import { movedFrom, useJobMoves } from '../../store/jobMoves.js';
+import { openChat } from '../../store/chatFlow.js';
 import { PowerPauseCard } from './PowerMode.js';
 import { usePower } from '../../hooks/usePower.js';
 
@@ -83,6 +87,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     return () => clearInterval(t);
   }, [ticking]);
   const { view: v, run, inputs, planRetry, runRetry } = useJobView(lineage, runs, now);
+  /** Where this job went when it was moved to a new chat (F39/F41): said instead of "Not started". */
+  const moved = useJobMoves((st) => movedFrom(st.moves, lineage));
   const roster = useRoster();
   const powerDefaultOn = usePowerDefaultOn();
   const jobPowerCap = useCapabilities((s) => s.chatJobPower);
@@ -431,7 +437,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     return (
       <section role="region" aria-label={regionName(v)} data-testid="job-passage" data-phase={v.phase} data-settled="true" data-lineage={lineage.lineage} className="wk-pass wk-pass--settled">
         <p className="wk-pass-settled">
-          {settledLine(v, { pr })}
+          {v.phase === 'notStarted' && moved !== null
+            ? <>Moved to {moved.where}: {v.proposal.what.label} · <button type="button" className="wk-pass-inl" data-testid="job-passage-moved-open" onClick={() => openChat(moved.chatId)}>Open it</button></>
+            : settledLine(v, { pr })}
           {runId !== null && <> · <button type="button" className="wk-pass-inl" data-testid="job-passage-details" onClick={() => openSheet({ kind: 'session', sessionId: `run:${runId}` })}>Details ›</button></>}
         </p>
         <div aria-live="polite" className="wk-visually-hidden" data-testid="job-passage-live">{announce}</div>
@@ -489,6 +497,10 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         <div data-testid="job-passage-question" className="wk-pass-ask">
           <span className="wk-pass-ask-who">{v.question.kind === 'lost_check' ? 'wicked asks · only your press changes the checks' : 'wicked asks'}</span>
           <p>{v.question.text}</p>
+          {/* F39: crew asks for the project with nothing to press; the passage offers the projects (a new chat there). */}
+          {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
+          {/* F41: crew asks for the repository with nothing to press (a new chat has none in scope): the registered ones. */}
+          {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
         </div>
       )}
       {/* Power mode for new jobs is on (operator ruling 2026-11-06): the Start's choice, shown before Start; where crew
@@ -508,7 +520,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         <p data-testid="job-passage-updating" className="wk-pass-sub wk-pass-grey">Updating from your {v.phase === 'revising' ? 'message' : 'change'}… Start waits until it settles.</p>
       )}
       {v.phase === 'coming' && <p className="wk-pass-sub" data-testid="job-passage-coming">{head.proposal.coming?.note ?? 'This one comes in a later release; it has no Start yet.'}</p>}
-      {v.phase === 'notStarted' && <p className="wk-pass-sub wk-pass-grey" data-testid="job-passage-not-started">Not started. Say so in the chat to bring it back.</p>}
+      {v.phase === 'notStarted' && (moved !== null
+        ? <p className="wk-pass-sub wk-pass-grey" data-testid="job-passage-moved">This job moved to {moved.where} · <button type="button" className="wk-pass-inl" data-testid="job-passage-moved-open" onClick={() => openChat(moved.chatId)}>Open it</button></p>
+        : <p className="wk-pass-sub wk-pass-grey" data-testid="job-passage-not-started">Not started. Say so in the chat to bring it back.</p>)}
       {v.phase === 'replaced' && <p className="wk-pass-sub wk-pass-grey">A newer proposal replaced this one. Nothing was started.</p>}
       {v.phase === 'starting' && <p className="wk-pass-sub wk-pass-grey" data-testid="job-passage-starting">Starting the job…</p>}
       {v.phase === 'interrupted' && <p className="wk-pass-sub">Interrupted before it was recorded as started. Go again resumes the same job.</p>}

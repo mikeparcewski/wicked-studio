@@ -44,6 +44,26 @@ npm publish dates. Every version listed here exists on
   judged. Redo the QE check?"). A binding failure, where no reviewer ran, now reads "The QE check's evidence could not
   be found. Run the QE check again?" instead of "didn't record a verdict". **Approve as your own judgment** stays its
   own labelled choice; an INCONCLUSIVE gate never labels that approve as a retry.
+### Added
+- **The `/` command list (DES-CATALOG-002 Lane E2; crew `chatJobProposals` + `workflowCatalogV2`).** On a daemon that
+  takes job proposals from a chat, `/` lists the v2 catalog by verb: each job's command (`/migrate`), title and line,
+  its variants as sub-commands (`/migrate upgrade`), and Yours. Typing filters it; with four or more words, crew's
+  words layer leads with a **Looks like** row. A pick puts the job on the composer with its exact variant and depth,
+  and nothing is sent until Enter, which puts the job in the chat as your proposal (its sentence and Start). A command
+  typed whole, or an old `/workflow-…` command, does the same; `/workflow-test-analysis` reaches its own job. Only jobs
+  that can start here are listed. New job, ⌘K New job and the named openers (Create an editor plugin, Learn, New demo
+  video, Draft epics, Write tests) open in a chat instead of the New job window. An older daemon keeps today's flow.
+- **A job that needs a project asks which, with chips (F39).** "Generate it" on a repository's Requirements files its
+  Analyze a codebase · Domain job in the project that holds the repository. When none (or several) do, the job's
+  "Project?" offers the projects as chips; a pick puts the same job in a new chat in that project, with Start.
+- **A job that needs a repository can get one from a new chat (F41).** A job typed in a new chat whose words name one
+  registered repository (`/analyze domain Map the domain of billing-api`) opens on it, filed in the project that holds
+  it. When the words name none, the job's "Which repository?" offers the registered repositories as chips (the ones
+  the words name first); a pick puts the same job in a new chat on that repository (and asks which project when the
+  job needs one no single project holds). The chat the job left says "This job moved to … · Open it", after a reload too.
+
+### Removed
+- Studio's own guess of a workflow from a launch's words (`detectWorkflow`): reading what words ask for is crew's.
 
 ## [0.15.0] — 2026-11-05
 
