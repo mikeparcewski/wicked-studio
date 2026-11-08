@@ -191,7 +191,7 @@ test.describe('the reviewed messaging', () => {
     for (const never of ['intercept', 'teams', 'deploys your', 'coming soon']) expect(all).not.toContain(never);
     expect(all).not.toMatch(/adds? an? (step|check|review|gate|approval)/);
     // the install needs follow crew 0.18.0's garden floor
-    expect(((await page.locator('#get').textContent()) || '').replace(/\s+/g, ' ')).toContain('wicked-garden 12.66.0 or later');
+    expect(((await page.locator('#get').textContent()) || '').replace(/\s+/g, ' ')).toContain('wicked-garden 12.66.1 or later');
   });
 });
 
