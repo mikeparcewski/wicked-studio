@@ -178,6 +178,8 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const [mode, setMode] = useState<AppMode>(initialMode ?? 'preview');
   const modeRef = useRef<AppMode>(initialMode ?? 'preview');
   const [sharing, setSharing] = useState(false);
+  const [publishRunId, setPublishRunId] = useState<string | null>(null);
+  const [publishEnabled, setPublishEnabled] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   /** A restore on its way: the panel cannot be closed under it (its progress would vanish). */
   const [restoring, setRestoring] = useState(false);
@@ -261,6 +263,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
           caps = undefined;
         }
       }
+      if (!cancelled) setPublishEnabled(caps?.publish === true);
       const picked = sampleApp(sample);
       const store: AppStorePort = slug !== null && caps !== undefined ? new CrewAppStore(slug) : new SampleAppStore(picked.slug, picked.spec);
       const session = new AppSession(store);
@@ -363,6 +366,10 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
     const t = setInterval(again, 5_000);
     return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); clearInterval(t); };
   }, []);
+
+  const publishStates = runs.filter((v) => v.session.id === publishRunId || (detail !== null && v.session.workflow_id === 'apps-publish' && v.session.repo_ref === detail.repoId))
+    .map((v) => `${v.session.id}:${v.session.status}`).join('|');
+  useEffect(() => { void sessionRef.current?.refresh(); }, [publishStates]);
 
   useEffect(() => {
     hostRef.current?.setAppMode(shown);
@@ -550,7 +557,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
               <AppSidePanel slug={slug} tab={tab} setTab={setPanelTab} collapsed={collapsed && !waiting} setCollapsed={setCollapsed}
                 busy={chatOn && detail.turn != null} unread={unread} dock={dock} phone={narrowWindow} selectedWhileCollapsed={collapsed && selId !== null}
                 chat={!chatOn ? null : (
-                  <AppChat slug={slug} detail={detail} runs={runs} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
+                  <AppChat slug={slug} detail={detail} runs={runs} publishRunId={publishRunId} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
                     onSent={() => { void sessionRef.current?.refresh(); }} prepareSend={prepareSend} pending={pending}
                     undoOff={phone || archived}
                     closedWhy={archived ? 'This app is archived: restore it to ask for changes.' : null}
@@ -580,7 +587,10 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         })()}
       </div>
       {sharing && detail !== null && (
-        <ShareSheet name={detail.name} slug={detail.slug} published={publishedOf(detail)} onClose={() => setSharing(false)} />
+        <ShareSheet name={detail.name} slug={detail.slug} detail={detail} published={publishedOf(detail)} publishEnabled={publishEnabled}
+          publishDisabledWhy={framed ? 'Open studio on its own to publish.' : archived ? 'Restore this app before publishing.' : kind?.store !== 'crew' ? 'Sample apps cannot be published.' : null}
+          onStarted={(id) => { setPublishRunId(id); setPanelTab('chat'); setCollapsed(false); setStatus('Publish started. Its checks and your consent appear in the app’s thread.'); }}
+          onClose={() => setSharing(false)} />
       )}
     </div>
   );

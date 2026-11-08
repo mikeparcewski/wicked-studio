@@ -141,7 +141,8 @@ export class AppSession {
     const turnsChanged = turnLogMark(app) !== turnLogMark(this.app);
     // (G16) Archived or restored in another tab: the head is the same, the app's state is not.
     const archivedChanged = archivedOf(app) != null !== this.archived;
-    if (!moved && !turnChanged && !turnsChanged && !archivedChanged) return;
+    const publishedChanged = JSON.stringify(app.published) !== JSON.stringify(this.app.published);
+    if (!moved && !turnChanged && !turnsChanged && !archivedChanged && !publishedChanged) return;
     // Archived meanwhile, with a burst waiting: it is dropped NOW, saying so, so it can never save later (an unarchive
     // seen before its timer would otherwise land it; codex r2).
     if (!moved && archivedChanged && archivedOf(app) != null && this.burst.length > 0) {

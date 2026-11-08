@@ -1,0 +1,5 @@
+/* The fixture's card sits outside the app, as the site host's card does. */
+.wk-fixture-card { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: var(--surface-card); }
+.wk-fixture-card > section { width: min(560px, 100%); max-height: 100%; overflow: auto; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-raised); }
+.wk-fixture-card pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-fixture-card button { font: inherit; color: var(--ink-high); background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; }
