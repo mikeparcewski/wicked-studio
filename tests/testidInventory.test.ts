@@ -89,9 +89,12 @@ describe('testid-inventory.json (TH-13)', () => {
     expect(inv.static.length).toBeGreaterThan(400);
     // The counts are computed on read (the dist copy): they agree with the lists and the scan.
     const scan = collectTestidScan(ROOT);
+    expect(scan.inventory.static).toHaveLength(inv.static.length);
+    expect(scan.inventory.dynamic).toHaveLength(inv.dynamic.length);
+    expect(scan.inventory.computed).toHaveLength(inv.computed.length);
     const { counts } = withCounts(inv, scan);
-    expect(counts.static).toBe(inv.static.length);
     expect(counts.occurrences).toBeGreaterThanOrEqual(counts.static + counts.dynamic);
+    expect(counts.files).toBeGreaterThan(100);
     // Stable codepoint ordering — what makes drift diffs reviewable and byte-identical
     // across macOS/Linux/Windows (no localeCompare anywhere).
     const codepointSorted = (xs: string[]) =>
