@@ -141,7 +141,8 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
   // (F22) A gate held on steering rules no judge ruled on says so in plain words, from the same structured reading the
   // gate's Re-check and Confirm or skip come from (never the prompt's prose).
   const hold = gate !== undefined && model !== null ? rulesHoldAt(events, view.units, gate.ord) : null;
-  const rulesHeld = hold !== null && hold.held ? rulesHoldHeadline(hold.rows) : null;
+  // Only when the gate's own cause is the hold: a broken rule or a hold behind another denial keeps its own headline.
+  const rulesHeld = hold !== null && hold.held && !hold.behind ? rulesHoldHeadline(hold.rows) : null;
   // The failures only this change has come before a missing judge (J4 0.16.6: a fix gate with both led with the judge).
   const headline = seatRefusal ? (judges?.inJob !== undefined ? `${seatName(judges.inJob.cli, judges.inJob.label)} can review this instead`
       : judges?.outside !== undefined ? `${seatName(judges.outside.key, judges.outside.display_name ?? null)} could review this, but isn’t one of this job’s helpers`

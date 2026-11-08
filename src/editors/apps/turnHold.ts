@@ -69,6 +69,9 @@ export function useTurnRulesHold(runId: string | null, view: SessionView | null,
     return () => { alive = false; if (timer !== undefined) clearTimeout(timer); };
   }, [key, runId, tick]);
   const verified = key !== null && readFor === key;
-  const heldNow = live && gate !== undefined && view !== null && rulesHoldAt(verified ? events : null, view.units, gate.ord).held;
+  // The gate's OWN cause is a rules hold: since #1016 `held` is any rule layer (a broken rule, or a hold behind the
+  // reviewer's FAIL, too) and `behind` says the gate's cause is another one; those keep See the job.
+  const reading = live && gate !== undefined && view !== null ? rulesHoldAt(verified ? events : null, view.units, gate.ord) : null;
+  const heldNow = reading !== null && reading.held && !reading.behind;
   return { gate, events, heldNow, held: verified && heldNow };
 }
