@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../../api/client.js';
+import { ApiError } from '../../api/errors.js';
 import type { RosterSeat, SeatContainerLoginOutcome } from '../../api/types.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { getCachedRoster } from '../../store/rosterCache.js';
@@ -11,22 +12,11 @@ import { AgentLoginProvider, SignInNotCompleted } from './agentLogin.js';
 import { holdInert, useLoginCover } from './inertHold.js';
 
 /**
- * THE CONTAINER SIGN-IN (STANDARDS option A; crew#1006 on wicked-core#938): an agent crew marks
- * `sign_in: 'container'` signs in once, in a disposable login container crew opens in its own PTY.
- * Studio only shows that terminal and waits: when it closes, crew moves the credential into its broker
- * (studio never sees it), and the modal's re-check reads the broker's answer off the roster.
- *
- *   Sign in   → `POST /seats/:key/container-login` → the login container's terminal, over the modal.
- *               When its socket closes (crew closes it when the PTY exits, and kills the PTY when the
- *               socket drops, so either way the login is over and crew ingests it) or the user closes
- *               the window, studio waits, bounded, for crew's ingest (`GET /seats/:key/container-login`),
- *               then the hook resolves and the modal re-checks (`GET /roster?refresh=<key>`). It rejects
- *               when the container could not be opened, and with crew's reason (SignInNotCompleted) when
- *               the ingest refused the sign-in.
- *   Sign out  → `POST /seats/:key/container-logout`.
- *   Check now → studio's default re-check.
- * Agents without `sign_in: 'container'` keep the copy-the-command steps, so a daemon outside the
- * container floor (which sends no such seat) changes nothing.
+ * Helper sign-in through crew's container-login endpoint. Crew may open the helper on this
+ * computer or in a container. Studio shows the returned terminal and reads the recorded outcome.
+ * A user closing the window cancels with DELETE after any opening POST has answered; terminal
+ * exit and a completed outcome finish without cancellation. The helper's modal then rechecks
+ * the roster. Helpers without `sign_in: 'container'` retain the copy-command steps.
  */
 
 /** How long studio waits for crew's ingest once the login terminal closed (crew bounds an ingest at 30 s). */
@@ -92,11 +82,12 @@ interface Session {
 const FOCUSABLE = 'button:not([disabled]), a[href], summary, textarea, [tabindex]:not([tabindex="-1"])';
 
 /** The login container's terminal, over the agent's modal (Escape closes it first, like every later layer). */
-function LoginTerminal({ session, open, onOpenError, onClosed }: {
+function LoginTerminal({ session, open, onOpenError, onClosed, onExit }: {
   session: Session;
   open: (cols: number, rows: number) => Promise<{ id: string }>;
   onOpenError: (err: unknown) => void;
   onClosed: () => void;
+  onExit: () => void;
 }): React.ReactElement {
   const titleId = useId();
   const dialog = useRef<HTMLDivElement | null>(null);
@@ -155,8 +146,8 @@ function LoginTerminal({ session, open, onOpenError, onClosed }: {
               ? `Follow ${name}’s sign-in steps in this terminal. When it finishes, this closes and studio checks the sign-in (up to a minute).`
               : onHost ? `Opening ${name}’s own sign-in on this computer…` : `Opening ${name}’s sign-in… The first sign-in can take a few minutes while it is prepared.`}
           </p>
-          <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onClosed} />
-          <span className="wk-agents-safe">{onHost ? `Studio opens ${name}’s own sign-in on this computer.` : 'It runs in a disposable container, and studio’s service keeps the sign-in.'} Studio never shows your password or token. For Claude, paste only the code your browser shows into claude’s own prompt: the sign-in reads the token claude prints, and asks you to paste it (unechoed) only if it cannot.</span>
+          <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onExit} />
+          <span className="wk-agents-safe">{onHost ? `Studio opens ${name}’s own sign-in on this computer.` : `Studio opens ${name}’s sign-in; follow its steps there.`} Studio never shows your password or token. For Claude, paste only the code your browser shows into claude’s own prompt: the sign-in reads the token claude prints, and asks you to paste it (unechoed) only if it cannot.</span>
         </div>
       </div>
     </div>,
@@ -183,25 +174,36 @@ export function ContainerSignInProvider({ children }: { children: React.ReactNod
   const signOut = useCallback(async (key: string): Promise<void> => { await api.seatContainerLogout(key); }, []);
 
   /** This session's callbacks: a late answer for an older, settled session touches nothing (codex r1). */
-  const bound = (s: Session): { open: (cols: number, rows: number) => Promise<{ id: string }>; closed: () => void; openError: (err: unknown) => void } => {
+  const bound = (s: Session): { open: (cols: number, rows: number) => Promise<{ id: string }>; closed: (cancel?: boolean) => void; openError: (err: unknown) => void } => {
     const mine = (): boolean => live.current === s && !s.done;
-    const closed = (): void => {
+    const closed = (cancel = false): void => {
       if (!mine()) return;
       s.done = true;
       s.watch.abort();
       show(null);
-      // Closed before the container opened (codex r4): the window goes now, but the agent stays held until
-      // the POST answers. A refusal opened nothing; a terminal it did open is closed by the unmounted
-      // Terminal itself, and crew's ingest of it is awaited like any other, so a retry never meets a 409.
+      // Closing during the opening POST hides the window immediately, but keeps this helper held
+      // until that POST answers. Only then can DELETE close the sign-in it opened.
       const settled = s.opened ? Promise.resolve(true) : (s.pending ?? Promise.reject(new Error('never sent'))).then(() => true, () => false);
       // Success only when crew's ingest says so: a refused ingest (nothing pasted, a bad token) rejects with crew's
       // reason, so the modal shows it rather than a re-check that reads like the sign-in worked. No answer in time
       // hands back to the re-check, which reads the broker either way.
       // While it waits, the modal says crew is checking the sign-in (the operator has nothing more to do).
-      void settled.then((o) => { if (!o) return null; s.onChecking?.(); return waitForOutcome(s.key); }).then((outcome) => {
+      void settled.then(async (o) => {
+        if (!o) return null;
+        if (cancel) {
+          try { await api.closeSeatContainerLogin(s.key); }
+          catch (error) {
+            if (!(error instanceof ApiError) || error.status !== 404 && error.status !== 405) {
+              throw new SignInNotCompleted('Studio couldn’t close the sign-in. Try again in a minute.');
+            }
+          }
+        }
+        s.onChecking?.();
+        return waitForOutcome(s.key);
+      }).then((outcome) => {
         if (outcome !== null && !outcome.ok) s.reject(new SignInNotCompleted(outcome.error?.trim() || 'the sign-in did not finish'));
         else s.resolve();
-      }, () => s.resolve());
+      }, (error: unknown) => s.reject(error));
     };
     const opened = (): void => {
       if (!mine()) return;
@@ -229,7 +231,7 @@ export function ContainerSignInProvider({ children }: { children: React.ReactNod
     <AgentLoginProvider hooks={{ signIn, signOut, offers: offersContainer }}>
       {children}
       {session !== null && on !== null && (
-        <LoginTerminal key={session.id} session={session} open={on.open} onOpenError={on.openError} onClosed={on.closed} />
+        <LoginTerminal key={session.id} session={session} open={on.open} onOpenError={on.openError} onClosed={() => on.closed(true)} onExit={() => on.closed()} />
       )}
     </AgentLoginProvider>
   );

@@ -43,7 +43,6 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const titleId = useId();
   const f = useFirstUseReads();
   const [creating, setCreating] = useState(false);
-  useEffect(() => { void f.load(true); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const facts = { rows, repos: f.repos, projects: f.projects, checks: f.checks };
   const steps = setupSteps(facts);

@@ -543,6 +543,10 @@ export const api = {
   seatContainerLogin: (cli: string, body: SeatSessionBody) =>
     apiFetch<SeatContainerLoginResponse>(`/seats/${encodeURIComponent(cli)}/container-login`, { method: 'POST', body: JSON.stringify(body) }),
 
+  /** Close an unfinished helper sign-in (crew#1438). Older services may answer 404/405. */
+  closeSeatContainerLogin: (cli: string) =>
+    apiFetch<{ closed: boolean }>(`/seats/${encodeURIComponent(cli)}/container-login`, { method: 'DELETE' }),
+
   /** The last container sign-in's outcome for this seat (crew#1006); 404 until its terminal closed and crew ingested it. */
   seatContainerLoginOutcome: (cli: string, signal?: AbortSignal) =>
     apiFetch<SeatContainerLoginOutcome>(`/seats/${encodeURIComponent(cli)}/container-login`, signal === undefined ? undefined : { signal }),

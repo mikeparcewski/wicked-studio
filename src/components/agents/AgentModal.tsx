@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
-import { helperNotInstalled, issueCopy, SEVERITY_WORD, type CopyCommand } from '../../board/agentsCopy.js';
+import { helperNotInstalled, helperRuntimeDown, issueCopy, SEVERITY_WORD, type CopyCommand } from '../../board/agentsCopy.js';
 import { authOf, commandDisplay, countWords, rowForKey, type AgentIssue, type AgentRow } from '../../board/agentsModel.js';
 import { hookOffers, SignInNotCompleted, useAgentLogin, useAuthOps } from './agentLogin.js';
 import { holdInert, useLoginCover } from './inertHold.js';
@@ -89,22 +89,28 @@ const OUTCOME_WORDS: Record<Exclude<Outcome['kind'], 'idle'>, (name: string, det
   'signin-checking': (n) => ({ lead: `Checking the sign-in with ${n}…`, tone: 'quiet', line: 'This can take up to a minute. There is nothing more to type.' }),
 };
 
-/** Match the refusal's typed fields; the translated Error.message loses its reason code. */
-function signInFailure(name: string, error: unknown): string {
+/** Crew's frozen refusal codes choose the lead and next move; its plain sentence stays intact. */
+function signInFailure(name: string, error: unknown): { lead: string; tone: 'fail'; line: string; action?: string } {
   const body = error instanceof ApiError && error.body !== null && typeof error.body === 'object'
     ? error.body as Record<string, unknown> : {};
-  const raw = error instanceof ApiError ? error.wire : error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  const reason = body['reason'] ?? body['code'] ?? raw;
-  if (reason === 'runtime_down' || /container runtime|docker/i.test(raw)) {
-    return 'The container runtime isn’t running. Start Docker Desktop or Rancher Desktop, then try again.';
+  const raw = error instanceof ApiError ? error.wire : error instanceof Error ? error.message : '';
+  const code = body['code'];
+  const line = typeof body['error'] === 'string' ? displayText(body['error']) : 'Try again.';
+  const result = (lead: string, action: string, fallback: string) => ({ lead, tone: 'fail' as const, line: code === undefined ? fallback : line, ...(code === undefined ? {} : { action }) });
+  if (code === 'container_runtime_down' || code === undefined && /container runtime|docker/i.test(raw)) {
+    return result('Docker or Rancher needs to be started.', 'Start Docker Desktop or Rancher Desktop, then try again.',
+      'The container runtime isn’t running. Start Docker Desktop or Rancher Desktop, then try again.');
   }
-  if (reason === 'host_cli_missing' || /is not installed on this host/i.test(raw)) {
-    return `${name} signs in with its own program on this computer, and it isn’t installed here. Install ${name} on this computer, then try again.`;
+  if (code === 'cli_not_installed' || code === undefined && /is not installed on this host/i.test(raw)) {
+    return result(`${name} isn’t installed on this computer.`, `Install ${name} on this computer, then try again.`,
+      `${name} signs in with its own program on this computer, and it isn’t installed here. Install ${name} on this computer, then try again.`);
   }
-  if (reason === 'already_open' || (error instanceof ApiError && error.status === 409 && /already open/i.test(raw))) {
-    return `A sign-in for ${name} is already open (perhaps in a window you closed). Finish it, or wait a minute and try again.`;
+  if (code === 'signin_already_open' || code === undefined && error instanceof ApiError && error.status === 409 && /already open/i.test(raw)) {
+    return result(`${name}’s sign-in is already open.`, 'Finish the open sign-in, or close it before trying again.',
+      `A sign-in for ${name} is already open (perhaps in a window you closed). Finish it, or wait a minute and try again.`);
   }
-  return displayText(raw.trim()) || 'Try again.';
+  if (code === 'signin_superseded') return result('Another sign-in replaced this one.', 'Continue with the newer sign-in, or try again.', 'Try again.');
+  return { lead: `Couldn’t open ${name}’s sign-in.`, tone: 'fail', line: code === 'signin_failed' ? line : 'Try again.', action: 'Try signing in again.' };
 }
 
 /** What one fresh reading of the agent says, as the modal's result line (one mapping for every check). */
@@ -322,13 +328,14 @@ export function AgentModal({ agentKey, onClose, intent }: {
   const hookSignIn = hookOffers(login, 'in', row?.seat);
   const hookSignOut = hookOffers(login, 'out', row?.seat);
   const now = Date.now();
-  const cards = useMemo(() => (row === undefined ? [] : (helperNotInstalled(row) ? [row.issues[0] ?? { code: 'signed_out' as const, severity: 'problem' as const, safety: false }] : row.issues).map((i) => ({ issue: i, copy: issueCopy(i, row, rows, now, hookSignIn) }))),
+  const cards = useMemo(() => (row === undefined ? [] : (helperNotInstalled(row) || helperRuntimeDown(row) !== null ? [row.issues[0] ?? { code: 'signed_out' as const, severity: 'problem' as const, safety: false }] : row.issues).map((i) => ({ issue: i, copy: issueCopy(i, row, rows, now, hookSignIn) }))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [row, rows, hookSignIn]);
 
   if (row === undefined && rosterState === 'ok') return null; // the effect above closes it
   const name = row?.name ?? '';
-  const result = outcome.kind === 'idle' ? null : OUTCOME_WORDS[outcome.kind](name, outcome.kind === 'signin-refused' ? displayText(outcome.detail) : outcome.kind === 'signin-failed' ? signInFailure(name, outcome.error) : '');
+  const result = outcome.kind === 'idle' ? null : outcome.kind === 'signin-failed' ? signInFailure(name, outcome.error)
+    : OUTCOME_WORDS[outcome.kind](name, outcome.kind === 'signin-refused' ? displayText(outcome.detail) : '');
   const resultLine = result === null ? null : (
     <div data-testid="agents-check-result" data-state={outcome.kind} role="status" className="wk-agents-result">
       <span className={`wk-agents-word wk-agents-word--${result.tone}`}>
@@ -336,6 +343,8 @@ export function AgentModal({ agentKey, onClose, intent }: {
         {result.lead}
       </span>
       {result.line !== null && <span>{result.line}</span>}
+      {'action' in result && typeof result.action === 'string' && <span>{result.action}</span>}
+      {outcome.kind === 'signin-failed' && <TechDetails summary="Technical details" text={displayText(outcome.error instanceof Error ? outcome.error.message : String(outcome.error))} />}
     </div>
   );
   // Once the fresh reading clears the sign-in card, its result line moves to the top of the modal.

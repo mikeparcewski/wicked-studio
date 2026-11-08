@@ -22,7 +22,7 @@ export interface FirstUseReads {
   state: ReadState;
   /** `full`: read the counts even when setup is settled (the Setup guide shows them). */
   load: (full?: boolean) => Promise<void>;
-  /** Persist `studio.setup` once (completed or skipped): a settled setup is never written again. */
+  /** Persist completion once, or an explicit skip; a skipped setup is never written again. */
   save: (patch: SetupState) => Promise<boolean>;
 }
 
@@ -44,7 +44,7 @@ export const useFirstUseReads = create<FirstUseReads>((set, get) => ({
     if (inflight !== null) return full && !inflightFull ? inflight.then(() => (get().counted ? undefined : get().load(true))) : inflight;
     inflightFull = full;
     set({ state: 'loading' });
-    // Settings first: only an explicit skip lets the landing omit the readiness reads.
+    // Settings first: a saved completion or skip lets the landing omit readiness reads.
     inflight = Promise.resolve().then(() => api.getAppearanceSettings())
       .then(async (s) => {
         // Keep a local completion/skip while its save is in flight; readiness still uses live checks.
@@ -74,7 +74,7 @@ export const useFirstUseReads = create<FirstUseReads>((set, get) => ({
   save: (patch) => {
     // Only over a setup this load has READ (never over an unread completedAt), and once (codex S4 r2).
     if (saving !== null) return saving;
-    if (get().state !== 'ok' || setupSettled(get().setup) || patch.completedAt !== undefined && get().setup.completedAt !== undefined) return Promise.resolve(get().state === 'ok');
+    if (get().state !== 'ok' || get().setup.skippedAt !== undefined || patch.completedAt !== undefined && get().setup.completedAt !== undefined) return Promise.resolve(get().state === 'ok');
     const before = get().setup;
     const next = { ...before, ...patch };
     set({ setup: next, saveFailed: false });

@@ -20,9 +20,14 @@ export function readSetup(settings: Record<string, unknown> | null | undefined):
 }
 
 export function setupSettled(s: SetupState, facts?: SetupFacts): boolean {
-  // A saved completion is not evidence that this computer is still ready. Only an explicit skip
-  // hides incomplete setup; both the guide and the landing use today's readings.
-  return s.skippedAt !== undefined || (s.completedAt !== undefined && facts !== undefined && goodEnough(facts));
+  // Landing decisions use the saved choice. The guide may reopen for a confirmed failure,
+  // but an older service or a probe that did not answer cannot undo a completed setup.
+  if (s.skippedAt !== undefined) return true;
+  if (s.completedAt === undefined) return false;
+  if (facts === undefined) return true;
+  const checks = facts.checks;
+  return checks?.skills !== false && checks?.estate !== false
+    && !(checks?.runtimeRequired === true && checks.runtime === false);
 }
 
 export interface SetupChecks {
@@ -60,9 +65,11 @@ export function setupChecks(snapshot: SystemSnapshot | null, health?: unknown, d
   const components = d['components'] !== null && typeof d['components'] === 'object' ? d['components'] as Record<string, unknown> : {};
   const binaries = components['engineBinaries'] !== null && typeof components['engineBinaries'] === 'object' ? components['engineBinaries'] as Record<string, unknown> : {};
   const estateVersion = binaries['wicked-estate'];
-  // The estate infrastructure row describes its data store, not whether the code map program is
-  // installed. Only the existing diagnostics version probe can confirm that program is available.
-  const estate = estateVersion === null ? false : typeof estateVersion === 'string' && estateVersion.trim() !== '' ? true : null;
+  // A missing binary is null in diagnostics. Newer services also name a missing installation
+  // in the estate row; other down states can describe its data store and do not prove absence.
+  const estateRow = infra.find((r) => r.key === 'estate');
+  const estateMissing = estateRow?.state === 'down' && /isn.t installed|not installed/i.test(estateRow.reason ?? '');
+  const estate = estateMissing || estateVersion === null ? false : typeof estateVersion === 'string' && estateVersion.trim() !== '' ? true : null;
   const skillsReady = skillState === null ? state('skills')
     : skillState !== 'published' ? false : skills['current'] === undefined ? null : skills['current'] !== null;
   return {

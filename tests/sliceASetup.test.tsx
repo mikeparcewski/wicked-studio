@@ -75,17 +75,18 @@ describe('A-C3 sign-in opening failures', () => {
   it.each([
     [502, { error: 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock' }],
     [503, { error: 'docker API unavailable' }],
-    [503, { error: 'the service did not start', reason: 'runtime_down' }],
-    [502, { error: 'runtime_down' }],
+    [503, { error: 'the container runtime did not start' }],
+    [502, { error: 'Docker is not running' }],
     [502, { error: 'container runtime stopped' }],
   ])('explains the runtime action for HTTP %s and %j', async (status, body) => {
     refusal = { status, body };
     const result = await failSignIn();
     expect(result).toHaveTextContent('The container runtime isn’t running. Start Docker Desktop or Rancher Desktop, then try again.');
-    expect(result).not.toHaveTextContent(/docker.sock|unix:|docker API|Cannot connect/);
+    const main = result.cloneNode(true) as HTMLElement;
+    main.querySelectorAll('details').forEach((d) => d.remove());
+    expect(main).not.toHaveTextContent(/docker.sock|unix:|docker API|Cannot connect/);
   });
   it.each([
-    { error: 'not available', reason: 'host_cli_missing' },
     { error: 'claude is not installed on this host' },
   ])('explains how to install the helper for %j', async (body) => {
     refusal = { status: 502, body };
@@ -93,7 +94,7 @@ describe('A-C3 sign-in opening failures', () => {
   });
   it.each([
     { error: 'a sign-in is already open for claude' },
-    { error: 'busy', reason: 'already_open' },
+    { error: 'a sign-in is already open' },
   ])('explains an already-open sign-in for %j', async (body) => {
     refusal = { status: 409, body };
     expect(await failSignIn()).toHaveTextContent('A sign-in for Claude Code is already open (perhaps in a window you closed). Finish it, or wait a minute and try again.');
@@ -101,7 +102,7 @@ describe('A-C3 sign-in opening failures', () => {
   it('keeps an unfamiliar reason visible and conceals home paths on both platforms', async () => {
     const home = ['', 'Users', 'alice', 'x'].join('/');
     const windows = 'C:' + '\\' + 'Users' + '\\' + 'alice' + '\\' + 'x';
-    refusal = { status: 422, body: { error: `Could not read ${home} or ${windows}.` } };
+    refusal = { status: 422, body: { code: 'signin_failed', error: `Could not read ${home} or ${windows}.` } };
     const result = await failSignIn();
     expect(result).toHaveTextContent('Could not read ~/x or ~\\x.');
     expect(result).not.toHaveTextContent('alice');
@@ -127,9 +128,9 @@ describe('A-C3 sign-in opening failures', () => {
     expect(login).toHaveTextContent('Opening Claude Code’s own sign-in on this computer');
     expect(login).not.toHaveTextContent('disposable container');
   });
-  it('only promises a container for helpers marked for container sign-in', () => {
+  it('uses wording valid for either helper sign-in path', () => {
     const [row] = agentRows({ roster: [helper()], defaults: null, now: Date.now() });
-    expect(issueCopy(row!.issues[0]!, row!, [row!], Date.now(), true).fix[0]!.text).toContain('disposable container');
+    expect(issueCopy(row!.issues[0]!, row!, [row!], Date.now(), true).fix[0]!.text).toContain('Studio opens Claude Code’s sign-in; follow its steps there.');
     const hostSeat = helper();
     delete hostSeat.sign_in;
     const [host] = agentRows({ roster: [hostSeat], defaults: null, now: Date.now() });
@@ -209,7 +210,7 @@ describe('A-C4 complete setup guide', () => {
     await waitFor(() => expect(screen.getByTestId('agents-setup-step-agents')).toHaveTextContent('Not checked yet.'));
     expect(screen.getByTestId('agents-setup-step-agents')).toHaveAttribute('data-done', 'false');
   });
-  it('requires every check for completion; an old completedAt cannot hide missing checks', () => {
+  it('requires every check for first completion, but unknown readings do not undo a saved completion', () => {
     const mode = { mode: 'admitted', class: null, source: 'acp_input_governance', reason: '', fence: { write_roots: [], read_roots: [], network: 'open' as const } };
     const governed = { ...mode, mode: 'admitted' as const, source: 'acp_input_governance' as const };
     const [row] = agentRows({ roster: [helper({ auth: 'signed_in', council_eligible: true, issues: [],
@@ -220,7 +221,7 @@ describe('A-C4 complete setup guide', () => {
     for (const key of ['skills', 'estate', 'runtime', 'runtimeRequired'] as const) {
       const incomplete = { ...facts, checks: { ...facts.checks, [key]: null } };
       expect(goodEnough(incomplete)).toBe(false);
-      expect(setupSettled({ completedAt: 1 }, incomplete)).toBe(false);
+      expect(setupSettled({ completedAt: 1 }, incomplete)).toBe(true);
     }
     expect(setupSettled({ skippedAt: 1 })).toBe(true);
     expect(goodEnough({ ...facts, checks: { ...facts.checks, runtime: null, runtimeRequired: false } })).toBe(true);

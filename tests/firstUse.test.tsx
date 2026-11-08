@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { GovernanceScopeKind, RosterSeat, SeatGovernanceMode } from '../src/api/types.js';
 import { agentRows } from '../src/board/agentsModel.js';
 import { goodEnough, readSetup, realProjects, setupAgents, setupMove } from '../src/board/firstUse.js';
@@ -149,32 +149,23 @@ describe('the setup steps (§5.2)', () => {
     expect(putSetup).toHaveBeenCalledWith({ completedAt: 1, skippedAt: expect.any(Number) });
   });
 
-  it('while the counts are out, step 3 says it is checking, never "not done" (real-data gate)', async () => {
+  it('keeps the guide hidden until the counts answer (real-data gate)', async () => {
     let answer: (v: { repos: unknown[] }) => void = () => undefined;
     listRepos.mockReturnValue(new Promise((r) => { answer = r; }));
     listProjects.mockResolvedValue({ projects: [{ id: 'default' }, { id: 'p1' }] });
     render(<AgentsPage search="?setup=1" navigate={vi.fn()} />);
-    const step = await screen.findByTestId('agents-setup-step-project');
-    await waitFor(() => expect(screen.getByTestId('agents-setup-place-reading')).toHaveAttribute('data-state', 'reading'));
-    expect(step).toHaveAttribute('data-done', 'false');
-    expect(step).toHaveTextContent('Checking your projects and repositories…');
-    expect(step).not.toHaveTextContent('Name it;');
-    expect(screen.getByTestId('agents-setup-skip')).toBeDisabled();
-    answer({ repos: [] });
-    await waitFor(() => expect(screen.getByTestId('agents-setup-step-project')).toHaveTextContent('You already have 1 project.'));
+    expect(screen.queryByTestId('agents-setup')).toBeNull();
+    await act(async () => { answer({ repos: [] }); });
+    expect(await screen.findByTestId('agents-setup-step-project')).toHaveTextContent('You already have 1 project.');
     expect(screen.queryByTestId('agents-setup-place-reading')).toBeNull();
   });
 
-  it('a failed count read says so, and Skip still goes to the Desk without writing studio.setup', async () => {
+  it('keeps the guide hidden after a failed count read, without writing studio.setup', async () => {
     listRepos.mockRejectedValue(new Error('down'));
-    const navigate = vi.fn();
-    render(<AgentsPage search="?setup=1" navigate={navigate} />);
-    await waitFor(() => expect(screen.getByTestId('agents-setup-place-reading')).toHaveAttribute('data-state', 'failed'));
-    expect(screen.getByTestId('agents-setup-step-project')).toHaveTextContent('Studio couldn’t read your projects and repositories just now.');
-    const skip = screen.getByTestId('agents-setup-skip');
-    expect(skip).toBeEnabled();
-    fireEvent.click(skip);
-    expect(navigate).toHaveBeenCalledWith('/');
+    const { useFirstUseReads } = await import('../src/store/firstUseReads.js');
+    render(<AgentsPage search="?setup=1" navigate={vi.fn()} />);
+    await waitFor(() => expect(useFirstUseReads.getState().state).toBe('failed'));
+    expect(screen.queryByTestId('agents-setup')).toBeNull();
     expect(putSetup).not.toHaveBeenCalled();
   });
 
