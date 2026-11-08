@@ -8,9 +8,10 @@ import { knowledgeAddition } from '../../editors/apps/knowledgeSeeds.js';
 import { readSuggestionGrounds, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
 import { AppComposer } from './AppComposer.js';
 import { LiveActivity } from '../session/LiveActivity.js';
-import { useGateStore } from '../../store/gates.js';
-import { GateRow } from '../session/GateRow.js';
 import { RunQuestions } from '../session/ThreadQuestions.js';
+import { GateRow } from '../session/GateRow.js';
+import { useGateStore } from '../../store/gates.js';
+import { useTurnRulesHold } from '../../editors/apps/turnHold.js';
 
 /**
  * THE APP'S CHAT (DES-APPS-001 §6.1-§6.2, §9.2; operator 2026-11-04: "I should be driving the changes mostly via chat"):
@@ -18,7 +19,9 @@ import { RunQuestions } from '../session/ThreadQuestions.js';
  * change, crew checks it against the app's data sources, a different seat reviews it — and it lands as a new version
  * or says why it did not. The thread IS crew's record of the app's turns (`AppDetail.turns`), so a reload and a second
  * tab read the same thing; while a turn runs the reply shows which step it is on, the run's live activity and any
- * question it asks (studio's own run machinery: {@link LiveActivity}, {@link RunQuestions}).
+ * question it asks (studio's own run machinery: {@link LiveActivity}, {@link RunQuestions}). (F22) A review held on
+ * steering rules no judge ruled on ("the work was not rejected") is answered here with the run page's own
+ * {@link GateRow}: Re-check the rules and Confirm or skip, exactly as the run page offers them.
  *
  * Selecting a component in Edit puts an "about:" chip on this composer (its words from the spec); the message names
  * the component by id and crew describes it to the builder from the spec, never from these words.
@@ -56,7 +59,8 @@ function dropDraft(slug: string): void {
   try { sessionStorage.removeItem(DRAFT_KEY(slug)); } catch { /* nothing kept */ }
 }
 
-/** Turns and publishes answer the same crew gates in the app's thread. */
+/** A publish run's gates (consent, QE acceptance) are answered in the app's thread, as on the run page. A turn's are
+ *  not: TurnReply answers only a verified rules hold (F22) and every other gate keeps See the job, one gate row each. */
 function AppRunQuestions({ view, navigate }: { view: SessionView; navigate: (p: string) => void }): React.ReactElement | null {
   const gate = useGateStore((s) => s.gates[view.session.id]);
   if (['completed', 'failed', 'cancelled'].includes(view.session.status)) return null;
@@ -76,15 +80,24 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
     <a href={sessionPath(`run:${t.runId}`)} className="wk-link wk-appchat-job" data-testid="app-chat-job"
       onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${t.runId}`)); }}>See the job</a>
   );
+  // (F22) The one reading of a rules hold on this turn's run (the busy line, the gate and the app page's strip share it).
+  const hold = useTurnRulesHold(t.runId, view, { running: t.state === 'running', framed });
+  const gate = hold.gate;
   if (t.state === 'running') {
-    const busy = busyText(view);
+    const busy = busyText(view, hold.held);
+    // The held step shows as the step waiting on you, never as failed.
+    const heldOrd = gate !== undefined && hold.heldNow ? gate.ord : null;
+    // Answered here: only a rules hold this gate's recorded trail shows (so the row carries Re-check and Confirm or skip).
+    // Every other gate an app turn can park on is a refusal crew stops (the turn cannot land through it), or one this
+    // chat does not know: See the job reaches the run page's gate.
+    const answerable = hold.held;
     return (
       <div className="wk-appchat-reply wk-appchat-reply--busy" data-testid="app-chat-busy" data-step={busy.step ?? ''} aria-live="polite">
         <p className="wk-appchat-busyline"><span className="wk-appchat-pulse" aria-hidden="true" />{busy.line}</p>
         <ol className="wk-appchat-steps" aria-label="Steps">
           {(['build', 'check', 'review'] as const).map((s) => {
             const u = view?.units.find((x) => x.id === `${t.runId}:${s}`) ?? null;
-            const state = u === null ? 'pending' : u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed' : u.status === 'distributed' ? 'now' : 'pending';
+            const state = u === null ? 'pending' : u.ord === heldOrd ? 'now' : u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed' : u.status === 'distributed' ? 'now' : 'pending';
             const label = s === 'build' ? 'Build' : s === 'check' ? 'Check' : 'Review';
             const who = u?.assigned_cli != null && u.assigned_cli !== '' && s !== 'check' ? ` · ${seatWord(u.assigned_cli)}` : '';
             return <li key={s} data-testid="app-chat-step" data-state={state}>{label}{who}</li>;
@@ -92,7 +105,11 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
         </ol>
         {/* The live activity offers Steer and Stop: never inside another page (xreview r2 on K5). */}
         {view !== null && busy.ord !== null && !framed && <LiveActivity runId={t.runId} ord={busy.ord} seat={busy.seat} />}
-        {view !== null && !framed && <AppRunQuestions view={view} navigate={navigate} />}
+        {view !== null && !framed && <RunQuestions view={view} />}
+        {/* (F22) The gate, answered here as on the run page; never inside another page (no answers there). */}
+        {view !== null && gate !== undefined && answerable && !framed && (
+          <div className="wk-appchat-gate" data-testid="app-chat-gate"><GateRow view={view} gate={gate} navigate={navigate} /></div>
+        )}
         <p className="wk-appchat-meta">The app is read-only until this lands. Preview still works. · {job}</p>
       </div>
     );

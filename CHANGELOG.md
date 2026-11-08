@@ -105,6 +105,19 @@ npm publish dates. Every version listed here exists on
   before ($0.16)".
 - **A program's path is never shown as a helper.** A step crew runs on a binary (a node path) is crew's own step: it is
   not listed among the helpers, in the run's agents or in the receipt's "built by".
+### Fixed
+
+- **The app's chat answers a rules hold in place (F22).** When an app turn's review is held on steering rules no judge
+  ruled on (unchecked, waived by instruction or disputed: "the work was not rejected"), the chat shows the run page's own
+  gate row under the turn's steps, with Re-check the rules and Confirm or skip, and the held review reads as waiting on
+  you, not failed. The chat first reads the run's recorded trail for that gate, so a live buffer that missed or outlived
+  an attempt never offers a stale answer; any other gate keeps See the job. Not inside another page. The page says the
+  same thing everywhere, from one reading (`useTurnRulesHold`): the busy line reads "Waiting on you: a rule needs your
+  call", the app page's "Needs you" strip counts the hold ("1 waiting", answer it in the chat), and a rules hold's gate
+  heading names the rule ("The rule learn-accessible needs your call before this step can go on"; a count for several)
+  instead of "The step was escalated". The gate headline and the prompt-only surfaces (the gate toast, the Desk, the
+  dock) use the same words, so the run page says it too. Needs crew with the
+  matching fix (wicked-crew#1385: a held turn is no longer cancelled); on an older crew the turn ends refused as before.
 
 ## [0.15.0] — 2026-11-05
 

@@ -3,8 +3,8 @@ import { reassignCandidates, reassignRefusedOf, runBenchesOf, type ReassignCandi
 import { isDeliverGate } from '../components/gateMoveModel.js';
 import { deliverAcceptance } from './checkState.js';
 import { choicesOf, type OpenGate } from '../store/gates.js';
-import { creatorSeatRefusal, isReduced, sessionAssurance, sessionQe, waitsForJudge } from './assuranceModel.js';
-import { governanceDenialHeadline, plainGateQuestion } from './deskWords.js';
+import { creatorSeatRefusal, isReduced, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
+import { governanceDenialHeadline, plainGateQuestion, rulesHoldWords } from './deskWords.js';
 import type { GateRowModel } from './gateRowModel.js';
 import { isHelperSeat } from './responder.js';
 
@@ -102,6 +102,12 @@ export function openGateFromEvents(runId: string, events: readonly CoreEvent[], 
   return null;
 }
 
+/** (F22) A rules hold's headline: the rules that need the person's call (blocking unchecked, waived by instruction,
+ *  disputed: {@link ruleHolds}, the rows the gate's Confirm or skip offers; a process row never counts). */
+export function rulesHoldHeadline(rows: readonly RuleRow[]): string {
+  return rulesHoldWords(rows.filter(ruleHolds).map((r) => r.ruleId));
+}
+
 /** What the headline is made of (GateRow's derived lead reads the same facts). */
 export interface GateCause {
   /** The run requires a distinct evaluator and only the builder's seat could review (not a reduced run). */
@@ -133,11 +139,17 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
   const broke = fresh !== null && fresh.length > 0
     ? (fresh.length === 1 ? 'One test this change broke needs fixing before the job can go on' : `${fresh.length} tests this change broke need fixing before the job can go on`)
     : null;
+  // (F22) A gate held on steering rules no judge ruled on says so in plain words, from the same structured reading the
+  // gate's Re-check and Confirm or skip come from (never the prompt's prose).
+  const hold = gate !== undefined && model !== null ? rulesHoldAt(events, view.units, gate.ord) : null;
+  // Only when the gate's own cause is the hold: a broken rule or a hold behind another denial keeps its own headline.
+  const rulesHeld = hold !== null && hold.held && !hold.behind ? rulesHoldHeadline(hold.rows) : null;
   // The failures only this change has come before a missing judge (J4 0.16.6: a fix gate with both led with the judge).
   const headline = seatRefusal ? (judges?.inJob !== undefined ? `${seatName(judges.inJob.cli, judges.inJob.label)} can review this instead`
       : judges?.outside !== undefined ? `${seatName(judges.outside.key, judges.outside.display_name ?? null)} could review this, but isn’t one of this job’s helpers`
         : 'No second helper is free to review this')
     : broke !== null ? broke
+    : rulesHeld !== null ? rulesHeld
       : judgeWait && model?.qe === undefined ? (judges?.inJob !== undefined
         // (J4 0.16.6) The live roster has a helper of this job, not the builder, signed in: say so, never "sign one in".
         ? `${seatName(judges.inJob.cli, judges.inJob.label)} is signed in but wasn’t used to check this step`
