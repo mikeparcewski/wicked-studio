@@ -51,6 +51,15 @@ describe('inputTokenChoices — documents', () => {
     ]);
   });
 
+  it('21 usable documents still leave one out to 20 (crew’s bound); 22 is no list at all', () => {
+    const docs = (n: number): unknown => ({ ...token, documents: Array.from({ length: n }, (_, i) => ({ token: `d${i}`, label: `doc ${i}`, status: 'ok' })) });
+    const res = inputTokenChoices(asToken(docs(21)), withToken(docs(21)))!;
+    expect(res.choices).toHaveLength(21);
+    const sent = (res.choices[0]!.edit.inputs!['documents'] as unknown as { tokens: string[] }).tokens;
+    expect(sent).toHaveLength(20);
+    expect(inputTokenChoices(asToken(docs(22)), withToken(docs(22)))).toBeNull();
+  });
+
   it('a token listed twice (one ok, one struck) is no list at all: no edit can name a struck token', () => {
     const dup = { ...token, documents: [
       { token: 'a', label: 'A', status: 'ok' }, { token: 'a', label: 'A', status: 'struck', reason: 'gone' }, { token: 'b', label: 'B', status: 'ok' },
@@ -108,6 +117,17 @@ describe('inputTokenChoices — sources', () => {
       { id: 'web', label: 'the web', picked: true }, { id: 'web', label: 'the web', picked: false, reason: 'switched off' },
     ] };
     expect(inputTokenChoices(asToken(dup), withToken(dup))).toBeNull();
+  });
+
+  it('at crew’s bound (20 picked) an Add is shown with why and every Leave out stays; past it the token is a fact', () => {
+    const many = Array.from({ length: 21 }, (_, i) => ({ id: `s${i}`, label: `source ${i}`, picked: i < 20 }));
+    const full = { ...token, sources: many };
+    const res = inputTokenChoices(asToken(full), withToken(full))!;
+    expect(res.choices).toHaveLength(20);
+    expect(res.choices.every((c) => c.label.startsWith('Leave out'))).toBe(true);
+    expect(res.unavailable).toEqual([{ label: 'source 20', reason: 'a job reads 20 sources at most' }]);
+    const over = { ...token, sources: many.map((s) => ({ ...s, picked: true })) };
+    expect(inputTokenChoices(asToken(over), withToken(over))).toBeNull();
   });
 
   it('keeps the token’s own order when adding, not the current pick’s order', () => {

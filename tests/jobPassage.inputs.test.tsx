@@ -10,7 +10,7 @@ import { useJobBinding } from '../src/store/jobBinding.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
 import { jobProposal, CHAT } from './jobFixtures.js';
 
-// Local wire fixtures for the optional CS12 fields missing from api-types 0.196.0.
+// Local wire fixtures for the optional CS12 fields the pinned api-types lack.
 interface InputToken extends Omit<ProposalToken, 'kind'> {
   kind: 'documents' | 'sources';
   documents?: unknown;
@@ -121,8 +121,32 @@ describe('job passage input tokens', () => {
     const only = within(list).getByRole('option', { name: 'Brief.pdf · the job’s only document' });
     expect(only).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(only);
-    fireEvent.keyDown(only, { key: 'Enter' });
+    for (const key of ['Enter', ' ']) fireEvent.keyDown(only, { key });
     expect(posts).toEqual([]);
+    expect(useJobBinding.getState().binding).toBeNull();
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('a row that can’t be picked, focused directly (not by the arrows), picks nothing on Enter or Space', async () => {
+    render(passage(proposal()));
+    fireEvent.click(token('2 documents, documents'));
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Leave out Brief.pdf' })).toHaveFocus());
+    const struck = screen.getByRole('option', { name: 'Old.pdf · This file expired' });
+    act(() => { struck.focus(); });
+    for (const key of ['Enter', ' ']) fireEvent.keyDown(struck, { key });
+    expect(posts).toEqual([]);
+    expect(useJobBinding.getState().binding).toBeNull();
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    // The arrows go on from the row focus is on.
+    fireEvent.keyDown(struck, { key: 'ArrowDown' });
+    expect(screen.getByRole('option', { name: 'Something else…' })).toHaveFocus();
+  });
+
+  it('a documents list crew sent with a token twice is a plain fact, even with generic swaps on the token', () => {
+    render(passage(proposal([{ ...documents, swap: { choices: [{ label: 'Only a', edit: { inputs: { documents: { kind: 'documents', tokens: ['a'] } } } }] },
+      documents: [{ token: 'a', label: 'A', status: 'ok' }, { token: 'a', label: 'A', status: 'struck', reason: 'gone' }, { token: 'b', label: 'B', status: 'ok' }] } as unknown as InputToken])));
+    expect(screen.queryByRole('button', { name: '2 documents, documents' })).toBeNull();
+    expect(screen.getByText('2 documents')).toHaveClass('wk-pass-fact');
   });
 
   it('a struck document crew gave no reason for shows its name alone', () => {
@@ -296,8 +320,6 @@ describe('job passage input tokens', () => {
     view.rerender(passage(p, revised));
     expect(screen.queryByRole('listbox')).toBeNull();
     await waitFor(() => expect(token('2 documents, documents')).toHaveFocus());
-    fireEvent.click(oldChoice);
-    expect(posts).toEqual([]);
     fireEvent.click(token('2 documents, documents'));
     fireEvent.click(screen.getByRole('option', { name: 'Leave out Notes.txt' }));
     expect(posts[0]?.body).toMatchObject({ revises: revised.pid, source: 'swap',

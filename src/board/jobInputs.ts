@@ -3,8 +3,8 @@ import type { ArtifactProposal, ProposalInputValue, ProposalRevisionEdits, Propo
 /**
  * The listbox a `documents` or `sources` job-input token opens (DES-CATALOG-002 CS12). Crew sends the two tokens on a
  * job proposal's sentence and carries the current pick in `proposal.inputs`; a person's pick is one revision that
- * replaces the whole list. Pure, and read defensively: the pinned `wicked-crew-api-types` (0.196.0) does NOT carry these
- * fields, so a daemon that predates them sends none and the token stays a plain fact exactly as today (the reader
+ * replaces the whole list. Pure, and read defensively: the pinned `wicked-crew-api-types` does NOT carry the token lists
+ * or the input arms (only the catalog's input kinds), so a daemon that predates them sends none and the token stays a plain fact exactly as today (the reader
  * returns `null`).
  *
  * slice P (board) writes this; slice Q (the passage) imports it.
@@ -99,6 +99,9 @@ function inputSourceIds(proposal: ArtifactProposal): string[] | null {
 const docsEdit = (tokens: string[]): ProposalRevisionEdits => ({ inputs: { documents: { kind: 'documents', tokens } as unknown as ProposalInputValue } });
 const sourcesEdit = (ids: string[]): ProposalRevisionEdits => ({ inputs: { sources: { kind: 'sources', ids } as unknown as ProposalInputValue } });
 
+/** crew's bound on either list (`edits.inputs.documents.tokens` and `.sources.ids`, chat-proposals InputValueSchema). */
+export const MAX_INPUT_LIST = 20;
+
 // ── The listbox ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -121,6 +124,8 @@ export function inputTokenChoices(token: ProposalToken, proposal: ArtifactPropos
     const docs = documentsOf(token);
     if (docs === null) return null;
     const ok = docs.filter((d) => d.status === 'ok');
+    // More usable documents than crew takes: no leave-out could be sent, so the token stays a plain fact.
+    if (ok.length > MAX_INPUT_LIST + 1) return null;
     // The documents that stay are the usable ones: crew refuses an edit that names a struck token, so a struck document
     // is never sent back (it drops out with the first change the person makes).
     const current = ok.map((d) => d.token);
@@ -140,14 +145,22 @@ export function inputTokenChoices(token: ProposalToken, proposal: ArtifactPropos
     const ids = inputSourceIds(proposal);
     const isPicked = (s: JobSourceOption): boolean => (ids !== null ? ids.includes(s.id) : s.picked);
     const pickable = sources.filter((s) => s.reason === undefined);
+    const pickedNow = pickable.filter(isPicked).length;
+    // More picked than crew takes: no edit from here could be sent, so the token stays a plain fact.
+    if (pickedNow > MAX_INPUT_LIST) return null;
+    // At the bound an Add can't be sent: it is shown with why, and every Leave out stays.
+    const full = pickedNow >= MAX_INPUT_LIST;
     // The new pick walks the token's own order, so a pick keeps it (§CS12 "order kept").
     const newPick = (toggled: JobSourceOption): string[] =>
       pickable.filter((s) => (s.id === toggled.id ? !isPicked(toggled) : isPicked(s))).map((s) => s.id);
-    const choices: InputTokenChoice[] = pickable.map((s) => ({
+    const choices: InputTokenChoice[] = pickable.filter((s) => !full || isPicked(s)).map((s) => ({
       label: `${isPicked(s) ? 'Leave out' : 'Add'} ${s.label}`,
       edit: sourcesEdit(newPick(s)),
     }));
-    const unavailable: InputTokenUnavailable[] = sources.filter((s) => s.reason !== undefined).map((s) => ({ label: s.label, reason: s.reason! }));
+    const unavailable: InputTokenUnavailable[] = [
+      ...(full ? pickable.filter((s) => !isPicked(s)).map((s) => ({ label: s.label, reason: `a job reads ${MAX_INPUT_LIST} sources at most` })) : []),
+      ...sources.filter((s) => s.reason !== undefined).map((s) => ({ label: s.label, reason: s.reason! })),
+    ];
     return { choices, unavailable };
   }
   return null;

@@ -445,11 +445,14 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         if ('text' in x) return <Fragment key={i}>{x.text}</Fragment>;
         const t = x.token;
         const input = inputTokenChoices(t, v.proposal);
-        const choices = input?.choices ?? t.swap?.choices ?? [];
+        // A documents or sources token is only ever its own list: one crew sent malformed (or none) is a plain fact,
+        // never the generic swaps, so an identity the reader refused can't come back through them.
+        const inputKind = (t.kind as string) === 'documents' || (t.kind as string) === 'sources';
+        const choices = input?.choices ?? (inputKind ? [] : t.swap?.choices ?? []);
         const pending = v.phase === 'swapPending' && swapToken === t.id;
         const label = pending ? '…' : t.label;
         const wash = washed.has(t.id) ? ' wk-pass-tok--chg' : '';
-        if (!v.tokensLive || (input === null && t.swap === null && t.kind !== 'checks')) {
+        if (!v.tokensLive || (input === null && (inputKind || (t.swap === null && t.kind !== 'checks')))) {
           return <b key={i} data-testid="job-passage-fact" data-token={t.id} className={`wk-pass-fact${wash}`}>{label}{t.kind === 'checks' && <span aria-hidden className="wk-pass-lock" />}</b>;
         }
         return (
@@ -836,18 +839,20 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); const n = (cursor + 1) % count; setCursor(n); optionRefs.current[n]?.focus(); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); const n = (cursor - 1 + count) % count; setCursor(n); optionRefs.current[n]?.focus(); }
+            // `cursor` follows focus (each row's onFocus), so this is the row the key was pressed on: one that can't be
+            // picked picks nothing.
             else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (cursor < choices.length) onPick(cursor); else if (cursor === elseAt) onPick('else'); }
             else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
           }}>
           {choices.map((c, i) => (
-            <li key={i} ref={(el) => { optionRefs.current[i] = el; }} role="option" tabIndex={-1} aria-selected={cursor === i}
+            <li key={i} ref={(el) => { optionRefs.current[i] = el; }} role="option" tabIndex={-1} aria-selected={cursor === i} onFocus={() => setCursor(i)}
               data-testid="job-passage-swap-option" onClick={() => onPick(i)}>{c.label}</li>
           ))}
           {unavailable.map((c, i) => (
-            <li key={`unavailable-${i}`} ref={(el) => { optionRefs.current[choices.length + i] = el; }} role="option" tabIndex={-1}
+            <li key={`unavailable-${i}`} ref={(el) => { optionRefs.current[choices.length + i] = el; }} role="option" tabIndex={-1} onFocus={() => setCursor(choices.length + i)}
               aria-disabled="true" aria-selected="false" data-testid="job-passage-swap-unavailable">{c.reason === '' ? c.label : `${c.label} · ${c.reason}`}</li>
           ))}
-          <li ref={(el) => { optionRefs.current[elseAt] = el; }} role="option" tabIndex={-1} aria-selected={cursor === elseAt}
+          <li ref={(el) => { optionRefs.current[elseAt] = el; }} role="option" tabIndex={-1} aria-selected={cursor === elseAt} onFocus={() => setCursor(elseAt)}
             data-testid="job-passage-swap-else" onClick={() => onPick('else')}>Something else…</li>
         </ul>
       )}
