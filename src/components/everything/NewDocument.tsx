@@ -6,7 +6,7 @@ import type { ArtifactProposal, ProposalEdits } from '../../api/chatArtifacts-wi
 import { formSources, proposalFormEdits, proposalFormOf, proposalHelperEligible, repoKeysOf, type ProposalForm } from '../../board/artifactProposal.js';
 import { apiStatus } from '../../api/errors.js';
 import type { Project, RosterSeat } from '../../api/types.js';
-import { andList, chosenSeats, defaultDocSeats, docClisJson, leftOutWords, readyDocHelpers } from '../../board/docSeats.js';
+import { andList, chosenSeats, defaultDocSeats, docClisJson, docHelperCounts, leftOutWords } from '../../board/docSeats.js';
 import { AGENTS_PATH } from '../../hooks/useRoute.js';
 import { newDocBody, newDocName } from '../../board/newDocument.js';
 import { useRoster } from '../../hooks/useRoster.js';
@@ -104,7 +104,10 @@ function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose
   // first-run C7: why helpers were left out, in plain words (never the service's "(broker credential signed_out)"),
   // and the two-helper rule said up front when fewer than two can work at all.
   const why = roster !== null ? leftOutWords(roster, leftOut) : null;
-  const ready = roster !== null ? readyDocHelpers(roster) : 0;
+  const counts = roster !== null ? docHelperCounts(roster) : { ready: 0, unknown: 0 };
+  const ready = counts.ready;
+  // Said only when the roster KNOWS fewer than two can work (an unknown reading is not counted out).
+  const tooFew = roster !== null && counts.ready + counts.unknown < MIN_DOC_SEATS;
   const signInLink = (
     <a href={AGENTS_PATH} data-testid="made-new-document-signin" className="wk-link"
       onClick={navigate === undefined ? undefined : (e) => { e.preventDefault(); navigate(AGENTS_PATH); }}>Sign one in</a>
@@ -198,7 +201,7 @@ function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose
             })}
           </span>
           <span data-testid="made-new-document-council" role={seatBlocked ? 'alert' : undefined}>
-            {ready < MIN_DOC_SEATS
+            {tooFew
               ? `A document needs two helpers that can work now: one writes it and another checks it. ${ready === 0 ? 'None can work now.' : 'Only one can work now.'}`
               : seatBlocked
                 ? (chosen ?? []).length === 0
@@ -214,9 +217,7 @@ function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose
           {why !== null && why.unavailable.length > 0 && (
             <span data-testid="made-new-document-unavailable">
               Can’t take work right now:{' '}
-              {why.unavailable.map((u, i) => (
-                <span key={u.name} title={u.title ?? undefined}>{i > 0 ? (i === why.unavailable.length - 1 ? ' and ' : ', ') : ''}{u.name}</span>
-              ))}.
+              {why.unavailable.map((u, i) => `${i > 0 ? (i === why.unavailable.length - 1 ? ' and ' : ', ') : ''}${u.name}${u.why !== null ? ` (${u.why})` : ''}`).join('')}.
             </span>
           )}
         </div>

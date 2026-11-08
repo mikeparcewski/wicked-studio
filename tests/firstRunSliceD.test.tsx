@@ -64,6 +64,17 @@ describe('C7: New document says plainly why it can not be made yet', () => {
     expect(screen.queryByTestId('made-new-document-signed-out')).toBeNull();
   });
 
+  it('a helper that can\'t work now says why in text (not only a hover), and an unknown reading is not counted out', () => {
+    ROSTER = [
+      { key: 'claude', display_name: 'Claude Code', enabled_for_council: true, auth: 'signed_in', signed_in: true, council_eligible: false, council_ineligible_reason: 'usage limit reached until 18:00' } as unknown as RosterSeat,
+      { key: 'codex', display_name: 'Codex', enabled_for_council: true } as unknown as RosterSeat,
+      { key: 'pi', display_name: 'Pi CLI', enabled_for_council: true } as unknown as RosterSeat,
+    ];
+    form();
+    expect(screen.getByTestId('made-new-document-unavailable')).toHaveTextContent('Can’t take work right now: Claude Code (usage limit reached until 18:00).');
+    expect(screen.getByTestId('made-new-document-council')).not.toHaveTextContent('can work now');
+  });
+
   it('the format is its own labelled row, apart from the grounding line', async () => {
     ROSTER = [];
     form();

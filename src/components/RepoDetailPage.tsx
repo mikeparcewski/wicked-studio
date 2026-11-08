@@ -265,6 +265,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     ? "The code map service (wicked-estate) isn't installed. Install it, then map this repository."
     : mappingReason === null ? 'Map this repository so you can explore its code and connections.'
       : `The last mapping attempt failed: ${healthText(mappingReason.replace(/^the daemon refused this[^—]*—\s*/, '').split(/[\r\n]/)[0]!)}`;
+  // first-run C2 (review): the banner's main text is crew's first line, without the client's "the daemon refused this —"
+  // prefix, home paths masked (also JSON-escaped Windows ones); the whole text stays under Technical details.
+  const plainFirstLine = (text: string | null): string =>
+    text === null ? '' : healthText(text.replace(/^the daemon refused this[^—]*—\s*/, '').split(/[\r\n]/)[0]!.trim());
   const marks = knowledgeMarks(repo, runsFailed ? null : runs, knowledgeOf(knowledge, repo.id), now);
   const trackerCount = links !== null && links.state === 'ok' ? links.trackers : null;
   const projects = links !== null && links.state === 'ok' ? links.projects : null;
@@ -376,7 +380,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     <p className="wk-state-banner-text">
                       {rerunError !== null ? 'Couldn’t start onboarding: ' : 'Registered. Onboarding couldn’t start: '}
                       {/* first-run C2: a missing code map service is said plainly; crew's words move under Technical details. */}
-                      {estateMissing ? mappingWords : showText(onboardErrorText)}
+                      {estateMissing ? mappingWords : plainFirstLine(onboardErrorText)}
                     </p>
                     {!findingOffersOnboard && (
                       <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="repo-onboard-error-rerun" disabled={onboarding} onClick={() => void startOnboarding()}>
@@ -385,7 +389,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     )}
                     <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={dismissOnboardError}>Dismiss</button>
                   </div>
-                  {estateMissing && <TechDetails text={healthText(onboardErrorText)} />}
+                  {onboardErrorText !== null && <TechDetails text={healthText(onboardErrorText)} />}
                 </div>
               )}
               {/* studio#251: the engine's checkout findings, with "Re-run onboarding" wired to this page's trigger. */}

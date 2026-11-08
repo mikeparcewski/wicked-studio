@@ -29,7 +29,7 @@ const ROSTER = [{ key: 'a', display_name: 'A' }, { key: 'b', display_name: 'B' }
 vi.mock('../src/hooks/useRoster.js', () => ({ useRoster: () => ROSTER }));
 vi.mock('../src/board/docSeats.js', async (orig) => ({
   ...(await orig<typeof import('../src/board/docSeats.js')>()),
-  readyDocHelpers: () => 2,
+  docHelperCounts: () => ({ ready: 2, unknown: 0 }),
   defaultDocSeats: () => ({ selected: new Set(['a', 'b']), leftOut: [] }),
   chosenSeats: (roster: { key: string }[], sel: Set<string>) => roster.filter((s) => sel.has(s.key)),
   docClisJson: () => '[]',
