@@ -12,8 +12,8 @@
   "studioVersion": "0.15.0",
   "counts": {
     "files": 327,
-    "occurrences": 4830,
-    "static": 4054,
+    "occurrences": 4839,
+    "static": 4063,
     "dynamic": 177,
     "computed": 53
   },
@@ -1536,7 +1536,61 @@
       ]
     },
     {
+      "testId": "artifact-checks-floor",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-floor-pages",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-floor-state",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
       "testId": "artifact-checks-note",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-notes",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-notes-body",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-notes-from",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-notes-head",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-notes-left-out",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-notes-toggle",
       "files": [
         "src/components/session/ChecksPanel.tsx"
       ]

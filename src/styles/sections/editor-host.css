@@ -141,3 +141,13 @@
    (with "Review this version" under the summary, the summary had scrolled out of that third). */
 .wk-hpanel-body .wk-checks { max-height: none; overflow: visible; border-top: 0; padding: 0; background: transparent; }
 .wk-checks-review { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-2); }
+
+/* PLAN G12 / DES-CHAT-ARTIFACTS-001 §11.2: the floor crew measured (a host measurement, not a review) and the writer's
+   notes, folded under the reviewers. */
+.wk-check--floor { overflow-wrap: anywhere; }
+/* Its own tone: a host measurement never borrows a reviewer's pass green. */
+.wk-check--floor .wk-check-top b { color: var(--ink-high); }
+.wk-check--floor-unverified .wk-check-top b, .wk-check--floor-unavailable .wk-check-top b { color: var(--status-gate); }
+.wk-checks-notes { padding: 5px 0; border-top: 1px solid var(--border); }
+.wk-checks-notes-body { margin-top: 2px; overflow-wrap: anywhere; }
+.wk-checks-notes-body p { margin: 2px 0 0; }

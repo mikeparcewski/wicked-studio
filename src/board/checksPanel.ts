@@ -1,4 +1,4 @@
-import type { DocCheck, DocReviewerId } from '../api/docChecks.js';
+import type { DocCheck, DocFloorCheck, DocNotes, DocReviewerId } from '../api/docChecks.js';
 import { anchorWords } from './artifactMorph.js';
 
 /**
@@ -91,4 +91,68 @@ export function reviewLanded(checks: readonly DocCheck[], version: number): bool
  *  `reviewers` = all four. */
 export function reviewRequestOf(docId: string, version: number): { event_type: string; payload: Record<string, unknown> } {
   return { event_type: 'wicked.interactive.review.requested', payload: { document_id: docId, version } };
+}
+
+// ── What crew checked before the version landed (PLAN G12; DES-CHAT-ARTIFACTS-001 §11.2) ──────────────────────────────
+
+/** The floor row: a HOST measurement, never a review. `null` when the daemon does not serve it. */
+export interface FloorRow {
+  /** `pass` · `unverified` · `unavailable` · `none` (not measured for this version, e.g. made by hand). */
+  state: 'pass' | 'unverified' | 'unavailable' | 'none';
+  stateWord: string;
+  /** Who says so: "measured by the host" only when the host measured it. */
+  attribution: string;
+  /** The page count in words, when there is one. */
+  pages: string | null;
+  sentence: string;
+}
+
+const FLOOR_WORD: Readonly<Record<'pass' | 'unverified' | 'unavailable', string>> = {
+  pass: 'Meets the floor',
+  unverified: 'Not everything could be measured',
+  unavailable: 'Could not run on the host',
+};
+
+export function floorRow(floor: DocFloorCheck | null | 'unreadable' | undefined): FloorRow | null {
+  if (floor === undefined) return null;
+  if (floor === 'unreadable') return { state: 'unavailable', stateWord: 'Could not be read', attribution: 'the host’s floor check, not a review', pages: null, sentence: 'Crew sent a floor record this studio could not read.' };
+  if (floor === null) return { state: 'none', stateWord: 'Not measured', attribution: 'the host’s floor check, not a review', pages: null, sentence: 'Crew measures the version a run made; this one was not measured (a version made by hand, or one from before).' };
+  const p = floor.pages;
+  const pages = p === null ? null
+    : p.measured
+      ? `${p.count} printed page${p.count === 1 ? '' : 's'}${p.budget !== null ? ` · budget ${p.budget}${p.exact ? ' exactly' : ' at most'}` : ''}`
+      : `at least ${p.count} page${p.count === 1 ? '' : 's'} by its structure; the printed count was not measured${p.budget !== null ? ` · budget ${p.budget}${p.exact ? ' exactly' : ' at most'}` : ''}`;
+  return { state: floor.verdict, stateWord: FLOOR_WORD[floor.verdict], attribution: floor.verdict === 'unavailable' ? 'the host’s floor check, not a review' : 'measured by the host, not a review', pages, sentence: floor.summary };
+}
+
+/** The notes fold: what the writer left out, beside the page and never in it. `null` when the daemon does not serve it. */
+export interface NotesView {
+  /** "Left out 2 things nothing could confirm"; "Nothing left out"; "No notes were recorded". */
+  head: string;
+  /** "from version 3" when the notes belong to an earlier version than the one on screen; else null. */
+  from: string | null;
+  leftOut: Array<{ claim: string; why: string }>;
+  assumptions: string[];
+  struck: Array<{ token: string; reason: string }>;
+  used: string[];
+  unused: string[];
+}
+
+export function notesView(notes: DocNotes | null | 'unreadable' | undefined, head: number): NotesView | null {
+  if (notes === undefined) return null;
+  if (notes === null) return { head: 'No notes were recorded', from: null, leftOut: [], assumptions: [], struck: [], used: [], unused: [] };
+  if (notes === 'unreadable') return { head: 'The writer’s notes could not be read', from: null, leftOut: [], assumptions: [], struck: [], used: [], unused: [] };
+  const n = notes.left_out.length;
+  // "Nothing left out" only when there is nothing else to look at either: crew's struck sources or the writer's
+  // assumptions never hide under a "nothing" label.
+  const others = notes.assumptions.length + notes.struck.length + notes.sources.length > 0;
+  return {
+    head: n > 0 ? `Left out ${n} thing${n === 1 ? '' : 's'} nothing could confirm` : others ? 'Nothing left out · the writer’s notes' : 'Nothing left out',
+    from: notes.from_version !== head ? `from version ${notes.from_version}` : null,
+    leftOut: notes.left_out,
+    assumptions: notes.assumptions,
+    struck: notes.struck,
+    used: notes.sources.filter((s) => s.used).map((s) => s.token),
+    unused: notes.sources.filter((s) => !s.used).map((s) => s.token),
+  };
 }
