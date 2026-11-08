@@ -435,7 +435,9 @@ describe('SkillsPage — the honest non-catalog states', () => {
     wire({ 'GET /skills': () => Promise.reject(new ApiError(503, 'the skills root is not seeded: no installed wicked-garden plugin was found')) });
     render(<Harness />);
     const state = await screen.findByTestId('skills-unavailable');
-    expect(state).toHaveTextContent('Studio can’t reach its service right now.');
+    // first-run P5: crew answered; what is missing is named, never "can't reach its service".
+    expect(state).toHaveTextContent('Skills need wicked-garden, which isn’t installed or running.');
+    expect(state).not.toHaveTextContent('can’t reach');
     expect(state).toHaveTextContent('the skills root is not seeded: no installed wicked-garden plugin was found');
     // Not the "predates" state, not a raw error, no write verbs, no empty catalog.
     expect(screen.queryByTestId('skills-unsupported')).toBeNull();

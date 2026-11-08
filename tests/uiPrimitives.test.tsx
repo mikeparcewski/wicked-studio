@@ -152,7 +152,9 @@ describe('copy rules (§5)', () => {
   });
   it('readErrorKind: a network failure is offline, a refusal is an error', () => {
     expect(readErrorKind(new TypeError('Failed to fetch'))).toBe('offline');
-    expect(readErrorKind(new ApiError(503, 'unavailable'))).toBe('offline');
+    // first-run P5: any HTTP answer (503 included) is crew answering, not a network failure.
+    expect(readErrorKind(new ApiError(503, 'unavailable'))).toBe('error');
+    expect(readErrorKind(new ApiError(0, 'no response'))).toBe('offline');
     expect(readErrorKind(new ApiError(409, 'conflict'))).toBe('error');
   });
 });

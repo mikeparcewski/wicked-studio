@@ -84,7 +84,11 @@ describe('S16a-4d — the New document door', () => {
     ]);
     const line = screen.getByTestId('made-new-document-council');
     expect(line).toHaveTextContent('Helpers: claude · pi');
-    expect(line).toHaveTextContent('left out: copilot (not picked for checks — quota_exhausted), codex (');
+    // first-run C7: the left-out helpers are grouped in plain words, with crew's reason as text (no "not picked for checks").
+    const seatsBox = screen.getByTestId('made-new-document-seats');
+    expect(seatsBox).not.toHaveTextContent('not picked for checks');
+    expect(screen.getByTestId('made-new-document-unavailable')).toHaveTextContent('copilot (quota_exhausted)');
+    expect(seatsBox.textContent).toMatch(/codex/);
     await userEvent.type(screen.getByTestId('made-new-document-brief'), 'Offsite plan');
     // studio#765: one helper cannot both write and check the draft — Create waits and says so.
     await userEvent.click(seats[1]!); // pi out
