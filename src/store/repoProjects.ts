@@ -39,18 +39,34 @@ function names(words: string, term: string): boolean {
   return new RegExp(`(?:^|[^\\p{L}\\p{N}_./-])${escapeRe(term)}(?=$|[^\\p{L}\\p{N}_./-]|\\.(?:$|[^\\p{L}\\p{N}_./-]))`, 'iu').test(words);
 }
 
-/** The repositories links in the words name by their path (CJ13): a pull request, tree, blob or commit link
- *  (`https://<host>/<owner>/<repo>/pull/9`), a clone link (`…/<repo>.git`), or any repository link on a known git host.
- *  Other links (`https://docs.example.com/guide/<word>`) and bare `owner/repo` paths name nothing. Lower-cased. */
+const GIT_HOSTS = new Set(['github.com', 'www.github.com', 'gitlab.com', 'www.gitlab.com', 'bitbucket.org', 'www.bitbucket.org']);
+const REPO_OPS = new Set(['pull', 'pulls', 'pull-requests', 'merge_requests', 'tree', 'blob', 'commit', 'commits', 'compare']);
+
+/** The repository one link names, or null (CJ13): any `<owner>/<repo>` link on a known git host (GitLab subgroups
+ *  included), a clone link (`…/<repo>.git`), or on another host a pull request, tree, blob, commit or compare link
+ *  (`…/<owner>/<repo>/pull/9`, `…/<repo>/-/merge_requests/9`). Other links name nothing. */
+function linkedRepo(link: string): string | null {
+  let url: URL;
+  try { url = new URL(link); } catch { return null; }
+  const segs = url.pathname.split('/').filter((x) => x !== '').map((x) => { try { return decodeURIComponent(x); } catch { return x; } });
+  const dash = segs.indexOf('-');
+  const clone = segs.findIndex((x) => /\.git$/iu.test(x));
+  let repo: string | undefined;
+  if (clone >= 1) repo = segs[clone];
+  else if (dash >= 2 && REPO_OPS.has(segs[dash + 1] ?? '')) repo = segs[dash - 1];
+  else if (GIT_HOSTS.has(url.hostname.toLowerCase())) repo = dash >= 2 ? segs[dash - 1] : segs[1];
+  else if (segs.length >= 3 && REPO_OPS.has(segs[2]!)) repo = segs[1];
+  const name = repo?.replace(/\.git$/iu, '').toLowerCase();
+  return name === undefined || name === '' ? null : name;
+}
+
+/** The repositories the links in the words name (lower-cased). A link ends at a space, a bracket or a quote, and a
+ *  sentence's punctuation after it is not part of it; a bare `owner/repo` path is not a link. */
 function linkedRepos(words: string): string[] {
   const out: string[] = [];
-  const re = /https?:\/\/([^\s/<>()[\]]+)\/[A-Za-z0-9_.-]+\/([A-Za-z0-9_.-]+)(\/(?:pulls?|tree|blob|commits?|compare|merge_requests|-)\/|\/?(?=$|[\s)\]>,;:!?'"]|\.(?:$|\s)))/giu;
-  for (const m of words.matchAll(re)) {
-    const host = m[1]!.toLowerCase();
-    const repo = m[2]!.replace(/\.+$/u, '');
-    const clone = /\.git$/iu.test(repo);
-    const vcs = m[3]!.startsWith('/') && m[3]!.length > 1 || clone || /^(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.org)$/u.test(host);
-    if (vcs) out.push(repo.replace(/\.git$/iu, '').toLowerCase());
+  for (const m of words.matchAll(/https?:\/\/[^\s<>()[\]"'`]+/giu)) {
+    const name = linkedRepo(m[0].replace(/[.,;:!?]+$/u, ''));
+    if (name !== null) out.push(name);
   }
   return out;
 }

@@ -209,6 +209,10 @@ describe('F41: the words name a repository as a whole token', () => {
     expect(names('see https://github.com/acme/rg10 for it')).toEqual(['rg10']);
     // Not a repository link: a docs page whose path ends in a repository's name, and a bare path.
     expect(names('read https://docs.example.com/guide/rg1 and acme/rg2')).toEqual([]);
+    expect(names('https://docs.example.com/guide/rg1/-/page')).toEqual([]);
+    expect(names('https://bitbucket.org/acme/rg1/pull-requests/9 and https://github.com/acme/rg2#readme')).toEqual(['rg1', 'rg2']);
+    expect(names('https://github.com/acme/rg10/issues/9 https://gitlab.com/grp/sub/zeta/-/merge_requests/3')).toEqual(['zeta', 'rg10']);
+    expect(names('https://git.example/o/rg2/-/merge_requests/9')).toEqual(['rg2']);
   });
   it('orders the named ones first, the rest by name', () => {
     expect(repoChoices('zeta and rg1', REPOS).list.map((r) => r.id)).toEqual(['zeta', 'rg1', 'rg10', 'rg2']);
