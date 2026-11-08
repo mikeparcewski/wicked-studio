@@ -7,7 +7,7 @@ import { composerSendRefusal, SIGN_ONE_IN } from '../../board/launchModel.js';
 import { isHelperSeat } from '../../board/responder.js';
 import { AGENTS_PATH } from '../../hooks/useRoute.js';
 import { parseWorkflowCommand, WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
-import { allCommandRows, catalogRows, commandList, notOfferedLine, parseCommandLine, takesRepo, workflowEntry, type CatalogRow, type CommandRow } from '../../board/slashCatalog.js';
+import { allCommandRows, catalogRows, commandList, exactRow, notOfferedLine, parseCommandLine, takesRepo, workflowEntry, type CatalogRow, type CommandRow } from '../../board/slashCatalog.js';
 import { contentWords } from '../../board/commandSearch.js';
 import { commandsOn, LOOKS_DEBOUNCE_MS, looksLike, useCatalogV2 } from '../../store/catalogV2.js';
 import { entryOffered, entryWords, jobCatalogView, startsInline, type CatalogEntry } from '../../board/workflowCatalog.js';
@@ -547,7 +547,8 @@ export function Composer({
       startEntry(known, freeWords ?? '');
       return;
     }
-    const words = freeWords ?? '';
+    // The command typed whole is the pick itself, not the job's words (e2e-1105 CJ9).
+    const words = freeWords === null || (row.kind !== 'looks' && v2View !== null && exactRow(v2View, line)?.key === row.key) ? '' : freeWords;
     addAboutChip(composerKey, jobChipFor({
       card: row.card, wireCard: row.kind === 'alias' && row.command !== null ? row.command : row.card,
       option: row.option, depth: row.depth, title: row.title, launchId: row.launchId,

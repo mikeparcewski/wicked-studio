@@ -285,8 +285,38 @@ export type CommandListState =
  *  - `/migrate up`: that card's sub-commands whose option word starts so; `/migrate upgrade ` (a space after a whole
  *    command and option word) closes the list: what follows is the job's words, and Enter posts it.
  *  - free words (`/upgrade node to 22`): the cards the one scorer ranks, best first, each with its sub-commands.
+ *  - a full command typed exactly, however it is spaced (`/ plugin phase`): the row the parser reads it as leads, so
+ *    Enter picks it, and its pick keeps no words.
  */
 export function commandList(view: WorkflowCatalogV2Response, text: string, looks: ShapeGuess | null = null): CommandListState {
+  const st = commandListRows(view, text, looks);
+  if (!st.open) return st;
+  // A full command typed exactly (`/plugin phase`, however it is spaced) wins the highlight: the row the parser reads it
+  // as leads, so Enter picks what was typed and never the card it belongs to (e2e-1105 CJ9).
+  const exact = exactRow(view, text);
+  if (exact === null) return st;
+  const at = st.rows.findIndex((r) => r.key === exact.key);
+  if (at === 0) return st;
+  const rows = [...st.rows];
+  const lead = at > 0 ? rows.splice(at, 1)[0]! : { ...exact, group: rows[0]?.group ?? exact.group, groupTitle: rows[0]?.groupTitle ?? exact.groupTitle };
+  rows.unshift(lead);
+  return { ...st, rows };
+}
+
+/**
+ * The listed card or option row a line names exactly: the line, with the slash and spacing normalized (`/ plugin  phase`
+ * reads as `/plugin phase`), parsed as the parser reads a command (the wire's option word), naming a card or option
+ * that can start here, with no depth and no words after it. null otherwise (an alias, words, a refused command).
+ */
+export function exactRow(view: WorkflowCatalogV2Response, text: string): CommandRow | null {
+  const words = lower(text).replace(/^\s*\/\s*/u, '').trim();
+  if (!text.trimStart().startsWith('/') || words === '') return null;
+  const hit = parseCommandLine(view, `/${words.split(/\s+/u).join(' ')}`);
+  if (hit === null || hit.refused !== null || hit.words !== '' || hit.depth !== null || hit.wireCard !== hit.card.id) return null;
+  return allCommandRows(view).find((r) => (r.kind === 'card' || r.kind === 'option') && r.card === hit.card.id && r.option === hit.option) ?? null;
+}
+
+function commandListRows(view: WorkflowCatalogV2Response, text: string, looks: ShapeGuess | null): CommandListState {
   const query = text.startsWith('/') ? text.slice(1) : text;
   const all = allCommandRows(view);
   if (query.trim() === '') return { open: true, rows: all, freeWords: null, query };
