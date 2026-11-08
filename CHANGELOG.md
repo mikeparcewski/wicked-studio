@@ -12,6 +12,22 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-11-08
+
+Patch: first-run wording fixes from the second clean-profile walk-through (#1065).
+
+### Fixed
+
+- **A repository folder that doesn't exist says so on the banner (first-run-2 C1).** Adding `~/code/nope` showed
+  "Couldn't load the repository." with crew's own sentence hidden under Technical details. When crew refuses a path in
+  plain words (the folder is missing, or the path is relative), that sentence is now the banner's line.
+- **The sidebar marks one current page (first-run-2 P1).** Projects' marker no longer shows beside Nerve Center's or a
+  chat's own; it shows only on Home and Projects.
+- **A job that started nothing says so (first-run-2 N5).** A `/bug` sent with no helper signed in now reads "Nothing
+  was started." beside "No helper is signed in yet", with crew's raw text under Technical details; a refusal with
+  another cause keeps its words. The one-row composer grows with a wrapped message, up to a cap, instead of cutting
+  its first line in half.
+
 ## [0.16.0] — 2026-11-08
 
 Minor: publish and share an app (CS2), run plugins from a pack in every job's Details (CS7), allow or remove an installed editor (CS1, F37), the web as a source (CS9), which skills your helpers use, a chat job read as one passage whose documents and sources you pick from their tokens (CS12), theme and refine by chat, requirements that show code age and mismatches, archived apps with restore, disputed rules and council rulings, a context document that says what every agent sees, and first-run fixes that tell a new user what is missing. For crew 0.18.0. Pins wicked-crew-api-types 0.197.0.
@@ -3301,7 +3317,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.0...v0.14.1
