@@ -142,8 +142,19 @@ describe('frozen sign-in refusals and next actions', () => {
     await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
     expect(result).toHaveTextContent(String(lead));
     expect(result).toHaveTextContent('Please check ~/x and ~\\x.');
-    expect(result).toHaveTextContent(String(action));
+    // Crew's sentence already says what to do: studio adds no second action line (no Technical details either).
+    if (code === 'signin_failed') expect(result).toHaveTextContent(String(action));
+    else expect(result).not.toHaveTextContent(String(action));
+    expect(result.textContent).not.toContain('Technical details');
     expect(result).not.toHaveTextContent('alice');
+  });
+  it('a coded refusal without crew sentence still gets studio’s action', async () => {
+    refusal = { status: 502, body: { code: 'container_runtime_down', error: '' } };
+    page('?fix=claude');
+    fireEvent.click(await screen.findByTestId('agents-signin'));
+    const result = await screen.findByTestId('agents-check-result');
+    await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
+    expect(result).toHaveTextContent('Start Docker Desktop or Rancher Desktop, then try again.');
   });
   it('keeps unrecognized older-service errors under Technical details', async () => {
     refusal = { status: 500, body: { error: 'internal_probe_failure: stack dump' } };

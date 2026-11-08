@@ -89,6 +89,11 @@ const OUTCOME_WORDS: Record<Exclude<Outcome['kind'], 'idle'>, (name: string, det
   'signin-checking': (n) => ({ lead: `Checking the sign-in with ${n}…`, tone: 'quiet', line: 'This can take up to a minute. There is nothing more to type.' }),
 };
 
+/** A refusal crew coded (crew#1438): its `error` is a plain sentence, not raw technical text. */
+function hasRefusalCode(error: unknown): boolean {
+  return error instanceof ApiError && error.body !== null && typeof error.body === 'object' && typeof (error.body as Record<string, unknown>)['code'] === 'string';
+}
+
 /** Crew's frozen refusal codes choose the lead and next move; its plain sentence stays intact. */
 function signInFailure(name: string, error: unknown): { lead: string; tone: 'fail'; line: string; action?: string } {
   const body = error instanceof ApiError && error.body !== null && typeof error.body === 'object'
@@ -96,7 +101,10 @@ function signInFailure(name: string, error: unknown): { lead: string; tone: 'fai
   const raw = error instanceof ApiError ? error.wire : error instanceof Error ? error.message : '';
   const code = body['code'];
   const line = typeof body['error'] === 'string' ? displayText(body['error']) : 'Try again.';
-  const result = (lead: string, action: string, fallback: string) => ({ lead, tone: 'fail' as const, line: code === undefined ? fallback : line, ...(code === undefined ? {} : { action }) });
+  // Crew's sentence already says what to do (fr-crew: "… Start Docker Desktop or Rancher Desktop, then try again."): the
+  // action line is studio's only when crew sent no sentence of its own.
+  const crewSaid = typeof body['error'] === 'string' && body['error'].trim() !== '';
+  const result = (lead: string, action: string, fallback: string) => ({ lead, tone: 'fail' as const, line: code === undefined ? fallback : line, ...(code === undefined || crewSaid ? {} : { action }) });
   if (code === 'container_runtime_down' || code === undefined && /container runtime|docker/i.test(raw)) {
     return result('Docker or Rancher needs to be started.', 'Start Docker Desktop or Rancher Desktop, then try again.',
       'The container runtime isn’t running. Start Docker Desktop or Rancher Desktop, then try again.');
@@ -344,7 +352,8 @@ export function AgentModal({ agentKey, onClose, intent }: {
       </span>
       {result.line !== null && <span>{result.line}</span>}
       {'action' in result && typeof result.action === 'string' && <span>{result.action}</span>}
-      {outcome.kind === 'signin-failed' && <TechDetails summary="Technical details" text={displayText(outcome.error instanceof Error ? outcome.error.message : String(outcome.error))} />}
+      {/* Crew's coded refusal is already its plain sentence above; older crews' raw text stays under Technical details. */}
+      {outcome.kind === 'signin-failed' && !hasRefusalCode(outcome.error) && <TechDetails summary="Technical details" text={displayText(outcome.error instanceof Error ? outcome.error.message : String(outcome.error))} />}
     </div>
   );
   // Once the fresh reading clears the sign-in card, its result line moves to the top of the modal.
