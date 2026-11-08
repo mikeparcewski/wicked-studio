@@ -79,11 +79,11 @@ describe('the first-party editor bundles', () => {
     expect(manifest.surfaces).toEqual(deckSurfaces);
     expect(manifest.permissions.map((p: { id: string }) => p.id)).toContain('artifact.theme');
   });
-  it('the page editor speaks wicked.editor/2 for `page` and asks only for what it uses', () => {
+  it('the page editor speaks wicked.editor/2 for `page` and asks only for what it uses (export: plugins-complete G13)', () => {
     const page = EDITORS.find((e) => e.id === 'wicked-page');
     expect(page?.title).toBe('Page');
     expect(page?.kinds).toEqual(['page']);
     expect(page?.protocol).toEqual([1, 2]);
-    expect(page?.permissions.map((p) => p.id).sort()).toEqual(['artifact.read', 'artifact.theme', 'artifact.write', 'network.media', 'selection.chip', 'ui.fullscreen']);
+    expect(page?.permissions.map((p) => p.id).sort()).toEqual(['artifact.export', 'artifact.read', 'artifact.theme', 'artifact.write', 'network.media', 'selection.chip', 'ui.fullscreen']);
   });
 });

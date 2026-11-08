@@ -5,7 +5,7 @@ import { editedLine, notUndoneLine, undoneLine, writtenWords, type EditorKind, t
 import { adapterWritesSettled, EditorHost, type HostLogEntry, type HostUi } from '../../editors/host.js';
 import {
   LIVE_FRAME_CAP, PANEL_RIBBON_BELOW_PX, adapterFor, dropLive, firstTabOf, setGroupShown, groupKey, hostTabsFor, isLive, joinGroup, relay, replayGroupSelection, touchLive, useGroupShown, useHostChrome, useHostPanel, useLiveCards,
-  type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
+  type ArtifactBinding, type ExportOutcome, type ExportedFile, type PluginCardProps, type SurfaceAdapter,
 } from '../../editors/hostApi.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import type { PermissionId } from '../../editors/protocol.js';
@@ -14,7 +14,7 @@ import { readThemeTokens } from '../../editors/theme.js';
 import { artifactSizeOf, registerArtifact, setArtifactSize, useArtifactSizes } from '../../store/artifactSizes.js';
 import { useArtifactAddress } from '../session/ArtifactAddress.js';
 import { VersionLens } from '../session/ArtifactVersions.js';
-import { useEditorChoices, useEditorFor, useEditorPicks } from '../../store/editors.js';
+import { clearAdvisoryNotes, setAdvisoryNotes, setOptionsOverFull, useAdvisoryNotes, useEditorChoices, useEditorFor, useEditorPicks, useOptionsOverFull } from '../../store/editors.js';
 import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import '../../editors/adapters/index.js';
 import './hostTabs.js';
@@ -22,7 +22,7 @@ import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge
 import { askAbout } from '../../board/askAbout.js';
 import { artifactRefOf } from '../../api/chatArtifacts-wire.js';
 import { noteShown, noteWritten, placementEntry, registerInView } from '../../store/artifactInView.js';
-import { FullShell } from './FullShell.js';
+import { FullShell, focusFullOptions } from './FullShell.js';
 import { useRunHost } from './RunHostContext.js';
 
 /**
@@ -165,6 +165,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const [exportOpen, setExportOpen] = useState(false);
   /** The plugin asked to grow: a host button offers it; nothing grows until the operator presses it. */
   const [offer, setOffer] = useState<'full' | 'options' | null>(null);
+  /** The plugin asked for an export the host makes: offered the same way (plugins-complete G25). */
+  const [exportOffer, setExportOffer] = useState<{ format: string; label: string } | null>(null);
+  /** An Ask pressed in full screen, run once the screen it needs (the drawer, or the card) has rendered (G24). */
+  const [pendingAsk, setPendingAsk] = useState<ArtifactBinding | null>(null);
   const [, bump] = useState(0);
   const loaded = useRef<{ src: string; grants: readonly PermissionId[] } | null>(null);
   const live = useRef(true);
@@ -181,6 +185,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   );
   const group = groupKey(editor.id, binding.artifactKey);
   const full = useHostChrome((s) => s.full === binding.artifactKey);
+  const advisory = useAdvisoryNotes((s) => s.byGroup[group]);
+  // The notes belong to this card's session with the plugin: gone with the card, never shown stale on a later one.
+  useEffect(() => () => clearAdvisoryNotes(group), [group]);
   // DES-CHAT-ARTIFACTS-001 §5.1: a document card on screen is what a chat message from its composer (or the floating
   // chat beside it) is about. The send reads the version it shows after its writes in flight have settled.
   const inViewRef = binding.source === 'interactive-doc' ? artifactRefOf(binding.projectId, binding.docId) : null;
@@ -214,6 +221,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const exitFull = useHostChrome((s) => s.exitFull);
   const openGroup = useHostPanel((s) => s.openGroup);
   const optionsOpen = useHostPanel((s) => s.group?.key === group);
+  // Options drawn over this card's full screen end with that full screen or with the options.
+  useEffect(() => {
+    if ((!full || !optionsOpen) && useOptionsOverFull.getState().group === group) setOptionsOverFull(null);
+  }, [full, optionsOpen, group]);
   const fullRef = useRef(full);
   fullRef.current = full;
   /** Leave full screen — only this card's own. */
@@ -286,8 +297,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           draft: (text, chips) => { if (live.current) setLine({ kind: 'drafted', editor: editor.title, text: chips.length > 0 ? `${text} (about ${chips.map((c) => c.label).join(', ')})` : text }); },
           typed: (g) => typedToComposer(bindingRef.current.composerKey, g),
           key: (k) => {
-            // Escape is honoured only with the focus in this frame (codex h2a-r3 P1), like every plugin-made shrink.
-            if (k === 'Escape') { if (clickedIn(hostRef.current?.frame) || document.activeElement === hostRef.current?.frame) leaveFull(); }
+            // Escape is honoured only with the focus in this frame (codex h2a-r3 P1), like every plugin-made shrink. In full
+            // screen it is the full screen's Esc: the options open over it close first (G24).
+            if (k === 'Escape') { if ((clickedIn(hostRef.current?.frame) || document.activeElement === hostRef.current?.frame) && fullRef.current) onEscapeRef.current(); }
             else forwardedKey(k, hostRef.current?.frame ?? null);
           },
           // v1 sizes: pane is the Options group (the "Editor" tab), full is full screen, inline is the card.
@@ -300,6 +312,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           },
           status: (l) => { if (live.current) setLine({ kind: 'status', text: l }); },
           notes: () => undefined,
+          advisory: (notes) => setAdvisoryNotes(group, notes),
+          // A plugin's export.request becomes a host offer; the operator's press makes the file (G25).
+          // One offer at a time, unchanged until the operator answers it: a later ask cannot swap what they are pressing.
+          exportOffer: (o) => { if (live.current) setExportOffer((cur) => cur ?? o); },
           // `written` owns the structured line and the group announcement.
           thread: () => undefined,
           written,
@@ -428,7 +444,12 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   // The address says "pane" exactly while this card's Options group is open (operator: it said pane with nothing open):
   // the Options button pushes it, closing the group (×) takes it back.
   const pressOptions = (): void => {
+    // Over full screen the options are the host's overlay, which the browser's own fullscreen of this card would cover
+    // ("Whole display"): that gives way first, and the app's full screen stays (G24).
+    if (fullRef.current && document.fullscreenElement) void document.exitFullscreen?.().catch(() => undefined);
     openOptions();
+    // Pressed in full screen: these options are drawn over it (G24).
+    if (fullRef.current) setOptionsOverFull(group);
     if (address !== null && address.routeKey !== key && !fullRef.current) address.write(key, 'inline', 'pane');
   };
   pressOptionsRef.current = pressOptions;
@@ -514,9 +535,12 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const exportGranted = loaded.current?.grants.includes('artifact.export') === true;
   const exports = exportGranted && adapter?.capabilities().includes('export') === true ? (adapter.exports?.() ?? []) : [];
   const head = adapter?.artifact().head ?? 0;
+  // Under the full screen's version lens an older version is on screen while Export makes the head: no export then.
+  const lensShown = full && lensVersion !== null;
+  useEffect(() => { if (lensShown) setExportOpen(false); }, [lensShown]);
   const exportAs = async (format: string): Promise<void> => {
     setExportOpen(false);
-    if (adapter?.exportFile === undefined || head < 1) return;
+    if (adapter?.exportFile === undefined || head < 1 || lensShown) return;
     const label = exports.find((x) => x.format === format)?.label ?? format;
     setLine({ kind: 'working', text: `Making the ${label} of version ${head}…` });
     const out = await adapter.exportFile(format, head);
@@ -542,12 +566,29 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const runAction = async (a: CardAction): Promise<void> => {
     if (a.verb === 'host:export') { setExportOpen((o) => !o); return; }
     // DES-CHAT-ARTIFACTS-001 §6.3: the composer on screen gets the artifact chip, else a chat opens beside it.
-    if (a.verb === 'host:ask') { void askAbout(binding); return; }
+    if (a.verb === 'host:ask') { askFrom(fullRef.current); return; }
     const r = await hostRef.current?.action(a.id);
     if (!live.current) return;
     if (r === null || r === undefined) setLine({ kind: 'status', text: `${a.label}: no answer from ${editor.title}` });
     else if (r.status !== null) setLine({ kind: 'status', text: r.status });
   };
+
+  /** Ask about this from the card or from full screen (plugins-complete G24). Full screen covers the page's composer
+   *  and the chat window, so: with the run's chat drawer, the drawer opens and its composer (the same key) takes the
+   *  chip; with none (a document Made opened on its own), full screen gives way to the card and the chat opens beside
+   *  it. Either way the ask runs in an effect once that render has committed, for the binding pressed; a card that
+   *  goes away first asks nothing. */
+  const askFrom = (inFull: boolean): void => {
+    if (!inFull) { void askAbout(binding); return; }
+    if (run?.renderChat !== undefined) useHostChrome.getState().setChatOpen(true);
+    else leaveFull();
+    setPendingAsk(binding);
+  };
+  useEffect(() => {
+    if (pendingAsk === null) return;
+    setPendingAsk(null);
+    void askAbout(pendingAsk);
+  }, [pendingAsk]);
 
   const hostTabs = adapter === null ? [] : hostTabsFor(adapter);
   const hasOptions = (decl?.options?.tabs.length ?? 0) > 0 || hostTabs.length > 0;
@@ -558,6 +599,50 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const actions = decl?.card.actions ?? [];
   const gate = run?.gateActions?.(binding) ?? null;
   const onExit = leaveFull;
+  /** Esc in full screen with this card's options open over it closes those options first, and the focus goes back to
+   *  the full screen's Options (G24). */
+  const onEscape = useCallback((): void => {
+    if (useHostPanel.getState().group?.key !== group || useOptionsOverFull.getState().group !== group) { leaveFull(); return; }
+    useHostPanel.getState().closeGroup();
+    queueMicrotask(focusFullOptions);
+  }, [group, leaveFull]);
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
+
+  /** The card's declared actions, drawn the same way in its footer and in the full-screen header (G24). */
+  const actionButtons = (
+    <>
+      {actions.map((a) => (
+        <span key={a.id} className="wk-pcard-action-wrap"
+          // Esc with the Export menu open closes the menu, not what the card sits in (the Made list's close), and
+          // gives Export its focus back (codex h4-fix r1 P2).
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape' || a.verb !== 'host:export' || !exportOpen) return;
+            e.preventDefault();
+            setExportOpen(false);
+            (e.currentTarget.querySelector('[data-verb="host:export"]') as HTMLButtonElement | null)?.focus();
+          }}>
+          <button type="button" data-testid="plugin-card-action" data-action={a.id} data-verb={a.verb}
+            // Under the full screen's version lens an older version is on screen: Export makes the head, so it waits.
+            disabled={a.verb === 'host:export' && (exports.length === 0 || head < 1 || lensShown)}
+            title={a.verb === 'host:export' && lensShown ? `Export makes version ${head}; go back to it to export` : undefined}
+            className={a.primary ? 'wk-host-btn wk-host-btn--primary' : 'wk-host-btn'} onClick={() => void runAction(a)}>
+            {a.label}{a.verb === 'host:export' ? ' ▾' : ''}
+          </button>
+          {a.verb === 'host:export' && exportOpen && !lensShown && (
+            <span role="menu" aria-label="Export as" data-testid="artifact-export-menu" className="wk-artifact-menu">
+              {exports.map((x) => (
+                <button key={x.format} type="button" role="menuitem" data-testid="artifact-export-format" data-format={x.format} onClick={() => void exportAs(x.format)} className="wk-artifact-menu-item">{x.label}</button>
+              ))}
+            </span>
+          )}
+        </span>
+      ))}
+    </>
+  );
+  const optionsButton = hasOptions && (
+    <button type="button" data-testid="plugin-card-options" aria-pressed={optionsOpen} className="wk-host-btn" onClick={pressOptions} disabled={decl === null}>Options</button>
+  );
 
   const frameStyle: React.CSSProperties = full ? {} : aspect === 'auto' ? { height: `${height ?? 240}px` } : { aspectRatio: aspect === '4:3' ? '4 / 3' : '16 / 9' };
 
@@ -591,8 +676,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         mode={mode}
         onMode={(m) => void chooseMode(m)}
         gateActions={gate}
+        actions={full ? <>{actionButtons}{optionsButton}</> : null}
         chat={run?.renderChat?.()}
         onExit={onExit}
+        onEscape={onEscape}
       >
         <div className="wk-pcard-frame" data-testid="plugin-card-frame" data-interactive={interactive ? 'true' : 'false'} style={frameStyle}>
           {/* Under the read-only lens the live editor is inert: no Tab or typing reaches it (codex h2-r19 P2). */}
@@ -649,38 +736,28 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           <button type="button" className="wk-since-toggle" onClick={() => setOffer(null)}>Not now</button>
         </p>
       )}
+      {exportOffer !== null && exportGranted && (
+        <p data-testid="plugin-card-export-offer" className="wk-artifact-line">
+          {editor.title} asks to export this as {exportOffer.label}.{' '}
+          <button type="button" data-testid="plugin-card-export-offer-accept" className="wk-host-btn wk-host-btn--primary" disabled={head < 1 || lensShown}
+            onClick={() => { const f = exportOffer.format; setExportOffer(null); void exportAs(f); }}>Make the {exportOffer.label}</button>{' '}
+          <button type="button" className="wk-since-toggle" onClick={() => setExportOffer(null)}>Not now</button>
+        </p>
+      )}
       {torn === null && note !== null && <p data-testid="plugin-card-note" className="wk-host-note">{note}</p>}
+      {!full && advisory !== undefined && advisory.length > 0 && (
+        // plugins-complete G25: the plugin's own notes, said to be its own and advisory — not a review, not a check.
+        <details data-testid="plugin-card-advisory" className="wk-host-note wk-pcard-advisory">
+          <summary>{editor.title}’s own notes ({advisory.length}) · advisory, not a review</summary>
+          <ul>{advisory.map((n, i) => <li key={`${n.id}:${i}`} data-testid="plugin-card-advisory-note">{n.text}</li>)}</ul>
+        </details>
+      )}
       {!full && (
         <footer className="wk-pcard-foot">
-          {actions.map((a) => (
-            <span key={a.id} className="wk-pcard-action-wrap"
-              // Esc with the Export menu open closes the menu, not what the card sits in (the Made list's close), and
-              // gives Export its focus back (codex h4-fix r1 P2).
-              onKeyDown={(e) => {
-                if (e.key !== 'Escape' || a.verb !== 'host:export' || !exportOpen) return;
-                e.preventDefault();
-                setExportOpen(false);
-                (e.currentTarget.querySelector('[data-verb="host:export"]') as HTMLButtonElement | null)?.focus();
-              }}>
-              <button type="button" data-testid="plugin-card-action" data-action={a.id} data-verb={a.verb}
-                disabled={a.verb === 'host:export' && (exports.length === 0 || head < 1)}
-                className={a.primary ? 'wk-host-btn wk-host-btn--primary' : 'wk-host-btn'} onClick={() => void runAction(a)}>
-                {a.label}{a.verb === 'host:export' ? ' ▾' : ''}
-              </button>
-              {a.verb === 'host:export' && exportOpen && (
-                <span role="menu" aria-label="Export as" data-testid="artifact-export-menu" className="wk-artifact-menu">
-                  {exports.map((x) => (
-                    <button key={x.format} type="button" role="menuitem" data-testid="artifact-export-format" data-format={x.format} onClick={() => void exportAs(x.format)} className="wk-artifact-menu-item">{x.label}</button>
-                  ))}
-                </span>
-              )}
-            </span>
-          ))}
+          {actionButtons}
           {gate}
           <span className="wk-pcard-gap" />
-          {hasOptions && (
-            <button type="button" data-testid="plugin-card-options" aria-pressed={optionsOpen} className="wk-host-btn" onClick={pressOptions} disabled={decl === null}>Options</button>
-          )}
+          {optionsButton}
           {hasFull && (
             <button type="button" data-testid="plugin-card-full" className="wk-host-btn" onClick={() => enterFull(binding.artifactKey)}>⤢ Full screen</button>
           )}

@@ -8,6 +8,8 @@ import { inventoryOf } from '../ops.js';
 const FORMATS: Readonly<Record<string, readonly ExportOption[]>> = {
   deck: [{ format: 'pptx', label: 'PowerPoint' }, { format: 'pdf', label: 'PDF' }],
   document: [{ format: 'pdf', label: 'PDF' }, { format: 'html', label: 'Web page' }],
+  // plugins-complete G13 (operator default D8): a page exports as the web page it is, or a PDF.
+  page: [{ format: 'html', label: 'Web page' }, { format: 'pdf', label: 'PDF' }],
 };
 
 /** `interactive-doc` (HOST-API §3): a page, deck or document in interactive, through crew's proxy. */

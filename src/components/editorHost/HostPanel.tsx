@@ -6,6 +6,8 @@ import {
 } from '../../editors/hostApi.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { chipsToComposer, forwardedKey, typedToComposer } from './composerBridge.js';
+import { setAdvisoryNotes, useOptionsOverFull } from '../../store/editors.js';
+import { focusFullOptions } from './FullShell.js';
 import type { Control, OptionsTab } from '../../editors/surfaces.js';
 
 /**
@@ -46,7 +48,16 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
 
   // Folded or narrow, the panel is the ribbon — but its subtree stays mounted (hidden), so the group's options
   // instance and its confirmed values live as long as the group (codex h2b-r1 P2).
-  const collapsed = narrow ? !overlay : folded;
+  // plugins-complete G24: a card's Options pressed in its full screen opens over that full screen (the panel beside the
+  // page sits under it), at the right edge, at every width — never the ribbon; × or Esc closes it back to the full screen.
+  const fullKey = useHostChrome((s) => s.full);
+  const overKey = useOptionsOverFull((s) => s.group);
+  const overFull = group !== null && fullKey !== null && group.binding.artifactKey === fullKey && overKey === group.key;
+  const collapsed = overFull ? false : narrow ? !overlay : folded;
+  // Opened (or shown again) over the full screen, the keyboard moves into the options, so the next Esc is theirs.
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { if (overFull && !collapsed) closeRef.current?.focus(); }, [overFull, collapsed, group?.key, revealed]);
+  const close = (): void => { closeGroup(); if (overFull) queueMicrotask(focusFullOptions); };
   // The edge handle and the panel's close hand the keyboard focus to each other, so it never drops to the page.
   const handleRef = useRef<HTMLButtonElement | null>(null);
   const foldRef = useRef<HTMLButtonElement | null>(null);
@@ -74,20 +85,27 @@ export function HostPanel({ runTab, ribbon, edgeHandle, onToggle }: HostPanelPro
           {ribbon ?? (group !== null ? `${group.editor.title} options` : 'Options')}
         </button>
       )}
-    <aside id="run-details-panel" data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}`}
-      // Over the page (below 1200 px), Esc closes the run page's panel back to its handle.
-      onKeyDown={(e) => { if (narrow && edgeHandle !== undefined && e.key === 'Escape' && !e.defaultPrevented) { moveFocus.current = true; setOverlay(false); } }}>
+    <aside id="run-details-panel" data-testid={collapsed ? undefined : 'host-panel'} hidden={collapsed} data-narrow={narrow ? 'true' : 'false'} data-over-full={overFull ? 'true' : undefined} aria-label="Run and options" className={`wk-hpanel${narrow ? ' wk-hpanel--overlay' : ''}${overFull ? ' wk-hpanel--overfull' : ''}`}
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented) return;
+        // Over a full screen, Esc closes these options (not the full screen under them) and gives the focus back to
+        // the full screen's Options.
+        if (overFull) { e.preventDefault(); close(); return; }
+        // Over the page (below 1200 px), Esc closes the run page's panel back to its handle.
+        if (narrow && edgeHandle !== undefined) { moveFocus.current = true; setOverlay(false); }
+      }}>
       <div className="wk-hpanel-head">
         {/* Without a group the panel is the run's details alone: its heading says so, and there is no one-tab strip. */}
         {group !== null ? <span className="wk-hpanel-heading">{`${group.editor.title} options`}</span>
           : runTab !== undefined && <span data-testid="host-panel-heading" className="wk-hpanel-heading">Details</span>}
         <span className="wk-hpanel-gap" />
         {group !== null && (
-          <button type="button" data-testid="host-panel-close" aria-label={`Close ${group.editor.title} options`} className="wk-host-btn" onClick={closeGroup}>×</button>
+          <button ref={closeRef} type="button" data-testid="host-panel-close" aria-label={`Close ${group.editor.title} options`} className="wk-host-btn" onClick={close}>×</button>
         )}
-        <button ref={foldRef} type="button" data-testid="host-panel-fold" aria-label={edgeHandle !== undefined && group === null ? 'Close the details' : 'Hide the panel'}
+        {/* Over a full screen there is nothing beside it to fold to: × closes. */}
+        {!overFull && <button ref={foldRef} type="button" data-testid="host-panel-fold" aria-label={edgeHandle !== undefined && group === null ? 'Close the details' : 'Hide the panel'}
           title={edgeHandle !== undefined && group === null ? 'Close the details — the handle at the right edge opens them again' : undefined} className="wk-host-btn"
-          onClick={() => { moveFocus.current = edgeHandle !== undefined; if (narrow) setOverlay(false); else { setFolded(true); onToggle?.(false); } }}>⟩</button>
+          onClick={() => { moveFocus.current = edgeHandle !== undefined; if (narrow) setOverlay(false); else { setFolded(true); onToggle?.(false); } }}>⟩</button>}
       </div>
       <PanelTabs group={group} tab={tab} setTab={setTab} withRun={runTab !== undefined} />
       <div className="wk-hpanel-body">
@@ -211,6 +229,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
   const tab0 = useMemo(() => initialTab, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (box.current === null) return undefined;
+    let closing = false;
     const e = group.editor;
     const bridge = group.adapter.mcpBridge?.();
     const host = new EditorHost({
@@ -242,7 +261,9 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
         key: (k) => {
           if (k === 'Escape') {
             if (document.activeElement !== hostRef.current?.frame) return;
-            if (withRunRef.current) useHostPanel.getState().setTab(RUN_TAB);
+            // Over its card's full screen, Esc in the options frame closes them back to the full screen (G24).
+            if (useHostChrome.getState().full === group.binding.artifactKey && useOptionsOverFull.getState().group === group.key) { useHostPanel.getState().closeGroup(); queueMicrotask(focusFullOptions); }
+            else if (withRunRef.current) useHostPanel.getState().setTab(RUN_TAB);
             else useHostPanel.getState().closeGroup(); // no Run tab here (codex h4-fix r1 P2): Esc closes the options
           }
           else forwardedKey(k, hostRef.current?.frame ?? null);
@@ -251,6 +272,8 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
         morph: () => undefined,
         status: (text) => relay(group.key, 'options', { type: 'status', text }),
         notes: () => undefined,
+        // The plugin's own notes reach its card, labelled advisory (plugins-complete G25).
+        advisory: (notes) => setAdvisoryNotes(group.key, notes),
         thread: () => undefined,
         shown: () => cb.current.onShown(),
         fullscreen: async () => false,
@@ -258,7 +281,9 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
         written: (write) => relay(group.key, 'options', { type: 'write', ok: true, write }),
         writeFailed: (message) => relay(group.key, 'options', { type: 'write', ok: false, message }),
         surfaces: () => replayGroupSelection(group.key, 'options'),
-        torn: (r) => cb.current.onTorn(r),
+        // Only a tear the frame suffered while open: this instance's own close (and React StrictMode's dev re-mount, which
+        // closes it once and makes it again) is not the frame failing to start.
+        torn: (r) => { if (!closing) cb.current.onTorn(r); },
         log: () => undefined,
         optionsValues: (t, v) => cb.current.onValues(t, v),
         selected: (anchors) => relay(group.key, 'options', { type: 'selection', anchors }),
@@ -271,7 +296,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
       else if (ev.type === 'changed') host.artifactChanged(ev.head, ev.kind);
       else if (ev.type === 'wrote') host.artifactChanged(ev.version, 'theme');
     }, () => host.connected);
-    return () => { leave(); host.teardown('The options were closed'); if (hostRef.current === host) hostRef.current = null; };
+    return () => { closing = true; leave(); host.teardown('The options were closed'); if (hostRef.current === host) hostRef.current = null; };
   }, [group, hostRef, tab0]);
   return <div ref={box} data-testid="host-panel-frame" hidden={!visible} className="wk-hpanel-frame" />;
 }

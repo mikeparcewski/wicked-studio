@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { editorFor, editorsFor, listEditors, type EditorView } from '../api/editors.js';
+import { editorsFor, listEditors, type EditorView } from '../api/editors.js';
 
 /**
  * Crew's editor registry, read once per tab (EP-P2): which plugin opens which artifact kind. `none`
@@ -63,6 +63,27 @@ export const useEditorPicks = create<{ picks: Record<string, string>; pick: (kin
   }),
 }));
 
+/** Whether an editor reads the artifact it is opened on: it declares `artifact.read`. One without it shows its own
+ *  form, never the artifact (plugins-complete G9), so it is not offered, or opened, beside one that does. */
+export function editorReads(e: EditorView): boolean {
+  return Array.isArray(e.permissions) && e.permissions.some((p) => p.id === 'artifact.read');
+}
+
+/** The editors a kind can open with: the fitting ones that read the artifact; when NONE declares a read (an older
+ *  registry lists no permissions), every fitting one, as before. "Open with" offers exactly these. */
+export function openableEditors(editors: readonly EditorView[], kind: string): EditorView[] {
+  const fit = editorsFor(editors, kind);
+  const readers = fit.filter(editorReads);
+  return readers.length > 0 ? readers : fit;
+}
+
+/** The editor that opens `kind` among `editors`: the person's pick while it is one of {@link openableEditors} (a stored
+ *  pick of a non-reader beside a reader is ignored), else the first of them. */
+export function openingEditor(editors: readonly EditorView[], kind: string, preferred: string | null): EditorView | null {
+  const can = openableEditors(editors, kind);
+  return (preferred !== null ? can.find((e) => e.id === preferred) : undefined) ?? can[0] ?? null;
+}
+
 /** The editor that opens `kind`, once the registry is read: `undefined` while loading, `null` when none claims it. */
 export function useEditorFor(kind: string): EditorView | null | undefined {
   const state = useEditors((s) => s.state);
@@ -70,19 +91,49 @@ export function useEditorFor(kind: string): EditorView | null | undefined {
   const preferred = useEditorPicks((s) => s.picks[kind] ?? null);
   useEffect(() => { if (state === 'idle') void useEditors.getState().load(); }, [state]);
   if (state === 'idle' || state === 'loading') return undefined;
-  return editorFor(editors, kind, 'inline', preferred);
+  return openingEditor(editors, kind, preferred);
 }
 
-/** Every editor that can open `kind` (the "Open with" choices), once the registry is read; `[]` before. */
+/** Every editor that can open `kind` (the "Open with" choices: {@link openableEditors}), once the registry is read;
+ *  `[]` before. */
 export function useEditorChoices(kind: string): EditorView[] {
   const state = useEditors((s) => s.state);
   const editors = useEditors((s) => s.editors);
-  return state === 'ready' ? editorsFor(editors, kind) : [];
+  return state === 'ready' ? openableEditors(editors, kind) : [];
 }
+
+/**
+ * A plugin's own notes on its artifact (`checks.contribute`, plugins-complete G25), per options group (editor ×
+ * artifact): the newest list from any of its instances (card, full screen, options). Advisory: the card shows them as
+ * the plugin's notes, never as a review or a check that ran.
+ */
+export interface AdvisoryNote { id: string; text: string }
+export const useAdvisoryNotes = create<{ byGroup: Record<string, readonly AdvisoryNote[]> }>(() => ({ byGroup: {} }));
+export function setAdvisoryNotes(group: string, notes: readonly AdvisoryNote[]): void {
+  useAdvisoryNotes.setState((s) => ({ byGroup: { ...s.byGroup, [group]: notes } }));
+}
+export function clearAdvisoryNotes(group: string): void {
+  useAdvisoryNotes.setState((s) => {
+    if (!(group in s.byGroup)) return s;
+    const byGroup = { ...s.byGroup };
+    delete byGroup[group];
+    return { byGroup };
+  });
+}
+
+/**
+ * The options group opened FROM a full screen (its header's Options, plugins-complete G24): only that group is drawn
+ * over the full screen. A group already open beside a card that then goes full screen stays where it was (beside the
+ * page, under the full screen), so entering full screen never covers the full screen's own header.
+ */
+export const useOptionsOverFull = create<{ group: string | null }>(() => ({ group: null }));
+export function setOptionsOverFull(group: string | null): void { useOptionsOverFull.setState({ group }); }
 
 /** Test seam. */
 export function resetEditors(): void {
   useEditors.setState({ state: 'idle', editors: [], reason: null });
   useEditorPicks.setState({ picks: {} });
+  useAdvisoryNotes.setState({ byGroup: {} });
+  useOptionsOverFull.setState({ group: null });
   try { localStorage.removeItem(PICK_KEY); } catch { /* none kept */ }
 }
