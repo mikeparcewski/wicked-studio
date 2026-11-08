@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import { deliveryReceiptOf, receiptOf, rulesSummary, worstRules, type RuleRow } from '../src/board/assuranceModel.js';
-import { sessionGateChoices, LAND_NOTE_LABEL, RETRY_RULES_LABEL } from '../src/board/gateRowModel.js';
+import { sessionGateChoices, LAND_NOTE_LABEL, RETRY_RULES_LABEL, SKIP_WARNING_PLACEHOLDER } from '../src/board/gateRowModel.js';
 import { AssuranceReceipt as ReceiptView, RulesChecked } from '../src/components/session/AssuranceReceipt.js';
 import type { OpenGate } from '../src/store/gates.js';
 import { makeUnit, makeView } from './factories.js';
@@ -727,6 +727,25 @@ describe('(e2e-1105 CJ9) a broken warning the engine marks waivable is skipped w
       const keys = offered(log([{ ...row('learn-linked-issue', 'broken'), waivable }])).map((c) => c.key);
       expect(keys, JSON.stringify(waivable)).not.toContain('skip-rules');
     }
+  });
+
+  it('(coord) "every other reason still stands" only when another reason is open; a warning skip asks why the rule does not apply', () => {
+    const warn = { ...row('learn-linked-issue', 'broken', 'names no issue it closes'), waivable: true };
+    type Skip = { title: string; notePlaceholder?: string };
+    const only = offered(log([row('learn-small-prs', 'kept'), warn])).find((c) => c.key === 'skip-rules') as unknown as Skip;
+    expect(only.title).not.toMatch(/Every other reason/);
+    expect(only.notePlaceholder).toBe(SKIP_WARNING_PLACEHOLDER);
+    // Another broken rule (an error, not skippable) stands beside it.
+    const withError = offered(log([warn, row('ERR-1', 'broken')])).find((c) => c.key === 'skip-rules') as unknown as Skip;
+    expect(withError.title).toMatch(/Every other reason this step was stopped still stands/);
+    // A layer that is not a rule (a failed check) behind it, on this attempt's unit record.
+    const failedCheck = units.map((u) => (u.ord === 11 ? { ...u, denials_behind: [{ source: 'rule_check', reason: 'x' }, { source: 'repo_checks', reason: 'npm test failed' }], assurance: { ...base, attempt: 1, rules: [warn] } } : u)) as unknown as WorkUnit[];
+    const m = sessionGateChoices({ runId: RUN, gate, units: failedCheck, events: log([warn]), pool: ['claude', 'codex'], roster: null })!;
+    const behind = [...m.choices, ...(m.overflow ?? [])].find((c) => c.key === 'skip-rules') as unknown as Skip;
+    expect(behind.title).toMatch(/Every other reason this step was stopped still stands/);
+    // A mix with an unchecked or disputed row keeps the old placeholder.
+    const mix = offered(log([warn, row('POL-2101', 'disputed')])).find((c) => c.key === 'skip-rules') as unknown as Skip;
+    expect(mix.notePlaceholder).toBeUndefined();
   });
 
   it('a waivable broken row beside a disputed one: both are offered, confirm or skip', () => {

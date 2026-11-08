@@ -959,12 +959,14 @@ const isRuleLayer = (source: string): boolean => source === RULES_UNCHECKED_SOUR
  * (`denial`, `denials_behind`, its persisted receipt). Rows of another attempt are never used (never an earlier
  * attempt's ids); a dispatch after the hold voids it.
  */
-export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): { held: boolean; rows: RuleRow[]; behind: boolean } {
+export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): { held: boolean; rows: RuleRow[]; behind: boolean; otherCause?: boolean } {
   if (typeof ord !== 'number') return { held: false, rows: [], behind: false };
   const unit = (units ?? []).find((u) => u.ord === ord) as unknown as { denial?: unknown; denials_behind?: unknown; assurance?: unknown } | undefined;
   const own = receiptOf(unit?.assurance);
   const sourceOf = (d: unknown): string => (isRecord(d) && typeof d['source'] === 'string' ? d['source'] : '');
   const recordLayer = Array.isArray(unit?.denials_behind) && unit.denials_behind.some((d) => isRuleLayer(sourceOf(d)));
+  // (e2e-1105 CJ9) A layer that is not a steering rule (a reviewer's FAIL, a failed check) in the record behind.
+  const recordOther = Array.isArray(unit?.denials_behind) && unit.denials_behind.some((d) => sourceOf(d) !== '' && !isRuleLayer(sourceOf(d)));
   const rowsLayer = (rows: readonly RuleRow[]): boolean => rows.some((r) => r.blocking && (ruleHolds(r) || r.status === 'broken'));
   const log = events ?? [];
   let winner: string | null = null;
@@ -996,7 +998,8 @@ export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly
     const rows = own?.rules ?? [];
     const holdWins = sourceOf(unit?.denial) === RULES_UNCHECKED_SOURCE;
     const layer = holdWins || isRuleLayer(sourceOf(unit?.denial)) || recordLayer || (isRecord(unit?.denial) && rowsLayer(rows));
-    return { held: layer, rows, behind: layer && !holdWins };
+    const own0 = sourceOf(unit?.denial);
+    return { held: layer, rows, behind: layer && !holdWins, otherCause: layer && ((own0 !== '' && !isRuleLayer(own0)) || recordOther) };
   }
   // The attempt this gate is about: the escalation's, else the evaluation's. An evaluation of another attempt (a log
   // missing the dispatch between) is not this attempt's, and neither is a unit record of another attempt.
@@ -1007,7 +1010,10 @@ export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly
   const holdWins = winner === RULES_UNCHECKED_SOURCE;
   const denied = escalated || (evalCurrent && evaluated!.denied);
   const layer = holdWins || isRuleLayer(winner ?? '') || (denied && (rowsLayer(rows) || (ownCurrent && recordLayer)));
-  return { held: layer, rows, behind: layer && !holdWins };
+  // (e2e-1105 CJ9) Something other than a steering rule stopped the step too: the winner, or (this attempt's record)
+  // a layer behind it.
+  const otherCause = layer && (((winner ?? '') !== '' && !isRuleLayer(winner!)) || (ownCurrent && recordOther));
+  return { held: layer, rows, behind: layer && !holdWins, otherCause };
 }
 
 /** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */
