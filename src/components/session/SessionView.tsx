@@ -540,9 +540,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // The closed line above the entries is crew's: the first crew entry under it needs no second label.
   const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
-  const state: SessionState = mine.some((v) => runState(v) === 'waiting') ? 'waiting'
-    : mine.some((v) => runState(v) === 'working') ? 'working'
-      : mine.length > 0 ? runState(mine[mine.length - 1]!) : 'quiet';
+  // An answered ask parked at its turn (`ask_turn`) waits on no one: the page's header reads it as done, as its word
+  // says "Answered" (e2e-1105: the header said "Waiting" beside a red Stop run). The rail keeps its ring (railClean).
+  const headState = (v: RunView): SessionState => (v.session.status === 'awaiting_human' && isAskTurnRun(v.session) && runState(v) === 'waiting' ? 'done' : runState(v));
+  const state: SessionState = mine.some((v) => headState(v) === 'waiting') ? 'waiting'
+    : mine.some((v) => headState(v) === 'working') ? 'working'
+      : mine.length > 0 ? headState(mine[mine.length - 1]!) : 'quiet';
   // (J4 0.16.6) A step silent past crew's quiet mark is not "Working": the header says how long it has said nothing.
   const silent = useSilentStep(mine.length > 0 ? mine[mine.length - 1] : undefined);
   const silentRunId = silent !== null ? mine[mine.length - 1]!.session.id : null;
