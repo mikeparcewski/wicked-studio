@@ -1072,7 +1072,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 14px;
   background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
 }
-.wk-desk-input { flex: 1 1 auto; resize: none; border: none; background: none; color: var(--ink-high); font: inherit; outline: none; padding: 6px 0; }
+.wk-desk-input { flex: 1 1 auto; resize: none; border: none; background: none; color: var(--ink-high); font: inherit; outline: none; padding: 6px 0; box-sizing: border-box; max-height: min(40vh, 240px); overflow-y: auto; }
 .wk-desk-send {
   width: 32px; height: 32px; border-radius: var(--radius-md); border: none; flex-shrink: 0;
   background: var(--accent); color: var(--accent-fg); cursor: pointer;

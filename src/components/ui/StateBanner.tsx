@@ -29,9 +29,12 @@ function sentence(kind: StateKind, what: string | undefined, asOf: number | null
   }
 }
 
-export function StateBanner({ kind, what, error, onRetry, retrying = false, asOf, 'data-testid': testId = 'state-banner' }: {
+export function StateBanner({ kind, what, said, error, onRetry, retrying = false, asOf, 'data-testid': testId = 'state-banner' }: {
   kind: StateKind;
   what?: string;
+  /** The service's own sentence when it is already plain words (a named cause, `plainRefusal`): it replaces
+   *  the generic line, and its raw twin is not repeated under Technical details. */
+  said?: string | null;
   error?: string | null;
   onRetry?: () => void;
   retrying?: boolean;
@@ -42,14 +45,14 @@ export function StateBanner({ kind, what, error, onRetry, retrying = false, asOf
   return (
     <div data-testid={testId} data-kind={kind} role={tone === 'fail' ? 'alert' : 'status'} className={`wk-state-banner wk-state-banner--${tone}`}>
       <div className="wk-state-banner-row">
-        <p className="wk-state-banner-text">{healthText(sentence(kind, what, asOf, error))}</p>
+        <p className="wk-state-banner-text">{healthText(said != null && said !== '' ? said : sentence(kind, what, asOf, error))}</p>
         {onRetry !== undefined && (
           <button type="button" data-testid={`${testId}-retry`} className="wk-btn wk-btn--secondary wk-btn--sm" onClick={onRetry} disabled={retrying} aria-busy={retrying}>
             {retrying ? 'Retrying…' : 'Retry'}
           </button>
         )}
       </div>
-      {error != null && error !== '' && <TechDetails data-testid={`${testId}-detail`} text={healthText(error)} />}
+      {(said == null || said === '') && error != null && error !== '' && <TechDetails data-testid={`${testId}-detail`} text={healthText(error)} />}
     </div>
   );
 }

@@ -43,6 +43,8 @@ let detect: () => Promise<unknown> = () => new Promise(() => {});
 let calls: Array<{ method: string; path: string; body: Record<string, unknown> | null }> = [];
 /** Statuses the next proposal / seed posts answer with (default 201), in order. */
 let proposalStatuses: number[] = [];
+let rosterSeats: RosterSeat[] = [SEAT];
+let proposalError = 'the daemon said no';
 let seedStatuses: number[] = [];
 /** Held until released: the v2 catalog read, and /health. */
 let v2Gate: Promise<void> = Promise.resolve();
@@ -74,7 +76,7 @@ function stubWire(): void {
     if (method === 'POST' && path === '/workflows/catalog/detect') return detect().then((g) => json(g));
     if (method === 'POST' && /^\/chats\/[^/]+\/proposals$/.test(path)) {
       const st = proposalStatuses.shift() ?? 201;
-      return proposalGate.then(() => st >= 400 ? json({ code: 'boom', error: 'the daemon said no' }, st) : json({ view: { state: 'open', proposal: { pid: `${path.split('/')[2]}:person:1`, kind: 'job' } } }, 201));
+      return proposalGate.then(() => st >= 400 ? json({ code: 'boom', error: proposalError }, st) : json({ view: { state: 'open', proposal: { pid: `${path.split('/')[2]}:person:1`, kind: 'job' } } }, 201));
     }
     if (method === 'POST' && path === '/chats') {
       const st = seedStatuses.shift() ?? 201;
@@ -86,7 +88,7 @@ function stubWire(): void {
     if (path === '/projects') return json({ projects: projectList });
     if (path === '/health') return healthGate.then(() => json({ status: 'ok', capabilities: healthCaps }));
     if (path === '/workflows/catalog') return u.searchParams.get('v') === '2' ? v2Gate.then(() => json(v2)) : json(rigV1);
-    return json(path === '/workflows' ? { workflows: WF } : path === '/roster' ? { roster: [SEAT] } : path === '/repos' ? { repos: [REPO] }
+    return json(path === '/workflows' ? { workflows: WF } : path === '/roster' ? { roster: rosterSeats } : path === '/repos' ? { repos: [REPO] }
       : path === '/presets' ? { presets: [] } : path === '/projects' ? { projects: [] } : {});
   }));
 }
@@ -128,6 +130,8 @@ function capable(on = true): void {
 beforeEach(() => {
   v2 = V2;
   proposalStatuses = [];
+  rosterSeats = [SEAT];
+  proposalError = 'the daemon said no';
   seedStatuses = [];
   v2Gate = Promise.resolve();
   healthGate = Promise.resolve();
@@ -509,6 +513,59 @@ describe('review folds (r1): the path holds under failure, races and edge input'
     release();
     await waitFor(() => expect(useCapabilities.getState().loaded).toBe(true));
   });
+  it('first-run-2 N5: with no helper signed in, a refused start says "Nothing was started." and the raw refusal rides Technical details', async () => {
+    rosterSeats = [{ ...SEAT, auth: 'signed_out', signed_in: false, reason: 'signed out', health: { status: 'inactive', message: 'signed out' } } as unknown as RosterSeat];
+    setCachedRoster(rosterSeats);
+    proposalStatuses = [409];
+    proposalError = 'no seat in the roster can take a turn (every seat is signed out or disabled)';
+    render(<Harness />);
+    await list('/bug');
+    pickRow('/bug');
+    type('div() crashes on b=0');
+    await waitFor(() => expect(screen.getByTestId('composer-refused').textContent).toMatch(/No helper is signed in yet/));
+    enter();
+    const note = await screen.findByTestId('composer-start-note');
+    expect(note.getAttribute('role')).toBe('alert');
+    expect(note.firstChild?.textContent).toBe('Nothing was started.');
+    const why = screen.getByTestId('composer-start-why');
+    expect(why.tagName).toBe('DETAILS');
+    expect(why.hasAttribute('open')).toBe(false);
+    expect(why.textContent).toMatch(/Technical details.*no seat in the roster can take a turn/s);
+    // The raw refusal is never in the line itself.
+    expect(note.textContent!.replace(why.textContent!, '')).toBe('Nothing was started.');
+  });
+
+  it('first-run-2 N5 (390): the box grows with a wrapped message instead of scrolling its first line half out of view', () => {
+    const spy = vi.spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLTextAreaElement) {
+      return this.value.length > 40 ? 96 : 32;
+    });
+    try {
+      render(<Harness />);
+      const box = screen.getByTestId('session-composer-input') as HTMLTextAreaElement;
+      type('div() in calc.py crashes on b=0 with ZeroDivisionError. Return a clear error instead.');
+      expect(box.style.height).toBe('96px');
+      type('short');
+      expect(box.style.height).toBe('32px');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('N5 review: beside the no-helper line, a refusal with another cause keeps its own words in the line', async () => {
+    rosterSeats = [{ ...SEAT, auth: 'signed_out', signed_in: false, reason: 'signed out', health: { status: 'inactive', message: 'signed out' } } as unknown as RosterSeat];
+    setCachedRoster(rosterSeats);
+    proposalStatuses = [409];
+    render(<Harness />);
+    await list('/bug');
+    pickRow('/bug');
+    type('div() crashes on b=0');
+    await waitFor(() => expect(screen.getByTestId('composer-refused').textContent).toMatch(/No helper is signed in yet/));
+    enter();
+    const note = await screen.findByTestId('composer-start-note');
+    expect(note.textContent).toMatch(/Nothing was started: .*the daemon said no/);
+    expect(screen.queryByTestId('composer-start-why')).toBeNull();
+  });
+
   it('a failed post says why where the person is and keeps the job; a retry is the same request; new words, a new one', async () => {
     proposalStatuses = [500, 500];
     render(<Harness />);

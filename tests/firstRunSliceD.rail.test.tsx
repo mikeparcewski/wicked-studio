@@ -33,6 +33,22 @@ describe('P1: one current page in the sidebar', () => {
     expect(screen.getByTestId('nav-projects')).not.toHaveClass('wk-rail-nav-item--primary');
   });
 
+  it('first-run-2 P1: a page with no sidebar entry (Nerve Center, New chat) shows no Projects mark', () => {
+    for (const path of ['/watch', '/s/a41ce243-cee0-4a2e-a950-988883d8c151']) {
+      cleanup();
+      openEveryHeading();
+      rail(path);
+      expect(screen.getByTestId('nav-projects').querySelector('.wk-rail-nav-mark'), path).toBeNull();
+      expect(screen.getByTestId('nav-projects'), path).not.toHaveClass('wk-rail-nav-item--primary');
+      expect(screen.getByTestId('nav-projects'), path).not.toHaveAttribute('aria-current');
+    }
+    // Nerve Center's own tile is the one current marker there.
+    cleanup();
+    openEveryHeading();
+    rail('/watch');
+    expect([...document.querySelectorAll('[aria-current="page"]')].map((e) => (e as HTMLElement).dataset.testid)).toEqual(['desk-rail-nerve']);
+  });
+
   it('Home and Projects keep the mark (nothing else is current)', () => {
     rail('/');
     expect(screen.getByTestId('nav-projects').querySelector('.wk-rail-nav-mark')).not.toBeNull();
