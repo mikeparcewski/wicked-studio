@@ -6047,6 +6047,12 @@
       ]
     },
     {
+      "testId": "doc-format-row",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
       "testId": "doc-grounding-chip",
       "files": [
         "src/components/GroundingChip.tsx"
@@ -10167,6 +10173,24 @@
     },
     {
       "testId": "made-new-document-seats",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-signed-out",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-signin",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-unavailable",
       "files": [
         "src/components/everything/NewDocument.tsx"
       ]
@@ -16206,6 +16230,12 @@
       ]
     },
     {
+      "testId": "repo-map-now",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
       "testId": "repo-menu-capture",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -16239,6 +16269,18 @@
       "testId": "repo-needs-you",
       "files": [
         "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-not-mapped",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-not-mapped-why",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
       ]
     },
     {
