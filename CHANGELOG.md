@@ -12,36 +12,93 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
-### Fixed
+## [0.16.0] — 2026-11-08
 
-- **A broken warning can be skipped with a reason (e2e-1105 CJ9).** A gate held on a broken steering rule offered
-  only Send back, Re-check, Retry with a note and Stop, so a warning that cannot be met (a pull request with no issue
-  to name) stranded the run at delivery. When the engine marks a broken row `waivable` (a rule of severity warn or
-  info; core-ts 0.15.34), the gate offers "Skip <rule>" with your written reason beside "Re-check the rules"; the
-  skip is labelled on the run, the gate and the delivery. A broken error or critical rule, or a row from an older
-  engine, still gets only the re-check (fail-closed). The reason box asks "Why this rule doesn't apply to this job…", and
-  "Every other reason this step was stopped still stands" shows only when another reason is really open.
+Minor: publish and share an app (CS2), run plugins from a pack in every job's Details (CS7), allow or remove an installed editor (CS1, F37), the web as a source (CS9), which skills your helpers use, a chat job read as one passage whose documents and sources you pick from their tokens (CS12), theme and refine by chat, requirements that show code age and mismatches, archived apps with restore, disputed rules and council rulings, a context document that says what every agent sees, and first-run fixes that tell a new user what is missing. For crew 0.18.0. Pins wicked-crew-api-types 0.197.0.
 
-- **A helper on the container floor is not "Not installed" because this computer lacks its program (first-run).**
-  With no `claude` on this computer's PATH, every helper read "Not installed" and "Sign in Claude Code" opened "Claude
-  Code isn't installed on this computer" with no Sign in button, although the seat runs from its image and claude signs
-  in through a login container. "Not installed" now means the helper can't be used on the floor that runs it: the
-  engine found it missing at run time, or this computer lacks it on the host floor, or on the container floor for a
-  helper whose sign-in runs here (crew's `sign_in_on: 'host'`: codex, pi, opencode) and that isn't signed in yet.
-  The setup guide offers "Fix" (not "Sign in") for such a helper. Its step 4, "Start the container runtime", reads the
-  runtime the way the Helpers rows do: done once a container helper's sign-in check answered, and "Docker isn't running:
-  start it" while the rows say so. It used to read only a seat-image probe that times out on a loaded host, so it said
-  "Not checked yet." with Docker up or down and the guide could never finish (first-run N3).
+### Added
 
-- **A pull request link names its repository (CJ13).** `/review-change https://github.com/<owner>/<repo>/pull/9` from a
-  new chat opens on that repository instead of asking "Which repository?". A pull request, tree, blob, commit or clone
-  link, or a repository link on a known git host, names its repository whatever its name; other links and a bare
-  `owner/repo` path name nothing.
-
-- **A published app's check renders again (CJ2).** The standalone Apps fixture used by the publish check shipped
-  React's unreplaced `process.env.NODE_ENV` read, so the check page threw "process is not defined" and reported
-  `render_unavailable`. Every editor, run-plugin and standalone Apps script is now built with `NODE_ENV` set to
-  `production`, and a test fails if any of them still reads `process`.
+- **A job's documents and sources open from their tokens (CS12, #1056).** In a chat job's passage, the documents
+  token lists each usable document with "Leave out", and shows one crew can't use with the reason; the sources token
+  lists each source you can pick with Add or Leave out, and shows one you can't pick with the reason. Each pick is one
+  revision of the job. Cards that take documents or sources no longer say they need a newer studio.
+- **Publish an app, and share it (CS2, #1047).** The Publish sheet asks where the app runs, who can open it (people
+  who sign in through your identity provider, by group, email domain or role; Public only for an app with no action
+  and only public queries) and which sites may embed it, then says what happens: crew checks every query and
+  action, QE runs it on sample data at desktop and phone size, and you consent before anything is produced. Nothing
+  is pushed. The run's check, QE and consent gates show in the app's thread. Afterwards the Share sheet gives the
+  link, who can open it, the version, the image, the `docker run` line and the embed snippet. Teams is not offered.
+- **Run plugins from a pack show in every job's Details (CS7, #1045).** An installed run plugin's section is labelled
+  "From plugin · <title> <version> · observes run events" and hears only the run events you granted it. Plugins
+  lists each topic it asked for with its reason and whether it was granted, and offers off and Remove, which take
+  effect in an open job without a reload.
+- **Nothing on Plugins is "coming soon", and you can remove an editor you installed (CS1, #1030).** The placeholder
+  Apps card is gone (Apps is the built-in App plugin, with "Open Apps"); an installed editor gets Remove (press
+  twice). A built-in editor is switched off instead.
+- **Allow what an installed editor asks for (F37, #1040).** An editor's details list what it asks for as switches
+  ("Can change documents (you can undo)" first); on allows it for the build shown, off withdraws it, and a rule's deny
+  shows the rule instead of a switch. The note an editor shows when it lacks a permission links straight to that
+  switch ("Allow it in Plugins").
+- **Settings → Sources → The web (CS9, #1036).** The sheet lists what Install puts on this computer before anything
+  does: the SearXNG search image pinned by digest (AGPL-3.0, run unmodified) and the page reader with every locked
+  package. Install sends exactly what was shown. With no container engine it says so and offers no Install. Once
+  installed, "Agents can query" starts off.
+- **Which skills your helpers use (#1046).** The Skills page shows, per skill, when a helper last used it ("Used 2h
+  ago · Codex"), "Not used since gen N" for a skill handed out but never opened or run, or "Use not visible" for a
+  helper whose use can't be seen. A "Not used" filter lists the candidates to turn off, and the drawer has 30 and
+  90 day counts per helper.
+- **A chat job reads as one passage in the thread (E1a, #1018).** The job, its plan (Approve plan or Change), its
+  gates under their steps, a queued answer with Undo, delivery, and its settled one-line form all read in the chat
+  thread, the same as in the Job tab.
+- **Change the look by chat (A7, #1024).** A theme proposal card shows every colour that changes, what a theme can't
+  change, and the measured contrast; a low-contrast theme can't be previewed. Preview it, Apply saves only what
+  changed, and Undo puts it back. Nothing runs.
+- **A refine keeps your edits (A5, #1034).** The card lists your own edits to the document, each with Keep it or Let
+  this change it; "Kept" shows only once the change has landed, and a hand edit made meanwhile offers Try again. The
+  document's side chat shows the same card.
+- **Requirements: code age, the minimum in force, and code that doesn't meet a requirement (#1031).** "Built from
+  code N commits old" with Refresh map; "Minimum 66%, this repository's own (Settings: 80%)" with Change and Use
+  Settings; a requirement whose code is wrong shows "Code doesn't meet it: …" and a filter lists them.
+- **Apps: Archive with Restore, and restore an earlier version (#1028).** An Apps | Archived switch; Archive (with
+  Undo, nothing deleted) and Restore; an app's Versions list restores an earlier accepted version (yours, reviewed or
+  restored) after showing what it holds. On a phone an app is view and chat.
+- **Disputed rules and council rulings on the gate (#1016).** A rule the judges disagree on reads "disputed: you
+  decide" with both readings; a council ruling shows its tally and seats; process rows are shown apart and never
+  count against the gate; Re-check and Skip are offered for a rule held behind another denial.
+- **The job's working document is its context document (#1033).** It says what every agent gets ("In every agent's
+  context from version N: Goal and Constraints"), what was cut to fit, when a version was refused and why, and who
+  saw it.
+- **Checks show the floor crew measured and the writer's notes (#1035).** Beside the page: the page count and leak
+  scan crew measured itself, and the drafter's process notes, kept out of the document.
+- **Editor full screen and page export (#1027).** Full screen keeps Ask, Export and Options and fits a phone; a page
+  exports as a web page or a PDF; "Review this version" asks the reviewers about the version on screen.
+- **Add a repository from the Document form (#1025).** "Add a repository…" attaches a registered repository to the
+  project so the draft is grounded on it.
+- **The `/` command list (DES-CATALOG-002 Lane E2; crew `chatJobProposals` + `workflowCatalogV2`).** On a daemon that
+  takes job proposals from a chat, `/` lists the v2 catalog by verb: each job's command (`/migrate`), title and line,
+  its variants as sub-commands (`/migrate upgrade`), and Yours. Typing filters it; with four or more words, crew's
+  words layer leads with a **Looks like** row. A pick puts the job on the composer with its exact variant and depth,
+  and nothing is sent until Enter, which puts the job in the chat as your proposal (its sentence and Start). A command
+  typed whole, or an old `/workflow-…` command, does the same; `/workflow-test-analysis` reaches its own job. Only jobs
+  that can start here are listed. New job, ⌘K New job and the named openers (Create an editor plugin, Learn, New demo
+  video, Draft epics, Write tests) open in a chat instead of the New job window. An older daemon keeps today's flow.
+- **A job that needs a project asks which, with chips (F39).** "Generate it" on a repository's Requirements files its
+  Analyze a codebase · Domain job in the project that holds the repository. When none (or several) do, the job's
+  "Project?" offers the projects as chips; a pick puts the same job in a new chat in that project, with Start.
+- **A job that needs a repository can get one from a new chat (F41).** A job typed in a new chat whose words name one
+  registered repository (`/analyze domain Map the domain of billing-api`) opens on it, filed in the project that holds
+  it. When the words name none, the job's "Which repository?" offers the registered repositories as chips (the ones
+  the words name first); a pick puts the same job in a new chat on that repository (and asks which project when the
+  job needs one no single project holds). The chat the job left says "This job moved to … · Open it", after a reload too.
+- **Run insights in a review run's thread (G2).** The review's own report, read-only in the card; open it to accept or
+  dismiss a recommendation beside it (the same decide panel as `/insights`). A review crew hasn't recorded yet is read
+  again until it is.
+- **The App card in an app turn's thread (G3).** What the turn did in crew's words (the version it made and its change
+  line, or why nothing landed), a picture of that version (crew's version read, wicked-crew api-types 0.196.0), and
+  Open the app.
+- **A demo's cut opens in its card (G7, piece 2).** Once the cut is made, the video card is bound to it (versions,
+  theme, exports), and the run thread tells the recording verbs that it does, so "Edit the cut" can be offered (with
+  studio#1026).
 
 ### Changed
 
@@ -49,9 +106,6 @@ npm publish dates. Every version listed here exists on
   studio PR conflicted with every merge on it. The committed file now holds only the sorted per-entry lists (the
   contract); `dist/testid-inventory.json` still carries `counts`, computed at build, so consumers see the same shape.
   Two branches adding disjoint testids now merge cleanly (pinned by a `git merge-file` test).
-
-### Changed
-
 - **A Demo video the engine records (wicked-core#1249, DES-DEMO-RECORD-001).** A run of either demo preset is a demo
   run, `demo-human-review` included (an app whose data stays out of model context: no model review, the person
   reviews the take at the record gate). At the plan gate, "What the engine will record" lists the approved
@@ -82,51 +136,57 @@ npm publish dates. Every version listed here exists on
   judged. Redo the QE check?"). A binding failure, where no reviewer ran, now reads "The QE check's evidence could not
   be found. Run the QE check again?" instead of "didn't record a verdict". **Approve as your own judgment** stays its
   own labelled choice; an INCONCLUSIVE gate never labels that approve as a retry.
-### Added
-- **The `/` command list (DES-CATALOG-002 Lane E2; crew `chatJobProposals` + `workflowCatalogV2`).** On a daemon that
-  takes job proposals from a chat, `/` lists the v2 catalog by verb: each job's command (`/migrate`), title and line,
-  its variants as sub-commands (`/migrate upgrade`), and Yours. Typing filters it; with four or more words, crew's
-  words layer leads with a **Looks like** row. A pick puts the job on the composer with its exact variant and depth,
-  and nothing is sent until Enter, which puts the job in the chat as your proposal (its sentence and Start). A command
-  typed whole, or an old `/workflow-…` command, does the same; `/workflow-test-analysis` reaches its own job. Only jobs
-  that can start here are listed. New job, ⌘K New job and the named openers (Create an editor plugin, Learn, New demo
-  video, Draft epics, Write tests) open in a chat instead of the New job window. An older daemon keeps today's flow.
-- **A job that needs a project asks which, with chips (F39).** "Generate it" on a repository's Requirements files its
-  Analyze a codebase · Domain job in the project that holds the repository. When none (or several) do, the job's
-  "Project?" offers the projects as chips; a pick puts the same job in a new chat in that project, with Start.
-- **A job that needs a repository can get one from a new chat (F41).** A job typed in a new chat whose words name one
-  registered repository (`/analyze domain Map the domain of billing-api`) opens on it, filed in the project that holds
-  it. When the words name none, the job's "Which repository?" offers the registered repositories as chips (the ones
-  the words name first); a pick puts the same job in a new chat on that repository (and asks which project when the
-  job needs one no single project holds). The chat the job left says "This job moved to … · Open it", after a reload too.
 
-### Removed
-- Studio's own guess of a workflow from a launch's words (`detectWorkflow`): reading what words ask for is crew's.
 ### Fixed
+
+- **A published app's check renders again (CJ2).** The standalone Apps fixture used by the publish check shipped
+  React's unreplaced `process.env.NODE_ENV` read, so the check page threw "process is not defined" and reported
+  `render_unavailable`. Every editor, run-plugin and standalone Apps script is now built with `NODE_ENV` set to
+  `production`, and a test fails if any of them still reads `process`.
 - **A full command typed exactly wins the `/` list highlight (e2e-1105 CJ9).** "/plugin phase" typed so the list
   read it as free words ("Matches") kept "/plugin" (Studio plugin) highlighted, so Enter picked the editor plugin and
   left "plugin phase" behind as the job's words. The row a full command names exactly (read as the parser reads it,
   however it is spaced) now leads the list, and its pick keeps no words.
+- **A helper on the container floor is not "Not installed" because this computer lacks its program (first-run).**
+  With no `claude` on this computer's PATH, every helper read "Not installed" and "Sign in Claude Code" opened "Claude
+  Code isn't installed on this computer" with no Sign in button, although the seat runs from its image and claude signs
+  in through a login container. "Not installed" now means the helper can't be used on the floor that runs it: the
+  engine found it missing at run time, or this computer lacks it on the host floor, or on the container floor for a
+  helper whose sign-in runs here (crew's `sign_in_on: 'host'`: codex, pi, opencode) and that isn't signed in yet.
+  The setup guide offers "Fix" (not "Sign in") for such a helper. Its step 4, "Start the container runtime", reads the
+  runtime the way the Helpers rows do: done once a container helper's sign-in check answered, and "Docker isn't running:
+  start it" while the rows say so. It used to read only a seat-image probe that times out on a loaded host, so it said
+  "Not checked yet." with Docker up or down and the guide could never finish (first-run N3).
+- **A broken warning can be skipped with a reason (e2e-1105 CJ9).** A gate held on a broken steering rule offered
+  only Send back, Re-check, Retry with a note and Stop, so a warning that cannot be met (a pull request with no issue
+  to name) stranded the run at delivery. When the engine marks a broken row `waivable` (a rule of severity warn or
+  info; core-ts 0.15.34), the gate offers "Skip <rule>" with your written reason beside "Re-check the rules"; the
+  skip is labelled on the run, the gate and the delivery. A broken error or critical rule, or a row from an older
+  engine, still gets only the re-check (fail-closed). The reason box asks "Why this rule doesn't apply to this job…", and
+  "Every other reason this step was stopped still stands" shows only when another reason is really open.
+- **A pull request link names its repository (CJ13).** `/review-change https://github.com/<owner>/<repo>/pull/9` from a
+  new chat opens on that repository instead of asking "Which repository?". A pull request, tree, blob, commit or clone
+  link, or a repository link on a known git host, names its repository whatever its name; other links and a bare
+  `owner/repo` path name nothing.
+- **A new user is told what is missing and what to do (first run, #1051).** With no helper signed in, chat says so in
+  one plain line with a "Sign one in" link, and the reasons per helper sit under a disclosure; a sign-in that fails
+  says why, once; setup checks stay live; the Document form, New job and the sidebar say one thing at a time;
+  estate's indexing output reads as a plain summary; "helper" is the one word for an agent; and a home path in health
+  text is masked even behind `unix://`.
+- **A refused Go again says why (F43, #1043).** An interrupted job whose helper can no longer work shows "Not
+  started:" with crew's reason instead of "Interrupted", and Not now ends it, so it is never a dead end.
+- **Re-enter or replace a saved source's token (#1011).** A Jira, GitHub or database source whose credential is kept in
+  its own keychain entry shows the field again when that entry is missing, offers "Replace token" when it is set,
+  saves it and tests the connection.
+- **The Learn "linked issue" starter applies only when a pull request resolves an issue (#1017, F21).** An adopted copy
+  of the old text shows "This starter changed" with both texts and an Update.
+- **A waiting run's plan card shows right after a reload (#1022, F31)**, not after every parked run was read.
 - **What a run made shows in its thread, filed or Unfiled (plugins S1, G1; DES-CHAT-ARTIFACTS-001 §7 slice A4).** A
   document made by an Unfiled chat or run (crew's `default` mount) now renders in the thread. A run's documents are
   the ones crew's `artifact_ref` names, crew's index binds to the run (`runs`), or, with no ref, its seam write root
   names (a draft root exactly). A run that can have made none reads no document list, so no Unfiled bridge starts for
   it. A chat proposal's card now has its run's artifacts right under it (the run's own block leaves them out, so each
   card shows once); an older attempt at the same document says why it didn't land.
-
-### Added
-- **Run insights in a review run's thread (G2).** The review's own report, read-only in the card; open it to accept or
-  dismiss a recommendation beside it (the same decide panel as `/insights`). A review crew hasn't recorded yet is read
-  again until it is.
-- **The App card in an app turn's thread (G3).** What the turn did in crew's words (the version it made and its change
-  line, or why nothing landed), a picture of that version (crew's version read, wicked-crew api-types 0.196.0), and
-  Open the app.
-- **A demo's cut opens in its card (G7, piece 2).** Once the cut is made, the video card is bound to it (versions,
-  theme, exports), and the run thread tells the recording verbs that it does, so "Edit the cut" can be offered (with
-  studio#1026).
-
-### Fixed
-
 - **No home folder prints anywhere in Studio (e2e-1105, privacy).** A path under the home directory reads `~/…` in
   the thread (a run's first message, a step's output, every reply drawn as Markdown, the title) and on every surface
   that already did so by default. "Show technical details" no longer shows the full path: a screen share with it on
@@ -140,8 +200,6 @@ npm publish dates. Every version listed here exists on
   before ($0.16)".
 - **A program's path is never shown as a helper.** A step crew runs on a binary (a node path) is crew's own step: it is
   not listed among the helpers, in the run's agents or in the receipt's "built by".
-### Fixed
-
 - **The app's chat answers a rules hold in place (F22).** When an app turn's review is held on steering rules no judge
   ruled on (unchecked, waived by instruction or disputed: "the work was not rejected"), the chat shows the run page's own
   gate row under the turn's steps, with Re-check the rules and Confirm or skip, and the held review reads as waiting on
@@ -153,6 +211,10 @@ npm publish dates. Every version listed here exists on
   instead of "The step was escalated". The gate headline and the prompt-only surfaces (the gate toast, the Desk, the
   dock) use the same words, so the run page says it too. Needs crew with the
   matching fix (wicked-crew#1385: a held turn is no longer cancelled); on an older crew the turn ends refused as before.
+
+### Removed
+
+- Studio's own guess of a workflow from a launch's words (`detectWorkflow`): reading what words ask for is crew's.
 
 ## [0.15.0] — 2026-11-05
 
@@ -3239,7 +3301,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.13.0...v0.14.0
