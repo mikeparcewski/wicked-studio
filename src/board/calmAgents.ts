@@ -1,3 +1,4 @@
+import { helperNotInstalled } from './agentsCopy.js';
 import { benchWord, type AgentRow, type Tone, agentTiles } from './agentsModel.js';
 
 /**
@@ -21,6 +22,7 @@ function clock(iso: string): string | null {
 
 /** The status word: the row's own readiness, in the page's fewer words. */
 export function agentStatus(row: AgentRow): AgentStatus {
+  if (helperNotInstalled(row)) return { word: 'Not installed', tone: 'fail', move: null };
   if (row.sign.word === 'Signed out') return { word: 'Not signed in', tone: 'quiet', move: 'signin' };
   if (row.bench !== null) {
     const at = clock(row.bench.lifts_at);

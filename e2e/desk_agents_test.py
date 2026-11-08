@@ -312,7 +312,7 @@ with sync_playwright() as p:
     pf.close()
     set_fixture(origin, setup={"completedAt": 1})
     mode["roster"] = "ok"
-    check("first-use", first["landed"] == "/agents?setup=1" and first["count"] == "No agent can take new jobs yet."
+    check("first-use", first["landed"] == "/agents?setup=1" and first["count"] == "No helper can take new jobs yet."
           and "Sign in Pi CLI" in first["moves"] and first["modal_at"] == "/agents?setup=1&fix=pi"
           and first["back_at"] == "/agents?setup=1" and first["still_steps"] == 1, **first)
 

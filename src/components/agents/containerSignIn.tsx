@@ -74,6 +74,7 @@ interface Session {
   id: number;
   key: string;
   name: string;
+  onHost: boolean;
   /** The login container's terminal opened (its POST answered). */
   opened: boolean;
   /** Settled: the terminal closed or failed to open; later events are ignored. */
@@ -140,7 +141,7 @@ function LoginTerminal({ session, open, onOpenError, onClosed }: {
     if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   };
-  const { key, name, opened } = session;
+  const { key, name, opened, onHost } = session;
   return createPortal(
     <div className="wk-agents-scrim wk-agents-scrim--login" data-testid="agents-login-scrim">
       <div ref={dialog} tabIndex={-1} onKeyDown={trapTab} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="agents-login" data-agent={key} data-state={opened ? 'open' : 'opening'} className="wk-agents-modal wk-agents-modal--login">
@@ -152,10 +153,10 @@ function LoginTerminal({ session, open, onOpenError, onClosed }: {
           <p data-testid="agents-login-line" role="status">
             {opened
               ? `Follow ${name}’s sign-in steps in this terminal. When it finishes, this closes and studio checks the sign-in (up to a minute).`
-              : `Opening ${name}’s login container… The first sign-in can take a few minutes while it is prepared.`}
+              : onHost ? `Opening ${name}’s own sign-in on this computer…` : `Opening ${name}’s sign-in… The first sign-in can take a few minutes while it is prepared.`}
           </p>
           <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onClosed} />
-          <span className="wk-agents-safe">It runs in a disposable container, and studio’s service keeps the sign-in. Studio never shows your password or token. For Claude, paste only the code your browser shows into claude’s own prompt: the sign-in reads the token claude prints, and asks you to paste it (unechoed) only if it cannot.</span>
+          <span className="wk-agents-safe">{onHost ? `Studio opens ${name}’s own sign-in on this computer.` : 'It runs in a disposable container, and studio’s service keeps the sign-in.'} Studio never shows your password or token. For Claude, paste only the code your browser shows into claude’s own prompt: the sign-in reads the token claude prints, and asks you to paste it (unechoed) only if it cannot.</span>
         </div>
       </div>
     </div>,
@@ -176,7 +177,7 @@ export function ContainerSignInProvider({ children }: { children: React.ReactNod
     if (live.current !== null) return Promise.reject(new Error(`finish the ${live.current.name} sign-in first`));
     const seat = getCachedRoster()?.find((s) => s.key === key);
     const name = seat !== undefined ? seatLabel(seat) : key;
-    return new Promise<void>((resolve, reject) => { show({ id: ++seq.current, key, name, opened: false, done: false, watch: new AbortController(), pending: null, onChecking, resolve, reject }); });
+    return new Promise<void>((resolve, reject) => { show({ id: ++seq.current, key, name, onHost: seat?.['sign_in_on'] === 'host', opened: false, done: false, watch: new AbortController(), pending: null, onChecking, resolve, reject }); });
   }, []);
 
   const signOut = useCallback(async (key: string): Promise<void> => { await api.seatContainerLogout(key); }, []);

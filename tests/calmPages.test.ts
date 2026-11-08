@@ -90,6 +90,7 @@ describe('agent words', () => {
   const row = (over: Partial<AgentRow>): AgentRow => ({
     key: 'claude', name: 'Claude Code', ready: { word: 'Ready', tone: 'ok', sub: null }, sign: { word: 'Signed in', tone: 'ok', sub: null },
     governed: { word: 'Every action checked', tone: 'ok', sub: null },
+    seat: { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
     bench: null, week: { units: 61, gated: 53, firstPass: 45 }, usable: true, issues: [], ...over,
   } as AgentRow);
   it('gives each agent one status word', () => {

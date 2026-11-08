@@ -13,6 +13,8 @@ import { TechDetails } from '../ui/TechDetails.js';
 import { CalmButton, CalmEmpty, CalmFacts, CalmHead, CalmLoading, CalmRow, CalmRows, CalmSection, type CalmTone } from '../calm/Calm.js';
 import { AgentModal } from './AgentModal.js';
 import { useAgentLogin } from './agentLogin.js';
+import { setupSettled } from '../../board/firstUse.js';
+import { useFirstUseReads } from '../../store/firstUseReads.js';
 import { SetupPanel } from './SetupPanel.js';
 import { useAgentRows } from './useAgentRows.js';
 import { PageAskButton, usePageChatFor } from '../chat/PageChat.js';
@@ -133,9 +135,17 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
   const params = new URLSearchParams(search);
   const fix = params.get('fix');
   // First use (§5.2): `?setup=1` shows the setup steps above the table; an agent's modal keeps them open behind it.
-  const setup = params.get('setup') === '1';
+  const firstUse = useFirstUseReads();
+  useEffect(() => {
+    void firstUse.load(true);
+    const timer = setInterval(() => { void useFirstUseReads.getState().load(true); }, 30_000);
+    return () => clearInterval(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const setup = params.get('setup') === '1' || !setupSettled(firstUse.setup, {
+    rows: v.rows, repos: firstUse.repos, projects: firstUse.projects, checks: firstUse.checks,
+  });
   const join = (path: string, q: string): string => `${path}${path.includes('?') ? '&' : '?'}${q}`;
-  const here = setup ? join(basePath, 'setup=1') : basePath;
+  const here = params.get('setup') === '1' ? join(basePath, 'setup=1') : basePath;
   const withFix = (key: string): string => join(here, `fix=${encodeURIComponent(key)}`);
   const known = fix !== null && v.rows.some((r) => r.keys.includes(fix));
   // An unknown key lands on the page with no modal and no error (§2.2).
@@ -208,7 +218,6 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
       <>
         {rosterFailed && <StateBanner kind="stale" asOf={v.readAt} onRetry={retry} retrying={retrying} data-testid="agents-banner" />}
         {missing.length > 0 && <StateBanner kind="partial" what={missing.join(' and ')} data-testid="agents-partial" />}
-        {setup && <SetupPanel rows={v.rows} open={open} navigate={navigate} />}
         <CalmSection label="Your agents" tools={menu} data-testid="agents-list-sec">
           <CalmRows data-testid="agents-list" label="Agents">
             {v.rows.map((r) => <AgentLine key={r.key} r={r} open={open} />)}
@@ -235,6 +244,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
   return (
     <div data-testid="agents-panel" className="wk-agents-panel wk-calm-col">
       <CalmHead title="Agents" titleAside={<PageAskButton kind="agents" testId="agents-page-ask" />} sentence={sentence} sentenceTestId={/* testid */ 'agents-sentence'} action={v.hasRoster && v.rows.length > 0 ? undefined : null} />
+      {setup && <SetupPanel rows={v.rows} helpersKnown={v.rosterState === 'ok'} open={open} navigate={navigate} />}
       {body}
       {fix !== null && known && <AgentModal agentKey={fix} onClose={close} />}
     </div>
