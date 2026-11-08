@@ -55,8 +55,8 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
   // A resumed run and a pre-0.33.0 daemon send none: the row is then absent, never a guessed base.
   const events = useRunEventStore((s) => s.byRun[session.id]) ?? EMPTY_EVENTS;
   const base = useMemo(() => runBase(events), [events]);
-  // studio#479: the worktree (and the base's note) under the home directory read `~/…` in the
-  // default layer, the hover included; "Show technical details" gives the full path.
+  // studio#479: the worktree (and the base's note) under the home directory read `~/…`, the
+  // hover included, technical details or not (e2e-1105).
   const showPath = useDisplayPath();
   const showText = useDisplayText();
   const workdir = session.workdir !== undefined && session.workdir !== null ? showPath(session.workdir) : null;

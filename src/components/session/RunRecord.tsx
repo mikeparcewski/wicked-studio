@@ -48,7 +48,7 @@ export function RunStory({ view, navigate, events = EMPTY }: {
   const stopped = status === 'cancelled' || status === 'failed';
   useEffect(() => { if (stopped) useProvenanceStore.getState().load(runId); }, [runId, stopped]);
   const rejectNote = useProvenanceStore((s) => s.rejectNotes[runId] ?? null);
-  // The engine headline quotes the engine's first line: paths read `~` unless technical details are on
+  // The engine headline quotes the engine's first line: paths read `~`, technical details or not
   // (the same rule as Technical details below it — codex r3).
   const show = useDisplayText();
   const story = useProvenanceStore((s) => s.cancelStories[runId] ?? null);

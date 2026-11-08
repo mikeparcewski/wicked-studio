@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { displayText } from '../../board/homePath.js';
 import type { AskLine } from '../../board/askThread.js';
 
 /**
@@ -22,10 +23,10 @@ export function AskLineView({ line, onSignIn, onRetry }: { line: AskLine; onSign
       <p className="wk-ask-line-text">
         {expandable ? (
           <button type="button" data-testid="ask-line-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="wk-ask-line-btn">
-            {line.text}
+            {displayText(line.text)}
           </button>
         ) : (
-          <span className="wk-ask-line-plain">{line.text}</span>
+          <span className="wk-ask-line-plain">{displayText(line.text)}</span>
         )}
         {line.action === 'signin' && onSignIn !== undefined && (
           <>
@@ -42,7 +43,7 @@ export function AskLineView({ line, onSignIn, onRetry }: { line: AskLine; onSign
       </p>
       {open && expandable && (
         <ul data-testid="ask-line-detail" className="wk-ask-line-detail">
-          {line.detail.map((d, i) => <li key={i}>{d}</li>)}
+          {line.detail.map((d, i) => <li key={i}>{displayText(d)}</li>)}
         </ul>
       )}
     </div>

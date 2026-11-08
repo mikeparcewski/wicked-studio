@@ -1,8 +1,8 @@
 /**
  * The one formatter for paths the daemon reports (studio#458, #460, #462 — the rule studio#444 set
- * for the hand-over card): in the DEFAULT layer, an absolute path under the operator's home
- * directory reads as `~/…`. A screen share or a recording then never prints the account name and
- * the local folder layout; "Show technical details" (`useViewPrefsStore`) shows the full path.
+ * for the hand-over card): an absolute path under the operator's home directory reads as `~/…`. A
+ * screen share or a recording then never prints the account name and the local folder layout. Since
+ * e2e-1105 (2026-11-08) this holds with "Show technical details" on too: no surface shows the full path.
  *
  * Studio is a browser client and is never told the daemon host's home directory, so the three
  * desktop spellings are recognised by shape: `/Users/<name>` (macOS), `/home/<name>` and `/root`
@@ -17,7 +17,7 @@
  * name with a space and nothing after it ("saved under C:\Users\Jane Doe") abbreviates its first
  * word only — prose cannot tell where such a name ends.
  *
- * Pure functions; the hooks in `hooks/useHomePath.ts` bind them to the technical-details pref.
+ * Pure functions; the hooks in `hooks/useHomePath.ts` hand them to components.
  */
 
 /** One run of name characters: no separator, whitespace, quote, bracket or sentence punctuation. */
@@ -44,7 +44,7 @@ const TEXT_RE = new RegExp(String.raw`(^|[\s"'\`(\[<=:,])${HOME_HEAD}(?=$|[\\\/\
 
 /** One path as the daemon reports it → its display form (`~/…` when it is under a home directory). */
 export function displayPath(path: string): string {
-  return path.replace(PATH_RE, '~');
+  return path.replace(PATH_RE, '~').replace(MAC_TMP_PATH_RE, '$$TMPDIR');
 }
 
 /** macOS's per-user temp directory (`/var/folders/<xx>/<id>/T`, also under `/private`): it names
@@ -52,6 +52,8 @@ export function displayPath(path: string): string {
  *  token boundaries as `TEXT_RE`: it starts after a prose delimiter and ends where the token does
  *  (`/srv/var/folders/…` and `…/T.backup/…` are other paths, codex on #650). */
 const MAC_TMP_RE = new RegExp(String.raw`(^|[\s"'\`(\[<=:,])(?:\/private)?\/var\/folders\/[^\/\s"'\`]+\/[^\/\s"'\`]+\/T(?=$|[\\\/\s"'\`()\[\]<>]|[,;:.!?](?=$|[\s"'\`()\[\]<>]))`, 'g');
+/** The same directory heading a path field (studio#650's rule for path fields too: codex on e2e-1105). */
+const MAC_TMP_PATH_RE = new RegExp(String.raw`^(?:\/private)?\/var\/folders\/[^\/\s"'\`]+\/[^\/\s"'\`]+\/T(?=$|[\\\/])`);
 
 /** Free text (a unit's output, a finding's message, a deliver card) with every home path → `~/…`
  *  and the macOS per-user temp directory → `$TMPDIR`. */

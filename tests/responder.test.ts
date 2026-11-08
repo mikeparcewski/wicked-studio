@@ -88,5 +88,7 @@ describe('e2e-1105: a program path where a seat goes is crew\'s step, never a he
     expect(seatResponder(NODE, ROSTER)).toEqual(CREW);
     const view = makeView({ id: 'r' }, [makeUnit({ id: 'r:1', session_id: 'r', ord: 1, assigned_cli: NODE, stage: 'recon' })]);
     expect(unitResponder(view, 1, ROSTER)).toEqual(CREW);
+    // A chat turn or a step named by the binary is crew's too (the thread's `turn-who-seat`).
+    expect(turnResponder(NODE, ROSTER)).toEqual(CREW);
   });
 });

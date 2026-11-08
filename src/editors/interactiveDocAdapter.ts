@@ -1,5 +1,5 @@
 import { ApiError } from '../api/errors.js';
-import { getVersions, HeadMovedError, interactiveDocUrl, postDeckOp, postEvent, postFork, putLearnedTheme, type VersionEntry } from '../api/interactive.js';
+import { getVersions, HeadMovedError, interactiveDocUrl, postDeckOp, postEvent, postFork, putLearnedTheme, UNFILED_MOUNT, type VersionEntry } from '../api/interactive.js';
 import { notUndoneLine } from '../board/artifactMorph.js';
 import { FEEDBACK_EVENT } from '../interactive/feedbackBatch.js';
 import { subscribeCoreEvents } from '../hooks/eventTap.js';
@@ -28,7 +28,9 @@ export interface FeedbackRefusal { rejected: { selector: string; reason: string 
 export function editRefusalWords(r: FeedbackRefusal): string {
   const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many.replace('#', String(n)));
   const why = (reason: string): string | null => {
-    const [code, detail = ''] = reason.split(':');
+    const cut = reason.indexOf(':');
+    const code = cut < 0 ? reason : reason.slice(0, cut);
+    const detail = cut < 0 ? '' : reason.slice(cut + 1);
     if (code === 'inv2-would-drop-wids') {
       const n = detail.split(',').filter((x) => x.trim() !== '').length;
       return n > 0 ? `it would remove ${plural(n, 'a part', '# parts')} nested inside what you edited` : 'it would remove parts nested inside what you edited';
@@ -48,10 +50,11 @@ export function editRefusalWords(r: FeedbackRefusal): string {
 
 /**
  * A relayed `feedback.processed` frame for `docId` that answers a batch sent against `base` and landed nothing, or
- * `null`. Matched by the doc, the batch's base, and a batch version not already in the manifest before the post (the
- * bridge records no correlation id on it): a version that landed is found by the manifest poll as before.
+ * `null`. Matched by the project, the doc, the batch's base, and a batch version not already in the manifest before the
+ * post. The bridge echoes no request id on it, so a second editor's refused batch on the same document and base in the
+ * same moment would be taken for this one (no such actor today: one person edits a page in one place).
  */
-export function refusalOf(event: CoreEvent, docId: string, base: number, before: ReadonlySet<number>): FeedbackRefusal | null {
+export function refusalOf(event: CoreEvent, projectId: string, docId: string, base: number, before: ReadonlySet<number>): FeedbackRefusal | null {
   if (event.type !== 'interactiveEvent') return null;
   const ev = (event as { event?: unknown }).event;
   if (typeof ev !== 'object' || ev === null) return null;
@@ -59,6 +62,9 @@ export function refusalOf(event: CoreEvent, docId: string, base: number, before:
   if ((e['event_type'] ?? e['type']) !== PROCESSED) return null;
   const p = (typeof e['payload'] === 'object' && e['payload'] !== null ? e['payload'] : e) as Record<string, unknown>;
   if (p['document_id'] !== docId || p['landed'] !== false) return null;
+  // The bridge stamps a bound document's project on every frame and none on an Unfiled one (docThread's rule): a
+  // same-named document in another project is not this one.
+  if ((typeof p['project_id'] === 'string' ? p['project_id'] : UNFILED_MOUNT) !== projectId) return null;
   if (typeof p['base_version'] === 'number' && p['base_version'] !== base) return null;
   if (typeof p['version'] === 'number' && before.has(p['version'])) return null;
   const rejected = Array.isArray(p['rejected'])
@@ -294,7 +300,7 @@ export class InteractiveDocAdapter implements HostAdapter {
     }
     // The engine's refusal comes back on the bus, not in the manifest: listen before the post, so it is never missed.
     let refusal: FeedbackRefusal | null = null;
-    const stop = subscribeCoreEvents((ev) => { refusal ??= refusalOf(ev, this.docId, base, before); });
+    const stop = subscribeCoreEvents((ev) => { refusal ??= refusalOf(ev, this.projectId, this.docId, base, before); });
     let landed: Awaited<ReturnType<InteractiveDocAdapter['waitForLanded']>>;
     try {
       await postEvent(this.projectId, {

@@ -6,17 +6,25 @@ import type { ChatCitationItem } from '../api/chat-wire.js';
 import { CitationBadge } from './citations.js';
 import { displayPath, displayText } from '../board/homePath.js';
 
+/** The verdict of the one citation whose display form is `shown`; none when two collapse to the same words. */
+function onlyMatch<T>(marks: ReadonlyMap<string, T>, shown: string): T | undefined {
+  const hits = [...marks].filter(([k]) => displayText(k) === shown);
+  return hits.length === 1 ? hits[0]![1] : undefined;
+}
+
 /** A markdown node, as far as {@link remarkHomePaths} reads it. */
-interface MdNode { type: string; value?: unknown; children?: MdNode[] }
+interface MdNode { type: string; value?: unknown; url?: unknown; children?: MdNode[] }
 
 /**
  * Privacy (e2e-1105, 2026-11-08): crew relays agent text, step output and run intents that name folders under the
- * home directory. No home folder renders: every text, inline code and code block value reads `~/…`. A link's target is
- * left as written (a file reference opens by its real path); its visible text is collapsed like any other text.
+ * home directory. No home folder renders: every text, inline code and code block value reads `~/…`. A file reference's
+ * target is kept (it opens by its real path) and shown collapsed; a `file://` link's target is collapsed.
  */
 export function remarkHomePaths() {
   const walk = (n: MdNode): void => {
     if ((n.type === 'text' || n.type === 'inlineCode' || n.type === 'code' || n.type === 'html') && typeof n.value === 'string') n.value = displayText(n.value);
+    // A `file://` link can't open from the page anyway; its target (shown on hover) never names the home folder.
+    if (typeof n.url === 'string' && /^file:\/\//i.test(n.url)) n.url = `file://${displayPath(n.url.slice(7))}`;
     for (const c of n.children ?? []) walk(c);
   };
   return (tree: MdNode): void => walk(tree);
@@ -169,14 +177,15 @@ const components: Components = {
   h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5" style={{ color: 'var(--ink-high)' }}>{children}</h2>,
   h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1" style={{ color: 'var(--ink-high)' }}>{children}</h3>,
   p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+  // Privacy (e2e-1105): a link's target shows on hover; a file reference's never names the home folder.
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
+    <a href={typeof href === 'string' && isFileRef(href) ? displayPath(href) : href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
       {children}
     </a>
   ),
   img: ({ alt }) => (
     <span className="text-xs font-mono rounded px-1" style={{ background: 'var(--surface-raised)', color: 'var(--ink-dim)' }}>
-      [image{alt ? `: ${alt}` : ''}]
+      [image{alt ? `: ${displayText(alt)}` : ''}]
     </span>
   ),
   code: codeElement,
@@ -250,7 +259,7 @@ export function Markdown({ children, className, onOpenFile, marks }: Props): Rea
               const raw = typeof codeChildren === 'string' ? codeChildren.trim() : '';
               // The token reads `~/…` once home folders are collapsed (remarkHomePaths): its verdict is found either way.
               const item = raw === '' || isCodeBlock(codeClass, codeChildren) ? undefined
-                : marks.get(raw) ?? [...marks].find(([k]) => displayText(k) === raw)?.[1];
+                : marks.get(raw) ?? onlyMatch(marks, raw);
               return item === undefined ? rendered : <CitationBadge item={item}>{rendered}</CitationBadge>;
             },
           };
@@ -275,7 +284,7 @@ export function Markdown({ children, className, onOpenFile, marks }: Props): Rea
           );
         }
         return (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
+          <a href={typeof href === 'string' && isFileRef(href) ? displayPath(href) : href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
             {linkChildren}
           </a>
         );

@@ -64,4 +64,11 @@ describe('Markdown: no home folder renders (e2e-1105 privacy)', () => {
     fireEvent.click(screen.getByTestId('evidence-ref'));
     expect(open).toHaveBeenCalledWith('/Users/reel-operator/.wicked/reviews/r1/out/report.json');
   });
+
+  it('macOS per-user temp and Windows home folders are collapsed too', () => {
+    const { container } = render(<Markdown>{'wrote /var/folders/x7/abc123/T/wicked-1/out.json and C:\\Users\\jane.doe\\repo\\a.ts'}</Markdown>);
+    expect(container.textContent).toContain('$TMPDIR/wicked-1/out.json');
+    expect(container.textContent).toContain('~\\repo\\a.ts');
+    expect(container.textContent).not.toMatch(/jane\.doe|abc123/);
+  });
 });

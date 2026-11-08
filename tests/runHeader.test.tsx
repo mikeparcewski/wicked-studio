@@ -58,6 +58,10 @@ describe('waitingItems — what the banner’s overview lists', () => {
       { key: 'fail:b', runId: 'b', kind: 'Failed run', step: 'Build', question: 'Move the nightly report job stopped at Build', age: null },
     ]);
   });
+  it('e2e-1105 privacy: a question naming a home folder reads ~/…', () => {
+    const items = waitingItems([row('gate:a', 'gate', { question: 'Approve writing /Users/reel-operator/.wicked/reviews/r1/out/report.json?' })], [run('a', 'awaiting_human')], {}, NOW);
+    expect(items[0]!.question).toBe('Approve writing ~/.wicked/reviews/r1/out/report.json?');
+  });
   it('a folded group counts its members; a hand-over gate says so; no rows, no items', () => {
     const group = row('group:approval', 'gate', { members: [row('gate:a', 'gate', { question: 'Approve the hand-over' })] });
     expect(waitingItems([group], [run('a', 'awaiting_human')], {}, NOW).map((i) => i.kind)).toEqual(['Hand-over']);
@@ -131,6 +135,10 @@ describe('NeedsBanner — shown only while something waits; hover or focus gives
     expect(screen.getByTestId('session-status')).toHaveAttribute('data-tone', 'ok');
     expect(screen.getByTestId('session')).toHaveAttribute('data-state', 'done');
     expect(screen.queryByTestId('session-stop')).toBeNull();
+    // The Details panel says the same: no Stop, never "Waiting on you" (codex on e2e-1105).
+    expect(screen.queryByTestId('run-tab-glance-stop')).toBeNull();
+    expect(screen.queryByTestId('run-tab-stop')).toBeNull();
+    expect(screen.getByTestId('session').textContent).not.toMatch(/Waiting on you/);
   });
 
   it('e2e-1105 privacy: a run asked with a home path never prints it (title, first message, its hover)', () => {
