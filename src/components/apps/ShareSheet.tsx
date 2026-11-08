@@ -1,25 +1,19 @@
 import { useRef, useState } from 'react';
+import type { AppDetail } from '../../api/types.js';
+import { PublishSheet } from './PublishSheet.js';
 import type { AppPublished } from '../../editors/apps/appsDirectory.js';
 import { useModalEscape } from '../Modal.js';
 import { useDialogFocus } from '../steer/useDialogFocus.js';
-
-/**
- * SHARE (operator 2026-11-03: "a share link so the user could share with others"). Real sharing is a PUBLISHED copy:
- * Publish (lane K6) builds a signed-in app server the deployer runs, and that server's address is the link. So:
- *
- *  - published (crew reports the record): the link and the iframe snippet (when embedding is allowed), each with Copy,
- *    who can open it, and which version went out when;
- *  - not published: it says so plainly, offers Publish (disabled until it lands), and a studio link labelled as one,
- *    for people who use this studio.
- *
- * Nothing here makes up an address: the share link is only ever crew's.
- */
 
 export interface ShareSheetProps {
   name: string;
   slug: string;
   published: AppPublished | null;
   onClose: () => void;
+  detail?: AppDetail;
+  publishEnabled?: boolean;
+  publishDisabledWhy?: string | null;
+  onStarted?: (runId: string) => void;
 }
 
 /** The studio address of an app (for people who use this studio, signed in to this daemon). */
@@ -58,7 +52,21 @@ function CopyRow({ label, value, testId, note, multiline = false }: { label: str
   );
 }
 
-export function ShareSheet({ name, slug, published, onClose }: ShareSheetProps): React.ReactElement {
+/** Quote the image as a shell argument; environment values stay in the deployer's environment. */
+export function dockerRun(published: AppPublished): string | null {
+  if (published.run === undefined || published.image === undefined) return null;
+  const { env, port, volume } = published.run;
+  const quote = (v: string): string => "'" + v.replaceAll("'", "'\\''") + "'";
+  return ['docker run --rm', `-p ${port}:${port}`, ...env.map((e) => `-e ${quote(e)}`), ...(volume === null ? [] : [`-v apps-data:${volume}`]), quote(published.image.tag)].join(' ');
+}
+
+export function ShareSheet(props: ShareSheetProps): React.ReactElement {
+  const [publishing, setPublishing] = useState(false);
+  if (publishing && props.detail !== undefined) return <PublishSheet detail={props.detail} onClose={() => setPublishing(false)} onStarted={(id) => { props.onStarted?.(id); props.onClose(); }} />;
+  return <ShareDialog {...props} onPublish={() => setPublishing(true)} />;
+}
+
+function ShareDialog({ name, slug, published, onClose, detail, publishEnabled = false, publishDisabledWhy = null, onPublish }: ShareSheetProps & { onPublish: () => void }): React.ReactElement {
   const box = useRef<HTMLDivElement | null>(null);
   // The modal family's contract: one Escape closes the top layer only (the palette and later modals first), Tab
   // stays inside, and focus goes back where it was when the sheet closes.
@@ -76,6 +84,11 @@ export function ShareSheet({ name, slug, published, onClose }: ShareSheetProps):
             <p className="wk-share-lead" data-testid="apps-share-state">Published: send this link to the people who can open it.</p>
             <CopyRow label="Share link" value={published.shareUrl} testId="apps-share-link" />
             <p className="wk-share-meta"><span className="wk-share-k">Who can open it</span> <span data-testid="apps-share-audience">{published.audience}</span></p>
+            {published.image !== undefined && <>
+              <CopyRow label="Image tag" value={published.image.tag} testId="apps-share-image-tag" />
+              <CopyRow label="Image id" value={published.image.id} testId="apps-share-image-id" />
+            </>}
+            {dockerRun(published) !== null && <CopyRow label="Run the image" value={dockerRun(published)!} testId="apps-share-run" multiline note="Set these environment names to your source secrets before running this command. Run the image at the share link’s site address." />}
             {published.snippet !== null && <CopyRow label="Embed in a page" value={published.snippet} testId="apps-share-embed" multiline />}
             <p className="wk-share-meta" data-testid="apps-share-when">
               <span className="wk-share-k">Published</span> v{published.version} on {new Date(published.at).toLocaleString()}
@@ -84,15 +97,17 @@ export function ShareSheet({ name, slug, published, onClose }: ShareSheetProps):
         ) : (
           <>
             <p className="wk-share-lead" data-testid="apps-share-state">Not published yet: other people need a published copy to open it.</p>
-            <p className="wk-share-body">Publish builds a signed-in app server that your deployer runs. Its link is what you share.</p>
-            <div className="wk-share-actions">
-              <button type="button" className="wk-btn wk-btn--primary" data-testid="apps-share-publish" disabled aria-describedby="wk-share-soon">Publish</button>
-              <span id="wk-share-soon" className="wk-share-note">Coming with Publish</span>
-            </div>
+            <p className="wk-share-body">Publish builds an app server that you run in your own container engine. Its site address is the link you share.</p>
             <CopyRow label="Studio link" value={studioLink(slug)} testId="apps-share-studio"
               note="For people who use this studio: it opens the app here, signed in to this daemon. Anyone else can’t open it." />
           </>
         )}
+        <div className="wk-share-actions">
+          <button type="button" className="wk-btn wk-btn--primary" data-testid="apps-share-publish" disabled={!publishEnabled || detail === undefined || publishDisabledWhy !== null} aria-describedby="wk-share-publish-why" onClick={onPublish}>
+            {published === null ? 'Publish' : detail !== undefined && detail.head.version > published.version ? `Publish v${detail.head.version}` : 'Publish again'}
+          </button>
+          <span id="wk-share-publish-why" className="wk-share-note">{!publishEnabled ? 'Publish needs a container engine (Docker or Rancher Desktop) running on this computer, and a wicked-crew that can publish.' : publishDisabledWhy ?? (detail === undefined ? 'Open the app to publish it.' : '')}</span>
+        </div>
       </div>
     </div>
   );

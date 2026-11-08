@@ -271,11 +271,11 @@ describe('Share: a published link only when crew reports one', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async (t: string) => { writes.push(t); }) } });
   });
 
-  it('not published: says so, Publish is disabled (coming with Publish), and Copy copies the studio link', async () => {
+  it('not published: says so, Publish needs a container engine, and Copy copies the studio link', async () => {
     render(<ShareSheet name="<b>Desk</b>" slug="desk" published={null} onClose={vi.fn()} />);
     expect(screen.getByTestId('apps-share-state').textContent).toMatch(/Not published yet/);
     expect((screen.getByTestId('apps-share-publish') as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText('Coming with Publish')).toBeTruthy();
+    expect(screen.getByText('Publish needs a container engine (Docker or Rancher Desktop) running on this computer, and a wicked-crew that can publish.')).toBeTruthy();
     expect(screen.queryByTestId('apps-share-link-field')).toBeNull();
     fireEvent.click(screen.getByTestId('apps-share-studio-copy'));
     await waitFor(() => expect(writes).toStrictEqual([`${window.location.origin}/apps/desk`]));
@@ -298,7 +298,7 @@ describe('Share: a published link only when crew reports one', () => {
     fireEvent.click(screen.getByTestId('apps-share-embed-copy'));
     await waitFor(() => expect(writes).toHaveLength(2));
     expect(writes).toStrictEqual(['https://desk.example.test/', snippet]);
-    expect(screen.queryByTestId('apps-share-publish')).toBeNull();
+    expect(screen.getByTestId('apps-share-publish').textContent).toBe('Publish again');
   });
 
   it('a malformed or partial record is "not published": no link is ever made up', () => {

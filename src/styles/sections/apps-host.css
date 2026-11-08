@@ -224,3 +224,8 @@
 .wk-apps-scope { margin: 0 0 var(--space-3); }
 .wk-apps-archive-item { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
 .wk-apps-archive-help { margin: var(--space-1) 0 0; color: var(--ink-muted); font-size: var(--text-caption); }
+
+.wk-publish { width: min(960px, 100%); }
+.wk-publish-columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-3); }
+.wk-publish .wk-share-actions { justify-content: flex-end; margin-top: var(--space-3); }
+@media (max-width: 639px) { .wk-publish-columns { grid-template-columns: 1fr; } }

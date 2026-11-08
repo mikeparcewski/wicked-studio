@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.15.0",
   "counts": {
-    "files": 339,
-    "occurrences": 5015,
-    "static": 4216,
+    "files": 340,
+    "occurrences": 5020,
+    "static": 4221,
     "dynamic": 177,
     "computed": 53
   },
@@ -610,6 +610,12 @@
     },
     {
       "testId": "app-chat-note",
+      "files": [
+        "src/components/apps/AppChat.tsx"
+      ]
+    },
+    {
+      "testId": "app-chat-publish",
       "files": [
         "src/components/apps/AppChat.tsx"
       ]
@@ -1218,6 +1224,12 @@
       ]
     },
     {
+      "testId": "apps-publish",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
       "testId": "apps-redo",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
@@ -1326,6 +1338,18 @@
       ]
     },
     {
+      "testId": "apps-share-image-id",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-image-tag",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
       "testId": "apps-share-link",
       "files": [
         "src/components/apps/ShareSheet.tsx"
@@ -1339,6 +1363,12 @@
     },
     {
       "testId": "apps-share-publish",
+      "files": [
+        "src/components/apps/ShareSheet.tsx"
+      ]
+    },
+    {
+      "testId": "apps-share-run",
       "files": [
         "src/components/apps/ShareSheet.tsx"
       ]

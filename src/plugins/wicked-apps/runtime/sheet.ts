@@ -37,7 +37,7 @@ export class Sheet {
   private phone: CSSMediaRule | null = null;
   private readonly phoneRules = new Map<string, CSSStyleRule>();
 
-  constructor(el: HTMLStyleElement) {
+  constructor(el: HTMLStyleElement | HTMLLinkElement) {
     if (el.sheet === null) throw new Error('the runtime stylesheet did not load');
     this.sheet = el.sheet;
     this.base = this.sheet.cssRules.length;

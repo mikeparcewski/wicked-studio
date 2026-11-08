@@ -8,6 +8,8 @@ import { knowledgeAddition } from '../../editors/apps/knowledgeSeeds.js';
 import { readSuggestionGrounds, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
 import { AppComposer } from './AppComposer.js';
 import { LiveActivity } from '../session/LiveActivity.js';
+import { useGateStore } from '../../store/gates.js';
+import { GateRow } from '../session/GateRow.js';
 import { RunQuestions } from '../session/ThreadQuestions.js';
 
 /**
@@ -54,6 +56,13 @@ function dropDraft(slug: string): void {
   try { sessionStorage.removeItem(DRAFT_KEY(slug)); } catch { /* nothing kept */ }
 }
 
+/** Turns and publishes answer the same crew gates in the app's thread. */
+function AppRunQuestions({ view, navigate }: { view: SessionView; navigate: (p: string) => void }): React.ReactElement | null {
+  const gate = useGateStore((s) => s.gates[view.session.id]);
+  if (['completed', 'failed', 'cancelled'].includes(view.session.status)) return null;
+  return <><GateRow view={view} gate={gate} navigate={navigate} /><RunQuestions view={view} /></>;
+}
+
 function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, framed, pending, undoOff = false }: {
   /** (G16) No Undo here (a phone: view + chat only). */
   undoOff?: boolean;
@@ -83,7 +92,7 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
         </ol>
         {/* The live activity offers Steer and Stop: never inside another page (xreview r2 on K5). */}
         {view !== null && busy.ord !== null && !framed && <LiveActivity runId={t.runId} ord={busy.ord} seat={busy.seat} />}
-        {view !== null && !framed && <RunQuestions view={view} />}
+        {view !== null && !framed && <AppRunQuestions view={view} navigate={navigate} />}
         <p className="wk-appchat-meta">The app is read-only until this lands. Preview still works. · {job}</p>
       </div>
     );
@@ -113,7 +122,8 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
   );
 }
 
-export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend, pending = 0, undoOff = false, closedWhy = null }: {
+export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend, pending = 0, undoOff = false, closedWhy = null, publishRunId = null }: {
+  publishRunId?: string | null;
   /** (G16) Why nothing can be sent now (an archived app), or null. The chat stays mounted, so a typed message is kept. */
   closedWhy?: string | null;
   /** (G16, operator ruling D5) A phone is view + chat: the chat offers no Undo there. */
@@ -145,6 +155,8 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   const [now, setNow] = useState(() => Date.now());
   const thread = useRef<HTMLDivElement | null>(null);
   const turns = useMemo(() => turnsOf(detail), [detail]);
+  const publishes = runs.filter((v) => v.session.id === publishRunId || (detail !== null && v.session.workflow_id === 'apps-publish' && v.session.repo_ref === detail.repoId));
+  const publishMark = publishes.map((v) => `${v.session.id}:${v.session.status}`).join('|');
   const busy = detail?.turn != null;
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
   // The newest message in view as the thread grows.
@@ -152,7 +164,7 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   useEffect(() => {
     const el = thread.current;
     if (el !== null) el.scrollTop = el.scrollHeight;
-  }, [turns.length, last?.state]);
+  }, [turns.length, last?.state, publishMark, publishRunId]);
   const latestLandedRun = [...turns].reverse().find((t) => t.state === 'landed')?.runId ?? null;
   const supported = detail === null || hasTurnLog(detail);
   // (DES-KNOWLEDGE-DATA-001 §9.1) What the app's project knows: one chip offers to add it when the app reads none yet.
@@ -232,6 +244,15 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
             <TurnReply t={t} view={runs.find((v) => v.session.id === t.runId) ?? null} detail={detail} onUndo={onUndo} navigate={navigate} now={now} latestLanded={t.runId === latestLandedRun} framed={framed} pending={pending} undoOff={undoOff} />
           </article>
         ))}
+        {publishes.map((view) => (
+          <article key={view.session.id} className="wk-appchat-turn" data-testid="app-chat-publish" data-run={view.session.id}>
+            <p className="wk-appchat-msg">Publish · {view.session.status === 'completed' ? 'finished' : view.session.status === 'failed' ? 'failed' : view.session.status === 'cancelled' ? 'cancelled' : 'running'}</p>
+            <ol className="wk-appchat-steps" aria-label="Publish steps">{view.units.map((u) => <li key={u.id} data-state={u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed' : u.status === 'distributed' ? 'now' : 'pending'}>{u.id.endsWith(':check') ? 'Publish check' : u.id.endsWith(':produce') ? 'Your consent → Produce' : u.id.endsWith(':qe') || u.id.endsWith(':acceptance') ? 'QE acceptance' : u.description}</li>)}</ol>
+            {!framed && <AppRunQuestions view={view} navigate={navigate} />}
+            <a className="wk-link wk-appchat-job" href={sessionPath(`run:${view.session.id}`)} onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${view.session.id}`)); }}>See the job</a>
+          </article>
+        ))}
+        {publishRunId !== null && !runs.some((v) => v.session.id === publishRunId) && <p className="wk-appchat-meta">Starting the publish run… <a className="wk-link" href={sessionPath(`run:${publishRunId}`)} onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${publishRunId}`)); }}>See the job</a></p>}
       </div>
       {note !== null && <p className="wk-appchat-note" data-testid="app-chat-note" role="status">{note}</p>}
       {kept.map((k) => (

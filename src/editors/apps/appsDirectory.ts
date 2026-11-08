@@ -1,6 +1,6 @@
 import { apiFetch } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
-import type { AppDetail, AppDetailResponse, AppSpec, AppsListResponse } from '../../api/types.js';
+import type { AppDetail, AppDetailResponse, AppPublished as WirePublished, AppSpec, AppsListResponse } from '../../api/types.js';
 import { cellText } from '../../plugins/wicked-apps/runtime/format.js';
 import type { AppHostPort } from './appAdapter.js';
 import { sampleAppData, type AppDataPort, type SampleData } from './appData.js';
@@ -18,22 +18,9 @@ import { SAMPLE_APPS } from './samples.js';
  * sample's own rows in this browser; with crew, none (a tile never starts a query).
  */
 
-/**
- * A published copy of an app (lane K6 builds the signed-in app server; its address is the share link), as K6 proposed
- * it for api-types (ledger 2026-11-03T18:26Z: `AppDetail.published: AppPublished | null`). Studio reads only the fields
- * the Share sheet shows, field by field, and shows a share link only when crew reports one: it never makes one up.
- */
-export interface AppPublished {
-  /** The site's address (its origin and `/`): what people are sent, and what Copy copies. */
-  shareUrl: string;
-  /** Who can open it, in one line ("people in group support-ops who sign in at dex.apps.test"). */
-  audience: string;
-  /** The `<iframe>` snippet, when the publish allows embedding (public apps); shown and copied exactly as crew wrote it. */
-  snippet: string | null;
-  /** The version published, and when (Unix millis). */
-  version: number;
-  at: number;
-}
+/** Older daemons report the link alone; image and run details appear together when crew publishes them. */
+export type AppPublished = Pick<WirePublished, 'shareUrl' | 'audience' | 'snippet' | 'version' | 'at'>
+  & Partial<Pick<WirePublished, 'image' | 'run' | 'runId' | 'manifestDigest'>>;
 
 /** An app's address segment: crew's slug grammar (api-types `AppSummary.slug`), never `check` or `uploads`. */
 export function isAppSlug(v: unknown): boolean {
@@ -88,7 +75,17 @@ export function publishedOf(detail: unknown): AppPublished | null {
   const audience = line(r['audience'], 300);
   const version = r['version'];
   if (shareUrl === null || audience === null || typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1 || !isTime(r['at'])) return null;
-  return { shareUrl, audience, snippet: snippetOf(r['snippet'], shareUrl), version, at: r['at'] };
+  const image = r['image'] as WirePublished['image'] | undefined;
+  const run = r['run'] as WirePublished['run'] | undefined;
+  const runnable = image != null && typeof image.tag === 'string' && image.tag !== '' && typeof image.id === 'string'
+    && run != null && Array.isArray(run.env) && run.env.every((e) => typeof e === 'string' && /^[A-Z_][A-Z0-9_]*$/u.test(e))
+    && Number.isSafeInteger(run.port) && run.port > 0 && run.port <= 65535 && (run.volume === null || run.volume === '/data');
+  return {
+    shareUrl, audience, snippet: snippetOf(r['snippet'], shareUrl), version, at: r['at'],
+    ...(runnable ? { image: { tag: image.tag, id: image.id }, run: { env: [...run.env], volume: run.volume, port: run.port } } : {}),
+    ...(typeof r['runId'] === 'string' ? { runId: r['runId'] } : {}),
+    ...(typeof r['manifestDigest'] === 'string' ? { manifestDigest: r['manifestDigest'] } : {}),
+  };
 }
 
 export interface TileKpi { title: string; value: string | null }
@@ -197,7 +194,7 @@ function summaryTile(a: Record<string, unknown>, slug: string, note: string | nu
   const receipt = typeof head['receipt'] === 'string' ? head['receipt'] : 'not accepted';
   return {
     slug, name: line(a['name'], 120) ?? slug, description: '', sample: false, sampleKey: null, detail: null, note,
-    version: `${v} · ${receipt}`, changedAt: isTime(a['createdAt']) ? a['createdAt'] : null, sources: [], kpis: [], published: null,
+    version: `${v} · ${receipt}`, changedAt: isTime(a['createdAt']) ? a['createdAt'] : null, sources: [], kpis: [], published: publishedOf(a),
     ...(typeof a['projectId'] === 'string' ? { projectId: a['projectId'] } : {}),
     ...(archivedOf(a) !== undefined ? { archived: archivedOf(a)! } : {}),
   };

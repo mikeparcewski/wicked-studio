@@ -74,8 +74,17 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 function isoDay(d: Date): string { return d.toISOString().slice(0, 10); }
 
 export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
-  const styleEl = document.getElementById('wk-apps-sheet');
-  if (!(styleEl instanceof HTMLStyleElement)) return;
+  initializeRuntime(cfg);
+}
+
+/** The standalone host supplies the same hello payload, over its own in-process channel. */
+export function boot(port: MessagePort, hello: Record<string, unknown>): void {
+  initializeRuntime({ editor: 'wicked-apps', surfaces: {} }, { port, hello });
+}
+
+function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connection?: { port: MessagePort; hello: Record<string, unknown> }): void {
+  const styleEl = document.getElementById('wk-apps-sheet') ?? (connection === undefined ? null : document.querySelector('link[rel="stylesheet"], style'));
+  if (!(styleEl instanceof HTMLStyleElement) && !(styleEl instanceof HTMLLinkElement)) return;
   const sheet = new Sheet(styleEl);
   const root = el('div', 'wk-app');
   root.setAttribute('data-testid', 'apps-runtime');
@@ -171,13 +180,9 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   };
   const density = (): 'comfortable' | 'compact' => (spec?.theme?.density === 'compact' ? 'compact' : 'comfortable');
 
-  window.addEventListener('message', (e: MessageEvent) => {
-    const d = e.data as Record<string, unknown> | null;
-    // The one handshake: from the parent only, once, with the port. After it, the window is never read again.
-    if (port !== null || e.source !== parent || !isObj(d) || d['p'] !== PROTOCOL || d['type'] !== 'host.hello' || e.ports[0] === undefined) return;
-    port = e.ports[0];
+  const connect = (next: MessagePort, p: Record<string, unknown>): void => {
+    port = next;
     port.onmessage = onPort;
-    const p = isObj(d['payload']) ? d['payload'] : {};
     grants = new Set(Array.isArray(p['grants']) ? (p['grants'] as unknown[]).filter((g): g is string => typeof g === 'string') : []);
     const app = isObj(p['app']) ? p['app'] : {};
     framed = app['framed'] !== false;
@@ -194,6 +199,12 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
     locale = typeof prefs['locale'] === 'string' && /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u.test(prefs['locale']) ? prefs['locale'] : 'en';
     applyTheme(p['theme']);
     void read();
+  };
+  if (connection === undefined) window.addEventListener('message', (e: MessageEvent) => {
+    const d = e.data as Record<string, unknown> | null;
+    // The one handshake: from the parent only, once, with the port. Standalone never listens on window.
+    if (port !== null || e.source !== parent || !isObj(d) || d['p'] !== PROTOCOL || d['type'] !== 'host.hello' || e.ports[0] === undefined) return;
+    connect(e.ports[0], isObj(d['payload']) ? d['payload'] : {});
   });
 
   // ── reading the app ─────────────────────────────────────────────────────────────────────
@@ -1174,5 +1185,6 @@ export function startRuntime(cfg: { editor: string; surfaces: unknown }): void {
   document.addEventListener('keydown', onKey);
 
   root.append(el('p', 'wk-empty', 'Loading the app…'));
-  announceReady(cfg.editor, cfg.surfaces);
+  if (connection === undefined) announceReady(cfg.editor, cfg.surfaces);
+  else connect(connection.port, connection.hello);
 }

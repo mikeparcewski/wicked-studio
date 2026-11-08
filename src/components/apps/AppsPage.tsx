@@ -74,6 +74,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   const [attempt, setAttempt] = useState(0);
   const [turnsOn, setTurnsOn] = useState(false);
   const [queriesOn, setQueriesOn] = useState(false);
+  const [publishEnabled, setPublishEnabled] = useState(false);
   /** (G16) Which apps the page lists: the active ones, or the archived ones. */
   const [scope, setScope] = useState<'active' | 'archived'>('active');
   /** What the last Archive or Restore did, with its way back (the inverse, fixed when it landed), or why it did not. */
@@ -103,7 +104,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
       try {
         const caps = (await api.getHealth()).capabilities?.apps;
         hasStore = caps !== undefined;
-        if (!cancelled) { setTurnsOn(caps?.turns === true); setQueriesOn(caps?.query === true); }
+        if (!cancelled) { setTurnsOn(caps?.turns === true); setQueriesOn(caps?.query === true); setPublishEnabled(caps?.publish === true); }
       } catch (e) {
         if (!cancelled) setDir({ source: 'error', message: `the daemon did not answer (${e instanceof Error ? e.message : String(e)})` });
         return;
@@ -236,7 +237,9 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
           ))}
         </div>
       )}
-      {sharing !== null && <ShareSheet name={sharing.name} slug={sharing.slug} published={sharing.published} onClose={() => setSharing(null)} />}
+      {sharing !== null && <ShareSheet name={sharing.name} slug={sharing.slug} published={sharing.published} {...(sharing.detail !== null ? { detail: sharing.detail } : {})}
+        publishEnabled={publishEnabled} publishDisabledWhy={framed ? 'Open studio on its own to publish.' : sharing.sample ? 'Sample apps cannot be published.' : null}
+        onStarted={() => navigate(appPath(sharing.slug))} onClose={() => setSharing(null)} />}
     </PageFrame>
   );
 }

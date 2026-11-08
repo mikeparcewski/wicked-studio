@@ -168,7 +168,7 @@ export function looksOf(id) {
 }
 
 /** Bundle one plugin's entry to a single IIFE script (Vite's library build, in memory). */
-async function bundleScript(entry) {
+async function bundleScript(entry, name = 'wickedEditor') {
   const { build } = await import('vite');
   const out = await build({
     configFile: false,
@@ -178,7 +178,7 @@ async function bundleScript(entry) {
       write: false,
       minify: true,
       target: 'es2020',
-      lib: { entry, formats: ['iife'], name: 'wickedEditor', fileName: () => 'plugin.js' },
+      lib: { entry, formats: ['iife'], name, fileName: () => 'plugin.js' },
       rollupOptions: { output: { inlineDynamicImports: true } },
     },
   });
@@ -212,7 +212,22 @@ export async function buildEditors(outDir, { version } = {}) {
     writeFileSync(join(target, 'editor.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
     written.push({ id: e.id, version: v, bytes: Buffer.byteLength(html, 'utf8'), sha256: createHash('sha256').update(html, 'utf8').digest('hex'), dir: target });
   }
+  await buildAppsStandalone(outDir);
   return written;
+}
+
+/** The same Apps interpreter, with a port entry for the site and a local fixture host for publish checks. */
+async function buildAppsStandalone(outDir) {
+  const target = join(outDir, 'apps-standalone');
+  mkdirSync(target, { recursive: true });
+  const runtime = join(root, 'src/plugins/wicked-apps');
+  const template = readFileSync(join(runtime, 'template.html'), 'utf8');
+  const css = /<style id="wk-apps-sheet">([\s\S]*?)<\/style>/u.exec(template)?.[1];
+  if (css === undefined) throw new Error('build-editors: Apps has no runtime stylesheet');
+  writeFileSync(join(target, 'runtime.js'), await bundleScript(join(runtime, 'runtime/standalone.ts'), 'wickedAppsStandalone'), 'utf8');
+  writeFileSync(join(target, 'runtime.css'), css + readFileSync(join(root, 'src/apps-standalone/fixture.css'), 'utf8'), 'utf8');
+  writeFileSync(join(target, 'fixture.js'), await bundleScript(join(root, 'src/apps-standalone/entry.ts')), 'utf8');
+  copyFileSync(join(root, 'src/apps-standalone/fixture.html'), join(target, 'fixture.html'));
 }
 
 const invokedDirectly = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
