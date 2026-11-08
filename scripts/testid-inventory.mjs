@@ -39,6 +39,7 @@ export const INVENTORY_DOC = [
   'The build also emits this file as dist/testid-inventory.json (vite.config.ts), so generators verify against the BUILT dist actually served — never source recon alone.',
   'Drift strategy: a selector miss in the deterministic executor FAILS the run — the model-free runner never decides what to click, so there is NO agentic fallback inside it. On failure the authoring agent re-authors the spec against the live DOM, the runner re-records deterministically, and the selector substitution lands in the spec diff for review.',
   "Entry kinds: `static` values appear verbatim in the DOM; `dynamic` are template-literal testids with each ${expr} normalised to '*'; `computed` carry the raw JSX expression — dynamic/computed resolve only against a live DOM.",
+  'No aggregates are committed: counts and totals change with every testid, so every open branch conflicted on them. A change touches only its own entries; dist/testid-inventory.json carries `counts`, computed at build (vite.config.ts, withCounts).',
   'Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show.',
 ];
 
@@ -343,9 +344,10 @@ function literalUnion(expr) {
 }
 
 /**
- * Build the full inventory for the repo at rootDir (must contain src/ and package.json).
+ * Scan the repo at rootDir (must contain src/ and package.json): the committed inventory, plus the
+ * scan's own totals (declaration sites, files with a hit), which are never committed.
  */
-export function collectTestidInventory(rootDir) {
+export function collectTestidScan(rootDir) {
   const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'));
   const srcDir = join(rootDir, 'src');
   const buckets = { static: new Map(), dynamic: new Map(), computed: new Map() };
@@ -374,19 +376,41 @@ export function collectTestidInventory(rootDir) {
         files: [...files].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
       }));
 
-  return {
+  // No aggregate is part of the committed shape: a count changes with every testid, so two branches
+  // that each add one disjoint testid would both rewrite it and conflict. Only per-entry rows remain.
+  const inventory = {
     $doc: INVENTORY_DOC,
     version: INVENTORY_VERSION,
     studioVersion: pkg.version,
-    counts: {
-      files: filesWithHits.size,
-      occurrences,
-      static: buckets.static.size,
-      dynamic: buckets.dynamic.size,
-      computed: buckets.computed.size,
-    },
     static: toRows(buckets.static, 'testId'),
     dynamic: toRows(buckets.dynamic, 'pattern'),
     computed: toRows(buckets.computed, 'expression'),
+  };
+  return { inventory, occurrences, files: filesWithHits.size };
+}
+
+/** The committed inventory for the repo at rootDir (the per-entry contract, no aggregates). */
+export function collectTestidInventory(rootDir) {
+  return collectTestidScan(rootDir).inventory;
+}
+
+/**
+ * The inventory with its `counts` computed on read (the dist copy, a log line): the list lengths,
+ * and the scan's own totals.
+ */
+export function withCounts(inventory, scan) {
+  const { $doc, version, studioVersion, ...lists } = inventory;
+  return {
+    $doc,
+    version,
+    studioVersion,
+    counts: {
+      files: scan.files,
+      occurrences: scan.occurrences,
+      static: inventory.static.length,
+      dynamic: inventory.dynamic.length,
+      computed: inventory.computed.length,
+    },
+    ...lists,
   };
 }

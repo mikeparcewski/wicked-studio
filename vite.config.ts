@@ -1,9 +1,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { loadEnv } from 'vite';
 import { defineConfig, configDefaults, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+
+import { collectTestidScan, withCounts, type TestidInventory } from './scripts/testid-inventory.mjs';
 
 // TH-13: ship the committed data-testid contract INSIDE the built dist, so consumers
 // (test generators, the model-free campaign runner) verify selectors against the bundle
@@ -16,10 +19,14 @@ function emitTestidInventory(): Plugin {
     name: 'emit-testid-inventory',
     apply: 'build',
     generateBundle() {
+      // The committed file carries no aggregates (they made every open branch conflict); the dist copy
+      // gets its `counts` here, computed on read: the list lengths and the same scan's totals.
+      const committed = JSON.parse(readFileSync(new URL('./testid-inventory.json', import.meta.url), 'utf8')) as TestidInventory;
+      const scan = collectTestidScan(fileURLToPath(new URL('.', import.meta.url)));
       this.emitFile({
         type: 'asset',
         fileName: 'testid-inventory.json',
-        source: readFileSync(new URL('./testid-inventory.json', import.meta.url), 'utf8'),
+        source: `${JSON.stringify(withCounts(committed, scan), null, 2)}\n`,
       });
     },
   };

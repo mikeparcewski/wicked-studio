@@ -14,6 +14,13 @@ npm publish dates. Every version listed here exists on
 
 ### Changed
 
+- **`testid-inventory.json` commits no aggregates.** The `counts` header changed with every testid, so every open
+  studio PR conflicted with every merge on it. The committed file now holds only the sorted per-entry lists (the
+  contract); `dist/testid-inventory.json` still carries `counts`, computed at build, so consumers see the same shape.
+  Two branches adding disjoint testids now merge cleanly (pinned by a `git merge-file` test).
+
+### Changed
+
 - **A Demo video the engine records (wicked-core#1249, DES-DEMO-RECORD-001).** A run of either demo preset is a demo
   run, `demo-human-review` included (an app whose data stays out of model context: no model review, the person
   reviews the take at the record gate). At the plan gate, "What the engine will record" lists the approved

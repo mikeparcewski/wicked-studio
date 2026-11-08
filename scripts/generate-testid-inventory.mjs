@@ -15,14 +15,16 @@ import { writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { collectTestidInventory } from './testid-inventory.mjs';
+import { collectTestidScan, withCounts } from './testid-inventory.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const inventory = collectTestidInventory(root);
+const scan = collectTestidScan(root);
 const out = resolve(root, 'testid-inventory.json');
-writeFileSync(out, `${JSON.stringify(inventory, null, 2)}\n`, 'utf8');
+// The committed file carries no aggregates (they made every open branch conflict); the log computes them.
+writeFileSync(out, `${JSON.stringify(scan.inventory, null, 2)}\n`, 'utf8');
+const { counts } = withCounts(scan.inventory, scan);
 console.log(
-  `wrote ${out}: ${inventory.counts.static} static · ${inventory.counts.dynamic} dynamic · ` +
-    `${inventory.counts.computed} computed testids across ${inventory.counts.files} files ` +
-    `(${inventory.counts.occurrences} declaration sites, wicked-studio ${inventory.studioVersion})`,
+  `wrote ${out}: ${counts.static} static · ${counts.dynamic} dynamic · ` +
+    `${counts.computed} computed testids across ${counts.files} files ` +
+    `(${counts.occurrences} declaration sites, wicked-studio ${scan.inventory.studioVersion})`,
 );
