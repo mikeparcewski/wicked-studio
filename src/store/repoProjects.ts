@@ -39,25 +39,26 @@ function names(words: string, term: string): boolean {
   return new RegExp(`(?:^|[^\\p{L}\\p{N}_./-])${escapeRe(term)}(?=$|[^\\p{L}\\p{N}_./-]|\\.(?:$|[^\\p{L}\\p{N}_./-]))`, 'iu').test(words);
 }
 
-const GIT_HOSTS = new Set(['github.com', 'www.github.com', 'gitlab.com', 'www.gitlab.com', 'bitbucket.org', 'www.bitbucket.org']);
 const REPO_OPS = new Set(['pull', 'pulls', 'pull-requests', 'merge_requests', 'tree', 'blob', 'commit', 'commits', 'compare']);
 
-/** The repository one link names, or null (CJ13): any `<owner>/<repo>` link on a known git host (GitLab subgroups
- *  included), a clone link (`…/<repo>.git`), or on another host a pull request, tree, blob, commit or compare link
- *  (`…/<owner>/<repo>/pull/9`, `…/<repo>/-/merge_requests/9`). Other links name nothing. */
+/** The repository one link names, or null (CJ13). GitHub and Bitbucket: `<owner>/<repo>`, whatever follows. GitLab: the
+ *  segment before its `/-/` separator, else the last one (subgroups). Another host: a clone link (the path ends in
+ *  `<repo>.git`), or `<owner>/<repo>/` followed by pull, tree, blob, commit or compare, or `<…>/<repo>/-/<that>`.
+ *  Other links name nothing. */
 function linkedRepo(link: string): string | null {
   let url: URL;
   try { url = new URL(link); } catch { return null; }
   const segs = url.pathname.split('/').filter((x) => x !== '').map((x) => { try { return decodeURIComponent(x); } catch { return x; } });
+  const host = url.hostname.toLowerCase().replace(/^www\./u, '');
   const dash = segs.indexOf('-');
-  const clone = segs.findIndex((x) => /\.git$/iu.test(x));
   let repo: string | undefined;
-  if (clone >= 1) repo = segs[clone];
+  if (host === 'github.com' || host === 'bitbucket.org') repo = segs.length >= 2 ? segs[1] : undefined;
+  else if (host === 'gitlab.com') repo = dash >= 2 ? segs[dash - 1] : dash < 0 && segs.length >= 2 ? segs[segs.length - 1] : undefined;
+  else if (dash < 0 && segs.length >= 2 && /\.git$/iu.test(segs[segs.length - 1]!)) repo = segs[segs.length - 1];
   else if (dash >= 2 && REPO_OPS.has(segs[dash + 1] ?? '')) repo = segs[dash - 1];
-  else if (GIT_HOSTS.has(url.hostname.toLowerCase())) repo = dash >= 2 ? segs[dash - 1] : segs[1];
-  else if (segs.length >= 3 && REPO_OPS.has(segs[2]!)) repo = segs[1];
+  else if (dash < 0 && segs.length >= 3 && REPO_OPS.has(segs[2]!)) repo = segs[1];
   const name = repo?.replace(/\.git$/iu, '').toLowerCase();
-  return name === undefined || name === '' ? null : name;
+  return name === undefined || name === '' || name === '-' ? null : name;
 }
 
 /** The repositories the links in the words name (lower-cased). A link ends at a space, a bracket or a quote, and a

@@ -213,6 +213,10 @@ describe('F41: the words name a repository as a whole token', () => {
     expect(names('https://bitbucket.org/acme/rg1/pull-requests/9 and https://github.com/acme/rg2#readme')).toEqual(['rg1', 'rg2']);
     expect(names('https://github.com/acme/rg10/issues/9 https://gitlab.com/grp/sub/zeta/-/merge_requests/3')).toEqual(['zeta', 'rg10']);
     expect(names('https://git.example/o/rg2/-/merge_requests/9')).toEqual(['rg2']);
+    // A path inside a repository never names another one; a GitLab project home names its project.
+    expect(names('https://github.com/acme/rg1/blob/main/rg2.git https://github.com/acme/rg1/tree/main/zeta/-/x')).toEqual(['rg1']);
+    expect(names('https://docs.example.com/guide/rg2.git/page https://git.example/proj/-/merge_requests/9')).toEqual([]);
+    expect(names('https://gitlab.com/grp/sub/rg2')).toEqual(['rg2']);
   });
   it('orders the named ones first, the rest by name', () => {
     expect(repoChoices('zeta and rg1', REPOS).list.map((r) => r.id)).toEqual(['zeta', 'rg1', 'rg10', 'rg2']);
