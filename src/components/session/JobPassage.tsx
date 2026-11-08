@@ -56,6 +56,19 @@ import { usePower } from '../../hooks/usePower.js';
  * (Swap pending); `revising` holds Start; plan answers carry `ord` + `planRev`.
  */
 
+/**
+ * F43: crew's helper_unavailable sentence ("opencode and pi can't work now; change who works on it", seat keys) in the
+ * passage's words: the helpers by their display names, and without the "change who works on it" an interrupted job
+ * can't do. A sentence of another shape is crew's, kept whole.
+ */
+export function helperRefusalWords(words: string, nameOf: (key: string) => string): string {
+  const m = /^(.+?) can['’]t work now\b/u.exec(words);
+  if (m === null) return `${words}.`;
+  const names = m[1]!.split(' and ').map((k) => nameOf(k.trim()));
+  const who = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${who} can’t work now.`;
+}
+
 /** What a queued decision does, in its own words (a Stop is never called an Approve). */
 const QUEUED_WORD: Readonly<Record<string, string>> = { approve: 'Approve', 'request-changes': 'Send back', reject: 'Reject', stop: 'Stop the job', 'edit-plan': 'Add a step' };
 
@@ -218,7 +231,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         .then(() => onChanged())
         .catch((e: unknown) => {
           const r = proposalRefusal(e);
-          if (fromInterrupted && decision === 'go' && e instanceof ApiError && e.status !== 0) setGoRefusal({ words: r.words, code: r.code });
+          // Only crew's own refusal (a 4xx) establishes that nothing started; a gateway or server failure (5xx) leaves the
+          // outcome open, so it keeps the Interrupted line and says crew's words under it, as before (codex on F43).
+          if (fromInterrupted && decision === 'go' && e instanceof ApiError && e.status >= 400 && e.status < 500) setGoRefusal({ words: r.words, code: r.code });
           else setError(r.words);
           onChanged();
         });
@@ -542,10 +557,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         ? <p className="wk-pass-sub" data-testid="job-passage-interrupted">Interrupted before it was recorded as started. Go again resumes the same job.</p>
         : (
           <p className="wk-pass-sub wk-pass-error" role="alert" data-testid="job-passage-refused" data-code={goRefusal.code ?? ''}>
-            Not started: {goRefusal.words}.
-            {/* crew resumes an interrupted job only with the helpers it was accepted with (chat-proposals Go again):
-                while one of them can't work, Go again is refused again. Not now ends it; a new ask proposes again. */}
-            {goRefusal.code === 'helper_unavailable' && ' An interrupted job keeps the helpers it was accepted with, so Go again can’t change them. Not now ends it; ask again in the chat for a job with helpers who can work.'}
+            {/* crew resumes an interrupted job only with the helpers it was accepted with (chat-proposals Go again; crew#1426
+                post-mvp): while one of them can't work, Go again is refused again. So crew's "change who works on it" is not
+                offered: Not now ends it, and a new ask proposes again. */}
+            {goRefusal.code === 'helper_unavailable'
+              ? `Not started: ${helperRefusalWords(goRefusal.words, (k) => seatResponder(k, roster).name)} An interrupted job keeps the helpers it was accepted with, so Go again can’t change them. Not now ends it; ask again in the chat for a job with helpers who can work.`
+              : `Not started: ${goRefusal.words}.`}
           </p>
         ))}
       {v.phase === 'stub' && <p className="wk-pass-sub wk-pass-grey">Test configuration: your Start was recorded, and nothing was started.</p>}
