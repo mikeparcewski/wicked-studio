@@ -142,6 +142,20 @@ describe('job passage input tokens', () => {
       fireEvent.scroll(document.body);
       expect(list).toHaveClass('wk-pass-swap--above');
     });
+
+    it('keeps a capped list’s own scroll when placed again, and closes when its token scrolls out of view', () => {
+      at.x = 60;
+      render(passage(proposal()));
+      fireEvent.click(token('the web, sources'));
+      const list = screen.getByRole('listbox', { name: 'Change sources' });
+      list.scrollTop = 40;
+      fireEvent.scroll(document.body);
+      expect(list.scrollTop).toBe(40);
+      // The thread scrolls the token above the viewport: the list closes, and focus is not left in a removed list.
+      at.y = -60;
+      fireEvent.scroll(document.body);
+      expect(screen.queryByRole('listbox')).toBeNull();
+    });
   });
 
   it('opens documents with leave-out choices, struck reasons, and Something else last', () => {

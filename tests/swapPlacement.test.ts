@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clipBounds, swapPlacement, type Box } from '../src/board/swapPlacement.js';
+import { anchorOutOfView, clipBounds, swapPlacement, type Box } from '../src/board/swapPlacement.js';
 
 /**
  * CS12 at 390x844: a sources or documents list opened from a token near the end of a line ran past the thread's right
@@ -50,6 +50,17 @@ describe('swapPlacement', () => {
     expect(swapPlacement(box(60, 224, 220, 250), box(60, 200, 80, 20), thread)).toMatchObject({ above: false, maxHeight: 148 });
     // Token low in the thread (300-320): 32 below, 208 above.
     expect(swapPlacement(box(60, 324, 220, 250), box(60, 300, 80, 20), thread)).toMatchObject({ above: true, maxHeight: 208 });
+  });
+});
+
+describe('anchorOutOfView', () => {
+  const thread: Box = { left: 0, top: 130, right: 390, bottom: 764 };
+  it('is true only when the token has left the thread wholly, and never for a token with no box', () => {
+    expect(anchorOutOfView(box(60, 100, 80, 20), thread)).toBe(true);
+    expect(anchorOutOfView(box(60, 770, 80, 20), thread)).toBe(true);
+    expect(anchorOutOfView(box(60, 120, 80, 20), thread)).toBe(false);
+    expect(anchorOutOfView(box(60, 400, 80, 20), thread)).toBe(false);
+    expect(anchorOutOfView(box(0, 0, 0, 0), thread)).toBe(false);
   });
 });
 

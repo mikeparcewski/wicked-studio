@@ -41,6 +41,18 @@ export function swapPlacement(list: Box, anchor: Box, bounds: Box, margin = SWAP
 /** Overflow values that cut what an ancestor shows (`visible`, or none set, does not). */
 const CLIPS = new Set(['auto', 'scroll', 'hidden', 'clip', 'overlay']);
 
+/** The ancestors of `el` whose overflow clips or scrolls, nearest first. */
+export function clipAncestors(el: Element): HTMLElement[] {
+  const doc = el.ownerDocument;
+  const view = doc.defaultView;
+  const out: HTMLElement[] = [];
+  for (let p = el.parentElement; p !== null && p !== doc.documentElement; p = p.parentElement) {
+    const s = view?.getComputedStyle(p);
+    if (s !== undefined && (CLIPS.has(s.overflowX) || CLIPS.has(s.overflowY))) out.push(p);
+  }
+  return out;
+}
+
 /**
  * The visible area that can show `el`: the viewport, cut by each ancestor whose overflow clips or scrolls (its padding
  * box, so a scroller's border and scrollbar are outside it).
@@ -49,9 +61,7 @@ export function clipBounds(el: Element): Box {
   const doc = el.ownerDocument;
   const view = doc.defaultView;
   const b: Box = { left: 0, top: 0, right: doc.documentElement.clientWidth || view?.innerWidth || 0, bottom: view?.innerHeight ?? 0 };
-  for (let p = el.parentElement; p !== null && p !== doc.documentElement; p = p.parentElement) {
-    const s = view?.getComputedStyle(p);
-    if (s === undefined || !(CLIPS.has(s.overflowX) || CLIPS.has(s.overflowY))) continue;
+  for (const p of clipAncestors(el)) {
     const r = p.getBoundingClientRect();
     const left = r.left + p.clientLeft;
     const top = r.top + p.clientTop;
@@ -60,4 +70,13 @@ export function clipBounds(el: Element): Box {
     b.bottom = Math.min(b.bottom, p.clientHeight > 0 ? top + p.clientHeight : r.bottom);
   }
   return b;
+}
+
+/**
+ * The token has scrolled wholly out of the area that shows it (its list would hang outside that area): the list closes.
+ * A token with no box (not laid out) is not judged.
+ */
+export function anchorOutOfView(anchor: Box, bounds: Box): boolean {
+  if (anchor.bottom - anchor.top <= 0) return false;
+  return anchor.bottom <= bounds.top || anchor.top >= bounds.bottom;
 }

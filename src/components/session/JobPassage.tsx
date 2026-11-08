@@ -6,7 +6,7 @@ import { ApiError } from '../../api/errors.js';
 import { proposalRefusal } from '../../board/artifactProposal.js';
 import { inputTokenChoices, type InputTokenChoice, type InputTokenUnavailable } from '../../board/jobInputs.js';
 import { commitGateDecision, type GateAnswer } from '../../board/gateActions.js';
-import { clipBounds, swapPlacement } from '../../board/swapPlacement.js';
+import { anchorOutOfView, clipAncestors, clipBounds, swapPlacement } from '../../board/swapPlacement.js';
 import {
   announceOf, changedTokenIds, foldLine, jobSettled, needsWords, proposalTarget, regionName, sentenceParts, settledLine, withWords,
   type JobLineage, type JobReply, type JobView,
@@ -809,30 +809,44 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
   const listRef = useRef<HTMLUListElement | null>(null);
   // The open list stays inside the area that shows it (a token at the end of a line on a phone pushed it past the
   // thread's edge, and the thread scrolled sideways). Placed before paint and before its first row takes focus, and
-  // placed again when the thread scrolls, the window resizes, or the list or its token changes size.
+  // placed again when the thread scrolls, the window resizes, or the list or a clipping ancestor changes size. A
+  // token scrolled out of that area closes its list.
   useLayoutEffect(() => {
     const ul = listRef.current;
     if (!open || ul === null) return undefined;
     const place = (): void => {
+      const bounds = clipBounds(ul);
+      const anchor = (ref.current ?? ul).getBoundingClientRect();
+      if (anchorOutOfView(anchor, bounds)) {
+        // Focus comes back to the token without scrolling the thread to it.
+        if (ul.contains(document.activeElement)) ref.current?.focus({ preventScroll: true });
+        onClose();
+        return;
+      }
+      // Clearing the caps to measure resets a capped list's own scroll: keep it.
+      const scrolled = ul.scrollTop;
       ul.style.transform = ''; ul.style.maxHeight = ''; ul.style.maxWidth = '';
       ul.classList.remove('wk-pass-swap--above');
-      const p = swapPlacement(ul.getBoundingClientRect(), (ref.current ?? ul).getBoundingClientRect(), clipBounds(ul));
+      const p = swapPlacement(ul.getBoundingClientRect(), anchor, bounds);
       ul.classList.toggle('wk-pass-swap--above', p.above);
       ul.style.maxWidth = `${p.maxWidth}px`;
       if (p.maxHeight !== null) ul.style.maxHeight = `${p.maxHeight}px`;
       if (p.dx !== 0) ul.style.transform = `translateX(${p.dx}px)`;
+      ul.scrollTop = scrolled;
     };
     place();
-    // A scroll inside the list (a capped one) is its own: placing it again would clear its cap and its scroll position.
+    // A scroll inside the list (a capped one) is its own: it needs no new place.
     const onScroll = (e: Event): void => { if (!(e.target instanceof Node && ul.contains(e.target))) place(); };
     const opts: AddEventListenerOptions = { capture: true, passive: true };
     window.addEventListener('resize', place);
     window.addEventListener('scroll', onScroll, opts);
-    // Rows that reflow (a font that loads late, a longer label) change the list's size: place it again. Its first
-    // callback lands after this placement and finds the same place.
+    // Rows that reflow (a late font, a longer label) or a thread that changes size (a section above it opens): place it
+    // again. The first callback lands after this placement and finds the same place.
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => place()) : null;
-    ro?.observe(ul);
+    if (ro !== null) for (const el of [ul, ...clipAncestors(ul)]) ro.observe(el);
     return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', onScroll, opts); ro?.disconnect(); };
+  // onClose is the parent's fresh closure each render; the effect re-subscribes only when the list opens or its rows change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, choices.length, unavailable.length]);
   // The list is already inside the visible area, so focusing its first row must not scroll the thread under it.
   useEffect(() => { if (open) { setCursor(0); queueMicrotask(() => optionRefs.current[0]?.focus({ preventScroll: true })); } }, [open]);
