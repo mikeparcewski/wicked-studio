@@ -8,16 +8,17 @@ import { bringIntoView } from './utils';
 test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
 test.describe('install copy buttons', () => {
-  test('bundled serve copy button copies the command and shows feedback', async ({ page }) => {
+  test('install copy button copies the install and serve commands and shows feedback', async ({ page }) => {
     await page.goto('/');
-    const btn = page.getByRole('button', { name: 'Copy the bundled serve command' });
+    const btn = page.getByRole('button', { name: 'Copy the install and serve commands' });
     await bringIntoView(btn);
     await btn.click();
 
     await expect(btn).toHaveText('Copied');
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-      .toBe('npx wicked-crew serve');
+      .toBe('npx wicked-installer\nwicked-crew serve');
+    await expect(page.getByRole('status')).toHaveText('Copied: npx wicked-installer, then wicked-crew serve');
 
     // Feedback resets after ~1.4s.
     await expect(btn).toHaveText('Copy');
@@ -117,9 +118,14 @@ test.describe('the reviewed messaging', () => {
     await expect(page.locator('.hero .hero-fine')).toContainText('reduced assurance');
     await expect(page.locator('.hero .agent-row li')).toHaveText(['Claude Code', 'Codex', 'GitHub Copilot', 'OpenCode', 'Pi']);
     // the first screen says what studio is and where it runs (critic: "IDE" read as a desktop app)
-    await expect(page.locator('.hero .cta-alt')).toContainText('One command on your machine starts the wicked-crew daemon');
-    await expect(page.locator('.hero .cta-alt')).toContainText('serves studio in your browser');
-    await expect(page.locator('.hero .cta-copy')).toContainText('npx wicked-crew serve');
+    await expect(page.locator('.hero .cta-alt')).toContainText('Then wicked-crew serve runs your agents in sandboxes and serves studio at');
+    await expect(page.locator('.hero .cta-alt')).toContainText('http://127.0.0.1:7701');
+    await expect(page.locator('.hero .cta-copy')).toContainText('npx wicked-installer');
+    // the install flow is the installer, then wicked-crew serve, then the local URL; never npx wicked-crew serve alone
+    const get = ((await page.locator('#get').textContent()) || '').replace(/\s+/g, ' ');
+    expect(get).toContain('npx wicked-installer sets up crew, garden and the rest. Then wicked-crew serve starts the daemon');
+    expect(get).toContain('open http://127.0.0.1:7701');
+    expect((await page.content())).not.toContain('npx wicked-crew serve');
     const why = page.locator('.why');
     // the benefits frame has a visible heading now (it was sr-only)
     await expect(why.getByRole('heading', { level: 2, name: 'What studio does for you' })).toBeVisible();

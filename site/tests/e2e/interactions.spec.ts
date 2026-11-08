@@ -273,12 +273,12 @@ test('what is new: eight items, arrows move, one stacked panel', async ({ page }
 
 test('the hero: the one command copies, and "Watch a job" replays the job to its plan', async ({ page }) => {
   await page.goto('/');
-  const chip = page.getByRole('button', { name: 'Copy npx wicked-crew serve' });
+  const chip = page.getByRole('button', { name: 'Copy npx wicked-installer' });
   await chip.click();
   await expect(chip).toContainText('Copied');
   // the confirmation is announced too (the visible label is aria-hidden)
-  await expect(page.getByRole('status')).toHaveText('Copied: npx wicked-crew serve');
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('npx wicked-crew serve');
+  await expect(page.getByRole('status')).toHaveText('Copied: npx wicked-installer');
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('npx wicked-installer');
   const ide = page.locator('[data-ide]');
   await expect(ide.getByRole('button', { name: 'Approve plan' })).toBeVisible({ timeout: 10_000 });
   await ide.getByRole('button', { name: 'Approve plan' }).click();
@@ -594,7 +594,7 @@ test('changing the motion preference while the page is open loads it again in th
   await expect(page.locator('[data-play-toggle]:visible')).toHaveCount(0);
   await expect(page.locator('[data-scene][data-step="4"]')).toHaveCount(3);
   await expect(page.locator('.relay')).toHaveAttribute('data-tok', 'y');
-  await expect(page.locator('[data-typed]')).toHaveText('npx wicked-crew serve');
+  await expect.poll(() => page.locator('[data-typed]').textContent()).toBe('npx wicked-installer\nwicked-crew serve');
   await expect(page.locator('[data-ide] [data-id="node"]')).toHaveAttribute('aria-label', 'Move CI to Node 22, Done');
   await Promise.all([page.waitForEvent('load'), page.emulateMedia({ reducedMotion: 'no-preference' })]);
   await expect(page.locator('.why [data-play-toggle]')).toBeVisible();

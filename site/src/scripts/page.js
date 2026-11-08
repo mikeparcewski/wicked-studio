@@ -219,7 +219,7 @@ $$('[data-copy]').forEach((b) => {
     navigator.clipboard.writeText(text).then(() => {
       label.textContent = 'Copied';
       b.classList.add('is-copied');
-      if (copyStatus) copyStatus.textContent = 'Copied: ' + text.split('\n')[0];
+      if (copyStatus) copyStatus.textContent = 'Copied: ' + text.split('\n').join(', then ');
       clearTimeout(t);
       t = setTimeout(() => { label.textContent = 'Copy'; b.classList.remove('is-copied'); if (copyStatus) copyStatus.textContent = ''; }, 1400);
     });

@@ -214,10 +214,10 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
             </ul>
           </div>
           <div class="hero-cta">
-            <button class="cta-copy" type="button" data-copy="npx wicked-crew serve" aria-label="Copy npx wicked-crew serve">
-              <span class="cta-prompt" aria-hidden="true">$</span><code>npx wicked-crew serve</code><span class="cta-copy-l" data-copy-label aria-hidden="true">Copy</span>
+            <button class="cta-copy" type="button" data-copy="npx wicked-installer" aria-label="Copy npx wicked-installer">
+              <span class="cta-prompt" aria-hidden="true">$</span><code>npx wicked-installer</code><span class="cta-copy-l" data-copy-label aria-hidden="true">Copy</span>
             </button>
-            <p class="cta-alt">One command on your machine starts the wicked-crew daemon, which runs your agents in sandboxes, and serves studio in your browser. <a href="#demo" class="cta-watch" data-watch>Watch a job<span class="cta-arr" aria-hidden="true"></span></a></p>
+            <p class="cta-alt">Then <code>wicked-crew serve</code> runs your agents in sandboxes and serves studio at http://127.0.0.1:7701. <a href="#demo" class="cta-watch" data-watch>Watch a job<span class="cta-arr" aria-hidden="true"></span></a></p>
           </div>
           <p class="voice-note hero-voice"><span class="mic" aria-hidden="true"></span><span>Voice needs whisper.cpp. {VOICE}</span></p>
           <p class="hero-fine">{FINE}</p>
@@ -817,36 +817,35 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     <section class="get frame snap-section" id="get" aria-labelledby="get-h">
       <div class="wrap get-grid">
         <div class="get-intro">
-          <h2 id="get-h">One command. Studio comes with it.</h2>
+          <h2 id="get-h">Install, serve, open. Studio comes with it.</h2>
           <p>
-            <code>npx wicked-crew serve</code> starts the daemon and serves studio on one port. Open the
-            URL it prints, sign in your agents, and start a job.
+            <code>npx wicked-installer</code> sets up crew, garden and the rest. Then <code>wicked-crew serve</code> starts
+            the daemon and serves studio on one port: open http://127.0.0.1:7701, sign in your agents, and start a job.
           </p>
           <ul class="needs" role="list">
             <li>Node 22 or later (24.12, 25.1 or later to upload files as data sources)</li>
             <li>A container runtime: Docker, Podman, Rancher Desktop, Colima or OrbStack</li>
             <li>wicked-garden 12.66.1 or later, for the skills every agent follows</li>
-            <li>The whole family instead? <code>npx wicked-installer</code></li>
           </ul>
         </div>
         <div class="install-stack">
-          <div class="install install--primary" role="group" aria-label="Run studio bundled with wicked-crew">
+          <div class="install install--primary" role="group" aria-label="Install with the family installer, then serve studio with wicked-crew">
             <div class="install__bar">
               <span class="install__label"><span class="install__star" aria-hidden="true">★</span> Recommended</span>
-              <button class="install__copy" type="button" aria-label="Copy the bundled serve command" data-copy="npx wicked-crew serve"><span data-copy-label>Copy</span></button>
+              <button class="install__copy" type="button" aria-label="Copy the install and serve commands" data-copy={'npx wicked-installer\nwicked-crew serve'}><span data-copy-label>Copy</span></button>
             </div>
-            <pre class="install__code"><code data-typed="npx wicked-crew serve">npx wicked-crew serve</code></pre>
-            <p class="install__note">Daemon and studio, one port. <span class="install__ver">wicked-studio v{studioVersion}</span></p>
+            <pre class="install__code"><code data-typed={'npx wicked-installer\nwicked-crew serve'}>{'npx wicked-installer\nwicked-crew serve'}</code></pre>
+            <p class="install__note">Then open http://127.0.0.1:7701. Daemon and studio, one port: crew serves the studio it bundles.</p>
           </div>
 
-          <div class="install install--secondary" role="group" aria-label="Run wicked-studio standalone against a daemon">
+          <div class="install install--secondary" role="group" aria-label="Developing studio: build it against a running daemon">
             <div class="install__bar">
-              <span class="install__label">Or host studio yourself</span>
+              <span class="install__label">Developing studio? Build it from its repo against a running daemon</span>
               <button class="install__copy" type="button" aria-label="Copy the standalone build commands" data-copy={'VITE_API_HOST=127.0.0.1:7701 npm run build\nnpx serve dist'}><span data-copy-label>Copy</span></button>
             </div>
             <pre class="install__code"><code>VITE_API_HOST=127.0.0.1:7701 npm run build
 npx serve dist</code></pre>
-            <p class="install__note">Studio is a pure client of crew’s <code>/api/v1</code> and <code>/ws</code>. It shares no code with crew beyond the published contract, <code>wicked-crew-api-types</code>.</p>
+            <p class="install__note">Studio is a pure client of crew’s <code>/api/v1</code> and <code>/ws</code>. It shares no code with crew beyond the published contract, <code>wicked-crew-api-types</code>. <span class="install__ver">wicked-studio v{studioVersion}</span></p>
           </div>
         </div>
         <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-studio#readme" target="_blank" rel="noopener" aria-label="View wicked-studio on GitHub">
