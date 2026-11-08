@@ -1,5 +1,5 @@
 import { actorWords } from './actorWords.js';
-import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
+import type { CoreEvent, RuleCouncilRecord, RuleCouncilVote, RulePosition, RuleVerdictOrigin, RuleVerdictStatus, SessionView, WorkUnit } from '../api/types.js';
 import { floorOverrideOf, type FloorOverrideView } from './floorOverride.js';
 
 /**
@@ -172,23 +172,81 @@ export interface AssuranceReceipt extends RunAssurance {
 export interface RuleRow {
   ruleId: string;
   /** `kept` | `broken` | `n_a` | `unchecked` | `skipped` | `waived` (the person's instruction conflicts; to confirm)
-   *  | `deferred` (api-types 0.191.0: its subject is the delivery, checked at the deliver step). */
+   *  | `deferred` (api-types 0.191.0: its subject is the delivery, checked at the deliver step) | `disputed`
+   *  (api-types 0.193.0: the rule judge and the reviewer disagreed and no council ruled; it holds, you decide). */
   status: string;
-  /** `fact` | `judge` | `machine` | `cache` | `operator` | `none`. */
+  /** `fact` | `judge` | `machine` | `cache` | `operator` | `council` | `none`. */
   how: string;
   reason: string;
   cite: string | null;
+  /** The seat that ruled. On a council row the engine keeps the RULE JUDGE's seat here, never the council's: the
+   *  council's seats are its votes'. */
   judge: string | null;
+  /** (api-types 0.193.0) Who reached the verdict, through the cache; `null` from an older engine. */
+  origin: RuleVerdictOrigin | null;
+  /** (api-types 0.193.0) A process rule's party (`reviewer`, `engine`, `person`); `null` on a rule about the work. */
+  party: string | null;
+  /** (api-types 0.193.0) `false` on a process rule: reported, never a deny or a hold, and out of the gate's counts. */
+  blocking: boolean;
+  /** (api-types 0.193.0) The reviewer's own reading of the rule, when it wrote one. */
+  reviewer: RulePosition | null;
+  /** (api-types 0.193.0) The council a dispute on this rule went to: its ruling, or why there is none. */
+  council: RuleCouncilRecord | null;
 }
 
-const RULE_STATUSES = ['kept', 'broken', 'n_a', 'unchecked', 'skipped', 'waived', 'deferred'] as const;
-const RULE_RANK: Record<string, number> = { broken: 5, unchecked: 4, waived: 4, skipped: 3, kept: 2, n_a: 1, deferred: 0 };
+const RULE_STATUSES = ['kept', 'broken', 'n_a', 'unchecked', 'skipped', 'waived', 'deferred', 'disputed'] as const;
+const RULE_RANK: Record<string, number> = { broken: 5, unchecked: 4, waived: 4, disputed: 4, skipped: 3, kept: 2, n_a: 1, deferred: 0 };
+/** The statuses that hold a gate until the person acts (`retry_rules` / `skip_rules`), on a blocking row. */
+const OPEN_RULE_STATUSES: readonly string[] = ['unchecked', 'waived', 'disputed'];
+const ORIGINS: readonly string[] = ['fact', 'judge', 'machine', 'council', 'operator'];
+
+const ruleStatusOf = (v: unknown): RuleVerdictStatus | null =>
+  typeof v === 'string' && (RULE_STATUSES as readonly string[]).includes(v) ? v as RuleVerdictStatus : null;
+
+function positionOf(v: unknown): RulePosition | null {
+  if (!isRecord(v) || typeof v['seat'] !== 'string') return null;
+  const status = ruleStatusOf(v['status']);
+  if (status === null) return null;
+  return { by: typeof v['by'] === 'string' ? v['by'] : '', seat: v['seat'], status, cite: typeof v['cite'] === 'string' ? v['cite'] : '' };
+}
+
+function councilOf(v: unknown): RuleCouncilRecord | null {
+  if (!isRecord(v)) return null;
+  const num = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
+  const votes: RuleCouncilVote[] = Array.isArray(v['votes'])
+    ? v['votes'].flatMap((x) => {
+      if (!isRecord(x) || typeof x['seat'] !== 'string' || x['seat'] === '') return [];
+      const status = ruleStatusOf(x['status']);
+      const whyNot = str(x['whyNot']);
+      return [{ seat: x['seat'], counted: x['counted'] === true, ...(status !== null ? { status } : {}), ...(whyNot !== null ? { whyNot } : {}) }];
+    })
+    : [];
+  const ruling = ruleStatusOf(v['ruling']);
+  const reason = str(v['reason']);
+  const ballotsIn = str(v['ballotsIn']);
+  return {
+    taskId: typeof v['taskId'] === 'string' ? v['taskId'] : '',
+    positions: Array.isArray(v['positions']) ? v['positions'].flatMap((p) => { const x = positionOf(p); return x === null ? [] : [x]; }) : [],
+    votes,
+    seated: num(v['seated']),
+    returned: num(v['returned']),
+    agreementPct: num(v['agreementPct']),
+    consensus: v['consensus'] === true,
+    seed: num(v['seed']),
+    eligible: strings(v['eligible']),
+    ...(ruling !== null ? { ruling } : {}),
+    ...(reason !== null ? { reason } : {}),
+    ...(ballotsIn !== null ? { ballotsIn } : {}),
+  };
+}
 
 function rulesOf(v: unknown): RuleRow[] {
   return Array.isArray(v)
     ? v.flatMap((r) => {
       if (!isRecord(r) || typeof r['ruleId'] !== 'string' || r['ruleId'] === '') return [];
-      const status = typeof r['status'] === 'string' && (RULE_STATUSES as readonly string[]).includes(r['status']) ? r['status'] : 'unchecked';
+      // A status this studio does not know holds in the engine: read as unchecked (it holds here too).
+      const status = ruleStatusOf(r['status']) ?? 'unchecked';
+      const origin = typeof r['origin'] === 'string' && ORIGINS.includes(r['origin']) ? r['origin'] as RuleVerdictOrigin : null;
       return [{
         ruleId: r['ruleId'],
         status,
@@ -196,9 +254,37 @@ function rulesOf(v: unknown): RuleRow[] {
         reason: typeof r['reason'] === 'string' ? r['reason'] : '',
         cite: str(r['cite']),
         judge: str(r['judge']),
+        origin,
+        party: str(r['party']),
+        // Only an explicit `false` makes a process row: anything else blocks like any rule (fail-closed).
+        blocking: r['blocking'] !== false,
+        reviewer: positionOf(r['reviewer']),
+        council: councilOf(r['council']),
       }];
     })
     : [];
+}
+
+/** Whether a row holds its gate until the person acts: a blocking `unchecked`, `waived` or `disputed` row. */
+export function ruleHolds(r: RuleRow): boolean {
+  return r.blocking && OPEN_RULE_STATUSES.includes(r.status);
+}
+
+/** A council's ruling on a row, with the engine's tally (`RuleCouncil::tally`: the counted votes for the ruling,
+ *  a kept vote counting toward a waiver, then the rest of the counted votes), the seats whose votes counted, and
+ *  the seats that sat but did not count; `null` when the row is not a council ruling (no council, no ruling, or a
+ *  ruling the row does not carry). */
+export function councilRulingOf(r: RuleRow): { ruling: string; tally: string; seats: string[]; uncounted: string[] } | null {
+  const c = r.council;
+  if (c === null || c.ruling === undefined || r.origin !== 'council' || c.ruling !== r.status) return null;
+  const counted = c.votes.filter((v) => v.counted && v.status !== undefined);
+  const won = counted.filter((v) => v.status === c.ruling || (c.ruling === 'waived' && v.status === 'kept')).length;
+  return {
+    ruling: c.ruling,
+    tally: `${won}-${counted.length - won}`,
+    seats: counted.map((v) => v.seat),
+    uncounted: c.votes.filter((v) => !counted.includes(v)).map((v) => v.seat),
+  };
 }
 
 /** One row per rule across receipts, the worst status winning (deny-dominates), in first-seen order. */
@@ -276,15 +362,28 @@ function gateRuleRows(view: SessionView | null | undefined, log: readonly CoreEv
 }
 
 /** The counts and the one line the run page, the gate card and the delivery say:
- *  "N rules checked: K kept, B broken, X not applicable" (+ unchecked, skipped by the operator). */
-export function rulesSummary(rows: readonly RuleRow[]): { line: string; broken: number; unchecked: number; skipped: number; waived: number } {
-  const n = (s: string) => rows.filter((r) => r.status === s).length;
-  let line = `${rows.length} ${rows.length === 1 ? 'rule' : 'rules'} checked: ${n('kept')} kept, ${n('broken')} broken, ${n('n_a')} not applicable`;
+ *  "N rules checked: K kept, B broken, X not applicable" (+ waived, unchecked, disputed, skipped by the operator,
+ *  deferred, settled by council). Only rows that decide the gate are counted; process rules (`blocking: false`,
+ *  DES-RULE-CHECK-001 rev 2 B.4) are reported after them, apart: "; 4 process rules reported (do not block): …". */
+export function rulesSummary(rows: readonly RuleRow[]): { line: string; broken: number; unchecked: number; skipped: number; waived: number; disputed: number; process: number } {
+  const gate = rows.filter((r) => r.blocking);
+  const process = rows.filter((r) => !r.blocking);
+  const n = (s: string, of: readonly RuleRow[] = gate) => of.filter((r) => r.status === s).length;
+  let line = `${gate.length} ${gate.length === 1 ? 'rule' : 'rules'} checked: ${n('kept')} kept, ${n('broken')} broken, ${n('n_a')} not applicable`;
   if (n('waived') > 0) line += `, ${n('waived')} waived by your instruction (to confirm)`;
   if (n('unchecked') > 0) line += `, ${n('unchecked')} unchecked`;
+  if (n('disputed') > 0) line += `, ${n('disputed')} disputed (you decide)`;
   if (n('skipped') > 0) line += `, ${n('skipped')} skipped by the operator`;
   if (n('deferred') > 0) line += `, ${n('deferred')} deferred to delivery`;
-  return { line, broken: n('broken'), unchecked: n('unchecked'), skipped: n('skipped'), waived: n('waived') };
+  // A council's waiver still waits for you (it is counted as waived, to confirm), so it is not "settled".
+  const settled = gate.filter((r) => councilRulingOf(r) !== null && !ruleHolds(r)).length;
+  if (settled > 0) line += `, ${settled} settled by council`;
+  if (process.length > 0) {
+    line += `; ${process.length} process ${process.length === 1 ? 'rule' : 'rules'} reported (do not block): ${n('kept', process)} kept, ${n('broken', process)} broken, ${n('n_a', process)} not applicable`;
+    const other = process.length - n('kept', process) - n('broken', process) - n('n_a', process);
+    if (other > 0) line += `, ${other} not ruled`;
+  }
+  return { line, broken: n('broken'), unchecked: n('unchecked'), skipped: n('skipped'), waived: n('waived'), disputed: n('disputed'), process: process.length };
 }
 
 /** One "judged by operator" record (`AssuranceReceipt.operatorJudges[]`). */
@@ -815,49 +914,79 @@ export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number |
 /** (DES-RULE-CHECK-001 S2) The engine's denial source of a gate held on steering rules no judge ruled on. */
 export const RULES_UNCHECKED_SOURCE = 'rules_unchecked';
 
+/** (DES-RULE-CHECK-001) The engine's denial source of a broken steering rule (core `rule_check::DENIAL_SOURCE_BROKEN`). */
+export const RULE_BROKEN_SOURCE = 'rule_check';
+const isRuleLayer = (source: string): boolean => source === RULES_UNCHECKED_SOURCE || source === RULE_BROKEN_SOURCE;
+
 /**
- * Whether the gate at `ord` is held `rules_unchecked` — the one gate where the engine takes `retry_rules` /
- * `skip_rules` (crew refuses them, 409, at any other) — and the rows it holds, both from THIS attempt. Read off
- * structured wire fields only, never the prompt's prose (an evaluator finding may quote it): the attempt's newest
- * `gateEscalated` (`denialSource`, else `condition`), else its newest `gateEvaluated.denial.source`; the rows from
- * that `gateEvaluated`. A log that never mentions the unit (empty, or filled by live events alone) leaves both to
- * the unit record (`denial.source`, its persisted receipt); an escalation frame alone takes the unit record's rows
- * unless both name an attempt and they differ (never an earlier attempt's ids); a dispatch after the hold voids it.
+ * Whether a steering-rule layer is in the denial record of the gate at `ord` — where the engine takes `retry_rules` /
+ * `skip_rules` (crew refuses them, 409, anywhere else) — and the rows, both from THIS attempt. Since wicked-core-ts
+ * 0.15.30 (DES-RULE-CHECK-001 rev 2 A.4) the engine takes them wherever a rule layer (`rules_unchecked`: a held rule;
+ * `rule_check`: a broken one) is in the unit's record: the winning denial or a layer BEHIND another one (a disputed
+ * rule behind the reviewer's FAIL, at `review_adjudication` too). `held`: a rule layer is there (the re-check is
+ * offered; the skip only for {@link ruleHolds} rows). `behind`: the gate's own cause is not a rule hold (another
+ * layer, or a broken rule), so the rule actions follow the gate's own.
+ *
+ * Read off structured wire fields only, never the prompt's prose (an evaluator finding may quote it):
+ *  - the winner: the attempt's newest `gateEscalated` (`denialSource`, else `condition`), else its newest
+ *    `gateEvaluated.denial.source`;
+ *  - the layers behind it: a denied evaluation's rows (a blocking unchecked, waived or disputed row is the engine's
+ *    `rules_unchecked` layer, a blocking broken row its `rule_check` layer), or the unit record's `denials_behind`
+ *    when the record is this attempt's (a layer the latest fold did not ask again stays there);
+ *  - the rows from that `gateEvaluated` when they are this attempt's, else the unit record's of the same attempt.
+ * A log that never mentions the unit (empty, or filled by live events alone) leaves all of it to the unit record
+ * (`denial`, `denials_behind`, its persisted receipt). Rows of another attempt are never used (never an earlier
+ * attempt's ids); a dispatch after the hold voids it.
  */
-export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): { held: boolean; rows: RuleRow[] } {
-  if (typeof ord !== 'number') return { held: false, rows: [] };
-  const unit = (units ?? []).find((u) => u.ord === ord) as unknown as { denial?: unknown; assurance?: unknown } | undefined;
-  const persisted = (): RuleRow[] => receiptOf(unit?.assurance)?.rules ?? [];
+export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): { held: boolean; rows: RuleRow[]; behind: boolean } {
+  if (typeof ord !== 'number') return { held: false, rows: [], behind: false };
+  const unit = (units ?? []).find((u) => u.ord === ord) as unknown as { denial?: unknown; denials_behind?: unknown; assurance?: unknown } | undefined;
+  const own = receiptOf(unit?.assurance);
+  const sourceOf = (d: unknown): string => (isRecord(d) && typeof d['source'] === 'string' ? d['source'] : '');
+  const recordLayer = Array.isArray(unit?.denials_behind) && unit.denials_behind.some((d) => isRuleLayer(sourceOf(d)));
+  const rowsLayer = (rows: readonly RuleRow[]): boolean => rows.some((r) => r.blocking && (ruleHolds(r) || r.status === 'broken'));
   const log = events ?? [];
-  let held: boolean | null = null;
-  let rows: RuleRow[] | null = null;
-  let attempt: unknown;
+  let winner: string | null = null;
+  let escalated = false;
+  let evaluated: { rows: RuleRow[] | null; denied: boolean; attempt: number | null } | null = null;
+  let attempt: number | null = null;
   let mentioned = false;
-  for (let i = log.length - 1; i >= 0 && (held === null || rows === null); i--) {
+  for (let i = log.length - 1; i >= 0 && evaluated === null; i--) {
     const e = log[i]! as Record<string, unknown>;
     if (e['ord'] !== ord) continue;
     if (e['type'] === 'unitDispatched') { mentioned = true; break; }
-    if (e['type'] === 'gateEscalated' && held === null) {
+    // An escalation OLDER than the newest evaluation (a re-check re-evaluates without a dispatch) is an earlier
+    // fold's: the newest evaluation's denial decides.
+    if (e['type'] === 'gateEscalated' && !escalated && evaluated === null) {
       mentioned = true;
-      attempt = e['attempt'];
+      escalated = true;
+      if (typeof e['attempt'] === 'number') attempt = e['attempt'];
       const source = typeof e['denialSource'] === 'string' ? e['denialSource'] : '';
-      held = source !== '' ? source === RULES_UNCHECKED_SOURCE : e['condition'] === RULES_UNCHECKED_SOURCE;
-    } else if (e['type'] === 'gateEvaluated' && rows === null) {
+      winner = source !== '' ? source : typeof e['condition'] === 'string' ? e['condition'] : '';
+    } else if (e['type'] === 'gateEvaluated' && evaluated === null) {
       mentioned = true;
-      rows = receiptOf(e['assurance'])?.rules ?? [];
-      if (held === null) { const d = e['denial']; held = isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE; }
+      const d = e['denial'];
+      const r = receiptOf(e['assurance']);
+      evaluated = { rows: r?.rules ?? null, denied: isRecord(d), attempt: r !== null ? r.attempt : null };
+      if (winner === null) winner = sourceOf(d);
     }
   }
   if (!mentioned) {
-    const d = unit?.denial;
-    return { held: isRecord(d) && d['source'] === RULES_UNCHECKED_SOURCE, rows: persisted() };
+    const rows = own?.rules ?? [];
+    const holdWins = sourceOf(unit?.denial) === RULES_UNCHECKED_SOURCE;
+    const layer = holdWins || isRuleLayer(sourceOf(unit?.denial)) || recordLayer || (isRecord(unit?.denial) && rowsLayer(rows));
+    return { held: layer, rows, behind: layer && !holdWins };
   }
-  if (held !== true) return { held: false, rows: rows ?? [] };
-  if (rows !== null) return { held, rows };
-  // Only the escalation frame: the unit record's rows, when they are this attempt's (never an earlier one's ids).
-  const own = receiptOf(unit?.assurance);
-  const same = typeof attempt !== 'number' || own === null || own.attempt === attempt;
-  return { held, rows: same ? own?.rules ?? [] : [] };
+  // The attempt this gate is about: the escalation's, else the evaluation's. An evaluation of another attempt (a log
+  // missing the dispatch between) is not this attempt's, and neither is a unit record of another attempt.
+  const current = attempt ?? evaluated?.attempt ?? null;
+  const evalCurrent = evaluated !== null && (current === null || evaluated.attempt === null || evaluated.attempt === current);
+  const ownCurrent = own !== null && (current === null ? evaluated === null : own.attempt === current);
+  const rows = evalCurrent && evaluated!.rows !== null && evaluated!.rows.length > 0 ? evaluated!.rows : ownCurrent ? own!.rules ?? [] : [];
+  const holdWins = winner === RULES_UNCHECKED_SOURCE;
+  const denied = escalated || (evalCurrent && evaluated!.denied);
+  const layer = holdWins || isRuleLayer(winner ?? '') || (denied && (rowsLayer(rows) || (ownCurrent && recordLayer)));
+  return { held: layer, rows, behind: layer && !holdWins };
 }
 
 /** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */
