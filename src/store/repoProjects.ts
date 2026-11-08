@@ -39,9 +39,49 @@ function names(words: string, term: string): boolean {
   return new RegExp(`(?:^|[^\\p{L}\\p{N}_./-])${escapeRe(term)}(?=$|[^\\p{L}\\p{N}_./-]|\\.(?:$|[^\\p{L}\\p{N}_./-]))`, 'iu').test(words);
 }
 
+const REPO_OPS = new Set(['pull', 'pulls', 'pull-requests', 'merge_requests', 'tree', 'blob', 'commit', 'commits', 'compare']);
+
+/** The repository one link names, or null (CJ13). GitHub and Bitbucket: `<owner>/<repo>`, whatever follows. Elsewhere
+ *  the repository is the segment before the first repository operation after it (`pull`, `tree`, `blob`, `commit`,
+ *  `compare`, `merge_requests`, or GitLab's `-` separator before one; on gitlab.com any `-`), so nothing in the content
+ *  path after it can rename it; with no operation, a GitLab project home names its last segment and a clone link
+ *  (`…/<repo>.git`) its repository. Other links name nothing. */
+function linkedRepo(link: string): string | null {
+  let url: URL;
+  try { url = new URL(link); } catch { return null; }
+  const segs = url.pathname.split('/').filter((x) => x !== '').map((x) => { try { return decodeURIComponent(x); } catch { return x; } });
+  const host = url.hostname.toLowerCase().replace(/^www\./u, '');
+  let repo: string | undefined;
+  if (host === 'github.com' || host === 'bitbucket.org') repo = segs.length >= 2 ? segs[1] : undefined;
+  else {
+    const gitlab = host === 'gitlab.com';
+    const at = segs.findIndex((x, i) => i >= 2 && (REPO_OPS.has(x) || (x === '-' && (gitlab || REPO_OPS.has(segs[i + 1] ?? '')))));
+    if (at >= 2) repo = segs[at - 1];
+    else if (gitlab) repo = segs.length >= 2 ? segs[segs.length - 1] : undefined;
+    else if (segs.length >= 2 && /\.git$/iu.test(segs[segs.length - 1]!)) repo = segs[segs.length - 1];
+  }
+  const name = repo?.replace(/\.git$/iu, '').toLowerCase();
+  return name === undefined || name === '' || name === '-' ? null : name;
+}
+
+/** The repositories the links in the words name (lower-cased). A link ends at a space, a bracket or a quote, and a
+ *  sentence's punctuation after it is not part of it; a bare `owner/repo` path is not a link. */
+function linkedRepos(words: string): string[] {
+  const out: string[] = [];
+  for (const m of words.matchAll(/https?:\/\/[^\s<>()[\]"'`]+/giu)) {
+    const name = linkedRepo(m[0].replace(/[.,;:!?]+$/u, ''));
+    if (name !== null) out.push(name);
+  }
+  return out;
+}
+
+const linkedTo = (linked: readonly string[], r: Pick<RepoEntry, 'id' | 'name'>): boolean =>
+  linked.includes(r.name.toLowerCase()) || linked.includes(r.id.toLowerCase());
+
 /** The registered repositories the words name (by name or id), in registry order (F41). */
 export function reposNamedIn<R extends Pick<RepoEntry, 'id' | 'name'>>(words: string, repos: readonly R[]): R[] {
-  return repos.filter((r) => names(words, r.name) || (r.id !== r.name && names(words, r.id)));
+  const linked = linkedRepos(words);
+  return repos.filter((r) => names(words, r.name) || (r.id !== r.name && names(words, r.id)) || linkedTo(linked, r));
 }
 
 /** A name distinct enough to be read as a repository rather than a word: it carries something other than letters (a
@@ -62,7 +102,9 @@ export async function repoNamedInWords(words: string): Promise<{ repo: RepoEntry
   try { repos = (await api.listRepos()).repos; } catch { return null; }
   const named = reposNamedIn(words, repos);
   // Named by a distinct name or id; two named (or one distinct and one plain) is not clear: the person picks.
-  const clear = named.filter((r) => (distinctName(r.name) && names(words, r.name)) || (r.id !== r.name && distinctName(r.id) && names(words, r.id)));
+  // A link names its repository plainly, whatever its name (`…/acme/payments/pull/9`).
+  const linked = linkedRepos(words);
+  const clear = named.filter((r) => linkedTo(linked, r) || (distinctName(r.name) && names(words, r.name)) || (r.id !== r.name && distinctName(r.id) && names(words, r.id)));
   if (named.length !== 1 || clear.length !== 1) return null;
   const repo = clear[0]!;
   try {

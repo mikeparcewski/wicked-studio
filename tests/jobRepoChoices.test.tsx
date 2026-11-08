@@ -200,6 +200,26 @@ describe('F41: the words name a repository as a whole token', () => {
     expect(names('rg1-old or rg1.old or rg1_x or my/rg1')).toEqual([]);
     expect(names('')).toEqual([]);
   });
+  it('a pull request, tree or clone link names its repository by its path (CJ13)', () => {
+    const names = (w: string) => reposNamedIn(w, REPOS).map((r) => r.id);
+    expect(names('/review-change https://github.com/acme/rg1/pull/9')).toEqual(['rg1']);
+    expect(names('review https://github.com/acme/rg2.git and http://git.example/o/rg10/tree/main')).toEqual(['rg2', 'rg10']);
+    expect(names('https://github.com/rg1/other/pull/9')).toEqual([]);
+    expect(names('review [it](https://github.com/acme/rg2.git) or https://gitlab.com/acme/rg1.git.')).toEqual(['rg1', 'rg2']);
+    expect(names('see https://github.com/acme/rg10 for it')).toEqual(['rg10']);
+    // Not a repository link: a docs page whose path ends in a repository's name, and a bare path.
+    expect(names('read https://docs.example.com/guide/rg1 and acme/rg2')).toEqual([]);
+    expect(names('https://docs.example.com/guide/rg1/-/page')).toEqual([]);
+    expect(names('https://bitbucket.org/acme/rg1/pull-requests/9 and https://github.com/acme/rg2#readme')).toEqual(['rg1', 'rg2']);
+    expect(names('https://github.com/acme/rg10/issues/9 https://gitlab.com/grp/sub/zeta/-/merge_requests/3')).toEqual(['zeta', 'rg10']);
+    expect(names('https://git.example/o/rg2/-/merge_requests/9')).toEqual(['rg2']);
+    // A path inside a repository never names another one; a GitLab project home names its project.
+    expect(names('https://github.com/acme/rg1/blob/main/rg2.git https://github.com/acme/rg1/tree/main/zeta/-/x')).toEqual(['rg1']);
+    expect(names('https://docs.example.com/guide/rg2.git/page https://git.example/proj/-/merge_requests/9')).toEqual([]);
+    expect(names('https://gitlab.com/grp/sub/rg2')).toEqual(['rg2']);
+    expect(names('https://git.example/acme/rg1/blob/main/rg2.git https://git.example/acme/rg1/tree/main/zeta/-/blob/f')).toEqual(['rg1']);
+    expect(names('https://git.example/acme/rg10/tree/main/-/file https://gitlab.com/grp/rg2/tree/main')).toEqual(['rg2', 'rg10']);
+  });
   it('orders the named ones first, the rest by name', () => {
     expect(repoChoices('zeta and rg1', REPOS).list.map((r) => r.id)).toEqual(['zeta', 'rg1', 'rg10', 'rg2']);
   });
@@ -232,6 +252,16 @@ describe('F41: a job seeded from a new chat opens on the repository its words na
   it('a box in Unfiled files the named repository in the project that solely holds it', async () => {
     await seed('Map the domain of rg1', true, 'default');
     expect(seeds()[0]!.body).toMatchObject({ repoRefs: ['rg1'], projectId: 'p1' });
+  });
+  it('a pull request link scopes the seed on its repository (CJ13)', async () => {
+    repos = [...REPOS, { id: 'e2e-j6', name: 'wicked-e2e-j6-plugins', root_path: '/r/j6', default_branch: 'main', registered_at: 1 }];
+    await seed('/review-change https://github.com/acme/wicked-e2e-j6-plugins/pull/9', true);
+    expect(seeds()[0]!.body['repoRefs']).toEqual(['e2e-j6']);
+  });
+  it('a link names a repository called like a word, which plain words never pick (CJ13)', async () => {
+    repos = [...REPOS, { id: 'domain', name: 'domain', root_path: '/r/domain', default_branch: 'main', registered_at: 1 }];
+    await seed('/review-change https://github.com/acme/domain/pull/9', true);
+    expect(seeds()[0]!.body['repoRefs']).toEqual(['domain']);
   });
   it('one named repository: the seed is scoped on it, in the project that solely holds it', async () => {
     await seed('Map the domain of rg1: what it does', true);
