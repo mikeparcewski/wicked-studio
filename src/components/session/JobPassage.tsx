@@ -1,10 +1,12 @@
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { api } from '../../api/client.js';
 import type { ChatPlanOffer, ProposalRevisionEdits, ProposalToken, SessionView } from '../../api/types.js';
 import { ApiError } from '../../api/errors.js';
 import { proposalRefusal } from '../../board/artifactProposal.js';
+import { inputTokenChoices, type InputTokenChoice, type InputTokenUnavailable } from '../../board/jobInputs.js';
 import { commitGateDecision, type GateAnswer } from '../../board/gateActions.js';
+import { anchorOutOfView, clipAncestors, clipBounds, swapPlacement } from '../../board/swapPlacement.js';
 import {
   announceOf, changedTokenIds, foldLine, jobSettled, needsWords, proposalTarget, regionName, sentenceParts, settledLine, withWords,
   type JobLineage, type JobReply, type JobView,
@@ -72,9 +74,9 @@ export function helperRefusalWords(words: string, nameOf: (key: string) => strin
 /** What a queued decision does, in its own words (a Stop is never called an Approve). */
 const QUEUED_WORD: Readonly<Record<string, string>> = { approve: 'Approve', 'request-changes': 'Send back', reject: 'Reject', stop: 'Stop the job', 'edit-plan': 'Add a step' };
 
-const TOKEN_KIND: Readonly<Record<ProposalToken['kind'], string>> = {
+const TOKEN_KIND: Readonly<Record<ProposalToken['kind'] | 'documents' | 'sources', string>> = {
   card: 'kind of job', option: 'kind of job', repo: 'repository', project: 'project', seats: 'who works on it',
-  depth: 'how deep', checks: 'what checks it', detail: 'detail',
+  depth: 'how deep', checks: 'what checks it', detail: 'detail', documents: 'documents', sources: 'sources',
 };
 
 export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, navigate, say, onChanged }: {
@@ -144,6 +146,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // A swap listbox open on one version closes when crew's next version lands; a press note about an old version goes.
   const clearNote = press.clearNote;
   useEffect(() => { setOpenSwap(null); clearNote(); }, [pt, v.plan?.planRev, clearNote]);
+  // A list open when a change starts (crew's hold for a typed correction, or this tab's own) closes: a held token offers
+  // nothing, so its list doesn't either.
+  useEffect(() => { if (v.tokensHeld || !v.tokensLive) setOpenSwap(null); }, [v.tokensHeld, v.tokensLive]);
   // Leaving the passage leaves no binding behind it (a binding answers only what this passage drew).
   useEffect(() => () => { const b = useJobBinding.getState().binding; if (b !== null && b.replyKey.startsWith(`${lineage.lineage}:`)) useJobBinding.getState().clear(b.replyKey); }, [lineage.lineage]);
 
@@ -413,10 +418,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   /** The version the open listbox was opened on: a pick counts only for it (§2.7.3 rule 6). */
   const swapOpenedOn = useRef<string | null>(null);
   const tokenRefs = useRef(new Map<string, HTMLSpanElement | null>());
-  const pickSwap = (t: ProposalToken, i: number | 'else'): void => {
+  const pickSwap = (t: ProposalToken, choices: InputTokenChoice[], i: number | 'else'): void => {
     setOpenSwap(null);
     // Focus stays on the token the person was changing (it stays focusable while the change is in flight).
     if (swapOpenedOn.current !== pt) { press.say('The job changed while you picked. Nothing was sent.'); return; }
+    // A change began while the list was open (before the close effect ran): this pick waits for it, so nothing is sent.
+    if (!v.tokensLive) { press.say('The job changed while you picked. Nothing was sent.'); return; }
+    if (v.tokensHeld) { press.say('A change to this job is still being applied. Nothing was sent.'); return; }
     if (i === 'else') {
       // Something else…: the composer, with the token named (a typed correction is the seat's revision).
       useJobBinding.getState().bind({
@@ -427,7 +435,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       focusSessionComposer();
       return;
     }
-    const c = t.swap?.choices[i];
+    const c = choices[i];
     if (c !== undefined) revise(c.edit, 'swap', undefined, t.id);
   };
   const lineageHead = useRef<string | null>(pt);
@@ -437,14 +445,19 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {parts.map((x, i) => {
         if ('text' in x) return <Fragment key={i}>{x.text}</Fragment>;
         const t = x.token;
+        const input = inputTokenChoices(t, v.proposal);
+        // A documents or sources token is only ever its own list: one crew sent malformed (or none) is a plain fact,
+        // never the generic swaps, so an identity the reader refused can't come back through them.
+        const inputKind = (t.kind as string) === 'documents' || (t.kind as string) === 'sources';
+        const choices = input?.choices ?? (inputKind ? [] : t.swap?.choices ?? []);
         const pending = v.phase === 'swapPending' && swapToken === t.id;
         const label = pending ? '…' : t.label;
         const wash = washed.has(t.id) ? ' wk-pass-tok--chg' : '';
-        if (!v.tokensLive || (t.swap === null && t.kind !== 'checks')) {
+        if (!v.tokensLive || (input === null && (inputKind || (t.swap === null && t.kind !== 'checks')))) {
           return <b key={i} data-testid="job-passage-fact" data-token={t.id} className={`wk-pass-fact${wash}`}>{label}{t.kind === 'checks' && <span aria-hidden className="wk-pass-lock" />}</b>;
         }
         return (
-          <TokenButton key={i} token={t} label={label} wash={wash} open={openSwap === t.id} held={v.tokensHeld}
+          <TokenButton key={i} token={t} choices={choices} unavailable={input?.unavailable ?? []} label={label} wash={wash} open={openSwap === t.id} held={v.tokensHeld}
             tokenRef={(el) => { tokenRefs.current.set(t.id, el); }} explainId={`${lineage.lineage}-why`}
             onOpen={() => {
               if (v.tokensHeld) return;
@@ -452,7 +465,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
               swapOpenedOn.current = pt;
               setOpenSwap((o) => (o === t.id ? null : t.id));
             }}
-            onPick={(c) => pickSwap(t, c)} onClose={() => setOpenSwap(null)} expanded={t.kind === 'checks' ? explain : openSwap === t.id} />
+            onPick={(c) => pickSwap(t, choices, c)} onClose={() => setOpenSwap(null)} expanded={t.kind === 'checks' ? explain : openSwap === t.id} />
         );
       })}
       {v.tokensLive && sentence?.ask != null && v.question === null && <> {sentence.ask}</>}
@@ -775,8 +788,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
 
 /** A swappable token: an inline `role="button"` (a native button cannot break across lines, §8.7) opening a listbox
  *  of crew's choices plus "Something else…". The checks token opens an explanation instead. */
-function TokenButton({ token, label, wash, open, expanded, held, tokenRef, explainId, onOpen, onPick, onClose }: {
+function TokenButton({ token, choices, unavailable, label, wash, open, expanded, held, tokenRef, explainId, onOpen, onPick, onClose }: {
   token: ProposalToken; label: string; wash: string; open: boolean; expanded: boolean;
+  choices: InputTokenChoice[]; unavailable: InputTokenUnavailable[];
   /** A change is in flight: the token stays focusable, says it is held, and opens nothing. */
   held: boolean;
   tokenRef: (el: HTMLSpanElement | null) => void;
@@ -786,11 +800,56 @@ function TokenButton({ token, label, wash, open, expanded, held, tokenRef, expla
 }): React.ReactElement {
   const ref = useRef<HTMLSpanElement | null>(null);
   const listId = useId();
-  const choices = token.swap?.choices ?? [];
   const [cursor, setCursor] = useState(0);
-  const count = choices.length + 1;
+  // The roving set: the choices, then the rows that can't be picked (focusable, so a keyboard or screen reader reaches
+  // their reason, but never picked), then Something else….
+  const elseAt = choices.length + unavailable.length;
+  const count = elseAt + 1;
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
-  useEffect(() => { if (open) { setCursor(0); queueMicrotask(() => optionRefs.current[0]?.focus()); } }, [open]);
+  const listRef = useRef<HTMLUListElement | null>(null);
+  // The open list stays inside the area that shows it (a token at the end of a line on a phone pushed it past the
+  // thread's edge, and the thread scrolled sideways). Placed before paint and before its first row takes focus, and
+  // placed again when the thread scrolls, the window resizes, or the list or a clipping ancestor changes size. A
+  // token scrolled out of that area closes its list.
+  useLayoutEffect(() => {
+    const ul = listRef.current;
+    if (!open || ul === null) return undefined;
+    const place = (): void => {
+      const bounds = clipBounds(ul);
+      const anchor = (ref.current ?? ul).getBoundingClientRect();
+      if (anchorOutOfView(anchor, bounds)) {
+        // Focus comes back to the token without scrolling the thread to it.
+        if (ul.contains(document.activeElement)) ref.current?.focus({ preventScroll: true });
+        onClose();
+        return;
+      }
+      // Clearing the caps to measure resets a capped list's own scroll: keep it.
+      const scrolled = ul.scrollTop;
+      ul.style.transform = ''; ul.style.maxHeight = ''; ul.style.maxWidth = '';
+      ul.classList.remove('wk-pass-swap--above');
+      const p = swapPlacement(ul.getBoundingClientRect(), anchor, bounds);
+      ul.classList.toggle('wk-pass-swap--above', p.above);
+      ul.style.maxWidth = `${p.maxWidth}px`;
+      if (p.maxHeight !== null) ul.style.maxHeight = `${p.maxHeight}px`;
+      if (p.dx !== 0) ul.style.transform = `translateX(${p.dx}px)`;
+      ul.scrollTop = scrolled;
+    };
+    place();
+    // A scroll inside the list (a capped one) is its own: it needs no new place.
+    const onScroll = (e: Event): void => { if (!(e.target instanceof Node && ul.contains(e.target))) place(); };
+    const opts: AddEventListenerOptions = { capture: true, passive: true };
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', onScroll, opts);
+    // Rows that reflow (a late font, a longer label) or a thread that changes size (a section above it opens): place it
+    // again. The first callback lands after this placement and finds the same place.
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => place()) : null;
+    if (ro !== null) for (const el of [ul, ...clipAncestors(ul)]) ro.observe(el);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', onScroll, opts); ro?.disconnect(); };
+  // onClose is the parent's fresh closure each render; the effect re-subscribes only when the list opens or its rows change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, choices.length, unavailable.length]);
+  // The list is already inside the visible area, so focusing its first row must not scroll the thread under it.
+  useEffect(() => { if (open) { setCursor(0); queueMicrotask(() => optionRefs.current[0]?.focus({ preventScroll: true })); } }, [open]);
   // The listbox closed (a pick, or crew's next version closed it): focus that was in it comes back to the token, never
   // to the page; focus the pick sent elsewhere (Something else… → the composer) stays there.
   const wasOpen = useRef(open);
@@ -818,20 +877,26 @@ function TokenButton({ token, label, wash, open, expanded, held, tokenRef, expla
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
       >{label}{checks && <span aria-hidden className="wk-pass-lock" />}</span>
       {open && !checks && (
-        <ul id={listId} role="listbox" aria-label={`Change ${TOKEN_KIND[token.kind]}`} data-testid="job-passage-swap" className="wk-pass-swap"
+        <ul ref={listRef} id={listId} role="listbox" aria-label={`Change ${TOKEN_KIND[token.kind]}`} data-testid="job-passage-swap" className="wk-pass-swap"
           onFocus={() => { focusIn.current = true; }}
           onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) focusIn.current = false; }}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); const n = (cursor + 1) % count; setCursor(n); optionRefs.current[n]?.focus(); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); const n = (cursor - 1 + count) % count; setCursor(n); optionRefs.current[n]?.focus(); }
-            else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(cursor < choices.length ? cursor : 'else'); }
+            // `cursor` follows focus (each row's onFocus), so this is the row the key was pressed on: one that can't be
+            // picked picks nothing.
+            else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (cursor < choices.length) onPick(cursor); else if (cursor === elseAt) onPick('else'); }
             else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
           }}>
           {choices.map((c, i) => (
-            <li key={i} ref={(el) => { optionRefs.current[i] = el; }} role="option" tabIndex={-1} aria-selected={cursor === i}
+            <li key={i} ref={(el) => { optionRefs.current[i] = el; }} role="option" tabIndex={-1} aria-selected={cursor === i} onFocus={() => setCursor(i)}
               data-testid="job-passage-swap-option" onClick={() => onPick(i)}>{c.label}</li>
           ))}
-          <li ref={(el) => { optionRefs.current[choices.length] = el; }} role="option" tabIndex={-1} aria-selected={cursor === choices.length}
+          {unavailable.map((c, i) => (
+            <li key={`unavailable-${i}`} ref={(el) => { optionRefs.current[choices.length + i] = el; }} role="option" tabIndex={-1} onFocus={() => setCursor(choices.length + i)}
+              aria-disabled="true" aria-selected="false" data-testid="job-passage-swap-unavailable">{c.reason === '' ? c.label : `${c.label} · ${c.reason}`}</li>
+          ))}
+          <li ref={(el) => { optionRefs.current[elseAt] = el; }} role="option" tabIndex={-1} aria-selected={cursor === elseAt} onFocus={() => setCursor(elseAt)}
             data-testid="job-passage-swap-else" onClick={() => onPick('else')}>Something else…</li>
         </ul>
       )}

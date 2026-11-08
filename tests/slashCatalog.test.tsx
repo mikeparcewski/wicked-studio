@@ -7,7 +7,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
+import type { CatalogInputKindV2, RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
+import { inputsKnown, KNOWN_INPUT_KINDS } from '../src/board/slashCatalog.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { Composer } from '../src/components/session/Composer.js';
 import { resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
@@ -398,5 +399,18 @@ describe('/workflow-<key> typed by hand (back-compat)', () => {
     fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
     expect(screen.getByTestId('composer-note').textContent).toBe('This daemon lists no workflow named distill-learnings — nothing was sent.');
     expect(useLaunchWizard.getState().open).toBe(false);
+  });
+});
+
+/** CS12: `documents` and `sources` are kinds studio collects, so a card taking them is listed, not “needs a newer
+ *  studio”. */
+describe('the known input kinds (CS12)', () => {
+  it('counts documents and sources as known, so a card that takes them has its inputs met', () => {
+    expect(KNOWN_INPUT_KINDS.has('documents')).toBe(true);
+    expect(KNOWN_INPUT_KINDS.has('sources')).toBe(true);
+    // `inputsKnown` is the exact predicate behind “needs a newer studio” (slashCatalog `refusalOf`).
+    expect(inputsKnown({ inputs: [{ id: 'd', label: 'Documents', kind: 'documents', required: true }, { id: 's', label: 'Sources', kind: 'sources', required: false }] })).toBe(true);
+    // A kind a later studio would add is still unknown: the rule stands.
+    expect(inputsKnown({ inputs: [{ id: 'x', label: 'Later', kind: 'later-kind' as CatalogInputKindV2, required: true }] })).toBe(false);
   });
 });

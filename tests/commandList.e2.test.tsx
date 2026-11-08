@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
-import type { WorkflowCatalogV2Response } from 'wicked-crew-api-types';
+import type { CatalogInputKindV2, WorkflowCatalogV2Response } from 'wicked-crew-api-types';
 import { SLASH_COMMANDS } from '../src/board/planDraft.js';
 import { allCommandRows, cardForWorkflow, commandList, KNOWN_INPUT_KINDS, parseCommandLine } from '../src/board/slashCatalog.js';
 import { Composer } from '../src/components/session/Composer.js';
@@ -174,11 +174,18 @@ describe('the v2 command list (pure)', () => {
     expect(ids.has('review-change')).toBe(false); // unavailable on this daemon
     expect(all.some((r) => r.command === '/plugin phase')).toBe(false); // a coming option
     expect(all.some((r) => r.command === '/plugin editor')).toBe(true);
-    // A card that takes an input kind this studio does not know is hidden (and comes back once the kind is known).
+    // A card that takes an input kind this studio does not know is hidden (and comes back once the kind is known). CS12
+    // taught studio `documents` and `sources`, so a future kind stands in for the unknown one here.
     const docs = structuredClone(V2);
-    docs.cards.find((c) => c.id === 'risk')!.inputs.push({ id: 'docs', label: 'Documents', kind: 'documents', required: true });
-    expect(KNOWN_INPUT_KINDS.has('documents')).toBe(false);
+    docs.cards.find((c) => c.id === 'risk')!.inputs.push({ id: 'docs', label: 'Later', kind: 'later-kind' as CatalogInputKindV2, required: true });
+    expect(KNOWN_INPUT_KINDS.has('later-kind' as CatalogInputKindV2)).toBe(false);
     expect(allCommandRows(docs).some((r) => r.card === 'risk')).toBe(false);
+    // CS12: `documents` and `sources` are now known, so a card taking them is listed (not “needs a newer studio”).
+    expect(KNOWN_INPUT_KINDS.has('documents')).toBe(true);
+    expect(KNOWN_INPUT_KINDS.has('sources')).toBe(true);
+    const known = structuredClone(V2);
+    known.cards.find((c) => c.id === 'risk')!.inputs.push({ id: 'docs', label: 'Documents', kind: 'documents', required: true }, { id: 'srcs', label: 'Sources', kind: 'sources', required: false });
+    expect(allCommandRows(known).some((r) => r.card === 'risk')).toBe(true);
   });
   it('filters by command prefix, then by option word; a whole command and words closes it', () => {
     expect(commandList(V2, '/mig')).toMatchObject({ open: true, freeWords: null });
@@ -734,7 +741,7 @@ describe('review folds (r2)', () => {
   });
   it('a named opener for a job this studio cannot collect posts nothing and says why', async () => {
     const sub = structuredClone(V2);
-    sub.cards.find((c) => c.id === 'studio-plugin')!.variant!.options.find((o) => o.id === 'editor')!.inputs.push({ id: 'docs', label: 'Documents', kind: 'documents', required: true });
+    sub.cards.find((c) => c.id === 'studio-plugin')!.variant!.options.find((o) => o.id === 'editor')!.inputs.push({ id: 'docs', label: 'Later', kind: 'later-kind' as CatalogInputKindV2, required: true });
     v2 = sub;
     act(() => openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID }));
     await waitFor(() => expect(Object.values(useStartNotes.getState().notes).join(' ')).toMatch(/needs a newer studio/));

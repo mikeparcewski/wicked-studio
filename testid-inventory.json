@@ -8678,6 +8678,12 @@
       ]
     },
     {
+      "testId": "job-passage-swap-unavailable",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-token",
       "files": [
         "src/components/session/JobPassage.tsx"

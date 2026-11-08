@@ -109,7 +109,7 @@ export function notOfferedLine(e: Pick<CatalogEntry, 'title' | 'status' | 'statu
 
 /** The input kinds this studio collects for a job. A card that takes any other kind is hidden here (the wire's rule:
  *  a kind a client does not know is never started). THE one list a newer input (CS12: `documents`, `sources`) extends. */
-export const KNOWN_INPUT_KINDS: ReadonlySet<CatalogInputKindV2> = new Set<CatalogInputKindV2>(['text', 'repo', 'project', 'url', 'requirements', 'seats']);
+export const KNOWN_INPUT_KINDS: ReadonlySet<CatalogInputKindV2> = new Set<CatalogInputKindV2>(['text', 'repo', 'project', 'url', 'requirements', 'seats', 'documents', 'sources']);
 
 export type JobDepth = 'quick' | 'standard' | 'deep';
 /** An Investigate card's depth words (the wire's own `LaunchShape.depth` values), typed after its command. */
