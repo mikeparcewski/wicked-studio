@@ -74,8 +74,8 @@ npm publish dates. Every version listed here exists on
 ### Fixed
 - **A full command typed exactly wins the `/` list highlight (e2e-1105 CJ9).** "/plugin phase" typed so the list
   read it as free words ("Matches") kept "/plugin" (Studio plugin) highlighted, so Enter picked the editor plugin and
-  left "plugin phase" behind as the job's words. A row whose command is exactly what was typed (however it is spaced) now
-  leads the list, and its pick keeps no words.
+  left "plugin phase" behind as the job's words. The row a full command names exactly (read as the parser reads it,
+  however it is spaced) now leads the list, and its pick keeps no words.
 - **What a run made shows in its thread, filed or Unfiled (plugins S1, G1; DES-CHAT-ARTIFACTS-001 §7 slice A4).** A
   document made by an Unfiled chat or run (crew's `default` mount) now renders in the thread. A run's documents are
   the ones crew's `artifact_ref` names, crew's index binds to the run (`runs`), or, with no ref, its seam write root

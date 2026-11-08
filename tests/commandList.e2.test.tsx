@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
 import type { CatalogInputKindV2, WorkflowCatalogV2Response } from 'wicked-crew-api-types';
 import { SLASH_COMMANDS } from '../src/board/planDraft.js';
-import { allCommandRows, cardForWorkflow, commandList, KNOWN_INPUT_KINDS, parseCommandLine } from '../src/board/slashCatalog.js';
+import { allCommandRows, cardForWorkflow, commandList, exactRow, KNOWN_INPUT_KINDS, parseCommandLine } from '../src/board/slashCatalog.js';
 import { Composer } from '../src/components/session/Composer.js';
 import { TEST_WORKFLOW_ID } from '../src/components/RouteRedirect.js';
 import { CREATE_EDITOR_WORKFLOW_ID } from '../src/components/editors/EditorPluginsSettings.js';
@@ -692,6 +692,29 @@ describe('review folds (r1): the path holds under failure, races and edge input'
     enter();
     expect(chipsOf(useComposerChips.getState(), 'c1')[0]).toMatchObject({ card: 'studio-plugin', option: 'phase' });
     expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('the exact match is the parser\'s reading: the wire\'s option word, and a command the scorer does not find (codex r1)', () => {
+    const sub = structuredClone(V2);
+    const migrate = sub.cards.find((c) => c.id === 'migrate')!;
+    migrate.variant!.options.find((o) => o.id === 'upgrade')!.optionWord = 'bump';
+    // `/ migrate bump` names Upgrade (the parser reads its option word); `/ migrate upgrade` is the card with words.
+    const bump = commandList(sub, '/ migrate bump');
+    expect(bump.open && bump.rows[0]).toMatchObject({ card: 'migrate', option: 'upgrade' });
+    expect(exactRow(sub, '/ migrate upgrade')).toBeNull();
+    // A command spelled so the scorer matches nothing still leads, once, when typed exactly.
+    const renamed = structuredClone(V2);
+    const m2 = renamed.cards.find((c) => c.id === 'migrate')!;
+    m2.command = '/modernise';
+    const up = m2.variant!.options.find((o) => o.id === 'upgrade')!;
+    up.command = '/modernise uplift';
+    up.optionWord = 'uplift';
+    const st = commandList(renamed, '/ modernise uplift');
+    expect(st.open && st.rows[0]).toMatchObject({ card: 'migrate', option: 'upgrade', command: '/modernise uplift' });
+    expect(st.open && st.rows.filter((r) => r.key === st.rows[0]!.key)).toHaveLength(1);
+    // Words after the command, a depth, or a prefix are never an exact match.
+    expect(exactRow(V2, '/ migrate upgrade to node 22')).toBeNull();
+    expect(exactRow(V2, '/mig')).toBeNull();
   });
 });
 

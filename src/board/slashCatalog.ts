@@ -289,21 +289,29 @@ export type CommandListState =
 export function commandList(view: WorkflowCatalogV2Response, text: string, looks: ShapeGuess | null = null): CommandListState {
   const st = commandListRows(view, text, looks);
   if (!st.open) return st;
-  // A full command typed exactly (`/plugin phase`, however it is spaced) wins the highlight: its row leads, so Enter
-  // picks what was typed and never the card it belongs to (e2e-1105 CJ9).
-  const at = st.rows.findIndex((r) => r.kind !== 'looks' && exactCommand(r, text));
-  if (at <= 0) return st;
+  // A full command typed exactly (`/plugin phase`, however it is spaced) wins the highlight: the row the parser reads it
+  // as leads, so Enter picks what was typed and never the card it belongs to (e2e-1105 CJ9).
+  const exact = exactRow(view, text);
+  if (exact === null) return st;
+  const at = st.rows.findIndex((r) => r.key === exact.key);
+  if (at === 0) return st;
   const rows = [...st.rows];
-  rows.unshift(rows.splice(at, 1)[0]!);
+  const lead = at > 0 ? rows.splice(at, 1)[0]! : { ...exact, group: rows[0]?.group ?? exact.group, groupTitle: rows[0]?.groupTitle ?? exact.groupTitle };
+  rows.unshift(lead);
   return { ...st, rows };
 }
 
-/** A command's words, lower-cased, with the slash and spacing taken out (`/Plugin  phase` → `plugin phase`). */
-const commandWords = (s: string): string => lower(s).replace(/^\s*\/\s*/u, '').trim().split(/\s+/u).join(' ');
-
-/** Whether the line is exactly a row's command (its card command, option command or alias), nothing more. */
-export function exactCommand(row: Pick<CommandRow, 'command'>, text: string): boolean {
-  return row.command !== null && commandWords(text) !== '' && commandWords(text) === commandWords(row.command);
+/**
+ * The listed card or option row a line names exactly: the line, with the slash and spacing normalized (`/ plugin  phase`
+ * reads as `/plugin phase`), parsed as the parser reads a command (the wire's option word), naming a card or option
+ * that can start here, with no depth and no words after it. null otherwise (an alias, words, a refused command).
+ */
+export function exactRow(view: WorkflowCatalogV2Response, text: string): CommandRow | null {
+  const words = lower(text).replace(/^\s*\/\s*/u, '').trim();
+  if (!text.trimStart().startsWith('/') || words === '') return null;
+  const hit = parseCommandLine(view, `/${words.split(/\s+/u).join(' ')}`);
+  if (hit === null || hit.refused !== null || hit.words !== '' || hit.depth !== null || hit.wireCard !== hit.card.id) return null;
+  return allCommandRows(view).find((r) => (r.kind === 'card' || r.kind === 'option') && r.card === hit.card.id && r.option === hit.option) ?? null;
 }
 
 function commandListRows(view: WorkflowCatalogV2Response, text: string, looks: ShapeGuess | null): CommandListState {
