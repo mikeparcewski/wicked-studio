@@ -46,3 +46,15 @@ describe('OperatorMessage', () => {
     expect(screen.queryByTestId('context-sent')).toBeNull();
   });
 });
+
+describe('the message itself (e2e-1105 privacy)', () => {
+  it('a home folder in what was asked reads ~/…, technical details on or off', () => {
+    useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: true } }));
+    try {
+      const { container } = render(<p><OperatorMessage text="Read the handoff file at /Users/reel-operator/.wicked/reviews/r1/handoff.json." /></p>);
+      expect(container.textContent).toBe('Read the handoff file at ~/.wicked/reviews/r1/handoff.json.');
+    } finally {
+      useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
+    }
+  });
+});

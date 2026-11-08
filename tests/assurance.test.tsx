@@ -47,6 +47,14 @@ describe('the receipt model', () => {
     expect(r.skipped).toEqual([{ instrument: 'judge', reason: 'no_distinct_seat', detail: null }]);
   });
 
+  it('e2e-1105: a program path in the seat lists is never named ("built by /opt/…/node, claude")', () => {
+    const r = receiptOf(wire({ ran: ['repo_checks', 'judge', 'distinct_evaluator'], creator: '/opt/homebrew/Cellar/node/26.11.1/bin/node, claude', evaluator: 'codex', judge: 'pi' }))!;
+    const who = receiptWords(r, true).who!;
+    expect(who).toContain('built by claude ·');
+    expect(who).not.toContain('/opt/');
+    expect(receiptWords(receiptOf(wire({ ran: ['repo_checks'], creator: '/usr/bin/node', evaluator: null, judge: null }))!).who).toBeNull();
+  });
+
   it('independent, same-seat, floor-only and unchecked read differently', () => {
     const indep = receiptOf(wire({ ran: ['repo_checks', 'judge', 'distinct_evaluator'], creator: 'claude', evaluator: 'codex', judge: 'pi' }))!;
     expect(assuranceKind(indep)).toBe('independent');

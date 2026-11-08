@@ -1,7 +1,7 @@
 // H3: who responded — the three responders (a seat, you, crew) and how each thread entry is named.
 import { describe, expect, it } from 'vitest';
 import {
-  askingResponder, CREW, gateResponder, OPERATOR, producerOf, responderKey, seatResponder, turnResponder, unitResponder,
+  askingResponder, CREW, gateResponder, isCommandPath, isHelperSeat, OPERATOR, producerOf, responderKey, seatResponder, turnResponder, unitResponder,
 } from '../src/board/responder.js';
 import { makeUnit, makeView } from './factories.js';
 
@@ -74,5 +74,21 @@ describe('responderKey', () => {
     expect(responderKey(CREW)).toBe(responderKey({ ...CREW }));
     expect(responderKey(seatResponder('claude', ROSTER))).not.toBe(responderKey(seatResponder('codex', ROSTER)));
     expect(responderKey(OPERATOR)).not.toBe(responderKey(CREW));
+  });
+});
+
+describe('e2e-1105: a program path where a seat goes is crew\'s step, never a helper by its path', () => {
+  const NODE = '/opt/homebrew/Cellar/node/26.11.1/bin/node';
+  it('is not a helper, and its turn is crew\'s', () => {
+    expect(isCommandPath(NODE)).toBe(true);
+    expect(isCommandPath('C:\\tools\\node.exe')).toBe(true);
+    expect(isCommandPath('claude#2')).toBe(false);
+    expect(isHelperSeat(NODE)).toBe(false);
+    expect(isHelperSeat('claude')).toBe(true);
+    expect(seatResponder(NODE, ROSTER)).toEqual(CREW);
+    const view = makeView({ id: 'r' }, [makeUnit({ id: 'r:1', session_id: 'r', ord: 1, assigned_cli: NODE, stage: 'recon' })]);
+    expect(unitResponder(view, 1, ROSTER)).toEqual(CREW);
+    // A chat turn or a step named by the binary is crew's too (the thread's `turn-who-seat`).
+    expect(turnResponder(NODE, ROSTER)).toEqual(CREW);
   });
 });

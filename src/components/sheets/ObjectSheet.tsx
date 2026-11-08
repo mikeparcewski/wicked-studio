@@ -40,6 +40,7 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { VerdictDetail } from '../VerdictDetail.js';
 import { SheetRunActions } from '../session/RunActions.js';
+import { isCommandPath } from '../../board/responder.js';
 
 /** A run can take a message only while a helper is working in it (crew's inject surface). */
 const MESSAGEABLE = new Set(['executing', 'distributing', 'planning']);
@@ -75,9 +76,9 @@ function sessionRuns(sessionId: string, runs: readonly SessionView[], runChatId:
   return [...mine].sort((a, b) => at(a) - at(b));
 }
 
-/** Every helper (CLI) a run's units were given to. */
+/** Every helper (CLI) a run's units were given to; a program's path (crew's tool step) is not a helper (e2e-1105). */
 function helpersOf(v: SessionView): string[] {
-  return [...new Set(v.units.map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== ''))];
+  return [...new Set(v.units.map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== '' && !isCommandPath(c)))];
 }
 
 /**
@@ -415,7 +416,7 @@ export function StepsList({ view }: { view: SessionView }): React.ReactElement {
         return (
           <li key={u.id} data-testid="sheet-step-row" data-ord={u.ord} data-status={u.status} className="wk-sheet-line" data-object={objectAttr(ref)}>
             <button type="button" data-testid="sheet-step-open" aria-label={`What ${stepName(u)} did`} onClick={() => useSheets.setState({ open: { ref, tab: 'did' } })} className="wk-link">
-              {stepName(u)}{again ? ' (again)' : ''} — {word}{u.assigned_cli ? ` · ${u.assigned_cli}` : ''}
+              {stepName(u)}{again ? ' (again)' : ''} — {word}{u.assigned_cli && !isCommandPath(u.assigned_cli) ? ` · ${u.assigned_cli}` : ''}
             </button>
             {u.denial_reason ? <TechDetails data-testid="sheet-step-why" text={u.denial_reason} /> : null}
           </li>

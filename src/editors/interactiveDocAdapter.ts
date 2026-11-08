@@ -1,7 +1,9 @@
 import { ApiError } from '../api/errors.js';
-import { getVersions, HeadMovedError, interactiveDocUrl, postDeckOp, postEvent, postFork, putLearnedTheme, type VersionEntry } from '../api/interactive.js';
+import { getVersions, HeadMovedError, interactiveDocUrl, postDeckOp, postEvent, postFork, putLearnedTheme, UNFILED_MOUNT, type VersionEntry } from '../api/interactive.js';
 import { notUndoneLine } from '../board/artifactMorph.js';
 import { FEEDBACK_EVENT } from '../interactive/feedbackBatch.js';
+import { subscribeCoreEvents } from '../hooks/eventTap.js';
+import type { CoreEvent } from '../api/types.js';
 import type { DocumentRequirements } from './adapters/requirements.js';
 import type { AdapterResult, ArtifactRef, HostAdapter, MovedOn } from './host.js';
 import type { VersionKind } from './model.js';
@@ -15,6 +17,63 @@ const SLIDE_REASONS: Readonly<Record<string, string>> = {
   'after-is-the-slide': 'a slide cannot go after itself',
   'notes-hold-anchors': 'these notes hold review anchors, so they can only be changed by asking',
 };
+
+/** The engine's answer to a feedback batch (interactive `feedback.processed`, relayed by crew on /ws). */
+const PROCESSED = 'wicked.interactive.feedback.processed';
+
+/** One batch the engine processed without landing a version: what it refused, and why. */
+export interface FeedbackRefusal { rejected: { selector: string; reason: string }[]; stale: string[]; unchanged: boolean }
+
+/** The engine's refusal reasons for a page edit (interactive `core/regenerate.js`), in plain words. */
+export function editRefusalWords(r: FeedbackRefusal): string {
+  const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many.replace('#', String(n)));
+  const why = (reason: string): string | null => {
+    const cut = reason.indexOf(':');
+    const code = cut < 0 ? reason : reason.slice(0, cut);
+    const detail = cut < 0 ? '' : reason.slice(cut + 1);
+    if (code === 'inv2-would-drop-wids') {
+      const n = detail.split(',').filter((x) => x.trim() !== '').length;
+      return n > 0 ? `it would remove ${plural(n, 'a part', '# parts')} nested inside what you edited` : 'it would remove parts nested inside what you edited';
+    }
+    if (code === 'selector-not-found') return 'the part you edited is not in this version';
+    if (code === 'content-edit-raw-text-element') return 'that part holds code, not text';
+    if (code === 'style-edit-rejected') return 'that style change is not allowed here';
+    if (code === 'structural-change-requires-llm') return 'that change needs a helper to make it';
+    return null;
+  };
+  const lines = [...new Set(r.rejected.map((x) => why(x.reason)).filter((x): x is string => x !== null))];
+  if (r.stale.length > 0) lines.push('the part you edited changed since you opened it');
+  if (lines.length > 0) return `the page refused this edit: ${lines.join('; ')}`;
+  if (r.rejected.length > 0) return 'the page refused this edit';
+  return r.unchanged ? 'the page already says that, so nothing changed' : 'the page did not take this edit';
+}
+
+/**
+ * A relayed `feedback.processed` frame for `docId` that answers a batch sent against `base` and landed nothing, or
+ * `null`. Matched by the project, the doc, the batch's base, and a batch version not already in the manifest before the
+ * post. The bridge echoes no request id on it, so a second editor's refused batch on the same document and base in the
+ * same moment would be taken for this one (no such actor today: one person edits a page in one place).
+ */
+export function refusalOf(event: CoreEvent, projectId: string, docId: string, base: number, before: ReadonlySet<number>): FeedbackRefusal | null {
+  if (event.type !== 'interactiveEvent') return null;
+  const ev = (event as { event?: unknown }).event;
+  if (typeof ev !== 'object' || ev === null) return null;
+  const e = ev as Record<string, unknown>;
+  if ((e['event_type'] ?? e['type']) !== PROCESSED) return null;
+  const p = (typeof e['payload'] === 'object' && e['payload'] !== null ? e['payload'] : e) as Record<string, unknown>;
+  if (p['document_id'] !== docId || p['landed'] !== false) return null;
+  // The bridge stamps a bound document's project on every frame and none on an Unfiled one (docThread's rule): a
+  // same-named document in another project is not this one.
+  if ((typeof p['project_id'] === 'string' ? p['project_id'] : UNFILED_MOUNT) !== projectId) return null;
+  if (typeof p['base_version'] === 'number' && p['base_version'] !== base) return null;
+  if (typeof p['version'] === 'number' && before.has(p['version'])) return null;
+  const rejected = Array.isArray(p['rejected'])
+    ? (p['rejected'] as unknown[]).flatMap((x) => (typeof x === 'object' && x !== null && typeof (x as { reason?: unknown }).reason === 'string'
+      ? [{ selector: String((x as { selector?: unknown }).selector ?? ''), reason: (x as { reason: string }).reason }] : []))
+    : [];
+  const stale = Array.isArray(p['stale']) ? (p['stale'] as unknown[]).map(String) : [];
+  return { rejected, stale, unchanged: p['unchanged'] === true };
+}
 
 /** After a write: how often, and how long, the manifest is re-read for the edit's own version. */
 const POLL_MS = 400;
@@ -143,10 +202,14 @@ export class InteractiveDocAdapter implements HostAdapter {
    * when the head moved without one, `null` when nothing landed in the window; the manifest's head is
    * returned beside the match, because a later version may already be the head.
    */
-  private async waitForLanded(base: number, before: ReadonlySet<number>): Promise<{ version: number; head: number } | { ambiguous: number[]; head: number } | { other: number } | null> {
+  private async waitForLanded(base: number, before: ReadonlySet<number>, refused: () => FeedbackRefusal | null = () => null): Promise<{ version: number; head: number } | { ambiguous: number[]; head: number } | { other: number } | { refused: FeedbackRefusal } | null> {
     const until = Date.now() + this.pollForMs;
     let moved: number | null = null;
     while (Date.now() < until) {
+      // The engine said no (e2e-1105: a whole-<li> edit that would drop nested anchors): that is the answer, said now —
+      // never "no new version appeared" after the window.
+      const no = refused();
+      if (no !== null) return { refused: no };
       try {
         const m = await getVersions(this.projectId, this.docId);
         this.entries = m.versions;
@@ -160,6 +223,8 @@ export class InteractiveDocAdapter implements HostAdapter {
       } catch { /* re-read on the next tick */ }
       await new Promise((r) => setTimeout(r, POLL_MS));
     }
+    const no = refused();
+    if (no !== null) return { refused: no };
     return moved === null ? null : { other: moved };
   }
 
@@ -233,12 +298,21 @@ export class InteractiveDocAdapter implements HostAdapter {
     } catch {
       return { error: 'unavailable', message: 'The page could not be read before sending, so nothing was changed.' };
     }
-    await postEvent(this.projectId, {
-      event_type: FEEDBACK_EVENT,
-      payload: { document_id: this.docId, version: base, author: 'studio', items },
-    });
-    const landed = await this.waitForLanded(base, before);
+    // The engine's refusal comes back on the bus, not in the manifest: listen before the post, so it is never missed.
+    let refusal: FeedbackRefusal | null = null;
+    const stop = subscribeCoreEvents((ev) => { refusal ??= refusalOf(ev, this.projectId, this.docId, base, before); });
+    let landed: Awaited<ReturnType<InteractiveDocAdapter['waitForLanded']>>;
+    try {
+      await postEvent(this.projectId, {
+        event_type: FEEDBACK_EVENT,
+        payload: { document_id: this.docId, version: base, author: 'studio', items },
+      });
+      landed = await this.waitForLanded(base, before, () => refusal);
+    } finally {
+      stop();
+    }
     if (landed === null) return { error: 'unavailable', message: 'The change was sent, but no new version appeared.' };
+    if ('refused' in landed) return { error: 'refused', message: `${editRefusalWords(landed.refused)}.` };
     if ('other' in landed) {
       const moved = this.movedTo(landed.other);
       return { error: 'stale', message: `The page changed (version ${landed.other}) while your edit was on its way; it was not seen land as its own version — see the versions.`, head: landed.other, moved };

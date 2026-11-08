@@ -233,7 +233,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         <SectionTitle>View</SectionTitle>
         <Switch label="Show technical details" data-testid="tech-details-toggle" checked={techDetails}
           onChange={(checked) => updateViewPrefs({ technical_details: checked })}
-          hint="Shows full file locations in technical details and additional references beside your work." />
+          hint="Shows the engine's own words and additional references beside your work. A path in your home folder always reads ~/…" />
         {viewPersist === 'dropped' && <p className="wk-field-note" data-testid="tech-details-unsaved">Not stored by Studio's service — applies to this session only.</p>}
         <Switch label="Show New job" data-testid="show-new-job-toggle" checked={!startInChat}
           onChange={(checked) => updateComposerPrefs({ startInChat: !checked })}

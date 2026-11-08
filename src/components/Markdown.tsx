@@ -4,6 +4,31 @@ import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 import type { ChatCitationItem } from '../api/chat-wire.js';
 import { CitationBadge } from './citations.js';
+import { displayPath, displayText } from '../board/homePath.js';
+
+/** A markdown node, as far as {@link remarkHomePaths} reads it. */
+interface MdNode { type: string; value?: unknown; url?: unknown; children?: MdNode[]; position?: { start?: { offset?: number } } }
+
+/**
+ * Privacy (e2e-1105, 2026-11-08): crew relays agent text, step output and run intents that name folders under the
+ * home directory. No home folder renders: every text, inline code and code block value reads `~/…`. A file reference's
+ * target is kept (it opens by its real path) and shown collapsed; a `file://` link's target is collapsed.
+ */
+export function remarkHomePaths(originals?: Map<number, string>) {
+  const walk = (n: MdNode): void => {
+    if ((n.type === 'text' || n.type === 'inlineCode' || n.type === 'code' || n.type === 'html') && typeof n.value === 'string') {
+      // An inline code token's own words, kept off the page (by its source offset) for its citation verdict: two
+      // tokens that collapse to the same `~/…` keep their own verdicts.
+      const at = n.position?.start?.offset;
+      if (n.type === 'inlineCode' && originals !== undefined && typeof at === 'number') originals.set(at, n.value);
+      n.value = displayText(n.value);
+    }
+    // A `file://` link can't open from the page anyway; its target (shown on hover) never names the home folder.
+    if (typeof n.url === 'string' && /^file:\/\//i.test(n.url)) n.url = `file://${displayPath(n.url.slice(7))}`;
+    for (const c of n.children ?? []) walk(c);
+  };
+  return (tree: MdNode): void => { originals?.clear(); walk(tree); };
+}
 
 /**
  * A file reference, as agents write them into transcripts: any href that is not
@@ -152,14 +177,15 @@ const components: Components = {
   h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5" style={{ color: 'var(--ink-high)' }}>{children}</h2>,
   h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1" style={{ color: 'var(--ink-high)' }}>{children}</h3>,
   p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+  // Privacy (e2e-1105): a link's target shows on hover; a file reference's never names the home folder.
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
+    <a href={typeof href === 'string' && isFileRef(href) ? displayPath(href) : href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
       {children}
     </a>
   ),
   img: ({ alt }) => (
     <span className="text-xs font-mono rounded px-1" style={{ background: 'var(--surface-raised)', color: 'var(--ink-dim)' }}>
-      [image{alt ? `: ${alt}` : ''}]
+      [image{alt ? `: ${displayText(alt)}` : ''}]
     </span>
   ),
   code: codeElement,
@@ -219,6 +245,9 @@ interface Props {
 }
 
 export function Markdown({ children, className, onOpenFile, marks }: Props): React.ReactElement {
+  // The inline code tokens as written, by source offset (filled while the text is parsed; see remarkHomePaths).
+  const originals = useMemo(() => new Map<number, string>(), []);
+  const plugins = useMemo(() => [remarkGfm, () => remarkHomePaths(originals)], [originals]);
   const resolved = useMemo<Components>(() => {
     // crew#561: an inline-code token that IS a flagged citation wears the daemon's verdict. Block
     // fences are left alone — a code sample is not a citation, and striking through a line of a
@@ -228,9 +257,13 @@ export function Markdown({ children, className, onOpenFile, marks }: Props): Rea
         ? components
         : {
             ...components,
-            code: ({ className: codeClass, children: codeChildren }) => {
+            code: ({ className: codeClass, children: codeChildren, node }) => {
               const rendered = codeElement({ className: codeClass, children: codeChildren });
-              const raw = typeof codeChildren === 'string' ? codeChildren.trim() : '';
+              // The verdict is looked up by the token as written (remarkHomePaths kept it by offset), never by the
+              // collapsed `~/…` words the page shows.
+              const at = node?.position?.start?.offset;
+              const shown = typeof codeChildren === 'string' ? codeChildren : '';
+              const raw = (typeof at === 'number' ? originals.get(at) ?? shown : shown).trim();
               const item = raw === '' || isCodeBlock(codeClass, codeChildren) ? undefined : marks.get(raw);
               return item === undefined ? rendered : <CitationBadge item={item}>{rendered}</CitationBadge>;
             },
@@ -242,7 +275,7 @@ export function Markdown({ children, className, onOpenFile, marks }: Props): Rea
         if (typeof href === 'string' && isFileRef(href)) {
           return (
             <a
-              href={href}
+              href={displayPath(href)}
               data-testid="evidence-ref"
               className="underline"
               style={{ color: 'var(--accent)' }}
@@ -256,20 +289,20 @@ export function Markdown({ children, className, onOpenFile, marks }: Props): Rea
           );
         }
         return (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
+          <a href={typeof href === 'string' && isFileRef(href) ? displayPath(href) : href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
             {linkChildren}
           </a>
         );
       },
     };
-  }, [onOpenFile, marks]);
+  }, [onOpenFile, marks, originals]);
 
   return (
     <div
       className={`text-sm leading-relaxed ${className ?? ''}`}
       style={{ color: 'var(--ink-high)' }}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={resolved}>
+      <ReactMarkdown remarkPlugins={plugins} components={resolved}>
         {normaliseTables(children)}
       </ReactMarkdown>
     </div>

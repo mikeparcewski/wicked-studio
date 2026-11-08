@@ -29,8 +29,19 @@ export const CREW: Responder = Object.freeze({ role: 'crew', name: 'crew', cli: 
 
 type Roster = readonly SeatNameInput[] | null | undefined;
 
-/** A seat by its key: its roster name when listed, else the key itself (honest, never invented). */
+/**
+ * A seat key that is a program's path (`/opt/homebrew/…/bin/node`, `C:\tools\node.exe`): crew's tool executor
+ * runs a script step on a binary and the wire names the binary where a seat goes (e2e-1105, 2026-11-07). It is crew's
+ * machinery, never a helper, and its path is never shown as a name.
+ */
+export function isCommandPath(cli: unknown): boolean {
+  return typeof cli === 'string' && /[\/\\]/.test(cli);
+}
+
+/** A seat by its key: its roster name when listed, else the key itself (honest, never invented). A program's path is
+ *  crew's own step ({@link isCommandPath}). */
 export function seatResponder(cli: string, roster: Roster): Responder {
+  if (isCommandPath(cli)) return CREW;
   const seat = (roster ?? []).find((s) => s.key === cli);
   return { role: 'seat', name: seat !== undefined ? seatLabel(seat) : cli, cli };
 }
@@ -98,9 +109,10 @@ export function responderKey(r: Responder): string {
 /** Seats that are crew's own machinery (a deliver script, a tool step), never a helper building the work. */
 const NOT_A_HELPER = new Set(['bash', 'tool', 'shell', 'script', 'crew']);
 
-/** Whether a unit's seat is a helper (a coding-agent CLI), not crew's own machinery (a deliver script, a tool step). */
+/** Whether a unit's seat is a helper (a coding-agent CLI), not crew's own machinery (a deliver script, a tool step, a
+ *  program's path). */
 export function isHelperSeat(cli: unknown): cli is string {
-  return typeof cli === 'string' && cli !== '' && !NOT_A_HELPER.has(cli.split('#')[0]!.toLowerCase());
+  return typeof cli === 'string' && cli !== '' && !isCommandPath(cli) && !NOT_A_HELPER.has(cli.split('#')[0]!.toLowerCase());
 }
 
 /**

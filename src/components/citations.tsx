@@ -22,6 +22,7 @@
  */
 
 import type { ChatCitationItem, ChatCitations } from '../api/chat-wire.js';
+import { displayText } from '../board/homePath.js';
 
 /**
  * The reply's counter: `24 verified · 2 unverifiable`, plus the other two states when they happened.
@@ -96,8 +97,8 @@ export function CitationBadge({
       data-testid="citation-mark"
       data-status={item.status}
       data-kind={item.kind}
-      data-raw={item.raw}
-      title={markTitle(item)}
+      data-raw={displayText(item.raw)}
+      title={displayText(markTitle(item))}
       className="inline-flex items-baseline gap-1"
     >
       <span style={item.status === 'unverified' ? { textDecoration: 'line-through' } : undefined}>{children}</span>
@@ -106,7 +107,7 @@ export function CitationBadge({
       </span>
       {item.status === 'corrected' && item.resolved !== undefined && (
         <span className="text-xs font-mono" style={{ color: 'var(--accent)' }}>
-          → {item.resolved}
+          → {displayText(item.resolved)}
         </span>
       )}
     </span>
@@ -138,13 +139,13 @@ export function CitationStrip({ citations }: { citations: ChatCitations }): Reac
           key={`${item.kind}:${item.raw}`}
           data-testid="citation-flag"
           data-status={item.status}
-          data-raw={item.raw}
-          title={markTitle(item)}
+          data-raw={displayText(item.raw)}
+          title={displayText(markTitle(item))}
           className="rounded px-1.5 py-0.5"
           style={{ background: 'var(--surface-raised)', color: MARK_COLOR[item.status] }}
         >
-          {item.raw}
-          {item.status === 'corrected' && item.resolved !== undefined ? ` → ${item.resolved}` : ''}
+          {displayText(item.raw)}
+          {item.status === 'corrected' && item.resolved !== undefined ? ` → ${displayText(item.resolved)}` : ''}
           {item.status === 'unverified' ? ' UNVERIFIED' : ''}
         </span>
       ))}

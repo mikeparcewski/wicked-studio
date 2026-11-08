@@ -10,6 +10,11 @@ import { displayPath, displayText, homeDirsIn, homeMasker } from '../src/board/h
  * `<drive>:\Users\<name>` in any case); any other absolute path is left exactly as it is.
  */
 describe('displayPath — a path under the home directory reads as ~', () => {
+  it('e2e-1105: the macOS per-user temp directory heading a path reads $TMPDIR (a path field names the account too)', () => {
+    expect(displayPath('/var/folders/x7/abc123/T/wicked-1/out.json')).toBe('$TMPDIR/wicked-1/out.json');
+    expect(displayPath('/private/var/folders/x7/abc123/T')).toBe('$TMPDIR');
+    expect(displayPath('/srv/var/folders/x7/abc123/T/a')).toBe('/srv/var/folders/x7/abc123/T/a');
+  });
   it('abbreviates the three desktop spellings of a home directory', () => {
     expect(displayPath('/Users/mika/.wicked-crew/settings.json')).toBe('~/.wicked-crew/settings.json');
     expect(displayPath('/home/mika/.wicked-crew/skills')).toBe('~/.wicked-crew/skills');

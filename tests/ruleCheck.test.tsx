@@ -214,7 +214,7 @@ describe('(s4-ui-fix) review findings', () => {
     expect(keys([], units).includes('retry-rules')).toBe(false);
   });
 
-  it('P3: a rule\'s reason hides home paths unless technical details are on', async () => {
+  it('P3: a rule\'s reason hides home paths, technical details on or off (e2e-1105 privacy)', async () => {
     const { useViewPrefsStore } = await import('../src/store/viewPrefs.js');
     const rows = receiptOf({ ...base, rules: [row('R', 'broken', 'cited /home/alice/project/src/math.js:3')] })!.rules!;
     useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
@@ -224,7 +224,8 @@ describe('(s4-ui-fix) review findings', () => {
     unmount();
     useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: true } }));
     render(<RulesChecked rows={rows} />);
-    expect(screen.getByTestId('assurance-rule').textContent).toContain('/home/alice/project/src/math.js:3');
+    expect(screen.getByTestId('assurance-rule').textContent).toContain('cited ~/project/src/math.js:3');
+    expect(screen.getByTestId('assurance-rule').textContent).not.toContain('/home/alice');
     useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
   });
 

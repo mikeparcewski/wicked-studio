@@ -99,18 +99,18 @@ describe('S16a-1c — the cancel / stop story in the thread', () => {
     expect(screen.queryByTestId('failure-engine')).toBeNull();
   });
 
-  it('run clarity: the engine headline reads home paths as ~ unless technical details are on (codex r3)', () => {
+  it('run clarity: the engine headline reads home paths as ~, technical details on or off (codex r3; e2e-1105 privacy)', () => {
     const events = [{ type: 'error', session: RUN, message: 'failed to open /Users/alice/private-project/worktree/file' }] as unknown as CoreEvent[];
     render(<RunStory view={makeView({ id: RUN, status: 'failed' })} events={events} />);
     const line = screen.getByTestId('failure-engine').querySelector('.wk-session-run-story-line')!;
     expect(line).toHaveTextContent('It stopped with an error: failed to open ~/private-project/worktree/file');
     expect(line.textContent).not.toMatch(/alice/);
-    // With technical details on, the operator asked for the raw text: the full path shows (agy r1).
+    // With technical details on the home folder still reads ~ (e2e-1105: a screen share printed it).
     cleanup();
     useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: true } }));
     try {
       render(<RunStory view={makeView({ id: RUN, status: 'failed' })} events={events} />);
-      expect(screen.getByTestId('failure-engine').querySelector('.wk-session-run-story-line')).toHaveTextContent('failed to open /Users/alice/private-project/worktree/file');
+      expect(screen.getByTestId('failure-engine').querySelector('.wk-session-run-story-line')).toHaveTextContent('failed to open ~/private-project/worktree/file');
     } finally {
       useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
     }

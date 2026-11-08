@@ -139,6 +139,16 @@ describe('everyday words on the face, the detail behind "Why we think this"', ()
     expect(words.plainRecommendation(reg('wait_on_people', 24, 0), M, true).changeMind).toContain('If the work itself changed');
   });
 
+  it('e2e-1105: a change too small to show at the rounding never reads "$0.16, up from $0.16"', () => {
+    const spend = { ...reg('wait_on_people', 0.162, 0.158), candidate: 'regression-spend-all', evidence: { ...reg('wait_on_people', 0.162, 0.158).evidence, metric: 'spend' as const } };
+    const s = words.plainRecommendation(spend as never, M);
+    expect(s.say).toBe('About the same as before ($0.16).');
+    expect(s.say).not.toMatch(/up from/u);
+    // A change the rounding shows still says it.
+    const up = { ...spend, evidence: { ...spend.evidence, value: 0.31 } };
+    expect(words.plainRecommendation(up as never, M).say).toBe('A typical run now costs $0.31, up from $0.16.');
+  });
+
   it('the header is one sentence', () => {
     const r = response().reviews[0]!;
     expect(words.reviewSentence({ ...r, window: { startMs: Date.UTC(2026, 9, 25, 12), endMs: Date.UTC(2026, 9, 27, 12) }, totals: { runs: 15 },

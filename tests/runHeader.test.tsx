@@ -58,6 +58,10 @@ describe('waitingItems — what the banner’s overview lists', () => {
       { key: 'fail:b', runId: 'b', kind: 'Failed run', step: 'Build', question: 'Move the nightly report job stopped at Build', age: null },
     ]);
   });
+  it('e2e-1105 privacy: a question naming a home folder reads ~/…', () => {
+    const items = waitingItems([row('gate:a', 'gate', { question: 'Approve writing /Users/reel-operator/.wicked/reviews/r1/out/report.json?' })], [run('a', 'awaiting_human')], {}, NOW);
+    expect(items[0]!.question).toBe('Approve writing ~/.wicked/reviews/r1/out/report.json?');
+  });
   it('a folded group counts its members; a hand-over gate says so; no rows, no items', () => {
     const group = row('group:approval', 'gate', { members: [row('gate:a', 'gate', { question: 'Approve the hand-over' })] });
     expect(waitingItems([group], [run('a', 'awaiting_human')], {}, NOW).map((i) => i.kind)).toEqual(['Hand-over']);
@@ -208,6 +212,30 @@ describe('the run page: banner below the header, jump to latest', () => {
     const order = [...session.children].map((c) => (c === head ? 'head' : c.contains(banner) ? 'banner' : c.classList.contains('wk-session-body') ? 'body' : 'other'));
     expect(order.indexOf('head')).toBeLessThan(order.indexOf('banner'));
     expect(order.indexOf('banner')).toBeLessThan(order.indexOf('body'));
+  });
+
+  it('e2e-1105: an answered chat (its ask parked at the turn, ask_turn) reads Answered, with no Stop run', () => {
+    const asked = run('a', 'awaiting_human');
+    (asked.session as unknown as { ask_turn: boolean }).ask_turn = true;
+    render(<SessionPage sessionId="run:a" runs={[asked]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    expect(screen.getByTestId('session-status')).toHaveTextContent('Answered');
+    expect(screen.getByTestId('session-status')).toHaveAttribute('data-tone', 'ok');
+    // The session's state stays the engine's (the rail's ring and the ask journeys read it); only the word changes.
+    expect(screen.getByTestId('session')).toHaveAttribute('data-state', 'waiting');
+    expect(screen.queryByTestId('session-stop')).toBeNull();
+    // The Details panel says the same: no Stop, never "Waiting on you" (codex on e2e-1105).
+    expect(screen.getByTestId('run-tab-glance-progress')).toBeInTheDocument();
+    expect(screen.queryByTestId('run-tab-glance-stop')).toBeNull();
+    expect(screen.queryByTestId('run-tab-stop')).toBeNull();
+    expect(screen.getByTestId('session').textContent).not.toMatch(/Waiting on you/);
+  });
+
+  it('e2e-1105 privacy: a run asked with a home path never prints it (title, first message, its hover)', () => {
+    const asked = run('a', 'completed');
+    (asked.session as unknown as { problem: string }).problem = 'Review recent work: read the handoff file at /Users/reel-operator/.wicked/reviews/r1/handoff.json and report.';
+    render(<SessionPage sessionId="run:a" runs={[asked]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    expect(screen.getByTestId('session').outerHTML).not.toMatch(/reel-operator/);
+    expect(screen.getByTestId('session').textContent).toContain('~/.wicked/reviews/r1/handoff.json');
   });
 
   it('nothing waits: no banner', () => {

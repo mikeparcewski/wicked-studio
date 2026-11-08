@@ -15,10 +15,11 @@ export function OperatorMessage({ text }: { text: string }): React.ReactElement 
   const showText = useDisplayText();
   const [open, setOpen] = useState(false);
   const { typed, pack } = splitAskContext(text);
-  if (pack === null) return <>{text}</>;
+  // Privacy (e2e-1105): a run's first message is crew's intent, which can name a file under the home folder.
+  if (pack === null) return <>{showText(text)}</>;
   return (
     <>
-      {typed}
+      {showText(typed)}
       <span data-testid="context-sent" data-open={open} className="wk-context-sent">
         <button type="button" data-testid="context-sent-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="wk-since-toggle">
           {open ? 'Hide what studio sent with this' : 'Sent with studio’s context'}

@@ -10,7 +10,7 @@ import { seatLabel } from '../../board/seatNames.js';
 import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
-import { builderResponder, isHelperSeat, isReviewUnit } from '../../board/responder.js';
+import { builderResponder, isCommandPath, isHelperSeat, isReviewUnit } from '../../board/responder.js';
 import { executingOrd } from '../../api/run-state.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
@@ -47,6 +47,7 @@ import { PANEL_SECTIONS, panelStateKind, quietSections, sectionOpen, type PanelS
 import { useRunPanel } from '../../store/runPanel.js';
 import { useHeldMarkedView } from '../../hooks/useHeldMarked.js';
 import { isHeldRun } from '../../board/heldRuns.js';
+import { isAskTurnRun } from '../../board/askTurn.js';
 import { TeamRosterLines } from './TeamRosterLines.js';
 import { panelRows, pluginSections } from '../../board/runPluginPanels.js';
 import { RUN_PLUGINS } from '../../plugins/runPlugins.js';
@@ -59,6 +60,11 @@ import { useProjectsStore } from '../../store/projects.js';
 
 function isTerminal(view: SessionView): boolean {
   return ['completed', 'cancelled', 'failed'].includes(view.session.status);
+}
+
+/** Nothing to stop: the run ended, or it is an answered ask parked at its turn (`ask_turn`), as the header says (e2e-1105). */
+function nothingToStop(view: SessionView): boolean {
+  return isTerminal(view) || (view.session.status === 'awaiting_human' && isAskTurnRun(view.session));
 }
 
 function primaryRun(runs: SessionView[]): SessionView | undefined {
@@ -74,8 +80,9 @@ function currentStep(view: SessionView, chain: ChainModel): ChainStep | undefine
 }
 
 function assignedClis(view: SessionView): string[] {
+  // A program's path (crew's tool step runs a binary) is not an agent, and its path is never shown as a name.
   return [...new Set(view.units.map((unit) => unit.assigned_cli)
-    .filter((cli): cli is string => typeof cli === 'string' && cli.trim() !== ''))];
+    .filter((cli): cli is string => typeof cli === 'string' && cli.trim() !== '' && !isCommandPath(cli)))];
 }
 
 function agentsWord(n: number): string {
@@ -222,7 +229,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
       <div className="wk-run-glance-item">
         <span className="wk-run-glance-label">Progress</span>
         <span data-testid="run-tab-glance-progress" className="wk-run-glance-value">{total === 0 ? 'No steps yet' : `Step ${Math.max(1, stepAt)} of ${total}${current !== undefined ? ` · ${current.label}` : ''}`}</span>
-        {total > 0 && <span aria-hidden className="wk-run-glance-bar" data-tone={session.status === 'awaiting_human' ? 'waiting' : isTerminal(view) ? 'done' : 'run'}><span style={{ width: `${Math.round((doneSteps / total) * 100)}%` }} /></span>}
+        {total > 0 && <span aria-hidden className="wk-run-glance-bar" data-tone={session.status === 'awaiting_human' && !isAskTurnRun(session) ? 'waiting' : nothingToStop(view) ? 'done' : 'run'}><span style={{ width: `${Math.round((doneSteps / total) * 100)}%` }} /></span>}
       </div>
       <div className="wk-run-glance-item">
         <span className="wk-run-glance-label">Changes</span>
@@ -239,10 +246,10 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         <button type="button" data-testid="run-tab-glance-plan" className="wk-run-glance-link" onClick={() => useRunPanel.getState().focusOn('plan', 'steps')}>Plan and steps</button>
         <button type="button" data-testid="run-tab-glance-evidence" className="wk-run-glance-link" onClick={() => useRunPanel.getState().focusOn('checks', 'evidence')}>Evidence and record</button>
       </nav>
-      {!isTerminal(view) && !glanceStop && (
+      {!nothingToStop(view) && !glanceStop && (
         <button type="button" data-testid="run-tab-glance-stop" className="wk-run-tab-button wk-stop-btn wk-run-glance-stop" disabled={stopping} onClick={() => setGlanceStop(true)}>{stopping ? 'Stopping…' : 'Stop job'}</button>
       )}
-      {!isTerminal(view) && glanceStop && (
+      {!nothingToStop(view) && glanceStop && (
         <div data-testid="run-tab-glance-stop-confirm-row" className="wk-run-tab-confirm">
           <span>Stop this job? What it did so far is kept.</span>
           <button type="button" data-testid="run-tab-glance-stop-confirm" className="wk-run-tab-button wk-stop-btn wk-stop-btn--confirm" disabled={stopping} onClick={() => { stopRun([id], `“${title}”`); setGlanceStop(false); }}>Stop this job</button>
@@ -288,12 +295,12 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
           <p data-testid="run-tab-stranded" role="status" className="wk-run-tab-warning">Nobody has taken this work yet: its delivery card is in the thread.</p>
         )}
         <div data-testid="run-tab-actions" className="wk-run-tab-actions">
-          {!isTerminal(view) && (
+          {!nothingToStop(view) && (
             <button type="button" data-testid="run-tab-stop" className="wk-run-tab-button wk-stop-btn" disabled={stopping} onClick={() => setConfirmStop(true)}>{stopping ? 'Stopping…' : 'Stop'}</button>
           )}
           {panelShown && <SheetRunActions view={view} />}
         </div>
-        {!isTerminal(view) && confirmStop && (
+        {!nothingToStop(view) && confirmStop && (
           <div data-testid="run-tab-stop-confirm-row" className="wk-run-tab-confirm">
             <span>Stop this run?</span>
             <button type="button" data-testid="run-tab-stop-confirm" className="wk-run-tab-button wk-stop-btn wk-stop-btn--confirm" disabled={stopping} onClick={() => { stopRun([id], `“${title}”`); setConfirmStop(false); }}>Stop this run</button>

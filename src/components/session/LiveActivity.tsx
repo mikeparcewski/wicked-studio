@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { displayText } from '../../board/homePath.js';
 import { BookOpen, CircleCheck, CircleX, GitCommitHorizontal, Loader, Pencil, Search, Sparkles, Terminal, Users } from 'lucide-react';
 import { activityRows, activitySummary, currentTurn, narration, turnEndedAt, visibleRows, workingWords, type ActivityKind, type LiveRow, type TurnRef } from '../../board/liveActivity.js';
 import { seatLabel } from '../../board/seatNames.js';
@@ -79,7 +80,7 @@ export function LiveActivity({ runId, ord, kind = 'step', seat = null, label }: 
           <span className="wk-live-meter-who">{seatName}</span> · {meterLine}
         </p>
       )}
-      {summary !== null && <p data-testid="live-rolling" className="wk-live-rolling">{summary}</p>}
+      {summary !== null && <p data-testid="live-rolling" className="wk-live-rolling">{displayText(summary)}</p>}
       {earlier > 0 && <p data-testid="live-activity-earlier" className="wk-live-earlier">{earlier} earlier</p>}
       <ul className="wk-live-list">
         {shown.map((r) => {
@@ -87,13 +88,13 @@ export function LiveActivity({ runId, ord, kind = 'step', seat = null, label }: 
           return (
             <li key={r.key} data-testid="live-activity-row" data-kind={r.kind} data-running={r.running ? 'true' : 'false'} className={`wk-live-row${r.running ? ' wk-live-row--running' : ''}${r.ok === false ? ' wk-live-row--fail' : ''}`}>
               <Icon size={13} aria-hidden className="wk-live-icon" />
-              <span className="wk-live-text">{textOf(r)}</span>
+              <span className="wk-live-text">{displayText(textOf(r))}</span>
               {r.kind !== 'working' && ago(r.at, now) !== null && <span className="wk-live-ago">{ago(r.at, now)}</span>}
             </li>
           );
         })}
       </ul>
-      {said !== null && <p data-testid="live-activity-said" className="wk-live-said">“{said}”</p>}
+      {said !== null && <p data-testid="live-activity-said" className="wk-live-said">“{displayText(said)}”</p>}
       {endedAt === null && start !== null && start.at !== null && (
         <InflightCheck runId={runId} ord={ord} attempt={start.attempt} kind={kind} startedAt={start.at} now={now}
           seatName={seatName} seatKey={seatKey} label={label ?? (kind === 'chat' ? 'this answer' : 'the job')} />

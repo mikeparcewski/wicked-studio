@@ -7,6 +7,7 @@ import { relTime } from './relTime.js';
 import { stepWord } from './runConversation.js';
 import type { SessionState } from './sessionModel.js';
 import { chatStatusWord } from './statusWords.js';
+import { displayText } from './homePath.js';
 
 /**
  * THE RUN PAGE'S HEADER, ITS "NEEDS YOU" BANNER AND ITS JUMP-TO-LATEST (operator 2026-10-18: "Header could be much
@@ -87,7 +88,8 @@ export function waitingItems(
     const runId = needRunId(row);
     if (runId === null || !byId.has(runId)) continue;
     const gate = row.kind === 'gate' ? gates[runId] : undefined;
-    const question = (row.question ?? row.text).split('\n')[0]!.trim();
+    // Privacy (e2e-1105): a gate's or failure's words can name a file under the home folder; it reads `~/…`.
+    const question = displayText((row.question ?? row.text).split('\n')[0]!.trim());
     out.push({
       key: row.key,
       runId,
