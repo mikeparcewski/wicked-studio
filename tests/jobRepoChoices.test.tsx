@@ -217,6 +217,8 @@ describe('F41: the words name a repository as a whole token', () => {
     expect(names('https://github.com/acme/rg1/blob/main/rg2.git https://github.com/acme/rg1/tree/main/zeta/-/x')).toEqual(['rg1']);
     expect(names('https://docs.example.com/guide/rg2.git/page https://git.example/proj/-/merge_requests/9')).toEqual([]);
     expect(names('https://gitlab.com/grp/sub/rg2')).toEqual(['rg2']);
+    expect(names('https://git.example/acme/rg1/blob/main/rg2.git https://git.example/acme/rg1/tree/main/zeta/-/blob/f')).toEqual(['rg1']);
+    expect(names('https://git.example/acme/rg10/tree/main/-/file https://gitlab.com/grp/rg2/tree/main')).toEqual(['rg2', 'rg10']);
   });
   it('orders the named ones first, the rest by name', () => {
     expect(repoChoices('zeta and rg1', REPOS).list.map((r) => r.id)).toEqual(['zeta', 'rg1', 'rg10', 'rg2']);

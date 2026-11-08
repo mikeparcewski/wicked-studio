@@ -41,22 +41,25 @@ function names(words: string, term: string): boolean {
 
 const REPO_OPS = new Set(['pull', 'pulls', 'pull-requests', 'merge_requests', 'tree', 'blob', 'commit', 'commits', 'compare']);
 
-/** The repository one link names, or null (CJ13). GitHub and Bitbucket: `<owner>/<repo>`, whatever follows. GitLab: the
- *  segment before its `/-/` separator, else the last one (subgroups). Another host: a clone link (the path ends in
- *  `<repo>.git`), or `<owner>/<repo>/` followed by pull, tree, blob, commit or compare, or `<…>/<repo>/-/<that>`.
- *  Other links name nothing. */
+/** The repository one link names, or null (CJ13). GitHub and Bitbucket: `<owner>/<repo>`, whatever follows. Elsewhere
+ *  the repository is the segment before the first repository operation after it (`pull`, `tree`, `blob`, `commit`,
+ *  `compare`, `merge_requests`, or GitLab's `-` separator before one; on gitlab.com any `-`), so nothing in the content
+ *  path after it can rename it; with no operation, a GitLab project home names its last segment and a clone link
+ *  (`…/<repo>.git`) its repository. Other links name nothing. */
 function linkedRepo(link: string): string | null {
   let url: URL;
   try { url = new URL(link); } catch { return null; }
   const segs = url.pathname.split('/').filter((x) => x !== '').map((x) => { try { return decodeURIComponent(x); } catch { return x; } });
   const host = url.hostname.toLowerCase().replace(/^www\./u, '');
-  const dash = segs.indexOf('-');
   let repo: string | undefined;
   if (host === 'github.com' || host === 'bitbucket.org') repo = segs.length >= 2 ? segs[1] : undefined;
-  else if (host === 'gitlab.com') repo = dash >= 2 ? segs[dash - 1] : dash < 0 && segs.length >= 2 ? segs[segs.length - 1] : undefined;
-  else if (dash < 0 && segs.length >= 2 && /\.git$/iu.test(segs[segs.length - 1]!)) repo = segs[segs.length - 1];
-  else if (dash >= 2 && REPO_OPS.has(segs[dash + 1] ?? '')) repo = segs[dash - 1];
-  else if (dash < 0 && segs.length >= 3 && REPO_OPS.has(segs[2]!)) repo = segs[1];
+  else {
+    const gitlab = host === 'gitlab.com';
+    const at = segs.findIndex((x, i) => i >= 2 && (REPO_OPS.has(x) || (x === '-' && (gitlab || REPO_OPS.has(segs[i + 1] ?? '')))));
+    if (at >= 2) repo = segs[at - 1];
+    else if (gitlab) repo = segs.length >= 2 ? segs[segs.length - 1] : undefined;
+    else if (segs.length >= 2 && /\.git$/iu.test(segs[segs.length - 1]!)) repo = segs[segs.length - 1];
+  }
   const name = repo?.replace(/\.git$/iu, '').toLowerCase();
   return name === undefined || name === '' || name === '-' ? null : name;
 }
