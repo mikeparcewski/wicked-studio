@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { Check } from 'lucide-react';
 import { setPickedForNewWork } from './useAgentRows.js';
-import { goodEnough, setupAgents, setupMove, setupSteps } from '../../board/firstUse.js';
+import { goodEnough, setupAgents, setupMove, setupSteps, withRowRuntime } from '../../board/firstUse.js';
 import { authOf, type AgentRow } from '../../board/agentsModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useFirstUseReads } from '../../store/firstUseReads.js';
@@ -44,7 +44,8 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const f = useFirstUseReads();
   const [creating, setCreating] = useState(false);
 
-  const facts = { rows, repos: f.repos, projects: f.projects, checks: f.checks };
+  const checks = withRowRuntime(f.checks, rows);
+  const facts = { rows, repos: f.repos, projects: f.projects, checks };
   const steps = setupSteps(facts);
   const counted = setupAgents(rows);
   const helperReadingKnown = helpersKnown && (steps.agentsDone || rows.every((r) => authOf(r.seat) !== 'unknown'));
@@ -104,11 +105,12 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
             {f.checks.estate === null ? 'Not checked yet.' : f.checks.estate ? 'Done. The code map service is ready.' : 'Not done. Install the code map service (wicked-estate) to add a repository.'}{' '}
             <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/watch')}>Open Nerve Center</button>
           </Step>
-          <Step n={4} done={f.checks.runtimeRequired === false || f.checks.runtime === true} testId="agents-setup-step-runtime">
+          <Step n={4} done={checks.runtimeRequired === false || checks.runtime === true} testId="agents-setup-step-runtime">
             <b>Start the container runtime.</b>{' '}
-            {f.checks.runtimeRequired === false ? 'Done. Helpers run on this computer without containers.'
-              : f.checks.runtime === null || f.checks.runtimeRequired === null ? 'Not checked yet.'
-              : f.checks.runtime ? 'Done. The container runtime is running.' : 'Not done. Start Docker Desktop or Rancher Desktop, then check again.'}{' '}
+            {checks.runtimeRequired === false ? 'Done. Helpers run on this computer without containers.'
+              : checks.runtime === null || checks.runtimeRequired === null ? 'Not checked yet.'
+              : checks.runtime ? 'Done. The container runtime is running.'
+              : `Not done. ${checks.downReason !== null ? `${checks.downReason.replace(/[.!]$/, '')}: start it` : 'Start Docker Desktop or Rancher Desktop'}, then check again.`}{' '}
             <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/watch')}>Open Nerve Center</button>
           </Step>
           <Step n={5} done={false} testId="agents-setup-step-defaults">

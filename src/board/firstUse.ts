@@ -1,4 +1,5 @@
 import type { SystemSnapshot } from '../api/system.js';
+import { helperNotInstalled, helperRuntimeDown } from './agentsCopy.js';
 import { boundaryHolds, type AgentRow } from './agentsModel.js';
 
 /** First use stays open until the live helper, skills, code map and runtime checks pass,
@@ -79,6 +80,21 @@ export function setupChecks(snapshot: SystemSnapshot | null, health?: unknown, d
 }
 
 /**
+ * The container runtime as the Helpers rows read it (first-run N3): a container helper whose check says the runtime
+ * is stopped ("Docker isn't running") means it is down; a container helper whose sign-in check answered (signed in
+ * or out) means it answered. The system snapshot's seat-image probe can time out on a loaded host and is read once,
+ * so it only fills in when no row has said either. `downReason` is the rows' own sentence.
+ */
+export function withRowRuntime(checks: SetupChecks, rows: readonly AgentRow[]): SetupChecks & { downReason: string | null } {
+  const container = rows.filter((r) => r.seat.sign_in === 'container');
+  if (container.length === 0) return { ...checks, downReason: null };
+  const down = container.map(helperRuntimeDown).find((m) => m !== null) ?? null;
+  if (down !== null) return { ...checks, runtime: false, runtimeRequired: true, downReason: down };
+  const answered = container.some((r) => r.seat.auth === 'signed_in' || r.seat.auth === 'signed_out');
+  return { ...checks, runtime: answered ? true : checks.runtime, runtimeRequired: true, downReason: null };
+}
+
+/**
  * The agents that count for setup (§5.1 `usableAgents`): picked for new work, not opt-in, signed in
  * or needing no sign-in, not on an active bench, given repository work (crew's `work_admission`
  * when sent, else studio's codex constant), and with a safety claim that holds for repository work.
@@ -120,6 +136,8 @@ export function setupSteps(f: SetupFacts): SetupSteps {
 export function setupMove(r: AgentRow, counted: readonly AgentRow[]): { kind: 'sign-in' | 'fix' | 'use'; label: string } | null {
   if (counted.some((c) => c.key === r.key)) return null;
   if (r.optIn) return null;
+  // A helper that can't be used on this floor can't be signed in yet: its modal says what to install.
+  if (helperNotInstalled(r)) return { kind: 'fix', label: `Fix ${r.name}` };
   // The top issue decides (issues are sorted): a sign-in offered first only when signing in is the next move (codex #759 r1).
   if (r.issues[0]?.code === 'signed_out') return { kind: 'sign-in', label: `Sign in ${r.name}` };
   if (!r.picked && r.usable && r.issues.every((i) => i.severity === 'note')) return { kind: 'use', label: `Use ${r.name} for new work` };

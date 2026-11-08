@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useEffect } from 'react';
 import type { RosterSeat } from '../src/api/types.js';
 import { normalizeSnapshot } from '../src/api/system.js';
-import { goodEnough, setupChecks, setupSettled } from '../src/board/firstUse.js';
+import { goodEnough, setupChecks, setupMove, setupSettled } from '../src/board/firstUse.js';
 import { agentRows } from '../src/board/agentsModel.js';
 import { agentStatus } from '../src/board/calmAgents.js';
 import { issueCopy } from '../src/board/agentsCopy.js';
@@ -140,7 +140,7 @@ describe('A-C3 sign-in opening failures', () => {
 
 describe('A-C9 missing helper', () => {
   it('shows one install problem for missing opencode, without safety or version warnings', async () => {
-    roster = [helper({ key: 'opencode', binary: 'opencode', display_name: 'opencode',
+    roster = [helper({ key: 'opencode', binary: 'opencode', display_name: 'opencode', sign_in_on: 'host',
       version: { installed: null, install_source: null, checked_at: new Date().toISOString(), status: 'unproven', proven: '1.17.18', why: 'no_answer' },
       issues: [{ code: 'version_unproven', severity: 'warning', params: {}, message: 'not found' },
         { code: 'signed_out', severity: 'problem', params: {}, message: 'signed out' }],
@@ -153,6 +153,36 @@ describe('A-C9 missing helper', () => {
     const [row] = agentRows({ roster, defaults: null, now: Date.now() });
     expect(agentStatus(row!)).toEqual({ word: 'Not installed', tone: 'fail', move: null });
     expect(modal).not.toHaveTextContent(/Safety checks are off|didn’t answer when studio asked|actions run unchecked/);
+  });
+  // fix-notinstalled (first-run-2): on the container floor the helper runs from its seat image and claude signs in
+  // through a login container, so no claude on this computer's PATH is not "not installed".
+  it('offers Sign in for claude on the container floor with no claude on this computer', async () => {
+    const missing = { installed: null, install_source: null, checked_at: new Date().toISOString(), status: 'no_pin' as const, proven: null };
+    roster = [helper({ sign_in_on: 'container', version: missing })];
+    const [row] = agentRows({ roster, defaults: null, now: Date.now() });
+    expect(agentStatus(row!).word).not.toBe('Not installed');
+    page('?fix=claude');
+    const modal = await screen.findByTestId('agents-modal');
+    expect(modal).not.toHaveTextContent('isn’t installed');
+    expect(within(modal).getByTestId('agents-signin')).toBeInTheDocument();
+    // A crew that doesn't say where sign-in runs leaves a container helper signable (its refusal is C3's).
+    const [older] = agentRows({ roster: [helper({ version: missing })], defaults: null, now: Date.now() });
+    expect(agentStatus(older!).word).not.toBe('Not installed');
+    // A host-sign-in helper (codex) already signed in keeps working from its image; signed out, it needs this computer's codex.
+    const codex = (extra: Partial<RosterSeat>) => agentRows({ roster: [helper({ key: 'codex', binary: 'codex', display_name: 'Codex', sign_in_on: 'host', version: missing, ...extra })], defaults: null, now: Date.now() })[0]!;
+    expect(agentStatus(codex({})).word).toBe('Not installed');
+    expect(agentStatus(codex({ auth: 'signed_in', signed_in: true, issues: [] })).word).not.toBe('Not installed');
+    // crew's auth wins over a stale boolean: a rejected credential still needs this computer's codex to sign in again.
+    expect(agentStatus(codex({ auth: 'signed_out', signed_in: true })).word).toBe('Not installed');
+    // Docker down comes first: the runtime is the thing to start.
+    expect(agentStatus(codex({ auth: 'unknown', health: { status: 'inactive', message: 'Docker isn’t running.', since: new Date().toISOString() } })).word).not.toBe('Not installed');
+    // The setup guide never offers a sign-in that needs the missing program.
+    expect(setupMove(codex({}), [])).toEqual({ kind: 'fix', label: 'Fix Codex' });
+    expect(setupMove(row!, [])).toEqual({ kind: 'sign-in', label: 'Sign in Claude Code' });
+    // The host floor still calls a missing program not installed.
+    const hostSeat = helper({ version: missing });
+    delete hostSeat.sign_in;
+    expect(agentStatus(agentRows({ roster: [hostSeat], defaults: null, now: Date.now() })[0]!).word).toBe('Not installed');
   });
   it('does not claim a signed-out helper with an unreadable version is taking unchecked actions', () => {
     const [row] = agentRows({ roster: [helper({ version: { installed: null, install_source: 'other', checked_at: new Date().toISOString(), status: 'unproven', proven: '1.17.18', why: 'no_answer' },
@@ -181,13 +211,14 @@ describe('A-C4 complete setup guide', () => {
     expect(guide).toHaveTextContent('Get one helper ready.');
     expect(guide).toHaveTextContent('Each sign-in opens the helper’s own sign-in; studio never sees your password.');
     expect(screen.getByTestId('agents-setup-step-estate')).toHaveTextContent('Install the code map service (wicked-estate) to add a repository.');
-    expect(screen.getByTestId('agents-setup-step-runtime')).toHaveTextContent('Start Docker Desktop or Rancher Desktop');
+    // The container helper's sign-in check answered, so the runtime did (N3: the rows win over the image probe).
+    expect(screen.getByTestId('agents-setup-step-runtime')).toHaveTextContent('Done. The container runtime is running.');
     expect(within(guide).getByRole('button', { name: 'Open Skills' })).toBeInTheDocument();
     expect(within(guide).getAllByRole('button', { name: 'Open Nerve Center' })).toHaveLength(2);
-    for (const key of ['skills', 'estate', 'runtime']) expect(screen.getByTestId(`agents-setup-step-${key}`)).toHaveAttribute('data-done', 'false');
+    for (const key of ['skills', 'estate']) expect(screen.getByTestId(`agents-setup-step-${key}`)).toHaveAttribute('data-done', 'false');
   });
   it('treats absent readings as not checked, never done', async () => {
-    infra = []; estateVersion = undefined;
+    infra = []; estateVersion = undefined; roster = [helper({ auth: 'unknown', issues: [] })];
     page('?setup=1');
     for (const key of ['skills', 'estate', 'runtime']) {
       const step = await screen.findByTestId(`agents-setup-step-${key}`);
@@ -203,6 +234,22 @@ describe('A-C4 complete setup guide', () => {
     await act(async () => { await useFirstUseReads.getState().load(true); });
     for (const key of ['skills', 'estate', 'runtime']) expect(screen.getByTestId(`agents-setup-step-${key}`)).toHaveAttribute('data-done', 'true');
     expect(writes).toHaveLength(0); // A helper still needs to sign in.
+  });
+  // first-run N3: step 4 read only the system snapshot's image probe, which a loaded host times out ("unknown"),
+  // so it said "Not checked yet." with Docker up, and the same with Docker down while the rows said so.
+  it('reads the container runtime the way the Helpers rows do', async () => {
+    infra = [{ key: 'skills', state: 'ok' }, { key: 'seat_images', state: 'unknown' }];
+    page('?setup=1');
+    const step = await screen.findByTestId('agents-setup-step-runtime');
+    await waitFor(() => expect(step).toHaveTextContent('Done. The container runtime is running.'));
+    expect(step).toHaveAttribute('data-done', 'true');
+    cleanup(); resetAgentsReads(); resetFirstUseReads(); clearCachedRoster();
+    roster = [helper({ auth: 'unknown', health: { status: 'inactive', message: 'Docker isn’t running.', since: new Date().toISOString() }, issues: [] })];
+    infra = [{ key: 'skills', state: 'ok' }, { key: 'seat_images', state: 'ok' }];
+    page('?setup=1');
+    const down = await screen.findByTestId('agents-setup-step-runtime');
+    await waitFor(() => expect(down).toHaveTextContent('Not done. Docker isn’t running: start it, then check again.'));
+    expect(down).toHaveAttribute('data-done', 'false');
   });
   it('calls an unread helper sign-in not checked yet', async () => {
     roster = [helper({ auth: 'unknown', issues: [] })];

@@ -15,7 +15,7 @@ import { TechDetails } from '../ui/TechDetails.js';
 import { CalmButton, CalmEmpty, CalmFacts, CalmHead, CalmLoading, CalmRow, CalmRows, CalmSection, type CalmTone } from '../calm/Calm.js';
 import { AgentModal } from './AgentModal.js';
 import { useAgentLogin } from './agentLogin.js';
-import { setupSettled } from '../../board/firstUse.js';
+import { setupSettled, withRowRuntime } from '../../board/firstUse.js';
 import { useFirstUseReads } from '../../store/firstUseReads.js';
 import { SetupPanel } from './SetupPanel.js';
 import { useAgentRows } from './useAgentRows.js';
@@ -145,7 +145,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
     return () => clearInterval(timer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const setup = firstUse.state === 'ok' && (params.get('setup') === '1' || !setupSettled(firstUse.setup, {
-    rows: v.rows, repos: firstUse.repos, projects: firstUse.projects, checks: firstUse.checks,
+    rows: v.rows, repos: firstUse.repos, projects: firstUse.projects, checks: withRowRuntime(firstUse.checks, v.rows),
   }));
   const join = (path: string, q: string): string => `${path}${path.includes('?') ? '&' : '?'}${q}`;
   const here = params.get('setup') === '1' ? join(basePath, 'setup=1') : basePath;
