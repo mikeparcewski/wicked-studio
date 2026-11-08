@@ -44,7 +44,7 @@ afterEach(() => { cleanup(); clearCachedRoster(); resetRunAcceptanceForTest(); v
 describe('rowHeadline (the row says what the dock says)', () => {
   it('a cause leads the row and the job title moves to the line; no cause keeps crew’s title and reason', () => {
     const a = item();
-    expect(rowHeadline(a, 'GitHub Copilot CLI can review this instead')).toBe('GitHub Copilot CLI can review this instead');
+    expect(rowHeadline(a, 'GitHub Copilot CLI can review this instead')).toBe('GitHub Copilot helper can review this instead');
     expect(rowLead(a, 'GitHub Copilot CLI can review this instead')).toBe('Add a tip splitter');
     expect(rowHeadline(a)).toBe('Add a tip splitter');
     expect(rowLead(a)).toBe('A reviewer could not be seated');

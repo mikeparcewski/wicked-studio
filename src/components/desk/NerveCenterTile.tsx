@@ -1,3 +1,4 @@
+import { healthText } from '../../board/rowHeadline.js';
 import { Activity } from 'lucide-react';
 import { toneWord } from '../../board/nerveCenter.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
@@ -36,7 +37,7 @@ export function NerveCenterTile({ navigate, pathname, waitingOnYou, compact = fa
   // the tile, and never crowds a tile that has something to act on.
   const note = state.read === 'fresh' && state.tone === 'green' && state.info != null ? state.info : null;
   const info = note !== null ? `. ${note}` : '';
-  const label = state.read === 'checking' ? `${PAGE_NAMES.watch}: ${state.words}` : `${PAGE_NAMES.watch}: ${state.words} — ${toneWord(state.tone)}${info}`;
+  const label = state.read === 'checking' ? `${PAGE_NAMES.watch}: ${healthText(state.words)}` : `${PAGE_NAMES.watch}: ${healthText(state.words)} — ${toneWord(state.tone)}${info}`;
   return (
     <a
       href={NERVE_CENTER_PATH}
@@ -49,10 +50,10 @@ export function NerveCenterTile({ navigate, pathname, waitingOnYou, compact = fa
       data-nav-dest="watch"
       data-tone={state.tone}
       data-read={state.read}
-      data-info={note ?? undefined}
+      data-info={note !== null ? healthText(note) : undefined}
       aria-current={here ? 'page' : undefined}
-      aria-label={label}
-      title={label}
+      aria-label={healthText(label)}
+      title={healthText(label)}
       data-rail-heading={compact ? 'watch' : undefined}
       className={`wk-nc-tile${compact ? ' wk-nc-tile--icon' : ''}`}
     >
@@ -62,7 +63,7 @@ export function NerveCenterTile({ navigate, pathname, waitingOnYou, compact = fa
       {!compact && <span className="wk-nc-text">
         <span className="wk-nc-name">{PAGE_NAMES.watch}</span>
         <span className="sr-only"> · </span>
-        <span data-testid="nerve-center-words" className="wk-nc-words">{state.words}</span>
+        <span data-testid="nerve-center-words" className="wk-nc-words">{healthText(state.words)}</span>
       </span>}
     </a>
   );

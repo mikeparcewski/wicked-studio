@@ -274,7 +274,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
           {note.text} <button type="button" className="wk-link wk-se-x" onClick={() => setNote(null)} aria-label="Dismiss">Dismiss</button>
         </CalmNote>
       )}
-      {coverage.kind === 'failed' && <StateBanner kind={coverage.error.kind} what="the memory totals" error={coverage.error.message} onRetry={loadCoverage} />}
+      {coverage.kind === 'failed' && error === null && <StateBanner kind={coverage.error.kind} what="the memory totals" error={coverage.error.message} onRetry={loadCoverage} />}
       {view === 'proposals' ? (
         <div className="wk-se-proposals wk-calm-proposals" data-testid="memory-proposals">
           <ProposalsSection kind="memory" heading="Memory proposals" editable revision={proposalsRev} runId={runFilter}

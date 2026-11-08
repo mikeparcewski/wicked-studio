@@ -1,3 +1,4 @@
+import { attentionCountWords } from '../../board/needsQueue.js';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -114,10 +115,10 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
 }): React.ReactElement {
   const { items, unfiled } = useMovableBoardModel(runs);
   const settled = useSettledNeeds(needRows, runsKnown, runsFailed);
-  const count = settled.count ?? 0;
-  const badgeText = settled.phase === 'partial' ? `${count}+` : String(count);
-  // The wordmark is named "Home"; its badge is said as the link's description: "22 need you".
-  const needWords = `${badgeText} ${badgeText === '1' ? 'needs' : 'need'} you`;
+  const count = settled.phase === 'complete' ? settled.count ?? 0 : 0;
+  const badgeText = String(count);
+  // The wordmark’s description uses Nerve Center’s count words.
+  const needWords = attentionCountWords(count);
   const needsId = useId();
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();

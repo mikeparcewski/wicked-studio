@@ -1,3 +1,4 @@
+import { healthText } from '../../board/rowHeadline.js';
 import { TechDetails } from './TechDetails.js';
 
 /**
@@ -8,7 +9,22 @@ import { TechDetails } from './TechDetails.js';
  */
 export type StateKind = 'offline' | 'error' | 'partial' | 'stale';
 
-function sentence(kind: StateKind, what: string | undefined, asOf: number | null | undefined): string {
+function sentence(kind: StateKind, what: string | undefined, asOf: number | null | undefined, error?: string | null): string {
+  // Existing callers retain ApiError.message when storing a failed read. Its prefix preserves
+  // the distinction between an HTTP refusal and a browser failure after that conversion.
+  const answered = error?.startsWith('the daemon refused this') === true;
+  if (kind === 'error') {
+    if (/memor/i.test(what ?? '') && /\b(?:wicked-)?estate\b/i.test(error ?? '')) {
+      return 'Memory needs the code map service (wicked-estate), which isn’t installed or running.';
+    }
+    if (/skill/i.test(what ?? '') && /\b(?:wicked-)?garden\b/i.test(error ?? '')) {
+      return 'Skills need wicked-garden, which isn’t installed or running.';
+    }
+    if (answered) {
+      const first = error!.replace(/^the daemon refused this[^—]*—\s*/, '').split(/[\r\n]/)[0]!.trim();
+      return `Studio’s service answered with an error: ${healthText(first)}`;
+    }
+  }
   const when = asOf != null ? new Date(asOf).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null;
   switch (kind) {
     case 'offline': return 'Studio can’t reach its service right now.';
@@ -31,14 +47,14 @@ export function StateBanner({ kind, what, error, onRetry, retrying = false, asOf
   return (
     <div data-testid={testId} data-kind={kind} role={tone === 'fail' ? 'alert' : 'status'} className={`wk-state-banner wk-state-banner--${tone}`}>
       <div className="wk-state-banner-row">
-        <p className="wk-state-banner-text">{sentence(kind, what, asOf)}</p>
+        <p className="wk-state-banner-text">{healthText(sentence(kind, what, asOf, error))}</p>
         {onRetry !== undefined && (
           <button type="button" data-testid={`${testId}-retry`} className="wk-btn wk-btn--secondary wk-btn--sm" onClick={onRetry} disabled={retrying} aria-busy={retrying}>
             {retrying ? 'Retrying…' : 'Retry'}
           </button>
         )}
       </div>
-      {error != null && error !== '' && <TechDetails data-testid={`${testId}-detail`} text={error} />}
+      {error != null && error !== '' && <TechDetails data-testid={`${testId}-detail`} text={healthText(error)} />}
     </div>
   );
 }

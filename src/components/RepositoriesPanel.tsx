@@ -362,7 +362,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
             titleAside={<PageAskButton kind="repos" testId="repos-page-ask" />}
             sentence={sentence}
             testId="repos-sentence"
-            action={(
+            action={loading || repos.length > 0 || showRegister || error !== null ? (
               <button
                 type="button"
                 data-testid="repos-add"
@@ -374,7 +374,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
               >
                 {showRegister ? 'Cancel' : 'Add a repository'}
               </button>
-            )}
+            ) : undefined}
           />
 
           {!loading && error !== null && (

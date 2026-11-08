@@ -623,3 +623,14 @@ describe('MemoryPage — Not accepted (what was turned down, kept by the store)'
     expect(screen.queryByTestId('not-accepted-empty')).toBeNull();
   });
 });
+
+it('slice C: a missing memory service appears in one error banner', async () => {
+  wire([]);
+  apiFetch.mockImplementation((path: string) => path.startsWith('/memory')
+    ? Promise.reject(new ApiError(503, 'wicked-estate not installed'))
+    : Promise.resolve({ proposals: [], projects: [] }));
+  const view = page();
+  await screen.findByTestId('memories-error');
+  await waitFor(() => expect(view.container.querySelectorAll('.wk-state-banner')).toHaveLength(1));
+  expect(screen.getByRole('alert')).toHaveTextContent('Memory needs the code map service (wicked-estate), which isn’t installed or running.');
+});

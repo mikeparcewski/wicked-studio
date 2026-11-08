@@ -305,3 +305,8 @@ export function focusLockView(flat: readonly NeedRow[], pinnedKey: string | null
 export function focusLockNote(hidden: number): string {
   return `${hidden} hidden, back when this clears`;
 }
+
+/** Shared words for Nerve Center's attention count and the header badge. */
+export function attentionCountWords(n: number): string {
+  return `${n} ${n === 1 ? 'thing needs' : 'things need'} a look`;
+}

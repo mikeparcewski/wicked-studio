@@ -1,3 +1,4 @@
+import { displayText } from './homePath.js';
 import type { SystemAttention } from '../api/system.js';
 
 /**
@@ -9,10 +10,25 @@ import type { SystemAttention } from '../api/system.js';
  * Slowing work now) reads it here.
  */
 export function rowHeadline(item: SystemAttention, cause: string | null = null): string {
-  return cause ?? item.text;
+  return healthText(cause ?? item.text);
 }
 
 /** The row's first muted words: the job's title under a cause headline, else crew's reason. */
 export function rowLead(item: SystemAttention, cause: string | null = null): string | null {
-  return cause !== null && cause !== item.text ? item.text : item.reason;
+  const text = cause !== null && cause !== item.text ? item.text : item.reason;
+  return text === null ? null : healthText(text);
+}
+
+/** Health and attention prose is safe even when full technical paths are enabled elsewhere. */
+export function healthText(text: string): string {
+  // A technical disclosure may contain JSON with escaped Windows separators.
+  return displayText(text.replace(/\\\\/g, '\\'))
+    .replace(/[0-9a-f]{32,}/gi, (id) => `${id.slice(0, 8)}…`)
+    .replace(/\bclis\b/gi, 'helpers').replace(/\bcli\b/gi, 'helper')
+    .replace(/\bagents\b/gi, 'helpers').replace(/\bagent\b/gi, 'helper')
+    .replace(/\bseats\b/gi, 'helpers').replace(/\bseat\b/gi, 'helper')
+    .replace(/\bcredentials?\b/gi, 'sign-in information')
+    .replace(/\bbroker\b/gi, 'helper service')
+    .replace(/\bsigned_out\b/g, 'not signed in')
+    .replace(/\bsnapshot\b/gi, 'system check').replace(/\bvenv\b/g, 'Python environment');
 }

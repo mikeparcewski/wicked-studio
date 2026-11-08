@@ -90,13 +90,14 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
   const clear = (): void => { setQuery(''); setStatus('all'); setAllTime(false); setShown(PAGE); onProject?.(null); onClearRefine?.(); };
   const sentence = jobsSentence(runsShown ? s : null, win, runs.length > 0);
   const listLabel = group === 'active' ? 'Active' : 'Finished';
+  const emptyStartsJob = runsShown && rows.length === 0 && narrowed.length === 0 && (runs.length === 0 || group === 'active');
 
   return (
     <div role="tabpanel" id={panelId} aria-labelledby={labelledBy} aria-label={labelledBy === undefined ? 'Jobs' : undefined} data-testid="desk-runs" className="wk-jr">
       <div className="wk-jr-col">
         <QuietHead title="Jobs" level={showProject ? 1 : 2} sentence={sentence} testId="desk-runs-sentence"
           titleAside={showProject ? <PageAskButton kind="jobs" testId="jobs-page-ask" /> : undefined}
-          action={onNewJob !== undefined ? <button type="button" className="wk-jr-btn wk-jr-btn--primary" data-testid="desk-runs-new" onClick={onNewJob}>New job</button> : undefined} />
+          action={onNewJob !== undefined && !emptyStartsJob ? <button type="button" className="wk-jr-btn wk-jr-btn--primary" data-testid="desk-runs-new" onClick={onNewJob}>New job</button> : undefined} />
 
         <section className="wk-jr-sec" aria-labelledby="desk-runs-title" data-testid="desk-runs-list" data-group={group}>
           <div className="wk-jr-sec-head">

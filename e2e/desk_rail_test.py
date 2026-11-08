@@ -137,7 +137,7 @@ with sync_playwright() as p:
           and not r["bell"] and r["homeLinks"] == 1 and r["nerveLast"]
           # The wordmark is the link Home; its description says the badge (the fixture has gates waiting).
           and r["homeTag"] == "A" and r["homeName"] == "Home"
-          and badge is not None and r["homeDesc"] in (f"{badge} need you", f"{badge} needs you")
+          and badge is not None and r["homeDesc"] in (f"{badge} things need a look", f"{badge} thing needs a look")
           # Projects is WORK's one primary entry: a stronger weight than its siblings and an accent mark.
           and r["primaries"] == ["nav-projects"] and r["primaryMark"]
           and (r["primaryWeight"] or 0) > (r["jobsWeight"] or 0)

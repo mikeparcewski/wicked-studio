@@ -75,3 +75,8 @@ describe('the data panel', () => {
     expect(rowWriteMenuBlocker(pgServer(), { ...TICKETS, kind: 'view' })).toMatch(/plain table/);
   });
 });
+
+it('slice C: the empty actions explain when changing rows becomes available', () => {
+  render(panel([]));
+  expect(screen.getByTestId('data-panel-no-actions')).toHaveTextContent('Once a source has tables, use a table’s ⋯ menu to allow an app to change rows.');
+});

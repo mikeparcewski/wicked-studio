@@ -183,3 +183,9 @@ describe('review r3 folds (codex)', () => {
     expect(screen.getByRole('dialog', { name: /Row write on support.assignments/ })).toBeTruthy();
   });
 });
+
+it('slice C: a source-free page uses complete sentences and calls coding tools helpers', async () => {
+  servers = [];
+  render(<SourcesPage navigate={vi.fn()} search="" />);
+  expect(await screen.findByText(/No data sources yet\. Crew’s own data is always here\./)).toHaveTextContent('helpers see');
+});

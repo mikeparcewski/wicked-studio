@@ -1,3 +1,4 @@
+import { useViewPrefsStore } from '../src/store/viewPrefs.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -109,6 +110,7 @@ const SNAPSHOT = {
 };
 
 beforeEach(() => {
+  useViewPrefsStore.setState({ prefs: { technical_details: false } });
   resetSystemStore();
   clearCachedRoster();
   caps = { system: true };
@@ -321,7 +323,7 @@ describe('against a crew with the system snapshot', () => {
     expect(within(copilot).getByTestId('nc-cli-pin')).toHaveAttribute('data-matched', 'false');
     const pi = cards[2]!;
     expect(within(pi).getByTestId('nc-cli-state')).toHaveTextContent('signed out');
-    expect(within(pi).getByTestId('nc-cli-reason')).toHaveTextContent('No credential found');
+    expect(within(pi).getByTestId('nc-cli-reason')).toHaveTextContent('No sign-in information found');
     // No stats: said why, and every number reads "—", never 0.
     expect(within(pi).getByTestId('nc-cli-statsnote')).toHaveTextContent('no event-log read binding');
     expect(within(pi).getByTestId('nc-cli-units')).toHaveTextContent('—');
@@ -577,9 +579,9 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
     const tile = screen.getByTestId('desk-rail-nerve');
     await waitFor(() => expect(tile).toHaveAttribute('data-read', 'fresh'));
     expect(tile).toHaveAttribute('data-tone', 'yellow');
-    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('sign in a second agent');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('sign in a second helper');
     const slow = await screen.findByTestId('nc-slow');
-    expect(slow).toHaveTextContent('Sign in a second agent so a different one can review');
+    expect(slow).toHaveTextContent('Sign in a second helper so a different one can review');
     // While too few agents are signed in, none of the others is "optional".
     expect(screen.queryByTestId('nc-not-set-up')).toBeNull();
     expect(tile).not.toHaveAttribute('data-info');
@@ -622,7 +624,7 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
     expect(tileOf('pi')).toHaveAttribute('data-tone', 'warn');
     expect(within(tileOf('copilot')).getByTestId('nc-tile-state')).toHaveTextContent('Signed out');
     expect(tileOf('copilot')).toHaveAttribute('data-tone', 'quiet');
-    expect(screen.getByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode · Signed out: GitHub Copilot CLI — optional');
+    expect(screen.getByTestId('nc-not-set-up')).toHaveTextContent('Not set up: OpenCode · Signed out: GitHub Copilot helper — optional');
   });
 
   it('an optional CLI never signed in never turns the CLIs chip yellow, against an older crew too', async () => {
@@ -644,4 +646,46 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
       });
     }
   });
+});
+
+it('slice C: no home paths or long IDs in the page, rail tile or their attributes', async () => {
+  const paths = [
+    ['', 'Users', 'alice', 'repo'].join('/'),
+    ['', 'home', 'alice', 'repo'].join('/'),
+    'C:' + '\\' + ['Users', 'alice', 'repo'].join('\\'),
+  ];
+  const id = 'abcdef0123456789'.repeat(3);
+  const words = `A helper needs a look in ${paths.join(' and ')} (${id})`;
+  useViewPrefsStore.setState({ prefs: { technical_details: true } });
+  rosterAnswer = () => Promise.resolve({ roster: SEATS.map((seat) => ({ ...seat, display_name: words, health: { status: 'inactive', since: iso(NOW), message: words } })) });
+  systemAnswer = () => Promise.resolve({
+    ...SNAPSHOT,
+    attention: SNAPSHOT.attention.map((a) => ({ ...a, title: words, reason: words + ' (estate is optional)', remedy: words, action: a.action === null ? null : { ...a.action, label: words } })),
+    clis: [cli({ cli: 'claude', label: words, state: 'benched', stateReason: words, version: words, sandbox: words, statsNote: words, stats: null, lastError: { at: iso(NOW), message: words }, versionPin: { pinned: words, observed: words, matched: false } })],
+    runs: [run({ runId: 'r-safe', title: words, liveness: 'held', reason: words, phase: words, seat: words })],
+    infra: SNAPSHOT.infra.map((r) => ({ ...r, label: words, reason: words, remedy: words, details: { note: words } })),
+    governance: SNAPSHOT.governance.map((g) => ({ ...g, label: words, reason: words, remedy: words, details: { note: words } })),
+  });
+  renderBoth();
+  await screen.findAllByTestId('nc-slow');
+  const assertSafe = (): void => {
+    const roots = [screen.getByTestId('nerve-center-page'), screen.getByTestId('desk-rail-nerve')];
+    for (const root of roots) {
+      const text = [root.textContent ?? '', ...[root, ...root.querySelectorAll('*')].flatMap((el) => [...el.attributes].map((a) => a.value))].join(' ');
+      for (const path of paths) {
+        expect(text).not.toContain(path.split('alice')[0]);
+        expect(text).not.toContain(JSON.stringify(path).slice(1, -1));
+      }
+      expect(text).not.toContain(id);
+    }
+  };
+  assertSafe();
+  expect(screen.getAllByTestId('nc-slow')[0]).toHaveAttribute('data-level', 'red');
+  expect(screen.getAllByTestId('nc-slow')[0]).toHaveTextContent('(estate is optional)');
+  expect(screen.getByTestId('nerve-center-page')).toHaveTextContent(id.slice(0, 8) + '…');
+  for (const tab of ['attention', 'clis', 'runs', 'infra', 'governance']) {
+    openTab(tab);
+    assertSafe();
+  }
+  useViewPrefsStore.setState({ prefs: { technical_details: false } });
 });

@@ -1,3 +1,4 @@
+import { attentionCountWords } from '../../board/needsQueue.js';
 import type { SystemAction, SystemAttention, SystemSnapshot } from '../../api/system.js';
 import type { RosterSeat } from '../../api/types.js';
 import type { NerveState } from '../../board/nerveCenter.js';
@@ -10,7 +11,7 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { CalmButton, CalmHead, CalmLoading, CalmSection } from '../calm/Calm.js';
 import { seatStandingWord, type HealthRegistry } from '../HealthRailSection.js';
 import { InsightsLine } from '../insights/InsightsLine.js';
-import { rowHeadline } from '../../board/rowHeadline.js';
+import { healthText, rowHeadline } from '../../board/rowHeadline.js';
 import type { SessionView } from '../../api/types.js';
 import { useRowHeadlines } from '../../hooks/useRowHeadlines.js';
 import { needTone } from '../../board/needTone.js';
@@ -130,7 +131,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
       const action = a.action;
       return (
         <button type="button" className="wk-calm-btn wk-calm-btn--link wk-ncv-fix" data-testid="nc-slow-fix" data-kind={action.kind} onClick={() => onAct(action)}>
-          {action.label ?? ACTION_WORD[action.kind]} <span aria-hidden>→</span>
+          {healthText(action.label ?? ACTION_WORD[action.kind])} <span aria-hidden>→</span>
         </button>
       );
     }
@@ -144,8 +145,9 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
         title={PAGE_NAMES.watch}
         sentenceTestId="nc-headline"
         sentence={<>
-          <span className="wk-ncv-lead" data-tone={sentence.tone}>{sentence.lead}</span>
-          {sentence.rest !== '' && <> <span>{sentence.rest}</span></>}
+          <span className="wk-ncv-lead" data-tone={sentence.tone}>{healthText(sentence.lead)}</span>
+          {state.read === 'fresh' && state.attention.length > 0 && <> <span>{attentionCountWords(state.attention.length)}.</span></>}
+          {sentence.rest !== '' && <> <span>{healthText(sentence.rest)}</span></>}
         </>}
         titleAside={<PageAskButton kind="nerve" testId="nc-chat" />}
         action={<><CheckedStamp /><CalmButton testId="nc-recheck" disabled={reading} onClick={onRecheck}>{reading ? 'Checking…' : 'Check again'}</CalmButton></>}
@@ -166,7 +168,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
                 <span aria-hidden className="wk-calm-dot" data-tone={needTone(a)} />
                 <span className="wk-ncv-slow-text">
                   <span className="wk-ncv-slow-title"><span className="sr-only">{a.level === 'red' ? 'Stopping work: ' : 'Slowing work: '}</span>{rowHeadline(a, causes.get(a.id) ?? null)}</span>
-                  {slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null) !== null && <span className="wk-ncv-slow-line">{slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null)}</span>}
+                  {slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null) !== null && <span className="wk-ncv-slow-line">{healthText(slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null) ?? '')}</span>}
                 </span>
                 {fix(a)}
               </li>
@@ -181,7 +183,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
           : helpers.length === 0
             ? <p className="wk-calm-foot">Crew reports no helpers.</p>
             : <TileGrid tiles={helpers} cols={4} search={search} navigate={navigate} onSignIn={(key) => onAct({ kind: 'sign-in', target: key })} />}
-        {state.info != null && <p className="wk-calm-foot" data-testid="nc-not-set-up">{state.info}</p>}
+        {state.info != null && <p className="wk-calm-foot" data-testid="nc-not-set-up">{healthText(state.info)}</p>}
       </CalmSection>
 
       <CalmSection label="System" data-testid="nc-system">
@@ -210,15 +212,15 @@ function TileGrid({ tiles, cols, search, navigate, onSignIn }: {
         const path = nerveTabPath(search, t.tab);
         return (
           <li key={t.id} className="wk-ncv-tile" data-testid="nc-tile" data-tile={t.id} data-tone={t.tone}>
-            <a href={path} className="wk-ncv-tile-main" data-testid="nc-tile-open" data-tab={t.tab} aria-label={`${t.name}: ${t.state}${t.line !== null ? `, ${t.line}` : ''}. Open its details`}
+            <a href={path} className="wk-ncv-tile-main" data-testid="nc-tile-open" data-tab={t.tab} aria-label={`${healthText(t.name)}: ${healthText(t.state)}${t.line !== null ? `, ${healthText(t.line)}` : ''}. Open its details`}
               onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate(path); }}>
-              <span className="wk-ncv-tile-name">{t.name}</span>
-              <span className="wk-ncv-tile-state" data-testid="nc-tile-state" data-tone={t.tone}>{t.state}</span>
-              {t.line !== null && <span className="wk-ncv-tile-line" data-testid="nc-tile-line">{t.line}</span>}
+              <span className="wk-ncv-tile-name">{healthText(t.name)}</span>
+              <span className="wk-ncv-tile-state" data-testid="nc-tile-state" data-tone={t.tone}>{healthText(t.state)}</span>
+              {t.line !== null && <span className="wk-ncv-tile-line" data-testid="nc-tile-line">{healthText(t.line)}</span>}
             </a>
             {t.signIn !== undefined && (
               <button type="button" className="wk-ncv-tile-signin" data-testid="nc-tile-signin" data-cli={t.signIn} onClick={() => onSignIn(t.signIn!)}>
-                Sign in<span className="sr-only"> to {t.name}</span>
+                Sign in<span className="sr-only"> to {healthText(t.name)}</span>
               </button>
             )}
           </li>
