@@ -2,6 +2,7 @@ import type { BaseSkillPosture, BaseSkillRefusedResponse, LaunchBodyWithDeliver,
 import { ApiError } from '../api/errors.js';
 import { chatAdmissionOf } from './chatOpen.js';
 import { seatLabel } from './seatNames.js';
+import { healthText } from './rowHeadline.js';
 import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictModel.js';
 
 /**
@@ -59,9 +60,26 @@ export interface HelperRefusal {
   reasons: string[];
 }
 
-/** Whether a daemon's refusal reason reads as a signed-out one (signing in is the fix). */
-function readsAsSignedOut(reason: string): boolean {
-  return /sign(?:ed)? out|sign(?:ed)? in|not logged in|log in|unauthori[sz]ed|401/i.test(reason);
+/** A narrowly NEGATIVE reading of a daemon's reason text — the positive phrase "signed in" must never
+ *  match (crew#533 now ships a reason like "status command says signed in, but its one live request did
+ *  not answer"). Used ONLY as a fallback when a seat carries no structured `auth` field. */
+function reasonReadsSignedOut(reason: string): boolean {
+  return /sign(?:ed)?\s*out|not\s+(?:logged|signed)\s+in|log\s*in|unauthori[sz]ed|\b401\b/i.test(reason);
+}
+
+/**
+ * Whether a seat reads as signed out (signing in is the fix). The structured fields decide first —
+ * `auth === 'signed_out'` (crew#533), or, on a daemon predating `auth`, `signed_in === false`. A seat
+ * whose `auth` is 'unknown' (crew reports this with "Docker isn't running" while the container runtime
+ * is down) is NOT signed out. The narrowly-negative text fallback runs only when `auth` is absent
+ * altogether (an older daemon with no `signed_in` either).
+ */
+function seatReadsSignedOut(seat: RosterSeat, reason: string): boolean {
+  const auth = (seat as Record<string, unknown>)['auth'];
+  if (typeof auth === 'string') return auth === 'signed_out';
+  if (seat.signed_in === false) return true;
+  if (seat.signed_in === true) return false;
+  return reasonReadsSignedOut(reason);
 }
 
 /**
@@ -86,8 +104,10 @@ export function composerSendRefusal(roster: readonly RosterSeat[] | null, scoped
     const reason = !admission.ok
       ? admission.reason ?? 'the daemon would not seat it'
       : (noCarryingSeatReason([seat.key], roster) ?? 'unavailable').replace(new RegExp(`^${seat.key}:\\s*`), '');
-    reasons.push(`${seatLabel(seat)}: ${reason}`);
-    if (!readsAsSignedOut(reason)) allSignedOut = false;
+    // B-P1 (privacy): a per-helper reason may carry a home path (/Users/alice/.config/…) — sanitize
+    // every reason that reaches the disclosure's DOM, closed or not.
+    reasons.push(healthText(`${seatLabel(seat)}: ${reason}`));
+    if (!seatReadsSignedOut(seat, reason)) allSignedOut = false;
   }
   // Signing in always goes somewhere useful (the Agents page), so the link rides every no-helper line.
   return { line: allSignedOut ? NO_HELPER_SIGNED_IN : NO_HELPER_AVAILABLE, signIn: true, reasons };

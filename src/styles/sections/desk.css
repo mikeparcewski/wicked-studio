@@ -1098,8 +1098,9 @@
 
 /* B-P12: the floating chat button (the Ask launcher) stands down on a page that already owns the
    bottom-right corner with its OWN composer (Understand's Ask), at a phone width (<= 640 px) where the
-   round button overlaps that composer's edge and its Ask button. Scoped to the launcher's selector; the
-   page's own composer is the way to ask there. */
+   round button overlaps that composer's edge and its Ask button. Scoped to the Understand CHAT pane
+   (data-pane="chat") only — the Knowledge, Coverage and Compare panes have no composer, so the launcher
+   stays available there. The page's own composer is the way to ask on the chat pane. */
 @media (max-width: 640px) {
-  [data-shell="desk"]:has([data-testid="understand-page"]) [data-testid="ask-launcher"] { display: none !important; }
+  [data-shell="desk"]:has([data-testid="understand-page"][data-pane="chat"]) [data-testid="ask-launcher"] { display: none !important; }
 }

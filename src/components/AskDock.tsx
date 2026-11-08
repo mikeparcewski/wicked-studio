@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { chatOpened, chatOpenFailed } from '../store/chatFlow.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
-import type { ChatOpenBody, ChatScope, RepoEntry, RosterSeat, SessionView } from '../api/types.js';
+import type { ChatOpenBody, ChatScope, ChatSeatOutcome, ChatSeatRefusal, RepoEntry, RosterSeat, SessionView } from '../api/types.js';
+import { healthText } from '../board/rowHeadline.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { useFailureClocks } from '../store/failureClocks.js';
 import { forgetAskSession, readAskSession, rememberChatChoices, writeAskSession, type AskSession } from '../store/askSession.js';
@@ -249,8 +250,36 @@ export function noHelperNotice(clis: readonly CliOption[]): { line: string; reas
   const allSignedOut = unavailable.every((o) => o.signInPath !== null);
   return {
     line: allSignedOut ? NO_HELPER_SIGNED_IN : NO_HELPER_AVAILABLE,
-    reasons: unavailable.map((o) => `${o.label}: ${o.reason ?? 'unavailable'}`),
+    // B-P1 (privacy): a per-helper reason may carry a home path — sanitize every reason that reaches
+    // the disclosure's DOM, closed or not.
+    reasons: unavailable.map((o) => healthText(`${o.label}: ${o.reason ?? 'unavailable'}`)),
   };
+}
+
+/**
+ * B-1: when the roster admitted a helper but the open itself refused every seat (`ChatSeatOutcome.ok:
+ * false`, and the response's `refused[]`), keep each failed start's reason — sanitized — for the drawer's
+ * disclosure, beside the plain "No helper can answer right now." line. The `label` maps a seat key to
+ * its one helper name. Deduped by key (the warm-outcome error wins over a `refused` row for the same
+ * seat); empty when nothing carried a reason.
+ */
+export function startFailureReasons(
+  seats: readonly ChatSeatOutcome[],
+  refused: readonly ChatSeatRefusal[] | undefined,
+  label: (key: string) => string,
+): string[] {
+  const rows: string[] = [];
+  const seen = new Set<string>();
+  for (const s of seats) {
+    if (!s.ok && typeof s.error === 'string' && s.error.trim() !== '') {
+      rows.push(healthText(`${label(s.cliKey)}: ${s.error}`));
+      seen.add(s.cliKey);
+    }
+  }
+  for (const r of refused ?? []) {
+    if (!seen.has(r.cliKey) && r.reason.trim() !== '') rows.push(healthText(`${label(r.cliKey)}: ${r.reason}`));
+  }
+  return rows;
 }
 
 /**
@@ -450,6 +479,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const [workflowRun, setWorkflowRun] = useState<string | null>(null);
   /** The repository the analysis could not ground (no code graph): "Index this repository". */
   const [indexOffer, setIndexOffer] = useState<{ repoId: string; name: string; state: 'offer' | 'starting' | 'started' | 'failed' } | null>(null);
+  /** B-1: the per-helper reasons the last chat open refused with (sanitized), for the drawer's disclosure
+   *  beside "No helper can answer right now.". Cleared at the next send; `null` when no open has refused. */
+  const [startFail, setStartFail] = useState<string[] | null>(null);
   /** The session's first question — its /chats handle, re-persisted with the flag. */
   const titleRef = useRef(resumed?.title ?? '');
 
@@ -661,6 +693,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const verbs: AssistVerbs = useMemo(
     () => ({
       send: async (text, _documents, files = []) => {
+        // A fresh send clears any stale open-failure reasons (B-1): the next open decides anew.
+        setStartFail(null);
         // Uploads (DES-SYSTEM-CHAT §8) are checked against crew's caps before anything is opened.
         if (files.length > 0) checkUpload(files);
         // What this message is about is chosen now, before anything below awaits; then the daemon's capabilities are
@@ -749,7 +783,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             if (askPath) body.primary = pick;
             // A refused open reads as the retired chat page's does (codex on #327): a pre-0.39.0 daemon's
             // "unknown field `scopeKind`" names the upgrade, never the raw wire.
-            const { seats: warmed, scope } = await api.openChat(body).catch((e: unknown) => {
+            const { seats: warmed, scope, refused } = await api.openChat(body).catch((e: unknown) => {
               throw new Error(describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e)));
             });
             // Closed while the open was in flight: end the chat it opened (keeping its history) and send
@@ -760,9 +794,13 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             }
             const ready = warmed.filter((s) => s.ok).map((s) => s.cliKey);
             if (ready.length === 0) {
-              // B-C6a: one plain line (the raw per-helper reasons belong to a disclosure, not the words).
+              // B-1/B-C6a: one plain line in the words; the roster admitted a helper but the open refused
+              // every seat — keep each failed start's reason (sanitized) under the drawer's disclosure.
+              setStartFail(startFailureReasons(warmed, refused, (k) => cliName(k, roster)));
               throw new Error(NO_HELPER_AVAILABLE);
             }
+            // The open seated a helper: any stale open-failure reasons stand down.
+            setStartFail(null);
             chatIdRef.current = id;
             setShownId(id);
             workflowAsk.current = undefined;
@@ -831,7 +869,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const locked = openedScope !== undefined;
   // B-C6a: before a chat is open, say in ONE plain line when no helper can answer (with a Sign-one-in link);
   // once the chat is open its one helper is fixed, so the notice stands down.
-  const noHelper = openedScope === undefined ? noHelperNotice(clis) : null;
+  // B-1: once a chat is open its one helper is fixed, so no notice; before that, the roster notice, else
+  // the last open-failure's reasons under the plain line (the open refused every admitted seat).
+  const noHelper = openedScope === undefined
+    ? (noHelperNotice(clis) ?? (startFail !== null && startFail.length > 0 ? { line: NO_HELPER_AVAILABLE, reasons: startFail } : null))
+    : null;
   const noHelperNode = noHelper === null ? null : (
     <p data-testid="ask-no-helper" className="wk-syschat-nohelper">
       {noHelper.line}{' '}

@@ -174,14 +174,20 @@ function YouBubble({ text, testId }: { text: string; testId: string }): React.Re
  * B-P7: estate's own index / annotate steps stream raw tool output ("annotated 6 member(s) across 1
  * community/communities … modularity=0.000") — not words for a person. Show a plain summary; the raw
  * output stays under Show all. `null` for any other step.
+ *
+ * The summary follows the step's OUTCOME: success words only for a step that succeeded; a FAILED
+ * (rejected) estate step reads "Mapping the code failed" / "Annotating the code map failed", with its
+ * raw output still under the disclosure. `state` defaults to 'done' for the plain-summary callers.
  */
-export function estateStepSummary(cli: string | null, label: string | null, raw: string): string | null {
+export function estateStepSummary(cli: string | null, label: string | null, raw: string, state: 'done' | 'rejected' = 'done'): string | null {
   if (cli !== 'wicked-estate' && cli !== 'estate') return null;
   const l = (label ?? '').toLowerCase();
   const t = raw.toLowerCase();
-  if (l.includes('annotat') || /annotated\b|modularity|communit/.test(t)) return 'Annotated the code map';
-  if (l.includes('index') || /\bindexed\b|member\(s\)|members? across/.test(t)) return 'Mapped the code';
-  return null;
+  const annotate = l.includes('annotat') || /annotated\b|modularity|communit/.test(t);
+  const index = l.includes('index') || /\bindexed\b|member\(s\)|members? across/.test(t);
+  if (!annotate && !index) return null;
+  if (state === 'rejected') return annotate ? 'Annotating the code map failed' : 'Mapping the code failed';
+  return annotate ? 'Annotated the code map' : 'Mapped the code';
 }
 
 function StepMessageView({ runId, step, who, checkWord, onOpen, at, evaluator = null }: {
@@ -197,7 +203,7 @@ function StepMessageView({ runId, step, who, checkWord, onOpen, at, evaluator = 
   const [all, setAll] = useState(false);
   const concise = useMemo(() => (read.state === 'text' ? conciseOutput(read.text) : null), [read]);
   // B-P7: an estate index / annotate step shows a plain summary; its raw output opens under Show all.
-  const estateSummary = useMemo(() => (read.state === 'text' ? estateStepSummary(who.cli, step.label, read.text) : null), [read, who.cli, step.label]);
+  const estateSummary = useMemo(() => (read.state === 'text' ? estateStepSummary(who.cli, step.label, read.text, step.state) : null), [read, who.cli, step.label, step.state]);
   const face = useMemo(() => (evaluator !== null && read.state === 'text' ? evaluatorFace(read.text, evaluator) : null), [evaluator, read]);
   const verdict = face === null ? concise?.verdict ?? null : null;
   return (
