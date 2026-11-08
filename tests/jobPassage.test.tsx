@@ -1246,3 +1246,39 @@ describe('Power mode for new jobs on (operator ruling 2026-11-06)', () => {
     expect(decisions()[0]!.body).toEqual({ decision: 'go', power: true });
   });
 });
+
+describe('F43: a refusal of Go again is said in crew’s words, never as "Interrupted · Go again"', () => {
+  const ACCEPTING = { at: T0 + 3, turnId: 't1', kind: 'proposal_accepting', pid: `${CHAT}:t1`, actor: 'me', edits: null, resolution: jobProposal(), identity: { runId: 'run-x', artifactRef: null } };
+  const refuseGo = (): void => {
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return Promise.resolve(ok({ code: 'helper_unavailable', error: "opencode can't work now; change who works on it" }, 409));
+      }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      if (path.endsWith('/team')) return Promise.resolve(ok(team));
+      if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+  };
+
+  it('helper_unavailable replaces the Interrupted line with crew’s sentence, and Not now is offered', async () => {
+    messages = [USER, SEAT, P1, ACCEPTING];
+    refuseGo();
+    page();
+    await screen.findByText(/Interrupted before it was recorded as started/);
+    fireEvent.click(reply('go_again'));
+    const refused = await screen.findByTestId('job-passage-refused');
+    expect(refused.textContent).toContain("Not started: opencode can't work now; change who works on it.");
+    expect(refused.textContent).toContain('Not now ends it');
+    expect(refused).toHaveAttribute('data-code', 'helper_unavailable');
+    expect(screen.queryByText(/Interrupted before it was recorded as started/)).toBeNull();
+    expect(screen.getByTestId('job-passage').textContent).not.toContain('Go again resumes the same job');
+    // Said once: not again under the passage.
+    expect(screen.getAllByText(/opencode can't work now/)).toHaveLength(1);
+    // The way out crew takes for an interrupted job.
+    fireEvent.click(reply('not_now'));
+    await waitFor(() => expect(posts.filter((p) => p.body['decision'] === 'not_now')).toHaveLength(1));
+  });
+});
