@@ -15,8 +15,9 @@ npm publish dates. Every version listed here exists on
 ### Fixed
 
 - **A pull request link names its repository (CJ13).** `/review-change https://github.com/<owner>/<repo>/pull/9` from a
-  new chat opens on that repository instead of asking "Which repository?": the words are read with each link's
-  repository segment beside them (a bare `owner/repo` path still names nothing).
+  new chat opens on that repository instead of asking "Which repository?". A pull request, tree, blob, commit or clone
+  link, or a repository link on a known git host, names its repository whatever its name; other links and a bare
+  `owner/repo` path name nothing.
 
 ### Changed
 

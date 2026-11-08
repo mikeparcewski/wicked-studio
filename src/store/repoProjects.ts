@@ -39,17 +39,29 @@ function names(words: string, term: string): boolean {
   return new RegExp(`(?:^|[^\\p{L}\\p{N}_./-])${escapeRe(term)}(?=$|[^\\p{L}\\p{N}_./-]|\\.(?:$|[^\\p{L}\\p{N}_./-]))`, 'iu').test(words);
 }
 
-/** A link names its repository by its path (`https://github.com/<owner>/<repo>/pull/9`, `…/<repo>.git`; CJ13): the
- *  words read with each link's repository segment beside them. A bare path (`my/rg1`) names nothing. */
-function withLinkedRepos(words: string): string {
-  const linked = [...words.matchAll(/https?:\/\/[^\s/]+\/[^\s/]+\/([^\s/?#]+)/giu)].map((m) => m[1]!.replace(/\.git$/iu, ''));
-  return linked.length === 0 ? words : `${words} ${linked.join(' ')}`;
+/** The repositories links in the words name by their path (CJ13): a pull request, tree, blob or commit link
+ *  (`https://<host>/<owner>/<repo>/pull/9`), a clone link (`…/<repo>.git`), or any repository link on a known git host.
+ *  Other links (`https://docs.example.com/guide/<word>`) and bare `owner/repo` paths name nothing. Lower-cased. */
+function linkedRepos(words: string): string[] {
+  const out: string[] = [];
+  const re = /https?:\/\/([^\s/<>()[\]]+)\/[A-Za-z0-9_.-]+\/([A-Za-z0-9_.-]+)(\/(?:pulls?|tree|blob|commits?|compare|merge_requests|-)\/|\/?(?=$|[\s)\]>,;:!?'"]|\.(?:$|\s)))/giu;
+  for (const m of words.matchAll(re)) {
+    const host = m[1]!.toLowerCase();
+    const repo = m[2]!.replace(/\.+$/u, '');
+    const clone = /\.git$/iu.test(repo);
+    const vcs = m[3]!.startsWith('/') && m[3]!.length > 1 || clone || /^(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.org)$/u.test(host);
+    if (vcs) out.push(repo.replace(/\.git$/iu, '').toLowerCase());
+  }
+  return out;
 }
+
+const linkedTo = (linked: readonly string[], r: Pick<RepoEntry, 'id' | 'name'>): boolean =>
+  linked.includes(r.name.toLowerCase()) || linked.includes(r.id.toLowerCase());
 
 /** The registered repositories the words name (by name or id), in registry order (F41). */
 export function reposNamedIn<R extends Pick<RepoEntry, 'id' | 'name'>>(words: string, repos: readonly R[]): R[] {
-  const read = withLinkedRepos(words);
-  return repos.filter((r) => names(read, r.name) || (r.id !== r.name && names(read, r.id)));
+  const linked = linkedRepos(words);
+  return repos.filter((r) => names(words, r.name) || (r.id !== r.name && names(words, r.id)) || linkedTo(linked, r));
 }
 
 /** A name distinct enough to be read as a repository rather than a word: it carries something other than letters (a
@@ -70,8 +82,9 @@ export async function repoNamedInWords(words: string): Promise<{ repo: RepoEntry
   try { repos = (await api.listRepos()).repos; } catch { return null; }
   const named = reposNamedIn(words, repos);
   // Named by a distinct name or id; two named (or one distinct and one plain) is not clear: the person picks.
-  const read = withLinkedRepos(words);
-  const clear = named.filter((r) => (distinctName(r.name) && names(read, r.name)) || (r.id !== r.name && distinctName(r.id) && names(read, r.id)));
+  // A link names its repository plainly, whatever its name (`…/acme/payments/pull/9`).
+  const linked = linkedRepos(words);
+  const clear = named.filter((r) => linkedTo(linked, r) || (distinctName(r.name) && names(words, r.name)) || (r.id !== r.name && distinctName(r.id) && names(words, r.id)));
   if (named.length !== 1 || clear.length !== 1) return null;
   const repo = clear[0]!;
   try {
