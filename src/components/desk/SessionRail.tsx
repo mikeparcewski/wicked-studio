@@ -188,9 +188,10 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
   const capsLoaded = useCapabilities((s) => s.loaded);
   useEffect(() => { if (!capsLoaded) void useCapabilities.getState().load(); }, [capsLoaded]);
   const on = navCurrent(pathname, { sources: dataSources });
-  // first-run P1: the primary entry's mark and weight show only while no other page is current (Home, or Projects
-  // itself); beside another current page it read as a second selection.
-  const primaryShown = on === null || on === 'home' || on === 'projects';
+  // first-run P1: the primary entry's mark and weight show only on Home and on Projects itself; beside another
+  // current page it read as a second selection. A page with no sidebar entry shows no mark either: Nerve Center
+  // is current on its own tile, a chat on its Recent row or the pressed New button (first-run-2 P1).
+  const primaryShown = on === 'home' || on === 'projects';
   const navLink = (item: NavItem): React.ReactElement => {
     const Icon = ITEM_ICON[item.id];
     const primary = item.primary === true && primaryShown;

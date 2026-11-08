@@ -71,6 +71,19 @@ export function apiStatus(e: unknown): number | null {
   return e instanceof ApiError ? e.status : null;
 }
 
+/**
+ * The daemon's own sentence when it is already written for a person: a refusal whose body carries one of
+ * the named `codes` (crew's plain-words refusals, e.g. `repo_path_missing`: "There is no folder at
+ * ~/code/nope. Check the path and try again."). It is the named cause, so it is shown as the line itself
+ * (first-run-2 C1); any other refusal keeps the plain sentence with its raw text under Technical details.
+ */
+export function plainRefusal(e: unknown, codes: readonly string[]): string | null {
+  if (!(e instanceof ApiError) || e.status < 400 || e.status >= 500 || typeof e.body !== 'object' || e.body === null) return null;
+  const code = (e.body as Record<string, unknown>)['code'];
+  const said = e.wire.trim();
+  return typeof code === 'string' && codes.includes(code) && said !== '' ? said : null;
+}
+
 /** The daemon's verbatim sentence, or null when `e` is not a wire refusal. */
 export function apiWire(e: unknown): string | null {
   return e instanceof ApiError ? e.wire : null;

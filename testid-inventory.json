@@ -3795,6 +3795,12 @@
       ]
     },
     {
+      "testId": "composer-start-why",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-suggestion",
       "files": [
         "src/components/session/Composer.tsx"

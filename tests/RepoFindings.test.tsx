@@ -467,3 +467,33 @@ describe('registering a repo whose onboarding cannot start (wicked-crew#1019)', 
     expect(screen.queryByTestId('repo-onboard-error')).toBeNull();
   });
 });
+
+describe('first-run-2 C1: a missing folder shows crew’s own sentence', () => {
+  it('crew’s plain 400 reason is the line; nothing generic, no duplicate under Technical details', async () => {
+    const { ApiError } = await import('../src/api/errors.js');
+    registerRepo.mockRejectedValueOnce(new ApiError(400, 'There is no folder at ~/code/nope. Check the path and try again.', {
+      code: 'repo_path_missing', error: 'There is no folder at ~/code/nope. Check the path and try again.',
+    }));
+    listRepos.mockResolvedValueOnce({ repos: [] });
+    render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);
+    await screen.findByTestId('repos-empty');
+    fireEvent.change(screen.getByTestId('repo-path'), { target: { value: '~/code/nope' } });
+    fireEvent.click(screen.getByTestId('repo-register-submit'));
+    const banner = await screen.findByTestId('repo-register-error');
+    expect(banner.textContent).toContain('There is no folder at ~/code/nope. Check the path and try again.');
+    expect(banner.textContent).not.toMatch(/Couldn’t load|the daemon refused this|Technical details/);
+  });
+
+  it('a refusal crew did not name keeps the plain line with its raw text under Technical details', async () => {
+    const { ApiError } = await import('../src/api/errors.js');
+    registerRepo.mockRejectedValueOnce(new ApiError(400, 'engine said something odd', { error: 'engine said something odd' }));
+    listRepos.mockResolvedValueOnce({ repos: [] });
+    render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);
+    await screen.findByTestId('repos-empty');
+    fireEvent.change(screen.getByTestId('repo-path'), { target: { value: '~/code/odd' } });
+    fireEvent.click(screen.getByTestId('repo-register-submit'));
+    const banner = await screen.findByTestId('repo-register-error');
+    expect(banner.querySelector('.wk-state-banner-text')!.textContent).toBe('Couldn’t load the repository.');
+    expect(banner.textContent).toContain('Technical details');
+  });
+});

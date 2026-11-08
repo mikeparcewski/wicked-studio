@@ -1,5 +1,6 @@
 import type { ShapeGuess } from 'wicked-crew-api-types';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { TechDetails } from '../ui/TechDetails.js';
 import type { SessionView } from '../../api/types.js';
 import { artifactOfChips, chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
 import { inViewFor } from '../../store/artifactInView.js';
@@ -166,6 +167,12 @@ export function shortPlaceholder(text: string, max = 18): string {
 /** One turn suggestion under the conversation: a label and what a click does. */
 export interface ComposerSuggestion { id: string; label: string; title?: string; onPick: () => void }
 
+/** The plain line under a refused start when the cause is already said (first-run-2 N5). */
+const NOTHING_STARTED = 'Nothing was started.';
+/** The daemon's no-seat refusal: the same cause the composer's no-helper line already says. Any other
+ *  refusal keeps its own words in the line (review r1). */
+const SEAT_REFUSAL = /no seat in the roster|every seat is signed out|signed out or disabled/i;
+
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
   inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false, jobChatId = null,
@@ -227,6 +234,14 @@ export function Composer({
   // never a sentence cut mid-word with no mark (UX audit row 32, the 390 px gate).
   const phone = usePhone();
   const box = inputRef ?? own;
+  // first-run-2 N5 (390 px): a one-row box scrolled a wrapped message so its first line sat half cut off at the
+  // top. The box grows with what is typed, up to the CSS max-height, and scrolls only past that.
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (el === null) return;
+    el.style.height = 'auto';
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
+  }, [text, box]);
   // Any width: when the whole placeholder does not fit on the one row (a run page with its panel open on a laptop),
   // the same first clause and ellipsis stand in, never a second line cut off (operator 2026-11-01).
   const [roomy, setRoomy] = useState(true);
@@ -735,7 +750,16 @@ export function Composer({
               {jobBusy ? 'Putting the job in the chat…' : 'Enter puts this job in the chat for you to look over. Nothing runs until you press Start.'}
             </span>
           )}
-          {startNote !== null && <span data-testid="composer-start-note" role="alert" className="wk-composer-note wk-composer-note--bad">{startNote}</span>}
+          {/* first-run-2 N5: beside the plain "No helper is signed in yet" line, the daemon's no-seat refusal is the
+              same cause in raw words: it rides Technical details, never the line. */}
+          {startNote !== null && (refusal !== null && SEAT_REFUSAL.test(startNote)
+            ? (
+              <span data-testid="composer-start-note" role="alert" className="wk-composer-note wk-composer-note--bad">
+                {NOTHING_STARTED}
+                <TechDetails data-testid="composer-start-why" text={startNote.replace(/^Nothing was started:\s*/, '')} />
+              </span>
+            )
+            : <span data-testid="composer-start-note" role="alert" className="wk-composer-note wk-composer-note--bad">{startNote}</span>)}
         </div>
       )}
       {showSeats && (

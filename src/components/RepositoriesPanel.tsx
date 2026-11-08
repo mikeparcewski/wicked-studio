@@ -12,7 +12,7 @@ import { rangeWord, TIME_RANGE_OPTIONS, useTimeRange, type TimeRange } from '../
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { onPlainClick, reindexAsPrefill } from './repoActions.js';
-import { readErrorKind } from '../api/errors.js';
+import { plainRefusal, readErrorKind } from '../api/errors.js';
 import { Segmented, StateBanner, StatLine, TechDetails } from './ui/index.js';
 import { QuietEmpty, QuietHead, QuietLoading } from './ui/QuietPage.js';
 import { lastActivity, repoReadiness, repoSide, repoTone, reposSentence } from '../board/repoRows.js';
@@ -65,6 +65,9 @@ interface Props {
  * bucket exists). Attach clocks read the membership mirror — never a new
  * request; the old per-repo graph fan-out stays retired.
  */
+
+/** Crew's register refusals that are already written for a person (crew api/repo-input.ts): shown as the line. */
+const PLAIN_REGISTER_CODES = ['repo_path_missing', 'repo_path_relative'] as const;
 
 /** A failure's raw text, for Technical details only. */
 function errorText(e: unknown): string {
@@ -483,7 +486,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
               </p>
 
               {registerError !== null && (
-                <StateBanner data-testid="repo-register-error" kind={readErrorKind(registerError)} what="the repository" error={errorText(registerError)} />
+                <StateBanner data-testid="repo-register-error" kind={readErrorKind(registerError)} what="the repository" said={plainRefusal(registerError, PLAIN_REGISTER_CODES)} error={errorText(registerError)} />
               )}
 
               <div className="wk-pg-repo-submit">
