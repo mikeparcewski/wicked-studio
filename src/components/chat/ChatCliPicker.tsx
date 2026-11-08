@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { healthText } from '../../board/rowHeadline.js';
 import { ChevronDown } from 'lucide-react';
 import type { CliOption } from '../../board/chatCli.js';
 import { OPT_IN_NOTE } from '../../store/composerSeats.js';
@@ -79,7 +80,7 @@ export function ChatCliPicker({ options, value, onChange, locked, onSignIn }: {
                 <span aria-hidden className="wk-chatcli-check">{o.key === value ? '✓' : ''}</span>
                 <span className="wk-chatcli-label">{o.label}</span>
                 {o.optIn && o.ok && <span className="wk-chatcli-why">{OPT_IN_NOTE}</span>}
-                {o.reason !== null && <span id={`chat-cli-why-${o.key}`} data-testid="chat-cli-why" className="wk-chatcli-why">{o.reason}</span>}
+                {o.reason !== null && <span id={`chat-cli-why-${o.key}`} data-testid="chat-cli-why" className="wk-chatcli-why">{healthText(o.reason)}</span>}
               </button>
               {o.signInPath !== null && (
                 <a

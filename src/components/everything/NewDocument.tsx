@@ -202,7 +202,7 @@ function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose
           </span>
           <span data-testid="made-new-document-council" role={seatBlocked ? 'alert' : undefined}>
             {tooFew
-              ? `A document needs two helpers that can work now: one writes it and another checks it. ${ready === 0 ? 'None can work now.' : 'Only one can work now.'}`
+              ? `A document needs two helpers that can work now: one writes it and another checks it.${counts.unknown > 0 ? '' : ready === 0 ? ' None can work now.' : ' Only one can work now.'}`
               : seatBlocked
                 ? (chosen ?? []).length === 0
                   ? 'Choose two helpers: one writes the document and another checks it.'

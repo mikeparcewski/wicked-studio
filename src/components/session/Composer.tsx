@@ -349,11 +349,12 @@ export function Composer({
     const assigned = liveRun.units.map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== '');
     return assigned.length > 0 && assigned.every((c) => !isHelperSeat(c));
   }, [liveRun]);
-  // B-6: the helper-free exception covers ONLY a plain message to the existing helper-free run. A NEW
-  // conversation (an @project chip opens a fresh session) or a workflow choice convenes helpers, so it
-  // keeps its helper checks — an estate-only run must not wave those through.
-  const helperFreeReply = jobHelperFree && project === null && wfChip === null;
-  const refusal = helperFreeReply ? null : composerSendRefusal(roster, project !== null);
+  // P7 (review r2): every send still needs a helper (a question about this job opens an Ask, which needs one), so the
+  // refusal always gates Send. Under a helper-free job it says so plainly: the job itself is fine.
+  const baseRefusal = composerSendRefusal(roster, project !== null);
+  const refusal = baseRefusal !== null && jobHelperFree && project === null && wfChip === null
+    ? { ...baseRefusal, line: 'This job runs without a helper. Asking about it needs one.' }
+    : baseRefusal;
   // studio#631: which seats THIS send uses — the launch form's rule (every eligible seat, minus the
   // ones you turned off), shown and editable here. A workflow launch convenes the council seats; an
   // Ask's first send opens a chat with the seats the daemon would admit to it. A reply into a started

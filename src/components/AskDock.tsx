@@ -544,6 +544,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const scoped = chipsScoped(chips) || seedPlanned;
   const clis = useMemo(() => cliOptions(roster, scoped), [roster, scoped]);
   const [cliPick, setCliPick] = useState<string | null>(() => sendPrimary ?? resumed?.cli ?? null);
+  // review r2: a failed start belongs to the helper and scope it tried; another pick or scope starts clean.
+  useEffect(() => { setStartFail(null); }, [cliPick, pathname]);
   const cli = openedScope !== undefined
     ? cliPick
     : cliPick !== null && clis.some((o) => o.key === cliPick && o.ok) ? cliPick : defaultChatCli(clis);
@@ -976,6 +978,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           prompts,
           composerControls: (
             <>
+              {/* review r2: a page chat says the same one line (and its reasons) as the floating chat. */}
+              {noHelperNode}
               {indexOffer !== null && (
                 <p className="wk-syschat-index" data-testid="analysis-index-offer" data-state={indexOffer.state}>
                   <span>{indexOffer.name} is not indexed yet, so this answer reads the files directly.</span>{' '}

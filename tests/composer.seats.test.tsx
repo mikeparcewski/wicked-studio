@@ -150,7 +150,10 @@ describe('studio#631: the composer helpers row', () => {
       makeUnit({ ord: 1, assigned_cli: 'wicked-estate', status: 'distributed' }),
     ])];
     render(<Composer composerKey="s1" text="" setText={() => {}} onSend={() => {}} runs={runs} started placeholder="p" ariaLabel="a" variant="session" navigate={() => {}} />);
-    expect(screen.queryByTestId('composer-refused')).toBeNull();
+    // Never "No helper can take this": the job runs fine; only asking about it needs a helper (review r2).
+    const line = screen.queryByTestId('composer-refused');
+    expect(line?.textContent ?? '').not.toMatch(/No helper can take this|cannot take a turn/);
+    if (line !== null) expect(line).toHaveTextContent('This job runs without a helper. Asking about it needs one.');
   });
 
   it('the choice persists per viewer, and the Ask reads the same choice', () => {

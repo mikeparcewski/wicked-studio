@@ -300,6 +300,16 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     await waitFor(() => expect(screen.getByTestId('chat-cli')).toBeDisabled());
   });
 
+  it('review r2: a PAGE chat (Understand) says the same one no-helper line as the floating chat', async () => {
+    setCachedRoster([
+      { key: 'claude', binary: 'claude', display_name: 'Claude Code', enabled_for_council: true, auth: 'signed_out', signed_in: false, chat_admission: { unscoped: { ok: false, reason: 'signed out' }, scoped: { ok: false, reason: 'signed out' } } },
+    ] as unknown as RosterSeat[]);
+    wireDiagnostics('present');
+    render(<AskDock runs={[]} pathname="/understand" onClose={() => undefined}
+      page={{ kind: 'understand', knows: 'Knows this page.', data: () => [], focus: null, onSent: () => undefined } as never} />);
+    expect(await screen.findByTestId('ask-no-helper')).toHaveTextContent('No helper is signed in yet.');
+  });
+
   it('B-C6a: every helper signed out shows EXACTLY ONE line “No helper is signed in yet.” with a link to /agents — never “cannot take a turn” per helper', async () => {
     const out = (reason: string) => ({ ok: false, reason });
     setCachedRoster([

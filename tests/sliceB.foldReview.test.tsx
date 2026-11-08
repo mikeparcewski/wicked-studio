@@ -135,6 +135,9 @@ function Harness({ onSend }: { onSend: (m: string, o: ComposerSend) => void }): 
   const [text, setText] = useState('');
   return <Composer composerKey="desk" text={text} setText={setText} onSend={onSend} runs={[ESTATE_RUN]} started placeholder="p" ariaLabel="a" variant="desk" navigate={() => {}} />;
 }
+function key(k: string): void {
+  fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: k });
+}
 function type(text: string): void {
   const box = screen.getByTestId('desk-composer-input') as HTMLTextAreaElement;
   fireEvent.change(box, { target: { value: text, selectionStart: text.length } });
@@ -157,10 +160,14 @@ describe('B-6: an estate-only run waves through a plain reply, never a new conve
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); useComposerChips.setState({ byComposer: {} }); });
 
-  it('a plain message to the helper-free run shows no refusal', () => {
-    render(<Harness onSend={() => {}} />);
+  it('a plain message under the helper-free run says the job is fine and asking needs a helper; Send stays gated (review r2)', () => {
+    const sent = vi.fn();
+    render(<Harness onSend={sent} />);
     type('what did it map?');
-    expect(screen.queryByTestId('composer-refused')).toBeNull();
+    expect(screen.getByTestId('composer-refused')).toHaveTextContent('This job runs without a helper. Asking about it needs one.');
+    expect(screen.getByTestId('composer-refused')).not.toHaveTextContent('No helper can take this');
+    key('Enter');
+    expect(sent).not.toHaveBeenCalled();
   });
 
   it('a new conversation (an @project chip) keeps its helper checks — the refusal stands', () => {

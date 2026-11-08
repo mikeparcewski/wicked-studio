@@ -61,8 +61,11 @@ function refusal(seat: RosterSeat, scoped: boolean): { reason: string; signIn: b
   const limit = health?.status === 'inactive' && typeof health.message === 'string' ? usageLimitWord(health.message) : null;
   if (limit !== null) return { reason: `benched: ${limit}`, signIn: false };
   // Signed out — by the roster's auth reading or in the daemon's own refusal — is fixed by signing in.
+  // Structured readings decide (review r2: "status command says signed in, but …" is not signed out, and crew's
+  // auth 'unknown' while Docker is down is not either); the refusal's words decide only when crew sent no reading.
+  const structured = typeof seat.auth === 'string' || typeof seat.signed_in === 'boolean';
   const signedOut = standing.kind === 'signed-out' || seat.auth === 'signed_out' || seat.signed_in === false
-    || (!admission.ok && /signed out|sign(?:ed)? in|not logged in|log in/i.test(admission.reason ?? ''));
+    || (!structured && !admission.ok && /signed out|not signed in|not logged in|sign in first|log in first/i.test(admission.reason ?? ''));
   if (signedOut) return { reason: admission.reason ?? 'signed out', signIn: true };
   if (!admission.ok) return { reason: admission.reason ?? 'the service will not seat it in this chat', signIn: false };
   // Left out of COUNCILS is not left out of chat (the chat admission above decides that); only a spent
