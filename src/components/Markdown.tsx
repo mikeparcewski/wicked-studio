@@ -27,7 +27,7 @@ export function remarkHomePaths(originals?: Map<number, string>) {
     if (typeof n.url === 'string' && /^file:\/\//i.test(n.url)) n.url = `file://${displayPath(n.url.slice(7))}`;
     for (const c of n.children ?? []) walk(c);
   };
-  return (tree: MdNode): void => walk(tree);
+  return (tree: MdNode): void => { originals?.clear(); walk(tree); };
 }
 
 /**
@@ -261,7 +261,7 @@ export function Markdown({ children, className, onOpenFile, marks }: Props): Rea
               const rendered = codeElement({ className: codeClass, children: codeChildren });
               // The verdict is looked up by the token as written (remarkHomePaths kept it by offset), never by the
               // collapsed `~/…` words the page shows.
-              const at = node?.position?.start.offset;
+              const at = node?.position?.start?.offset;
               const shown = typeof codeChildren === 'string' ? codeChildren : '';
               const raw = (typeof at === 'number' ? originals.get(at) ?? shown : shown).trim();
               const item = raw === '' || isCodeBlock(codeClass, codeChildren) ? undefined : marks.get(raw);

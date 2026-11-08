@@ -93,3 +93,17 @@ describe('Markdown privacy: link targets, image text, citation verdicts (e2e-110
     expect(container.innerHTML).not.toMatch(/reel-operator/);
   });
 });
+
+describe('citation marks and the strip never print a home folder (e2e-1105 r3)', () => {
+  it('raw, correction and note read ~/… on the inline mark and on the strip', async () => {
+    const { citationMarks, CitationStrip } = await import('../src/components/citations.js');
+    const c = { verified: 0, unverifiable: 0, corrected: 1, unchecked: 0, items: [
+      { raw: '/Users/reel-operator/repo/a.ts:9', kind: 'file', status: 'corrected', resolved: '/Users/reel-operator/repo/a.ts:12', note: 'moved in /Users/reel-operator/repo' },
+    ] } as never;
+    const { container } = render(<><Markdown marks={citationMarks(c)}>{'See `/Users/reel-operator/repo/a.ts:9`.'}</Markdown><CitationStrip citations={c} /></>);
+    expect(container.querySelector('[data-testid="citation-mark"]')!.getAttribute('data-status')).toBe('corrected');
+    expect(container.textContent).toContain('→ ~/repo/a.ts:12');
+    expect(screen.getByTestId('citation-flag').textContent).toContain('~/repo/a.ts:9 → ~/repo/a.ts:12');
+    expect(container.innerHTML).not.toMatch(/reel-operator/);
+  });
+});
