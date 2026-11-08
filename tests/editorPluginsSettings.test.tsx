@@ -92,7 +92,7 @@ describe('the Plugins page (editor plugins)', () => {
     await waitFor(() => expect(screen.getAllByTestId('plugin-tile')).toHaveLength(3));
     const tiles = screen.getAllByTestId('plugin-tile');
     expect(tiles.map((t) => t.dataset.plugin)).toEqual(['wicked-phase-report', 'wicked-page', 'e2e-json-viewer']);
-    expect(screen.getAllByTestId('plugin-tile-source').map((t) => t.textContent)).toEqual(['Built in', 'Built in', 'You installed']);
+    expect(screen.getAllByTestId('plugin-tile-source').map((t) => t.textContent)).toEqual(['Built in · pre-granted', 'Built in', 'You installed']);
     // The run plugin offers a live preview; a built-in editor with no preview image draws its miniature.
     expect(screen.getAllByTestId('plugin-tile-preview').map((p) => p.dataset.preview)).toEqual(['live', 'mini', 'mini']);
     expect(tiles[2]!.textContent).toContain('Opens pages and documents.');
@@ -129,6 +129,37 @@ describe('the Plugins page (editor plugins)', () => {
     expect(screen.queryByTestId('plugin-details')).toBeNull();
   });
 
+  it('installed run cards show their source, topics and real switch state; off and Remove update open sections', async () => {
+    const installed = { ...EDITORS.editors[1]!, id: 'acme-cost', title: 'Cost', protocol: [3], kinds: [], sizes: [], permissions: [],
+      entry_url: '/api/v1/editors/acme-cost/0.1.0/entry', inline: 'run-thread', enabled: false,
+      observe: [{ topic: 'wicked.run.unit.started', why: 'Measure steps.' }, { topic: 'wicked.run.usage.reported', why: 'Show spending.' }],
+      granted_topics: ['wicked.run.unit.started'], run_panels: [{ slot: 'run.details', id: 'cost', title: 'Cost', order: 15 }] };
+    vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+      if (init?.method === 'POST') { installed.enabled = true; return json(installed); }
+      if (init?.method === 'DELETE') return json({ removed: true, id: installed.id });
+      return json({ editors: [installed] });
+    }));
+    render(<PluginsPage navigate={vi.fn()} />);
+    const tile = await tileOf(installed.id);
+    expect(tile.dataset['kind']).toBe('run');
+    expect(tile.textContent).toContain('You installed');
+    expect(tile.textContent).toContain('Off');
+    expect(tile.textContent).toContain('Job details');
+    fireEvent.click(tile);
+    expect(screen.getByTestId('plugin-details-switch')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('plugin-details-hears').textContent).toContain('Measure steps.');
+    expect(screen.getByTestId('plugin-details-hears').textContent).toContain('Show spending.');
+    expect(screen.getByTestId('plugin-details-hears').querySelector('[data-topic="wicked.run.unit.started"]')?.textContent).toContain('Granted');
+    expect(screen.getByTestId('plugin-details-hears').querySelector('[data-topic="wicked.run.usage.reported"]')?.textContent).toContain('Not granted');
+    expect(screen.queryByTestId('editor-plugin-open')).toBeNull();
+    fireEvent.click(screen.getByTestId('plugin-details-switch'));
+    await waitFor(() => expect(screen.getByTestId('plugin-details-switch')).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByTestId('plugin-remove'));
+    fireEvent.click(screen.getByTestId('plugin-remove-confirm'));
+    await waitFor(() => expect(screen.queryByTestId('plugin-details')).toBeNull());
+    expect(screen.getAllByTestId('plugin-tile').some((t) => t.dataset['plugin'] === installed.id)).toBe(false);
+  });
+
   it('an editor’s details switch it off through crew (human-only POST), and the card says Off', async () => {
     const f = vi.fn((input: RequestInfo | URL) => {
       const u = String(input);
@@ -160,6 +191,10 @@ describe('the Plugins page (editor plugins)', () => {
     expect(editorLooks(EDITORS.editors[1]! as never).line).toBe('Opens pages and documents.');
     const cards = cardsOf(RUN_PLUGINS, EDITORS.editors as never);
     expect(filterCards(cards, 'job').map((c) => c.id)).toEqual(['wicked-phase-report']);
+    // review r1 (agy): an installed run plugin without its registry row (list not read yet, or the read failed) is left
+    // out, never drawn as a built-in with no switch and no Remove.
+    const orphan = { ...RUN_PLUGINS[0]!, id: 'acme-cost', grantedBy: 'install' as const, firstParty: false as const };
+    expect(cardsOf([...RUN_PLUGINS, orphan as never], null).map((c) => c.id)).toEqual(['wicked-phase-report']);
     expect(slotWords(RUN_PLUGINS[0]!.panels[0]!)).toBe('Job details · after Now, before Plan and steps (order 10) · one section per phase · the running phase open, the rest folded');
   });
 

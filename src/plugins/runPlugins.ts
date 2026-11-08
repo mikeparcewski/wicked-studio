@@ -1,9 +1,7 @@
 /**
- * The run-thread plugins studio hosts (program DES-PLUGIN-EVENTS spike 1): each renders ONE sandboxed block in a run's
- * thread and observes the run's events on the topics it was granted. Spike 1 hosts only the first-party ones studio
- * ships in its own bundle; they are PRE-GRANTED the topics their manifest names, and every place that shows one says
- * so ("Built in · pre-granted"). A third-party run-thread plugin needs crew's registry to carry `inline` and
- * `observe[]` and the install consent to grant them: spike 1b.
+ * The built-in run-thread plugins studio bundles. They are pre-granted the topics and run-thread permissions their
+ * manifests name. The run-plugin store merges these with observe-only installs from crew's registry; installed
+ * plugins receive only the topics crew granted for that build.
  */
 
 import bundles from 'virtual:wicked-run-plugins';
@@ -33,15 +31,18 @@ export interface RunPlugin {
   visuals: PluginVisuals;
   /** What it asked to observe (each with its reason), as the consent and the Plugins page show it. */
   observe: ObserveGrant[];
-  /** The topic patterns granted: a built-in plugin is pre-granted what its manifest names (valid patterns only). */
+  /** The granted topic patterns: crew’s decided set for an install; the valid manifest topics for a built-in. */
   granted: string[];
   /** The requests it asked for, each with its reason; a built-in one is pre-granted them (run-thread ones only). */
   permissions: RunPermission[];
   /** How the grant was given, said wherever the plugin is shown. */
-  grantedBy: 'built-in';
-  firstParty: true;
-  /** The plugin's one HTML file (framed from a blob: URL). */
+  grantedBy: 'built-in' | 'install';
+  firstParty: boolean;
+  /** A built-in’s HTML file (framed from a blob: URL); empty for an installed entry. */
   html: string;
+  /** Installed entries use the daemon’s hash-pinned bundle route, with its CSP. */
+  entryUrl?: string;
+  enabled?: boolean;
   sha256: string;
 }
 

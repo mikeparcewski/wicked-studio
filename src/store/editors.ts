@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { editorsFor, listEditors, type EditorView } from '../api/editors.js';
+import { editorsFor, listEditors, subscribeEditorRegistry, type EditorView } from '../api/editors.js';
 
 /**
  * Crew's editor registry, read once per tab (EP-P2): which plugin opens which artifact kind. `none`
@@ -30,6 +30,16 @@ export const useEditors = create<EditorsStore>((set, get) => ({
     }
   },
 }));
+
+// Every registry read and successful switch/removal updates already open artifact and run panels.
+// A full read published by anyone (an open job's run-plugin refresh included) is the tab's one read: the store is
+// ready, so a later load() does not read again (journeys desk_page_editor: one registry read per tab).
+subscribeEditorRegistry((change) => useEditors.setState((s) => ({
+  ...('editors' in change ? (change.none === true ? { state: 'none' as const, reason: 'This daemon has no editor registry.' } : { state: 'ready' as const, reason: null }) : {}),
+  editors: 'editors' in change ? change.editors : 'removed' in change
+    ? s.editors.filter((e) => e.id !== change.removed)
+    : s.editors.map((e) => e.id === change.id ? { ...e, enabled: change.enabled } : e),
+})));
 
 /**
  * WHICH EDITOR OPENS A KIND, BY THE PERSON'S PICK (artifact-runs-fix). More than one editor may declare a kind (an

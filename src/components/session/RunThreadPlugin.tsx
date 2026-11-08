@@ -12,8 +12,9 @@ import { seatLabel } from '../../board/seatNames.js';
 import { stepLabelOf } from '../../board/chainModel.js';
 import { pickedUpStep } from '../../plugins/wicked-phase-report/workingDoc.js';
 import { pluginSectionOpen, sectionKey, type PluginSection } from '../../board/runPluginPanels.js';
-import { RUN_PLUGINS, topicWords, type RunPlugin } from '../../plugins/runPlugins.js';
+import { topicWords, type RunPlugin } from '../../plugins/runPlugins.js';
 import { useBlockView, useRunPluginView, type RunPhase } from '../../store/runPluginView.js';
+import { useRunPlugins } from '../../store/runPlugins.js';
 import { useRunPanel } from '../../store/runPanel.js';
 import { useConnectionStore } from '../../store/connection.js';
 
@@ -120,7 +121,7 @@ export function RunPluginSection({ runId, plugin, section, live }: { runId: stri
   useEffect(() => {
     if (frameBox.current === null) return undefined;
     setTorn(null);
-    const url = URL.createObjectURL(new Blob([plugin.html], { type: 'text/html' }));
+    const url = plugin.entryUrl ?? URL.createObjectURL(new Blob([plugin.html], { type: 'text/html' }));
     const host = new EditorHost({
       container: frameBox.current,
       src: url,
@@ -187,16 +188,16 @@ export function RunPluginSection({ runId, plugin, section, live }: { runId: stri
     return () => {
       host.teardown('The section was closed');
       hostRef.current = null;
-      URL.revokeObjectURL(url);
+      if (plugin.entryUrl === undefined) URL.revokeObjectURL(url);
     };
     // One frame per mount; "Reload it" remounts; a phase whose units changed is another scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, plugin.id, plugin.html, mountKey, phase?.key, phase?.ords.join(',')]);
+  }, [runId, plugin.id, plugin.html, plugin.entryUrl, plugin.sha256, plugin.granted.join(','), mountKey, phase?.key, phase?.ords.join(',')]);
 
   // The working document changed (crew's `workingDocChanged` frame): the plugin re-reads it, the thread rows follow.
   useEffect(() => subscribeCoreEvents((e) => {
     const ev = e as unknown as { type: string; session?: unknown; head?: unknown };
-    if (ev.type !== 'workingDocChanged' || ev.session !== runId) return;
+    if (ev.type !== 'workingDocChanged' || ev.session !== runId || current.current.plugin.grantedBy === 'install') return;
     hostRef.current?.docChanged(typeof ev.head === 'number' ? ev.head : null);
     if (!granted('doc.read')) void docSeam.current.read();
   }), [runId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -289,7 +290,7 @@ export function RunPluginSection({ runId, plugin, section, live }: { runId: stri
           onClick={() => setOpen(runId, key, !open)} className="wk-rp-toggle">
           <span aria-hidden className="wk-rp-chevron" />
           <span className="wk-rp-label" data-testid="run-plugin-title">{section.title}</span>
-          <span className="wk-runplugin-mark" data-testid="run-plugin-grant" title={`From the ${plugin.title} plugin (built in, pre-granted). It hears ${topics}.`}>
+          <span className="wk-runplugin-mark" data-testid="run-plugin-grant" title={`From the ${plugin.title} plugin (${plugin.grantedBy === 'install' ? 'you installed it' : 'built in, pre-granted'}). It hears ${topics || 'no run events'}.`}>
             <svg aria-hidden viewBox="0 0 16 16" width="11" height="11"><path d="M6 2v3M10 2v3M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11v3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
             Plugin
           </span>
@@ -327,20 +328,20 @@ export function RunPluginSection({ runId, plugin, section, live }: { runId: stri
             </p>
           </div>
         )}
-        <p data-testid="run-plugin-attribution" className="wk-runplugin-foot" title={`It hears ${topics}. It writes only its own lines in the context document; what you type there is yours, and it never answers a decision.`}>{attributionLine(plugin)}</p>
+        <p data-testid="run-plugin-attribution" className="wk-runplugin-foot" title={`It hears ${topics || 'no run events'}. ${plugin.grantedBy === 'install' ? 'It cannot read or change the context document.' : 'It writes only its own lines in the context document; what you type there is yours, and it never answers a decision.'}`}>{attributionLine(plugin)}</p>
       </div>
     </section>
   );
 }
 
 /** The run plugins with a per-phase section in the panel: each has a thread row per phase. */
-function perPhase(): Array<{ plugin: RunPlugin; panelId: string }> {
-  return RUN_PLUGINS.flatMap((p) => p.panels.filter((d) => d.slot === 'run.details' && d.instances === 'per-phase').map((d) => ({ plugin: p, panelId: d.id })));
+function perPhase(plugins: readonly RunPlugin[]): Array<{ plugin: RunPlugin; panelId: string }> {
+  return plugins.flatMap((p) => p.panels.filter((d) => d.slot === 'run.details' && d.instances === 'per-phase').map((d) => ({ plugin: p, panelId: d.id })));
 }
 
 /** The run plugins with one section for the whole run (a phased run's per-phase plugins too: it has no phases). */
-function wholeRun(): Array<{ plugin: RunPlugin; panelId: string }> {
-  return RUN_PLUGINS.flatMap((p) => p.panels.filter((d) => d.slot === 'run.details').map((d) => ({ plugin: p, panelId: d.id })));
+function wholeRun(plugins: readonly RunPlugin[]): Array<{ plugin: RunPlugin; panelId: string }> {
+  return plugins.flatMap((p) => p.panels.filter((d) => d.slot === 'run.details').map((d) => ({ plugin: p, panelId: d.id })));
 }
 
 /**
@@ -349,7 +350,7 @@ function wholeRun(): Array<{ plugin: RunPlugin; panelId: string }> {
  */
 export function RunPhaseRows({ sessionId, runId, phase, live }: { sessionId: string | null; runId: string; phase: RunPhase; live: boolean }): React.ReactElement | null {
   const blocks = useRunPluginView((s) => s.blocks);
-  const rows = perPhase();
+  const rows = perPhase(useRunPlugins());
   if (rows.length === 0) return null;
   return (
     <>
@@ -375,7 +376,7 @@ export function RunPhaseRows({ sessionId, runId, phase, live }: { sessionId: str
  *  about (`ords`), or — `except` — one row at the newest unit not in it (the step running now has no message yet). */
 export function RunPluginJumpRows({ sessionId = null, runId, ords, except }: { sessionId?: string | null; runId: string; ords?: readonly number[]; except?: readonly number[] }): React.ReactElement | null {
   const blocks = useRunPluginView((s) => s.blocks);
-  const rows = wholeRun().flatMap(({ plugin, panelId }) => {
+  const rows = wholeRun(useRunPlugins()).flatMap(({ plugin, panelId }) => {
     const key = sectionKey(plugin.id, panelId, null);
     const b = blocks[`${runId}::${key}`];
     if (b === undefined) return [];

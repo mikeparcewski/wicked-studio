@@ -50,7 +50,7 @@ import { isHeldRun } from '../../board/heldRuns.js';
 import { isAskTurnRun } from '../../board/askTurn.js';
 import { TeamRosterLines } from './TeamRosterLines.js';
 import { panelRows, pluginSections } from '../../board/runPluginPanels.js';
-import { RUN_PLUGINS } from '../../plugins/runPlugins.js';
+import { useRunPlugins } from '../../store/runPlugins.js';
 import { useRunPhases } from '../../hooks/useRunPhases.js';
 import { useRunPluginView } from '../../store/runPluginView.js';
 import { RunPluginSection } from './RunThreadPlugin.js';
@@ -433,7 +433,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
 function RunPanelRows({ view, core }: { view: SessionView; core: Record<PanelSectionId, React.ReactElement> }): React.ReactElement {
   const id = view.session.id;
   const phases = useRunPhases(view);
-  const sections = useMemo(() => pluginSections(RUN_PLUGINS, phases), [phases]);
+  const runPlugins = useRunPlugins();
+  const sections = useMemo(() => pluginSections(runPlugins, phases), [runPlugins, phases]);
   const blocks = useRunPluginView((s) => s.blocks);
   const pinned = (key: string): boolean => blocks[`${id}::${key}`]?.pinned ?? useRunPluginView.getState().view(id, key).pinned;
   const rows = panelRows(sections, pinned);
@@ -442,7 +443,7 @@ function RunPanelRows({ view, core }: { view: SessionView; core: Record<PanelSec
     <>
       {rows.map((r) => (r.kind === 'core'
         ? <Fragment key={r.id}>{core[r.id]}</Fragment>
-        : <RunPluginSection key={`${id}:${r.section.key}:${pinned(r.section.key) ? 'pin' : 'place'}`} runId={id} plugin={RUN_PLUGINS.find((p) => p.id === r.section.pluginId)!} section={r.section} live={live} />))}
+        : <RunPluginSection key={`${id}:${r.section.key}:${pinned(r.section.key) ? 'pin' : 'place'}`} runId={id} plugin={runPlugins.find((p) => p.id === r.section.pluginId)!} section={r.section} live={live} />))}
     </>
   );
 }

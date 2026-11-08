@@ -3,7 +3,9 @@ import { removeEditor, setEditorEnabled, type EditorView } from '../../api/edito
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { mcpInspectPath } from '../../api/mcpInspect.js';
 import { CORE_ORDER, type PanelDecl } from '../../board/runPluginPanels.js';
-import { RUN_PLUGINS, permissionWords, topicWords, type RunPlugin } from '../../plugins/runPlugins.js';
+import { permissionWords, topicWords, type RunPlugin } from '../../plugins/runPlugins.js';
+import { useRunPlugins } from '../../store/runPlugins.js';
+import { useEditors } from '../../store/editors.js';
 import { firstPartyLooks } from '../../plugins/firstParty.js';
 import { NO_VISUALS, parseVisuals, previewFor, type PluginVisuals } from '../../plugins/visuals.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
@@ -76,12 +78,19 @@ export function panelWhere(panels: readonly PanelDecl[]): string[] {
 
 /** Every card on the page, in the page's order: run plugins, then editors (built-in first). */
 export function cardsOf(runPlugins: readonly RunPlugin[], editors: readonly EditorView[] | null): PluginCardModel[] {
-  const runs: PluginCardModel[] = runPlugins.map((p) => ({
-    key: `run:${p.id}`, kind: 'run', id: p.id, title: p.title, version: p.version, source: 'built-in', enabled: true,
-    line: p.description !== '' ? p.description : 'Shows a section in each job’s details.',
-    where: panelWhere(p.panels), visuals: p.visuals, mini: 'phase', run: p,
-  }));
-  const eds: PluginCardModel[] = (editors ?? []).map((e) => {
+  // An installed run plugin is shown only with its registry row (its switch and Remove need it): while the list is
+  // not read, or a read failed, it is left out rather than drawn as a built-in that cannot be switched off.
+  const runs: PluginCardModel[] = runPlugins.flatMap((p) => {
+    const editor = p.grantedBy === 'install' ? editors?.find((e) => e.id === p.id) : undefined;
+    if (p.grantedBy === 'install' && editor === undefined) return [];
+    return [{
+      key: `run:${p.id}`, kind: 'run', id: p.id, title: p.title, version: p.version, source: p.grantedBy === 'built-in' ? 'built-in' : 'installed', enabled: p.enabled !== false,
+      ...(editor !== undefined ? { editor } : {}),
+      line: p.description !== '' ? p.description : 'Shows a section in each job’s details.',
+      where: panelWhere(p.panels), visuals: p.visuals, mini: 'phase', run: p,
+    } satisfies PluginCardModel];
+  });
+  const eds: PluginCardModel[] = (editors ?? []).filter((e) => !runPlugins.some((p) => p.id === e.id) && (e as EditorView & { inline?: unknown }).inline !== 'run-thread').map((e) => {
     const looks = editorLooks(e);
     return {
       key: `editor:${e.id}`, kind: 'editor', id: e.id, title: e.title, version: e.version, source: e.first_party ? 'built-in' : 'installed',
@@ -163,7 +172,7 @@ function PluginTile({ card, selected, onPick }: { card: PluginCardModel; selecte
         <span className="wk-plugcard-words">
           <span className="wk-plugcard-title">
             <span data-testid="plugin-tile-title">{card.title}</span>
-            <span data-testid="plugin-tile-source" className="wk-tag">{SOURCE_WORDS[card.source]}</span>
+            <span data-testid="plugin-tile-source" className="wk-tag">{card.run?.grantedBy === 'built-in' ? 'Built in · pre-granted' : SOURCE_WORDS[card.source]}</span>
             {!card.enabled && <span data-testid="plugin-tile-off" className="wk-tag">Off</span>}
           </span>
           <span data-testid="plugin-tile-line" className="wk-plugcard-line">{card.line}</span>
@@ -227,10 +236,11 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
   const close = useRef<HTMLButtonElement | null>(null);
   useEffect(() => { close.current?.focus({ preventScroll: true }); }, [card.key]);
   const e = card.editor;
-  const grants = useEditorGrants(e);
+  // A run plugin's card is not an editor's: it has no permissions to decide (its topics are listed under Hears).
+  const grants = useEditorGrants(card.run === undefined ? e : undefined);
   // "May do" ticks only what crew decided it may do (F37, codex r1): a permission still asking (or denied) is under
   // "Asks for"; while crew's answer is unknown, an installed editor is ticked for nothing.
-  const allowed = e !== undefined ? allowedOf(e, grants.load) : null;
+  const allowed = e !== undefined && card.run === undefined ? allowedOf(e, grants.load) : null;
   const mayDo = e !== undefined && allowed !== null ? e.permissions.filter((p) => allowed.has(p.id)) : null;
   // An empty decided set is "nothing yet", not the manifest's "Asks for nothing" (codex r2).
   const words = mayDo === null ? null : mayDo.length === 0 ? { can: 'Nothing yet: it does only what you allow.', internet: null } : permissionsInWords(mayDo);
@@ -246,7 +256,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
         <PluginIcon card={card} size={40} />
         <div className="wk-plugdetail-name">
           <h2 data-testid="plugin-details-title">{card.title}</h2>
-          <p>{card.id}{card.version !== null ? ` · ${card.version}` : ''} · {SOURCE_WORDS[card.source]}</p>
+          <p>{card.id}{card.version !== null ? ` · ${card.version}` : ''} · {card.run?.grantedBy === 'built-in' ? 'Built in · pre-granted' : SOURCE_WORDS[card.source]}</p>
         </div>
         <button type="button" ref={close} data-testid="plugin-details-close" className="wk-runplugin-btn" aria-label={`Close the details of ${card.title}`} onClick={onClose}>
           <svg aria-hidden viewBox="0 0 16 16" width="14" height="14"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
@@ -259,7 +269,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
       <div className="wk-plugdetail-switch" data-testid="plugin-details-switch-row">
         {e !== undefined ? (
           <>
-            <span><b>{e.enabled ? 'On' : 'Off'}</b><br /><span className="wk-plugdetail-muted">Off takes effect where it opens next. Only you can change this.</span></span>
+            <span><b>{e.enabled ? 'On' : 'Off'}</b><br /><span className="wk-plugdetail-muted">{card.run !== undefined ? 'Off removes its section from open jobs.' : 'Off takes effect where it opens next.'} Only you can change this.</span></span>
             <button type="button" role="switch" aria-checked={e.enabled} data-testid="plugin-details-switch" disabled={switching || remove.state === 'removing'}
               aria-label={`${card.title} is ${e.enabled ? 'on' : 'off'}`} className="wk-switch" onClick={() => onSwitch(!e.enabled)}>
               <span aria-hidden className="wk-switch-track"><span className="wk-switch-thumb" /></span>
@@ -279,7 +289,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
           <ul className="wk-plugdetail-grants">{card.run.panels.map((p) => <li key={p.id}>{CHECK}<span>{slotWords(p)}<br /><code>{p.slot}</code></span></li>)}</ul>
         </section>
       )}
-      {e !== undefined && (
+      {e !== undefined && card.run === undefined && (
         <section className="wk-plugdetail-sec" data-testid="plugin-details-slot">
           <h3>Shows in</h3>
           <ul className="wk-plugdetail-grants"><li>{CHECK}<span>Opens {kindsInWords(e.kinds)} · {e.sizes.map((s) => (s === 'inline' ? 'in the conversation' : s === 'pane' ? 'beside it' : 'full screen')).join(', ')}</span></li></ul>
@@ -290,7 +300,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
         <section className="wk-plugdetail-sec" data-testid="plugin-details-hears">
           <h3>Hears (events it was granted)</h3>
           <ul className="wk-plugdetail-grants">
-            {card.run.observe.map((o) => <li key={o.topic} data-topic={o.topic}>{CHECK}<span>{topicWords(o.topic)}<br /><code>{o.topic}</code></span></li>)}
+            {card.run.observe.map((o) => <li key={o.topic} data-topic={o.topic}>{card.run!.granted.includes(o.topic) ? CHECK : CROSS}<span>{topicWords(o.topic)} · {card.run!.granted.includes(o.topic) ? 'Granted' : 'Not granted'}<br />{o.why}<br /><code>{o.topic}</code></span></li>)}
           </ul>
         </section>
       )}
@@ -317,7 +327,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
         </section>
       )}
 
-      {e !== undefined && !appsDoor && (opensDocuments || (e.enabled && door !== null)) && (
+      {e !== undefined && card.run === undefined && !appsDoor && (opensDocuments || (e.enabled && door !== null)) && (
         <section className="wk-plugdetail-sec" data-testid="editor-plugin-row" data-editor={e.id}>
           <h3>Use it</h3>
           {opensDocuments && <OpenDocumentList kinds={e.kinds} navigate={navigate} />}
@@ -342,7 +352,7 @@ function PluginDetails({ card, onClose, onSwitch, switching, switchError, naviga
           <h3>Remove</h3>
           {remove.state !== 'idle' ? (
             <>
-              <p className="wk-plugdetail-muted" data-testid="plugin-remove-confirm-line">Remove {card.title}? It is uninstalled and its install grant is withdrawn. Documents it opened stay; another editor, or studio’s own, opens them.</p>
+              <p className="wk-plugdetail-muted" data-testid="plugin-remove-confirm-line">Remove {card.title}? It is uninstalled and its install grant is withdrawn. {card.run !== undefined ? 'Its sections disappear from open jobs.' : 'Documents it opened stay; another editor, or studio’s own, opens them.'}</p>
               <p style={{ marginTop: 8, display: 'flex', gap: 8 }}>
                 <button type="button" data-testid="plugin-remove-confirm" className="wk-btn wk-btn--danger wk-btn--sm" disabled={remove.state === 'removing' || switching} onClick={onRemove}>
                   {remove.state === 'removing' ? 'Removing…' : `Remove ${card.title}`}
@@ -379,12 +389,12 @@ export function deepLinkOf(search: string | undefined): { editor: string; allow:
 export function PluginsPage({ navigate, search }: { navigate: (p: string) => void; search?: string }): React.ReactElement {
   const { load, retry, retrying } = useEditorList();
   const link = useMemo(() => deepLinkOf(search), [search]);
-  const [switched, setSwitched] = useState<Record<string, boolean>>({});
-  const [removed, setRemoved] = useState<ReadonlySet<string>>(() => new Set());
-  const editors = useMemo(() => (load.state === 'ready'
-    ? load.editors.filter((e) => !removed.has(e.id)).map((e) => (Object.hasOwn(switched, e.id) ? { ...e, enabled: switched[e.id]! } : e))
-    : null), [load, switched, removed]);
-  const cards = useMemo(() => cardsOf(RUN_PLUGINS, editors), [editors]);
+  // The shared registry (CS7): a switch or a removal here publishes into it, so it also reaches open jobs' run
+  // plugins without a reload (it replaces the page's own switched/removed overlays).
+  const registryEditors = useEditors((s) => s.editors);
+  const editors = load.state === 'ready' ? registryEditors : null;
+  const runPlugins = useRunPlugins(true);
+  const cards = useMemo(() => cardsOf(runPlugins, editors), [runPlugins, editors]);
   const [filter, setFilter] = useState<PluginFilter>('all');
   const [picked, setPicked] = useState<string | null>(null);
   // The card open NOW, read when crew answers a removal (its callback closes over an older render).
@@ -432,7 +442,6 @@ export function PluginsPage({ navigate, search }: { navigate: (p: string) => voi
     setSwitching(true);
     setSwitchError(null);
     setEditorEnabled(e.id, on)
-      .then((v) => setSwitched((s) => ({ ...s, [e.id]: typeof v?.enabled === 'boolean' ? v.enabled : on })))
       .catch((err: unknown) => setSwitchError({ id: e.id, error: err instanceof Error ? err.message : String(err) }))
       .finally(() => setSwitching(false));
   };
@@ -441,11 +450,10 @@ export function PluginsPage({ navigate, search }: { navigate: (p: string) => voi
     // Sent only for an editor you installed, never twice at once, never while its switch is being changed.
     if (e === undefined || !removableCard(card) || removeOf(e.id).state === 'removing' || switching) return;
     const id = e.id;
-    const key = `editor:${id}`;
+    const key = card!.key;
     setRemoveOf(id, { state: 'removing' });
     removeEditor(id)
       .then(() => {
-        setRemoved((s) => new Set([...s, id]));
         setRemoveOf(id, IDLE);
         // Close the details only if they still show this editor; another card the person opened stays open.
         if (pickedRef.current === key) {
