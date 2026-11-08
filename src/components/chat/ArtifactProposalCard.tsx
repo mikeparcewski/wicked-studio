@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { FileText } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { FileText, Palette } from 'lucide-react';
 import { api } from '../../api/client.js';
 import type { AskAnswer } from '../../api/ask.js';
 import { parseArtifactRef, type ArtifactProposal, type ChatProposalView, type ProposalEdits, type ProposalSource, type ProtectedEdit } from '../../api/chatArtifacts-wire.js';
@@ -26,8 +26,15 @@ import {
   type RefineOutcome,
   isProposalView,
   shownProposal,
+  THEME_LIMITS,
+  themeChangeWords,
+  themeDisclosure,
   type ProposalEntry,
 } from '../../board/artifactProposal.js';
+import { SETTINGS_THEME_PATH } from '../../board/settingsTabs.js';
+import { canonicalDelta, effectiveAppearance, mergedAppearance, themePatchOf, useAppearanceStore } from '../../theming/appearance.js';
+import { contrastWords, measureTheme, type ContrastCheck } from '../../theming/themeContrast.js';
+import { ThemeSwatches } from '../ThemeSwatches.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
 
 /**
@@ -55,6 +62,18 @@ export interface ArtifactProposalCardProps {
 }
 
 const terminal = (s: ChatProposalView['state']): boolean => s === 'decided' || s === 'superseded';
+
+/** What a theme card shows (slice A7): its changes against the tab's appearance, and the contrast of the merged result. */
+interface ThemeFacts {
+  changes: string[];
+  check: ContrastCheck;
+  seatName: string;
+}
+
+const goTo = (path: string): void => {
+  history.pushState(null, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
 
 export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged, run = null }: ArtifactProposalCardProps): React.ReactElement {
   const [busy, setBusy] = useState(false);
@@ -90,6 +109,47 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   const view: ProposalEntry = answered !== null && !terminal(entry.state) && (terminal(answered.view.state) || same(answered.against, entry)) ? answered.view : entry;
   const p = shownProposal(view);
   const open = view.state === 'open';
+  // A7: a theme proposal is previewed on this tab, measured on the exact merged result, and applied from the preview.
+  const stored = useAppearanceStore((s) => s.appearance);
+  const preview = useAppearanceStore((s) => s.preview);
+  const save = useAppearanceStore((s) => s.save);
+  const saving = save.state === 'saving';
+  const previewingThis = preview !== null && preview.chatId === chatId && preview.pid === entry.pid;
+  const themeFacts = useMemo<ThemeFacts | null>(() => {
+    if (p.kind !== 'theme' || p.theme === undefined) return null;
+    // The preview of THIS card is what Apply saves: the whole accumulated delta (with any Theme-page moves) against the
+    // saved appearance. Any other card shows what its Preview would show: its patch over what the tab shows now.
+    if (previewingThis && preview !== null) {
+      return { changes: themeChangeWords(stored, canonicalDelta(stored, preview.delta)), check: measureTheme(effectiveAppearance({ appearance: stored, preview })), seatName };
+    }
+    const patch = themePatchOf(p.theme.patch);
+    // The base Preview will build on (the store's rule): this chat's preview, else the saved appearance.
+    const current = preview !== null && preview.chatId === chatId ? effectiveAppearance({ appearance: stored, preview }) : stored;
+    if (Object.keys(patch).length === 0) return { changes: [], check: { ratios: null, colors: null, ok: false, failing: ['this proposal names nothing studio can change'] }, seatName };
+    return { changes: themeChangeWords(current, canonicalDelta(current, patch)), check: measureTheme(mergedAppearance(current, patch)), seatName };
+  }, [p, stored, preview, previewingThis, seatName, chatId]);
+  const themeRefused = themeFacts === null || themeFacts.check.ok ? null : `Can’t preview: ${themeFacts.check.failing.join('; ')}`;
+  const startThemePreview = (): void => {
+    if (p.theme === undefined || themeRefused !== null) return;
+    useAppearanceStore.getState().startPreview({ name: p.theme.name, seat: seatName, chatId, pid: entry.pid, patch: themePatchOf(p.theme.patch) });
+  };
+  // An Apply of this card's preview from the bar or the Theme page: re-read the chat, so the card shows it answered
+  // even without the live frame.
+  const savedThis = useAppearanceStore((s) => s.answered === entry.pid);
+  useEffect(() => {
+    if (savedThis) onChanged();
+  }, [savedThis]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Focus follows the controls a keyboard used: Preview → the preview's Apply; Back to mine → Preview again.
+  const themeFocus = useRef<'apply' | 'go' | null>(null);
+  useEffect(() => {
+    const want = themeFocus.current;
+    if (want === null) return;
+    themeFocus.current = null;
+    const el = want === 'apply'
+      ? sectionRef.current?.querySelector<HTMLElement>('[data-testid="artifact-proposal-theme-apply"]')
+      : sectionRef.current?.querySelector<HTMLElement>('[data-ask-option="go"]');
+    el?.focus();
+  }, [previewingThis]);
   // A5: the protected edits the person lets this refine change (Keep it is the default). Only ids the card shows count:
   // a re-resolved card (the document moved) draws new ids, all kept again.
   const [letChange, setLetChange] = useState<ReadonlySet<string>>(new Set());
@@ -168,14 +228,26 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
     void answerWith(decision);
   };
   const onAnswer = (a: AskAnswer): void => {
-    if (a.option === 'go' || a.option === 'not_now') decide(a.option);
-    else if (a.option === 'change') {
+    // A7: Preview records nothing (the Apply does); Not now ends this card's preview.
+    if (a.option === 'go' && p.kind === 'theme') {
+      if (sectionRef.current?.contains(document.activeElement) === true) themeFocus.current = 'apply';
+      startThemePreview();
+    }
+    else if (a.option === 'go' || a.option === 'not_now') {
+      if (a.option === 'not_now' && previewingThis) useAppearanceStore.getState().endPreview();
+      decide(a.option);
+    } else if (a.option === 'change') {
       setError(null);
       const route = changeRoute(p.kind);
       if (route.kind === 'form') setAnswering(true);
-      else setNote(route.note);
+      else if (route.kind === 'theme') {
+        startThemePreview();
+        if (themeRefused === null) goTo(SETTINGS_THEME_PATH);
+      } else setNote(route.note);
     }
   };
+  // A saved Apply re-reads the chat through `savedThis` (whichever surface applied it).
+  const applyTheme = (): void => { void useAppearanceStore.getState().applyPreview(); };
 
   // A3: a real Go takes seconds; while it starts (this tab's request, or a Go recorded moments ago in another tab) the
   // card says so instead of "Interrupted · Go again".
@@ -207,14 +279,16 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       ref={sectionRef}
     >
       <p className="wk-ask-who">
-        <FileText size={16} aria-hidden />
-        <span>{open ? `Proposal from ${seatName} · nothing starts until you choose` : `Proposal from ${seatName}`}</span>
+        {p.kind === 'theme' ? <Palette size={16} aria-hidden /> : <FileText size={16} aria-hidden />}
+        <span>{p.kind === 'theme'
+          ? (open ? `Theme proposal from ${seatName} · nothing changes until you apply it` : `Theme proposal from ${seatName}`)
+          : (open ? `Proposal from ${seatName} · nothing starts until you choose` : `Proposal from ${seatName}`)}</span>
       </p>
       <p className="wk-ask-q" data-testid="artifact-proposal-what">{p.what.label}</p>
       {open || view.state === 'accepting' ? (
         <>
           {p.what.outcome !== null && p.what.outcome !== '' && <p className="wk-ask-sub">{p.what.outcome}</p>}
-          <ProposalLines p={p} id={detailsId} />
+          <ProposalLines p={p} id={detailsId} theme={themeFacts} />
         </>
       ) : null}
       {open && p.blocked !== null && (
@@ -228,9 +302,16 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       {open && p.kind === 'refine' && p.protected !== undefined && (
         <ProtectedEditsBlock p={p} letChange={letChange} onToggle={toggle} disabled={busy} />
       )}
-      {open && answering ? null : open ? (
-        <AskCard ask={proposalAsk(view, { stub })} header={false} busy={busy} onAnswer={onAnswer}
-          confirmLabel={(o) => (o.id === 'change' ? 'Change something' : o.label)}
+      {open && previewingThis ? (
+        <div className="wk-proposal-again" data-testid="artifact-proposal-previewing" role="group" aria-label={`Previewing ${p.theme?.name ?? 'the theme'}`}>
+          <AskRecord line={`Previewing ${p.theme?.name ?? 'the theme'} on this tab only`} testId="artifact-proposal-record" />
+          <button type="button" data-testid="artifact-proposal-theme-apply" className="wk-btn wk-btn--primary wk-btn--sm" disabled={busy || saving} onClick={applyTheme}>{saving ? 'Saving…' : 'Apply'}</button>
+          <button type="button" data-testid="artifact-proposal-theme-back" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={saving} onClick={() => { themeFocus.current = 'go'; useAppearanceStore.getState().endPreview(); }}>Back to mine</button>
+          <button type="button" data-testid="artifact-proposal-theme-open" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => goTo(SETTINGS_THEME_PATH)}>Open in Theme</button>
+        </div>
+      ) : open && answering ? null : open ? (
+        <AskCard ask={proposalAsk(view, { stub, themeRefused })} header={false} busy={busy} onAnswer={onAnswer}
+          confirmLabel={(o) => (o.id === 'change' ? (p.kind === 'theme' ? 'Open in Theme' : 'Change something') : o.label)}
           testIds={{ root: 'artifact-proposal-ask', confirm: 'artifact-proposal-confirm' }} />
       ) : view.state === 'accepting' ? (
         <div className="wk-proposal-again">
@@ -262,7 +343,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
             {details && (
               <>
                 {p.what.outcome !== null && p.what.outcome !== '' && <p className="wk-ask-sub">{p.what.outcome}</p>}
-                <ProposalLines p={p} />
+                <ProposalLines p={p} theme={themeFacts} />
               </>
             )}
           </div>
@@ -297,8 +378,8 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   );
 }
 
-/** Crew's facts, one per line, each only when crew stated it. */
-function ProposalLines({ p, id }: { p: ArtifactProposal; id?: string }): React.ReactElement {
+/** Crew's facts, one per line, each only when crew stated it (a theme's changes and contrast are studio's measure). */
+function ProposalLines({ p, id, theme }: { p: ArtifactProposal; id?: string; theme?: ThemeFacts | null }): React.ReactElement {
   const time = proposalTimeWords(p);
   const has = (v: string | null | undefined): v is string => v !== null && v !== undefined && v.trim() !== '';
   return (
@@ -307,7 +388,19 @@ function ProposalLines({ p, id }: { p: ArtifactProposal; id?: string }): React.R
       {p.kind === 'refine' && has(p.brief) && <Row k="Ask" testId="artifact-proposal-brief">{p.brief}</Row>}
       {p.kind === 'create' && has(p.brief) && <Row k="Brief" testId="artifact-proposal-brief">{p.brief}</Row>}
       {p.touches !== undefined && p.touches.length > 0 && <Row k="Parts" testId="artifact-proposal-touches">{p.touches.join(', ')}</Row>}
-      {p.theme !== undefined && p.theme.changes.length > 0 && <Row k="Changes" testId="artifact-proposal-theme">{p.theme.changes.join(', ')}</Row>}
+      {p.theme !== undefined && theme !== undefined && theme !== null ? (
+        <>
+          {theme.check.colors !== null && <Row k="Looks" testId="artifact-proposal-theme-swatches"><ThemeSwatches colors={theme.check.colors} /></Row>}
+          <Row k="Changes" testId="artifact-proposal-theme">{theme.changes.length > 0 ? theme.changes.join(' · ') : p.theme.changes.join(', ')}</Row>
+          <Row k="Contrast" testId="artifact-proposal-theme-contrast">
+            <span data-ok={theme.check.ok ? 'true' : 'false'} className={theme.check.ok ? undefined : 'wk-proposal-contrast-low'}>
+              {theme.check.ok ? contrastWords(theme.check) : `${contrastWords(theme.check)}${theme.check.ratios !== null ? ` · too low: ${theme.check.failing.join('; ')}` : ''}`}
+            </span>
+          </Row>
+          <Row k="Limits" testId="artifact-proposal-theme-limits">{THEME_LIMITS}</Row>
+          <Row k="Checked" testId="artifact-proposal-theme-disclosure">{themeDisclosure(theme.seatName)}</Row>
+        </>
+      ) : p.theme !== undefined && p.theme.changes.length > 0 ? <Row k="Changes" testId="artifact-proposal-theme">{p.theme.changes.join(', ')}</Row> : null}
       {p.demo !== undefined && has(p.demo.url) && <Row k="Records" testId="artifact-proposal-demo">{p.demo.url}</Row>}
       {p.demo !== undefined && has(p.demo.audience) && <Row k="For" testId="artifact-proposal-audience">{p.demo.audience}</Row>}
       {p.demo !== undefined && has(p.demo.show) && <Row k="Shows" testId="artifact-proposal-show">{p.demo.show}</Row>}

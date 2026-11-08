@@ -44,6 +44,7 @@ import { UndoToasts } from './components/UndoToasts.js';
 import { VoiceRoot } from './components/voice/VoiceRoot.js';
 import { LaunchWizard } from './components/launch/LaunchWizard.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
+import { ThemePreviewBar } from './components/ThemePreviewBar.js';
 import { SettingsPage } from './components/SettingsPage.js';
 import { SETTINGS_THEME_PATH } from './board/settingsTabs.js';
 import { NerveCenterPage } from './components/nerve/NerveCenterPage.js';
@@ -857,6 +858,9 @@ export function App(): React.ReactElement {
       {/* studio#722: the gate notice is a strip IN the main column's flow, above the page — it pushes
           the page down instead of covering its composer, cards or thread. */}
       <div id="main" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ outline: 'none' }}>
+        {/* DES-CHAT-ARTIFACTS-001 §9 (A7, mockup e): a theme previewed on this tab — Apply, Back to mine, Saved · Undo —
+            a strip in the main column's flow, so it never covers a composer, a card or a page's controls. */}
+        <ThemePreviewBar />
         {panel !== 'home' && (
           <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={shownRuns} hideRuns={viewedRunIds} />
         )}
