@@ -328,7 +328,7 @@ with sync_playwright() as p:
       count: !!document.querySelector('[data-testid="agents-tiles"]'), action: !!document.querySelector('[data-testid="agents-check-all"]'),
       health: document.querySelector('[data-testid="desk-rail-nerve"]').dataset.tone })""")
     page2.screenshot(path=str(SHOTS / "desk-agents-error.png"))
-    check("error", "Couldn’t load agents." in st["banner"] and not st["count"] and not st["action"] and st["health"] == healthy_before, **st)
+    check("error", "Couldn’t load helpers." in st["banner"] and not st["count"] and not st["action"] and st["health"] == healthy_before, **st)
     page2.close()
     mode["roster"] = "empty"
     page3 = ctx.new_page()
