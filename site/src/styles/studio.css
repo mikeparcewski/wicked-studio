@@ -749,6 +749,8 @@ li[data-s="s1"] .fl-s1, li[data-s="s2"] .fl-s2, li[data-s="s3"] .fl-s3 { opacity
 .install__code { min-width: 0; margin: 0; padding: 16px; overflow-x: auto; }
 .install__code:focus-visible { outline-offset: -3px; }
 .install__code code { display: block; background: none; border: none; padding: 0; font-family: var(--font-mono); font-size: var(--text-code); line-height: 1.8; min-height: 1.8em; color: var(--ink); white-space: pre; }
+/* the recommended command is two lines: hold their height while it types, so nothing below moves */
+.install--primary .install__code code { min-height: 3.6em; }
 .install__code code.is-typing::after { content: ''; display: inline-block; width: 7px; height: 1.1em; margin-left: 1px; vertical-align: -2px; background: var(--ink); animation: blink 1s steps(1) 2; }
 .install-stack { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .install--primary { border-color: var(--border-strong); box-shadow: 0 0 0 1px color-mix(in oklab, var(--ink) 8%, transparent), 0 24px 48px -34px rgba(0,0,0,.6); }
