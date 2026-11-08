@@ -2,6 +2,8 @@ import { SKILL_KINDS, isSkillKind, skillPortability, type SkillRow } from '../ap
 import { SectionTitle } from './ui/PageFrame.js';
 import { EmptyState } from './ui/StateBanner.js';
 import { EnabledToggle, KindChip, ProvenanceChip, SkillFlags } from './SkillChips.js';
+import { UsageChip } from './SkillUsage.js';
+import type { SkillUsageRow } from '../api/skillUsage.js';
 
 /**
  * The skills CATALOG — one row per skill in the manifest: name · kind · provenance · flags (core /
@@ -16,7 +18,7 @@ import { EnabledToggle, KindChip, ProvenanceChip, SkillFlags } from './SkillChip
 
 /** The facet chips — the three kinds plus the state cuts the KPI tiles are doors into. The reach
  *  split (`portable` · `not-portable` · `needs-claude`, 0.34.0 / F-079) replaces `claude-only`. */
-export const SKILL_CHIPS = ['all', ...SKILL_KINDS, 'enabled', 'disabled', 'overridden', 'core', 'portable', 'not-portable', 'needs-claude'] as const;
+export const SKILL_CHIPS = ['all', ...SKILL_KINDS, 'enabled', 'disabled', 'overridden', 'core', 'portable', 'not-portable', 'needs-claude', 'unused'] as const;
 
 export type SkillChip = (typeof SKILL_CHIPS)[number];
 
@@ -29,9 +31,11 @@ export const SKILLS_FACETS_DEFAULT: SkillsFacets = { query: '', chip: 'all' };
 
 /** The facet predicate over the manifest rows — pinned by unit test so the chip counts, the
  *  KPI tiles and the table agree. */
-export function filterSkills(rows: readonly SkillRow[], f: SkillsFacets): SkillRow[] {
+export function filterSkills(rows: readonly SkillRow[], f: SkillsFacets, usage?: ReadonlyMap<string, SkillUsageRow>): SkillRow[] {
   const q = f.query.trim().toLowerCase();
   return rows.filter((r) => {
+    // `unused`: handed to a helper whose use can be seen, and never opened or run since (skill usage).
+    if (f.chip === 'unused' && usage?.get(r.name)?.unusedSince.all !== true) return false;
     if (isSkillKind(f.chip) && r.kind !== f.chip) return false;
     if (f.chip === 'enabled' && !r.enabled) return false;
     if (f.chip === 'disabled' && r.enabled) return false;
@@ -45,8 +49,13 @@ export function filterSkills(rows: readonly SkillRow[], f: SkillsFacets): SkillR
   });
 }
 
-export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, frozen, countsKnown = true, onSelect, onToggle }: {
+export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, frozen, countsKnown = true, onSelect, onToggle, usage, sinceGen = null, now = Date.now() }: {
   rows: readonly SkillRow[];
+  /** Skill usage by name (`GET /skills/usage`); absent when this crew does not record it. */
+  usage?: ReadonlyMap<string, SkillUsageRow>;
+  /** The generation "not used since" is judged from. */
+  sinceGen?: number | null;
+  now?: number;
   facets: SkillsFacets;
   onFacets: (next: SkillsFacets) => void;
   /** The skill whose drawer is open — its row reads selected. */
@@ -60,8 +69,8 @@ export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, fro
   onSelect: (name: string) => void;
   onToggle: (row: SkillRow) => void;
 }): React.ReactElement {
-  const shown = filterSkills(rows, facets);
-  const count = (chip: SkillChip): number => filterSkills(rows, { query: facets.query, chip }).length;
+  const shown = filterSkills(rows, facets, usage);
+  const count = (chip: SkillChip): number => filterSkills(rows, { query: facets.query, chip }, usage).length;
 
   return (
     <section data-testid="skills-grid" className="wk-card wk-pg-skills-catalog">
@@ -73,12 +82,12 @@ export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, fro
             placeholder="Search by skill name or folder" onChange={(e) => onFacets({ ...facets, query: e.target.value })} />
         </label>
         <div className="wk-pg-skills-filters" aria-label="Filter skills">
-          {SKILL_CHIPS.filter((c) => !countsKnown || count(c) > 0 || c === facets.chip).map((c) => (
+          {SKILL_CHIPS.filter((c) => (c !== 'unused' || usage !== undefined) && (!countsKnown || count(c) > 0 || c === facets.chip)).map((c) => (
             <button key={c} type="button" data-testid="skills-filter-chip" data-chip={c}
               aria-pressed={facets.chip === c} className={`wk-chip${facets.chip === c ? ' wk-chip--active' : ''}`}
               data-active={facets.chip === c ? 'true' : 'false'}
               onClick={() => onFacets({ ...facets, chip: c })}>
-              {c === 'all' ? 'All' : c === 'fork-worker' ? 'Worker' : c === 'needs-claude' ? 'Needs Claude' : c === 'not-portable' ? 'Not portable' : c.charAt(0).toUpperCase() + c.slice(1)} {countsKnown ? count(c) : null}
+              {c === 'all' ? 'All' : c === 'fork-worker' ? 'Worker' : c === 'needs-claude' ? 'Needs Claude' : c === 'not-portable' ? 'Not portable' : c === 'unused' ? 'Not used' : c.charAt(0).toUpperCase() + c.slice(1)} {countsKnown ? count(c) : null}
             </button>
           ))}
         </div>
@@ -99,6 +108,7 @@ export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, fro
                   onClick={(e) => { e.stopPropagation(); onSelect(r.name); }}>{r.name}</button>
                 <div className="wk-list-row-meta flex flex-wrap gap-2">
                   <KindChip kind={r.kind} /><ProvenanceChip provenance={r.provenance} /><SkillFlags skill={r} />
+                  {usage !== undefined && <UsageChip row={usage.get(r.name)} sinceGen={sinceGen} now={now} />}
                 </div>
               </div>
               <div className="wk-list-row-actions" onClick={(e) => e.stopPropagation()}>

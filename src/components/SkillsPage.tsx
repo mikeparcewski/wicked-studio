@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { getSkillUsage, isUsageUnavailable, usageByName, type SkillUsageResponse, type SkillUsageUnavailable } from '../api/skillUsage.js';
 import { getDiagnostics } from '../api/diagnostics.js';
 import { apiRevision, apiWire, readErrorKind } from '../api/errors.js';
 import {
@@ -129,6 +130,21 @@ export function SkillsPage({ navigate, search = '' }: {
   /** `GET /diagnostics` → `skills`: what the engine is being handed. `null` until read, or when
    *  this daemon's diagnostics predate the seam / could not be read (never blocks the page). */
   const [engine, setEngine] = useState<DiagnosticsSkills | null>(null);
+  /** Skill usage (`GET /skills/usage`): `undefined` while read, `null` when this crew does not record it. Read-only
+   *  telemetry beside the catalog: a failure leaves it unavailable, never fails the page. */
+  const [usage, setUsage] = useState<SkillUsageResponse | SkillUsageUnavailable | undefined>(undefined);
+  /** Each usage read's token: an answer that is not the newest read's is dropped (two catalog reads in a row). */
+  const usageSeq = useRef(0);
+  const loadUsage = useCallback(async (): Promise<void> => {
+    const seq = (usageSeq.current += 1);
+    const next = await getSkillUsage();
+    if (seq === usageSeq.current) setUsage(next);
+  }, []);
+  const usageMap = useMemo(() => (usage !== undefined && !isUsageUnavailable(usage) ? usageByName(usage) : undefined), [usage]);
+  // The "Not used" cut needs usage: when it is not shown, the cut falls back to All (unknown is never zero).
+  useEffect(() => {
+    if (isUsageUnavailable(usage) && facets.chip === 'unused') setFacets((f) => ({ ...f, chip: 'all' }));
+  }, [usage, facets.chip]);
   /** The open drawer has unsaved edits (it reports every flip). A row click on ANOTHER skill then
    *  parks its name in `pendingSelect` and the drawer asks first — its `key` swaps only after the
    *  operator discards, never under a draft (review round 2). */
@@ -179,6 +195,7 @@ export function SkillsPage({ navigate, search = '' }: {
       setState({ kind: 'loaded' });
       setCatalogEpoch((n) => n + 1);
       void loadEngine();
+      void loadUsage();
       return c;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -195,7 +212,7 @@ export function SkillsPage({ navigate, search = '' }: {
       }
       return null;
     }
-  }, [loadEngine]);
+  }, [loadEngine, loadUsage]);
 
   useEffect(() => {
     void load();
@@ -540,12 +557,13 @@ export function SkillsPage({ navigate, search = '' }: {
           {note !== null && <div data-testid="skills-note"><p>Changes saved — publish to share them with your helpers.</p><TechDetails text={note} /></div>}
           {pageResult !== null && <SkillFindings verb={pageResult.verb} result={pageResult.result} testId="skills-page-findings" />}
           {linkedMissing && <p data-testid="skills-deep-link-missing">No skill named {linked} in this catalog — showing every skill.</p>}
-          <SkillsGrid rows={rows} facets={facets} onFacets={setFacets} selectedName={selected?.name ?? null} busyName={busyName} frozen={frozen} countsKnown={statsKnown} onSelect={selectSkill} onToggle={onRowToggle} />
+          <SkillsGrid rows={rows} facets={facets} onFacets={setFacets} selectedName={selected?.name ?? null} busyName={busyName} frozen={frozen} countsKnown={statsKnown} onSelect={selectSkill} onToggle={onRowToggle} {...(usageMap !== undefined && usage !== undefined && !isUsageUnavailable(usage) ? { usage: usageMap, sinceGen: usage.sinceGen } : {})} />
         </> : null}
       </PageFrame>
 
       {selected !== null && (
         <SkillDrawer
+          usage={usage}
           key={selected.name}
           top={drawerTop}
           skill={selected}
