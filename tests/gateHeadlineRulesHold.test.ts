@@ -37,13 +37,18 @@ describe('gate headline: "a rule needs your call" only for a gate held on its ow
       .toBe('The rule learn-accessible needs your call before this step can go on');
   });
 
+  it('a process row (blocking: false) is never counted: the headline names the rules the gate offers to skip', () => {
+    const proc = { ...row('RVWL-1002', 'unchecked'), blocking: false };
+    expect(headline(log('rules_unchecked', 'rules_unchecked', [row('learn-accessible', 'unchecked'), proc])))
+      .toBe('The rule learn-accessible needs your call before this step can go on');
+  });
+
   it('a broken-rule gate (rule_check wins) does not say a rule needs your call', () => {
-    expect(headline(log('rule_check', 'rule_check', [row('A', 'kept'), row('learn-tests-with-fixes', 'broken')])) ?? '')
-      .not.toMatch(/needs your call/);
+    // No hold headline at all: the gate's own question speaks (pi r1: assert the absence, not only the words).
+    expect(headline(log('rule_check', 'rule_check', [row('A', 'kept'), row('learn-tests-with-fixes', 'broken')]))).toBeNull();
   });
 
   it("a disputed rule behind the reviewer's FAIL does not say a rule needs your call", () => {
-    expect(headline(log('evaluator_verdict', 'verdict_not_pass', [row('A', 'kept'), row('DEV-TINYMATH-2', 'disputed')])) ?? '')
-      .not.toMatch(/needs your call/);
+    expect(headline(log('evaluator_verdict', 'verdict_not_pass', [row('A', 'kept'), row('DEV-TINYMATH-2', 'disputed')]))).toBeNull();
   });
 });

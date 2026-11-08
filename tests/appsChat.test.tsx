@@ -261,7 +261,8 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
   });
 
   it('the rules-hold headline names the rule, or counts them', () => {
-    const r = (ruleId: string, status: string) => ({ ruleId, status, how: 'none', reason: '', cite: null }) as never;
+    // A parsed row always carries `blocking` (receiptOf: true unless the engine says false); only blocking rows count.
+    const r = (ruleId: string, status: string) => ({ ruleId, status, how: 'none', reason: '', cite: null, blocking: true }) as never;
     expect(rulesHoldHeadline([r('a', 'kept'), r('b', 'unchecked')])).toBe('The rule b needs your call before this step can go on');
     expect(rulesHoldHeadline([r('b', 'unchecked'), r('c', 'waived'), r('d', 'broken')])).toBe('2 steering rules need your call before this step can go on');
     expect(rulesHoldHeadline([])).toBe('A steering rule needs your call before this step can go on');

@@ -3,7 +3,7 @@ import { reassignCandidates, reassignRefusedOf, runBenchesOf, type ReassignCandi
 import { isDeliverGate } from '../components/gateMoveModel.js';
 import { deliverAcceptance } from './checkState.js';
 import { choicesOf, type OpenGate } from '../store/gates.js';
-import { creatorSeatRefusal, isReduced, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
+import { creatorSeatRefusal, isReduced, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
 import { governanceDenialHeadline, plainGateQuestion, rulesHoldWords } from './deskWords.js';
 import type { GateRowModel } from './gateRowModel.js';
 import { isHelperSeat } from './responder.js';
@@ -102,9 +102,10 @@ export function openGateFromEvents(runId: string, events: readonly CoreEvent[], 
   return null;
 }
 
-/** (F22) A rules hold's headline: the rules that need the person's call (unchecked, waived by instruction, disputed). */
+/** (F22) A rules hold's headline: the rules that need the person's call (blocking unchecked, waived by instruction,
+ *  disputed: {@link ruleHolds}, the rows the gate's Confirm or skip offers; a process row never counts). */
 export function rulesHoldHeadline(rows: readonly RuleRow[]): string {
-  return rulesHoldWords(rows.filter((r) => r.status === 'unchecked' || r.status === 'waived' || r.status === 'disputed').map((r) => r.ruleId));
+  return rulesHoldWords(rows.filter(ruleHolds).map((r) => r.ruleId));
 }
 
 /** What the headline is made of (GateRow's derived lead reads the same facts). */
