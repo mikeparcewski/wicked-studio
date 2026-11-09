@@ -129,6 +129,17 @@ describe('the onboard card model', () => {
     // Every onboard fact must be there: a half card is never drawn.
     expect(isArtifactProposal({ ...onboardProposal(), onboard: undefined })).toBe(false);
     expect(isArtifactProposal({ ...onboardProposal(), onboard: { url: 'x', name: 'y' } })).toBe(false);
+    // On any kind: a malformed onboard payload on a create card is refused, never drawn half (codex/pi review).
+    const create = { ...onboardProposal(), kind: 'create' as const };
+    expect(isArtifactProposal({ ...create, onboard: { url: 'x' } })).toBe(false);
+    expect(isArtifactProposal({ ...create, onboard: null })).toBe(false);
+    // An answerable card says what Go does: a new one where it is cloned, an existing one the project it joins.
+    const base = onboardProposal().onboard!;
+    expect(isArtifactProposal(onboardProposal({ onboard: { ...base, checkout: null } }))).toBe(false);
+    expect(isArtifactProposal(onboardProposal({ onboard: { ...base, url: ' ' } }))).toBe(false);
+    expect(isArtifactProposal(onboardProposal({ onboard: { ...base, checkout: null, projectId: null, existing: { id: 'r', name: 'r' } } }))).toBe(false);
+    // …unless Go is blocked: then it only informs.
+    expect(isArtifactProposal(onboardProposal({ blocked: 'no project is named “labs”', onboard: { ...base, checkout: null } }))).toBe(true);
     const [e] = foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: onboardProposal() }]);
     const ask = proposalAsk(e!, { stub: false });
     expect(ask.options?.map((o) => [o.label, o.sub])).toStrictEqual([
@@ -146,6 +157,9 @@ describe('the onboard card model', () => {
     const existing = onboardProposal({ onboard: { ...onboardProposal().onboard!, checkout: null, existing: { id: 'wicked-studio', name: 'wicked-studio' } } });
     const [ex] = foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: existing }, { at: 2, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'local', decision: 'go', result: { runId: 'bbbbbbbb', artifactRef: null, adopted: false, stub: false } }]);
     expect(proposalResultWords(ex!)).toBe('Added to Wicked Labs · nothing was started');
+    // No project: the consequence never claims one.
+    const unfiled = foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: onboardProposal({ filedIn: { projectId: null, label: 'Not in a project' }, onboard: { ...onboardProposal().onboard!, projectId: null, projectName: null } }) }])[0]!;
+    expect(proposalAsk(unfiled, { stub: false }).options?.[0]?.consequence).toBe('Studio clones the repository to this computer, registers it (in no project) and starts onboarding (it builds the code map). Nothing happens until you choose.');
     expect(proposalAsk(foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: existing }])[0]!, { stub: false }).options?.[0]?.sub).toBe('Adds it to the project; nothing is cloned');
   });
 });

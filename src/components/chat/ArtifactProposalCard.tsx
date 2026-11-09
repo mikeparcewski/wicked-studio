@@ -401,7 +401,7 @@ function ProposalLines({ p, id, theme }: { p: ArtifactProposal; id?: string; the
           <Row k="Checked" testId="artifact-proposal-theme-disclosure">{themeDisclosure(theme.seatName)}</Row>
         </>
       ) : p.theme !== undefined && p.theme.changes.length > 0 ? <Row k="Changes" testId="artifact-proposal-theme">{p.theme.changes.join(', ')}</Row> : null}
-      {p.onboard !== undefined && (
+      {p.kind === 'onboard' && p.onboard !== undefined && (
         <>
           <Row k="Repository" testId="artifact-proposal-onboard-url">{p.onboard.url}</Row>
           {p.onboard.existing !== null

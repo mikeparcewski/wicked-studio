@@ -286,10 +286,22 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const goTab = (t: RepoTab, fromPanel = false): void => {
     if (t === shown) return;
     focusTab.current = fromPanel;
-    if (registrationError !== null) navigate(tabPath(t), { state: { onboardError: registrationError } });
+    // A registration's notices ride along to the tab (they live on the history entry).
+    const notices = { ...(registrationError !== null ? { onboardError: registrationError } : {}), ...(attachError !== null ? { projectAttachError: attachError } : {}) };
+    if (Object.keys(notices).length > 0) navigate(tabPath(t), { state: notices });
     else navigate(tabPath(t));
   };
   const count: Partial<Record<RepoTab, number | null>> = { jobs: runsFailed ? null : runs.length, trackers: trackerCount };
+
+  /** Added to a project from here: its membership is read again, and a registration's "not added" notice is settled. */
+  function onAddedToProject(): void {
+    useRepoLinks.getState().ensure([repoId], true);
+    if (attachError === null) return;
+    const st = keepEntryState();
+    delete st.projectAttachError;
+    window.history.replaceState(st, '');
+    announceHistoryChange();
+  }
 
   function clearRegistrationError(): void {
     const st = keepEntryState();
@@ -480,8 +492,15 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                         </div>
                       )}
                       <AddRepoToProject repoId={repo.id} repoName={repo.name} inProjects={projects === null ? null : projects.map((p) => p.id)}
-                        onAdded={() => useRepoLinks.getState().ensure([repo.id], true)} />
+                        onAdded={onAddedToProject} />
                     </Section>
+                    )}
+                    {/* Where crew can't say which projects hold it (no tracker links, or that read failed), it can still be
+                        added to one: the attach is the project-members route, not the links read. */}
+                    {!(projects !== null || jobProjects.length > 0 || attachError !== null) && (
+                      <Section title="Projects" testId="repo-overview-add-project">
+                        <AddRepoToProject repoId={repo.id} repoName={repo.name} inProjects={null} onAdded={onAddedToProject} />
+                      </Section>
                     )}
                     {trackerCount !== null && (
                       <Section title="Trackers" testId="repo-overview-trackers">

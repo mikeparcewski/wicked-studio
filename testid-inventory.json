@@ -16037,6 +16037,18 @@
       ]
     },
     {
+      "testId": "repo-add-to-project-failed",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-retry",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
       "testId": "repo-add-to-project-select",
       "files": [
         "src/components/AddRepoToProject.tsx"
@@ -16375,6 +16387,12 @@
     },
     {
       "testId": "repo-open-requirements",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-overview-add-project",
       "files": [
         "src/components/RepoDetailPage.tsx"
       ]

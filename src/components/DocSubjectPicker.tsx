@@ -87,6 +87,18 @@ export function DocSubjectPicker({
   const [status, setStatus] = useState<SubjectStatus>('loading');
   const [failure, setFailure] = useState<string>('');
   const [attempt, setAttempt] = useState(0);
+  // crew-0182: "+ Register a repository…" opens the register form in a NEW tab, so this draft stays; coming back to this
+  // tab reads the repositories again, and the one just registered is offered.
+  const registering = useRef(false);
+  useEffect(() => {
+    const back = (): void => {
+      if (!registering.current) return;
+      registering.current = false;
+      setAttempt((n) => n + 1);
+    };
+    window.addEventListener('focus', back);
+    return () => window.removeEventListener('focus', back);
+  }, []);
   // "Add a repository…": the chooser is open, an attach is in flight (its repo id), or it failed (the wire's words).
   const [adding, setAdding] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
@@ -281,17 +293,14 @@ export function DocSubjectPicker({
       )}
       {status === 'ready' && projectId !== UNFILED_MOUNT && attachable.length === 0 && !adding && (
         // crew-0182: with nothing registered left to add (a fresh install has none), the chip opens the register form,
-        // in this project, instead of vanishing.
+        // in this project, instead of vanishing; in a new tab, so the document being written here is not lost.
         <a
           href={registerRepoPath(projectId)}
+          target="_blank"
+          rel="noopener"
           data-testid="doc-subject-register"
-          onClick={(e) => {
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-            e.preventDefault();
-            history.pushState(null, '', registerRepoPath(projectId));
-            window.dispatchEvent(new PopStateEvent('popstate'));
-          }}
-          title="Register a repository in this project; registering onboards it"
+          onClick={() => { registering.current = true; }}
+          title="Opens Add a repository for this project in a new tab; back here, it is offered"
           className="wk-chip"
         >
           + Register a repository…

@@ -244,7 +244,10 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
 
       const detailPath = repoDetailPath(repo.id, { project: ambientProject });
       const projectName = projects.find((p) => p.id === selectedProjectId)?.name ?? selectedProjectId;
-      const attachNote = projectAttachError !== null ? `Registered, but not added to ${projectName ?? 'the project'}: ${projectAttachError}` : null;
+      // Crew attached the repository but could not file its onboarding run there: the repository IS in the project.
+      const attachNote = projectAttachError === null ? null
+        : registered.projectAttached === true ? `Added to ${projectName ?? 'the project'}, but its onboarding run is not filed there: ${projectAttachError}`
+          : `Registered, but not added to ${projectName ?? 'the project'}: ${projectAttachError}`;
       if (onboardError || attachNote !== null) {
         navigate(detailPath, { state: { ...(onboardError ? { onboardError } : {}), ...(attachNote !== null ? { projectAttachError: attachNote } : {}) } });
       } else {
@@ -436,7 +439,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                       {projects.filter((p) => p.id !== 'default' && p.status !== 'archived').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                       <option value={NEW_PROJECT}>+ New project…</option>
                     </select>
-                    <span className="wk-field-note" data-testid="repo-project-hint">The repository joins this project, and its onboarding is filed there.</span>
+                    <span className="wk-field-note" data-testid="repo-project-hint">
+                      {selectedProjectId === null ? 'It is registered in no project; you can add it to one later from its page.' : 'The repository joins this project, and its onboarding is filed there.'}
+                    </span>
                   </>
                 )}
               </div>

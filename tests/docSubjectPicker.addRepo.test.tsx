@@ -138,9 +138,15 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     render(<Harness projectId="p1" />);
     const link = await screen.findByTestId('doc-subject-register');
     expect(link.getAttribute('href')).toBe('/repos/new?project=p1');
+    // A new tab: the document being written here stays.
+    expect(link.getAttribute('target')).toBe('_blank');
     expect(screen.queryByTestId('doc-subject-add')).toBeNull();
     fireEvent.click(link);
-    expect(window.location.pathname + window.location.search).toBe('/repos/new?project=p1');
+    // Back in this tab, the repositories are read again and the one just registered is offered.
+    listRepos.mockResolvedValue({ repos: [repo('r-new', 'new-one')] });
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(await screen.findByTestId('doc-subject-add')).not.toBeNull();
+    expect(listRepos).toHaveBeenCalledTimes(2);
   });
 
   it('Unfiled has no project to add to: it says to file the document', async () => {

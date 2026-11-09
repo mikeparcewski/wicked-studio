@@ -72,9 +72,11 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   if (p['kind'] === 'theme' && (!isObj(theme) || !str(theme['name']) || theme['name'].trim() === '' || theme['name'].length > 60 || !isObj(theme['patch']))) return false;
   const demo = p['demo'];
   if (demo !== undefined && (!isObj(demo) || !str(demo['url']) || !strOrNull(demo['audience']) || !strOrNull(demo['show']))) return false;
-  // (crew 0.18.2) An onboard card names the repository, where it goes and the project: all of it, well formed.
+  // (crew 0.18.2) An onboard card names the repository, where it goes and the project: all of it, well formed, on any
+  // kind that carries it; an onboard card must carry it, and one that can be answered must say what Go does.
   const onboard = p['onboard'];
-  if (p['kind'] === 'onboard' && !isOnboard(onboard)) return false;
+  if (onboard !== undefined && !isOnboard(onboard)) return false;
+  if (p['kind'] === 'onboard' && (onboard === undefined || (p['blocked'] === null && !onboardGoable(onboard as Record<string, unknown>)))) return false;
   const touches = p['touches'];
   if (touches !== undefined && (!Array.isArray(touches) || !touches.every(str))) return false;
   // (A5) A refine's protected edits: each one the card can draw and the person can answer.
@@ -82,9 +84,14 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   return kept === undefined || (Array.isArray(kept) && kept.every(isProtectedEdit));
 }
 
+const filled = (v: unknown): v is string => str(v) && v.trim() !== '';
 const isOnboard = (o: unknown): boolean => isObj(o) && str(o['url']) && str(o['name']) && strOrNull(o['checkout'])
   && strOrNull(o['projectId']) && strOrNull(o['projectName'])
-  && (o['existing'] === null || (isObj(o['existing']) && str(o['existing']['id']) && str(o['existing']['name'])));
+  && (o['existing'] === null || (isObj(o['existing']) && filled(o['existing']['id']) && filled(o['existing']['name'])));
+/** An onboard card Go can answer: the address and name, and either where it is cloned (a new one) or the project an
+ *  already-registered one joins. */
+const onboardGoable = (o: Record<string, unknown>): boolean => filled(o['url']) && filled(o['name'])
+  && (o['existing'] === null ? filled(o['checkout']) : filled(o['projectId']));
 
 const PROTECTED_KINDS: ReadonlySet<string> = new Set(['text', 'attr', 'added', 'gone', 'order']);
 const isProtectedEdit = (e: unknown): boolean =>
@@ -226,6 +233,12 @@ const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
   onboard: 'Nothing is cloned or registered',
 };
 
+/** What Go on an onboard card does, said for its own facts (no project = registered unfiled). */
+function onboardConsequence(o: NonNullable<ArtifactProposal['onboard']>): string {
+  if (o.existing !== null) return `Studio adds ${o.existing.name} to ${o.projectName ?? 'the project'}. Nothing is cloned and no onboarding starts.`;
+  return `Studio clones the repository to this computer, registers it${o.projectName !== null ? `, adds it to ${o.projectName}` : ' (in no project)'} and starts onboarding (it builds the code map). Nothing happens until you choose.`;
+}
+
 /**
  * Change something, routed per kind (DES §4.2): the New document form (create), an inline edit (refine), the Theme
  * page (theme) or New job's demo form (demo). Each arrives with its own slice; until then the card says what is coming
@@ -264,12 +277,12 @@ export function proposalAsk(e: ProposalEntry, o: { stub: boolean; themeRefused?:
     label: goWords(p),
     // The test configuration starts nothing, and the option says so too (never "Starts now" beside that notice).
     sub: o.stub ? 'Records your click; nothing starts' : isRetryProposal(p) && p.kind === 'refine' ? 'Revises the latest version; your edits are kept'
-      : p.onboard?.existing != null ? 'Adds it to the project; nothing is cloned' : GO_SUB[p.kind],
+      : p.kind === 'onboard' && p.onboard?.existing != null ? 'Adds it to the project; nothing is cloned' : GO_SUB[p.kind],
     token: 'go',
     tone: 'primary',
     consequence: o.stub
       ? 'Test configuration: Studio records your click and starts nothing.'
-      : p.onboard?.existing != null ? `Studio adds ${p.onboard.existing.name} to ${p.onboard.projectName ?? 'the project'}. Nothing is cloned and no onboarding starts.` : GO_CONSEQUENCE[p.kind],
+      : p.kind === 'onboard' && p.onboard !== undefined ? onboardConsequence(p.onboard) : GO_CONSEQUENCE[p.kind],
     ...(p.blocked !== null ? { disabled: `Blocked: ${p.blocked}` } : refused !== null ? { disabled: refused } : { recommended: true }),
   };
   const change: AskOption = {
