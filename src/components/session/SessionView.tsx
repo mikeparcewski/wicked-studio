@@ -1103,12 +1103,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // chat's page (nothing opened yet) seeds a new chat instead.
     jobChatId: ref.kind === 'chat' && (conversation === 'live' || awaitingOpenRead) ? ref.chatId : null,
     // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
-    footer: scopeNote !== null || sendFailure !== null ? (
-      <>
-        {sendFailure !== null && <p data-testid="session-send-failed" role="alert" className="wk-composer-hint wk-composer-hint--bad">That wasn’t sent: {sendFailure}</p>}
-        {scopeNote !== null && <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p>}
-      </>
-    ) : null,
+    footer: scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null,
     text: draft,
     setText: (t: string) => setDraft(sessionId, t),
     // S16a-4e: on a live chat's own session the composer replies into THAT chat.
@@ -1232,7 +1227,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
 
       <DecisionDockFrame items={dockItems} composer={(reply, docked) => (
         // The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width.
-        <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><DockedComposer reply={reply} docked={docked} composerProps={composerProps} who={dockWho} /></div>
+        <div className="wk-session-composer-wrap wk-measure wk-measure--thread">
+          {/* crew-0183: why this page's last send failed, beside the box whatever the box's own footer is (a docked
+              decision replaces that footer; codex r3). */}
+          {sendFailure !== null && <p data-testid="session-send-failed" role="alert" className="wk-composer-hint wk-composer-hint--bad">That wasn’t sent: {sendFailure}</p>}
+          <DockedComposer reply={reply} docked={docked} composerProps={composerProps} who={dockWho} />
+        </div>
       )}>
       <div className="wk-session-body">
         {/* S16a-4a: an address naming an artifact this session does not hold grows nothing and says so. */}

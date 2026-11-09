@@ -52,6 +52,7 @@ export function RepoWatchLine({ status, repoId, now, compact = false, navigate, 
               );
             })}
             {` ${line.waitingOn.length === 1 ? 'is' : 'are'} using this repository’s code map; it is re-indexed when ${line.waitingOn.length === 1 ? 'that job ends' : 'they end'}.`}
+            {failed && ' (couldn’t refresh this just now)'}
           </span>
         )}
         {line.remedy !== null && <span className="wk-rp-watch-remedy" data-testid="repo-watch-remedy"> {line.remedy}</span>}
