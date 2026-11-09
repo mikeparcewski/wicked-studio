@@ -103,6 +103,7 @@
   .wk-rl-desk { display: none; }
   .wk-rl-name { padding-right: 112px; }
   .wk-rl-phone { display: block; padding-left: 22px; padding-right: 8px; font-size: var(--text-xs); color: var(--ink-muted); white-space: normal; }
+  .wk-rl-phone .wk-rl-watch { white-space: normal; }
   .wk-rl-act { top: 14px; right: 12px; transform: none; }
   .wk-rl-error { padding: 0 12px 12px 34px; }
 }

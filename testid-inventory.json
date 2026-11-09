@@ -16590,6 +16590,12 @@
       ]
     },
     {
+      "testId": "repo-row-watch-phone",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-row-word",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -26932,6 +26938,7 @@
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoFindings.tsx",
         "src/components/RepoKnowledge.tsx",
+        "src/components/RepoWatchLine.tsx",
         "src/components/RequirementsCoverageSummary.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/SkillChips.tsx",

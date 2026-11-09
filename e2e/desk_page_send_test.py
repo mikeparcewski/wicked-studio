@@ -11,7 +11,8 @@ The operator's path on the fixture's ask path (a real team path replay):
      `openCommandList`; the fixture serves no v2 catalog, so "start in chat" is saved and New job takes the same
      `openChatFlow` to the same page.
   2. Enter: the chat opens under THAT page's id; the helper answers on the page.
-  3. A reply on the same page.
+  3. Two replies in quick succession: the second while the first's answer is still being written is refused by the
+     daemon (turn in flight), the page says so and puts the words back in the box; sent again, it lands once.
 Through all of it, a MutationObserver installed before load records any node that IS (or holds) the floating window,
 the system chat or its tray (`ask-panel`, `system-chat`, `chat-tray`), and a per-frame probe looks for them too: none
 ever mounts. The URL stays `/s/<id>`, each message shows exactly once and the fixture saw exactly one POST per send,
@@ -64,9 +65,13 @@ WATCH = """(() => {
   window.__dock = [];
   const sel = ids.map((i) => `[data-testid="${i}"]`).join(',');
   const note = (how) => { const el = document.querySelector(sel); if (el) window.__dock.push({ how, id: el.dataset.testid, url: location.pathname, t: performance.now() }); };
+  // Each matching node is recorded FROM the mutation record itself (codex r1: one inserted and removed within a task
+  // was gone before a document query could see it).
   new MutationObserver((records) => {
     for (const r of records) for (const n of r.addedNodes) {
-      if (n.nodeType === 1 && (n.matches?.(sel) || n.querySelector?.(sel))) note('mutation');
+      if (n.nodeType !== 1) continue;
+      const hit = n.matches?.(sel) ? n : n.querySelector?.(sel);
+      if (hit) window.__dock.push({ how: 'mutation', id: hit.dataset.testid, url: location.pathname, t: performance.now() });
     }
   }).observe(document, { childList: true, subtree: true });
   const tick = () => { note('frame'); requestAnimationFrame(tick); };
@@ -106,6 +111,10 @@ def journey(browser, w: int, h: int, theme: str) -> None:
     # Top document only, guarded: the init script also runs in sandboxed artifact frames, which have no storage.
     page.add_init_script(f"try {{ if (window === window.top && !sessionStorage.getItem('wicked.ask.session')) sessionStorage.setItem('wicked.ask.session', {json.dumps(STORED_CHAT)}); }} catch {{}}")
     page.add_init_script(WATCH)
+    # Every POST of a message, counted in the browser before the daemon validates it (codex r1: a refused duplicate
+    # never reached the fixture's ledger).
+    posted: list[str] = []
+    page.on("request", lambda r: posted.append(r.post_data or "") if r.method == "POST" and r.url.endswith("/messages") else None)
     tag = f"{w}x{h}-{theme}"
     set_fixture(origin, sessions=True, run_chat_id=True, ask_path=True, ask_one_seat=False, extra_frames=[],
                 appearance={"theme": f"wicked-{theme}"})
@@ -135,13 +144,39 @@ def journey(browser, w: int, h: int, theme: str) -> None:
     posts = ask_posts(origin)
     check(f"first-opens-this-chat-{tag}", posts[-1]["chatId"] == chat_id, chat=chat_id, posted=posts[-1]["chatId"])
 
-    # 3. A reply on the same page.
+    check(f"first-one-request-{tag}", sum(1 for d in posted if words in d) == 1, requests=len(posted))
+
+    # 3. A reply sent while the previous answer is still being written: refused by the daemon (turn in flight), said on
+    #    the page, and the words go back into the box; sent again once the answer is in, it lands exactly once.
     reply = f"And add a test for it ({tag})"
+    early = f"Also log the result ({tag})"
     box = page.get_by_test_id("session-composer-input")
+    with_answer = page.evaluate("""() => document.querySelectorAll('[data-testid="session-turn"][data-who="helper"]:not([data-pending])').length""")
     box.click()
+    box.fill(early)
+    box.press("Enter")
+    page.wait_for_timeout(150)
     box.fill(reply)
     box.press("Enter")
-    send_and_wait(page, before + 2, 2, reply, f"reply-{tag}")
+    send_and_wait(page, before + 2, with_answer + 1, early, f"early-{tag}")
+    failed = page.get_by_test_id("session-send-failed")
+    try:
+        failed.wait_for(state="visible", timeout=8000)
+        refused = True
+    except Exception:  # noqa: BLE001
+        refused = False
+    if refused:
+        check(f"refusal-said-and-words-kept-{tag}", "still being written" in failed.inner_text() and box.input_value() == reply,
+              said=failed.inner_text(), box=box.input_value())
+        page.wait_for_timeout(1500)
+        box.click()
+        box.press("Enter")
+        send_and_wait(page, before + 3, with_answer + 2, reply, f"reply-{tag}")
+    else:
+        # The daemon took both (the first answer was already in): each still once.
+        send_and_wait(page, before + 3, with_answer + 2, reply, f"reply-{tag}")
+    check(f"each-request-once-{tag}", sum(1 for d in posted if early in d) == 1 and sum(1 for d in posted if reply in d) == (2 if refused else 1),
+          early=sum(1 for d in posted if early in d), reply=sum(1 for d in posted if reply in d), refused=refused)
     page.evaluate("() => { const t = document.querySelector('[data-testid=session-thread]'); if (t) t.scrollTop = t.scrollHeight; }")
     page.wait_for_timeout(600)
     page.screenshot(path=str(SHOTS / f"desk-page-send-{tag}-answered.png"))
@@ -149,8 +184,8 @@ def journey(browser, w: int, h: int, theme: str) -> None:
     dock = page.evaluate("window.__dock")
     check(f"window-never-mounted-{tag}", dock == [], seen=dock[:5])
     check(f"stays-on-its-page-{tag}", SESSION_RE.search(page.url) is not None and SESSION_RE.search(page.url).group(1) == chat_id, url=page.url)
-    check(f"each-message-once-{tag}", page.evaluate(YOU, words) == 1 and page.evaluate(YOU, reply) == 1,
-          first=page.evaluate(YOU, words), reply=page.evaluate(YOU, reply))
+    check(f"each-message-once-{tag}", page.evaluate(YOU, words) == 1 and page.evaluate(YOU, reply) == 1 and page.evaluate(YOU, early) == 1,
+          first=page.evaluate(YOU, words), early=page.evaluate(YOU, early), reply=page.evaluate(YOU, reply))
     stored = page.evaluate("sessionStorage.getItem('wicked.ask.session')")
     check(f"system-chat-stored-chat-unchanged-{tag}", stored == STORED_CHAT, stored=stored)
     ctx.close()

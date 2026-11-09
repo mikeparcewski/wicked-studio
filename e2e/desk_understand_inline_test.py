@@ -53,9 +53,13 @@ WATCH = """(() => {
   window.__dock = [];
   const sel = ids.map((i) => `[data-testid="${i}"]`).join(',');
   const note = (how) => { const el = document.querySelector(sel); if (el) window.__dock.push({ how, id: el.dataset.testid, url: location.pathname, t: performance.now() }); };
+  // Each matching node is recorded FROM the mutation record itself (codex r1: one inserted and removed within a task
+  // was gone before a document query could see it).
   new MutationObserver((records) => {
     for (const r of records) for (const n of r.addedNodes) {
-      if (n.nodeType === 1 && (n.matches?.(sel) || n.querySelector?.(sel))) note('mutation');
+      if (n.nodeType !== 1) continue;
+      const hit = n.matches?.(sel) ? n : n.querySelector?.(sel);
+      if (hit) window.__dock.push({ how: 'mutation', id: hit.dataset.testid, url: location.pathname, t: performance.now() });
     }
   }).observe(document, { childList: true, subtree: true });
   const tick = () => { note('frame'); requestAnimationFrame(tick); };
@@ -72,6 +76,10 @@ def journey(browser, w: int, h: int, theme: str) -> None:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
     page.add_init_script(f"try {{ if (window === window.top && !sessionStorage.getItem('wicked.ask.session')) sessionStorage.setItem('wicked.ask.session', {json.dumps(STORED_CHAT)}); }} catch {{}}")
     page.add_init_script(WATCH)
+    posted: list[str] = []
+    # Every request and WebSocket frame the page sends, counted in the browser before the daemon sees it.
+    page.on("request", lambda r: posted.append(f"{r.url} {r.post_data or ''}") if r.method == "POST" else None)
+    page.on("websocket", lambda ws: ws.on("framesent", lambda payload: posted.append(f"ws {payload if isinstance(payload, str) else ''}")))
     tag = f"{w}x{h}-{theme}"
     set_fixture(origin, sessions=True, repo=True, run_chat_id=True, ask_path=True, ask_one_seat=False, extra_frames=[],
                 appearance={"theme": f"wicked-{theme}"})
@@ -88,19 +96,27 @@ def journey(browser, w: int, h: int, theme: str) -> None:
         if len(posts) > before:
             break
         time.sleep(0.25)
-    time.sleep(1.0)
+    page.wait_for_timeout(1000)  # lets Playwright deliver the request events recorded meanwhile
     posts = ask_posts(origin)
-    check(f"asked-once-{tag}", len(posts) == before + 1 and question in posts[-1]["text"], posts=[p["text"][:60] for p in posts[before:]])
+    # The question rides in exactly ONE request (the open's seed or its first message), counted in the browser.
+    carrying = [d for d in posted if question in d]
+    check(f"asked-once-{tag}", len(posts) == before + 1 and question in posts[-1]["text"] and len(carrying) == 1,
+          posts=[p["text"][:60] for p in posts[before:]], requests=len(posted), carrying=len(carrying))
     chat = page.get_by_test_id("understand-chat")
+    # The helper's own answer, inside the page's chat: a non-pending message from a helper (codex r1: the waiting copy
+    # alone matched the old check).
+    ANSWER = """() => [...document.querySelectorAll('[data-testid="understand-chat"] [data-testid="assist-chat-msg"]')]
+      .filter((m) => m.dataset.agent !== 'you' && m.dataset.pending !== 'true' && (m.innerText || '').trim().length > 20)
+      .map((m) => m.innerText.trim().slice(0, 120))"""
     try:
-        page.wait_for_function("""() => { const c = document.querySelector('[data-testid="understand-chat"]');
-            return !!c && /stand-in|answer|fixture|helper|greet/i.test(c.innerText) && c.innerText.length > 80; }""", timeout=20000)
+        page.wait_for_function(f"() => ({ANSWER})().length > 0", timeout=25000)
     except Exception:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / f"desk-understand-ask-{tag}-no-answer.png"))
         check(f"answer-in-page-{tag}", False, text=chat.inner_text()[:400] if chat.count() else None)
     page.wait_for_timeout(1200)
     page.screenshot(path=str(SHOTS / f"desk-understand-ask-{tag}-answered.png"))
-    check(f"answer-in-page-{tag}", chat.is_visible() and question.split(" (")[0] in chat.inner_text(), text=chat.inner_text()[:200])
+    answers = page.evaluate(ANSWER)
+    check(f"answer-in-page-{tag}", chat.is_visible() and len(answers) >= 1 and question.split(" (")[0] in chat.inner_text(), answers=answers)
     dock = page.evaluate("window.__dock")
     check(f"window-never-mounted-{tag}", dock == [], seen=dock[:5])
     check(f"stays-on-understand-{tag}", page.url.rstrip("/").endswith("/understand"), url=page.url)

@@ -6,7 +6,7 @@ import type { ChatOpenBody, ChatScope, ChatSeatOutcome, ChatSeatRefusal, RepoEnt
 import { healthText } from '../board/rowHeadline.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { useFailureClocks } from '../store/failureClocks.js';
-import { forgetAskSession, readAskSession, rememberChatChoices, writeAskSession, type AskSession } from '../store/askSession.js';
+import { chatChoices, forgetAskSession, readAskSession, rememberChatChoices, writeAskSession, type AskSession } from '../store/askSession.js';
 import { useGateStore } from '../store/gates.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -358,7 +358,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
    * message is sent once at mount; `onDone` gets `null` once it is accepted, else the reason (the page shows it); the
    * engine then closes itself. Its session is kept under its own key, so the system chat's stored chat is untouched.
    */
-  headless?: { onDone: (failed: string | null) => void };
+  headless?: { onDone: (failed: string | null, turnInFlight?: boolean) => void };
 }): React.ReactElement {
   // Each page chat keeps its own conversation; the system chat keeps the one it always had.
   const sessKey = page !== undefined ? pageChatSessionKey(page.kind) : headless !== undefined ? PAGE_SEND_SESSION_KEY : ASK_SESSION_KEY;
@@ -464,6 +464,22 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     if (sendText !== undefined && sendChatId !== undefined) {
       const stored = readAskSession(sessKey);
       if (stored !== null && stored.chatId === sendChatId) return stored;
+      // crew-0183 (codex r1): a page send into a chat this engine has not stored keeps the chat's OWN choices — the system
+      // chat's record of it (read, never written), else what this browser remembered for it; with no record, nothing is
+      // claimed as chosen (every source off), never the defaults.
+      if (headless !== undefined) {
+        const sys = readAskSession(ASK_SESSION_KEY);
+        const known = sys !== null && sys.chatId === sendChatId ? sys : null;
+        const ch = known === null ? chatChoices(sendChatId) : null;
+        const session: AskSession = known !== null ? { ...known } : {
+          chatId: sendChatId, title: '', seeded: true, scope: ch?.scope ?? null,
+          ...(ch?.chips !== undefined && ch.chips.length > 0 ? { chips: ch.chips } : { chipsUnknown: true as const }),
+          ...(ch?.cli !== undefined ? { cli: ch.cli } : {}),
+          ...(ch?.packSig !== undefined ? { packSig: ch.packSig } : {}),
+        };
+        writeAskSession(session, sessKey);
+        return session;
+      }
       // The chat on screen, opened elsewhere: its context pack rode its own first send.
       const session: AskSession = { chatId: sendChatId, title: '', seeded: true, scope: null };
       writeAskSession(session, sessKey);
@@ -735,6 +751,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
               .then((detail) => detail.seats.length === 0)
               .catch(() => false);
             if (!gone) throw sendErr;
+            // crew-0183 (codex r1): a page's own send never opens a replacement chat behind the page — the page would show
+            // neither the question nor its answer. It fails, saying so, and the page keeps the words.
+            if (headless !== undefined) throw new Error('This chat has ended, so nothing was sent. Start a new chat to go on.');
             // Reclaimed (idle reaper, pool cap, a daemon restart) — forget it and open a
             // fresh session for this question below.
             forgetAskSession(id, sessKey);
@@ -807,8 +826,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             if (ready.length === 0) {
               // B-1/B-C6a: one plain line in the words; the roster admitted a helper but the open refused
               // every seat — keep each failed start's reason (sanitized) under the drawer's disclosure.
-              setStartFail(startFailureReasons(warmed, refused, (k) => cliName(k, roster)));
-              throw new Error(NO_HELPER_AVAILABLE);
+              const reasons = startFailureReasons(warmed, refused, (k) => cliName(k, roster));
+              setStartFail(reasons);
+              // A headless send draws no drawer: the reasons ride the error to the page (codex r1).
+              throw new Error(headless !== undefined && reasons.length > 0 ? `${NO_HELPER_AVAILABLE} ${reasons.join(' ')}` : NO_HELPER_AVAILABLE);
             }
             // The open seated a helper: any stale open-failure reasons stand down.
             setStartFail(null);
@@ -978,7 +999,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     if (body === '') { onCloseRef.current(); return; }
     void verbs.send(body, []).then(
       () => h.onDone(null),
-      (e: unknown) => h.onDone(e instanceof Error ? e.message : String(e)),
+      (e: unknown) => h.onDone(
+        e instanceof TurnInFlightError ? 'the answer to the last message is still being written. Send it again when it has finished.' : e instanceof Error ? e.message : String(e),
+        e instanceof TurnInFlightError,
+      ),
     ).finally(() => onCloseRef.current());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount, with the handed-over text
   }, []);

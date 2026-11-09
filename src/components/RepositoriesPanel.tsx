@@ -735,7 +735,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                             {trk !== null && <span className="wk-rl-cell wk-rl-desk" data-muted={trk.muted ? 'true' : undefined} data-testid="repo-row-trackers">{trk.words}</span>}
                             <span className="wk-rl-cell wk-rl-desk" data-muted="true" data-testid="repo-row-last">{when}</span>
                             <span className="wk-rl-cell wk-rl-desk" aria-hidden />
-                            <span className="wk-rl-phone" data-testid="repo-row-phone">{phoneLine(map, link, when, jobsIn)}<RepoWatchLine status={watch} repoId={repo.id} now={now} compact /></span>
+                            <span className="wk-rl-phone" data-testid="repo-row-phone">{phoneLine(map, link, when, jobsIn)}<RepoWatchLine status={watch} repoId={repo.id} now={now} compact testId="repo-row-watch-phone" /></span>
                           </a>
                           <span className="wk-rl-act">
                             {showWord && <span className="wk-jr-word" data-tone={side.tone} data-testid="repo-row-word">{side.label}</span>}
