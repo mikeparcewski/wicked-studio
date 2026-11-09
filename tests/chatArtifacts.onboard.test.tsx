@@ -138,6 +138,9 @@ describe('the onboard card model', () => {
     expect(isArtifactProposal(onboardProposal({ onboard: { ...base, checkout: null } }))).toBe(false);
     expect(isArtifactProposal(onboardProposal({ onboard: { ...base, url: ' ' } }))).toBe(false);
     expect(isArtifactProposal(onboardProposal({ onboard: { ...base, checkout: null, projectId: null, existing: { id: 'r', name: 'r' } } }))).toBe(false);
+    // One destination: id and name together, and the card's Project row is that project (codex r2).
+    expect(isArtifactProposal(onboardProposal({ onboard: { ...base, projectName: null } }))).toBe(false);
+    expect(isArtifactProposal(onboardProposal({ filedIn: { projectId: null, label: 'Not in a project' } }))).toBe(false);
     // …unless Go is blocked: then it only informs.
     expect(isArtifactProposal(onboardProposal({ blocked: 'no project is named “labs”', onboard: { ...base, checkout: null } }))).toBe(true);
     const [e] = foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: onboardProposal() }]);

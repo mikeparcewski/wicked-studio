@@ -300,6 +300,8 @@ export function DocSubjectPicker({
           rel="noopener"
           data-testid="doc-subject-register"
           onClick={() => { registering.current = true; }}
+          // A middle click opens the tab too (it fires auxclick, not click).
+          onAuxClick={() => { registering.current = true; }}
           title="Opens Add a repository for this project in a new tab; back here, it is offered"
           className="wk-chip"
         >

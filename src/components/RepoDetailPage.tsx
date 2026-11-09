@@ -124,6 +124,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   // crew-0182: the register form's project attach that did not land, said here (the repo itself is registered).
   const entryAttachError = useHistoryEntryValue('projectAttachError');
   const attachError = typeof entryAttachError === 'string' && entryAttachError.trim() !== '' ? entryAttachError : null;
+  const attachFor = useHistoryEntryValue('projectAttachFor');
+  const attachRepo = useHistoryEntryValue('projectAttachRepo');
   // What we know about it (round 10): the same reads as its row on Repositories.
   const knowledge = useRepoKnowledgeFor([repoId]);
   const linksSupported = useTrackerLinksSupported();
@@ -278,6 +280,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const projects = links !== null && links.state === 'ok' ? links.projects : null;
   const jobProjects = (projectsByJobs(runs, new Map(sharedProjects.map((p) => [p.id, p.name])), nameByRun).get(repo.id) ?? [])
     .filter((n) => !(projects ?? []).some((p) => p.name === n));
+  const known = projects !== null || jobProjects.length > 0 || attachError !== null;
   const tabs: readonly RepoTab[] = linksSupported ? ['overview', 'knowledge', 'jobs', 'history', 'trackers', 'settings'] : ['overview', 'knowledge', 'jobs', 'history', 'settings'];
   // The Trackers tab on a crew without tracker links is Overview (the tab does not exist there).
   const shown: RepoTab = tabs.includes(tab) ? tab : 'overview';
@@ -287,18 +290,21 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     if (t === shown) return;
     focusTab.current = fromPanel;
     // A registration's notices ride along to the tab (they live on the history entry).
-    const notices = { ...(registrationError !== null ? { onboardError: registrationError } : {}), ...(attachError !== null ? { projectAttachError: attachError } : {}) };
+    const notices = { ...(registrationError !== null ? { onboardError: registrationError } : {}), ...(attachError !== null ? { projectAttachError: attachError, projectAttachFor: attachFor, projectAttachRepo: attachRepo } : {}) };
     if (Object.keys(notices).length > 0) navigate(tabPath(t), { state: notices });
     else navigate(tabPath(t));
   };
   const count: Partial<Record<RepoTab, number | null>> = { jobs: runsFailed ? null : runs.length, trackers: trackerCount };
 
-  /** Added to a project from here: its membership is read again, and a registration's "not added" notice is settled. */
-  function onAddedToProject(): void {
+  /** Added to a project from here: its membership is read again; a registration's "not added to P" notice is settled
+   *  only by adding it to P (a "run not filed" notice, or one about another project, stays true). */
+  function onAddedToProject(project: { id: string }): void {
     useRepoLinks.getState().ensure([repoId], true);
-    if (attachError === null) return;
+    if (attachError === null || attachRepo !== true || attachFor !== project.id) return;
     const st = keepEntryState();
     delete st.projectAttachError;
+    delete st.projectAttachFor;
+    delete st.projectAttachRepo;
     window.history.replaceState(st, '');
     announceHistoryChange();
   }
@@ -478,10 +484,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     </Section>
                   </div>
                   <div>
-                    {/* crew-0182: a repository in no project can be added to one from here (the section shows wherever crew
-                        says which projects hold it; an older crew without tracker links shows neither). */}
-                    {(projects !== null || jobProjects.length > 0 || attachError !== null) && (
-                    <Section title="In projects" testId="repo-overview-projects">
+                    {/* crew-0182: one section, always, so a repository in no project can be added to one from here. Its
+                        title and test id say whether crew could tell which projects hold it (tracker links); its add
+                        control is one stable element across that change (its pick and focus survive a late read). */}
+                    <Section title={known ? 'In projects' : 'Projects'} testId={known ? 'repo-overview-projects' : 'repo-overview-add-project'}>
                       {attachError !== null && <p className="wk-field-note wk-field-note--bad" role="alert" data-testid="repo-overview-attach-error">{attachError}</p>}
                       {jobProjects.length > 0 && <p className="wk-rp-note" data-testid="repo-overview-job-projects">Used by {jobProjects.join(', ')}’s jobs; not attached.</p>}
                       {projects === null ? null : projects.length === 0 ? (jobProjects.length > 0 ? null : <p className="wk-rp-note">In no project yet.</p>) : (
@@ -494,14 +500,6 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                       <AddRepoToProject repoId={repo.id} repoName={repo.name} inProjects={projects === null ? null : projects.map((p) => p.id)}
                         onAdded={onAddedToProject} />
                     </Section>
-                    )}
-                    {/* Where crew can't say which projects hold it (no tracker links, or that read failed), it can still be
-                        added to one: the attach is the project-members route, not the links read. */}
-                    {!(projects !== null || jobProjects.length > 0 || attachError !== null) && (
-                      <Section title="Projects" testId="repo-overview-add-project">
-                        <AddRepoToProject repoId={repo.id} repoName={repo.name} inProjects={null} onAdded={onAddedToProject} />
-                      </Section>
-                    )}
                     {trackerCount !== null && (
                       <Section title="Trackers" testId="repo-overview-trackers">
                         <p className="wk-rp-note">{trackerCount === 0 ? 'No tracker is linked yet.' : <><b>{trackerCount} linked.</b> Jobs on this repository can read {trackerCount === 1 ? 'it' : 'them'}.</>}</p>

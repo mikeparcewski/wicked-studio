@@ -149,6 +149,15 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     expect(listRepos).toHaveBeenCalledTimes(2);
   });
 
+  it('a middle click opens the tab too, and the return reads again (codex r2)', async () => {
+    listRepos.mockResolvedValue({ repos: [] });
+    listProjectMembers.mockResolvedValue({ members: [] });
+    render(<Harness projectId="p1" />);
+    fireEvent(await screen.findByTestId('doc-subject-register'), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(2));
+  });
+
   it('Unfiled has no project to add to: it says to file the document', async () => {
     render(<Harness projectId="default" />);
     expect((await screen.findByTestId('doc-subject-unfiled')).textContent).toBe('File it in a project to ground it on code.');

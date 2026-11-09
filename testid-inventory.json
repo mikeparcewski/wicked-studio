@@ -16440,7 +16440,19 @@
       ]
     },
     {
+      "testId": "repo-project-failed",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-project-hint",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-project-retry",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]

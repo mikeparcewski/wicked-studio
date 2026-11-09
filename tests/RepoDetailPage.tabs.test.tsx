@@ -196,6 +196,8 @@ describe('projects and trackers: only on a crew with tracker links', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(5);
     expect(screen.getByRole('tabpanel')).toHaveAttribute('data-testid', 'repo-panel-overview');
     expect(screen.queryByTestId('repo-overview-projects')).toBeNull();
+    // crew-0182: it can still be added to a project (the member route, not the links read).
+    expect(screen.getByTestId('repo-overview-add-project')).toBeInTheDocument();
     expect(screen.queryByTestId('repo-overview-trackers')).toBeNull();
     expect(trackersApi.links).not.toHaveBeenCalled();
   });

@@ -112,6 +112,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   // `projectAttached`/`projectAttachError`; studio then attaches it itself (POST /projects/:id/members).
   // `null` = Unfiled: no projectId, nothing attached.
   const [projects, setProjects] = useState<Project[]>([]);
+  // The Project field's list could not be read: said beside it, with a Retry (never an empty list that looks real).
+  const [projectsFailed, setProjectsFailed] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(ambientProject);
   const [showNewProject, setShowNewProject] = useState(false);
   const projectsRequested = useRef(false);
@@ -139,10 +141,13 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     // A failed (or absent) read throws inside the chain, never out of the effect that asked.
     Promise.resolve()
       .then(() => api.listProjects())
-      .then(({ projects: ps }) =>
-        setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at)))
+      .then(({ projects: ps }) => {
+        setProjectsFailed(false);
+        setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at));
+      })
       .catch(() => {
-        projectsRequested.current = false; // transient — retry on the next open
+        projectsRequested.current = false; // transient — the Retry beside the field reads it again
+        setProjectsFailed(true);
       });
   }
 
@@ -249,7 +254,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
         : registered.projectAttached === true ? `Added to ${projectName ?? 'the project'}, but its onboarding run is not filed there: ${projectAttachError}`
           : `Registered, but not added to ${projectName ?? 'the project'}: ${projectAttachError}`;
       if (onboardError || attachNote !== null) {
-        navigate(detailPath, { state: { ...(onboardError ? { onboardError } : {}), ...(attachNote !== null ? { projectAttachError: attachNote } : {}) } });
+        navigate(detailPath, { state: {
+          ...(onboardError ? { onboardError } : {}),
+          // Which project and which step failed: adding the repo to THAT project later settles a "not added" notice.
+          ...(attachNote !== null ? { projectAttachError: attachNote, projectAttachFor: selectedProjectId, projectAttachRepo: registered.projectAttached !== true } : {}),
+        } });
       } else {
         navigate(detailPath);
       }
@@ -439,6 +448,12 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                       {projects.filter((p) => p.id !== 'default' && p.status !== 'archived').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                       <option value={NEW_PROJECT}>+ New project…</option>
                     </select>
+                    {projectsFailed && (
+                      <span className="wk-field-note wk-field-note--bad" role="alert" data-testid="repo-project-failed">
+                        Your projects could not be listed.{' '}
+                        <button type="button" data-testid="repo-project-retry" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={loadProjects}>Retry</button>
+                      </span>
+                    )}
                     <span className="wk-field-note" data-testid="repo-project-hint">
                       {selectedProjectId === null ? 'It is registered in no project; you can add it to one later from its page.' : 'The repository joins this project, and its onboarding is filed there.'}
                     </span>

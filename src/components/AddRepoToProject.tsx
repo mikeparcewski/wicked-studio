@@ -20,6 +20,11 @@ export function AddRepoToProject({ repoId, repoName, inProjects, onAdded }: {
   const [readFailed, setReadFailed] = useState(false);
   const [read, setRead] = useState(0);
   const doneRef = useRef<HTMLParagraphElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectRef = useRef<HTMLSelectElement | null>(null);
+  /** Focus was on Retry (owed to the list it brings back), or in the controls when the last project was added (owed
+   *  to the "Added" line once they go): it moves there, and only if nothing else took it meanwhile. */
+  const focusOwed = useRef<'retry' | 'added' | null>(null);
   const [pick, setPick] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,9 +38,18 @@ export function AddRepoToProject({ repoId, repoName, inProjects, onAdded }: {
     );
     return () => { live = false; };
   }, [read]);
-  // The last project offered was just added: its controls go, so focus moves to what was said (keyboard users keep
-  // their place instead of landing on the page body).
-  useEffect(() => { if (added !== null) doneRef.current?.focus(); }, [added]);
+  // The controls that held focus went away (the last project was added, or Retry was pressed): focus moves to what
+  // replaced them, unless the person has moved on to something else meanwhile (focus is no longer on the page body).
+  useEffect(() => {
+    const owed = focusOwed.current;
+    if (owed === null) return;
+    // Retry: the list it brought back. The last add: the "Added" line, once the controls are gone.
+    const target = owed === 'retry' ? selectRef.current : selectRef.current === null ? doneRef.current : null;
+    if (target === null) return;
+    focusOwed.current = null;
+    const lost = document.activeElement === null || document.activeElement === document.body;
+    if (lost || (owed === 'added' && rootRef.current?.contains(document.activeElement) === true)) target.focus();
+  });
   const offered = (projects ?? [])
     .filter((p) => p.id !== 'default' && p.status !== 'archived' && !(inProjects ?? []).includes(p.id))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -43,7 +57,7 @@ export function AddRepoToProject({ repoId, repoName, inProjects, onAdded }: {
     return (
       <p data-testid="repo-add-to-project-failed" role="alert" className="wk-field-note wk-field-note--bad">
         The projects could not be listed.{' '}
-        <button type="button" data-testid="repo-add-to-project-retry" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => setRead((n) => n + 1)}>Retry</button>
+        <button type="button" data-testid="repo-add-to-project-retry" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => { focusOwed.current = 'retry'; setRead((n) => n + 1); }}>Retry</button>
       </p>
     );
   }
@@ -55,6 +69,8 @@ export function AddRepoToProject({ repoId, repoName, inProjects, onAdded }: {
     setError(null);
     try {
       await api.attachProjectMember(project.id, { kind: 'crew.repo', ref: repoId, attachedBy: 'studio' });
+      // Only the last project leaves no control to keep focus on; and only if focus is still here.
+      focusOwed.current = offered.length === 1 && rootRef.current?.contains(document.activeElement) === true ? 'added' : null;
       setAdded(project.name);
       setPick('');
       onAdded({ id: project.id, name: project.name });
@@ -65,10 +81,11 @@ export function AddRepoToProject({ repoId, repoName, inProjects, onAdded }: {
     }
   };
   return (
-    <div data-testid="repo-add-to-project" className="wk-rp-add-project">
+    <div ref={rootRef} data-testid="repo-add-to-project" className="wk-rp-add-project">
       {offered.length > 0 && (
         <span className="wk-rp-add-project-row">
           <select
+            ref={selectRef}
             data-testid="repo-add-to-project-select"
             aria-label={`Add ${repoName} to a project`}
             className="wk-field"

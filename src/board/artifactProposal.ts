@@ -76,7 +76,7 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   // kind that carries it; an onboard card must carry it, and one that can be answered must say what Go does.
   const onboard = p['onboard'];
   if (onboard !== undefined && !isOnboard(onboard)) return false;
-  if (p['kind'] === 'onboard' && (onboard === undefined || (p['blocked'] === null && !onboardGoable(onboard as Record<string, unknown>)))) return false;
+  if (p['kind'] === 'onboard' && (onboard === undefined || (p['blocked'] === null && !onboardGoable(onboard as Record<string, unknown>, filed)))) return false;
   const touches = p['touches'];
   if (touches !== undefined && (!Array.isArray(touches) || !touches.every(str))) return false;
   // (A5) A refine's protected edits: each one the card can draw and the person can answer.
@@ -90,8 +90,12 @@ const isOnboard = (o: unknown): boolean => isObj(o) && str(o['url']) && str(o['n
   && (o['existing'] === null || (isObj(o['existing']) && filled(o['existing']['id']) && filled(o['existing']['name'])));
 /** An onboard card Go can answer: the address and name, and either where it is cloned (a new one) or the project an
  *  already-registered one joins. */
-const onboardGoable = (o: Record<string, unknown>): boolean => filled(o['url']) && filled(o['name'])
-  && (o['existing'] === null ? filled(o['checkout']) : filled(o['projectId']));
+const onboardGoable = (o: Record<string, unknown>, filedIn: unknown): boolean => filled(o['url']) && filled(o['name'])
+  && (o['existing'] === null ? filled(o['checkout']) : filled(o['projectId']))
+  // One destination, said the same everywhere: the project's id and name together (or neither), and the card's
+  // "Project" row is that project.
+  && (o['projectId'] === null ? o['projectName'] === null : filled(o['projectId']) && filled(o['projectName']))
+  && isObj(filedIn) && filedIn['projectId'] === o['projectId'];
 
 const PROTECTED_KINDS: ReadonlySet<string> = new Set(['text', 'attr', 'added', 'gone', 'order']);
 const isProtectedEdit = (e: unknown): boolean =>
