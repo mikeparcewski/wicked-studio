@@ -422,7 +422,10 @@ function ProposalLines({ p, id, theme }: { p: ArtifactProposal; id?: string; the
       {p.helpers !== null && <Row k="Helpers" testId="artifact-proposal-helpers">{p.helpers.label}</Row>}
       {time !== null && <Row k="Time, cost" testId="artifact-proposal-time">{time}</Row>}
       {has(p.stops) && <Row k="Stops" testId="artifact-proposal-stops">{p.stops}</Row>}
-      <Row k={p.kind === 'onboard' ? 'Project' : 'Filed in'} testId="artifact-proposal-filed">{p.filedIn.label}</Row>
+      {/* An onboard card names its project from the very facts Go uses (one destination, said once). */}
+      <Row k={p.kind === 'onboard' ? 'Project' : 'Filed in'} testId="artifact-proposal-filed">
+        {p.kind === 'onboard' && p.onboard !== undefined ? (p.onboard.projectName ?? 'Not in a project') : p.filedIn.label}
+      </Row>
       {has(p.reason) && <Row k="Why" testId="artifact-proposal-reason">{p.reason}</Row>}
     </dl>
   );

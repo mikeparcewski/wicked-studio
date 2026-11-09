@@ -301,7 +301,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   function onAddedToProject(project: { id: string }): void {
     useRepoLinks.getState().ensure([repoId], true);
     if (attachError === null || attachRepo !== true || attachFor !== project.id) return;
+    // A late answer after the person moved to another page never edits that page's notices.
+    if (!window.location.pathname.endsWith(`/repo-detail/${encodeURIComponent(repoId)}`)) return;
     const st = keepEntryState();
+    if (st.projectAttachFor !== project.id) return;
     delete st.projectAttachError;
     delete st.projectAttachFor;
     delete st.projectAttachRepo;

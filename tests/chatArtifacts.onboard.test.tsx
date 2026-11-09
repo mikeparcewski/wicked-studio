@@ -177,6 +177,12 @@ describe('the onboard card', () => {
     expect(text('artifact-proposal-onboard-name')).toBe('Namewicked-studio');
     expect(text('artifact-proposal-onboard-checkout')).toBe('Clones to~/.wicked/repos/wicked-studio');
     expect(text('artifact-proposal-filed')).toBe('ProjectWicked Labs');
+    // The Project row is the onboard facts' own (never a label that could say another project; review r3).
+    cleanup();
+    chatBody = { ...chatBody, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: onboardProposal({ filedIn: { projectId: 'proj_labs', label: 'Some other project' } }) }] };
+    page();
+    await screen.findByTestId('artifact-proposal');
+    expect(text('artifact-proposal-filed')).toBe('ProjectWicked Labs');
     expect(screen.queryByTestId('artifact-proposal-helpers')).toBeNull();
     expect(card.querySelector('[data-ask-option="go"]')?.getAttribute('aria-checked')).toBe('true');
   });

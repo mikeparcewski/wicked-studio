@@ -65,12 +65,15 @@ export function AddRepoToProject({ repoId, repoName, inProjects, onAdded }: {
   const add = async (): Promise<void> => {
     const project = offered.find((p) => p.id === pick);
     if (project === undefined || busy) return;
+    // Whether focus is here is read BEFORE the controls are disabled (a browser moves focus off a disabled control).
+    const owned = rootRef.current?.contains(document.activeElement) === true;
     setBusy(true);
     setError(null);
     try {
       await api.attachProjectMember(project.id, { kind: 'crew.repo', ref: repoId, attachedBy: 'studio' });
-      // Only the last project leaves no control to keep focus on; and only if focus is still here.
-      focusOwed.current = offered.length === 1 && rootRef.current?.contains(document.activeElement) === true ? 'added' : null;
+      // Only the last project leaves no control to keep focus on; owed only if the person has not moved elsewhere.
+      const elsewhere = document.activeElement !== null && document.activeElement !== document.body && rootRef.current?.contains(document.activeElement) !== true;
+      focusOwed.current = offered.length === 1 && owned && !elsewhere ? 'added' : null;
       setAdded(project.name);
       setPick('');
       onAdded({ id: project.id, name: project.name });

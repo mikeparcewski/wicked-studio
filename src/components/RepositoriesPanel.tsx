@@ -223,14 +223,17 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
       const { repo, onboardError } = registered;
       // crew-0182: crew attached it (or says why not). An older crew did not read projectId's attach: studio attaches it,
       // and a failed attach is named on the repository's page (the registration itself has already succeeded).
-      let projectAttachError = registered.projectAttachError ?? null;
-      if (selectedProjectId !== null && registered.projectAttached !== true && projectAttachError === null) {
+      // Unless crew says the repository is attached, studio attaches it (an older crew's projectAttachError was about the
+      // onboarding run's filing only). What failed is kept apart: the repository's attach, or only the run's filing.
+      let repoAttachError: string | null = null;
+      if (selectedProjectId !== null && registered.projectAttached !== true) {
         try {
           await api.attachProjectMember(selectedProjectId, { kind: 'crew.repo', ref: repo.id, attachedBy: 'studio' });
         } catch (err) {
-          projectAttachError = err instanceof Error ? err.message : String(err);
+          repoAttachError = err instanceof Error ? err.message : String(err);
         }
       }
+      const runFilingError = repoAttachError === null ? registered.projectAttachError ?? null : null;
 
       setRepos((prev) => [...prev, repo]);
       // A just-registered repo joins the queue's register at once (its "never indexed" row).
@@ -249,15 +252,13 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
 
       const detailPath = repoDetailPath(repo.id, { project: ambientProject });
       const projectName = projects.find((p) => p.id === selectedProjectId)?.name ?? selectedProjectId;
-      // Crew attached the repository but could not file its onboarding run there: the repository IS in the project.
-      const attachNote = projectAttachError === null ? null
-        : registered.projectAttached === true ? `Added to ${projectName ?? 'the project'}, but its onboarding run is not filed there: ${projectAttachError}`
-          : `Registered, but not added to ${projectName ?? 'the project'}: ${projectAttachError}`;
+      const attachNote = repoAttachError !== null ? `Registered, but not added to ${projectName ?? 'the project'}: ${repoAttachError}`
+        : runFilingError !== null ? `Added to ${projectName ?? 'the project'}, but its onboarding run is not filed there: ${runFilingError}` : null;
       if (onboardError || attachNote !== null) {
         navigate(detailPath, { state: {
           ...(onboardError ? { onboardError } : {}),
           // Which project and which step failed: adding the repo to THAT project later settles a "not added" notice.
-          ...(attachNote !== null ? { projectAttachError: attachNote, projectAttachFor: selectedProjectId, projectAttachRepo: registered.projectAttached !== true } : {}),
+          ...(attachNote !== null ? { projectAttachError: attachNote, projectAttachFor: selectedProjectId, projectAttachRepo: repoAttachError !== null } : {}),
         } });
       } else {
         navigate(detailPath);
