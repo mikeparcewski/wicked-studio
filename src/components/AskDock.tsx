@@ -308,6 +308,11 @@ export interface PageChatBinding {
   headerEnd?: React.ReactNode;
   /** The focus chip above the box (removable). */
   focusChip?: React.ReactNode;
+  /** crew-0183: the page IS the conversation (Understand): no inner header row or scope line; the page draws the scope,
+   *  the answering helper and the open-in-full action from what this reports. */
+  bare?: { onChrome: (c: { chatId: string | null; helper: string | null }) => void };
+  /** How the person's own words are shown (a page strips what it appended for the seat). */
+  userText?: (text: string) => string;
 }
 
 export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, sendWorkflow, sendRepos, sendArtifact, startProjectId, startText, startFresh = false, page, headless }: {
@@ -463,23 +468,32 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     }
     if (sendText !== undefined && sendChatId !== undefined) {
       const stored = readAskSession(sessKey);
-      if (stored !== null && stored.chatId === sendChatId) return stored;
-      // crew-0183 (codex r1): a page send into a chat this engine has not stored keeps the chat's OWN choices — the system
-      // chat's record of it (read, never written), else what this browser remembered for it; with no record, nothing is
-      // claimed as chosen (every source off), never the defaults.
+      // crew-0183 (codex r1, r2): a page send keeps the chat's OWN choices, read fresh every time from the per-chat record
+      // every surface writes (so a source turned off in the dock since stays off), else the system chat's record of it
+      // (read, never written), else this engine's own cache; with no record, nothing is claimed as chosen.
       if (headless !== undefined) {
+        const cached = stored !== null && stored.chatId === sendChatId ? stored : null;
         const sys = readAskSession(ASK_SESSION_KEY);
         const known = sys !== null && sys.chatId === sendChatId ? sys : null;
-        const ch = known === null ? chatChoices(sendChatId) : null;
-        const session: AskSession = known !== null ? { ...known } : {
-          chatId: sendChatId, title: '', seeded: true, scope: ch?.scope ?? null,
-          ...(ch?.chips !== undefined && ch.chips.length > 0 ? { chips: ch.chips } : { chipsUnknown: true as const }),
+        const ch = chatChoices(sendChatId);
+        const chips = ch?.chips !== undefined && ch.chips.length > 0 ? ch.chips
+          : known?.chips !== undefined && known.chips.length > 0 ? known.chips
+            : cached?.chips !== undefined && cached.chips.length > 0 ? cached.chips : undefined;
+        const base: AskSession = cached ?? known ?? { chatId: sendChatId, title: '', seeded: true, scope: null };
+        const rest: AskSession = { ...base };
+        delete rest.chips;
+        delete rest.chipsUnknown;
+        const session: AskSession = {
+          ...rest,
+          scope: ch?.scope ?? base.scope ?? null,
+          ...(chips !== undefined ? { chips } : { chipsUnknown: true as const }),
           ...(ch?.cli !== undefined ? { cli: ch.cli } : {}),
           ...(ch?.packSig !== undefined ? { packSig: ch.packSig } : {}),
         };
         writeAskSession(session, sessKey);
         return session;
       }
+      if (stored !== null && stored.chatId === sendChatId) return stored;
       // The chat on screen, opened elsewhere: its context pack rode its own first send.
       const session: AskSession = { chatId: sendChatId, title: '', seeded: true, scope: null };
       writeAskSession(session, sessKey);
@@ -502,6 +516,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
    *  = a plain chat: none asked, or this crew does not run it). */
   const workflowAsk = useRef<string | undefined>(resumed === null ? sendWorkflow ?? (page !== undefined ? PAGE_CHAT_SPECS[page.kind].workflow : undefined) : undefined);
   const [workflowRun, setWorkflowRun] = useState<string | null>(null);
+  /** The workflow the open chat runs, read by the pack builder in the same send (state lands a render later). */
+  const openedWorkflowRef = useRef<string | null>(null);
   /** The repository the analysis could not ground (no code graph): "Index this repository". */
   const [indexOffer, setIndexOffer] = useState<{ repoId: string; name: string; state: 'offer' | 'starting' | 'started' | 'failed' } | null>(null);
   /** B-1: the per-helper reasons the last chat open refused with (sanitized), for the drawer's disclosure
@@ -577,6 +593,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const cliRef = useRef(cli);
   cliRef.current = cli;
   const cliLabel = cli === null ? null : cliName(cli, roster);
+  // crew-0183: a bare page chat shows its answering helper in the page's own line.
+  const cliLabelRef = useRef(cliLabel);
+  cliLabelRef.current = cliLabel;
+  const bareChat = useRef<string | null>(null);
+  useEffect(() => { if (page?.bare !== undefined) page.bare.onChrome({ chatId: bareChat.current, helper: cliLabel }); }, [cliLabel]); // eslint-disable-line react-hooks/exhaustive-deps -- the page's binding is fixed for the mount
   useEffect(() => { if (pageRef.current === undefined && headless === undefined) useChatWindow.getState().setCli(cliLabel); }, [cliLabel]); // eslint-disable-line react-hooks/exhaustive-deps -- headless is fixed for the mount
 
   // ASK-S1 (Amendment 6 decision 5: studio renders ONE thread): on the chat's own session page the
@@ -640,8 +661,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       ...packInputs.current, chips: chipsNow, omitDiagnostics: !diag,
       ...(pg !== undefined ? { pageLines: pg.data(), focus } : {}),
     });
-    if (split) return { message: pg !== undefined ? `${text}\n\n${pageChatRules(pg.kind)}` : text, sig, diag, page: pack };
-    return { message: `${text}${PACK_JOIN}${pack}${pg !== undefined ? `\n${pageChatRules(pg.kind)}` : ''}`, sig, diag, page: null };
+    // crew-0183: a chat that runs a read-only workflow (Understand's `analyze`) has its rules in the workflow's own
+    // instructions, so studio's page rules do not ride the person's words (they leaked into crew's chat title).
+    const rules = pg !== undefined && openedWorkflowRef.current === null ? pageChatRules(pg.kind) : null;
+    if (split) return { message: rules !== null ? `${text}\n\n${rules}` : text, sig, diag, page: pack };
+    return { message: `${text}${PACK_JOIN}${pack}${rules !== null ? `\n${rules}` : ''}`, sig, diag, page: null };
   }, []);
   /** The handed-over message is still owed (its artifact rides it until a send of it lands). */
   const handoffOwed = useRef(sendText !== undefined);
@@ -836,6 +860,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             chatIdRef.current = id;
             setShownId(id);
             workflowAsk.current = undefined;
+            openedWorkflowRef.current = workflow;
             setWorkflowRun(workflow);
             const offer = workflow !== null ? indexOfferFor(scope) : null;
             setIndexOffer(offer === null ? null : { ...offer, state: 'offer' });
@@ -1151,6 +1176,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         headerProps={page !== undefined ? undefined : chrome?.dragProps}
         headerExtra={picker}
         compactHeader
+        {...(page?.bare !== undefined ? { bare: true, onLatestChat: (id: string | null) => { bareChat.current = id; page.bare?.onChrome({ chatId: id, helper: cliLabelRef.current }); } } : {})}
+        {...(page?.userText !== undefined ? { userText: page.userText } : {})}
         headerEnd={page !== undefined ? page.headerEnd : chrome?.controls}
         onStatus={onStatus}
         // Uploads ride crew's attachments route; without it the paperclip stays away rather than attach a

@@ -42,6 +42,14 @@ describe('watchLine', () => {
   });
 });
 
+describe('watchLine when the read fails (codex r2)', () => {
+  it('says it cannot check when nothing was read, and marks an older read', () => {
+    expect(watchLine(undefined, 'r1', NOW, true)?.words).toMatch(/Can’t check right now/);
+    expect(watchLine(status({}), 'r1', NOW, true)?.words).toMatch(/couldn’t refresh this just now/);
+    expect(watchLine(null, 'r1', NOW, false)).toBeNull();
+  });
+});
+
 describe('readRepoWatch', () => {
   it('keeps good rows and drops malformed ones', () => {
     const got = readRepoWatch({ enabled: true, cap: 24, covers: 'x', repos: [{ repoId: 'r1', state: 'current' }, { repoId: 2, state: 'current' }, { repoId: 'r3', state: 'weird' }, null] });

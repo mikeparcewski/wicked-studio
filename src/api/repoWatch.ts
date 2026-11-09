@@ -119,8 +119,16 @@ export interface WatchLine {
   waitingOn: RepoWatchHold[];
 }
 
-/** One repository's watch line, or null when this crew has no watcher or does not watch the repo (not onboarded yet). */
-export function watchLine(status: RepoWatchStatus | null | undefined, repoId: string, now: number): WatchLine | null {
+/** One repository's watch line, or null when this crew has no watcher or does not watch the repo (not onboarded yet).
+ *  `failed`: the last read failed — with nothing read yet the line says it cannot check; with an older read, it says
+ *  that read may be out of date. */
+export function watchLine(status: RepoWatchStatus | null | undefined, repoId: string, now: number, failed = false): WatchLine | null {
+  if (status === undefined && failed) return { state: 'daemon-off', tone: 'quiet', words: 'Can’t check right now whether the code map is kept current', remedy: null, waitingOn: [] };
+  const line = watchLineOf(status, repoId, now);
+  return line !== null && failed ? { ...line, words: `${line.words} (couldn’t refresh this just now)` } : line;
+}
+
+function watchLineOf(status: RepoWatchStatus | null | undefined, repoId: string, now: number): WatchLine | null {
   if (status === null || status === undefined) return null;
   if (!status.enabled) return { state: 'daemon-off', tone: 'quiet', words: 'Not kept current: the repo watcher is off on this computer', remedy: null, waitingOn: [] };
   const r = status.repos.find((x) => x.repoId === repoId);
@@ -144,11 +152,20 @@ export function watchLine(status: RepoWatchStatus | null | undefined, repoId: st
 /** Read the watcher now and every {@link REPO_WATCH_POLL_MS} while the calling surface is mounted (paused while hidden). */
 export function useRepoWatch(): RepoWatchStatus | null | undefined {
   const status = useRepoWatchStore((s) => s.status);
+  useRepoWatchPoll();
+  return status;
+}
+
+/** Whether the last read of the watcher failed (codex r2: a failure was indistinguishable from "no watcher"). */
+export function useRepoWatchFailed(): boolean {
+  return useRepoWatchStore((s) => s.failed);
+}
+
+function useRepoWatchPoll(): void {
   useEffect(() => {
     const load = (): void => { if (typeof document === 'undefined' || document.visibilityState !== 'hidden') void useRepoWatchStore.getState().load(); };
     load();
     const t = setInterval(load, REPO_WATCH_POLL_MS);
     return () => clearInterval(t);
   }, []);
-  return status;
 }

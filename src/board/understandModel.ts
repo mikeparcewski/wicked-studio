@@ -29,8 +29,21 @@ export const ASKED_MAX = 20;
 /** What is sent with the question, on its own line: the page promises cited answers. */
 export const GROUNDING_LINE = 'Answer from the code itself and cite the files you read.';
 
-export function questionMessage(question: string): string {
-  return `${question.trim()}\n\n${GROUNDING_LINE}`;
+/**
+ * What Understand sends for a question (crew-0183). A chat running crew's `analyze` workflow is told to cite the files
+ * it read by the workflow's own instructions, so the question goes alone and the person's bubble and crew's chat title
+ * carry only what they asked. A plain chat (a crew without `analyze`) has no other instruction channel: crew's message
+ * `context` is data, never instructions; so the grounding line rides on the text there, and the page strips it from
+ * the person's bubble ({@link withoutGroundingLine}) as it does from the title.
+ */
+export function questionMessage(question: string, analysis = false): string {
+  return analysis ? question.trim() : `${question.trim()}\n\n${GROUNDING_LINE}`;
+}
+
+/** The person's own words of a sent question: the grounding line a plain chat carried is not theirs. */
+export function withoutGroundingLine(text: string): string {
+  const suffix = `\n\n${GROUNDING_LINE}`;
+  return text.endsWith(suffix) ? text.slice(0, text.length - suffix.length) : withoutGrounding(text);
 }
 
 function isAsked(v: unknown): v is AskedQuestion {

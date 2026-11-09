@@ -158,23 +158,31 @@ def journey(browser, w: int, h: int, theme: str) -> None:
     page.wait_for_timeout(150)
     box.fill(reply)
     box.press("Enter")
-    send_and_wait(page, before + 2, with_answer + 1, early, f"early-{tag}")
+    # Classify what the daemon did with the second message BEFORE asserting counts (codex r2): refused (turn in flight),
+    # or accepted because the first answer was already in.
+    texts = lambda: [p["text"] for p in ask_posts(origin)]  # noqa: E731
     failed = page.get_by_test_id("session-send-failed")
-    try:
-        failed.wait_for(state="visible", timeout=8000)
-        refused = True
-    except Exception:  # noqa: BLE001
-        refused = False
+    refused = False
+    for _ in range(80):
+        page.wait_for_timeout(250)
+        if failed.count() > 0 and failed.is_visible():
+            refused = True
+            break
+        if any(reply in t for t in texts()):
+            break
+    check(f"early-posted-once-{tag}", sum(1 for t in texts() if early in t) == 1, posts=[t[:50] for t in texts()][-4:])
     if refused:
         check(f"refusal-said-and-words-kept-{tag}", "still being written" in failed.inner_text() and box.input_value() == reply,
               said=failed.inner_text(), box=box.input_value())
+        try:
+            page.wait_for_function("""(n) => document.querySelectorAll('[data-testid="session-turn"][data-who="helper"]:not([data-pending])').length >= n""",
+                                   arg=with_answer + 1, timeout=20000)
+        except Exception:  # noqa: BLE001
+            check(f"early-reply-{tag}", False)
         page.wait_for_timeout(1500)
         box.click()
         box.press("Enter")
-        send_and_wait(page, before + 3, with_answer + 2, reply, f"reply-{tag}")
-    else:
-        # The daemon took both (the first answer was already in): each still once.
-        send_and_wait(page, before + 3, with_answer + 2, reply, f"reply-{tag}")
+    send_and_wait(page, before + 3, with_answer + 2, reply, f"reply-{tag}")
     check(f"each-request-once-{tag}", sum(1 for d in posted if early in d) == 1 and sum(1 for d in posted if reply in d) == (2 if refused else 1),
           early=sum(1 for d in posted if early in d), reply=sum(1 for d in posted if reply in d), refused=refused)
     page.evaluate("() => { const t = document.querySelector('[data-testid=session-thread]'); if (t) t.scrollTop = t.scrollHeight; }")

@@ -44,6 +44,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
 SESSION_RE = re.compile(r"/s/([0-9a-f-]{20,})$")
+GROUNDING = "Answer from the code itself and cite the files you read."
 STORED_CHAT = json.dumps({"chatId": "kept-system-chat", "title": "the dock's own chat", "seeded": True, "scope": None})
 DOCK_IDS = ["ask-panel", "system-chat", "chat-tray"]
 
@@ -90,6 +91,12 @@ def journey(browser, w: int, h: int, theme: str) -> None:
     page.wait_for_timeout(600)
     page.screenshot(path=str(SHOTS / f"desk-understand-ask-{tag}-before.png"))
     page.get_by_test_id("understand-ask-send").click()
+    try:
+        page.get_by_test_id("understand-chat").wait_for(state="visible", timeout=8000)
+        page.wait_for_timeout(500)
+    except Exception:  # noqa: BLE001
+        pass
+    page.screenshot(path=str(SHOTS / f"desk-understand-ask-{tag}-during.png"))
     posts = []
     for _ in range(80):
         posts = ask_posts(origin)
@@ -117,6 +124,22 @@ def journey(browser, w: int, h: int, theme: str) -> None:
     page.screenshot(path=str(SHOTS / f"desk-understand-ask-{tag}-answered.png"))
     answers = page.evaluate(ANSWER)
     check(f"answer-in-page-{tag}", chat.is_visible() and len(answers) >= 1 and question.split(" (")[0] in chat.inner_text(), answers=answers)
+    # crew-0183 (operator: "why does understand open new panel?"): once asked, the page IS the conversation — no inner
+    # header row inside it, the scope (and who answers) one quiet line under the page title.
+    inner = page.evaluate("""() => document.querySelectorAll('[data-testid="understand-chat"] [data-testid="assist-header"]').length""")
+    scope_line = page.get_by_test_id("understand-scope-line")
+    check(f"no-inner-panel-header-{tag}", inner == 0 and scope_line.is_visible() and "read-only" in scope_line.inner_text(),
+          inner=inner, scope=scope_line.inner_text() if scope_line.count() else None)
+    # The person's bubble is exactly what they asked; the grounding line is not theirs (neither is it in Recent answers).
+    bubbles = page.evaluate("""() => [...document.querySelectorAll('[data-testid="understand-chat"] [data-testid="assist-user-msg"], [data-testid="understand-chat"] [data-testid="assist-chat-msg"][data-agent="you"]')]
+      .map((m) => (m.innerText || '').trim())""")
+    recent = page.evaluate("""() => [...document.querySelectorAll('[data-testid="understand-answer"]')].map((r) => r.innerText)""")
+    check(f"bubble-is-the-question-{tag}", bubbles == [question] and all(GROUNDING not in r for r in recent),
+          bubbles=bubbles, recent=[r[:120] for r in recent])
+    # ...and the seat is still told to cite: on an `analyze` chat by the workflow it runs, else by the line on the text.
+    opened = [d for d in posted if "/api/v1/chats " in d]
+    told = any('"workflow":"analyze"' in d for d in opened) or any(GROUNDING in d for d in carrying)
+    check(f"seat-still-told-to-cite-{tag}", told, opened=[d[:200] for d in opened], carrying=[d[:200] for d in carrying])
     dock = page.evaluate("window.__dock")
     check(f"window-never-mounted-{tag}", dock == [], seen=dock[:5])
     check(f"stays-on-understand-{tag}", page.url.rstrip("/").endswith("/understand"), url=page.url)

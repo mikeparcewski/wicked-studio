@@ -34,6 +34,12 @@ Patch: two operator reports and the repo watcher's UI (bundled by crew 0.18.3).
   (or arrives while the last answer is still being written) says why under the composer and puts the words back. Start
   still leaves your words unsent in the new chat until you press Enter. The unused hand-over from Understand's Ask to the
   window is removed (its Ask answers in its own page chat).
+- **Understand no longer opens a panel inside the page.** Once you ask, the conversation is the Understand page itself:
+  the title stays, the inner "Analysis · Understand" header row is gone, what it reads and who answers are one quiet line
+  under the title, and "open in full" is a quiet action beside it. Your question shows as you typed it: on a crew that
+  runs the `analyze` workflow (which tells the helper to cite the files it read) the grounding line is no longer added
+  to your words, so it is gone from your message and from the chat's title; on an older crew it still reaches the
+  helper and is not shown as yours.
 - **The rail's Move to project picker stays open on the bottom rows too.** Focusing its first item scrolled the rail's
   scroller when the row sat at its edge, and the picker closed about 14 ms later; the focus no longer scrolls. The
   journey now checks the last row on the scroller's bottom edge at 1440 and 390, and that Tab inside the picker keeps it

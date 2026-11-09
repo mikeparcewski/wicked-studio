@@ -149,6 +149,9 @@ const RIGHT_PANEL_PX = 288;
 /** The Desk's Start row + composer band (skin `desk`): the Ask panel opens above it. */
 const DESK_COMPOSER_PX = 96;
 
+/** What a failed page send last put back into a chat's box (so a second failure appends rather than gives way). */
+const restoredDrafts = new Map<string, string>();
+
 /** The chat id of the session page on screen (`/s/<id>`), read at send time like the dock's `stepAside`; else null. */
 function chatOnScreen(): string | null {
   if (typeof window === 'undefined') return null;
@@ -937,9 +940,16 @@ export function App(): React.ReactElement {
           headless={{ onDone: (failed) => {
             if (failed === null) return;
             pageSendFailed(pageSend.target, failed);
-            // The words go back into the page's box unless the person has typed something since (codex r1).
+            // The words go back into the page's box unless the person has typed something since (codex r1); a box holding
+            // only words an earlier failure put back takes these too, so two failed sends never lose one (codex r2).
             const drafts = useSessionDrafts.getState();
-            if ((drafts.drafts[pageSend.target] ?? '').trim() === '') drafts.setDraft(pageSend.target, pageSend.text);
+            const now = drafts.drafts[pageSend.target] ?? '';
+            const restored = restoredDrafts.get(pageSend.target);
+            if (now.trim() === '' || now === restored) {
+              const next = now.trim() === '' ? pageSend.text : `${now}\n\n${pageSend.text}`;
+              drafts.setDraft(pageSend.target, next);
+              restoredDrafts.set(pageSend.target, next);
+            }
           } }}
           runs={shownRuns}
           pathname={pathname}

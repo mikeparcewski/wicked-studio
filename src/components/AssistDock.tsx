@@ -311,7 +311,9 @@ type ResumeProbe = { kind: 'gone' } | { kind: 'ended' } | { kind: 'error'; messa
 /** A chat's kept history (the system chat's past chats): its records, and whether it has ended. */
 export type ChatHistoryLoader = (chatId: string) => Promise<{ records: readonly unknown[]; closed: boolean }>;
 
-function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns, flow = false }: {
+function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns, flow = false, userText }: {
+  /** crew-0183: how the person's own words are shown (a page strips what it appended for the seat). */
+  userText?: ((text: string) => string) | undefined;
   chatId: string;
   /** A chat window or page chat (journey 2026-11-04): the block is the conversation itself, not a box in a dock. No
    *  seat-chip header and no inner scroller: the thread around it is the one scroller, so no line of an answer ever
@@ -594,7 +596,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
                 // A failed turn's text is the daemon's error prose — it stays
                 // verbatim in the fail ink, never dressed as markdown.
                 <p className="whitespace-pre-wrap text-xs leading-relaxed" style={{ color: 'var(--status-fail)' }}>
-                  {m.text}
+                  {m.cliKey === 'you' && userText !== undefined ? userText(m.text) : m.text}
                 </p>
               ) : (
                 // E3 (campaign): seat replies ARE markdown — rendered with the
@@ -602,7 +604,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
                 // GFM; raw HTML is never parsed, so nothing injects), not
                 // dumped as ##-visible raw text.
                 <div className="text-xs leading-relaxed">
-                  <Markdown>{m.text}</Markdown>
+                  <Markdown>{m.cliKey === 'you' && userText !== undefined ? userText(m.text) : m.text}</Markdown>
                   {m.pending && <span aria-hidden className="animate-pulse"> …</span>}
                 </div>
               )}
@@ -630,7 +632,13 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
 
 const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice, fileMode = false, loadHistory, variant, threadTail, seed, onSeedTaken, sendChip, composerRef }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice, fileMode = false, loadHistory, variant, threadTail, seed, onSeedTaken, sendChip, composerRef, bare = false, onLatestChat, userText }: {
+  /** crew-0183: a page that IS the conversation (Understand) draws no header row and no scope line of its own; the page
+   *  shows them (`onLatestChat` tells it which chat the open-in-full action opens). */
+  bare?: boolean;
+  onLatestChat?: (chatId: string | null) => void;
+  /** How the person's own words are shown (a page strips what it appended for the seat). */
+  userText?: (text: string) => string;
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -771,6 +779,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     }
     return null;
   }, [items]);
+  const onLatestChatRef = useRef(onLatestChat);
+  onLatestChatRef.current = onLatestChat;
+  useEffect(() => { onLatestChatRef.current?.(latestChatId); }, [latestChatId]);
 
   // Pinned to the tail as items land (the live-follow posture, DES-RUN-NARRATOR).
   useEffect(() => {
@@ -1046,6 +1057,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       } : undefined}
     >
       {/* Header */}
+      {!bare && (
       <div {...headerProps} data-testid="assist-header" className="wk-assist-header flex shrink-0 items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--surface-raised)' }}>
         {headerStart}
         <span className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>{context.title}</span>
@@ -1092,8 +1104,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           </button>
         )}
       </div>
+      )}
 
-      {page && context.contextLabel !== '' && (
+      {page && !bare && context.contextLabel !== '' && (
         <p data-testid="assist-context" className="wk-pagechat-scope">{context.contextLabel}</p>
       )}
 
@@ -1138,7 +1151,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             return (
               <div key={i} data-testid="assist-user-msg" className="self-end max-w-[85%] rounded-2xl px-3 py-2" style={{ background: 'var(--accent-subtle)', color: 'var(--ink-high)' }}>
                 {item.chip !== undefined && <span className="wk-assist-chip" data-testid="assist-msg-chip">{item.chip}</span>}
-                <p className="whitespace-pre-wrap text-xs leading-relaxed">{item.text}</p>
+                <p className="whitespace-pre-wrap text-xs leading-relaxed">{userText !== undefined ? userText(item.text) : item.text}</p>
                 {item.files.length > 0 && (
                   <p className="mt-1 font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>
                     📎 {item.files.join(' · ')}
@@ -1166,6 +1179,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
                 loadHistory={loadHistory}
                 turns={inlineTurns[item.chatId]}
                 flow={flow}
+                userText={userText}
               />
             );
           }

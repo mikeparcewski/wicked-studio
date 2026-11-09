@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import { repoWatchApi, useRepoWatchStore, watchLine, type RepoWatchStatus } from '../api/repoWatch.js';
+import { repoWatchApi, useRepoWatchFailed, useRepoWatchStore, watchLine, type RepoWatchStatus } from '../api/repoWatch.js';
+import { ApiError } from '../api/errors.js';
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 import { sessionPath } from '../board/sessionModel.js';
 
@@ -19,7 +20,8 @@ export function RepoWatchLine({ status, repoId, now, compact = false, navigate, 
   /** The list renders the line twice (desktop cell, phone line; CSS shows one): each its own id. */
   testId?: string;
 }): React.ReactElement | null {
-  const line = watchLine(status, repoId, now);
+  const failed = useRepoWatchFailed();
+  const line = watchLine(status, repoId, now, failed);
   if (line === null) return null;
   if (compact) {
     return (
@@ -75,7 +77,9 @@ export function RepoWatchControls({ status, repoId }: { status: RepoWatchStatus 
       await fn();
       setSaid(ok);
     } catch (e) {
-      setSaid(`That didn’t work: ${errorText(e)}`);
+      // crew keeps a press made while jobs hold the map (409 with `waitingOn`) and runs it when they end (codex r2).
+      const waiting = e instanceof ApiError && e.status === 409 && typeof e.body === 'object' && e.body !== null && Array.isArray((e.body as { waitingOn?: unknown }).waitingOn);
+      setSaid(waiting ? 'Re-index requested: it runs when the job using the code map ends.' : `That didn’t work: ${errorText(e)}`);
     } finally {
       setBusy(false);
       void useRepoWatchStore.getState().load();

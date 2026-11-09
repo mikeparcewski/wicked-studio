@@ -4,7 +4,7 @@ import type { ChatTranscriptRecord } from 'wicked-crew-api-types';
 import type { SessionView } from '../src/api/types.js';
 import { ApiError } from '../src/api/errors.js';
 import {
-  ASKED_KEY, answerLine, firstSentence, forgetAsked, GROUNDING_LINE, questionMessage, readAsked, rememberAsked, suggestedQuestions,
+  ASKED_KEY, answerLine, firstSentence, forgetAsked, GROUNDING_LINE, questionMessage, readAsked, rememberAsked, suggestedQuestions, withoutGroundingLine,
 } from '../src/board/understandModel.js';
 import { typeRows, typeTone, typeWords, type EvalSource } from '../src/board/evalModel.js';
 import type { EvalResult } from '../src/api/testing.js';
@@ -98,6 +98,12 @@ describe('Understand words (pure)', () => {
 
   it('sends the question with the grounding line on its own line', () => {
     expect(questionMessage('  Who calls deliver?  ')).toBe(`Who calls deliver?\n\n${GROUNDING_LINE}`);
+    // crew-0183: on an `analyze` chat the workflow's own instructions ask for citations: the question goes alone, so
+    // the person's bubble and crew's chat title are exactly what they asked.
+    expect(questionMessage('  Who calls deliver?  ', true)).toBe('Who calls deliver?');
+    // A plain chat still carries the line to the seat; the person's bubble shows only their words.
+    expect(withoutGroundingLine(questionMessage('Who calls deliver?'))).toBe('Who calls deliver?');
+    expect(withoutGroundingLine('Who calls deliver?')).toBe('Who calls deliver?');
   });
 
   it('one plain line of what an answer found, and the files it cites (verified ones only)', () => {
