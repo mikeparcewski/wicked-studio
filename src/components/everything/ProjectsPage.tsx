@@ -66,7 +66,7 @@ export function ProjectsPage({ runs, runsLoaded, runsError = null, onRetryRuns, 
   return (
     <CalmPage data-testid="projects-page">
       <CalmHead title={PAGE_NAMES.projects} sentenceTestId="projects-sentence"
-        sentence={archivedLens ? 'Archived projects keep their jobs and repositories. Unarchive one to work in it again.' : projectsSentence(rows, known, snapshot, unfiledWaiting)}
+        sentence={archivedLens ? 'Archived projects keep their jobs and repositories. Open one and restore it from its Settings to work in it again.' : projectsSentence(rows, known, snapshot, unfiledWaiting)}
         action={<CalmAction label="New project" testId="projects-new" onClick={() => setNewOpen(true)} />} />
       {read === 'failed' && <StateBanner data-testid="projects-failed" kind={readErrorKind(runsError)} what="your work" error={runsError} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />}
       <CalmSection label={archivedLens ? 'Archived' : 'Your projects'} data-testid="projects-tab"
