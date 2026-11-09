@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { Project, ProjectMember } from '../src/api/types.js';
 import { makeView } from './factories.js';
 
-const { getProject, getRun, apiFetch, detach, listProjects, listMembers } = vi.hoisted(() => ({ getProject: vi.fn(), getRun: vi.fn(), apiFetch: vi.fn(), detach: vi.fn(),
+const { getProject, getRun, apiFetch, detach, listProjects, listMembers, updateProject } = vi.hoisted(() => ({ getProject: vi.fn(), getRun: vi.fn(), apiFetch: vi.fn(), detach: vi.fn(), updateProject: vi.fn(),
   listProjects: vi.fn(() => Promise.resolve({ projects: [] as unknown[] })), listMembers: vi.fn(() => Promise.resolve({ members: [] as unknown[] })) }));
 vi.mock('../src/api/client.js', () => ({
   apiBase: () => '/api/v1',
@@ -15,6 +15,7 @@ vi.mock('../src/api/client.js', () => ({
     getProject: (...args: unknown[]) => getProject(...args),
     getRun: (...args: unknown[]) => getRun(...args),
     detachProjectMember: (...args: unknown[]) => detach(...args),
+    updateProject: (...args: unknown[]) => updateProject(...args),
     listProjects: () => listProjects(),
     listProjectMembers: () => listMembers(),
     listRepos: () => Promise.resolve({ repos: [{ id: 'repo', name: 'Shop code', root_path: '/code', default_branch: 'main', registered_at: 1 }] }),
@@ -118,7 +119,31 @@ describe("a project's home (no ?tab=, the approved ui-v2-projects mockup)", () =
     // Every tabbed view stays one link away.
     expect(screen.getAllByTestId('project-view').map((a) => a.getAttribute('href'))).toEqual([
       '/projects/p1?tab=work', '/projects/p1?tab=runs', '/projects/p1?tab=repositories', '/projects/p1?tab=report', '/projects/p1?tab=understand',
-      '/projects/p1?tab=steer', '/projects/p1?tab=memory', '/projects/p1?tab=agents', '/projects/p1?tab=evaluate']);
+      '/projects/p1?tab=steer', '/projects/p1?tab=memory', '/projects/p1?tab=agents', '/projects/p1?tab=evaluate', '/projects/p1?tab=settings']);
+  });
+
+  it('"More info" replaces the ⋯: a quiet link to the project page\'s first tab (operator 2026-11-09)', async () => {
+    const navigate = vi.fn();
+    render(<ProjectDesk {...props} navigate={navigate} />);
+    await loaded();
+    expect(screen.queryByTestId('project-menu')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^More actions for/ })).toBeNull();
+    const more = screen.getByTestId('project-more-info');
+    expect(more.tagName).toBe('A');
+    expect(more).toHaveTextContent(/^More info$/);
+    expect(more).toHaveAttribute('href', '/projects/p1?tab=work');
+    fireEvent.click(more);
+    expect(navigate).toHaveBeenCalledWith('/projects/p1?tab=work');
+    // No rename, archive or documents control on the home: Settings holds them, Work holds the documents.
+    expect(screen.queryByText(/Archive this project|Edit name and description|Rename/)).toBeNull();
+    expect(screen.queryByTestId('project-archived')).toBeNull();
+  });
+
+  it('an archived project\'s home shows its Archived tag', async () => {
+    getProject.mockResolvedValue({ project: { ...project, status: 'archived' }, members: [] });
+    render(<ProjectDesk {...props} />);
+    await loaded();
+    expect(screen.getByTestId('project-archived')).toHaveTextContent('Archived');
   });
 
   it("a ranked crew: Needs you is crew's attention filtered to the project; stale work is one tidy-up line with its spend", async () => {
@@ -192,7 +217,12 @@ describe('the project Desk', () => {
     // New job and Chat are the rail's (in this project); the header keeps only the project's own actions.
     expect(screen.queryByTestId('project-new-job')).toBeNull();
     expect(screen.queryByTestId('project-chat')).toBeNull();
-    expect(screen.getByTestId('project-documents')).toBeInTheDocument();
+    // Operator 2026-11-09: the header keeps Open repository only; Documents and the Edit / Archive ⋯ are gone.
+    const actions = screen.getByTestId('project-actions');
+    expect(within(actions).queryByTestId('project-documents')).toBeNull();
+    expect(within(actions).getByTestId('project-open-repo')).toBeInTheDocument();
+    expect(within(actions).queryByRole('button', { name: /^More actions for/ })).toBeNull();
+    expect(actions.textContent).not.toMatch(/Documents|Archive|Edit|Restore/);
     expect(document.getElementById('requirements')).toBeInTheDocument();
     expect(document.getElementById('project-documents')).toBeInTheDocument();
     for (const id of ['project-band', 'project-jobs', 'project-feed', 'project-needs']) expect(screen.queryByTestId(id)).toBeNull();
@@ -229,6 +259,11 @@ describe('the project Desk', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Not in a project' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^More actions for/ })).toBeNull();
     expect(document.getElementById('requirements')).toBeNull();
+    // Nothing can edit work in no project (crew refuses the PATCH): no Settings tab, and its address shows Work.
+    expect(screen.queryByTestId('desk-tab-settings')).toBeNull();
+    view.rerender(<ProjectDesk {...props} projectId="default" search="?tab=settings" />);
+    expect(screen.getByTestId('desk')).toHaveAttribute('data-tab', 'work');
+    expect(screen.queryByTestId('project-settings')).toBeNull();
     view.rerender(<ProjectDesk {...props} projectId="default" search="?tab=repositories" />);
     expect(screen.getByText(/Work not in a project has no repositories of its own/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Repositories page/ })).toHaveAttribute('href', '/repos');
@@ -266,13 +301,14 @@ describe('the project Desk', () => {
     scroll.mockRestore();
   });
 
-  it('Documents navigates to Work before scrolling from a hosted tab', async () => {
+  it('the documents stay on the Work tab, and an old #project-documents link still opens them there', async () => {
     const navigate = vi.fn();
     const scroll = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+    window.history.replaceState(null, '', '/projects/p1?tab=repositories#project-documents');
     const view = render(<ProjectDesk {...props} navigate={navigate} search="?tab=repositories" />);
     await loaded();
-    fireEvent.click(screen.getByTestId('project-documents'));
-    expect(navigate).toHaveBeenCalledWith('/projects/p1?tab=work');
+    expect(navigate).toHaveBeenCalledWith('/projects/p1?tab=work#project-documents', { replace: true });
+    window.history.replaceState(null, '', '/projects/p1?tab=work#project-documents');
     view.rerender(<ProjectDesk {...props} navigate={navigate} search="?tab=work" />);
     await waitFor(() => expect(scroll.mock.instances).toContain(document.getElementById('project-documents')));
     scroll.mockRestore();
@@ -340,5 +376,128 @@ describe('Not in a project (operator 2026-10-16: the same dashboard as a project
     expect(screen.getByTestId('project-meta')).not.toHaveTextContent('repository attached');
     listProjects.mockResolvedValue({ projects: [] });
     listMembers.mockResolvedValue({ members: [] });
+  });
+});
+
+describe("a project's Settings tab (operator 2026-11-09)", () => {
+  const settings = async (search = '?tab=settings'): Promise<void> => {
+    render(<ProjectDesk {...props} search={search} />);
+    await loaded();
+    await screen.findByTestId('project-settings');
+  };
+
+  it('is the last tab, and edits the name and description through PATCH /projects/:id', async () => {
+    updateProject.mockImplementation(async (id: string, body: Record<string, unknown>) => ({ project: { ...project, id, ...body } }));
+    await settings();
+    const tabs = within(screen.getByTestId('desk-tabs')).getAllByRole('tab');
+    expect(tabs.at(-1)).toHaveTextContent('Settings');
+    expect(tabs.at(-1)).toHaveAttribute('href', '/projects/p1?tab=settings');
+    expect(screen.getByTestId('project-settings-name')).toHaveValue('Shop');
+    expect(screen.getByTestId('project-settings-description')).toHaveValue('Checkout work');
+    // Unchanged, there is nothing to save; an empty name cannot be saved.
+    expect(screen.getByTestId('project-settings-save')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('project-settings-name'), { target: { value: '  ' } });
+    expect(screen.getByTestId('project-settings-save')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('project-settings-name'), { target: { value: ' Shop front ' } });
+    fireEvent.change(screen.getByTestId('project-settings-description'), { target: { value: 'The storefront' } });
+    fireEvent.click(screen.getByTestId('project-settings-save'));
+    await waitFor(() => expect(updateProject).toHaveBeenCalledExactlyOnceWith('p1', { name: 'Shop front', description: 'The storefront' }));
+    expect(await screen.findByTestId('project-settings-saved')).toHaveTextContent('Saved.');
+    // The page's header and the shared store say the new name at once.
+    expect(screen.getByRole('heading', { level: 1, name: 'Shop front' })).toBeInTheDocument();
+    expect(useProjectsStore.getState().projects.find((x) => x.id === 'p1')?.name).toBe('Shop front');
+  });
+
+  it('a refused save says so in its own section, with the daemon\'s words behind technical details', async () => {
+    updateProject.mockRejectedValue(new Error('409 a project named Shop front already exists'));
+    await settings();
+    fireEvent.change(screen.getByTestId('project-settings-name'), { target: { value: 'Shop front' } });
+    fireEvent.click(screen.getByTestId('project-settings-save'));
+    expect(await screen.findByTestId('project-settings-error')).toHaveTextContent('Couldn’t save the project.');
+    expect(screen.queryByTestId('project-settings-saved')).toBeNull();
+  });
+
+  it('links Personality to Learn for this project', async () => {
+    const navigate = vi.fn();
+    render(<ProjectDesk {...props} navigate={navigate} search="?tab=settings" />);
+    await loaded();
+    const link = await screen.findByTestId('project-personality');
+    expect(link).toHaveAttribute('href', '/learn?tab=personality&project=p1');
+    fireEvent.click(link);
+    expect(navigate).toHaveBeenCalledWith('/learn?tab=personality&project=p1');
+  });
+
+  it('archives only after the inline confirm; Cancel sends nothing', async () => {
+    updateProject.mockImplementation(async (id: string, body: Record<string, unknown>) => ({ project: { ...project, id, ...body } }));
+    await settings();
+    const zone = screen.getByTestId('project-danger-zone');
+    expect(zone).toHaveTextContent('Danger zone');
+    expect(within(zone).getByTestId('project-archive-words')).toHaveTextContent('no new jobs, chats, repositories or trackers');
+    expect(within(zone).getByTestId('project-archive-words')).toHaveTextContent('Nothing is deleted.');
+    fireEvent.click(within(zone).getByTestId('project-archive'));
+    expect(updateProject).not.toHaveBeenCalled();
+    expect(within(zone).getByTestId('project-archive-confirming')).toHaveTextContent('Archive Shop? It stops taking new work until you restore it.');
+    // No modal: the confirm is inline.
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(within(zone).getByTestId('project-archive-cancel'));
+    expect(within(zone).queryByTestId('project-archive-confirming')).toBeNull();
+    expect(updateProject).not.toHaveBeenCalled();
+    fireEvent.click(within(zone).getByTestId('project-archive'));
+    fireEvent.click(within(zone).getByTestId('project-archive-confirm'));
+    await waitFor(() => expect(updateProject).toHaveBeenCalledExactlyOnceWith('p1', { status: 'archived' }));
+    // Archived: the header says so, and the danger zone now offers Restore.
+    expect(await within(zone).findByTestId('project-restore')).toHaveTextContent('Restore this project');
+    expect(screen.getByTestId('project-meta')).toHaveTextContent('Archived');
+  });
+
+  it("an archived project's Settings restores it in one click (restoring destroys nothing)", async () => {
+    getProject.mockResolvedValue({ project: { ...project, status: 'archived' }, members: [] });
+    useProjectsStore.setState({ projects: [] });
+    updateProject.mockImplementation(async (id: string, body: Record<string, unknown>) => ({ project: { ...project, id, ...body } }));
+    await settings();
+    expect(screen.queryByTestId('project-archive')).toBeNull();
+    expect(screen.getByTestId('project-archived-note')).toHaveTextContent('It takes no new work until you restore it.');
+    fireEvent.click(screen.getByTestId('project-restore'));
+    await waitFor(() => expect(updateProject).toHaveBeenCalledExactlyOnceWith('p1', { status: 'active' }));
+    expect(await screen.findByTestId('project-archive')).toBeInTheDocument();
+    // A restored project rejoins the active register the rail reads.
+    expect(useProjectsStore.getState().projects.map((x) => x.id)).toContain('p1');
+  });
+
+  it('a refused archive keeps the confirm open and says why', async () => {
+    updateProject.mockRejectedValue(new Error('403 admin only'));
+    await settings();
+    fireEvent.click(screen.getByTestId('project-archive'));
+    fireEvent.click(screen.getByTestId('project-archive-confirm'));
+    expect(await screen.findByTestId('project-archive-error')).toHaveTextContent('Couldn’t archive the project.');
+    expect(screen.getByTestId('project-archive-confirm')).toBeEnabled();
+  });
+});
+
+describe("a project's own pages never lead to the filtered Everything list (operator 2026-11-09)", () => {
+  it.each(['', '?tab=work', '?tab=runs', '?tab=report', '?tab=understand', '?tab=settings', '?tab=repositories'])('no anchor on %s links /everything with project=', async (search) => {
+    render(<ProjectDesk {...props} search={search} />);
+    await loaded();
+    await waitFor(() => expect(screen.queryByTestId('project-home-loading')).toBeNull());
+    const bad = [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href') ?? '').filter((h) => h.startsWith('/everything') && /[?&]project=/.test(h));
+    expect(bad).toEqual([]);
+  });
+
+  it('Running now, Failed and See all open the project\'s Jobs tab, the filter in the address', async () => {
+    render(<ProjectDesk {...props} search="?tab=work" />);
+    await loaded();
+    const hrefOf = (id: string): string | null => screen.getByTestId(id).closest('a')?.getAttribute('href') ?? screen.getByTestId(id).querySelector('a')?.getAttribute('href') ?? null;
+    expect(hrefOf('desk-block-running')).toBe('/projects/p1?tab=runs&filter=active');
+    expect(hrefOf('desk-block-failed')).toBe('/projects/p1?tab=runs&filter=failed');
+  });
+
+  it('?filter=failed opens Jobs on Finished, narrowed to Failed; ?filter=active on Active', async () => {
+    const failed = makeView({ id: 'broke', project_id: 'p1', problem: 'Broken deploy', status: 'failed', created_at: NOW / 1000 - 100, ended_at: NOW / 1000 - 50 });
+    const view = render(<ProjectDesk {...props} runs={[...runs, failed]} search="?tab=runs&filter=failed" />);
+    await loaded();
+    await waitFor(() => expect(rowIds()).toEqual(['broke']));
+    expect(screen.getByTestId('desk-runs-group-finished')).toHaveAttribute('aria-checked', 'true');
+    view.rerender(<ProjectDesk {...props} runs={[...runs, failed]} search="?tab=runs&filter=active" />);
+    await waitFor(() => expect(rowIds()).toEqual(['member']));
   });
 });

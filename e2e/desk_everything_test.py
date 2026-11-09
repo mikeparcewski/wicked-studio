@@ -131,10 +131,12 @@ with sync_playwright() as p:
     check("filter-is-an-address", st["selected"] == "sessions" and st["pressed"] == "failed" and st["states"]
           and all(x == "blocked" for x in st["states"]), pressed=st["pressed"], states=st["states"][:4])
 
-    # ── 3. ?project= → the project's scoped Sessions tab ─────────────────────────
+    # ── 3. ?project= → the Sessions tab filtered to one project, with no second project card ──
+    # (operator 2026-11-09: a project's page is its homepage; this list is a filter, not a project surface).
     page.goto(f"{origin}/everything?tab=sessions&project=alpha", wait_until="networkidle")
-    page.get_by_test_id("everything-project-header").wait_for(state="visible", timeout=10000)
-    check("project-to-sessions-tab", address(page) == "/everything?tab=sessions&project=alpha", landed=address(page))
+    page.locator('[data-testid="everything-sessions"][data-project="alpha"]').wait_for(state="visible", timeout=10000)
+    check("project-to-sessions-tab", address(page) == "/everything?tab=sessions&project=alpha"
+          and page.get_by_test_id("everything-project-header").count() == 0, landed=address(page))
     page.goto(f"{origin}/everything?tab=sessions&project=nothing-here", wait_until="networkidle")
     page.get_by_test_id("everything").wait_for(state="visible", timeout=10000)
     empty = page.get_by_test_id("everything-empty").inner_text()

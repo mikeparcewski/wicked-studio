@@ -12,6 +12,32 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+Patch: project pages made consistent (operator 2026-11-09). Bundled by crew 0.18.5.
+
+### Changed
+
+- **A new project opens on its homepage.** Create (and Retry attaching the repository) now land on `/projects/<id>`,
+  as do a project's command-palette entry and the Open button on Everything > Projects. The Sessions list filtered
+  to one project is no longer a project page: it lost its second project card (with its own Rename and Archive), and
+  nothing on a project's pages links to it any more.
+- **"More info" replaces the ⋯ on a project's homepage.** It is a quiet link to the project page's first tab (Work).
+  An archived project's homepage shows an Archived tag.
+- **The project page header keeps Open repository only.** The Documents button and the ⋯ with Edit and Archive are
+  gone. The documents stay on the Work tab; More info, the homepage's "Work and documents" link and old
+  `#project-documents` links all go there.
+- **Running now, Failed and See all on a project's Work tab open its own Jobs tab** (`?tab=runs&filter=active` or
+  `&filter=failed`, in the Sessions filter's words). The Jobs list starts on Active, or on Finished narrowed to Failed.
+- **Project cards and rows only open the project.** The Projects page cards and the Everything > Projects rows no
+  longer rename, archive or unarchive. An archived card says Archived and opens the project.
+
+### Added
+
+- **A Settings tab on every project page, placed last.** It holds the name and description (saved with one
+  `PATCH /projects/:id`), a link to the project's personality in Learn, and a Danger zone. Archive explains what
+  archiving does (no new jobs, chats, repositories or trackers, and agents stop seeing the project in chat; nothing
+  is deleted) and asks inline before it archives. An archived project's Settings offer Restore, which needs no
+  confirm. Work that is not in any project has no Settings tab, because crew refuses edits to it.
+
 ## [0.16.3] — 2026-11-09
 
 Patch: two operator reports and the repo watcher's UI (bundled by crew 0.18.3).

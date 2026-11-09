@@ -44,7 +44,7 @@ describe('the Projects page', () => {
     expect(navigate).toHaveBeenLastCalledWith('/projects', { replace: true });
   });
 
-  it('one card per project: its state, one sentence, New project; Rename and Archive behind its ⋯', () => {
+  it('one card per project: its state, one sentence, New project; the card opens the homepage and holds no rename or archive', () => {
     const navigate = vi.fn();
     render(<ProjectsPage runs={[]} runsLoaded needRows={[]} navigate={navigate} search="" />);
     expect(screen.getByTestId('projects-sentence')).toHaveTextContent('Two projects. Nothing needs you.');
@@ -54,8 +54,19 @@ describe('the Projects page', () => {
     expect(screen.getByTestId('projects-new')).toHaveTextContent('New project');
     fireEvent.click(alpha.querySelector('[data-testid="projects-row-open"]')!);
     expect(navigate).toHaveBeenCalledWith('/projects/alpha');
-    fireEvent.click(screen.getByRole('button', { name: 'More actions for Alpha' }));
-    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Rename', 'Archive']);
+    // Operator 2026-11-09: name, description, Archive and Restore live in the project's Settings, and only there.
+    expect(screen.queryByRole('button', { name: 'More actions for Alpha' })).toBeNull();
+    for (const card of screen.getAllByTestId('projects-row')) {
+      expect([...card.querySelectorAll('a, button')].map((el) => el.getAttribute('data-testid'))).toEqual(['projects-row-open']);
+    }
+  });
+
+  it('an archived card says Archived, opens its homepage and offers no Unarchive', async () => {
+    render(<ProjectsPage runs={[]} runsLoaded needRows={[]} navigate={vi.fn()} search="?filter=archived" />);
+    const card = await waitFor(() => screen.getAllByTestId('projects-row').find((r) => r.dataset.projectId === 'old')!);
+    expect(card.querySelector('[data-testid="projects-row-state"]')).toHaveTextContent('Archived');
+    expect(card.querySelector('[data-testid="projects-row-open"]')?.getAttribute('href')).toBe('/projects/old');
+    expect(card.querySelector('button')).toBeNull();
   });
 
   it('/projects is its own page, named Projects, current under the sidebar item; a project keeps its own name', () => {

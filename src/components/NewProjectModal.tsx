@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { PROJECT_NAME_MAX, projectNameProblem } from '../board/projectName.js';
 import { api } from '../api/client.js';
-import { everythingPath } from '../board/everythingModel.js';
+import { projectDetailPath } from '../hooks/useRoute.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useModalEscape } from './Modal.js';
@@ -11,8 +11,8 @@ import { TechDetails } from './ui/TechDetails.js';
  * The new-project flow (DES-FEEDBACK-001 §1.3, slice A): a minimal inline
  * modal — not a new route, not a full page — opened from the QUICK section's
  * `Project` action. Name (required) and an optional description; Create →
- * `POST /api/v1/projects`, then the project's Sessions (S16a-4f: the "Start with" radio went with
- * the shell's modes). Escape / ✕ / Cancel close it.
+ * `POST /api/v1/projects`, then the project's homepage (operator 2026-11-09: the Sessions list it
+ * used to land on looked incomplete). Escape / ✕ / Cancel close it.
  *
  * The wire contract (verified against wicked-crew `projects/routes.ts` +
  * `wicked-crew-api-types`): the body is `{ name, description? }` with
@@ -73,8 +73,8 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
         }
       }
       onClose();
-      // S16a-4f: a new project lands on its Sessions (the shell's modes moved onto the Desk).
-      navigate(everythingPath({ tab: 'sessions', project: project.id }));
+      // A new project lands on its homepage (operator 2026-11-09), the page every project opens on.
+      navigate(projectDetailPath(project.id));
     } catch (e) {
       setError("Couldn't create the project.");
       setRawError(e instanceof Error ? e.message : String(e));
@@ -90,7 +90,7 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
     try {
       await api.attachProjectMember(createdId, { kind: 'crew.repo', ref: repoId, attachedBy: 'studio' });
       onClose();
-      navigate(everythingPath({ tab: 'sessions', project: createdId }));
+      navigate(projectDetailPath(createdId));
     } catch (e) {
       setError("The project was created, but the repository couldn't be attached.");
       setRawError(e instanceof Error ? e.message : String(e));

@@ -3269,6 +3269,11 @@ launched_seq = [0]
 # GET /projects for this server lifetime. Guarded by state_lock.
 created_projects: list = []       # Project dicts, proj_-minted ids
 created_seq = [100000]            # the engine's seq starts fresh per process
+# project-pages (operator 2026-11-09): a created project's page reads its detail (GET /projects/<id>, crew's
+# {project, members}) and its Settings tab writes PATCH /projects/<id> {name?, description?, status?}. Both
+# answer for the projects created this lifetime only (every other id keeps the fixture's 404); each PATCH
+# body is recorded at GET /__fixture/project-patches.
+project_patch_log: list = []
 
 # ── Slice P (DES-FEEDBACK-003 §10.2): the two chat runs, behind `chat_runs` ───
 #
@@ -6635,6 +6640,15 @@ class W2Handler(SimpleHTTPRequestHandler):
         if m:
             self._viewer_routes(urllib.parse.unquote(m.group(1)), m.group(2))
             return True
+        made = re.fullmatch(r"/api/v1/projects/(proj_[0-9]+)", path)
+        if made:
+            with state_lock:
+                row = next((dict(p) for p in created_projects if p["id"] == made.group(1)), None)
+            if row is None:
+                self._json(404, {"error": f"Project {made.group(1)} not found"})
+            else:
+                self._json(200, {"project": row, "members": []})
+            return True
         if path == "/api/v1/projects":
             with state_lock:
                 batch_on = state["batch_gates"]
@@ -8749,6 +8763,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 rposts = list(reassign_post_log)
             return self._json(200, {"posts": rposts})
+        if path == "/__fixture/project-patches":
+            with state_lock:
+                pposts = list(project_patch_log)
+            return self._json(200, {"posts": pposts})
         if path == "/__fixture/power-posts":
             return self._json(200, {"posts": list(power_mode_corpus.POSTS)})
         if path == "/__fixture/gate-posts":
@@ -10107,6 +10125,29 @@ class W2Handler(SimpleHTTPRequestHandler):
                         {"kind": "user", "text": body.get("text", ""), "turnId": f"t-{turn_n}", "at": int(time.time() * 1000)})
             return self._json(200, {"seats": [], "turnId": f"t-{turn_n}"})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+
+    def do_PATCH(self):  # noqa: N802 (stdlib naming)
+        path = urllib.parse.urlparse(self.path).path
+        # crew's PATCH /projects/:id (projects/routes.ts): rename, describe, archive, restore. A created
+        # project only; the reserved `default` answers crew's 409, anything else crew's 404.
+        m = re.fullmatch(r"/api/v1/projects/([^/]+)", path)
+        if not m:
+            return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+        pid = urllib.parse.unquote(m.group(1))
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        if pid == "default":
+            return self._json(409, {"error": "the synthesized 'default' project cannot be modified"})
+        with state_lock:
+            row = next((p for p in created_projects if p["id"] == pid), None)
+            if row is None:
+                return self._json(404, {"error": f"Project {pid} not found"})
+            project_patch_log.append({"id": pid, "body": body})
+            for key in ("name", "description", "status"):
+                if key in body:
+                    row[key] = body[key]
+            row["updated_at"] = int(time.time() * 1000)
+            out = dict(row)
+        return self._json(200, {"project": out})
 
     def do_PUT(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path

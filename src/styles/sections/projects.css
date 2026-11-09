@@ -23,9 +23,6 @@
 .wk-pj-card-state[data-tone="ok"] { color: color-mix(in oklab, var(--status-ok) 78%, var(--ink-high)); }
 .wk-pj-card-sentence { font-size: var(--text-body); line-height: 1.5; color: var(--ink-body); }
 .wk-pj-card-menu { position: absolute; top: 16px; right: 14px; }
-.wk-pj-card-edit { display: flex; flex-direction: column; gap: 12px; padding: 24px 26px; }
-.wk-pj-card-acts { display: flex; gap: 10px; flex-wrap: wrap; }
-.wk-pj-card-error { padding: 0 26px 20px; }
 .wk-pj-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .wk-pj-chip {
   font-size: var(--text-caption); line-height: 1.4; padding: 4px 10px; border-radius: 999px;
@@ -48,6 +45,19 @@ a.wk-pj-chip--link:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-pj-home-foot { display: flex; flex-direction: column; gap: 12px; }
 .wk-pj-views { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--text-body); color: var(--ink-muted); }
 .wk-pj-views-label { color: var(--ink-muted); }
+/* "More info" beside a project's title on its home: a quiet link to the project page's first tab. */
+.wk-pj-more-info { font-size: var(--text-body); white-space: nowrap; }
+.wk-pj-archived { margin-left: 10px; align-self: center; }
+/* A project's Settings tab: its name and description, its personality, and the danger zone. */
+.wk-pj-settings { display: flex; flex-direction: column; gap: var(--space-6); max-width: 760px; }
+.wk-pj-settings .wk-card { padding: var(--d2-pad); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); }
+.wk-pj-settings .wk-section-title { font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-pj-settings .wk-field-note { margin: 0; line-height: 1.5; }
+.wk-pj-danger { border: 1px solid color-mix(in oklab, var(--status-fail) 55%, transparent); }
+.wk-pj-settings .wk-pj-danger-title { color: color-mix(in oklab, var(--status-fail) 80%, var(--ink-high)); }
+.wk-pj-danger-what { margin: 0; font-weight: var(--weight-strong); color: var(--ink-high); }
+.wk-pj-danger-ask { flex-basis: 100%; color: var(--ink-high); font-size: var(--text-body); }
+.wk-pj-settings p { margin: 0; font-size: var(--text-body); }
 /* The tabbed views' way back home, over the project's title. */
 .wk-desk-a-titles > .wk-pj-back { margin-bottom: 4px; }
 

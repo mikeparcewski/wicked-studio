@@ -1012,6 +1012,17 @@
     "repo-onboard": "repo-row-index",
     "repo-open": "repo-row",
     "plugin-coming-soon": "plugin-tile",
-    "plugin-coming-soon-tag": "plugin-tile-source"
+    "plugin-coming-soon-tag": "plugin-tile-source",
+    "project-menu": "project-more-info",
+    "project-documents": "desk-work",
+    "project-edit": "project-settings-name",
+    "everything-project-header": "project-home",
+    "everything-project-rename": "project-settings-name",
+    "everything-project-archive": "project-archive",
+    "projects-row-rename": "project-settings-name",
+    "projects-row-archive": "project-archive",
+    "projects-row-unarchive": "project-restore",
+    "projects-row-menu": "projects-row-open",
+    "projects-row-error": "project-settings-error"
   }
 }

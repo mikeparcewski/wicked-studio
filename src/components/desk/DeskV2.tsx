@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Activity, Bot, CircleAlert, MoreHorizontal, Wallet } from 'lucide-react';
-import { everythingPath } from '../../board/everythingModel.js';
+import { everythingPath, type SessionFilter } from '../../board/everythingModel.js';
 import type { DiagnosticsGovernance, RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics } from '../../api/diagnostics.js';
 import { readErrorKind } from '../../api/errors.js';
@@ -47,7 +47,7 @@ import { DeskHappening } from './DeskHappening.js';
 import { DeskStat, RefineSelect } from './DeskParts.js';
 import { DeskRuleLine } from './DeskRuleLine.js';
 import { DeskRuns } from './DeskRuns.js';
-import { needHolds, projectWord } from '../../board/deskRuns.js';
+import { jobsStartOf, needHolds, projectWord } from '../../board/deskRuns.js';
 import { startNewJob } from './SessionRail.js';
 import { scrollBehavior } from '../ui/motion.js';
 import type { MenuItem } from '../ui/index.js';
@@ -80,7 +80,7 @@ import { ReportPage } from '../report/ReportPage.js';
  *  4. One visual language: every widget is a `ChartCard`; every chart is the kit in
  *     `components/charts/Chart.tsx`; a helper has one colour everywhere.
  */
-export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRuns, needRows: rawNeedRows, now, navigate, search = '', hosted, projectId, projectHead, workExtra, runActions, view }: {
+export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRuns, needRows: rawNeedRows, now, navigate, search = '', hosted, projectId, projectHead, workExtra, settings, runActions, view }: {
   /** The global Desk's page (ui-v2 nav regroup): Home (`/`), Jobs, Report or Understand, each at its own
    *  address and reached from the sidebar. A project's page ignores it and reads its tab off `?tab=`. */
   view?: DeskTab;
@@ -95,8 +95,11 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
    */
   projectId?: string;
   projectHead?: { title: string; meta?: React.ReactNode; actions: React.ReactNode; back?: React.ReactNode };
-  /** The project's own Work-tab sections (requirements, documents, edit), under the inbox. */
+  /** The project's own Work-tab sections (requirements, documents), under the inbox. */
   workExtra?: React.ReactNode;
+  /** A project's Settings tab (name and description, personality, the danger zone); absent = no Settings
+   *  tab (the global Desk, and work not in a project, which nothing can edit). */
+  settings?: React.ReactNode;
   /** The route's query: a project page's `?tab=` (Work is the default); Report's `?focus=spend`. */
   search?: string;
   runs: SessionView[];
@@ -118,21 +121,25 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   }, [rawNeedRows, runs, projectId]);
   const base = projectId === undefined ? '/' : projectDetailPath(projectId);
   const projectRunIds = useMemo(() => (projectId === undefined ? null : new Set(runs.map((v) => v.session.id))), [runs, projectId]);
-  const tabPath = (t: DeskTab, at?: string): string => deskTabPath(t, at, base);
+  const tabPath = (t: ProjectTab, at?: string): string => deskTabPath(t, at, base);
+  // A project's tabs: Settings only when the page has one to show.
+  const projectTabs = settings === undefined ? DESK_TABS.filter((t) => t.id !== 'settings') : DESK_TABS;
   // Where you were: the Desk's scroll position comes back on Back (useHistoryScroll, as before).
   const scroller = useRef<HTMLDivElement | null>(null);
   useHistoryScroll(scroller, 'desk.scroll');
   const query = new URLSearchParams(search);
   // The global Desk's pages have no tabs (the sidebar is the way between them); a project's page does.
   const tabbed = projectId !== undefined;
-  const tab: DeskTab = tabbed ? (DESK_TABS.find((t) => t.id === query.get('tab'))?.id ?? 'work') : (view ?? 'work');
+  const tab: ProjectTab = tabbed ? (projectTabs.find((t) => t.id === query.get('tab'))?.id ?? 'work') : (view ?? 'work');
+  // Where the Jobs list starts (`?filter=`, the Sessions filter's words: one vocabulary for "Running now" and "Failed").
+  const jobsFilter = query.get('filter');
   /** A view's panel is a tabpanel of the project's tabs; on a global page it is the page itself. */
-  const panelOf = (t: DeskTab): { role?: 'tabpanel'; id?: string; 'aria-labelledby'?: string } => (tabbed ? { role: 'tabpanel', id: panelId(t), 'aria-labelledby': tabId(t) } : {});
+  const panelOf = (t: ProjectTab): { role?: 'tabpanel'; id?: string; 'aria-labelledby'?: string } => (tabbed ? { role: 'tabpanel', id: panelId(t), 'aria-labelledby': tabId(t) } : {});
   const focus = query.get('focus');
-  const goTab = (t: DeskTab): void => navigate(tabPath(t));
+  const goTab = (t: ProjectTab): void => navigate(tabPath(t));
   const tabPrefix = useId();
-  const tabId = (t: DeskTab): string => `${tabPrefix}-tab-${t}`;
-  const panelId = (t: DeskTab): string => `${tabPrefix}-panel-${t}`;
+  const tabId = (t: ProjectTab): string => `${tabPrefix}-tab-${t}`;
+  const panelId = (t: ProjectTab): string => `${tabPrefix}-panel-${t}`;
   const keyboardFocus = useRef<string | null>(null);
   useEffect(() => {
     // Hosted pages change the shell's layout; restore the tab's keyboard focus after navigation.
@@ -301,7 +308,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     <header className="wk-desk2-head">
       <div className="wk-desk-a-titles">
         {projectHead?.back}
-        <h1 className="wk-desk-a-title" data-testid={projectHead !== undefined ? 'project-title' : undefined}>{projectHead?.title ?? PAGE_TITLE[tab]}</h1>
+        <h1 className="wk-desk-a-title" data-testid={projectHead !== undefined ? 'project-title' : undefined}>{projectHead?.title ?? (tab === 'settings' ? 'Settings' : PAGE_TITLE[tab])}</h1>
         <p data-testid="desk-as-of" className="wk-desk-a-when">{projectHead?.meta ?? (readState === 'known' ? `As of ${asOf}` : readState === 'stale' ? 'As of the last read' : 'Reading…')}</p>
       </div>
       {/* Search, New job and Chat live in the rail on every page (SessionRail's action row): the header
@@ -317,7 +324,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const tabs = !tabbed ? null : (
     <div className="wk-desk2-tabbar">
       <div role="tablist" aria-label="Project view" className="wk-desk2-tabs" data-testid="desk-tabs">
-        {DESK_TABS.map((t) => (
+        {projectTabs.map((t) => (
           <a key={t.id} role="tab" id={tabId(t.id)} aria-controls={panelId(t.id)} tabIndex={tab === t.id ? 0 : -1}
             href={tabPath(t.id)} aria-selected={tab === t.id} data-testid={`desk-tab-${t.id}`} className="wk-desk2-tab"
             onKeyDown={(e) => { keyboardFocus.current = handleTabKeyDown(e)?.id ?? null; }}
@@ -327,7 +334,12 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     </div>
   );
 
-  const runningPath = everythingPath({ tab: 'sessions', filter: 'active', ...(projectId !== undefined ? { project: projectId } : {}) });
+  // A project's page lists its jobs on its own Jobs tab (operator 2026-11-09: never the Everything list);
+  // the global Desk's numbers open Everything, as before.
+  const jobsPath = (filter?: SessionFilter): string => (projectId !== undefined
+    ? `${tabPath('runs')}${filter !== undefined ? `&filter=${filter}` : ''}`
+    : everythingPath({ tab: 'sessions', ...(filter !== undefined ? { filter } : {}) }));
+  const runningPath = jobsPath('active');
   const work = (
     <div {...panelOf('work')} data-testid="desk-work" className="wk-work">
       {/* The handover is studio-wide (the audit trail and its dismissal are global): the Desk only, never a project page. */}
@@ -337,13 +349,13 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         <DeskInbox rows={needRows} runs={runs} navigate={navigate} now={now} settled={readState === 'known' ? settled.phase : 'loading'} agentName={agentName} extra={projectId === undefined ? choresBlock : null} setupCount={setup.length}
           missing={settled.missing} onRetry={rereadSources} retrying={rereading} />
         <DeskHappening runs={runs} runsShown={runsShown} navigate={navigate} now={now} title={(v) => jobTitle(v.session)} pathOf={pathOfRun} agentName={agentName}
-          scope={projectRunIds} scopeKey={projectId ?? 'desk'} {...(projectId !== undefined ? { seeAllPath: everythingPath({ tab: 'sessions', project: projectId }) } : {})} />
+          scope={projectRunIds} scopeKey={projectId ?? 'desk'} {...(projectId !== undefined ? { seeAllPath: jobsPath() } : {})} />
       </div>
       {/* At a glance: four quiet numbers on one surface, under the band: Needs you leads, above the fold (each opens its list). */}
       <ul className="wk-work-blocks" aria-label="At a glance" data-testid="desk-blocks">
         <DeskStat icon={Activity} tone="run" label="Running now" testId="desk-block-running" href={runningPath} navigate={navigate}
           value={runsShown ? String(allRunning) : null} note={allRunning === 0 ? 'nothing running' : 'working now'} />
-        <DeskStat icon={CircleAlert} tone="fail" label="Failed" testId="desk-block-failed" href={everythingPath({ tab: 'sessions', filter: 'failed', ...(projectId !== undefined ? { project: projectId } : {}) })} navigate={navigate}
+        <DeskStat icon={CircleAlert} tone="fail" label="Failed" testId="desk-block-failed" href={jobsPath('failed')} navigate={navigate}
           value={runsShown ? String(workFailed.inWindow.length) : null}
           note={workFailed.inWindow.length === 0 ? (workFailed.older > 0 ? `none new · ${workFailed.older} older still open` : 'none in the last 30 days') : `last 30 days, not retried${workFailed.retried > 0 ? ` · ${workFailed.retried} retried` : ''}`} />
         <DeskStat icon={Bot} tone="accent" label="Agents ready" testId="desk-block-agents" href={tabPath('agents')} navigate={navigate}
@@ -458,7 +470,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   );
 
   const runsTab = (
-    <DeskRuns {...(runActions !== undefined ? { rowActions: runActions } : {})} runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false, false)} now={now} navigate={navigate} pathOf={pathOfRun}
+    <DeskRuns key={jobsFilter ?? ''} start={jobsStartOf(jobsFilter)} {...(runActions !== undefined ? { rowActions: runActions } : {})} runs={runs} runsShown={runsShown} refine={refine} refineBar={refineBarOf(false, false)} now={now} navigate={navigate} pathOf={pathOfRun}
       projectIds={projectIdsKnown} onProject={(v) => set('project', v)}
       holds={runHolds} onNewJob={() => startNewJob(projectId ?? null)}
       onClearRefine={() => setRefine((r) => ({ ...DEFAULT_REFINE, days: r.days, groupBy: r.groupBy }))}
@@ -480,7 +492,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
     </div>
   );
 
-  if (isHostedView(tab)) {
+  if (tab !== 'settings' && isHostedView(tab)) {
     // A project's hosted tabs (Repositories, Steering, Memory, Agents, Evaluate): App renders the page for
     // the address the tab carries (`&at=/rules/...`, `&at=/memory?view=proposals`), so every sub-page and
     // deep link keeps working. The global ones are pages of their own (`DeskHostedPage`).
@@ -506,7 +518,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
             second title over them. A project's page keeps the header. */}
         {!(home && (tab === 'work' || tab === 'inbox' || tab === 'runs' || tab === 'report' || tab === 'understand')) && header}
         {tabs}
-        {tab === 'work' ? (home ? firstRunHome : work) : tab === 'inbox' ? inboxView : tab === 'runs' ? runsTab : tab === 'report' ? report : understand}
+        {tab === 'work' ? (home ? firstRunHome : work) : tab === 'inbox' ? inboxView : tab === 'runs' ? runsTab : tab === 'report' ? report : tab === 'settings'
+          ? <div {...panelOf('settings')} data-testid="desk-settings" className="wk-project-settings-panel">{settings}</div> : understand}
       </div>
       {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}
     </div>
@@ -515,6 +528,8 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
 
 export type DeskTab = DeskView;
 export type HostedTab = HostedView;
+/** A project page's tab: a Desk view, or its own Settings (a project's page only; the global Desk has none). */
+export type ProjectTab = DeskTab | 'settings';
 
 /** A global Desk page's title (one name per page, board/pageNames). */
 const PAGE_TITLE: Record<DeskTab, string> = {
@@ -526,7 +541,7 @@ const PAGE_TITLE: Record<DeskTab, string> = {
  * A project page's tabs, in order (the address carries `?tab=`; Work is the default), named as the
  * sidebar names the same views. The global Desk has no tabs: each view is a page (board/navModel.ts).
  */
-export const DESK_TABS: readonly { id: DeskTab; label: string }[] = [
+export const DESK_TABS: readonly { id: ProjectTab; label: string }[] = [
   { id: 'work', label: 'Work' },
   { id: 'runs', label: PAGE_NAMES.jobs },
   { id: 'repositories', label: PAGE_NAMES.repos },
@@ -536,6 +551,8 @@ export const DESK_TABS: readonly { id: DeskTab; label: string }[] = [
   { id: 'memory', label: PAGE_NAMES.memory },
   { id: 'agents', label: PAGE_NAMES.agents },
   { id: 'evaluate', label: PAGE_NAMES.evals },
+  // Last (operator 2026-11-09): the project's name and description, its personality and the danger zone.
+  { id: 'settings', label: 'Settings' },
 ];
 
 /** Each hosted view's own page when the address names none. */
@@ -548,7 +565,9 @@ export const HOSTED_HOME: Record<HostedTab, string> = {
  * global Desk every view is a page of its own (`/jobs`, `/report`, `/rules/…`), so a hosted view's
  * address IS its `at`; a project's views are its tabs (`/projects/:id?tab=…&at=…`).
  */
-export function deskTabPath(t: DeskTab, at?: string, base = '/'): string {
+export function deskTabPath(t: ProjectTab, at?: string, base = '/'): string {
+  // Settings is a project's own tab; there is no global Settings view behind this address.
+  if (t === 'settings') return `${base}?tab=settings`;
   if (base === '/') return isHostedView(t) && at !== undefined ? at : DESK_VIEW_PATH[t];
   // A project's Work view is a tab of its own: the project's address with no `?tab=` is its home.
   if (t === 'work') return `${base}?tab=work`;

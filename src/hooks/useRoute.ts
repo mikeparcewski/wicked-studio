@@ -158,6 +158,11 @@ export function projectDetailPath(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}`;
 }
 
+/** A project's Settings tab (its name, description, archive and restore): `deskTabPath('settings', …)`'s address. */
+export function projectSettingsPath(projectId: string): string {
+  return `${projectDetailPath(projectId)}?tab=settings`;
+}
+
 /** A run's raw event JSON (`GET /runs/:id/events`) as a route — see `run-events`. */
 export function runEventsPath(runId: string): string {
   return `/runs/${encodeURIComponent(runId)}/events`;

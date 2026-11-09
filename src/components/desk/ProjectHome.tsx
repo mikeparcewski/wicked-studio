@@ -27,7 +27,6 @@ import { openLaunchWizard } from '../../store/launchWizard.js';
 import { useNotificationStore } from '../../store/notifications.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { CalmHead, CalmLoading, CalmRow, CalmRows, CalmSection } from '../calm/Calm.js';
-import { OverflowMenu, type MenuItem } from '../ui/OverflowMenu.js';
 import { DESK_TABS, deskTabPath } from './DeskV2.js';
 import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 
@@ -73,11 +72,11 @@ function moveWord(a: NeedAction, kind: NeedRow['kind']): string {
  * (the one New job flow, the words carried in), Needs you, In progress (step x of y), the repositories
  * with "Add a repository", and one line about the week that links to the project's report.
  *
- * The project's views (Work and documents, Jobs, Repositories, Report…) keep their tabs at
- * `?tab=`; the foot names each of them, and the ⋯ holds the project's own moves (Documents, a
- * repository, Edit, Archive), so nothing the tabbed page did is out of reach.
+ * The project's views (Work and documents, Jobs, Repositories, Report…, Settings) keep their tabs at
+ * `?tab=`; "More info" by the title opens the first of them (operator 2026-11-09: it replaced the ⋯),
+ * and the foot names each. The name, description, Archive and Restore are the Settings tab's.
  */
-export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos, now, known, loading, navigate, menu, isDefault }: {
+export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos, now, known, loading, navigate, isDefault }: {
   project: Project;
   projectId: string;
   /** This project's runs (its membership plus member runs the list no longer serves). */
@@ -91,8 +90,6 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   known: boolean;
   loading: boolean;
   navigate: Navigate;
-  /** The project's own moves, behind the header's ⋯. */
-  menu: readonly MenuItem[];
   isDefault: boolean;
 }): React.ReactElement {
   const askId = useId();
@@ -132,6 +129,9 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   const reposTab = deskTabPath('repositories', undefined, base);
   const addRepo = registerRepoPath(projectId);
   const jobs = deskTabPath('runs', undefined, base);
+  // "More info": the project page's first tab. Work in no project has no Settings (nothing can edit it).
+  const moreInfo = deskTabPath(DESK_TABS[0]!.id, undefined, base);
+  const views = isDefault ? DESK_TABS.filter((t) => t.id !== 'settings') : DESK_TABS;
 
   const start = (e: React.FormEvent): void => {
     e.preventDefault();
@@ -144,11 +144,12 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
         <div className="wk-pj-home-top">
           <a href={PROJECTS_PATH} onClick={go(navigate, PROJECTS_PATH)} className="wk-link wk-pj-back" data-testid="project-back"><span aria-hidden>←</span> Projects</a>
           <CalmHead title={isDefault ? 'Not in a project' : project.name} titleTestId="project-title" sentenceTestId="project-sentence" sentence={sentence}
-            action={menu.length > 0 && !isDefault ? <span className="wk-calm-menu" data-testid="project-actions"><OverflowMenu label={`More actions for ${isDefault ? 'work not in a project' : project.name}`} items={menu} data-testid="project-menu" /></span> : undefined} />
+            {...(project.status === 'archived' ? { titleAside: <span className="wk-tag wk-pj-archived" data-testid="project-archived">Archived</span> } : {})}
+            action={<a href={moreInfo} onClick={go(navigate, moreInfo)} className="wk-link wk-pj-more-info" data-testid="project-more-info">More info</a>} />
           {project.description && !isDefault && <p className="wk-pj-home-desc" data-testid="project-desc" title={project.description}>{project.description}</p>}
         </div>
 
-        {/* Work in no project is not a project: no ask box and no ⋯, one line that offers to file it. */}
+        {/* Work in no project is not a project: no ask box, one line that offers to file it. */}
         {isDefault
           ? <UnfiledLine runs={allRuns} needRows={needRows} />
           : <form className="wk-home-ask wk-pj-ask" role="search" aria-label="Start a job in this project" onSubmit={start} data-testid="project-ask">
@@ -239,7 +240,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
           )}
           <nav aria-label="Everything in this project" className="wk-pj-views" data-testid="project-views">
             <span className="wk-pj-views-label">Everything in this project:</span>
-            {DESK_TABS.map((t) => {
+            {views.map((t) => {
               const path = deskTabPath(t.id, undefined, base);
               return <a key={t.id} href={path} onClick={go(navigate, path)} className="wk-link" data-testid="project-view" data-tab={t.id}>{t.id === 'work' ? 'Work and documents' : t.label}</a>;
             })}
