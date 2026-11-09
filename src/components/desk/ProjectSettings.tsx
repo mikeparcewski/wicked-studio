@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { Project } from '../../api/types.js';
 import { PROJECT_NAME_MAX, projectNameProblem } from '../../board/projectName.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -19,6 +19,8 @@ const ARCHIVE_WORDS = 'Archiving stops this project from taking new work: no new
  * `useProjectSave`, the one project write path (it keeps the projects store in step, and puts a restored
  * project back in it). Personality is Learn's; this links there. Archive is never one click: it asks inline
  * first, the repository Detach confirm's pattern. Restore destroys nothing, so it does not ask.
+ * One save at a time (codex review): while one is out, every field and button waits, so a slower answer can
+ * never undo a newer one and an edit typed meanwhile is never overwritten by the answer.
  */
 export function ProjectSettings({ project, navigate, onSaved }: {
   project: Project;
@@ -31,26 +33,45 @@ export function ProjectSettings({ project, navigate, onSaved }: {
   const [description, setDescription] = useState(project.description ?? '');
   const [saved, setSaved] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  // Two saves, one write path: a failed rename and a refused archive each say so in their own section.
-  const details = useProjectSave(project.id, onSaved);
-  const status = useProjectSave(project.id, onSaved);
+  // One write path, one save at a time; `op` says which section asked, so its error shows there.
+  const { apply, error, busy } = useProjectSave(project.id, onSaved);
+  const [op, setOp] = useState<'details' | 'status' | null>(null);
   useEffect(() => { setName(project.name); setDescription(project.description ?? ''); }, [project.id, project.name, project.description]);
   useEffect(() => { setConfirming(false); }, [project.id, project.status]);
+  // Focus follows the confirm (keyboard and screen-reader users keep their place): into it on open (Cancel, the
+  // safe choice), back to Archive on Cancel, and onto Restore or Archive once the status changed.
+  const archiveRef = useRef<HTMLButtonElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+  const restoreRef = useRef<HTMLButtonElement | null>(null);
+  const focusNext = useRef<'cancel' | 'archive' | 'restore' | null>(null);
+  useEffect(() => {
+    const want = focusNext.current;
+    if (want === null) return;
+    const el = want === 'cancel' ? cancelRef.current : want === 'archive' ? archiveRef.current : restoreRef.current;
+    if (el !== null) { el.focus(); focusNext.current = null; }
+  });
 
   const nameProblem = projectNameProblem(name);
   const changed = name.trim() !== project.name || description.trim() !== (project.description ?? '');
-  const canSave = changed && nameProblem === null && !details.busy;
+  const canSave = changed && nameProblem === null && !busy;
   const archived = project.status === 'archived';
   const personality = learnPath('personality', project.id);
 
   const save = async (): Promise<void> => {
     if (!canSave) return;
     setSaved(false);
-    if (await details.apply({ name: name.trim(), description: description.trim() })) setSaved(true);
+    setOp('details');
+    if (await apply({ name: name.trim(), description: description.trim() })) setSaved(true);
   };
   const setStatus = async (to: 'active' | 'archived'): Promise<void> => {
-    if (await status.apply({ status: to })) setConfirming(false);
+    if (busy) return;
+    setOp('status');
+    if (await apply({ status: to })) { focusNext.current = to === 'archived' ? 'restore' : 'archive'; setConfirming(false); }
   };
+  const ask = (): void => { focusNext.current = 'cancel'; setConfirming(true); };
+  const cancel = (): void => { focusNext.current = 'archive'; setConfirming(false); };
+  const detailsError = op === 'details' ? error : null;
+  const statusError = op === 'status' ? error : null;
 
   return (
     <div className="wk-pj-settings" data-testid="project-settings">
@@ -58,22 +79,22 @@ export function ProjectSettings({ project, navigate, onSaved }: {
         <h2 id={`${ids}-details`} className="wk-section-title">Name and description</h2>
         <form className="wk-pg-proj-stack" onSubmit={(e) => { e.preventDefault(); void save(); }}>
           <label className="wk-pg-proj-field">Project name
-            <input type="text" className="wk-field" data-testid="project-settings-name" value={name} maxLength={PROJECT_NAME_MAX}
+            <input type="text" className="wk-field" data-testid="project-settings-name" value={name} maxLength={PROJECT_NAME_MAX} disabled={busy}
               onChange={(e) => { setName(e.target.value); setSaved(false); }} />
           </label>
           {name !== '' && nameProblem !== null && <p className="wk-field-note wk-field-note--bad" data-testid="project-settings-name-invalid">{nameProblem}</p>}
           {name === '' && <p className="wk-field-note" data-testid="project-settings-name-invalid">Enter a project name to save.</p>}
           <label className="wk-pg-proj-field">Description
-            <textarea className="wk-field" data-testid="project-settings-description" value={description} rows={3} placeholder="Describe this project"
+            <textarea className="wk-field" data-testid="project-settings-description" value={description} rows={3} placeholder="Describe this project" disabled={busy}
               onChange={(e) => { setDescription(e.target.value); setSaved(false); }} />
           </label>
           <div className="wk-pg-proj-actions">
-            <button type="submit" className="wk-btn wk-btn--primary" data-testid="project-settings-save" disabled={!canSave}>{details.busy ? 'Saving…' : 'Save'}</button>
+            <button type="submit" className="wk-btn wk-btn--primary" data-testid="project-settings-save" disabled={!canSave}>{busy && op === 'details' ? 'Saving…' : 'Save'}</button>
             {saved && !changed && <p className="wk-field-note" role="status" data-testid="project-settings-saved">Saved.</p>}
           </div>
-          {details.error !== null && <div role="alert" data-testid="project-settings-error">
+          {detailsError !== null && <div role="alert" data-testid="project-settings-error">
             <p className="wk-field-note wk-field-note--bad">Couldn’t save the project.</p>
-            <TechDetails text={details.error} />
+            <TechDetails text={detailsError} />
           </div>}
         </form>
       </section>
@@ -91,26 +112,27 @@ export function ProjectSettings({ project, navigate, onSaved }: {
           <p className="wk-pj-danger-what">This project is archived</p>
           <p className="wk-field-note" data-testid="project-archived-note">It takes no new work until you restore it. Its jobs, documents and history are all here.</p>
           <div className="wk-pg-proj-actions">
-            <button type="button" className="wk-btn wk-btn--secondary" data-testid="project-restore" disabled={status.busy} onClick={() => void setStatus('active')}>
-              {status.busy ? 'Restoring…' : 'Restore this project'}
+            <button ref={restoreRef} type="button" className="wk-btn wk-btn--secondary" data-testid="project-restore" disabled={busy} onClick={() => void setStatus('active')}>
+              {busy && op === 'status' ? 'Restoring…' : 'Restore this project'}
             </button>
           </div>
         </> : <>
           <p className="wk-pj-danger-what">Archive this project</p>
           <p className="wk-field-note" data-testid="project-archive-words">{ARCHIVE_WORDS}</p>
           {confirming
-            ? <div className="wk-pg-proj-actions" role="group" aria-label="Confirm archiving" data-testid="project-archive-confirming">
-              <span className="wk-pj-danger-ask">Archive {project.name}? It stops taking new work until you restore it.</span>
-              <button type="button" className="wk-btn wk-btn--danger" data-testid="project-archive-confirm" disabled={status.busy} onClick={() => void setStatus('archived')}>{status.busy ? 'Archiving…' : 'Archive'}</button>
-              <button type="button" className="wk-btn wk-btn--quiet" data-testid="project-archive-cancel" disabled={status.busy} onClick={() => setConfirming(false)}>Cancel</button>
+            ? <div className="wk-pg-proj-actions" role="group" aria-labelledby={`${ids}-ask`} data-testid="project-archive-confirming"
+              onKeyDown={(e) => { if (e.key === 'Escape' && !busy) { e.stopPropagation(); cancel(); } }}>
+              <span id={`${ids}-ask`} className="wk-pj-danger-ask" role="status">Archive {project.name}? It stops taking new work until you restore it.</span>
+              <button type="button" className="wk-btn wk-btn--danger" data-testid="project-archive-confirm" disabled={busy} onClick={() => void setStatus('archived')}>{busy && op === 'status' ? 'Archiving…' : 'Archive'}</button>
+              <button ref={cancelRef} type="button" className="wk-btn wk-btn--quiet" data-testid="project-archive-cancel" disabled={busy} onClick={cancel}>Cancel</button>
             </div>
             : <div className="wk-pg-proj-actions">
-              <button type="button" className="wk-btn wk-btn--danger" data-testid="project-archive" onClick={() => setConfirming(true)}>Archive this project…</button>
+              <button ref={archiveRef} type="button" className="wk-btn wk-btn--danger" data-testid="project-archive" disabled={busy} onClick={ask}>Archive this project…</button>
             </div>}
         </>}
-        {status.error !== null && <div role="alert" data-testid="project-archive-error">
+        {statusError !== null && <div role="alert" data-testid="project-archive-error">
           <p className="wk-field-note wk-field-note--bad">{archived ? 'Couldn’t restore the project.' : 'Couldn’t archive the project.'}</p>
-          <TechDetails text={status.error} />
+          <TechDetails text={statusError} />
         </div>}
       </section>
     </div>

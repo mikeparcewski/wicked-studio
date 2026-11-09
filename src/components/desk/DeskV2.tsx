@@ -177,6 +177,11 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   // The project the record reads are scoped to: the page's project, else the refine bar's.
   const scope = projectId ?? refine.project;
   const set = <K extends keyof Refine>(k: K, v: Refine[K]): void => setRefine((r) => ({ ...r, [k]: v }));
+  // A project's "Running now" / "Failed" open Jobs with `?filter=`: the list they land on is the one the
+  // number counted (the last 30 days, every agent and workflow), never a range or agent picked earlier.
+  useEffect(() => {
+    if (tab === 'runs' && jobsFilter !== null) setRefine((r) => ({ ...DEFAULT_REFINE, groupBy: r.groupBy }));
+  }, [tab, jobsFilter]);
   const [signIn, setSignIn] = useState<RosterSeat | null>(null);
 
   const projects = useProjectsStore((s) => s.projects);

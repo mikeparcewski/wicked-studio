@@ -464,6 +464,42 @@ describe("a project's Settings tab (operator 2026-11-09)", () => {
     expect(useProjectsStore.getState().projects.map((x) => x.id)).toContain('p1');
   });
 
+  it('one save at a time: while a rename is out, the fields and Archive wait, and the answer never overwrites a newer edit', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    updateProject.mockImplementation(() => new Promise((r) => { answer = r; }));
+    await settings();
+    fireEvent.change(screen.getByTestId('project-settings-name'), { target: { value: 'Shop front' } });
+    fireEvent.click(screen.getByTestId('project-settings-save'));
+    await waitFor(() => expect(updateProject).toHaveBeenCalledTimes(1));
+    // Nothing else can be typed or sent until crew answers (codex review: a slower answer undid a newer one).
+    expect(screen.getByTestId('project-settings-name')).toBeDisabled();
+    expect(screen.getByTestId('project-settings-description')).toBeDisabled();
+    expect(screen.getByTestId('project-archive')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('project-archive'));
+    expect(screen.queryByTestId('project-archive-confirming')).toBeNull();
+    answer({ project: { ...project, name: 'Shop front' } });
+    await waitFor(() => expect(screen.getByTestId('project-settings-name')).toBeEnabled());
+    expect(screen.getByTestId('project-settings-name')).toHaveValue('Shop front');
+    expect(screen.getByTestId('project-settings-description')).toHaveValue('Checkout work');
+    expect(updateProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('focus follows the confirm: Cancel on open, Archive on cancel, Restore once archived; Escape cancels', async () => {
+    updateProject.mockImplementation(async (id: string, body: Record<string, unknown>) => ({ project: { ...project, id, ...body } }));
+    await settings();
+    fireEvent.click(screen.getByTestId('project-archive'));
+    await waitFor(() => expect(screen.getByTestId('project-archive-cancel')).toHaveFocus());
+    fireEvent.click(screen.getByTestId('project-archive-cancel'));
+    await waitFor(() => expect(screen.getByTestId('project-archive')).toHaveFocus());
+    fireEvent.click(screen.getByTestId('project-archive'));
+    fireEvent.keyDown(screen.getByTestId('project-archive-cancel'), { key: 'Escape' });
+    await waitFor(() => expect(screen.getByTestId('project-archive')).toHaveFocus());
+    expect(updateProject).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('project-archive'));
+    fireEvent.click(screen.getByTestId('project-archive-confirm'));
+    await waitFor(() => expect(screen.getByTestId('project-restore')).toHaveFocus());
+  });
+
   it('a refused archive keeps the confirm open and says why', async () => {
     updateProject.mockRejectedValue(new Error('403 admin only'));
     await settings();
@@ -489,6 +525,20 @@ describe("a project's own pages never lead to the filtered Everything list (oper
     const hrefOf = (id: string): string | null => screen.getByTestId(id).closest('a')?.getAttribute('href') ?? screen.getByTestId(id).querySelector('a')?.getAttribute('href') ?? null;
     expect(hrefOf('desk-block-running')).toBe('/projects/p1?tab=runs&filter=active');
     expect(hrefOf('desk-block-failed')).toBe('/projects/p1?tab=runs&filter=failed');
+  });
+
+  it('Failed lands on the list it counted: a range picked earlier on Jobs does not hide it (codex review)', async () => {
+    const old = makeView({ id: 'old-fail', project_id: 'p1', problem: 'Old failure', status: 'failed', created_at: NOW / 1000 - 20 * 86400, ended_at: NOW / 1000 - 20 * 86400 + 60 });
+    const all = [...runs, old];
+    const view = render(<ProjectDesk {...props} runs={all} search="?tab=runs" />);
+    await loaded();
+    fireEvent.click(screen.getByTestId('desk-runs-tools'));
+    fireEvent.click(screen.getByTestId('desk-range-7'));
+    fireEvent.click(screen.getByTestId('desk-runs-group-finished'));
+    await waitFor(() => expect(rowIds()).not.toContain('old-fail'));
+    view.rerender(<ProjectDesk {...props} runs={all} search="?tab=work" />);
+    view.rerender(<ProjectDesk {...props} runs={all} search="?tab=runs&filter=failed" />);
+    await waitFor(() => expect(rowIds()).toEqual(['old-fail']));
   });
 
   it('?filter=failed opens Jobs on Finished, narrowed to Failed; ?filter=active on Active', async () => {

@@ -68,11 +68,13 @@ const OF_FILTER: Record<Exclude<RunStatusFilter, 'all'>, readonly JobWord[]> = {
  */
 export function jobsStartOf(filter: string | null): { group: JobGroup; status: RunStatusFilter } {
   switch (filter) {
-    case 'waiting': return { group: 'active', status: 'waiting' };
     case 'completed': return { group: 'finished', status: 'finished' };
     case 'failed': return { group: 'finished', status: 'failed' };
     case 'cancelled': return { group: 'finished', status: 'stopped' };
-    default: return { group: 'active', status: 'all' };
+    // Working (`active`) is every live job. "Waiting on you" in Sessions holds both of Jobs' "Waiting on you" and
+    // "Needs a decision", which no single Jobs status covers, so it opens Active too rather than hide one of them.
+    // `all` and Archived (a Sessions-only lens) start where Jobs always does.
+    case 'active': case 'waiting': case 'all': case 'archived': default: return { group: 'active', status: 'all' };
   }
 }
 

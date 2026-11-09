@@ -10135,6 +10135,14 @@ class W2Handler(SimpleHTTPRequestHandler):
             return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
         pid = urllib.parse.unquote(m.group(1))
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        # crew's UpdateProjectSchema (strict): name 1-120 chars, description a string, status active|archived.
+        known = {"name", "description", "status", "interactiveRoot", "autoCapture"}
+        bad = (not isinstance(body, dict) or set(body) - known
+               or ("name" in body and not (isinstance(body["name"], str) and 1 <= len(body["name"]) <= 120))
+               or ("description" in body and not isinstance(body["description"], str))
+               or ("status" in body and body["status"] not in ("active", "archived")))
+        if bad:
+            return self._json(400, {"error": "Invalid request body"})
         if pid == "default":
             return self._json(409, {"error": "the synthesized 'default' project cannot be modified"})
         with state_lock:

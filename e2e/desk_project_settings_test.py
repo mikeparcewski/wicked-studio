@@ -24,6 +24,7 @@ import json
 import os
 import sys
 import urllib.parse
+import urllib.error
 import urllib.request
 
 from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
@@ -146,6 +147,18 @@ with sync_playwright() as p:
           and card.get_by_test_id("projects-row-state").inner_text() == "Archived"
           and card.locator("button").count() == 0
           and card.get_by_test_id("projects-row-open").get_attribute("href") == base, patches=archived)
+
+    # The fixture refuses what crew's strict PATCH schema refuses, and changes nothing.
+    def raw_patch(body: dict) -> int:
+        req = urllib.request.Request(f"{origin}/api/v1/projects/{pid}", data=json.dumps(body).encode(), method="PATCH",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status
+        except urllib.error.HTTPError as e:
+            return e.code
+    refused = [raw_patch(b) for b in ({"name": ""}, {"name": "x" * 121}, {"status": "gone"}, {"colour": "red"})]
+    check("fixture-refuses-bad-bodies", refused == [400, 400, 400, 400] and len(patches(origin)) == len(archived), refused=refused)
 
     # 6. Restore from Settings.
     card.get_by_test_id("projects-row-open").click()
