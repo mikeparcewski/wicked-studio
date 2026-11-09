@@ -11,7 +11,10 @@ At 1440x700 (the rail) and 390x844 (the drawer), against the in-process fixture:
   1. expand Recent, hover a run row, click its Move to project icon;
   2. 300 ms later the picker is still open (aria-expanded=true), sits inside the viewport, and the element at its
      centre is inside the picker (nothing covers it);
-  3. 0 page errors.
+  3. readable in both themes (the theme set BEFORE the page loads, then 600 ms for the colour transitions): every text
+     of the open picker and of the rail's links and run rows is >= 4.5:1 on what it sits on (WCAG AA, measured from the
+     computed colours, opacity and alpha included);
+  4. 0 page errors.
 
 Captures: e2e/shots/desk-rail-move-<w>x<h>-<theme>.png (light and dark). Env: FEEDBACK_PORT (default 4497).
 JSON report; exit 0/1.
@@ -50,6 +53,33 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
 
+# WCAG contrast of every visible text under `root` against the first opaque background behind it: the text colour's
+# alpha and every ancestor's opacity up to that background blend it toward the background first.
+CONTRAST = """(root) => {
+  const parse = (c) => { const m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null;
+    const p = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; };
+  const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const out = [];
+  for (const el of root.querySelectorAll('*')) {
+    const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== '');
+    if (!own || el.getClientRects().length === 0 || getComputedStyle(el).visibility === 'hidden') continue;
+    const fg = parse(getComputedStyle(el).color);
+    let alpha = fg[3]; let bg = null;
+    for (let n = el; n; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      const c = parse(cs.backgroundColor);
+      if (c && c[3] >= 0.99) { bg = c; break; }
+      alpha *= Number(cs.opacity);
+    }
+    bg = bg ?? [255, 255, 255, 1];
+    const shown = [0, 1, 2].map((i) => fg[i] * alpha + bg[i] * (1 - alpha));
+    const a = lum(shown), b = lum(bg);
+    out.push({ text: el.textContent.trim().slice(0, 32), ratio: Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 100) / 100 });
+  }
+  return out;
+}"""
+
 IN_PICKER = """([x, y]) => { const el = document.elementFromPoint(x, y);
   return !!el && !!el.closest('[data-testid="session-move-picker"]'); }"""
 
@@ -82,6 +112,15 @@ def open_picker(page, w: int, h: int) -> None:
     check(f"centre-hits-picker-{w}", hit)
 
 
+def readable(page, w: int, theme: str) -> None:
+    """Every picker and rail text >= 4.5:1, with the numbers in the report."""
+    for part, sel in (("picker", '[data-testid="session-move-picker"]'), ("rail", '[data-testid="session-rail"]')):
+        rows = page.locator(sel).first.evaluate(CONTRAST)
+        low = [r for r in rows if r["ratio"] < 4.5]
+        ratios = sorted(r["ratio"] for r in rows)
+        check(f"contrast-{part}-{w}-{theme}", bool(rows) and not low, texts=len(rows), lowest=ratios[:3], low=low[:5])
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch()
     for (w, h) in ((1440, 700), (390, 844)):
@@ -91,11 +130,15 @@ with sync_playwright() as p:
             page.add_init_script(
                 "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
                 f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-            set_fixture(origin, repo=True, sessions=True)
+            # The theme is the stored setting before the page loads (never switched under a running transition).
+            set_fixture(origin, repo=True, sessions=True, appearance={"theme": f"wicked-{theme}"})
             open_picker(page, w, h)
-            page.evaluate(f"document.documentElement.setAttribute('data-theme', 'wicked-{theme}')")
+            page.wait_for_timeout(600)  # every colour transition (140 ms) has ended
+            check(f"theme-{w}-{theme}", page.evaluate("document.documentElement.getAttribute('data-theme')") == f"wicked-{theme}")
+            readable(page, w, theme)
             page.screenshot(path=str(SHOTS / f"desk-rail-move-{w}x{h}-{theme}.png"))
             page.close()
+    set_fixture(origin, appearance=None)
     browser.close()
 
 check("no-page-errors", not errors, errors=errors[:5])
