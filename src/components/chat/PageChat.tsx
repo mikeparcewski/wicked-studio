@@ -304,6 +304,9 @@ export function PageChat({ kind, runs, navigate, variant, chips, onClose, provid
       usePageChat.getState().clearFocus(kind);
     },
     ...(chips !== undefined ? { chips } : {}),
+    // crew-0183: inline (Understand's only use) the page IS the conversation: no inner header, the page draws its line.
+    ...(variant === 'inline' ? { bare: { onChrome: (c: { chatId: string | null; helper: string | null }) => providerOf()?.onChrome?.(c) } } : {}),
+    ...(providerOf()?.userText !== undefined ? { userText: (t: string) => providerOf()?.userText?.(t) ?? t } : {}),
     seed,
     onSeedTaken: (n) => usePageChat.getState().tookSeed(kind, n),
     threadTail,

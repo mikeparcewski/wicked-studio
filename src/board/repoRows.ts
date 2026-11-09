@@ -111,7 +111,8 @@ const said = (n: number): string => WORDS[n] ?? String(n);
  * The one sentence under "Repositories".
  *  "Five repositories, all indexed and ready." / "Six repositories. Four are indexed; two need re-indexing."
  */
-export function reposSentence(read: 'loading' | 'failed' | 'known', readiness: readonly RepoReadiness[], waiting: number, heldIndexing = 0): string {
+export function reposSentence(read: 'loading' | 'failed' | 'known', readiness: readonly RepoReadiness[], waiting: number, heldIndexing = 0,
+  watch: { failed: number; waiting: number } = { failed: 0, waiting: 0 }): string {
   if (read === 'loading') return 'Reading your repositories…';
   if (read === 'failed') return 'Your repositories could not be read just now.';
   const n = readiness.length;
@@ -124,12 +125,22 @@ export function reposSentence(read: 'loading' | 'failed' | 'known', readiness: r
   // (crew#1042) `heldIndexing`: onboardings a Needs-you row holds; they are among `waiting`, not "indexing now".
   const building = Math.max(0, of('onboarding') - heldIndexing);
   const wait = waiting > 0 ? ` ${said(waiting)} ${waiting === 1 ? 'job waits' : 'jobs wait'} on you.` : '';
-  if (ready === n) return n === 1 ? `${repos}, indexed and ready.${wait}` : `${repos}, all indexed and ready.${wait}`;
+  // crew-0183 (coord): never "all … ready" while the watcher could not re-index one, or a job holds one's code map.
+  const watchParts = [
+    watch.failed > 0 ? `${said(watch.failed).toLowerCase()} couldn’t re-index` : null,
+    watch.waiting > 0 ? `${said(watch.waiting).toLowerCase()} ${watch.waiting === 1 ? 'is' : 'are'} waiting on a job` : null,
+  ].filter((x): x is string => x !== null);
+  if (ready === n && watchParts.length === 0) return n === 1 ? `${repos}, indexed and ready.${wait}` : `${repos}, all indexed and ready.${wait}`;
+  if (ready === n) {
+    const body = watchParts.join('; ');
+    return `${repos}. ${body.charAt(0).toUpperCase()}${body.slice(1)}.${wait}`;
+  }
   const parts = [
     ready > 0 ? `${said(ready).toLowerCase()} ${ready === 1 ? 'is' : 'are'} indexed` : null,
     building > 0 ? `${said(building).toLowerCase()} ${building === 1 ? 'is' : 'are'} indexing now` : null,
     redo > 0 ? `${said(redo).toLowerCase()} ${redo === 1 ? 'needs' : 'need'} re-indexing` : null,
     never > 0 ? `${said(never).toLowerCase()} ${never === 1 ? 'is' : 'are'} not indexed yet` : null,
+    ...watchParts,
   ].filter((x): x is string => x !== null);
   const body = parts.join('; ');
   return `${repos}. ${body.charAt(0).toUpperCase()}${body.slice(1)}.${wait}`;

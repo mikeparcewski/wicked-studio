@@ -10,7 +10,7 @@
     "Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show."
   ],
   "version": 1,
-  "studioVersion": "0.16.2",
+  "studioVersion": "0.16.3",
   "static": [
     {
       "testId": "accent-lgt",
@@ -16584,6 +16584,18 @@
       ]
     },
     {
+      "testId": "repo-row-watch",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-watch-phone",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-row-word",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -16665,6 +16677,60 @@
       "testId": "repo-upkeep",
       "files": [
         "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-watch",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-watch-controls",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-watch-covers",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-watch-reindex",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-watch-remedy",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-watch-run",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-watch-said",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-watch-toggle",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-watch-words",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
       ]
     },
     {
@@ -19955,6 +20021,12 @@
     },
     {
       "testId": "session-runs-slow-retry",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-send-failed",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
@@ -24416,6 +24488,12 @@
       ]
     },
     {
+      "testId": "understand-open-full",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
       "testId": "understand-page",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
@@ -24435,6 +24513,12 @@
     },
     {
       "testId": "understand-scope",
+      "files": [
+        "src/components/desk/UnderstandPage.tsx"
+      ]
+    },
+    {
+      "testId": "understand-scope-line",
       "files": [
         "src/components/desk/UnderstandPage.tsx"
       ]
@@ -26866,6 +26950,7 @@
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoFindings.tsx",
         "src/components/RepoKnowledge.tsx",
+        "src/components/RepoWatchLine.tsx",
         "src/components/RequirementsCoverageSummary.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/SkillChips.tsx",

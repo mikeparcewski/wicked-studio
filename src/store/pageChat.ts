@@ -109,6 +109,11 @@ export interface PageChatProvider {
   onSent?: (text: string, chatId: string) => void;
   /** Evaluate: how many uncovered behaviours the analysed evaluation has (offers Draft rules). */
   gaps?: (focus: PageFocus | null) => number;
+  /** crew-0183 (an inline page chat, Understand): the conversation on screen and its answering helper, for the page's
+   *  own header line and open-in-full action (the chat draws no header of its own). */
+  onChrome?: (c: { chatId: string | null; helper: string | null }) => void;
+  /** How the person's own words are shown (Understand strips the grounding line it appends on a plain chat). */
+  userText?: (text: string) => string;
 }
 
 interface PageChatHostState {

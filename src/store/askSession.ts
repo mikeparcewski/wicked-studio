@@ -39,6 +39,9 @@ export interface AskSession {
 }
 
 export const ASK_SESSION_KEY = 'wicked.ask.session';
+/** crew-0183: the headless engine a chat page's own send runs (AskDock `headless`): its own key, so a page send never
+ *  replaces the system chat's stored chat. */
+export const PAGE_SEND_SESSION_KEY = 'wicked.ask.session.page-send';
 
 /** `key`: whose session — the system chat's ({@link ASK_SESSION_KEY}, the default) or a page chat's
  *  (`pageChatSessionKey`): each page keeps its own conversation. */

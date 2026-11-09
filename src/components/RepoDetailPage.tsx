@@ -24,6 +24,8 @@ import { useMembershipStore } from '../store/membership.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { linksOf, useRepoLinks, useRepoLinksFor } from '../store/repoLinks.js';
 import { AddRepoToProject } from './AddRepoToProject.js';
+import { RepoWatchControls, RepoWatchLine } from './RepoWatchLine.js';
+import { useRepoWatch, watchDotTone, watchLine } from '../api/repoWatch.js';
 import { CommitCadence } from './CommitCadence.js';
 import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
@@ -96,6 +98,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const showText = useDisplayText();
   const tab = repoTabOf(search);
   const ambientProject = ambientProjectId('', search);
+  // crew-0183: crew's repo watcher — whether this repository's code map is kept current, read while the page is open.
+  const watch = useRepoWatch();
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [rawRuns, setRuns] = useState<SessionView[]>([]);
@@ -386,7 +390,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                 {lang !== null && <> · {lang}</>}
                 {projects !== null && projects.length > 0 && <> · in {projects.map((p, i) => <span key={p.id}>{i > 0 ? ', ' : ''}<b>{p.name}</b></span>)}</>}
                 {jobProjects.length > 0 && <> · used by {jobProjects.join(', ')}’s jobs</>}
-                {' · '}<span aria-hidden className="wk-rp-meta-dot" data-tone={map.tone} />{map.size === null ? map.words : `${map.words} · ${map.size}`}
+                {' · '}<span aria-hidden className="wk-rp-meta-dot" data-tone={watchDotTone(watchLine(watch, repo.id, now)) ?? map.tone} />{map.size === null ? map.words : `${map.words} · ${map.size}`}
               </p>
             </div>
             <div className="wk-desk2-actions">
@@ -395,6 +399,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
               <OverflowMenu label={`More for ${repo.name}`} items={menu} data-testid="repo-more" />
             </div>
           </header>
+          <RepoWatchLine status={watch} repoId={repo.id} now={now} navigate={navigate} />
 
           {/* What blocks the code map, above the tabs (seen on every tab); silent when nothing does. */}
           {(onboardErrorText !== null || hasFindings || graphFailedHere || captureError !== null || runsFailed) && (
@@ -550,6 +555,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                 <div>
                   <section className="wk-card" data-testid="repo-upkeep">
                     <SectionTitle>Upkeep</SectionTitle>
+                    <RepoWatchControls status={watch} repoId={repo.id} />
                     <div className="wk-rp-upkeep">
                       <b>Rebuild the code map</b>
                       <button type="button" data-testid="repo-run-onboarding" onClick={() => void startOnboarding()} disabled={onboarding}

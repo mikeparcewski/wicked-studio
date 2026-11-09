@@ -9,7 +9,8 @@ import { endSystemChat, useAskDock, type AskRequest } from './store/askDock.js';
 import { useSearchModal } from './store/searchModal.js';
 import { usePhone } from './hooks/usePhone.js';
 import { useAskThreadStore } from './store/askThread.js';
-import { useChatFlow } from './store/chatFlow.js';
+import { pageSendFailed, useChatFlow } from './store/chatFlow.js';
+import { useSessionDrafts } from './store/sessionDrafts.js';
 import { AskLauncher } from './components/AskLauncher.js';
 import { ChatWindow } from './components/chat/ChatWindow.js';
 import { setSystemChatOpen as setAskOpen, toggleSystemChat, useChatWindow } from './store/chatWindow.js';
@@ -147,6 +148,17 @@ const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 const RIGHT_PANEL_PX = 288;
 /** The Desk's Start row + composer band (skin `desk`): the Ask panel opens above it. */
 const DESK_COMPOSER_PX = 96;
+
+/** What a failed page send last put back into a chat's box (so a second failure appends rather than gives way). */
+const restoredDrafts = new Map<string, string>();
+
+/** The chat id of the session page on screen (`/s/<id>`), read at send time like the dock's `stepAside`; else null. */
+function chatOnScreen(): string | null {
+  if (typeof window === 'undefined') return null;
+  const m = /^\/s\/([^/?#]+)/.exec(window.location.pathname);
+  if (m === null) return null;
+  try { return decodeURIComponent(m[1]!); } catch { return null; }
+}
 
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, artifactId, showLaunch, campaignId, testingPage, artifactKey, navigate, search, pathname } = useRoute();
@@ -415,7 +427,21 @@ export function App(): React.ReactElement {
   useEffect(() => {
     if (!askOpen) setAskHandoff(null);
   }, [askOpen]);
+  // crew-0183 (operator: "opens ask, then redirects to inline chat"): a send whose chat is the session page on screen —
+  // a fresh chat's first message (`openChatId`) or a reply into it (`chatId`) — runs the same engine HEADLESS beside the
+  // page: the floating window never mounts and the page's thread shows the turn. Everything else is the dock's.
+  // Each send is its own engine, kept mounted until ITS send settles (codex + pi r1: a newer send to the same chat was
+  // unmounted by the older one's close, and a reply could be dropped).
+  const pageSendSeq = useRef(0);
+  const [pageSends, setPageSends] = useState<Array<{ key: number; text: string; target: string } & ComposerSend>>([]);
   const handToAsk = useCallback((text: string, opts: ComposerSend = {}) => {
+    const target = opts.openChatId ?? opts.chatId;
+    if (target !== undefined && chatOnScreen() === target) {
+      pageSendFailed(target, null);
+      const key = (pageSendSeq.current += 1);
+      setPageSends((cur) => [...cur, { key, text, target, ...opts }]);
+      return;
+    }
     setAskKey((k) => k + 1);
     setAskHandoff({ text, ...opts });
     setAskOpen(true);
@@ -430,23 +456,11 @@ export function App(): React.ReactElement {
   // (or filled) into the fresh dock are dropped by it (desk_ask_team: Send stayed disabled after a fill).
   useLayoutEffect(() => {
     if (askRequest === null) return;
-    // Understand's ask box (`askInChat`): the operator's own question, sent as the first message of a
-    // new chat under the id the page minted (the same handoff the Desk composer's send takes).
-    if (askRequest.send !== undefined) {
-      setAskStart(null);
-      handToAsk(askRequest.seedText, {
-        fresh: true, openChatId: askRequest.send.chatId,
-        ...(askRequest.projectId !== null ? { projectId: askRequest.projectId } : {}),
-        ...(askRequest.send.workflow !== undefined ? { workflow: askRequest.send.workflow } : {}),
-        ...(askRequest.send.repos !== undefined ? { repos: askRequest.send.repos } : {}),
-      });
-      return;
-    }
     setAskKey((k) => k + 1);
     setAskHandoff(null);
     setAskStart(askRequest);
     setAskOpen(true);
-  }, [askRequest, handToAsk]);
+  }, [askRequest]);
   useEffect(() => {
     if (!askOpen) setAskStart(null);
   }, [askOpen]);
@@ -918,6 +932,40 @@ export function App(): React.ReactElement {
           />
         )}
       </ChatWindow>
+
+      {/* crew-0183: a chat page's own send, headless (no window, nothing drawn); the page's thread shows the turn. */}
+      {pageSends.map((pageSend) => (
+        <AskDock
+          key={`page-send-${pageSend.key}`}
+          headless={{ onDone: (failed) => {
+            if (failed === null) return;
+            pageSendFailed(pageSend.target, failed);
+            // The words go back into the page's box unless the person has typed something since (codex r1); a box holding
+            // only words an earlier failure put back takes these too, so two failed sends never lose one (codex r2).
+            const drafts = useSessionDrafts.getState();
+            const now = drafts.drafts[pageSend.target] ?? '';
+            const restored = restoredDrafts.get(pageSend.target);
+            if (now.trim() === '' || now === restored) {
+              const next = now.trim() === '' ? pageSend.text : `${now}\n\n${pageSend.text}`;
+              drafts.setDraft(pageSend.target, next);
+              restoredDrafts.set(pageSend.target, next);
+            }
+          } }}
+          runs={shownRuns}
+          pathname={pathname}
+          navigate={navigate}
+          onClose={() => setPageSends((cur) => cur.filter((x) => x.key !== pageSend.key))}
+          sendText={pageSend.text}
+          {...(pageSend.projectId !== undefined ? { sendProjectId: pageSend.projectId } : {})}
+          {...(pageSend.fresh === true ? { sendFresh: true } : {})}
+          {...(pageSend.primary !== undefined ? { sendPrimary: pageSend.primary } : {})}
+          {...(pageSend.chatId !== undefined ? { sendChatId: pageSend.chatId } : {})}
+          {...(pageSend.openChatId !== undefined ? { sendOpenChatId: pageSend.openChatId } : {})}
+          {...(pageSend.workflow !== undefined ? { sendWorkflow: pageSend.workflow } : {})}
+          {...(pageSend.repos !== undefined ? { sendRepos: pageSend.repos } : {})}
+          {...(pageSend.artifact !== undefined ? { sendArtifact: pageSend.artifact } : {})}
+        />
+      ))}
 
       {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
       <ObjectSheet runs={shownRuns} navigate={navigate} needCount={needsNumber} />

@@ -23,6 +23,9 @@
 }
 .wk-uc-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .wk-uc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; padding: 0 24px 8px 0; }
+/* crew-0183: the conversation is the page: one quiet line under the title says what it reads and who answers. */
+.wk-uc-scope { margin: -4px 24px 8px 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-uc .wk-pagechat[data-variant="inline"] .wk-assist--page { border: 0 !important; box-shadow: none !important; }
 .wk-uc-title { margin: 0; font-size: var(--text-title); line-height: 1.15; font-weight: var(--weight-strong); color: var(--ink-high); letter-spacing: var(--tracking-title); }
 .wk-uc-sidebtn { display: none; }
 

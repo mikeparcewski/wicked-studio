@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Columns3, Database, ListChecks, MessageSquarePlus, Network, PanelRight, Share2, X } from 'lucide-react';
+import { ArrowLeft, Columns3, Database, ExternalLink, ListChecks, MessageSquarePlus, Network, PanelRight, Share2, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { apiStatus } from '../../api/errors.js';
 import type { RepoEntry, SessionView } from '../../api/types.js';
@@ -8,7 +8,7 @@ import { pageChatSessionKey } from '../../board/pageChat.js';
 import { readAskSession } from '../../store/askSession.js';
 import { usePageChat } from '../../store/pageChat.js';
 import { askPage, PageChat } from '../chat/PageChat.js';
-import { answerLine, askedWithChats, forgetAsked, graphLinkRepos, questionMessage, readAsked, rememberAsked, suggestedQuestions, type AnswerLine, type AskedQuestion } from '../../board/understandModel.js';
+import { answerLine, askedWithChats, forgetAsked, graphLinkRepos, questionMessage, readAsked, rememberAsked, suggestedQuestions, withoutGroundingLine, type AnswerLine, type AskedQuestion } from '../../board/understandModel.js';
 import { knowledgeMarks, type KnowMark } from '../../board/repoKnowledge.js';
 import type { ScopeChip } from '../../board/chatScopes.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../../store/repoKnowledge.js';
@@ -17,6 +17,7 @@ import { relTime } from '../../board/relTime.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
+import { PAGE_CHAT_SPECS } from '../../board/pageChat.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { CoverageView } from '../CoverageView.js';
 import { RepoGraphModal } from '../RepoGraphModal.js';
@@ -72,6 +73,11 @@ type AnswerRead =
  *    of them before any is chosen; their state is read once a minute through store/repoKnowledge), and More.
  *  - Under 1024 px the sidebar is a modal drawer behind the header's button.
  */
+/** Whether this crew runs Understand's question as an `analyze` chat (its instructions ask for cited answers). */
+function analysisServed(): boolean {
+  return useCapabilities.getState().chatWorkflows.includes(PAGE_CHAT_SPECS.understand.workflow ?? 'analyze');
+}
+
 export function UnderstandPage({ project, navigate, now, compare, runs = [], search }: {
   /** The project on screen (a project's page): the chat is scoped to it. */
   project: string | null;
@@ -176,7 +182,13 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [], sea
     setInline(true);
     setOpenChat(null);
     setOpenScope(scopeRepos.map((r) => r.id));
-    askPage('understand', { text: questionMessage(question), send: true, fresh: true });
+    // crew-0183: on a chat that runs crew's `analyze` workflow the workflow itself asks for cited answers, so the question
+    // goes alone (the person's bubble and the chat's title are what they asked).
+    // The capabilities decide it, so they are read first when this page was quicker than the health read.
+    const caps = useCapabilities.getState();
+    const send = (): void => askPage('understand', { text: questionMessage(question, analysisServed()), send: true, fresh: true });
+    if (caps.loaded) send();
+    else void caps.load().catch(() => undefined).then(send);
     setQ('');
   };
   // The Knowledge map has an address (a review link lands on it): the pane follows it, and it follows the pane.
@@ -211,7 +223,11 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [], sea
     setPane('chat');
     if (drawer) closeSide('content'); else focusContent();
   };
+  // crew-0183: the page IS the conversation once asked: its header says the scope and who answers, and opens it in full.
+  const [chrome, setChrome] = useState<{ chatId: string | null; helper: string | null }>({ chatId: null, helper: null });
   const provider = {
+    onChrome: (c: { chatId: string | null; helper: string | null }) => setChrome((cur) => (cur.chatId === c.chatId && cur.helper === c.helper ? cur : c)),
+    userText: withoutGroundingLine,
     knows: scopeRepos.length === 0 ? (onProject ? 'Reads this project’s repositories · read-only' : 'Reads all repositories · read-only')
       : `Reads ${scopeRepos.map((r) => r.name).join(', ')} · read-only`,
     data: () => [],
@@ -313,12 +329,25 @@ export function UnderstandPage({ project, navigate, now, compare, runs = [], sea
                 <MessageSquarePlus size={18} aria-hidden />
               </button>
             )}
+            {inline && pane === 'chat' && chrome.chatId !== null && (
+              <a className="wk-pagechat-titlebtn" data-testid="understand-open-full" aria-label="Open this conversation in full" title="Open in full"
+                href={`/s/${encodeURIComponent(chrome.chatId)}`}
+                onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(`/s/${encodeURIComponent(chrome.chatId!)}`); }}>
+                <ExternalLink size={16} aria-hidden />
+              </a>
+            )}
           </div>
           <button ref={toggleRef} type="button" className="wk-pagechat-titlebtn wk-uc-sidebtn" data-testid="understand-side-toggle" aria-expanded={sideOpen} aria-controls={sideId}
             aria-label={sideOpen ? 'Hide recent answers and graphs' : 'Recent answers and graphs'} title="Recent answers and graphs" onClick={() => setSideOpen((v) => !v)}>
             <PanelRight size={18} aria-hidden />
           </button>
         </header>
+        {/* crew-0183: once asked, the page IS the conversation: what it reads and who answers, one quiet line. */}
+        {inline && pane === 'chat' && (
+          <p className="wk-uc-scope" data-testid="understand-scope-line">
+            {provider.knows}{chrome.helper !== null ? ` · ${chrome.helper} answers` : ''}
+          </p>
+        )}
 
         {pane !== 'chat' && (
           <div className="wk-uc-back">

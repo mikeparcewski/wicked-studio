@@ -2,7 +2,7 @@ import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorBadge, floorWords } from '../../board/floorRun.js';
-import { beginChatOpen, chatOpened, useChatFlow } from '../../store/chatFlow.js';
+import { beginChatOpen, chatOpened, useChatFlow, usePageSendFailure } from '../../store/chatFlow.js';
 import { moveOf, useJobMoves } from '../../store/jobMoves.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -277,6 +277,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const chatProjectName = useProjectsStore((s) => (chatProjectId === null ? null : s.projects.find((p) => p.id === chatProjectId)?.name ?? null));
   const trackerLinks = useTrackerLinksSupported();
   const freshOpening = useChatFlow((s) => (ref.kind === 'chat' && s.opening[ref.chatId] === true));
+  // crew-0183: a send from this page runs headless (no floating window to say why it failed), so the reason shows here.
+  const sendFailure = usePageSendFailure((s) => (ref.kind === 'chat' ? s.failed[ref.chatId] ?? null : null));
   // Opened on the daemon: read the chat again, and until THAT read answers the page stays the new chat
   // (codex r1: the read from before the open said "closed", which is not what the page now is).
   const [openedAt, setOpenedAt] = useState<number | null>(null);
@@ -1225,7 +1227,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
 
       <DecisionDockFrame items={dockItems} composer={(reply, docked) => (
         // The measure sits on a wrapper: the composer's own box (its `/` and `@` menus anchor to it) stays the input's width.
-        <div className="wk-session-composer-wrap wk-measure wk-measure--thread"><DockedComposer reply={reply} docked={docked} composerProps={composerProps} who={dockWho} /></div>
+        <div className="wk-session-composer-wrap wk-measure wk-measure--thread">
+          {/* crew-0183: why this page's last send failed, beside the box whatever the box's own footer is (a docked
+              decision replaces that footer; codex r3). */}
+          {sendFailure !== null && <p data-testid="session-send-failed" role="alert" className="wk-composer-hint wk-composer-hint--bad">That wasn’t sent: {sendFailure}</p>}
+          <DockedComposer reply={reply} docked={docked} composerProps={composerProps} who={dockWho} />
+        </div>
       )}>
       <div className="wk-session-body">
         {/* S16a-4a: an address naming an artifact this session does not hold grows nothing and says so. */}
