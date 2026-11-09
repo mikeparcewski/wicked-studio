@@ -233,9 +233,14 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
           repoAttachError = err instanceof Error ? err.message : String(err);
         }
       }
-      // Only crew's own attach can leave the run unfiled: studio's attach goes through the member route, which files the
-      // repository's onboarding run there too (review r4).
-      const runFilingError = registered.projectAttached === true ? registered.projectAttachError ?? null : null;
+      // A run-filing error stands unless the run is now seen filed: crew attached the repo (its error is the run's), or an
+      // older crew's error and studio's own attach, whose member route files the run only best-effort (review r5).
+      let runFilingError = repoAttachError === null ? registered.projectAttachError ?? null : null;
+      if (runFilingError !== null && selectedProjectId !== null && registered.onboardRunId !== null) {
+        const filed = await api.listProjectMembers(selectedProjectId)
+          .then(({ members }) => members.some((m) => m.member_kind === 'crew.run' && m.member_ref === registered.onboardRunId), () => false);
+        if (filed) runFilingError = null;
+      }
 
       setRepos((prev) => [...prev, repo]);
       // A just-registered repo joins the queue's register at once (its "never indexed" row).

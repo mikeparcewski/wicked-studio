@@ -112,8 +112,9 @@ describe('RepositoriesPanel register flow — project binding (slice B; crew-018
     expect(client.api.attachProjectMember).toHaveBeenCalledTimes(1);
   });
 
-  it('an older crew\'s projectAttachError (its run filing): studio attaches the repo, whose member route files the run too: no notice', async () => {
+  it('an older crew\'s projectAttachError (its run filing): studio attaches the repo; seen filed after that: no notice', async () => {
     vi.mocked(client.api.registerRepo).mockResolvedValue({ repo: REPO, onboardRunId: 'r-onboard', projectAttachError: 'filing failed' });
+    vi.spyOn(client.api, 'listProjectMembers').mockResolvedValue({ projectId: 'q3-review-deck', members: [{ id: 'm', project_id: 'q3-review-deck', member_kind: 'crew.run', member_ref: 'r-onboard', meta: null, attached_at: 1, attached_by: 'studio' }] } as never);
     const user = userEvent.setup();
     const navigate = vi.fn();
     render(<RepositoriesPanel navigate={navigate} autoShowRegister />);
@@ -151,6 +152,23 @@ describe('RepositoriesPanel register flow — an attached repo whose run filing 
     await fillAndRegister(user);
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1', {
       state: { projectAttachError: 'Added to q3-review-deck, but its onboarding run is not filed there: project busy', projectAttachFor: 'q3-review-deck', projectAttachRepo: false },
+    }));
+  });
+});
+
+describe('RepositoriesPanel register flow — an older crew whose run filing still failed (review r5)', () => {
+  it('keeps the notice when the run is still not filed after studio\'s attach', async () => {
+    vi.mocked(client.api.registerRepo).mockResolvedValue({ repo: REPO, onboardRunId: 'r-onboard', projectAttachError: 'filing failed' });
+    vi.spyOn(client.api, 'listProjectMembers').mockResolvedValue({ projectId: 'q3-review-deck', members: [] } as never);
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<RepositoriesPanel navigate={navigate} autoShowRegister />);
+    const select = screen.getByTestId('repo-project-select');
+    await waitFor(() => expect((select as HTMLSelectElement).options.length).toBe(4));
+    await user.selectOptions(select, 'q3-review-deck');
+    await fillAndRegister(user);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1', {
+      state: { projectAttachError: 'Added to q3-review-deck, but its onboarding run is not filed there: filing failed', projectAttachFor: 'q3-review-deck', projectAttachRepo: false },
     }));
   });
 });

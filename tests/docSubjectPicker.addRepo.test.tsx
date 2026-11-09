@@ -149,6 +149,21 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     expect(listRepos).toHaveBeenCalledTimes(2);
   });
 
+  it('a return while the person is choosing or adding does not re-read (it would drop the pick; review r5)', async () => {
+    listRepos.mockResolvedValue({ repos: [] });
+    listProjectMembers.mockResolvedValue({ members: [] });
+    render(<Harness projectId="p1" />);
+    fireEvent.click(await screen.findByTestId('doc-subject-register'));
+    listRepos.mockResolvedValue({ repos: [repo('r-a', 'a-one')] });
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    fireEvent.click(await screen.findByTestId('doc-subject-add'));
+    expect(screen.getByTestId('doc-subject-add-select')).not.toBeNull();
+    // Choosing: a return reads nothing and the chooser stays open.
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(listRepos).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('doc-subject-add-select')).not.toBeNull();
+  });
+
   it('a middle click opens the tab too, and the return reads again (codex r2)', async () => {
     listRepos.mockResolvedValue({ repos: [] });
     listProjectMembers.mockResolvedValue({ members: [] });
