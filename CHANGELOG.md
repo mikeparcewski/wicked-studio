@@ -12,6 +12,33 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.3] — 2026-11-09
+
+Patch: two operator reports and the repo watcher's UI (bundled by crew 0.18.3).
+
+### Added
+
+- **Repositories say whether their code map is kept current** (crew 0.18.3's repo watcher). Each row and each repository
+  page shows one line: watching for changes (and when it last re-indexed), changes seen, re-indexing now, waiting on a
+  job that is using the code map (each job linked), couldn't re-index with what to do, turned off, or past the limit. The
+  repository page's Upkeep has "Keep the code map current" (the per-repository switch) and Re-index now, and says what
+  "current" covers: symbols, files and references for what is on disk now; clusters refresh when the repository is
+  onboarded again. Nothing shows on an older crew.
+
+### Fixed
+
+- **Sending from a chat's page no longer opens the Ask window.** Kicking off a job (Desk Start, then Enter on the new
+  chat) and every reply on a chat's page used to open the floating Ask window, which opened the chat and posted, then
+  stepped aside onto the page (about 2.7 s on a first message, 1.1 s on a reply). The send now runs behind the page: the
+  window never opens, the message is sent once, the system chat's own conversation is left alone, and a send that fails
+  (or arrives while the last answer is still being written) says why under the composer and puts the words back. Start
+  still leaves your words unsent in the new chat until you press Enter. The unused hand-over from Understand's Ask to the
+  window is removed (its Ask answers in its own page chat).
+- **The rail's Move to project picker stays open on the bottom rows too.** Focusing its first item scrolled the rail's
+  scroller when the row sat at its edge, and the picker closed about 14 ms later; the focus no longer scrolls. The
+  journey now checks the last row on the scroller's bottom edge at 1440 and 390, and that Tab inside the picker keeps it
+  open.
+
 ## [0.16.2] — 2026-11-09
 
 Patch: first-run fixes from the clean install of crew 0.18.1 (bundled by crew 0.18.2).
@@ -3345,7 +3372,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.2...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.3...HEAD
+[0.16.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.15.0...v0.16.0
