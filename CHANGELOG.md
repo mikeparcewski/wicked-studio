@@ -12,6 +12,34 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.2] — 2026-11-09
+
+Patch: first-run fixes from the clean install of crew 0.18.1 (bundled by crew 0.18.2).
+
+### Added
+
+- **A chat adds a repository to a project.** Ask "onboard <git address> into <project>" and the chat shows a card with
+  the address, the name, where it is cloned and the project; Add it registers, clones, adds it to the project and starts
+  onboarding. Nothing happens until you choose. Drawn only where crew advertises it (`chatArtifacts.onboard`, crew
+  0.18.2), and studio then declares `accepts: ['onboard']`.
+- **Add to a project from a repository's page.** In projects now has "Add to a project…" (the same attach the project
+  page's "Attach one already added" uses).
+
+### Fixed
+
+- **Add a repository has a real Project field.** It was a small "Unfiled" chip that read as a label. It is now a
+  list, filled when the form opens, defaulting to the project you came from; the chosen project goes with the
+  registration (crew 0.18.2 attaches it and files its onboarding), and a failed attach is said on the repository's
+  page. With an older crew, studio still attaches it itself.
+- **The document composer's "+ Add a repository…" no longer vanishes when nothing is registered.** It offers
+  "+ Register a repository…", which opens Add a repository for that project in a new tab (the draft stays) and reads
+  the list again when you come back.
+- **The rail's Move to project picker stays open.** It closed about 14 ms after the click: the trigger's centring
+  transform made the picker's fixed position relative to the rail's scroller. A new journey checks it at 1440 and 390.
+- **Sign-in copy.** Pi's sign-in window says how to finish ("Signed in? Quit pi (ctrl+d) or close this window to save
+  it"); codex and opencode say they close by themselves. The Desk says an agent "needs signing in", not "again", which
+  was wrong for an agent never signed in.
+
 ## [0.16.1] — 2026-11-08
 
 Patch: first-run wording fixes from the second clean-profile walk-through (#1065).
@@ -3317,7 +3345,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.2...HEAD
+[0.16.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.14.1...v0.15.0
