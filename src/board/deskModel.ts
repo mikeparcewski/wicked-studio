@@ -493,7 +493,8 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
         key: `seat:${s.key}`,
         seat: s.key,
         rosterSeat: s,
-        title: `An AI agent (${name}) needs signing in again`,
+        // crew-0182: "again" read wrong for an agent never signed in (a fresh install); true for both.
+        title: `An AI agent (${name}) needs signing in`,
         line: 'No sign-in seen for it — work given to it may pause or move to another agent',
         action: { label: 'Sign in', path: agentFixPath(s.key) },
       };

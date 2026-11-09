@@ -131,6 +131,18 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     expect(screen.queryAllByTestId('doc-subject-repo')).toHaveLength(0);
   });
 
+  // crew-0182: a fresh install has nothing registered, so the chip had vanished; it opens the register form here instead.
+  it('nothing registered left to add: the chip registers one, in this project', async () => {
+    listRepos.mockResolvedValue({ repos: [] });
+    listProjectMembers.mockResolvedValue({ members: [] });
+    render(<Harness projectId="p1" />);
+    const link = await screen.findByTestId('doc-subject-register');
+    expect(link.getAttribute('href')).toBe('/repos/new?project=p1');
+    expect(screen.queryByTestId('doc-subject-add')).toBeNull();
+    fireEvent.click(link);
+    expect(window.location.pathname + window.location.search).toBe('/repos/new?project=p1');
+  });
+
   it('Unfiled has no project to add to: it says to file the document', async () => {
     render(<Harness projectId="default" />);
     expect((await screen.findByTestId('doc-subject-unfiled')).textContent).toBe('File it in a project to ground it on code.');

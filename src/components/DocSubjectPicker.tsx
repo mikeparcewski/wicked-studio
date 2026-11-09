@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
+import { registerRepoPath } from '../hooks/ambientProject.js';
 
 // What the next document (or demo) is ABOUT, and — for a document — in what format (acceptance
 // finding F-046, the studio half). The create composer used to send a brief and nothing else:
@@ -277,6 +278,24 @@ export function DocSubjectPicker({
         >
           + Add a repository…
         </button>
+      )}
+      {status === 'ready' && projectId !== UNFILED_MOUNT && attachable.length === 0 && !adding && (
+        // crew-0182: with nothing registered left to add (a fresh install has none), the chip opens the register form,
+        // in this project, instead of vanishing.
+        <a
+          href={registerRepoPath(projectId)}
+          data-testid="doc-subject-register"
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            history.pushState(null, '', registerRepoPath(projectId));
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }}
+          title="Register a repository in this project; registering onboards it"
+          className="wk-chip"
+        >
+          + Register a repository…
+        </a>
       )}
       {status === 'ready' && projectId !== UNFILED_MOUNT && adding && (
         // A native select sizes to its longest option: held to the form's width on a phone (codex on the diff).

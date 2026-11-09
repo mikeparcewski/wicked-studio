@@ -23,6 +23,7 @@ import { announceHistoryChange, keepEntryState, useHistoryEntryValue } from '../
 import { useMembershipStore } from '../store/membership.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { linksOf, useRepoLinks, useRepoLinksFor } from '../store/repoLinks.js';
+import { AddRepoToProject } from './AddRepoToProject.js';
 import { CommitCadence } from './CommitCadence.js';
 import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
@@ -120,6 +121,9 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const [captureError, setCaptureError] = useState<string | null>(null);
   const entryOnboardError = useHistoryEntryValue('onboardError');
   const registrationError = typeof entryOnboardError === 'string' && entryOnboardError.trim() !== '' ? entryOnboardError : null;
+  // crew-0182: the register form's project attach that did not land, said here (the repo itself is registered).
+  const entryAttachError = useHistoryEntryValue('projectAttachError');
+  const attachError = typeof entryAttachError === 'string' && entryAttachError.trim() !== '' ? entryAttachError : null;
   // What we know about it (round 10): the same reads as its row on Repositories.
   const knowledge = useRepoKnowledgeFor([repoId]);
   const linksSupported = useTrackerLinksSupported();
@@ -462,17 +466,22 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     </Section>
                   </div>
                   <div>
-                    {(projects !== null || jobProjects.length > 0) && (
-                      <Section title="In projects" testId="repo-overview-projects">
-                        {jobProjects.length > 0 && <p className="wk-rp-note" data-testid="repo-overview-job-projects">Used by {jobProjects.join(', ')}’s jobs; not attached.</p>}
-                        {projects === null ? null : projects.length === 0 ? (jobProjects.length > 0 ? null : <p className="wk-rp-note">In no project yet.</p>) : (
-                          <div className="wk-rp-chips">
-                            {projects.map((p) => (
-                              <a key={p.id} className="wk-chip" href={`/projects/${encodeURIComponent(p.id)}`} onClick={onPlainClick(navigate, `/projects/${encodeURIComponent(p.id)}`)}>{p.name}</a>
-                            ))}
-                          </div>
-                        )}
-                      </Section>
+                    {/* crew-0182: a repository in no project can be added to one from here (the section shows wherever crew
+                        says which projects hold it; an older crew without tracker links shows neither). */}
+                    {(projects !== null || jobProjects.length > 0 || attachError !== null) && (
+                    <Section title="In projects" testId="repo-overview-projects">
+                      {attachError !== null && <p className="wk-field-note wk-field-note--bad" role="alert" data-testid="repo-overview-attach-error">{attachError}</p>}
+                      {jobProjects.length > 0 && <p className="wk-rp-note" data-testid="repo-overview-job-projects">Used by {jobProjects.join(', ')}’s jobs; not attached.</p>}
+                      {projects === null ? null : projects.length === 0 ? (jobProjects.length > 0 ? null : <p className="wk-rp-note">In no project yet.</p>) : (
+                        <div className="wk-rp-chips">
+                          {projects.map((p) => (
+                            <a key={p.id} className="wk-chip" href={`/projects/${encodeURIComponent(p.id)}`} onClick={onPlainClick(navigate, `/projects/${encodeURIComponent(p.id)}`)}>{p.name}</a>
+                          ))}
+                        </div>
+                      )}
+                      <AddRepoToProject repoId={repo.id} repoName={repo.name} inProjects={projects === null ? null : projects.map((p) => p.id)}
+                        onAdded={() => useRepoLinks.getState().ensure([repo.id], true)} />
+                    </Section>
                     )}
                     {trackerCount !== null && (
                       <Section title="Trackers" testId="repo-overview-trackers">

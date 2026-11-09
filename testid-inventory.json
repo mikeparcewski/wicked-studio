@@ -1879,6 +1879,30 @@
       ]
     },
     {
+      "testId": "artifact-proposal-onboard-checkout",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-onboard-existing",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-onboard-name",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-onboard-url",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "artifact-proposal-outcome",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
@@ -6144,6 +6168,12 @@
     },
     {
       "testId": "doc-subject-none",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-register",
       "files": [
         "src/components/DocSubjectPicker.tsx"
       ]
@@ -15983,6 +16013,36 @@
       ]
     },
     {
+      "testId": "repo-add-to-project",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-confirm",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-done",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-error",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-select",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
       "testId": "repo-alerts",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -16320,6 +16380,12 @@
       ]
     },
     {
+      "testId": "repo-overview-attach-error",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
       "testId": "repo-overview-job-projects",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -16356,7 +16422,19 @@
       ]
     },
     {
+      "testId": "repo-project-hint",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-project-row",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-project-select",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]

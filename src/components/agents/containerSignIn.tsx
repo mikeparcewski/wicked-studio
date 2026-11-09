@@ -56,6 +56,17 @@ export async function waitForOutcome(key: string, waitMs = OUTCOME_WAIT_MS, poll
   }
 }
 
+/**
+ * How a sign-in in the terminal is finished, per agent (crew-0182). Pi stays open after `/login`, so the person ends it:
+ * quitting pi or closing this window both keep what it saved (crew ingests it on close). codex and opencode end by
+ * themselves. A container sign-in (claude, copilot) ends when its own steps finish.
+ */
+export function loginFinishLine(key: string, name: string, onHost: boolean): string {
+  if (key === 'pi') return 'Type /login and finish it in your browser. Signed in? Quit pi (ctrl+d) or close this window to save it.';
+  if (onHost) return `Follow ${name}’s sign-in steps in this terminal. It closes by itself when ${name} is done, and studio checks the sign-in. Closing it early keeps a sign-in that already finished.`;
+  return `Follow ${name}’s sign-in steps in this terminal. When it finishes, this closes and studio checks the sign-in (up to a minute).`;
+}
+
 /** While a login terminal is open, how often studio asks whether crew already ingested it (its exit can be missed). */
 export const WATCH_POLL_MS = 2_000;
 
@@ -143,7 +154,7 @@ function LoginTerminal({ session, open, onOpenError, onClosed, onExit }: {
         <div className="wk-agents-modal-body">
           <p data-testid="agents-login-line" role="status">
             {opened
-              ? `Follow ${name}’s sign-in steps in this terminal. When it finishes, this closes and studio checks the sign-in (up to a minute).`
+              ? loginFinishLine(key, name, onHost)
               : onHost ? `Opening ${name}’s own sign-in on this computer…` : `Opening ${name}’s sign-in… The first sign-in can take a few minutes while it is prepared.`}
           </p>
           <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onExit} />
