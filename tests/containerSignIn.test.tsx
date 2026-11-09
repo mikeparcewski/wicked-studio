@@ -23,7 +23,7 @@ vi.mock('../src/api/diagnostics.js', () => ({
 }));
 
 const { AgentsPage } = await import('../src/components/agents/AgentsPage.js');
-const { ContainerSignInProvider, offersContainer, waitForOutcome } = await import('../src/components/agents/containerSignIn.js');
+const { ContainerSignInProvider, loginFinishLine, offersContainer, waitForOutcome } = await import('../src/components/agents/containerSignIn.js');
 const { useAuthOps } = await import('../src/components/agents/agentLogin.js');
 const { resetAgentsReads } = await import('../src/store/agentsReads.js');
 const { holdInert } = await import('../src/components/agents/inertHold.js');
@@ -124,6 +124,13 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 const posts = (): { path: string; body: unknown }[] => d.calls.filter((c) => c.method === 'POST').map(({ path, body }) => ({ path, body }));
 
 describe('container sign-in hooks (crew#1006)', () => {
+  // crew-0182: pi stays open after /login, so the window says how to finish (and that closing it keeps the sign-in).
+  it('the terminal says how each agent\'s sign-in is finished', () => {
+    expect(loginFinishLine('pi', 'Pi', true)).toBe('Type /login and finish it in your browser. Signed in? Quit pi (ctrl+d) or close this window to save it.');
+    expect(loginFinishLine('codex', 'Codex', true)).toMatch(/closes by itself when Codex is done.*Closing it early keeps a sign-in that already finished/);
+    expect(loginFinishLine('claude', 'Claude Code', false)).toMatch(/When it finishes, this closes and studio checks the sign-in/);
+  });
+
   it('offers its buttons only for the agents crew marks sign_in: container', () => {
     expect(offersContainer({ key: 'claude', sign_in: 'container' } as unknown as RosterSeat)).toBe(true);
     expect(offersContainer({ key: 'claude' } as RosterSeat)).toBe(false);

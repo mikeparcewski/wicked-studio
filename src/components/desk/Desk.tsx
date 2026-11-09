@@ -201,7 +201,7 @@ export function Desk({ runs: wireRuns, runsLoaded, runsError = null, onRetryRuns
         <div data-testid="desk-chore-group" data-count={chores.length} className="wk-desk-need wk-desk-need--wrap">
           <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
           <span className="wk-desk-need-body">
-            <span className="wk-desk-need-title">{`${chores.length} helpers need signing in again`}</span>
+            <span className="wk-desk-need-title">{`${chores.length} helpers need signing in`}</span>
             <span className="wk-desk-need-line">Nothing they would do can start until each one is signed in.</span>
           </span>
           <span className="wk-need-acts">

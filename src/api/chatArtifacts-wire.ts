@@ -20,6 +20,9 @@ export interface ChatArtifactsCapabilities {
   /** (api-types 0.171.0, A3) Under the test configuration, the kinds whose Go is still a stub (`create` is real since A3).
    *  Absent with `stub: true` = every kind (a daemon before the field). */
   stubOps?: ArtifactProposalKind[];
+  /** (api-types 0.200.0, crew 0.18.2) A seat may propose adding a git repository (`onboard` cards); studio then declares
+   *  `accepts: ['onboard']`. Absent on an older daemon. */
+  onboard?: boolean;
 }
 
 /** `ChatMessageBody.context` (api-types 0.169.0): what studio shows beside the message. */
@@ -89,7 +92,19 @@ export function isAnchorWid(wid: string): boolean {
 
 // ── Chat proposals (api-types 0.170.0, DES-CHAT-ARTIFACTS-001 §4, slice A2) ─────────────────────────────────────────
 
-export type ArtifactProposalKind = 'create' | 'refine' | 'theme' | 'demo';
+export type ArtifactProposalKind = 'create' | 'refine' | 'theme' | 'demo' | 'onboard';
+
+/** (api-types 0.200.0, crew 0.18.2) An `onboard` card: register a git repository, add it to a project and onboard it on
+ *  one Go (or, for an already-registered one, `existing`, only add it to the project). Every field is crew's. */
+export interface ProposalOnboard {
+  url: string;
+  name: string;
+  /** Home-relative clone folder; `null` for an existing registration. */
+  checkout: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  existing: { id: string; name: string } | null;
+}
 
 /** One "From" chip, as crew resolved and authorized it. */
 export interface ProposalSource {
@@ -139,6 +154,8 @@ export interface ArtifactProposal {
   protected?: ProtectedEdit[];
   theme?: { name: string; patch: Record<string, string | number | boolean>; changes: string[] };
   demo?: { url: string; audience: string | null; show: string | null };
+  /** (api-types 0.200.0) onboard: the repository, where it goes and the project it joins. */
+  onboard?: ProposalOnboard;
   /** Go is refused with this reason; `null` = Go is open. */
   blocked: string | null;
 }

@@ -57,6 +57,9 @@ interface CapabilitiesStore {
   chatProposals: boolean;
   /** `chatArtifacts.stub`: the daemon runs the chat-artifacts test configuration (Go starts nothing); the card says so. */
   chatArtifactsStub: boolean;
+  /** `chatArtifacts.onboard` (api-types 0.200.0, crew 0.18.2): a chat seat may propose adding a git repository; studio
+   *  draws the card and declares `accepts: ['onboard']`. */
+  chatOnboard: boolean;
   /** `chatArtifacts.stubOps` (api-types 0.171.0, A3): the kinds still stubbed under the test configuration; `null` = the
    *  daemon did not say (with `stub`, every kind is). */
   chatArtifactsStubOps: string[] | null;
@@ -106,6 +109,7 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   chatContext: false,
   chatProposals: false,
   chatArtifactsStub: false,
+  chatOnboard: false,
   chatArtifactsStubOps: null,
   dataSources: false,
   planGateNote: false,
@@ -121,9 +125,9 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true, chatArtifactsStubOps: stubOpsOf(caps['chatArtifacts']), dataSources: (caps['apps'] as { uploads?: unknown } | undefined)?.uploads === true, trackerLinks: caps['trackerLinks'] === true, planGateNote: caps['planGateNote'] === true, chatJobProposals: caps['chatJobProposals'] === true, reshapeRun: caps['reshapeRun'] === true, chatJobPower: caps['chatJobPower'] === true, workflowCatalogV2: caps['workflowCatalogV2'] === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true, chatOnboard: (caps['chatArtifacts'] as { onboard?: unknown } | undefined)?.onboard === true, chatArtifactsStubOps: stubOpsOf(caps['chatArtifacts']), dataSources: (caps['apps'] as { uploads?: unknown } | undefined)?.uploads === true, trackerLinks: caps['trackerLinks'] === true, planGateNote: caps['planGateNote'] === true, chatJobProposals: caps['chatJobProposals'] === true, reshapeRun: caps['reshapeRun'] === true, chatJobPower: caps['chatJobPower'] === true, workflowCatalogV2: caps['workflowCatalogV2'] === true });
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false, chatArtifactsStubOps: null, dataSources: false, trackerLinks: false, planGateNote: false, chatJobProposals: false, reshapeRun: false, chatJobPower: false, workflowCatalogV2: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false, chatOnboard: false, chatArtifactsStubOps: null, dataSources: false, trackerLinks: false, planGateNote: false, chatJobProposals: false, reshapeRun: false, chatJobPower: false, workflowCatalogV2: false }); })
       .finally(() => { inflight = null; });
     return inflight;
   },

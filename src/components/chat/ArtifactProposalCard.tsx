@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { FileText, Palette } from 'lucide-react';
+import { FileText, GitBranch, Palette } from 'lucide-react';
 import { api } from '../../api/client.js';
 import type { AskAnswer } from '../../api/ask.js';
 import { parseArtifactRef, type ArtifactProposal, type ChatProposalView, type ProposalEdits, type ProposalSource, type ProtectedEdit } from '../../api/chatArtifacts-wire.js';
@@ -279,7 +279,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       ref={sectionRef}
     >
       <p className="wk-ask-who">
-        {p.kind === 'theme' ? <Palette size={16} aria-hidden /> : <FileText size={16} aria-hidden />}
+        {p.kind === 'theme' ? <Palette size={16} aria-hidden /> : p.kind === 'onboard' ? <GitBranch size={16} aria-hidden /> : <FileText size={16} aria-hidden />}
         <span>{p.kind === 'theme'
           ? (open ? `Theme proposal from ${seatName} · nothing changes until you apply it` : `Theme proposal from ${seatName}`)
           : (open ? `Proposal from ${seatName} · nothing starts until you choose` : `Proposal from ${seatName}`)}</span>
@@ -293,7 +293,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       ) : null}
       {open && p.blocked !== null && (
         <p data-testid="artifact-proposal-blocked" className="wk-proposal-blocked">
-          <b>Can’t start here yet.</b> {p.blocked}. Nothing was started.
+          <b>Can’t start here yet.</b> {p.blocked.charAt(0).toUpperCase() + p.blocked.slice(1)}. Nothing was started.
         </p>
       )}
       {(open || view.state === 'accepting') && stub && (
@@ -401,6 +401,15 @@ function ProposalLines({ p, id, theme }: { p: ArtifactProposal; id?: string; the
           <Row k="Checked" testId="artifact-proposal-theme-disclosure">{themeDisclosure(theme.seatName)}</Row>
         </>
       ) : p.theme !== undefined && p.theme.changes.length > 0 ? <Row k="Changes" testId="artifact-proposal-theme">{p.theme.changes.join(', ')}</Row> : null}
+      {p.kind === 'onboard' && p.onboard !== undefined && (
+        <>
+          <Row k="Repository" testId="artifact-proposal-onboard-url">{p.onboard.url}</Row>
+          {p.onboard.existing !== null
+            ? <Row k="Registered" testId="artifact-proposal-onboard-existing">{`Already registered as ${p.onboard.existing.name}`}</Row>
+            : <Row k="Name" testId="artifact-proposal-onboard-name">{p.onboard.name}</Row>}
+          {p.onboard.checkout !== null && <Row k="Clones to" testId="artifact-proposal-onboard-checkout">{p.onboard.checkout}</Row>}
+        </>
+      )}
       {p.demo !== undefined && has(p.demo.url) && <Row k="Records" testId="artifact-proposal-demo">{p.demo.url}</Row>}
       {p.demo !== undefined && has(p.demo.audience) && <Row k="For" testId="artifact-proposal-audience">{p.demo.audience}</Row>}
       {p.demo !== undefined && has(p.demo.show) && <Row k="Shows" testId="artifact-proposal-show">{p.demo.show}</Row>}
@@ -413,7 +422,10 @@ function ProposalLines({ p, id, theme }: { p: ArtifactProposal; id?: string; the
       {p.helpers !== null && <Row k="Helpers" testId="artifact-proposal-helpers">{p.helpers.label}</Row>}
       {time !== null && <Row k="Time, cost" testId="artifact-proposal-time">{time}</Row>}
       {has(p.stops) && <Row k="Stops" testId="artifact-proposal-stops">{p.stops}</Row>}
-      <Row k="Filed in" testId="artifact-proposal-filed">{p.filedIn.label}</Row>
+      {/* An onboard card names its project from the very facts Go uses (one destination, said once). */}
+      <Row k={p.kind === 'onboard' ? 'Project' : 'Filed in'} testId="artifact-proposal-filed">
+        {p.kind === 'onboard' && p.onboard !== undefined ? (p.onboard.projectName ?? 'Not in a project') : p.filedIn.label}
+      </Row>
       {has(p.reason) && <Row k="Why" testId="artifact-proposal-reason">{p.reason}</Row>}
     </dl>
   );

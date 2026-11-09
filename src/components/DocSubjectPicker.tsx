@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
+import { registerRepoPath } from '../hooks/ambientProject.js';
 
 // What the next document (or demo) is ABOUT, and — for a document — in what format (acceptance
 // finding F-046, the studio half). The create composer used to send a brief and nothing else:
@@ -86,9 +87,24 @@ export function DocSubjectPicker({
   const [status, setStatus] = useState<SubjectStatus>('loading');
   const [failure, setFailure] = useState<string>('');
   const [attempt, setAttempt] = useState(0);
+  // crew-0182: "+ Register a repository…" opens the register form in a NEW tab, so this draft stays; coming back to this
+  // tab reads the repositories again, and the one just registered is offered.
+  const registering = useRef(false);
+  // The chooser is open or an attach is in flight: a return from the register tab does not re-read then.
+  const busyRef = useRef(false);
+  useEffect(() => {
+    // Every return reads again once the link was used (a slow clone may finish after the first return; review r4), but
+    // never while the person is choosing or adding one (a re-read resets the chooser and drops an attach in flight).
+    const back = (): void => {
+      if (registering.current && !busyRef.current) setAttempt((n) => n + 1);
+    };
+    window.addEventListener('focus', back);
+    return () => window.removeEventListener('focus', back);
+  }, []);
   // "Add a repository…": the chooser is open, an attach is in flight (its repo id), or it failed (the wire's words).
   const [adding, setAdding] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
+  busyRef.current = adding || attaching !== null;
   const [addFailure, setAddFailure] = useState<string | null>(null);
   // The chooser's pick. Choosing is not adding: a closed native select fires `change` on every arrow key on
   // Windows and Linux, so the attach waits for the "Add" press (pi on the diff).
@@ -277,6 +293,23 @@ export function DocSubjectPicker({
         >
           + Add a repository…
         </button>
+      )}
+      {status === 'ready' && projectId !== UNFILED_MOUNT && attachable.length === 0 && !adding && (
+        // crew-0182: with nothing registered left to add (a fresh install has none), the chip opens the register form,
+        // in this project, instead of vanishing; in a new tab, so the document being written here is not lost.
+        <a
+          href={registerRepoPath(projectId)}
+          target="_blank"
+          rel="noopener"
+          data-testid="doc-subject-register"
+          onClick={() => { registering.current = true; }}
+          // A middle click opens the tab too (it fires auxclick, not click).
+          onAuxClick={() => { registering.current = true; }}
+          title="Opens Add a repository for this project in a new tab; back here, it is offered"
+          className="wk-chip"
+        >
+          + Register a repository…
+        </a>
       )}
       {status === 'ready' && projectId !== UNFILED_MOUNT && adding && (
         // A native select sizes to its longest option: held to the form's width on a phone (codex on the diff).

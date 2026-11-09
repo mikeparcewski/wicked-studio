@@ -10,7 +10,7 @@
     "Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show."
   ],
   "version": 1,
-  "studioVersion": "0.16.1",
+  "studioVersion": "0.16.2",
   "static": [
     {
       "testId": "accent-lgt",
@@ -1874,6 +1874,30 @@
     },
     {
       "testId": "artifact-proposal-note",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-onboard-checkout",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-onboard-existing",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-onboard-name",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-onboard-url",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
       ]
@@ -6144,6 +6168,12 @@
     },
     {
       "testId": "doc-subject-none",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-register",
       "files": [
         "src/components/DocSubjectPicker.tsx"
       ]
@@ -15983,6 +16013,48 @@
       ]
     },
     {
+      "testId": "repo-add-to-project",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-confirm",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-done",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-error",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-failed",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-retry",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
+      "testId": "repo-add-to-project-select",
+      "files": [
+        "src/components/AddRepoToProject.tsx"
+      ]
+    },
+    {
       "testId": "repo-alerts",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -16320,6 +16392,18 @@
       ]
     },
     {
+      "testId": "repo-overview-add-project",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-overview-attach-error",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
       "testId": "repo-overview-job-projects",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -16356,7 +16440,31 @@
       ]
     },
     {
+      "testId": "repo-project-failed",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-project-hint",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-project-retry",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-project-row",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-project-select",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]

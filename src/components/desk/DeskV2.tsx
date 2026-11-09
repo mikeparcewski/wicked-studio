@@ -281,7 +281,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       )}
       {choresGrouped && (
         <div data-testid="desk-chore-group" data-count={chores.length} className="wk-inbox-chore">
-          <span className="wk-inbox-chore-body"><span className="wk-inbox-chore-title">{`${chores.length} agents need signing in again`}</span><span className="wk-inbox-chore-line">Nothing they would do can start until each one is signed in.</span></span>
+          <span className="wk-inbox-chore-body"><span className="wk-inbox-chore-title">{`${chores.length} agents need signing in`}</span><span className="wk-inbox-chore-line">Nothing they would do can start until each one is signed in.</span></span>
           <button type="button" data-testid="desk-chore-group-toggle" aria-expanded={choresOpen} onClick={() => setChoresOpen((v) => !v)} className="wk-need-act">{choresOpen ? 'Fold' : 'Show each'}</button>
         </div>
       )}

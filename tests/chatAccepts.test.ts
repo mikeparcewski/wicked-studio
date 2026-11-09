@@ -18,7 +18,7 @@ beforeEach(() => {
     return Promise.resolve(new Response(JSON.stringify({ chatId: 'c1', seats: [], turnId: 't1' }), { status: 201, headers: { 'content-type': 'application/json' } }));
   }));
 });
-afterEach(() => { vi.unstubAllGlobals(); useCapabilities.setState({ chatJobProposals: false }); });
+afterEach(() => { vi.unstubAllGlobals(); useCapabilities.setState({ chatJobProposals: false, chatOnboard: false }); });
 
 describe('accepts: ["job"]', () => {
   it('is declared on the open and on each message when the daemon serves job proposals', async () => {
@@ -39,5 +39,29 @@ describe('accepts: ["job"]', () => {
       { path: '/chats', body: { chatId: 'c1', scopeKind: 'system' } },
       { path: '/chats/c1/messages', body: { text: 'fix the double charge', attachments: ['a1'] } },
     ]);
+  });
+});
+
+// crew-0182: `onboard` (crew 0.18.2 `chatArtifacts.onboard`): declared only where crew advertises it, beside `job`.
+describe('accepts: ["onboard"]', () => {
+  it.each([
+    [{ chatJobProposals: false, chatOnboard: true }, ['onboard']],
+    [{ chatJobProposals: true, chatOnboard: true }, ['job', 'onboard']],
+    [{ chatJobProposals: true, chatOnboard: false }, ['job']],
+  ])('with %j the open and each message declare %j', async (caps, accepts) => {
+    useCapabilities.setState(caps);
+    await api.openChat({ chatId: 'c1', scopeKind: 'system' });
+    await api.sendChatMessage('c1', 'onboard this');
+    expect(bodies).toEqual([
+      { path: '/chats', body: { chatId: 'c1', scopeKind: 'system', accepts } },
+      { path: '/chats/c1/messages', body: { text: 'onboard this', accepts } },
+    ]);
+  });
+
+  it('the capability is read from crew\'s health (chatArtifacts.onboard)', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ status: 'ok', capabilities: { chatArtifacts: { context: true, proposals: true, create: true, refine: true, theme: true, demo: false, onboard: true } } }), { status: 200, headers: { 'content-type': 'application/json' } }))));
+    useCapabilities.setState({ loaded: false, chatOnboard: false });
+    await useCapabilities.getState().load();
+    expect(useCapabilities.getState().chatOnboard).toBe(true);
   });
 });

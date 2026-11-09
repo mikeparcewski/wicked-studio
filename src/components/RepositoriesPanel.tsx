@@ -74,6 +74,9 @@ function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/** The Project field's "+ New project…" entry (never a project id: ids are `proj_…` or `default`). */
+const NEW_PROJECT = '\u0000new';
+
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
   usePageChatFor('repos', 'Knows Repositories: each registered repository, its code graph and its work.', 'repos-page');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
@@ -103,11 +106,14 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   const [registering, setRegistering] = useState(false);
   const nameEditedRef = useRef(false);
 
-  // ── Project binding (DES-FEEDBACK-001 §5, slice B) ──────────────────────────
-  // POST /repos takes no projectId (its schema is strict), so a selected project
-  // binds via POST /projects/:id/members (`crew.repo`) right after registration.
-  // `null` = Unfiled: register exactly as before, attach nothing.
+  // ── Project binding (DES-FEEDBACK-001 §5, slice B; crew-0182) ──────────────
+  // A selected project rides `POST /repos {projectId}`: crew 0.18.2 attaches the repo there (`crew.repo`, the one attach
+  // path a chat's onboarding card takes too) and files its onboarding run. An older crew answers without
+  // `projectAttached`/`projectAttachError`; studio then attaches it itself (POST /projects/:id/members).
+  // `null` = Unfiled: no projectId, nothing attached.
   const [projects, setProjects] = useState<Project[]>([]);
+  // The Project field's list could not be read: said beside it, with a Retry (never an empty list that looks real).
+  const [projectsFailed, setProjectsFailed] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(ambientProject);
   const [showNewProject, setShowNewProject] = useState(false);
   const projectsRequested = useRef(false);
@@ -124,15 +130,24 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     // loadProjects is ref-guarded and single-shot, so listing only the carry is safe.
   }, [ambientProject]);
 
+  // crew-0182: the Project field lists the projects as soon as the form is up (it is a choice, not a lazy chip).
+  useEffect(() => {
+    if (showRegister) loadProjects();
+  }, [showRegister]);
+
   function loadProjects(): void {
     if (projectsRequested.current) return;
     projectsRequested.current = true;
-    api
-      .listProjects()
-      .then(({ projects: ps }) =>
-        setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at)))
+    // A failed (or absent) read throws inside the chain, never out of the effect that asked.
+    Promise.resolve()
+      .then(() => api.listProjects())
+      .then(({ projects: ps }) => {
+        setProjectsFailed(false);
+        setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at));
+      })
       .catch(() => {
-        projectsRequested.current = false; // transient — retry on the next open
+        projectsRequested.current = false; // transient — the Retry beside the field reads it again
+        setProjectsFailed(true);
       });
   }
 
@@ -201,20 +216,30 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     setRegisterError(null);
     setRegistering(true);
     try {
-      const { repo, onboardError } = isRemote
-        ? await api.cloneAndRegisterRepo(name, target, checkoutPath.trim() || undefined)
-        : await api.registerRepo(name, target);
-
-      // §5.1/§5.2: a selected project binds the repo AT CREATION — the register
-      // route's strict schema carries no projectId, so the binding is the
-      // membership attach. A failed attach surfaces (never a silent unfiled
-      // repo); the registration itself has already succeeded.
-      if (selectedProjectId !== null) {
-        await api.attachProjectMember(selectedProjectId, {
-          kind: 'crew.repo',
-          ref: repo.id,
-          attachedBy: 'studio',
-        });
+      const projectId = selectedProjectId ?? undefined;
+      const registered = isRemote
+        ? await api.cloneAndRegisterRepo(name, target, checkoutPath.trim() || undefined, projectId)
+        : await api.registerRepo(name, target, projectId);
+      const { repo, onboardError } = registered;
+      // crew-0182: crew attached it (or says why not). An older crew did not read projectId's attach: studio attaches it,
+      // and a failed attach is named on the repository's page (the registration itself has already succeeded).
+      // Unless crew says the repository is attached, studio attaches it (an older crew's projectAttachError was about the
+      // onboarding run's filing only). What failed is kept apart: the repository's attach, or only the run's filing.
+      let repoAttachError: string | null = null;
+      if (selectedProjectId !== null && registered.projectAttached !== true) {
+        try {
+          await api.attachProjectMember(selectedProjectId, { kind: 'crew.repo', ref: repo.id, attachedBy: 'studio' });
+        } catch (err) {
+          repoAttachError = err instanceof Error ? err.message : String(err);
+        }
+      }
+      // A run-filing error stands unless the run is now seen filed: crew attached the repo (its error is the run's), or an
+      // older crew's error and studio's own attach, whose member route files the run only best-effort (review r5).
+      let runFilingError = repoAttachError === null ? registered.projectAttachError ?? null : null;
+      if (runFilingError !== null && selectedProjectId !== null && registered.onboardRunId !== null) {
+        const filed = await api.listProjectMembers(selectedProjectId)
+          .then(({ members }) => members.some((m) => m.member_kind === 'crew.run' && m.member_ref === registered.onboardRunId), () => false);
+        if (filed) runFilingError = null;
       }
 
       setRepos((prev) => [...prev, repo]);
@@ -233,8 +258,15 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
       nameEditedRef.current = false;
 
       const detailPath = repoDetailPath(repo.id, { project: ambientProject });
-      if (onboardError) {
-        navigate(detailPath, { state: { onboardError } });
+      const projectName = projects.find((p) => p.id === selectedProjectId)?.name ?? selectedProjectId;
+      const attachNote = repoAttachError !== null ? `Registered, but not added to ${projectName ?? 'the project'}: ${repoAttachError}`
+        : runFilingError !== null ? `Added to ${projectName ?? 'the project'}, but its onboarding run is not filed there: ${runFilingError}` : null;
+      if (onboardError || attachNote !== null) {
+        navigate(detailPath, { state: {
+          ...(onboardError ? { onboardError } : {}),
+          // Which project and which step failed: adding the repo to THAT project later settles a "not added" notice.
+          ...(attachNote !== null ? { projectAttachError: attachNote, projectAttachFor: selectedProjectId, projectAttachRepo: repoAttachError !== null } : {}),
+        } });
       } else {
         navigate(detailPath);
       }
@@ -392,21 +424,49 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   a selected project binds the repo at creation via membership. */}
               <div className="wk-pg-repo-field" data-testid="repo-project-row">
                 <span className="wk-pg-repo-label">Project</span>
-                <ProjectSwitcher
-                  current={
-                    projects.find((p) => p.id === selectedProjectId)
-                    // Locked-but-still-resolving: show the id rather than a false
-                    // "Unfiled" while the one name-resolving read is in flight.
-                    ?? (locked && selectedProjectId !== null
-                      ? { id: selectedProjectId, name: selectedProjectId, description: null, status: 'active', scope: '', created_at: 0, updated_at: 0 }
-                      : null)
-                  }
-                  projects={projects}
-                  onSelect={setSelectedProjectId}
-                  onNewProject={() => setShowNewProject(true)}
-                  onOpen={loadProjects}
-                  locked={locked}
-                />
+                {locked ? (
+                  <ProjectSwitcher
+                    current={
+                      projects.find((p) => p.id === selectedProjectId)
+                      // Locked-but-still-resolving: show the id rather than a false
+                      // "Unfiled" while the one name-resolving read is in flight.
+                      ?? (selectedProjectId !== null
+                        ? { id: selectedProjectId, name: selectedProjectId, description: null, status: 'active', scope: '', created_at: 0, updated_at: 0 }
+                        : null)
+                    }
+                    projects={projects}
+                    onSelect={setSelectedProjectId}
+                    locked
+                  />
+                ) : (
+                  // crew-0182 (operator: "no way to put a repo in a project"): a real field, its list read when the form
+                  // opens, so the choice is seen, not a chip that reads as a label.
+                  <>
+                    <select
+                      data-testid="repo-project-select"
+                      aria-label="Project"
+                      className="wk-field"
+                      value={selectedProjectId ?? ''}
+                      onChange={(e) => {
+                        if (e.target.value === NEW_PROJECT) { setShowNewProject(true); return; }
+                        setSelectedProjectId(e.target.value === '' ? null : e.target.value);
+                      }}
+                    >
+                      <option value="">No project (Unfiled)</option>
+                      {projects.filter((p) => p.id !== 'default' && p.status !== 'archived').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      <option value={NEW_PROJECT}>+ New project…</option>
+                    </select>
+                    {projectsFailed && (
+                      <span className="wk-field-note wk-field-note--bad" role="alert" data-testid="repo-project-failed">
+                        Your projects could not be listed.{' '}
+                        <button type="button" data-testid="repo-project-retry" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={loadProjects}>Retry</button>
+                      </span>
+                    )}
+                    <span className="wk-field-note" data-testid="repo-project-hint">
+                      {selectedProjectId === null ? 'It is registered in no project; you can add it to one later from its page.' : 'The repository joins this project, and its onboarding is filed there.'}
+                    </span>
+                  </>
+                )}
               </div>
 
               <div className="wk-pg-repo-field">

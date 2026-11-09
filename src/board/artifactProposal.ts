@@ -40,7 +40,7 @@ const KINDS: ReadonlySet<string> = new Set(['proposal', 'proposal_accepting', 'p
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === 'string';
 const strOrNull = (v: unknown): boolean => v === null || typeof v === 'string';
-const KIND_SET: ReadonlySet<string> = new Set(['create', 'refine', 'theme', 'demo']);
+const KIND_SET: ReadonlySet<string> = new Set(['create', 'refine', 'theme', 'demo', 'onboard']);
 const isSource = (s: unknown): boolean => isObj(s) && str(s['token']) && str(s['label']) && (s['status'] === 'ok' || s['status'] === 'struck')
   && (s['reason'] === undefined || str(s['reason']));
 /**
@@ -72,12 +72,30 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   if (p['kind'] === 'theme' && (!isObj(theme) || !str(theme['name']) || theme['name'].trim() === '' || theme['name'].length > 60 || !isObj(theme['patch']))) return false;
   const demo = p['demo'];
   if (demo !== undefined && (!isObj(demo) || !str(demo['url']) || !strOrNull(demo['audience']) || !strOrNull(demo['show']))) return false;
+  // (crew 0.18.2) An onboard card names the repository, where it goes and the project: all of it, well formed, on any
+  // kind that carries it; an onboard card must carry it, and one that can be answered must say what Go does.
+  const onboard = p['onboard'];
+  if (onboard !== undefined && !isOnboard(onboard)) return false;
+  if (p['kind'] === 'onboard' && (onboard === undefined || (p['blocked'] === null && !onboardGoable(onboard as Record<string, unknown>, filed)))) return false;
   const touches = p['touches'];
   if (touches !== undefined && (!Array.isArray(touches) || !touches.every(str))) return false;
   // (A5) A refine's protected edits: each one the card can draw and the person can answer.
   const kept = p['protected'];
   return kept === undefined || (Array.isArray(kept) && kept.every(isProtectedEdit));
 }
+
+const filled = (v: unknown): v is string => str(v) && v.trim() !== '';
+const isOnboard = (o: unknown): boolean => isObj(o) && str(o['url']) && str(o['name']) && strOrNull(o['checkout'])
+  && strOrNull(o['projectId']) && strOrNull(o['projectName'])
+  && (o['existing'] === null || (isObj(o['existing']) && filled(o['existing']['id']) && filled(o['existing']['name'])));
+/** An onboard card Go can answer: the address and name, and either where it is cloned (a new one) or the project an
+ *  already-registered one joins. */
+const onboardGoable = (o: Record<string, unknown>, filedIn: unknown): boolean => filled(o['url']) && filled(o['name'])
+  && (o['existing'] === null ? filled(o['checkout']) : filled(o['projectId']))
+  // One destination, said the same everywhere: the project's id and name together (or neither), and the card's
+  // "Project" row is that project.
+  && (o['projectId'] === null ? o['projectName'] === null : filled(o['projectId']) && filled(o['projectName']))
+  && isObj(filedIn) && filedIn['projectId'] === o['projectId'];
 
 const PROTECTED_KINDS: ReadonlySet<string> = new Set(['text', 'attr', 'added', 'gone', 'order']);
 const isProtectedEdit = (e: unknown): boolean =>
@@ -175,6 +193,7 @@ export const GO_WORDS: Readonly<Record<ArtifactProposalKind, string>> = {
   demo: 'Make it',
   refine: 'Make the change',
   theme: 'Preview',
+  onboard: 'Add it',
 };
 
 const GO_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
@@ -182,6 +201,7 @@ const GO_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
   demo: 'Starts now; keep chatting',
   refine: 'Starts now; your edits are kept',
   theme: 'Nothing changes until you apply it',
+  onboard: 'Clones it and starts onboarding',
 };
 
 const GO_CONSEQUENCE: Readonly<Record<ArtifactProposalKind, string>> = {
@@ -189,6 +209,7 @@ const GO_CONSEQUENCE: Readonly<Record<ArtifactProposalKind, string>> = {
   demo: 'Studio plans, records and reviews the video; it appears here as it’s made. One job at a time in a chat.',
   refine: 'Studio starts the revision; the new version appears here. Your own edits are kept. One job at a time in a chat.',
   theme: 'Studio shows the theme on the Theme page. Nothing is saved until you apply it.',
+  onboard: 'Studio clones the repository to this computer, registers it, adds it to the project and starts onboarding (it builds the code map). Nothing happens until you choose.',
 };
 
 const CHANGE_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
@@ -196,6 +217,7 @@ const CHANGE_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
   demo: 'Address, audience, what to show',
   refine: 'Edit the ask',
   theme: 'Compare and apply',
+  onboard: 'Say it in the chat',
 };
 
 /** Change something's label: a theme's is "Open in Theme" (DES §4.2, mockup e). */
@@ -204,6 +226,7 @@ const CHANGE_WORDS: Readonly<Record<ArtifactProposalKind, string>> = {
   demo: 'Change something',
   refine: 'Change something',
   theme: 'Open in Theme',
+  onboard: 'Change something',
 };
 
 const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
@@ -211,7 +234,14 @@ const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
   demo: 'Nothing is made',
   refine: 'The document stays as it is',
   theme: 'Nothing changes',
+  onboard: 'Nothing is cloned or registered',
 };
+
+/** What Go on an onboard card does, said for its own facts (no project = registered unfiled). */
+function onboardConsequence(o: NonNullable<ArtifactProposal['onboard']>): string {
+  if (o.existing !== null) return `Studio adds ${o.existing.name} to ${o.projectName ?? 'the project'}. Nothing is cloned and no onboarding starts.`;
+  return `Studio clones the repository to this computer, registers it${o.projectName !== null ? `, adds it to ${o.projectName}` : ' (in no project)'} and starts onboarding (it builds the code map). Nothing happens until you choose.`;
+}
 
 /**
  * Change something, routed per kind (DES §4.2): the New document form (create), an inline edit (refine), the Theme
@@ -226,6 +256,7 @@ export function changeRoute(kind: ArtifactProposalKind): { kind: 'form' } | { ki
   const notes: Record<Exclude<ArtifactProposalKind, 'create' | 'theme'>, string> = {
     refine: 'Editing the ask here comes with refining from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
     demo: 'Changing the address, audience and what to show comes with demo videos from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
+    onboard: 'To change the address, the name or the project, say so in the chat: a new proposal replaces this one.',
   };
   return { kind: 'stub', note: notes[kind] };
 }
@@ -249,12 +280,13 @@ export function proposalAsk(e: ProposalEntry, o: { stub: boolean; themeRefused?:
     id: 'go',
     label: goWords(p),
     // The test configuration starts nothing, and the option says so too (never "Starts now" beside that notice).
-    sub: o.stub ? 'Records your click; nothing starts' : isRetryProposal(p) && p.kind === 'refine' ? 'Revises the latest version; your edits are kept' : GO_SUB[p.kind],
+    sub: o.stub ? 'Records your click; nothing starts' : isRetryProposal(p) && p.kind === 'refine' ? 'Revises the latest version; your edits are kept'
+      : p.kind === 'onboard' && p.onboard?.existing != null ? 'Adds it to the project; nothing is cloned' : GO_SUB[p.kind],
     token: 'go',
     tone: 'primary',
     consequence: o.stub
       ? 'Test configuration: Studio records your click and starts nothing.'
-      : GO_CONSEQUENCE[p.kind],
+      : p.kind === 'onboard' && p.onboard !== undefined ? onboardConsequence(p.onboard) : GO_CONSEQUENCE[p.kind],
     ...(p.blocked !== null ? { disabled: `Blocked: ${p.blocked}` } : refused !== null ? { disabled: refused } : { recommended: true }),
   };
   const change: AskOption = {
@@ -309,6 +341,12 @@ export function proposalResultWords(e: ProposalEntry): string | null {
   if (e.state !== 'decided' || e.decision !== 'go' || e.result === null || e.result === undefined) return null;
   if (e.result.stub) return 'Test configuration: recorded, nothing was made';
   if (e.proposal.kind === 'theme') return 'Saved to your studio settings · no job was started';
+  const ob = e.proposal.onboard;
+  if (e.proposal.kind === 'onboard' && ob !== undefined) {
+    return ob.existing !== null
+      ? `Added to ${ob.projectName ?? 'the project'} · nothing was started`
+      : `Added${ob.projectName !== null ? ` to ${ob.projectName}` : ''} · onboarding run ${e.result.runId.slice(0, 8)}`;
+  }
   return `Started · run ${e.result.runId.slice(0, 8)}`;
 }
 

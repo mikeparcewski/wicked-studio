@@ -3,16 +3,14 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RepositoriesPanel } from '../src/components/RepositoriesPanel.js';
 import { RepoDetailPage } from '../src/components/RepoDetailPage.js';
+import { AddRepoToProject } from '../src/components/AddRepoToProject.js';
 import * as client from '../src/api/client.js';
 import type { Project, RepoEntry } from '../src/api/types.js';
 
 /**
- * DES-FEEDBACK-001 slice B (§5.1/§5.2) — the repo register flow's project
- * binding. POST /repos has a strict schema with no projectId, so:
- *   - Unfiled (the default) registers exactly as before — register body
- *     unchanged, NO membership attach;
- *   - a selected project binds the repo at creation via
- *     POST /projects/:id/members with kind `crew.repo`.
+ * DES-FEEDBACK-001 slice B (§5.1/§5.2), crew-0182 — the repo register flow's project binding: a chosen project rides
+ * `POST /repos {projectId}` (crew 0.18.2 attaches it); an older crew's answer has no `projectAttached`, and studio then
+ * attaches it itself (POST /projects/:id/members, `crew.repo`). Unfiled sends no projectId and attaches nothing.
  */
 
 function proj(id: string, updated = 1): Project {
@@ -52,45 +50,199 @@ async function fillAndRegister(user: ReturnType<typeof userEvent.setup>): Promis
   await waitFor(() => expect(client.api.registerRepo).toHaveBeenCalledTimes(1));
 }
 
-describe('RepositoriesPanel register flow — project binding (slice B)', () => {
-  it('the project field is the first form field, Unfiled by default; register attaches nothing', async () => {
+describe('RepositoriesPanel register flow — project binding (slice B; crew-0182)', () => {
+  it('the project field is the first form field, a real choice listed when the form opens, No project by default', async () => {
     const user = userEvent.setup();
     render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);
 
-    const row = screen.getByTestId('repo-project-row');
-    expect(row).toBeInTheDocument();
-    expect(screen.getByTestId('project-field').textContent).toContain('Unfiled');
-    // Lazy: no project list fetch until the dropdown opens.
-    expect(client.api.listProjects).not.toHaveBeenCalled();
+    expect(screen.getByTestId('repo-project-row')).toBeInTheDocument();
+    const select = screen.getByTestId('repo-project-select') as HTMLSelectElement;
+    expect(select.value).toBe('');
+    // crew-0182: listed at once (the operator never saw the old chip as a choice), Unfiled spelled out, + New project.
+    await waitFor(() => expect([...select.options].map((o) => o.textContent)).toEqual(['No project (Unfiled)', 'q3-review-deck', 'api-migration', '+ New project…']));
+    expect(client.api.listProjects).toHaveBeenCalledTimes(1);
 
     await fillAndRegister(user);
-    // §5.1: unfiled = the register request is byte-identical to before, and no attach.
-    expect(client.api.registerRepo).toHaveBeenCalledWith('my-repo', '/tmp/my-repo');
+    // Unfiled: no projectId, and nothing attached.
+    expect(client.api.registerRepo).toHaveBeenCalledWith('my-repo', '/tmp/my-repo', undefined);
     expect(client.api.attachProjectMember).not.toHaveBeenCalled();
   });
 
-  it('a selected project binds the repo at creation via crew.repo membership', async () => {
+  it('a chosen project rides POST /repos; crew attached it, so studio attaches nothing more', async () => {
+    vi.mocked(client.api.registerRepo).mockResolvedValue({ repo: REPO, onboardRunId: 'r-onboard', projectAttached: true });
     const user = userEvent.setup();
     const navigate = vi.fn();
     render(<RepositoriesPanel navigate={navigate} autoShowRegister />);
+    const select = screen.getByTestId('repo-project-select');
+    await waitFor(() => expect((select as HTMLSelectElement).options.length).toBe(4));
+    await user.selectOptions(select, 'q3-review-deck');
+    await fillAndRegister(user);
+    expect(client.api.registerRepo).toHaveBeenCalledWith('my-repo', '/tmp/my-repo', 'q3-review-deck');
+    expect(client.api.attachProjectMember).not.toHaveBeenCalled();
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1'));
+  });
 
-    await user.click(screen.getByTestId('project-field'));
-    expect(client.api.listProjects).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.getAllByTestId('project-switcher-option').length).toBe(2));
-    expect(screen.getByTestId('project-switcher-add')).toBeInTheDocument();
-    await user.click(screen.getAllByTestId('project-switcher-option')[0]!);
-    expect(screen.getByTestId('project-field').textContent).toContain('q3-review-deck');
-
+  it('an older crew (no projectAttached): studio attaches the repo itself via crew.repo membership', async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<RepositoriesPanel navigate={navigate} autoShowRegister />);
+    const select = screen.getByTestId('repo-project-select');
+    await waitFor(() => expect((select as HTMLSelectElement).options.length).toBe(4));
+    await user.selectOptions(select, 'q3-review-deck');
     await fillAndRegister(user);
     await waitFor(() =>
-      expect(client.api.attachProjectMember).toHaveBeenCalledWith('q3-review-deck', {
-        kind: 'crew.repo',
-        ref: 'repo-1',
-        attachedBy: 'studio',
-      }),
+      expect(client.api.attachProjectMember).toHaveBeenCalledWith('q3-review-deck', { kind: 'crew.repo', ref: 'repo-1', attachedBy: 'studio' }),
     );
-    // The flow still lands on the repo detail page after the bind.
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1'));
+  });
+
+  it('crew registered it but could not add it to the project (and studio could not either): the repository page says so', async () => {
+    vi.mocked(client.api.registerRepo).mockResolvedValue({ repo: REPO, onboardRunId: 'r-onboard', projectAttachError: 'project q3-review-deck is archived' });
+    vi.mocked(client.api.attachProjectMember).mockRejectedValue(new Error('project q3-review-deck is archived'));
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<RepositoriesPanel navigate={navigate} autoShowRegister />);
+    const select = screen.getByTestId('repo-project-select');
+    await waitFor(() => expect((select as HTMLSelectElement).options.length).toBe(4));
+    await user.selectOptions(select, 'q3-review-deck');
+    await fillAndRegister(user);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1', {
+      state: { projectAttachError: 'Registered, but not added to q3-review-deck: project q3-review-deck is archived', projectAttachFor: 'q3-review-deck', projectAttachRepo: true },
+    }));
+    expect(client.api.attachProjectMember).toHaveBeenCalledTimes(1);
+  });
+
+  it('an older crew\'s projectAttachError (its run filing): studio attaches the repo; seen filed after that: no notice', async () => {
+    vi.mocked(client.api.registerRepo).mockResolvedValue({ repo: REPO, onboardRunId: 'r-onboard', projectAttachError: 'filing failed' });
+    vi.spyOn(client.api, 'listProjectMembers').mockResolvedValue({ projectId: 'q3-review-deck', members: [{ id: 'm', project_id: 'q3-review-deck', member_kind: 'crew.run', member_ref: 'r-onboard', meta: null, attached_at: 1, attached_by: 'studio' }] } as never);
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<RepositoriesPanel navigate={navigate} autoShowRegister />);
+    const select = screen.getByTestId('repo-project-select');
+    await waitFor(() => expect((select as HTMLSelectElement).options.length).toBe(4));
+    await user.selectOptions(select, 'q3-review-deck');
+    await fillAndRegister(user);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1'));
+    expect(client.api.attachProjectMember).toHaveBeenCalledWith('q3-review-deck', { kind: 'crew.repo', ref: 'repo-1', attachedBy: 'studio' });
+  });
+});
+
+describe('RepositoriesPanel register flow — the project list (crew-0182 review r2)', () => {
+  it('a failed list says so beside the field, and Retry reads it again', async () => {
+    vi.mocked(client.api.listProjects).mockRejectedValueOnce(new Error('offline'));
+    const user = userEvent.setup();
+    render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);
+    await user.click(await screen.findByTestId('repo-project-retry'));
+    await waitFor(() => expect((screen.getByTestId('repo-project-select') as HTMLSelectElement).options.length).toBe(4));
+    expect(screen.queryByTestId('repo-project-failed')).toBeNull();
+  });
+});
+
+describe('RepositoriesPanel register flow — an attached repo whose run filing failed (crew-0182 review)', () => {
+  it('says it was added, and that only its onboarding run is not filed', async () => {
+    vi.mocked(client.api.registerRepo).mockResolvedValue({ repo: REPO, onboardRunId: 'r-onboard', projectAttached: true, projectAttachError: 'project busy' });
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<RepositoriesPanel navigate={navigate} autoShowRegister />);
+    const select = screen.getByTestId('repo-project-select');
+    expect(screen.getByTestId('repo-project-hint')).toHaveTextContent('registered in no project');
+    await waitFor(() => expect((select as HTMLSelectElement).options.length).toBe(4));
+    await user.selectOptions(select, 'q3-review-deck');
+    expect(screen.getByTestId('repo-project-hint')).toHaveTextContent('joins this project');
+    await fillAndRegister(user);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1', {
+      state: { projectAttachError: 'Added to q3-review-deck, but its onboarding run is not filed there: project busy', projectAttachFor: 'q3-review-deck', projectAttachRepo: false },
+    }));
+  });
+});
+
+describe('RepositoriesPanel register flow — an older crew whose run filing still failed (review r5)', () => {
+  it('keeps the notice when the run is still not filed after studio\'s attach', async () => {
+    vi.mocked(client.api.registerRepo).mockResolvedValue({ repo: REPO, onboardRunId: 'r-onboard', projectAttachError: 'filing failed' });
+    vi.spyOn(client.api, 'listProjectMembers').mockResolvedValue({ projectId: 'q3-review-deck', members: [] } as never);
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<RepositoriesPanel navigate={navigate} autoShowRegister />);
+    const select = screen.getByTestId('repo-project-select');
+    await waitFor(() => expect((select as HTMLSelectElement).options.length).toBe(4));
+    await user.selectOptions(select, 'q3-review-deck');
+    await fillAndRegister(user);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1', {
+      state: { projectAttachError: 'Added to q3-review-deck, but its onboarding run is not filed there: filing failed', projectAttachFor: 'q3-review-deck', projectAttachRepo: false },
+    }));
+  });
+});
+
+/** crew-0182: a registered repository joins a project from its own page (the member path the project page uses). */
+describe('Repository page — Add to a project', () => {
+
+  it('offers the projects it is not in and attaches the pick with crew.repo', async () => {
+    const onAdded = vi.fn();
+    render(<AddRepoToProject repoId="repo-1" repoName="my-repo" inProjects={['q3-review-deck']} onAdded={onAdded} />);
+    const select = await screen.findByTestId('repo-add-to-project-select');
+    expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Add to a project…', 'api-migration']);
+    const user = userEvent.setup();
+    await user.selectOptions(select, 'api-migration');
+    await user.click(screen.getByTestId('repo-add-to-project-confirm'));
+    await waitFor(() => expect(client.api.attachProjectMember).toHaveBeenCalledWith('api-migration', { kind: 'crew.repo', ref: 'repo-1', attachedBy: 'studio' }));
+    expect(await screen.findByTestId('repo-add-to-project-done')).toHaveTextContent('Added to api-migration.');
+    expect(onAdded).toHaveBeenCalledWith({ id: 'api-migration', name: 'api-migration' });
+  });
+
+  it('a failed project list says so with a Retry that reads it again, and focus lands on the list it brings back', async () => {
+    vi.mocked(client.api.listProjects).mockRejectedValueOnce(new Error('offline'));
+    render(<AddRepoToProject repoId="repo-1" repoName="my-repo" inProjects={null} onAdded={vi.fn()} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId('repo-add-to-project-retry'));
+    const select = await screen.findByTestId('repo-add-to-project-select');
+    await waitFor(() => expect(document.activeElement).toBe(select));
+  });
+
+  it('a browser that moves focus off the disabled controls while the add is in flight still gets focus back (review r3)', async () => {
+    let finish!: () => void;
+    vi.mocked(client.api.attachProjectMember).mockImplementationOnce(() => new Promise((r) => { finish = () => r({ member: {} } as never); }));
+    const { rerender } = render(<AddRepoToProject repoId="repo-1" repoName="my-repo" inProjects={['q3-review-deck']} onAdded={vi.fn()} />);
+    const user = userEvent.setup();
+    await user.selectOptions(await screen.findByTestId('repo-add-to-project-select'), 'api-migration');
+    await user.click(screen.getByTestId('repo-add-to-project-confirm'));
+    (document.activeElement as HTMLElement).blur(); // the focus fix-up a real browser applies to a disabled control
+    finish();
+    await screen.findByTestId('repo-add-to-project-done');
+    rerender(<AddRepoToProject repoId="repo-1" repoName="my-repo" inProjects={['q3-review-deck', 'api-migration']} onAdded={vi.fn()} />);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('repo-add-to-project-done')));
+  });
+
+  it('a person who moved on while the add was in flight keeps their focus', async () => {
+    let finish!: () => void;
+    vi.mocked(client.api.attachProjectMember).mockImplementationOnce(() => new Promise((r) => { finish = () => r({ member: {} } as never); }));
+    render(<><input data-testid="elsewhere" /><AddRepoToProject repoId="repo-1" repoName="my-repo" inProjects={['q3-review-deck']} onAdded={vi.fn()} /></>);
+    const user = userEvent.setup();
+    await user.selectOptions(await screen.findByTestId('repo-add-to-project-select'), 'api-migration');
+    await user.click(screen.getByTestId('repo-add-to-project-confirm'));
+    screen.getByTestId('elsewhere').focus();
+    finish();
+    await screen.findByTestId('repo-add-to-project-done');
+    expect(document.activeElement).toBe(screen.getByTestId('elsewhere'));
+  });
+
+  it('adding the last project left keeps keyboard focus on what was said', async () => {
+    const { rerender } = render(<AddRepoToProject repoId="repo-1" repoName="my-repo" inProjects={['q3-review-deck']} onAdded={vi.fn()} />);
+    const select = await screen.findByTestId('repo-add-to-project-select');
+    const user = userEvent.setup();
+    await user.selectOptions(select, 'api-migration');
+    await user.click(screen.getByTestId('repo-add-to-project-confirm'));
+    rerender(<AddRepoToProject repoId="repo-1" repoName="my-repo" inProjects={['q3-review-deck', 'api-migration']} onAdded={vi.fn()} />);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('repo-add-to-project-done')));
+  });
+
+  it('a refused attach says why', async () => {
+    vi.mocked(client.api.attachProjectMember).mockRejectedValue(new Error('only a person attaches a repo to a project'));
+    render(<AddRepoToProject repoId="repo-1" repoName="my-repo" inProjects={null} onAdded={vi.fn()} />);
+    const select = await screen.findByTestId('repo-add-to-project-select');
+    const user = userEvent.setup();
+    await user.selectOptions(select, 'q3-review-deck');
+    await user.click(screen.getByTestId('repo-add-to-project-confirm'));
+    expect(await screen.findByTestId('repo-add-to-project-error')).toHaveTextContent('Could not add it: only a person attaches a repo to a project');
   });
 });
 

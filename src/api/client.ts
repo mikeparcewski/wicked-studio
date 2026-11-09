@@ -54,8 +54,20 @@ export type * from './types.js';
  * to point at a command. ONLY where `GET /health.capabilities.chatJobProposals` is true: an older daemon's strict body
  * would refuse the field, so it gets exactly today's request.
  */
-function jobAccepts(): { accepts?: Array<'job'> } {
-  return useCapabilities.getState().chatJobProposals ? { accepts: ['job'] } : {};
+/** `POST /repos` → 201 (crew 0.18.2 adds `projectAttached` / `projectAttachError` for a `projectId`). */
+export interface RegisterRepoAnswer {
+  repo: RepoEntry;
+  onboardRunId: string | null;
+  onboardError?: string;
+  projectAttached?: boolean;
+  projectAttachError?: string;
+}
+
+function jobAccepts(): { accepts?: Array<'job' | 'onboard'> } {
+  const caps = useCapabilities.getState();
+  // (crew 0.18.2) `onboard`: studio draws a chat's "add a repository" card; only where crew advertises it.
+  const accepts = [...(caps.chatJobProposals ? ['job' as const] : []), ...(caps.chatOnboard ? ['onboard' as const] : [])];
+  return accepts.length > 0 ? { accepts } : {};
 }
 export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
 export { ApiError, apiStatus, apiWire, isRouteAbsent, translateWireError } from './errors.js';
@@ -490,18 +502,20 @@ export const api = {
   listRepos: () => apiFetch<{ repos: RepoEntry[] }>('/repos'),
 
   /** Register a local git repo and launch an onboarding run. Returns the repo and run id. */
-  registerRepo: (name: string, rootPath: string) =>
-    apiFetch<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string }>('/repos', {
+  /** (crew 0.18.2) With `projectId` crew attaches the repo there and files its onboarding run (`projectAttached`), or says
+   *  why not (`projectAttachError`); an older crew answers with neither. */
+  registerRepo: (name: string, rootPath: string, projectId?: string) =>
+    apiFetch<RegisterRepoAnswer>('/repos', {
       method: 'POST',
-      body: JSON.stringify({ name, rootPath }),
+      body: JSON.stringify({ name, rootPath, ...(projectId !== undefined ? { projectId } : {}) }),
     }),
 
   /** Clone a remote git URL, register it, and launch an onboarding run.
    *  `checkoutPath` (absolute) overrides the default ~/.wicked/repos/<name>. */
-  cloneAndRegisterRepo: (name: string, gitUrl: string, checkoutPath?: string) =>
-    apiFetch<{ repo: RepoEntry; onboardRunId: string | null; onboardError?: string }>('/repos', {
+  cloneAndRegisterRepo: (name: string, gitUrl: string, checkoutPath?: string, projectId?: string) =>
+    apiFetch<RegisterRepoAnswer>('/repos', {
       method: 'POST',
-      body: JSON.stringify({ name, gitUrl, ...(checkoutPath ? { rootPath: checkoutPath } : {}) }),
+      body: JSON.stringify({ name, gitUrl, ...(checkoutPath ? { rootPath: checkoutPath } : {}), ...(projectId !== undefined ? { projectId } : {}) }),
     }),
 
   /** Get the onboarding run id for a repo (null if not launched this daemon session). */

@@ -131,6 +131,53 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     expect(screen.queryAllByTestId('doc-subject-repo')).toHaveLength(0);
   });
 
+  // crew-0182: a fresh install has nothing registered, so the chip had vanished; it opens the register form here instead.
+  it('nothing registered left to add: the chip registers one, in this project', async () => {
+    listRepos.mockResolvedValue({ repos: [] });
+    listProjectMembers.mockResolvedValue({ members: [] });
+    render(<Harness projectId="p1" />);
+    const link = await screen.findByTestId('doc-subject-register');
+    expect(link.getAttribute('href')).toBe('/repos/new?project=p1');
+    // A new tab: the document being written here stays.
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(screen.queryByTestId('doc-subject-add')).toBeNull();
+    fireEvent.click(link);
+    // Back in this tab, the repositories are read again and the one just registered is offered.
+    listRepos.mockResolvedValue({ repos: [repo('r-new', 'new-one')] });
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(await screen.findByTestId('doc-subject-add')).not.toBeNull();
+    expect(listRepos).toHaveBeenCalledTimes(2);
+  });
+
+  it('a return while the person is choosing or adding does not re-read (it would drop the pick; review r5)', async () => {
+    listRepos.mockResolvedValue({ repos: [] });
+    listProjectMembers.mockResolvedValue({ members: [] });
+    render(<Harness projectId="p1" />);
+    fireEvent.click(await screen.findByTestId('doc-subject-register'));
+    listRepos.mockResolvedValue({ repos: [repo('r-a', 'a-one')] });
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    fireEvent.click(await screen.findByTestId('doc-subject-add'));
+    expect(screen.getByTestId('doc-subject-add-select')).not.toBeNull();
+    // Choosing: a return reads nothing and the chooser stays open.
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(listRepos).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('doc-subject-add-select')).not.toBeNull();
+  });
+
+  it('a middle click opens the tab too, and the return reads again (codex r2)', async () => {
+    listRepos.mockResolvedValue({ repos: [] });
+    listProjectMembers.mockResolvedValue({ members: [] });
+    render(<Harness projectId="p1" />);
+    fireEvent(await screen.findByTestId('doc-subject-register'), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(2));
+    // A return before the clone finished, then another after it: the second return reads again too (review r4).
+    listRepos.mockResolvedValue({ repos: [repo('r-late', 'late-one')] });
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(await screen.findByTestId('doc-subject-add')).not.toBeNull();
+    expect(listRepos).toHaveBeenCalledTimes(3);
+  });
+
   it('Unfiled has no project to add to: it says to file the document', async () => {
     render(<Harness projectId="default" />);
     expect((await screen.findByTestId('doc-subject-unfiled')).textContent).toBe('File it in a project to ground it on code.');
