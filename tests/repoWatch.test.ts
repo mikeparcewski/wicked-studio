@@ -58,3 +58,20 @@ describe('readRepoWatch', () => {
     expect(readRepoWatch({ nope: true })).toBeNull();
   });
 });
+
+describe('the Repositories sentence and dots under the watcher (coord, crew-0183)', () => {
+  it('never says all ready while one could not re-index or waits on a job', async () => {
+    const { reposSentence } = await import('../src/board/repoRows.js');
+    const five = ['ready', 'ready', 'ready', 'ready', 'ready'] as const;
+    expect(reposSentence('known', five, 0)).toBe('Five repositories, all indexed and ready.');
+    expect(reposSentence('known', five, 0, 0, { failed: 1, waiting: 1 })).toBe('Five repositories. One couldn’t re-index; one is waiting on a job.');
+    expect(reposSentence('known', ['ready', 'stale'], 0, 0, { failed: 1, waiting: 0 })).toBe('Two repositories. One is indexed; one needs re-indexing; one couldn’t re-index.');
+  });
+
+  it('the dot is amber for a failed re-index and quiet while waiting, off or capped', async () => {
+    const { watchDotTone } = await import('../src/api/repoWatch.js');
+    expect(watchDotTone(watchLine(status({ state: 'failed', error: 'x' }), 'r1', NOW))).toBe('warn');
+    for (const state of ['waiting-runs', 'off', 'capped'] as const) expect(watchDotTone(watchLine(status({ state }), 'r1', NOW))).toBe('none');
+    expect(watchDotTone(watchLine(status({}), 'r1', NOW))).toBeNull();
+  });
+});

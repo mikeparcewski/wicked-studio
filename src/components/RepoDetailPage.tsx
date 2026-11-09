@@ -25,7 +25,7 @@ import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { linksOf, useRepoLinks, useRepoLinksFor } from '../store/repoLinks.js';
 import { AddRepoToProject } from './AddRepoToProject.js';
 import { RepoWatchControls, RepoWatchLine } from './RepoWatchLine.js';
-import { useRepoWatch } from '../api/repoWatch.js';
+import { useRepoWatch, watchDotTone, watchLine } from '../api/repoWatch.js';
 import { CommitCadence } from './CommitCadence.js';
 import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
@@ -390,7 +390,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                 {lang !== null && <> · {lang}</>}
                 {projects !== null && projects.length > 0 && <> · in {projects.map((p, i) => <span key={p.id}>{i > 0 ? ', ' : ''}<b>{p.name}</b></span>)}</>}
                 {jobProjects.length > 0 && <> · used by {jobProjects.join(', ')}’s jobs</>}
-                {' · '}<span aria-hidden className="wk-rp-meta-dot" data-tone={map.tone} />{map.size === null ? map.words : `${map.words} · ${map.size}`}
+                {' · '}<span aria-hidden className="wk-rp-meta-dot" data-tone={watchDotTone(watchLine(watch, repo.id, now)) ?? map.tone} />{map.size === null ? map.words : `${map.words} · ${map.size}`}
               </p>
             </div>
             <div className="wk-desk2-actions">

@@ -169,3 +169,22 @@ function useRepoWatchPoll(): void {
     return () => clearInterval(t);
   }, []);
 }
+
+/**
+ * crew-0183 (coord): the code map's dot never reads healthy while the watcher cannot keep it current: amber when the
+ * re-index failed, quiet while a job holds it, it is turned off or past the limit. `null` = the map's own tone stands.
+ */
+export function watchDotTone(line: WatchLine | null): 'warn' | 'none' | null {
+  if (line === null) return null;
+  if (line.state === 'failed') return 'warn';
+  if (line.state === 'waiting-runs' || line.state === 'off' || line.state === 'capped') return 'none';
+  return null;
+}
+
+/** How many of `repoIds` the watcher could not re-index, and how many wait on a job (the Repositories sentence). */
+export function watchCounts(status: RepoWatchStatus | null | undefined, repoIds: readonly string[]): { failed: number; waiting: number } {
+  if (status === null || status === undefined || !status.enabled) return { failed: 0, waiting: 0 };
+  const ids = new Set(repoIds);
+  const rows = status.repos.filter((r) => ids.has(r.repoId));
+  return { failed: rows.filter((r) => r.state === 'failed').length, waiting: rows.filter((r) => r.state === 'waiting-runs').length };
+}

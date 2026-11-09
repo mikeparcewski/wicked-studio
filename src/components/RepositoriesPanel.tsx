@@ -30,7 +30,7 @@ import { linksOf, useRepoLinksFor } from '../store/repoLinks.js';
 import { useHeldMarked } from '../hooks/useHeldMarked.js';
 import { isHeldRun } from '../board/heldRuns.js';
 import { useTrackerLinksSupported } from '../api/trackers.js';
-import { useRepoWatch } from '../api/repoWatch.js';
+import { useRepoWatch, watchCounts, watchDotTone, watchLine } from '../api/repoWatch.js';
 import { RepoWatchLine } from './RepoWatchLine.js';
 
 type SourceMode = 'local' | 'remote';
@@ -382,7 +382,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   // An app's own repository is not "not indexed yet" work for you: the sentence counts the others and names the apps'.
   const appRepos = fleet.filter((m) => appOf.has(m.repo.id));
   const ownReadiness = fleet.filter((m) => !appOf.has(m.repo.id)).map((m) => readiness.get(m.repo.id) ?? 'never');
-  const baseSentence = reposSentence(loading ? 'loading' : error !== null ? 'failed' : 'known', ownReadiness, waitingN, heldIndexing);
+  const baseSentence = reposSentence(loading ? 'loading' : error !== null ? 'failed' : 'known', ownReadiness, waitingN, heldIndexing,
+    watchCounts(watch, fleet.filter((m) => !appOf.has(m.repo.id)).map((m) => m.repo.id)));
   const sentence = !loading && error === null && appRepos.length > 0 ? withApps(fleet.length, appRepos.length, baseSentence) : baseSentence;
   // The projects whose jobs used each repository: names from the shared projects mirror and the membership join the
   // board model keeps (store reads, never a new request).
@@ -685,7 +686,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                       // An app's own repository that was never indexed is the app's, not a chore: no "Not indexed yet", no Index.
                       const appQuiet = app !== null && (ready === 'never' || ready === 'missing');
                       const cell = mapCell(ready, m, knowledgeOf(knowledge, repo.id).kinds, now);
-                      const map = appQuiet ? { tone: 'none' as const, words: 'Not indexed (app)', size: null } : cell;
+                      // crew-0183 (coord): a map the watcher cannot keep current never shows a healthy dot.
+                      const dotOverride = watchDotTone(watchLine(watch, repo.id, now));
+                      const map = appQuiet ? { tone: 'none' as const, words: 'Not indexed (app)', size: null } : dotOverride !== null ? { ...cell, tone: dotOverride } : cell;
                       const link = linksSupported ? linksOf(links, repo.id) : null;
                       const jobsIn = usedBy.get(repo.id) ?? [];
                       // Attached (crew's membership, with tracker links) and used by a project's jobs (the run list, always).
@@ -718,7 +721,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                             onClick={onPlainClick(navigate, detailPath)}
                           >
                             <span className="wk-rl-name">
-                              <span aria-hidden className="wk-jr-dot" data-tone={appQuiet && m.waiting.length === 0 ? 'quiet' : repoTone(m, ready)} />
+                              <span aria-hidden className="wk-jr-dot" data-tone={appQuiet && m.waiting.length === 0 ? 'quiet' : dotOverride !== null && m.waiting.length === 0 && repoTone(m, ready) === 'ready' ? (dotOverride === 'warn' ? 'warn' : 'quiet') : repoTone(m, ready)} />
                               <span className="wk-rl-words">
                                 <span className="wk-rl-title wk-jr-row-title">{repo.name}{app !== null && <span className="wk-tag wk-rl-app" data-testid="repo-row-app" title={`The repository of the app “${app}”`}>App</span>}</span>
                                 <span className="wk-rl-sub wk-rl-desk" data-testid="repo-row-sub">{[lang, repo.default_branch].filter((x): x is string => x !== null && x !== '').join(' · ')}</span>
