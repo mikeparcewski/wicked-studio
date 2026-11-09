@@ -89,3 +89,5 @@ a.wk-pj-chip--link:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-pj-move-more { padding: 8px 12px 0; }
 .wk-pj-tidy { margin-top: 8px; }
 .wk-pj-archived-line { margin: 0; font-size: var(--text-body); color: var(--ink-body); }
+/* A link inside the sentence reads as one in every theme (light's accent is near-black): underlined, as other in-sentence links are. */
+.wk-pj-archived-line .wk-link { text-decoration: underline; text-underline-offset: 2px; font-weight: var(--weight-semi); }
