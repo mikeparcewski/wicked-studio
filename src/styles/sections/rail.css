@@ -57,7 +57,9 @@
    the row is hovered or focused instead of reserving its width on every row, so titles keep it. */
 @media (min-width: 768px) {
   .wk-rail-session-row { position: relative; }
-  .wk-rail-session-row > .wk-desk-move { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); }
+  /* Centred by flex, never a transform (crew-0182): a transformed ancestor is the containing block of the picker's
+     `position: fixed` box, which then sat inside the rail's scroller, off screen, and closed on the scroll its focus made. */
+  .wk-rail-session-row > .wk-desk-move { position: absolute; right: 2px; top: 0; bottom: 0; display: flex; align-items: center; }
   .wk-rail-session-row > .wk-desk-move .wk-desk-move-trigger { background: var(--surface-card); }
   /* While the trigger shows, it takes the count's place at the row's end (the count stays in the row's
      hover title and label); the row makes room for it, so a twin's tag stays readable beside it. */
