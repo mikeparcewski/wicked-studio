@@ -100,10 +100,10 @@ with sync_playwright() as p:
     items = page.get_by_test_id("composer-menu-item").evaluate_all("els => els.map(e => e.dataset.cmd)")
     page.screenshot(path=str(SHOTS / "desk-composer-slash.png"))
     page.keyboard.press("Enter")
-    page.get_by_test_id("session-step-queued").wait_for(state="visible", timeout=8000)
-    queued = page.get_by_test_id("session-step-queued").inner_text()
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=8000)
+    queued = page.get_by_test_id("inline-undo").inner_text()
     page.screenshot(path=str(SHOTS / "desk-composer-queued.png"))
-    page.get_by_test_id("session-step-undo").click()
+    page.get_by_test_id("inline-undo-button").click()
     page.wait_for_timeout(WINDOW_MS)
     undone = plan_edits()
     check("mid-run-undo", items == ["test"] and queued.startswith("Adding Test") and undone == [],
@@ -123,14 +123,14 @@ with sync_playwright() as p:
     check("mid-run-send", len(sent) == 1 and sent[0]["runId"] == "r-team"
           and body.get("plan", {}).get("steps") == [{"catalog": "test"}]
           and isinstance(body.get("requestId"), str) and added.startswith("Added Test")
-          and page.get_by_test_id("session-step-undo").count() == 0,
+          and page.get_by_test_id("inline-undo-button").count() == 0,
           posts=sent, added=added)
 
     # ── 3. a refused command says why and queues nothing ─────────────────────────────
     pick("/plan")
     page.get_by_test_id("composer-note").wait_for(state="visible", timeout=8000)
     note = page.get_by_test_id("composer-note").inner_text()
-    queued_after = page.get_by_test_id("session-step-queued").count()
+    queued_after = page.get_by_test_id("inline-undo").count()
     check("refused", "only grows" in note and queued_after == 0, note=note)
 
     # ── 4. a question is never a command ─────────────────────────────────────────────

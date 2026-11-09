@@ -1,13 +1,15 @@
 import { create } from 'zustand';
 import type { GateDecision } from '../api/types.js';
 import {
-  IDLE_GATE_ACTION, isDecisionPending, sendGateDecision, unwatchDecision, useGateActionStore, watchDecision,
+  IDLE_GATE_ACTION, gateKeyOf, isDecisionPending, sendGateDecision, unwatchDecision, useGateActionStore, watchDecision,
 } from './gateActions.js';
 import { describeDecision, queueDecision, reportDecision, restoreNote } from './undoQueue.js';
 import { PLAN_UNSEEN_TEXT, seenPlanRev } from './planRevBinding.js';
 
 /** The key a batch reject note is handed back under after an Undo. */
 export const BATCH_NOTE_KEY = 'batch';
+/** The undo-queue key for a batch decision and its notices (`board/undoQueue.ts` module note): the group bar hosts it. */
+export const BATCH_KEY = 'batch';
 
 /**
  * Batch gate resolution (DES-FEEDBACK-002 §9, P2-9, slice L): a selection
@@ -101,7 +103,7 @@ async function decideOne(runId: string, decision: GateDecision, ord?: number): P
 
 /**
  * Commit a batch decision (wave 2a): ONE undo window for the whole batch — one
- * toast, one Undo — then the fan-out. The selection is snapshotted at commit and
+ * inline Undo, on the bar it was taken on — then the fan-out. The selection is snapshotted at commit and
  * frozen while queued; each id wears the per-gate `queued` state on its card.
  * Undo releases everything and sends nothing. The returned promise settles when
  * the fan-out finishes (or the batch is undone).
@@ -113,7 +115,7 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
   const skipped = s.selected.length - ids.length;
   if (skipped > 0) {
     // Never silent: the ids that already carry a decision leave the selection, and say so.
-    reportDecision('not-sent', `${skipped} selected ${skipped === 1 ? 'gate already has' : 'gates already have'} a decision — left out of the batch.`);
+    reportDecision('not-sent', `${skipped} selected ${skipped === 1 ? 'gate already has' : 'gates already have'} a decision — left out of the batch.`, { keys: [BATCH_KEY] });
     useBatchGateStore.setState({ selected: ids });
   }
   if (ids.length === 0) return Promise.resolve();
@@ -126,12 +128,14 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
     return r === null;
   });
   if (unseen.length > 0) {
-    reportDecision('not-sent', `${unseen.length} selected ${unseen.length === 1 ? 'gate is a job’s plan' : 'gates are jobs’ plans'} not read here — left out of the batch. ${PLAN_UNSEEN_TEXT}`);
+    reportDecision('not-sent', `${unseen.length} selected ${unseen.length === 1 ? 'gate is a job’s plan' : 'gates are jobs’ plans'} not read here — left out of the batch. ${PLAN_UNSEEN_TEXT}`, { keys: [BATCH_KEY] });
     ids.splice(0, ids.length, ...ids.filter((id) => !unseen.includes(id)));
     useBatchGateStore.setState({ selected: ids });
     if (ids.length === 0) return Promise.resolve();
   }
   const { verb, preview } = describeDecision(decision, ids.length);
+  const batchKeys = [BATCH_KEY, ...ids.map(gateKeyOf)];
+  lastBatchKeys = batchKeys;
   const amend = decision.amend ?? null;
   const markQueued = (queued: boolean): void =>
     useGateActionStore.setState((cur) => {
@@ -151,14 +155,17 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
     const id = queueDecision({
       verb,
       runIds: ids,
+      // The bar, and each member's gate: a member's row or card shows it waiting (quietly), and the result still has a
+      // place on screen when the group itself has gone.
+      keys: batchKeys,
       preview,
       amend,
       commit: async () => {
         release();
         await fanOut(ids, decision, ords, revs);
         const { failures } = useBatchGateStore.getState();
-        if (failures.length === 0) reportDecision('sent', `${ids.length} gates answered.`);
-        else reportDecision('failed', `${ids.length - failures.length} of ${ids.length} gates answered — ${failures.length} failed (listed on the bar).`);
+        if (failures.length === 0) reportDecision('sent', `${ids.length} gates answered.`, { keys: batchKeys });
+        else reportDecision('failed', `Sent ${ids.length - failures.length} of ${ids.length}. Couldn’t send ${failures.length}:`, { keys: batchKeys });
         resolve();
       },
       onUndo: () => {
@@ -203,6 +210,26 @@ async function fanOut(ids: string[], decision: GateDecision, ords: Record<string
   useBatchGateStore.setState({ running: false });
 }
 
+/**
+ * A member's refusal in studio's words (studio steering: show translated errors, never the raw wire sentence). The
+ * daemon's own sentence goes under Technical details. `open` is whether "Open it" is the move (the job moved on).
+ */
+export function batchFailureWords(error: string): { line: string; detail: string; open: boolean } {
+  const detail = error.replace(/^the daemon refused this[^—]*—\s*/i, '').trim();
+  if (/not awaiting a human gate|gate[ _]changed|answered or replaced|no open gate/i.test(detail)) {
+    return { line: 'this job is no longer waiting for that answer. Open it to see where it is.', detail, open: true };
+  }
+  if (/qe acceptance/i.test(detail)) return { line: 'QE acceptance hasn’t passed, so it can’t be handed over yet.', detail, open: true };
+  if (/network|fetch|did not answer|timed? ?out|ECONN/i.test(detail)) {
+    return { line: 'studio’s service didn’t answer. Try again.', detail, open: false };
+  }
+  return { line: 'studio’s service didn’t take it.', detail, open: true };
+}
+
+/** The keys of the last batch queued: its failure summary carries them, and a retry that answers the last failed member
+ *  settles it. */
+let lastBatchKeys: string[] | null = null;
+
 /** Retry exactly one failed id with the decision the fan-out used (§9.5). */
 export async function retryBatchOne(runId: string): Promise<void> {
   const s = useBatchGateStore.getState();
@@ -215,7 +242,7 @@ export async function retryBatchOne(runId: string): Promise<void> {
   const sentRev = (decision as { planRev?: number }).planRev;
   if (sentRev !== undefined) {
     const now = seenPlanRev(runId, s.lastDecision);
-    if (now !== sentRev) { reportDecision('not-sent', 'Not sent: this job’s plan changed since the batch answered it. Read the new plan and decide again.'); return; }
+    if (now !== sentRev) { reportDecision('not-sent', 'Not sent: this job’s plan changed since the batch answered it. Read the new plan and decide again.', { keys: [BATCH_KEY] }); return; }
   }
   useBatchGateStore.setState({ running: true });
   const error = await decideOne(runId, decision, sentBefore?.ord);
@@ -226,4 +253,10 @@ export async function retryBatchOne(runId: string): Promise<void> {
       ? cur.failures.filter((f) => f.runId !== runId)
       : cur.failures.map((f) => (f.runId === runId ? { runId, error } : f)),
   }));
+  // The last failed member went out: the batch's "N failed" summary is settled, said as sent (it clears the summary,
+  // whose keys are exactly this batch's).
+  if (error === null && useBatchGateStore.getState().failures.length === 0 && lastBatchKeys !== null) {
+    reportDecision('sent', 'Every gate in the batch is answered now.', { keys: lastBatchKeys });
+    lastBatchKeys = null;
+  }
 }

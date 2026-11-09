@@ -96,7 +96,7 @@
 .wk-voice-line[data-partial="true"] .wk-voice-text::after { content: '▍'; margin-left: 2px; animation: wk-voice-caret 1s steps(1) infinite; }
 @keyframes wk-voice-caret { 50% { opacity: 0; } }
 .wk-voice-ask { margin-top: 8px; }
-.wk-voice-undo { display: flex; align-items: center; gap: 10px; margin-top: 6px; color: var(--ink-muted); font-size: var(--text-sm); }
+.wk-voice-undo { margin-top: 6px; }
 .wk-voice-foot { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; color: var(--ink-muted); font-size: var(--text-sm); }
 .wk-voice-hold { display: inline-flex; align-items: center; gap: 6px; touch-action: none; user-select: none; }
 .wk-voice-hold[data-held="true"] { background: var(--status-fail); color: var(--status-fail-fg); }

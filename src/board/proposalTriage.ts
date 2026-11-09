@@ -88,7 +88,7 @@ export function acceptMemoryLabel(n: number): string {
   return `Accept ${n} ${n === 1 ? 'memory' : 'memories'} ›`;
 }
 
-/** What the batch accept will do, spelled once for the preview and the undo toast. */
+/** What the batch accept will do, spelled once for the preview and the inline Undo. */
 export function acceptMemoryPreview(accepting: number, staying: number): string {
   const head = `${accepting} ${accepting === 1 ? 'memory becomes' : 'memories become'} active for workers to recall; no rule is written and enforcement is unchanged.`;
   return staying > 0

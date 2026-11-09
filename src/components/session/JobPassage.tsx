@@ -5,7 +5,8 @@ import type { ChatPlanOffer, ProposalRevisionEdits, ProposalToken, SessionView }
 import { ApiError } from '../../api/errors.js';
 import { proposalRefusal } from '../../board/artifactProposal.js';
 import { inputTokenChoices, type InputTokenChoice, type InputTokenUnavailable } from '../../board/jobInputs.js';
-import { commitGateDecision, type GateAnswer } from '../../board/gateActions.js';
+import { commitGateDecision, gateKeyOf, type GateAnswer } from '../../board/gateActions.js';
+import { InlineUndo } from '../InlineUndo.js';
 import { anchorOutOfView, clipAncestors, clipBounds, swapPlacement } from '../../board/swapPlacement.js';
 import {
   announceOf, changedTokenIds, foldLine, jobSettled, needsWords, proposalTarget, regionName, sentenceParts, settledLine, withWords,
@@ -14,7 +15,7 @@ import {
 import { newRequestId } from '../../board/planModel.js';
 import { deliverySummary, handedOf, outcomeLine } from '../../board/proposalCard.js';
 import { seatResponder } from '../../board/responder.js';
-import { isQueued, takeRestoredNote, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
+import { isQueued, takeRestoredNote, useUndoQueue } from '../../board/undoQueue.js';
 import { jobRunId, useJobLocal, useJobView } from '../../hooks/useJobStream.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -71,8 +72,6 @@ export function helperRefusalWords(words: string, nameOf: (key: string) => strin
   return `${who} can’t work now.`;
 }
 
-/** What a queued decision does, in its own words (a Stop is never called an Approve). */
-const QUEUED_WORD: Readonly<Record<string, string>> = { approve: 'Approve', 'request-changes': 'Send back', reject: 'Reject', stop: 'Stop the job', 'edit-plan': 'Add a step' };
 
 const TOKEN_KIND: Readonly<Record<ProposalToken['kind'] | 'documents' | 'sources', string>> = {
   card: 'kind of job', option: 'kind of job', repo: 'repository', project: 'project', seats: 'who works on it',
@@ -493,13 +492,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const tone = v.needsYou ? ' wk-pass--needs' : v.phase === 'delivered' ? ' wk-pass--ok' : v.phase === 'failed' || v.phase === 'stopped' ? ' wk-pass--bad'
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
   const replies = v.replies;
-  const queued = inputs.pending;
   const progress = v.progress;
 
   return (
     <section
       role="region" aria-label={regionName(v)} ref={passageRef} tabIndex={-1}
-      data-testid="job-passage" data-phase={v.phase} data-version={v.version} data-lineage={lineage.lineage}
+      data-testid="job-passage" data-undo-host="job-passage" data-phase={v.phase} data-version={v.version} data-lineage={lineage.lineage}
       {...(runId !== null ? { 'data-run-id': runId } : {})}
       className={`wk-pass${tone}`}
       onPointerDown={() => setWashFrom(null)}
@@ -728,13 +726,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         </div>
       ))}
 
-      {/* studio's own receipt for an answer in its undo window: never a tick, until crew records it (rev 6 §2.7.1). */}
-      {queued !== null && (v.phase === 'planHeld' || v.phase === 'replanning') && (
-        <p data-testid="job-passage-queued" className="wk-pass-receipt">
-          {QUEUED_WORD[queued.verb] ?? 'Your answer'}: queued, not sent yet · sends in {Math.max(0, Math.ceil((queued.dueAt - Math.max(now, queued.queuedAt)) / 1000))} s ·{' '}
-          <button type="button" data-testid="job-passage-undo" className="wk-pass-act" {...press.bind('undo', `queued:${queued.id}`, () => undoDecision(queued.id), 'That answer was replaced.')}>Undo</button>
-        </p>
-      )}
+      {/* studio's own receipt for an answer (or a Stop) in its undo window: never a tick, until crew records it
+          (rev 6 §2.7.1). studio 0.16.4: the shared inline Undo — countdown, what happens, Undo, the result. */}
+      {runId !== null && <InlineUndo host="job-passage" keys={[gateKeyOf(runId), `stop:${runId}`]} />}
 
       {replies.length > 0 && confirmStop === null && (
         <div role="group" aria-label={`Replies to the job, ${v.versionLabel}`} data-testid="job-passage-replies" className="wk-pass-acts">

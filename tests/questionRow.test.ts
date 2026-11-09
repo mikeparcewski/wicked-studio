@@ -120,7 +120,7 @@ describe('the row keyboard (§5.6 rules 2 and 3)', () => {
 
 describe('the folded row', () => {
   it('"You chose Approve · Undo 9 s", then "You chose Approve · sending"', () => {
-    expect(chosenLine('Approve', 9)).toBe('You chose Approve · Undo 9 s');
+    expect(chosenLine('Approve', 9)).toBe('You chose Approve');
     expect(chosenLine('Approve', 0)).toBe('You chose Approve · sending');
   });
 });

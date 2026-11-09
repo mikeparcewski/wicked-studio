@@ -5,16 +5,24 @@ import type { GateDecision } from '../api/types.js';
  * Preview, then commit, with an undo window (studio wave 2a, behaviour 5).
  *
  * A gate decision (approve, reject, batch) is not POSTed when the operator commits it: it
- * is QUEUED here for {@link UNDO_WINDOW_MS}, with an Undo toast, and the POST goes out only
+ * is QUEUED here for {@link UNDO_WINDOW_MS}, with an inline Undo, and the POST goes out only
  * when the window ends. Undo cancels it: nothing is sent and the gate stays open.
  *
  * The queue lives in page memory on purpose. Closing (or reloading) the tab inside the window
  * drops the timer with the page, so the decision is NOT sent and the gate stays open. No
  * `sendBeacon`, no `beforeunload` flush: a decision the operator could not see land must
- * not land. The toast copy says so ({@link CLOSE_NOTE}).
+ * not land. The inline block says so ({@link CLOSE_NOTE}).
  *
- * This module is the behaviour: the store, the timers, the copy. Components only render it
- * (`UndoToasts`); callers (`decideGate`, `runBatchDecision`) queue through it.
+ * This module is the behaviour: the store, the timers, the copy, and which on-screen block shows
+ * each decision. Components only render it (`InlineUndo`, in the block where the action was taken —
+ * studio 0.16.4 removed the floating toast); callers (`decideGate`, `runBatchDecision`, `stopRun`…)
+ * queue through it.
+ *
+ * KEYS say what a decision (and its result) is about, so a block shows only its own:
+ * `gate:<run>` (a gate answer or reassign), `stop:<run>`, `plan:<run>` (a mid-run plan step),
+ * `power:<run>`, `batch`, `memory-accept`. Every block that hosts a key registers while mounted
+ * (`registerUndoHost`); ONE of them owns each decision — the block it was taken in, else the first
+ * in document order — and the others show a quiet "waiting to send" line (one Undo per decision).
  */
 
 export const UNDO_WINDOW_MS = 10_000;
@@ -25,6 +33,12 @@ export type DecisionVerb = 'approve' | 'reject' | 'request-changes' | 'edit-plan
 export interface PendingDecision {
   id: number;
   verb: DecisionVerb;
+  /** What the decision is about (see the module note): the blocks that host one of these show it. */
+  keys: string[];
+  /** The kind of block it was taken in (`data-undo-host` at the moment it was queued); null = not in one. */
+  origin: string | null;
+  /** That block itself, so of several blocks of one kind (two approval groups) the one acted in shows it. */
+  originEl?: Element;
   /** The runs this decision answers — one for a single gate, N for a batch. */
   runIds: string[];
   /** Which gate, in words: "the plan for “Fix the double charge”" (`gateLabel`); null for a batch. */
@@ -51,7 +65,15 @@ export interface DecisionResult {
   kind: 'sent' | 'failed' | 'not-sent';
   text: string;
   at: number;
-  /** The failure is crew's refusal because QE acceptance is required: the toast links to the setting. */
+  /** The blocks that may show it (the decision's keys). */
+  keys: string[];
+  /** The block kind its decision was taken in, so it lands where the Undo was. */
+  origin: string | null;
+  originEl?: Element;
+  /** When a block first showed it. A sent / not-sent result goes {@link RESULT_TTL_MS} after that; a failure
+   *  stays until it is dismissed. Unset = nobody has seen it yet, so it waits for a block to mount. */
+  shownAt?: number;
+  /** The failure is crew's refusal because QE acceptance is required: the result links to the setting. */
   qe?: true;
 }
 
@@ -61,23 +83,87 @@ export const RESULT_TTL_MS = 8_000;
 interface UndoQueueStore {
   pending: PendingDecision[];
   results: DecisionResult[];
+  /** Bumped when a hosting block mounts or unmounts, so the blocks re-decide which one owns a decision. */
+  hostsRev: number;
   /** Notes handed back by an Undo, keyed by run id (or `batch`), until a surface re-seeds from them. */
   restoredNotes: Record<string, string>;
 }
 
-export const useUndoQueue = create<UndoQueueStore>(() => ({ pending: [], results: [], restoredNotes: {} }));
+export const useUndoQueue = create<UndoQueueStore>(() => ({ pending: [], results: [], hostsRev: 0, restoredNotes: {} }));
 
 let nextResultId = 1;
 
-/** Record an outcome (a toast-level line, gone after {@link RESULT_TTL_MS}). */
-export function reportDecision(kind: DecisionResult['kind'], text: string, opts: { qe?: boolean } = {}): void {
+/** At most this many results nobody has seen are kept (the oldest go first), so results nobody comes back for stay
+ *  bounded. Results a block has shown are not counted: a shown failure stays until it is dismissed. */
+export const RESULT_CAP = 50;
+
+/** The block the latest decision on each key was taken in — a result lands where its Undo was. */
+const originByKey = new Map<string, Origin>();
+
+/** Record an outcome. It shows inline on a block hosting one of `keys`; it is never on a timer until seen. */
+export function reportDecision(
+  kind: DecisionResult['kind'], text: string, opts: { keys: readonly string[]; qe?: boolean },
+): void {
   const id = nextResultId++;
-  useUndoQueue.setState((s) => ({ results: [...s.results, { id, kind, text, at: Date.now(), ...(opts.qe === true ? { qe: true as const } : {}) }] }));
+  const keys = [...opts.keys];
+  const o = keys.map((k) => originByKey.get(k)).find((x) => x !== undefined) ?? NO_ORIGIN;
+  const result: DecisionResult = {
+    id, kind, text, at: Date.now(), keys, origin: o.name, ...(o.el !== undefined ? { originEl: o.el } : {}),
+    ...(opts.qe === true ? { qe: true as const } : {}),
+  };
+  useUndoQueue.setState((s) => {
+    // A sent outcome on a run settles that run's earlier failure (the person retried it and it went out). Only run keys
+    // count: an unrelated batch or accept never clears another one's failure.
+    // Settled means every run it was about went out now: a batch's failure is not settled by one member's success.
+    const runKeys = kind === 'sent' ? keys.filter((k) => runOfKey(k) !== null) : [];
+    const settles = (r: DecisionResult): boolean => {
+      const its = r.keys.filter((k) => runOfKey(k) !== null);
+      return its.length > 0 && its.every((k) => runKeys.includes(k));
+    };
+    let results = runKeys.length === 0 ? s.results : s.results.filter((r) => r.kind !== 'failed' || !settles(r));
+    results = [...results, result];
+    // Bounded: at most RESULT_CAP results nobody has seen yet (the oldest go first). A shown failure stays until it is
+    // dismissed, whatever comes after it.
+    const unseen = results.filter((r) => r.shownAt === undefined);
+    if (unseen.length > RESULT_CAP) {
+      const drop = new Set(unseen.slice(0, unseen.length - RESULT_CAP).map((r) => r.id));
+      results = results.filter((r) => !drop.has(r.id));
+    }
+    return { results };
+  });
+}
+
+/** A block showed a result: a sent / not-sent one goes after {@link RESULT_TTL_MS}; a failure stays until dismissed. */
+export function markResultShown(id: number): void {
+  const r = useUndoQueue.getState().results.find((x) => x.id === id);
+  if (r === undefined || r.shownAt !== undefined) return;
+  useUndoQueue.setState((s) => ({ results: s.results.map((x) => (x.id === id ? { ...x, shownAt: Date.now() } : x)) }));
+  if (r.kind === 'failed') return;
   setTimeout(() => {
     // A result whose link has keyboard focus stays until focus leaves it (releaseResult).
     if (heldResults.has(id)) { expiredResults.add(id); return; }
-    useUndoQueue.setState((s) => ({ results: s.results.filter((r) => r.id !== id) }));
+    dropResult(id);
   }, RESULT_TTL_MS);
+}
+
+/** Dismiss a result (a failure's Dismiss button). */
+export function dismissResult(id: number): void {
+  heldResults.delete(id);
+  expiredResults.delete(id);
+  dropResult(id);
+}
+
+function dropResult(id: number): void {
+  useUndoQueue.setState((s) => ({ results: s.results.filter((r) => r.id !== id) }));
+  pruneOrigins();
+}
+
+/** Forget the origin block of every key no queued decision or kept result is about (no detached card kept alive). */
+function pruneOrigins(): void {
+  const s = useUndoQueue.getState();
+  const live = new Set<string>();
+  for (const x of [...s.pending, ...s.results]) for (const k of x.keys) live.add(k);
+  for (const k of [...originByKey.keys()]) if (!live.has(k)) originByKey.delete(k);
 }
 
 const heldResults = new Set<number>();
@@ -92,7 +178,7 @@ export function holdResult(id: number): void {
 export function releaseResult(id: number): void {
   heldResults.delete(id);
   if (!expiredResults.delete(id)) return;
-  useUndoQueue.setState((s) => ({ results: s.results.filter((r) => r.id !== id) }));
+  dropResult(id);
 }
 
 /** Hand a note back after an Undo. */
@@ -132,6 +218,8 @@ function remove(id: number): void {
 export interface QueueSpec {
   verb: DecisionVerb;
   runIds: string[];
+  /** What it is about (see the module note); its results carry the same keys. */
+  keys: readonly string[];
   preview: string;
   label?: string | null;
   amend?: string | null;
@@ -156,26 +244,29 @@ export function setUndoWindowForTest(ms: number | null): void {
 export function queueDecision(spec: QueueSpec): number {
   const id = nextId++;
   const windowMs = windowOverride ?? UNDO_WINDOW_MS;
+  const keys = [...spec.keys];
+  const origin = originHere();
+  pruneOrigins(); // the keys nothing refers to any more (decisions undone, results gone) — before this one's are set
+  for (const k of keys) originByKey.set(k, origin);
   const timer = setTimeout(() => {
     const h = handles.get(id);
     if (h === undefined) return; // undone in the same tick
+    // Sent only once its countdown and Undo were on screen (a last look now, should the page have been too busy for
+    // the earlier one). Without a shell (a bare test harness) there is nothing to look at.
+    if (hostlessHandler !== null && !seenDecisions.has(id) && !shownNow(id)) { cancelDecision(id, NOT_SHOWN); return; }
+    seenDecisions.delete(id);
     remove(id);
     void h.commit();
   }, windowMs);
   handles.set(id, { timer, commit: spec.commit, onUndo: spec.onUndo, onCancel: spec.onCancel });
-  useUndoQueue.setState((s) => ({
-    pending: [
-      ...s.pending,
-      (() => {
-        const queuedAt = Date.now();
-        return {
-          id, verb: spec.verb, runIds: [...spec.runIds], preview: spec.preview,
-          label: spec.label ?? null, amend: spec.amend ?? null, queuedAt, dueAt: queuedAt + windowMs,
-          ...(spec.closeNote !== undefined ? { closeNote: spec.closeNote } : {}),
-        };
-      })(),
-    ],
-  }));
+  const queuedAt = Date.now();
+  const entry: PendingDecision = {
+    id, verb: spec.verb, keys, origin: origin.name, ...(origin.el !== undefined ? { originEl: origin.el } : {}), runIds: [...spec.runIds], preview: spec.preview,
+    label: spec.label ?? null, amend: spec.amend ?? null, queuedAt, dueAt: queuedAt + windowMs,
+    ...(spec.closeNote !== undefined ? { closeNote: spec.closeNote } : {}),
+  };
+  useUndoQueue.setState((s) => ({ pending: [...s.pending, entry] }));
+  ensureSeen(id, keys);
   return id;
 }
 
@@ -184,6 +275,7 @@ export function undoDecision(id: number): void {
   const h = handles.get(id);
   if (h === undefined) return;
   clearTimeout(h.timer);
+  seenDecisions.delete(id);
   remove(id);
   h.onUndo?.();
 }
@@ -196,9 +288,11 @@ export function cancelDecision(id: number, reason: string): void {
   const h = handles.get(id);
   if (h === undefined) return;
   clearTimeout(h.timer);
+  const p = useUndoQueue.getState().pending.find((x) => x.id === id);
+  seenDecisions.delete(id);
   remove(id);
   (h.onCancel ?? h.onUndo)?.(reason);
-  reportDecision('not-sent', reason);
+  reportDecision('not-sent', reason, { keys: p?.keys ?? [] });
 }
 
 const testResets: Array<() => void> = [];
@@ -212,7 +306,10 @@ export function onDecisionTestReset(reset: () => void): void {
 export function resetDecisionsForTest(): void {
   for (const h of handles.values()) clearTimeout(h.timer);
   handles.clear();
-  useUndoQueue.setState({ pending: [], results: [], restoredNotes: {} });
+  useUndoQueue.setState({ pending: [], results: [], hostsRev: 0, restoredNotes: {} });
+  originByKey.clear();
+  seenDecisions.clear();
+  lastPress = null;
   for (const reset of testResets) reset();
 }
 
@@ -233,7 +330,181 @@ export function isQueued(runId: string): boolean {
   return useUndoQueue.getState().pending.some((p) => p.runIds.includes(runId));
 }
 
-/** Whole seconds left in the window, never below 0 — the toast's countdown. A clock read
+// ── Which block shows a decision ─────────────────────────────────────────────────────────────────
+
+interface UndoHost {
+  /** The block kind (`gate-card`, `proposal-card`, `desk-row`, `batch-bar`, …). */
+  host: string;
+  keys: readonly string[];
+  /** The block's InlineUndo wrapper, for document order. */
+  el: Element;
+  /** The block sits OVER the page (voice full screen): while it is up it shows what it hosts, whatever is under it. */
+  over: boolean;
+  /** The block shows what it hosts only when no other block for it is on screen: the place a gate's row or card
+   *  WAS (the Needs list, the session under its header) once that row has gone — answered elsewhere, say. */
+  fallback: boolean;
+}
+
+const hosts = new Map<number, UndoHost>();
+let nextHostId = 1;
+
+/** A block that shows decisions for `keys` mounted; returns its handle (pass it to `ownsDecision`) and the unregister. */
+export function registerUndoHost(
+  host: string, keys: readonly string[], el: Element, opts: { over?: boolean; fallback?: boolean } = {},
+): { id: number; unregister: () => void } {
+  const id = nextHostId++;
+  hosts.set(id, { host, keys: [...keys], el, over: opts.over === true, fallback: opts.fallback === true });
+  useUndoQueue.setState((s) => ({ hostsRev: s.hostsRev + 1 }));
+  return {
+    id,
+    unregister: () => {
+      hosts.delete(id);
+      useUndoQueue.setState((s) => ({ hostsRev: s.hostsRev + 1 }));
+    },
+  };
+}
+
+/** A block a person can see: on the page, and not inside something hidden (display:none, a closed fold). jsdom
+ *  has no layout (no `checkVisibility`), so there a connected block counts as seen. */
+function visible(el: Element): boolean {
+  if (!el.isConnected) return false;
+  // The wrapper itself is hidden while empty: its hosting block is what has to be on screen. A `display: contents`
+  // scope (`.wk-undo-scope`) has no box of its own, so the first ancestor with one stands for it.
+  let block: Element = el.parentElement ?? el;
+  while (block.parentElement !== null && typeof getComputedStyle === 'function' && getComputedStyle(block).display === 'contents') {
+    block = block.parentElement;
+  }
+  return boxShown(block);
+}
+
+/** Rendered with a box (not display:none, not in a closed fold, not visibility:hidden). jsdom has no layout: there a
+ *  connected element counts as shown. */
+function boxShown(el: Element): boolean {
+  if (!el.isConnected) return false;
+  const check = (el as Element & { checkVisibility?: (o?: object) => boolean }).checkVisibility;
+  return typeof check === 'function' ? check.call(el, { visibilityProperty: true }) : true;
+}
+
+function hostedNow(keys: readonly string[]): boolean {
+  for (const h of hosts.values()) if (visible(h.el) && h.keys.some((k) => keys.includes(k))) return true;
+  return false;
+}
+
+/** How long a decision may wait for a block to show it, once the shell has been asked to bring one on screen (a cold
+ *  run page reads its runs first); well inside the 10 s window, and the send itself checks again. */
+export const SHOW_GRACE_MS = 4_000;
+
+/** Said where the run's gate shows next (a result waits for a block to mount): the person learns it was not sent. */
+export const NOT_SHOWN = 'Not sent: studio couldn’t show you its Undo, so nothing was sent. Decide again here.';
+
+/** Decisions whose full countdown and Undo have been on screen. */
+const seenDecisions = new Set<number>();
+
+/** Whether a decision's full block (its countdown and Undo) is on screen now; if so it is recorded as seen, and
+ *  scrolled into view when it is outside the viewport (a decision made by keyboard, the palette or voice). */
+function shownNow(id: number): boolean {
+  if (typeof document === 'undefined') return false;
+  const el = document.querySelector(`[data-testid="inline-undo"][data-undo-id="${id}"]`);
+  if (el === null || !boxShown(el)) return false;
+  seenDecisions.add(id);
+  const r = el.getBoundingClientRect();
+  if (r.height > 0 && (r.bottom > window.innerHeight || r.top < 0)) el.scrollIntoView?.({ block: 'nearest' });
+  return true;
+}
+
+/**
+ * No invisible decisions. After the commit that queued it (so a block the same action mounts has rendered), a
+ * decision whose full countdown and Undo are on screen nowhere takes the person to its run's page; still shown
+ * nowhere a moment later, it is not sent at all ("Not sent: … it could not be shown"), and the send itself checks
+ * once more. Only with a shell to ask (`setHostlessHandler`): a bare test harness has none.
+ */
+function ensureSeen(id: number, keys: readonly string[]): void {
+  setTimeout(() => {
+    if (hostlessHandler === null || !handles.has(id) || shownNow(id)) return;
+    hostlessHandler(keys);
+    setTimeout(() => {
+      if (hostlessHandler === null || !handles.has(id) || seenDecisions.has(id) || shownNow(id)) return;
+      cancelDecision(id, NOT_SHOWN);
+    }, SHOW_GRACE_MS);
+  }, 0);
+}
+
+/**
+ * The ONE block that shows a decision (or result) in full: the block kind it was taken in, else the first
+ * hosting block in document order. Null when no hosting block is mounted.
+ */
+export function ownerOf(item: { keys: readonly string[]; origin: string | null; originEl?: Element }): number | null {
+  const all = [...hosts.entries()].filter(([, h]) => visible(h.el) && h.keys.some((k) => item.keys.includes(k)));
+  const regular = all.filter(([, h]) => !h.fallback);
+  const on = regular.length > 0 ? regular : all;
+  if (on.length === 0) return null;
+  on.sort(([, a], [, b]) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+  const over = on.find(([, h]) => h.over);
+  const inBlock = item.originEl?.isConnected === true ? on.find(([, h]) => item.originEl!.contains(h.el)) : undefined;
+  const ofKind = item.origin === null ? undefined : on.find(([, h]) => h.host === item.origin);
+  return (over ?? inBlock ?? ofKind ?? on[0]!)[0];
+}
+
+/** Focus the block that shows decisions for `keys` now (its first action, else its Undo block): where focus goes
+ *  when the block it was in has left the page. */
+export function focusHostFor(keys: readonly string[]): void {
+  const item = useUndoQueue.getState().pending.find((p) => p.keys.some((k) => keys.includes(k)))
+    ?? useUndoQueue.getState().results.find((r) => r.keys.some((k) => keys.includes(k)));
+  const id = item !== undefined ? ownerOf(item) : null;
+  const h = id !== null ? hosts.get(id) : [...hosts.values()].find((x) => visible(x.el) && x.keys.some((k) => keys.includes(k)));
+  if (h === undefined) return;
+  const target = (h.el.querySelector<HTMLElement>('button:not([disabled])') ?? h.el) as HTMLElement;
+  target.focus({ preventScroll: true });
+}
+
+let lastPress: { el: Element; at: number } | null = null;
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', (e) => {
+    if (e.target instanceof Element) lastPress = { el: e.target, at: Date.now() };
+  }, true);
+  // A key pressed after it means the person acts by keyboard now: where focus is, not where they last clicked.
+  document.addEventListener('keydown', () => { lastPress = null; }, true);
+}
+
+interface Origin { name: string | null; el?: Element }
+const NO_ORIGIN: Origin = { name: null };
+
+/** The block the person is acting in right now: the press that just happened, else the focused element. */
+function originHere(): Origin {
+  if (typeof document === 'undefined') return NO_ORIGIN;
+  // A press that just happened, on something still on the page (a press on a card that has since gone says nothing).
+  const pressed = lastPress !== null && Date.now() - lastPress.at < 2_000 && lastPress.el.isConnected ? lastPress.el : null;
+  for (const el of [pressed, document.activeElement]) {
+    const block = el?.closest?.('[data-undo-host]');
+    const name = block?.getAttribute('data-undo-host');
+    if (block !== null && block !== undefined && name !== undefined && name !== null && name !== '') return { name, el: block };
+  }
+  return NO_ORIGIN;
+}
+
+let hostlessHandler: ((keys: readonly string[]) => void) | null = null;
+
+/** The shell says how to bring a hostless decision on screen (it navigates to the run's page). */
+export function setHostlessHandler(fn: ((keys: readonly string[]) => void) | null): void {
+  hostlessHandler = fn;
+}
+
+/** Every key of one kind (`gate`) that a queued decision or a kept result is about, space-joined (a stable
+ *  selector value) — what a fallback block hosts. */
+export function keysOfKind(s: Pick<UndoQueueStore, 'pending' | 'results'>, kind: string): string {
+  const all = new Set<string>();
+  // `gate` matches `gate:<run>`; a bare key (`batch`, `memory-accept`) matches itself.
+  for (const x of [...s.pending, ...s.results]) for (const k of x.keys) if (k === kind || k.startsWith(`${kind}:`)) all.add(k);
+  return [...all].sort().join(' ');
+}
+
+/** The run a key is about (`gate:r1` → `r1`); null for `batch` / `memory-accept`. */
+export function runOfKey(key: string): { kind: string; runId: string } | null {
+  const at = key.indexOf(':');
+  return at <= 0 ? null : { kind: key.slice(0, at), runId: key.slice(at + 1) };
+}
+
+/** Whole seconds left in the window, never below 0 — the countdown. A clock read
  *  before the decision was queued counts as the moment it was queued. */
 export function secondsLeft(p: PendingDecision, now: number): number {
   return Math.max(0, Math.ceil((p.dueAt - Math.max(now, p.queuedAt)) / 1000));
@@ -254,9 +525,24 @@ export function undoHeadline(p: PendingDecision, now: number): string {
   return `${verb}${what} in ${secondsLeft(p, now)} s`;
 }
 
+/** What the inline block's live region says ONCE when a decision is queued — no seconds, so the 1 s tick never
+ *  re-announces it: "Approving the plan for “Fix it”. You can undo it until it sends." */
+export function undoAnnouncement(p: PendingDecision): string {
+  const verb = HEADLINE_VERB[p.verb];
+  const what = p.runIds.length > 1 ? ` ${p.runIds.length} gates` : p.label !== null ? ` ${p.label}` : '';
+  // No duration: a block that shows it late (another took over) would promise a fresh window it does not have.
+  return `${verb}${what}. You can undo it until it sends.`;
+}
+
+/** The quiet line on every OTHER block that shows the same decision (one Undo per decision per page). */
+export function waitingLine(p: PendingDecision, now: number): string {
+  const left = secondsLeft(p, now);
+  return left > 0 ? `Waiting to send · ${left} s` : 'Sending';
+}
+
 /**
  * The "what will happen" line, spelled once for every surface that previews a decision
- * (the toast, the chip's title, the reject note, the batch bar). A reject with no choices
+ * (the inline Undo, the chip's title, the reject note, the batch bar). A reject with no choices
  * cancels the run (the daemon's `{approve:false}`), so the line says so.
  */
 export function decisionPreview(verb: DecisionVerb, count: number, withNote = false): string {
@@ -277,7 +563,7 @@ export interface DeliverTarget {
   branch: string | null;
   repo: string | null;
   /** The deliver unit's gate-card target sentence (`deliverTargetOf`) — what THIS push will do on
-   *  this origin. When present the toast says exactly that (R1/R3); without it `deliverPreview`
+   *  this origin. When present the inline Undo says exactly that (R1/R3); without it `deliverPreview`
    *  states the push and makes the pull request a condition, `repo` naming whose origin. */
   card?: string | null;
 }
@@ -298,9 +584,9 @@ export function deliverPreview(t: DeliverTarget): string {
 /**
  * Verb + "what will happen" for ANY gate decision the wire can carry — plain approve, approve
  * with a steer note, reject (with or without a note), request changes — so every caller of the
- * shared decision path gets an honest toast without spelling its own copy.
+ * shared decision path gets an honest preview without spelling its own copy.
  */
-/** The undo toast's line for each escalation arm (`GateDecision.action`, api-types 0.57.0). */
+/** The inline Undo's line for each escalation arm (`GateDecision.action`, api-types 0.57.0). */
 const ESCALATION_PREVIEW: Record<string, string> = {
   extend: 'The checks re-run on the tree as it stands, each under twice its time bound.',
   targeted: "The checks re-run with the repo's targeted tests in place of the full test set.",
@@ -327,7 +613,7 @@ export function describeDecision(
   const arm = ESCALATION_PREVIEW[(decision as { action?: string }).action ?? ''];
   if (decision.approve && arm !== undefined) return { verb: 'approve', preview: arm };
   if (decision.approve) {
-    // studio#368: approving a deliver gate pushes and opens a PR — the toast says so, not "resumes".
+    // studio#368: approving a deliver gate pushes and opens a PR — the preview says so, not "resumes".
     const base = deliver !== null && count === 1 ? deliverPreview(deliver) : decisionPreview('approve', count);
     return { verb: 'approve', preview: note ? `${base.slice(0, -1)}, carrying your note as guidance.` : base };
   }
@@ -340,5 +626,5 @@ export function describeDecision(
   return { verb: 'reject', preview: decisionPreview('reject', count, note) };
 }
 
-/** The page-close contract, in the toast's own words. */
+/** The page-close contract, in the inline block's own words. */
 export const CLOSE_NOTE = 'Close this tab before then and nothing is sent: the gate stays open.';

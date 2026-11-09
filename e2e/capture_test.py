@@ -211,7 +211,7 @@ with sync_playwright() as p:
         page.get_by_test_id("need-accept-preview").wait_for(state="visible")
         check("preview-posts-nothing", approves(origin) == [])
         page.get_by_test_id("need-accept-confirm").click()
-        page.get_by_test_id("undo-toast").wait_for(state="visible")
+        page.get_by_test_id("inline-undo").wait_for(state="visible")
         page.wait_for_function("""() => !document.querySelector('[data-testid="need-accept-act"]')""", timeout=25000)
         run_id = captures(origin)[0]["runId"]
         want = sorted(f"{run_id}-p{i}" for i in (1, 2, 3, 4))

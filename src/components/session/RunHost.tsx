@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { SessionView as RunView } from '../../api/types.js';
-import { decideGate, IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
+import { decideGate, gateKeyOf, IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
+import { InlineUndo } from '../InlineUndo.js';
 import type { ArtifactBinding, RunHostContext } from '../../editors/hostApi.js';
 import { useHostChrome } from '../../editors/hostApi.js';
 import { useGateStore } from '../../store/gates.js';
@@ -43,7 +44,10 @@ function runOfBinding(binding: ArtifactBinding, runs: readonly RunView[]): RunVi
 export function GateButtons({ runId }: { runId: string }): React.ReactElement | null {
   const gate = useGateStore((s) => s.gates[runId]);
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
-  if (gate === undefined) return null;
+  // studio 0.16.4: an Approve pressed here shows its countdown, Undo and result here — after the gate has
+  // cleared, too, so the result is not lost with the buttons.
+  const undo = <InlineUndo host="run-host" keys={[gateKeyOf(runId)]} className="wk-run-gate-undo" />;
+  if (gate === undefined) return <span data-undo-host="run-host" className="wk-run-gate-actions">{undo}</span>;
   const busy = action.queued || action.busy || action.answered !== null;
   // Fail closed (codex final review P1): the bare Approve is offered only for a gate KNOWN to be the plain
   // pre-run review (`def`) with the two plain answers. A gate whose kind is not known (a late join: GET
@@ -59,7 +63,7 @@ export function GateButtons({ runId }: { runId: string }): React.ReactElement | 
     block?.querySelector<HTMLElement>('button, textarea')?.focus();
   };
   return (
-    <span data-testid="run-gate-actions" data-run-id={runId} className="wk-run-gate-actions">
+    <span data-testid="run-gate-actions" data-undo-host="run-host" data-run-id={runId} className="wk-run-gate-actions">
       {plainApprove && (
         <button type="button" data-testid="run-gate-approve" disabled={busy} onClick={() => { void decideGate(runId, { approve: true }); }} className="wk-btn wk-btn--primary wk-btn--sm">
           {action.queued ? 'Approving…' : 'Approve'}
@@ -68,6 +72,7 @@ export function GateButtons({ runId }: { runId: string }): React.ReactElement | 
       <button type="button" data-testid="run-gate-open" onClick={toThread} className="wk-btn wk-btn--secondary wk-btn--sm">
         {plainApprove ? 'Send back or more' : 'Answer in the thread'}
       </button>
+      {undo}
     </span>
   );
 }

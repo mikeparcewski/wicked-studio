@@ -9,7 +9,7 @@ Against 11 pending proposals (5 memory, 6 policy) served on crew's GET /proposal
            carries "Accept 5 memories ›".
   list     expanded, it shows at most 4 at a time, enforcement-changing ones first, and pages.
   preview  the click names exactly the 5 memories and posts NOTHING.
-  undo     confirm queues it behind the undo window; Undo in the toast sends nothing.
+  undo     confirm queues it behind the undo window; Undo inline sends nothing.
   accept   confirm again and let the window close: the fixture receives POST /proposals/<id>/approve
            for exactly the 5 memories, none for a policy; the row then lists the 6 that change
            enforcement, with no batch accept left.
@@ -120,12 +120,12 @@ with sync_playwright() as p:
         check("preview-posts-nothing", posts(origin) == [])
         page.screenshot(path=str(SHOTS / f"waveb-desk-preview.png"))
 
-        # Undo: confirm, then Undo in the toast — nothing is sent.
+        # Undo: confirm, then the inline Undo — nothing is sent.
         page.get_by_test_id("need-accept-confirm").click()
-        toast = page.get_by_test_id("undo-toast")
+        toast = page.get_by_test_id("inline-undo")
         toast.wait_for(state="visible")
         check("undo-toast-names-it", "memory-only proposals" in toast.inner_text(), text=toast.inner_text())
-        page.get_by_test_id("undo-button").click()
+        page.get_by_test_id("inline-undo-button").click()
         toast.wait_for(state="detached")
         time.sleep(1)
         check("undo-sends-nothing", posts(origin) == [])
@@ -134,7 +134,7 @@ with sync_playwright() as p:
         # Accept: confirm and let the window close.
         act.click()
         page.get_by_test_id("need-accept-confirm").click()
-        page.get_by_test_id("undo-toast").wait_for(state="visible")
+        page.get_by_test_id("inline-undo").wait_for(state="visible")
         time.sleep(4)
         check("window-holds-the-post", posts(origin) == [])
         page.wait_for_function(

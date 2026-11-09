@@ -7,7 +7,7 @@ The wave-1 corpus with a SIMPLE gate waiting on b1 (unit 3), answered from its D
 
   open      "Answer" opens the row's choices (Approve / Reject); C3 absent: nothing is preselected.
   enter     Enter with nothing moved to sends nothing and queues nothing (§5.6 rule 3).
-  undo      ↓ then Enter queues Approve: the row folds to "You chose Approve · Undo N s"; the toast
+  undo      ↓ then Enter queues Approve: the row folds to "You chose Approve" with the inline Undo under it (studio 0.16.4); the block
             names the gate ("Approving “migrate beta's settings page to the new form kit” in 10 s"); Undo restores the row; 12 s later the
             daemon has received NOTHING.
   elsewhere the digit 1 queues Approve; mid-window the gate is answered elsewhere (a live `resumed`
@@ -65,7 +65,7 @@ def server_posts(origin: str, rid: str = "b1") -> list:
 
 def notice(page) -> str:
     return page.evaluate(
-        "() => [...document.querySelectorAll('[data-testid=\"undo-result\"]')].map(n => n.dataset.kind + ': ' + n.textContent).join(' | ')")
+        "() => [...document.querySelectorAll('[data-testid=\"inline-undo-result\"]')].map(n => n.dataset.kind + ': ' + n.textContent).join(' | ')")
 
 
 ROW = '[data-testid="need-row"][data-key="gate:b1"], [data-testid="need-member"][data-key="gate:b1"]'
@@ -118,7 +118,7 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / "desk-answer-open.png"))
         page.keyboard.press("Enter")
         page.wait_for_timeout(400)
-        check("enter-inert", page.get_by_test_id("undo-toast").count() == 0
+        check("enter-inert", page.get_by_test_id("inline-undo").count() == 0
               and row.locator('[data-testid="need-choices"]').count() == 1)
         page.keyboard.press("ArrowDown")
         # The moved-to choice is announced (aria-activedescendant names it; codex).
@@ -127,14 +127,14 @@ with sync_playwright() as p:
             "return el ? [el.dataset.choice, el.getAttribute('aria-checked')] : null; }")
         check("moved-is-announced", active == ["approve", "true"], active=active)
         page.keyboard.press("Enter")
-        page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+        page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
         pressed = time.monotonic()
         line = row.locator('[data-testid="need-chosen-line"]').inner_text()
-        toast = page.get_by_test_id("undo-toast").text_content() or ""
-        check("folded", line.startswith("You chose Approve · Undo ") and "Approving “migrate beta's settings page to the new form kit” in" in toast,
+        toast = page.get_by_test_id("inline-undo").text_content() or ""
+        check("folded", line == "You chose Approve" and "Approving “migrate beta's settings page to the new form kit” in" in toast,
               line=line, toast=toast)
         page.screenshot(path=str(SHOTS / "desk-answer-chosen.png"))
-        row.locator('[data-testid="need-chosen-undo"]').click()
+        row.locator('[data-testid="inline-undo-button"]').click()
         page.wait_for_timeout(300)
         check("undo-restores", row.locator('[data-testid="need-answer"]').count() == 1
               and row.locator('[data-testid="need-chosen"]').count() == 0)
@@ -144,7 +144,7 @@ with sync_playwright() as p:
         # ── answered elsewhere mid-window ─────────────────────────────────────────────
         open_row(page)
         page.keyboard.press("1")
-        page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+        page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
         pressed = time.monotonic()
         page.wait_for_timeout(3000)
         set_fixture(origin, status_over={"b1": "executing"}, gate_now=[],
@@ -160,7 +160,7 @@ with sync_playwright() as p:
         page = desk(browser)
         open_row(page)
         page.keyboard.press("1")
-        page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+        page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
         pressed = time.monotonic()
         page.wait_for_timeout(3000)
         set_fixture(origin, extra_gates=[{"session": "b1", "ord": 4, "prompt": "Approve unit 4 before it runs: ship it"}])
@@ -174,7 +174,7 @@ with sync_playwright() as p:
         page = desk(browser)
         open_row(page)
         page.keyboard.press("1")
-        page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+        page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
         pressed = time.monotonic()
         page.close()
         time.sleep(max(0.0, pressed + 12.0 - time.monotonic()))
@@ -184,7 +184,7 @@ with sync_playwright() as p:
         page = desk(browser)
         row = open_row(page)
         row.locator('[data-testid="need-choice"][data-choice="approve"]').click()
-        page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+        page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
         pressed = time.monotonic()
         page.wait_for_timeout(max(0, int((pressed + 9.3 - time.monotonic()) * 1000)))
         check("ord-nothing-before-window", len(server_posts(origin)) == 0)
@@ -220,7 +220,7 @@ with sync_playwright() as p:
         page = desk(browser)
         row = open_row(page)
         page.keyboard.press("1")
-        page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+        page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
         pressed = time.monotonic()
         page.wait_for_timeout(2500)
         set_fixture(origin, extra_frames=[{"type": "awaitingHuman", "session": "b1", "ord": 3,
@@ -250,7 +250,7 @@ with sync_playwright() as p:
             "els => els.map(e => [e.dataset.choice, e.dataset.focus, e.dataset.recommended || ''])")
         page.keyboard.press("Enter")
         page.wait_for_timeout(400)
-        inert = page.get_by_test_id("undo-toast").count() == 0
+        inert = page.get_by_test_id("inline-undo").count() == 0
         check("c3-preselect-only", rec[0] == ["approve", "true", "true"] and inert, choices=rec, inert=inert)
         page.screenshot(path=str(SHOTS / "desk-answer-c3.png"))
         page.close()

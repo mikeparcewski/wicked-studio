@@ -948,6 +948,10 @@
   .wk-inbox-acts .wk-need-act, .wk-inbox-chores .wk-need-act { min-height: var(--tap-min); }
 }
 @media (prefers-reduced-motion: reduce) { .wk-inbox-list div.wk-inbox-row { transition: none; } }
+/* studio 0.16.4: a row's inline Undo (countdown, what happens, Undo, the result) on its own line under the row. */
+.wk-inbox-list div.wk-inbox-row > .wk-need-undo { grid-column: 2 / -1; margin-top: var(--space-2); cursor: auto; }
+.wk-desk-need:has(> .wk-need-undo[data-empty="false"]) { flex-wrap: wrap; }
+.wk-desk-need > .wk-need-undo { flex-basis: 100%; padding-left: 18px; }
 
 /* Runs and Report stat rows (2026-10-26): one quiet strip on one surface, like the Work tab's glance — the
    label, a mark at the right, the number at one size (28 px, not 56), the note. No five boxes. */
@@ -1104,3 +1108,5 @@
 @media (max-width: 640px) {
   [data-shell="desk"]:has([data-testid="understand-page"][data-pane="chat"]) [data-testid="ask-launcher"] { display: none !important; }
 }
+/* …and where a gate's row WAS (answered elsewhere): its result, at the head of the list. */
+.wk-desk-needs > .wk-need-undo--list { padding: 0 var(--space-2); margin-bottom: var(--space-2); }

@@ -139,7 +139,8 @@ export function pickKey(s: RowPick, key: string, n: number): { state: RowPick; s
   }
 }
 
-/** The folded row: "You chose Approve · Undo 9 s" inside the window, then "· sending". */
+/** The folded row: "You chose Approve" inside the window (its countdown and Undo are in the row's inline
+ *  block, studio 0.16.4), then "· sending". */
 export function chosenLine(label: string, secondsLeft: number): string {
-  return secondsLeft > 0 ? `You chose ${label} · Undo ${secondsLeft} s` : `You chose ${label} · sending`;
+  return secondsLeft > 0 ? `You chose ${label}` : `You chose ${label} · sending`;
 }

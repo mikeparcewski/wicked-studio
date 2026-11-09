@@ -16,6 +16,12 @@ import { needRunId } from '../board/deskModel.js';
 import { deskVerb, plainRunTitle } from '../board/deskWords.js';
 import { Switch } from './ui/index.js';
 import { FailureWhy } from './desk/FailureWhy.js';
+import { InlineUndo } from './InlineUndo.js';
+import { batchFailedResult } from './desk/BatchFailures.js';
+import { keysOfKind, useUndoQueue } from '../board/undoQueue.js';
+import { BATCH_KEY } from '../board/batchGates.js';
+import { gateKeyOf } from '../board/gateActions.js';
+import { MEMORY_ACCEPT_KEY } from '../hooks/useAcceptMemory.js';
 
 /**
  * THE NEEDS-YOU QUEUE (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
@@ -166,8 +172,9 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
   /** The proposal group's "Accept N memory-only" (idea 4): opens a preview; while queued it is the Undo. */
   const acceptAct = (a: Extract<NeedRow['action'], { kind: 'accept-memory' }>): React.ReactElement => {
     const s = queue.accept.state;
+    // studio 0.16.4: while queued the one Undo is the row's inline block; this button only says it is waiting.
     const label = s.phase === 'queued'
-      ? `Undo accepting ${s.count}`
+      ? `Accepting ${s.count}…`
       : s.phase === 'sending'
         ? `Accepting ${s.done}/${s.total}…`
         // Plain words for the move (UX gate S1): what it accepts, not the triage class's name.
@@ -177,9 +184,9 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
         type="button"
         data-testid="need-accept-act"
         data-accept-phase={s.phase}
-        disabled={s.phase === 'sending'}
+        disabled={s.phase === 'sending' || s.phase === 'queued'}
         title={s.phase === 'idle' ? 'Preview exactly which memory proposals would be accepted' : undefined}
-        onClick={() => (s.phase === 'queued' ? queue.accept.undo() : queue.act(a))}
+        onClick={() => queue.act(a)}
         className="wk-need-act"
       >
         {label}
@@ -253,12 +260,14 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
     const current = look.selectedKey === row.key;
     // The one spark mark (UI-CONTRACT §2): the most urgent row, the list's first.
     const urgent = testId === 'need-row' && queue.rows[0]?.key === row.key;
+    const undo = undoOf(row);
     return (
       <div
         key={row.key}
         data-testid={testId}
         data-kind={row.kind}
         data-key={row.key}
+        data-undo-host={undo?.host}
         data-count={row.members?.length ?? 1}
         data-queue-item={row.key}
         data-kbd-selected={selected ? 'true' : undefined}
@@ -308,6 +317,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
             <span className="wk-need-acts">{act(row)}</span>
           )}
         </span>
+        {rowUndo(undo)}
       </div>
     );
   };
@@ -320,12 +330,14 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
     // The one yellow dot (DESIGN-simple §1a): the most urgent row, the list's first.
     const urgent = testId === 'need-row' && queue.rows[0]?.key === row.key;
     const dot = urgent ? ' wk-desk-dot--urgent' : waiting ? ' wk-desk-dot--waiting' : '';
+    const undo = undoOf(row);
     return (
       <div
         key={row.key}
         data-testid={testId}
         data-kind={row.kind}
         data-key={row.key}
+        data-undo-host={undo?.host}
         data-count={row.members?.length ?? 1}
         data-queue-item={row.key}
         data-kbd-selected={selected ? 'true' : undefined}
@@ -371,6 +383,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
         ) : (
           <span className="wk-need-acts">{act(row)}</span>
         )}
+        {rowUndo(undo)}
       </div>
     );
   };
@@ -405,6 +418,24 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
     );
   };
 
+  // Where a row WAS: its gates, a batch, an accept — shown here only when no row or bar for them is on screen.
+  const failedBatch = batchFailedResult(navigate);
+  const orphanGateKeys = useUndoQueue((st) => [keysOfKind(st, 'gate'), keysOfKind(st, BATCH_KEY), keysOfKind(st, MEMORY_ACCEPT_KEY)].filter((x) => x !== '').join(' '));
+  /** studio 0.16.4: the row's inline Undo — a gate row's answer, an approval group's batch, a memory group's accept —
+   *  in its own line under the row; null for rows that queue nothing. The row's root carries the same host name. */
+  const undoOf = (row: NeedRow): { host: string; keys: string[] } | null => {
+    if (row.members !== undefined) {
+      // The group's own members (a batch carries them): another approvals group never shows this one's batch.
+      if (row.action.kind === 'batch-approve') return { host: 'batch-bar', keys: row.action.runIds.map(gateKeyOf) };
+      if (row.action.kind === 'accept-memory') return { host: 'memory-bar', keys: [MEMORY_ACCEPT_KEY] };
+      return null;
+    }
+    const runId = row.kind === 'gate' && row.action.kind === 'open' ? needRunId(row) : null;
+    return runId === null || runId === '' ? null : { host: 'desk-row', keys: [gateKeyOf(runId)] };
+  };
+  const rowUndo = (u: { host: string; keys: string[] } | null): React.ReactElement | null =>
+    u === null ? null : <InlineUndo host={u.host} keys={u.keys} className="wk-need-undo" renderFailed={failedBatch} />;
+
   // The Desk's row is the only row since the classic skins retired (S18d); Desk v2 lays it out as mail.
   const line = (row: NeedRow, testId: 'need-row' | 'need-member'): React.ReactElement => (inbox !== undefined ? inboxLine(row, testId, inbox) : deskLine(row, testId));
 
@@ -418,6 +449,9 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
       data-focus-lock={queue.focus.on ? 'on' : 'off'}
       className="wk-desk-needs"
     >
+      {/* studio 0.16.4: where a gate's row WAS — its decision's result when the row has gone (answered elsewhere, the
+          run moved on), in the list's flow. Shown only when no row or card for that gate is on screen. */}
+      <InlineUndo host="needs-queue" fallback keys={orphanGateKeys === '' ? [] : orphanGateKeys.split(' ')} className="wk-need-undo wk-need-undo--list" renderFailed={failedBatch} />
       <h2 className={inbox !== undefined ? 'wk-sr-only' : 'wk-desk-section-title'}>
         Needs you
         {sectionCounts.length > 0 && (

@@ -181,10 +181,10 @@ with sync_playwright() as p:
     page.goto(session_url(PLAN), wait_until="domcontentloaded")
     card.wait_for(state="visible", timeout=10000)
     card.get_by_test_id("session-proposal-go").click()
-    page.get_by_test_id("undo-toast").first.wait_for(state="visible", timeout=5000)
-    head = page.get_by_test_id("undo-headline").first.inner_text()
+    page.get_by_test_id("inline-undo").first.wait_for(state="visible", timeout=5000)
+    head = page.get_by_test_id("inline-undo-headline").first.inner_text()
     page.screenshot(path=str(SHOTS / "desk-reel-words-undo-plan.png"))
-    page.get_by_test_id("undo-button").first.click()
+    page.get_by_test_id("inline-undo-button").first.click()
     page.wait_for_timeout(600)
     check("443-undo-names-the-work",
           re.match(r"^Approving the plan for “Add a short \"Rules for booking\" section to PROPOSAL\.md” in \d+ s$", head) is not None
@@ -207,11 +207,11 @@ with sync_playwright() as p:
     sure = hand.get_by_test_id("session-proposal-confirm").inner_text()
     page.screenshot(path=str(SHOTS / "desk-reel-words-handover-sure.png"))
     hand.get_by_test_id("session-proposal-confirm-yes").click()
-    page.get_by_test_id("undo-toast").first.wait_for(state="visible", timeout=5000)
-    u_head = page.get_by_test_id("undo-headline").first.inner_text()
-    u_prev = page.get_by_test_id("undo-preview").first.inner_text()
+    page.get_by_test_id("inline-undo").first.wait_for(state="visible", timeout=5000)
+    u_head = page.get_by_test_id("inline-undo-headline").first.inner_text()
+    u_prev = page.get_by_test_id("inline-undo-preview").first.inner_text()
     page.screenshot(path=str(SHOTS / "desk-reel-words-handover-undo.png"))
-    page.get_by_test_id("undo-button").first.click()
+    page.get_by_test_id("inline-undo-button").first.click()
     page.wait_for_timeout(600)
     shown = [why, sure, u_head, u_prev]
     leaks = [x for x in shown if re.search(r"/var/|wicked/|gh resolves|IS the delivery|Push identity", x) or UUIDISH.search(x)]

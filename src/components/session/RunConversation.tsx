@@ -16,7 +16,7 @@ import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceMod
 import { approvedLine, overriddenFloorsOf } from '../../board/failingChecks.js';
 import { wordOf } from '../../board/planDraft.js';
 import { stepLabelOf } from '../../board/chainModel.js';
-import { undoDecision } from '../../board/undoQueue.js';
+import { InlineUndo } from '../InlineUndo.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { RunLearningsLine } from './RunLearningsLine.js';
 import { useRoster } from '../../hooks/useRoster.js';
@@ -665,22 +665,17 @@ export function RecoveryRow({ view, navigate }: { view: RunView; navigate?: Navi
   );
 }
 
-/** S7: the steps a `/` command added mid-run — "Adding Test · Undo" while the 10 s window is open, then "Added Test". */
-function PlanStepLines({ runId }: { runId: string }): React.ReactElement | null {
-  const queued = usePlanDrafts((s) => s.queued[runId]);
+/** S7: the steps a `/` command added mid-run — the shared inline Undo while the 10 s window is open (studio 0.16.4:
+ *  its countdown, what happens, Undo and the result), then "Added Test". Always mounted, so a step queued from the
+ *  composer or the plan editor shows here. */
+function PlanStepLines({ runId }: { runId: string }): React.ReactElement {
   const added = usePlanDrafts((s) => s.added[runId]);
-  if ((queued?.length ?? 0) === 0 && (added?.length ?? 0) === 0) return null;
   return (
-    <div className="wk-session-steps">
+    <div data-undo-host="plan-steps" className="wk-session-steps">
       {(added ?? []).map((c, i) => (
         <p key={`a${i}`} data-testid="session-step-added" data-catalog={c} className="wk-session-grey">Added {wordOf(c)} — it stays: a running plan only grows.</p>
       ))}
-      {(queued ?? []).map((q) => (
-        <p key={`q${q.id}`} data-testid="session-step-queued" data-catalog={q.catalog} className="wk-session-grey">
-          Adding {wordOf(q.catalog)} ·{' '}
-          <button type="button" data-testid="session-step-undo" onClick={() => undoDecision(q.id)} className="wk-btn wk-btn--quiet wk-btn--sm">Undo</button>
-        </p>
-      ))}
+      <InlineUndo host="plan-steps" keys={[`plan:${runId}`]} />
     </div>
   );
 }

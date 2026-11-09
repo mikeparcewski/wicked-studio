@@ -121,7 +121,7 @@ export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenG
   const s = view.session.status;
   const count = chain.total > 0 && !chain.proposed ? ` · ${chain.done} of ${chain.total} done` : '';
   if (action !== undefined && (s === 'awaiting_human' || gate !== undefined)) {
-    if (action.queued) return `Your answer goes in a moment — Undo is in the notice${count}`;
+    if (action.queued) return `Sending your answer in a moment — you can undo it on the decision card${count}`;
     if (action.busy) return `Sending your answer${count}`;
     if (action.answered === 'approved') return `Answered — starting${count}`;
   }
@@ -330,7 +330,7 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
     if (action.error !== null && !action.busy && !action.queued && action.answered === null) {
       return { ...card, state: 'fail', reason: `${action.error} The question is being read again; the answers come back with it.`, canRetry: false };
     }
-    return { ...card, state: 'run', runLabel: 'Going', live: action.queued ? 'Sending in a moment — Undo is in the notice' : 'Starting the work' };
+    return { ...card, state: 'run', runLabel: 'Going', live: action.queued ? 'Sending in a moment' : 'Starting the work' };
   }
 
   if (kind !== null && gate !== undefined) {
@@ -356,7 +356,7 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
     if (action.queued || action.busy || action.answered !== null) {
       return {
         ...card, state: 'run', runLabel: kind === 'deliver' ? 'Handing over' : 'Going',
-        live: action.queued ? 'Sending in a moment — Undo is in the notice' : 'Sending your answer',
+        live: action.queued ? 'Sending in a moment' : 'Sending your answer',
       };
     }
     if (kind === 'deliver' && ui.confirming === instance) {

@@ -10,7 +10,7 @@ SIMPLE gate waiting on b1:
   body      Home, nothing focused: "approve this" opens the Ask dock and lands in its input.
   card      Home, the beta card selected and focused (⌥J): "approve this" lands in the dock.
   button    Home, the b1 gate chip's Approve button focused: "approve this" lands in the dock;
-            the button is not pressed (no undo toast).
+            the button is not pressed (no inline Undo).
   page      /runs/new, the launch composer mounted, a button focused: "approve this" lands in
             the page's composer (launch-problem), and no Ask dock opens.
   gate      b1's session thread (/s/run%3Ab1, S16a-2a), the gate row's Approve focused: the row's
@@ -18,7 +18,7 @@ SIMPLE gate waiting on b1:
   composite /everything, its selected tab focused: a typed letter and digit stay with the tablist —
             no dock opens, no composer receives them.
   zero      after waiting past the 10 s undo window, NO gate POST reached the daemon (browser
-            and fixture both) and no undo toast ever appeared.
+            and fixture both) and no inline Undo ever appeared.
 
 Captures: e2e/shots/type-to-composer-{home,gate,page}.png.
 On the Desk (the one shell since S18d) Home is the Desk, which has no composer since concept A
@@ -81,11 +81,11 @@ with sync_playwright() as p:
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-    # Every undo toast that EVER mounts (however briefly, on any page) is recorded, so "no toast"
+    # Every inline Undo that EVER mounts (however briefly, on any page) is recorded, so "no toast"
     # is a whole-run fact, not a sample. sessionStorage survives the navigations below.
     page.add_init_script("""
       new MutationObserver(() => {
-        if (document.querySelector('[data-testid="undo-toast"]')) {
+        if (document.querySelector('[data-testid="inline-undo"]')) {
           sessionStorage.setItem('t2c-toasts', String(Number(sessionStorage.getItem('t2c-toasts') || '0') + 1)
             + ':' + location.pathname);
         }

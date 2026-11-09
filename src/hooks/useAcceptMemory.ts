@@ -7,7 +7,7 @@ import { useNeedsSources } from '../store/needsSources.js';
 /**
  * The proposal group's "Accept N memory-only" (studio Wave B, idea 4): PREVIEW exactly which
  * proposals, then COMMIT into the shared undo window (`board/undoQueue.ts`, the gate decisions'
- * 10 s window and toast), and only when the window ends POST each one through the EXISTING
+ * 10 s window, its inline Undo under the group row), and only when the window ends POST each one through the EXISTING
  * `POST /proposals/:id/approve`. What the preview named is exactly what is sent: the list is
  * snapshot at open. Undo (or closing the tab inside the window) sends nothing. Skins render the
  * states; they never post.
@@ -37,11 +37,14 @@ export interface AcceptMemory {
   cancel: () => void;
   /** Queue the previewed set behind the undo window. */
   confirm: () => void;
-  /** Undo a queued accept (the toast's Undo does the same). */
+  /** Undo a queued accept (the row's inline Undo does the same). */
   undo: () => void;
 }
 
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/** The undo-queue key for accepting memory-only proposals: the Needs queue's accept bar hosts it. */
+export const MEMORY_ACCEPT_KEY = 'memory-accept';
 
 export const ACCEPT_CLOSE_NOTE = 'Close this tab before then and nothing is sent: the proposals stay pending.';
 
@@ -87,6 +90,7 @@ export function useAcceptMemory(): AcceptMemory {
     const undoId = queueDecision({
       verb: 'approve',
       runIds: [],
+      keys: [MEMORY_ACCEPT_KEY],
       label: `${n} memory-only proposal${n === 1 ? '' : 's'}`,
       preview: acceptMemoryPreview(n, s.staying),
       closeNote: ACCEPT_CLOSE_NOTE,
@@ -94,11 +98,12 @@ export function useAcceptMemory(): AcceptMemory {
         setState({ phase: 'sending', done: 0, total: n });
         const { accepted, failures } = await acceptProposals(picked, (done) => setState({ phase: 'sending', done, total: n }));
         if (failures.length === 0) {
-          reportDecision('sent', `Accepted ${accepted} memory-only proposal${accepted === 1 ? '' : 's'}.`);
+          reportDecision('sent', `Accepted ${accepted} memory-only proposal${accepted === 1 ? '' : 's'}.`, { keys: [MEMORY_ACCEPT_KEY] });
         } else {
           reportDecision(
             'failed',
             `Accepted ${accepted} of ${n}; ${failures.length} refused: ${failures.map((f) => `${f.id}: ${f.error}`).join('; ')}`,
+            { keys: [MEMORY_ACCEPT_KEY] },
           );
         }
         setState({ phase: 'idle' });

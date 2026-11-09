@@ -228,7 +228,7 @@ describe('wicked’s passage (the held plan)', () => {
     expect(screen.queryByTestId('session-run')).toBeNull();
     fireEvent.click(reply('approve'));
     // Studio's receipt while it waits in the undo window: never a tick, nothing sent.
-    expect((await screen.findByTestId('job-passage-queued')).textContent).toMatch(/^Approve: queued, not sent yet · sends in \d+ s/);
+    expect((await screen.findByTestId('inline-undo-headline')).textContent).toMatch(/^Approving .* in \d+ s$/);
     expect(posts).toEqual([]);
     await act(async () => { await flushDecisionsForTest(); });
     expect(posts).toEqual([{ path: `/runs/${RUN}/gate`, body: { approve: true, planRev: 2, ord: 1 } }]);
@@ -238,10 +238,10 @@ describe('wicked’s passage (the held plan)', () => {
     page([run()]);
     await waitFor(() => expect(reply('approve').disabled).toBe(false));
     fireEvent.click(reply('approve'));
-    fireEvent.click(await screen.findByTestId('job-passage-undo'));
+    fireEvent.click(await screen.findByTestId('inline-undo-button'));
     await act(async () => { await flushDecisionsForTest(); });
     expect(posts).toEqual([]);
-    expect(screen.queryByTestId('job-passage-queued')).toBeNull();
+    expect(screen.queryByTestId('inline-undo')).toBeNull();
     expect(reply('approve').disabled).toBe(false);
   });
 
@@ -353,7 +353,7 @@ describe('review round 1 folds (the run half)', () => {
     const box = screen.getByTestId('session-composer-input');
     fireEvent.change(box, { target: { value: 'add a rollback step' } });
     fireEvent.keyDown(box, { key: 'Enter' });
-    fireEvent.click(await screen.findByTestId('job-passage-undo'));
+    fireEvent.click(await screen.findByTestId('inline-undo-button'));
     await act(async () => { await flushDecisionsForTest(); });
     expect(posts).toEqual([]);
     await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('add a rollback step'));
@@ -365,7 +365,7 @@ describe('review round 1 folds (the run half)', () => {
     await waitFor(() => expect(reply('change').disabled).toBe(false));
     fireEvent.click(reply('change'));
     fireEvent.click(reply('approve'));
-    await screen.findByTestId('job-passage-queued');
+    await screen.findByTestId('inline-undo');
     const box = screen.getByTestId('session-composer-input');
     fireEvent.change(box, { target: { value: 'add a rollback step' } });
     fireEvent.keyDown(box, { key: 'Enter' });
@@ -423,7 +423,7 @@ describe('review round 2 folds', () => {
     page([run()]);
     await waitFor(() => expect(reply('approve').disabled).toBe(false));
     act(() => { stopRun([RUN], 'the job'); });
-    expect((await screen.findByTestId('job-passage-queued')).textContent).toMatch(/^Stop the job: queued/);
+    expect((await screen.findByTestId('inline-undo-headline')).textContent).toMatch(/^Stopping the job in \d+ s$/);
     expect(reply('approve').disabled).toBe(true);
   });
 
@@ -435,9 +435,9 @@ describe('review round 2 folds', () => {
     const box = screen.getByTestId('session-composer-input');
     fireEvent.change(box, { target: { value: 'add a rollback step' } });
     fireEvent.keyDown(box, { key: 'Enter' });
-    await screen.findByTestId('job-passage-undo');
+    await screen.findByTestId('inline-undo-button');
     fireEvent.change(screen.getByTestId('session-composer-input'), { target: { value: 'a newer thought' } });
-    fireEvent.click(screen.getByTestId('job-passage-undo'));
+    fireEvent.click(screen.getByTestId('inline-undo-button'));
     await act(async () => { await flushDecisionsForTest(); });
     expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('a newer thought');
     expect(screen.queryByTestId('job-binding-label')).toBeNull();
