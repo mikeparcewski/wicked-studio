@@ -46,7 +46,7 @@ import { ChatCliPicker } from './chat/ChatCliPicker.js';
 import { ChatScopeChips, type ScopeCandidate } from './chat/ChatScopeChips.js';
 import { ChatHistoryRail } from './chat/ChatHistoryRail.js';
 import { History } from 'lucide-react';
-import { ASK_SESSION_KEY } from '../store/askSession.js';
+import { ASK_SESSION_KEY, PAGE_SEND_SESSION_KEY } from '../store/askSession.js';
 import { PAGE_CHAT_SPECS, pageChatRules, pageChatSessionKey, type PageChatKind, type PageFocus } from '../board/pageChat.js';
 import { pageChatEpoch } from '../store/pageChat.js';
 import { focusPack } from './askContext.js';
@@ -310,7 +310,7 @@ export interface PageChatBinding {
   focusChip?: React.ReactNode;
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, sendWorkflow, sendRepos, sendArtifact, startProjectId, startText, startFresh = false, page }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, sendWorkflow, sendRepos, sendArtifact, startProjectId, startText, startFresh = false, page, headless }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -352,15 +352,23 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   startFresh?: boolean;
   /** Drawn inside a page as its own chat (DES-LEARN §6.2). */
   page?: PageChatBinding;
+  /**
+   * crew-0183 (operator: "opens ask, then redirects to inline chat"): a send from the page that SHOWS the chat (its own
+   * session page) runs this engine's open-and-send with nothing drawn — the floating window never mounts. The handed-over
+   * message is sent once at mount; `onDone` gets `null` once it is accepted, else the reason (the page shows it); the
+   * engine then closes itself. Its session is kept under its own key, so the system chat's stored chat is untouched.
+   */
+  headless?: { onDone: (failed: string | null) => void };
 }): React.ReactElement {
   // Each page chat keeps its own conversation; the system chat keeps the one it always had.
-  const sessKey = page !== undefined ? pageChatSessionKey(page.kind) : ASK_SESSION_KEY;
+  const sessKey = page !== undefined ? pageChatSessionKey(page.kind) : headless !== undefined ? PAGE_SEND_SESSION_KEY : ASK_SESSION_KEY;
   const pageRef = useRef(page);
   pageRef.current = page;
   // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
   // in an effect (a StrictMode double initializer must not read an already-emptied seed).
-  const [typedSeed] = useState(peekTypedSeed);
-  useEffect(() => { takeTypedSeed(); }, []);
+  // A headless send never takes the letters typed to open the dock (they are the dock's, not this send's).
+  const [typedSeed] = useState(() => (headless !== undefined ? '' : peekTypedSeed()));
+  useEffect(() => { if (headless === undefined) takeTypedSeed(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, at mount
   // A Desk handoff is read once, at mount, like the seed: later props never re-send it.
   const [handoff] = useState(() => sendText);
   // DES-CHAT-ARTIFACTS-001: the artifact the handed-over message is about rides that ONE send; an "Ask about this" seed
@@ -389,7 +397,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // The floating window's chrome (drag handle, minimize / full size / close) — absent in a bare render.
   const chrome = useChatChrome();
   // A send that settles after Close ended this chat must not re-persist it.
-  const epochNow = (): number => (pageRef.current !== undefined ? pageChatEpoch(pageRef.current.kind) : systemChatEpoch());
+  // A headless send belongs to no window: closing the system chat does not end it.
+  const epochNow = (): number => (pageRef.current !== undefined ? pageChatEpoch(pageRef.current.kind) : headless !== undefined ? 0 : systemChatEpoch());
   const [epoch] = useState(epochNow);
   const ended = (): boolean => epochNow() !== epoch;
 
@@ -552,7 +561,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const cliRef = useRef(cli);
   cliRef.current = cli;
   const cliLabel = cli === null ? null : cliName(cli, roster);
-  useEffect(() => { if (pageRef.current === undefined) useChatWindow.getState().setCli(cliLabel); }, [cliLabel]);
+  useEffect(() => { if (pageRef.current === undefined && headless === undefined) useChatWindow.getState().setCli(cliLabel); }, [cliLabel]); // eslint-disable-line react-hooks/exhaustive-deps -- headless is fixed for the mount
 
   // ASK-S1 (Amendment 6 decision 5: studio renders ONE thread): on the chat's own session page the
   // session thread shows every turn as it happens, so once a send is accepted the dock steps aside
@@ -957,6 +966,23 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       {...(navigate !== undefined ? { onSignIn: (path: string) => navigate(path) } : {})}
     />
   );
+
+  // crew-0183: the headless send — once, at mount, through the same verbs the drawer's Send uses; then the engine closes.
+  const headlessRef = useRef(headless);
+  const headlessSent = useRef(false);
+  useEffect(() => {
+    const h = headlessRef.current;
+    if (h === undefined || headlessSent.current) return;
+    headlessSent.current = true;
+    const body = (handoff ?? '').trim();
+    if (body === '') { onCloseRef.current(); return; }
+    void verbs.send(body, []).then(
+      () => h.onDone(null),
+      (e: unknown) => h.onDone(e instanceof Error ? e.message : String(e)),
+    ).finally(() => onCloseRef.current());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount, with the handed-over text
+  }, []);
+  if (headless !== undefined) return <></>;
 
   return (
     <div ref={bodyRef} data-testid={page !== undefined ? 'page-chat-engine' : 'system-chat'} data-past-chats={page === undefined && chatList && historyOpen ? (wide ? 'column' : 'overlay') : undefined} className="wk-syschat">

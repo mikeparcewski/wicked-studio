@@ -152,6 +152,20 @@ describe('move work into a project', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('crew-0183: opening the picker focuses its first item WITHOUT scrolling the rail (a row at the scroller\'s edge stayed closed)', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    surfaces([run()]);
+    const host = screen.getByTestId('session-rail');
+    await waitFor(() => expect(within(host).getByTestId('session-move')).toBeInTheDocument());
+    fireEvent.click(within(host).getByTestId('session-move'));
+    const picker = within(host).getByTestId('session-move-picker');
+    const first = within(picker).getAllByRole('button').find((b) => !(b as HTMLButtonElement).disabled)!;
+    await waitFor(() => expect(document.activeElement).toBe(first));
+    const call = focus.mock.calls.find((_, i) => focus.mock.contexts[i] === first);
+    expect(call?.[0]).toEqual({ preventScroll: true });
+    focus.mockRestore();
+  });
+
   it('studio#723: the picker is a viewport-placed menu (fixed, height-capped) of quiet rows, not bordered boxes', async () => {
     surfaces([run()]);
     const trigger = await screen.findByRole('button', { name: 'Move Write the guide to a project' });

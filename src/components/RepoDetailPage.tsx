@@ -24,6 +24,8 @@ import { useMembershipStore } from '../store/membership.js';
 import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { linksOf, useRepoLinks, useRepoLinksFor } from '../store/repoLinks.js';
 import { AddRepoToProject } from './AddRepoToProject.js';
+import { RepoWatchControls, RepoWatchLine } from './RepoWatchLine.js';
+import { useRepoWatch } from '../api/repoWatch.js';
 import { CommitCadence } from './CommitCadence.js';
 import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
@@ -96,6 +98,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const showText = useDisplayText();
   const tab = repoTabOf(search);
   const ambientProject = ambientProjectId('', search);
+  // crew-0183: crew's repo watcher — whether this repository's code map is kept current, read while the page is open.
+  const watch = useRepoWatch();
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [rawRuns, setRuns] = useState<SessionView[]>([]);
@@ -395,6 +399,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
               <OverflowMenu label={`More for ${repo.name}`} items={menu} data-testid="repo-more" />
             </div>
           </header>
+          <RepoWatchLine status={watch} repoId={repo.id} now={now} navigate={navigate} />
 
           {/* What blocks the code map, above the tabs (seen on every tab); silent when nothing does. */}
           {(onboardErrorText !== null || hasFindings || graphFailedHere || captureError !== null || runsFailed) && (
@@ -550,6 +555,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                 <div>
                   <section className="wk-card" data-testid="repo-upkeep">
                     <SectionTitle>Upkeep</SectionTitle>
+                    <RepoWatchControls status={watch} repoId={repo.id} />
                     <div className="wk-rp-upkeep">
                       <b>Rebuild the code map</b>
                       <button type="button" data-testid="repo-run-onboarding" onClick={() => void startOnboarding()} disabled={onboarding}

@@ -35,6 +35,22 @@
 .wk-rl-map[data-tone="warn"] .wk-rl-map-dot { background: var(--status-warn); }
 .wk-rl-map[data-tone="fail"] .wk-rl-map-dot { background: var(--status-fail); }
 .wk-rl-map[data-tone="none"] .wk-rl-map-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
+/* crew-0183: whether the code map is kept current (crew's repo watcher), one quiet line under the map's own. */
+.wk-rl-watch { display: block; margin-top: 2px; font-size: var(--text-xs); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-rl-watch[data-tone="busy"] { color: var(--ink-body); }
+.wk-rl-watch[data-tone="wait"] { color: var(--ink-body); }
+.wk-rl-watch[data-tone="bad"] { color: var(--status-fail); }
+.wk-rp-watch { display: flex; align-items: baseline; gap: 8px; margin: -8px 0 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-rp-watch-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--ink-dim); transform: translateY(-1px); }
+.wk-rp-watch[data-tone="ok"] .wk-rp-watch-dot { background: var(--status-ok); }
+.wk-rp-watch[data-tone="busy"] .wk-rp-watch-dot { background: var(--status-run); }
+.wk-rp-watch[data-tone="wait"] .wk-rp-watch-dot { background: var(--status-gate); }
+.wk-rp-watch[data-tone="bad"] .wk-rp-watch-dot { background: var(--status-fail); }
+.wk-rp-watch[data-tone="quiet"] .wk-rp-watch-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
+.wk-rp-watch[data-tone="bad"] [data-testid="repo-watch-words"] { color: var(--status-fail); }
+.wk-rp-watch-remedy { color: var(--ink-body); }
+.wk-rp-watch-toggle { display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-rp-watch-toggle input { margin-top: 3px; }
 /* The right-hand word or step: its own control, over the row's last column. */
 .wk-rl-act { position: absolute; right: 16px; top: 32px; transform: translateY(-50%); display: flex; align-items: center; }
 .wk-rl-act .wk-jr-word, .wk-rl-act .wk-jr-link { font-size: var(--text-sm); }

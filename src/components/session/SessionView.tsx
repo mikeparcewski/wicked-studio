@@ -2,7 +2,7 @@ import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorBadge, floorWords } from '../../board/floorRun.js';
-import { beginChatOpen, chatOpened, useChatFlow } from '../../store/chatFlow.js';
+import { beginChatOpen, chatOpened, useChatFlow, usePageSendFailure } from '../../store/chatFlow.js';
 import { moveOf, useJobMoves } from '../../store/jobMoves.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -277,6 +277,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const chatProjectName = useProjectsStore((s) => (chatProjectId === null ? null : s.projects.find((p) => p.id === chatProjectId)?.name ?? null));
   const trackerLinks = useTrackerLinksSupported();
   const freshOpening = useChatFlow((s) => (ref.kind === 'chat' && s.opening[ref.chatId] === true));
+  // crew-0183: a send from this page runs headless (no floating window to say why it failed), so the reason shows here.
+  const sendFailure = usePageSendFailure((s) => (ref.kind === 'chat' ? s.failed[ref.chatId] ?? null : null));
   // Opened on the daemon: read the chat again, and until THAT read answers the page stays the new chat
   // (codex r1: the read from before the open said "closed", which is not what the page now is).
   const [openedAt, setOpenedAt] = useState<number | null>(null);
@@ -1101,7 +1103,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // chat's page (nothing opened yet) seeds a new chat instead.
     jobChatId: ref.kind === 'chat' && (conversation === 'live' || awaitingOpenRead) ? ref.chatId : null,
     // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
-    footer: scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null,
+    footer: scopeNote !== null || sendFailure !== null ? (
+      <>
+        {sendFailure !== null && <p data-testid="session-send-failed" role="alert" className="wk-composer-hint wk-composer-hint--bad">That wasn’t sent: {sendFailure}</p>}
+        {scopeNote !== null && <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p>}
+      </>
+    ) : null,
     text: draft,
     setText: (t: string) => setDraft(sessionId, t),
     // S16a-4e: on a live chat's own session the composer replies into THAT chat.

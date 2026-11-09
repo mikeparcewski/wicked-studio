@@ -30,6 +30,8 @@ import { linksOf, useRepoLinksFor } from '../store/repoLinks.js';
 import { useHeldMarked } from '../hooks/useHeldMarked.js';
 import { isHeldRun } from '../board/heldRuns.js';
 import { useTrackerLinksSupported } from '../api/trackers.js';
+import { useRepoWatch } from '../api/repoWatch.js';
+import { RepoWatchLine } from './RepoWatchLine.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -78,6 +80,8 @@ function errorText(e: unknown): string {
 const NEW_PROJECT = '\u0000new';
 
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
+  // crew-0183: crew's repo watcher — each row says whether its code map is kept current, read while the list is open.
+  const watch = useRepoWatch();
   usePageChatFor('repos', 'Knows Repositories: each registered repository, its code graph and its work.', 'repos-page');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [rawRuns, setRuns] = useState<SessionView[]>([]);
@@ -726,11 +730,12 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                                 <span aria-hidden className="wk-rl-map-dot" />
                                 <span><span data-testid="repo-row-line">{map.words}</span>{map.size !== null && <> · <b>{map.size}</b></>}</span>
                               </span>
+                              <RepoWatchLine status={watch} repoId={repo.id} now={now} compact />
                             </span>
                             {trk !== null && <span className="wk-rl-cell wk-rl-desk" data-muted={trk.muted ? 'true' : undefined} data-testid="repo-row-trackers">{trk.words}</span>}
                             <span className="wk-rl-cell wk-rl-desk" data-muted="true" data-testid="repo-row-last">{when}</span>
                             <span className="wk-rl-cell wk-rl-desk" aria-hidden />
-                            <span className="wk-rl-phone" data-testid="repo-row-phone">{phoneLine(map, link, when, jobsIn)}</span>
+                            <span className="wk-rl-phone" data-testid="repo-row-phone">{phoneLine(map, link, when, jobsIn)}<RepoWatchLine status={watch} repoId={repo.id} now={now} compact /></span>
                           </a>
                           <span className="wk-rl-act">
                             {showWord && <span className="wk-jr-word" data-tone={side.tone} data-testid="repo-row-word">{side.label}</span>}

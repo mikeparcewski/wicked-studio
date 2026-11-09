@@ -112,6 +112,21 @@ export function chatOpened(chatId: string): void {
   useChatFlow.setState({ fresh, opening });
 }
 
+/**
+ * crew-0183: why a chat page's own send failed (the headless engine's reason; the floating window that used to say it no
+ * longer opens). The page shows it under its composer until the next send.
+ */
+export const usePageSendFailure = create<{ failed: Readonly<Record<string, string>> }>(() => ({ failed: {} }));
+
+export function pageSendFailed(chatId: string, reason: string | null): void {
+  usePageSendFailure.setState((s) => {
+    const failed = { ...s.failed };
+    if (reason === null) delete failed[chatId];
+    else failed[chatId] = reason;
+    return { failed };
+  });
+}
+
 /** Test hook. */
 export function resetChatFlow(): void {
   writeFresh({});

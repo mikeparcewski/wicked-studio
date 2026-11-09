@@ -14,7 +14,13 @@ At 1440x700 (the rail) and 390x844 (the drawer), against the in-process fixture:
   3. readable in both themes (the theme set BEFORE the page loads, then 600 ms for the colour transitions): every text
      of the open picker and of the rail's links and run rows is >= 4.5:1 on what it sits on (WCAG AA, measured from the
      computed colours, opacity and alpha included);
-  4. 0 page errors.
+  4. crew-0183 (operator: it STILL closed at once on the one "Not in a project" row): the rail's scroller overflowing
+     (scrollHeight > clientHeight), the LAST row of the last group scrolled so it sits on the scroller's bottom edge.
+     A plain focus of the picker's first item scrolled the scroller and the picker's scroll listener closed it 14 ms
+     later. Click: 300 ms later it is still open and the scroller has not moved; Tab and Shift+Tab move between its
+     items without scrolling the rail or closing it. (The move itself, and the only member of "Not in a project",
+     run on a real daemon: the fixture keeps no membership writes.)
+  5. 0 page errors.
 
 Captures: e2e/shots/desk-rail-move-<w>x<h>-<theme>.png (light and dark). Env: FEEDBACK_PORT (default 4497).
 JSON report; exit 0/1.
@@ -112,6 +118,62 @@ def open_picker(page, w: int, h: int) -> None:
     check(f"centre-hits-picker-{w}", hit)
 
 
+EDGE = """() => {
+  const rows = [...document.querySelectorAll('[data-testid="session-rail"] .wk-rail-session-row')];
+  if (rows.length === 0) return null;
+  const last = rows[rows.length - 1];
+  // The row's own scroller: the desktop rail's `.wk-rail-groups`, the phone drawer's panel.
+  let sc = last.parentElement;
+  while (sc && !/(auto|scroll)/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
+  if (!sc) return null;
+  document.querySelectorAll('[data-e2e-scroller]').forEach((e) => e.removeAttribute('data-e2e-scroller'));
+  sc.setAttribute('data-e2e-scroller', '1');
+  // Room above the rows (the fixture's rows alone may fit), then the row scrolled down onto the scroller's bottom edge
+  // (or the screen's, when the scroller runs past it): where the operator's one "Not in a project" row sat.
+  const pad = document.createElement('div'); pad.dataset.e2ePad = '1'; pad.style.height = `${sc.clientHeight}px`; pad.style.flex = "0 0 auto";
+  sc.insertBefore(pad, sc.firstChild);
+  sc.scrollTop = sc.scrollHeight;
+  const edge = () => Math.min(sc.getBoundingClientRect().bottom, innerHeight);
+  sc.scrollTop -= edge() - last.getBoundingClientRect().bottom;
+  const s = sc.getBoundingClientRect(), r = last.getBoundingClientRect();
+  last.setAttribute('data-e2e-edge', '1');
+  return { scroller: sc.className, scrollHeight: sc.scrollHeight, clientHeight: sc.clientHeight, scrollTop: sc.scrollTop,
+    rowBottom: Math.round(r.bottom), scrollerBottom: Math.round(Math.min(s.bottom, innerHeight)) };
+}"""
+
+
+def edge_row_stays_open(page, w: int, h: int) -> None:
+    """The bottom-edge row of an overflowing rail: the picker opens and stays open, and Tab never scrolls the rail."""
+    page.goto(f"{origin}/", wait_until="networkidle")
+    if w < 768:
+        page.get_by_test_id("rail-drawer-toggle").click()
+    rail = page.get_by_test_id("session-rail")
+    rail.wait_for(state="visible", timeout=15000)
+    rows = rail.locator(".wk-rail-session-row")
+    if rows.count() == 0:
+        rail.get_by_role("button", name="Recent").first.click()
+    rows.first.wait_for(state="visible", timeout=15000)
+    geo = page.evaluate(EDGE)
+    check(f"edge-overflowing-{w}", geo is not None and geo["scrollHeight"] > geo["clientHeight"]
+          and geo["scrollTop"] > 0 and abs(geo["scrollerBottom"] - geo["rowBottom"]) <= 2, geo=geo)
+    row = page.locator('[data-e2e-edge="1"]')
+    row.hover()
+    trigger = row.get_by_test_id("session-move")
+    top0 = page.evaluate("document.querySelector('[data-e2e-scroller]').scrollTop")
+    trigger.click()
+    page.wait_for_timeout(300)
+    picker = page.get_by_test_id("session-move-picker")
+    top1 = page.evaluate("document.querySelector('[data-e2e-scroller]').scrollTop")
+    check(f"edge-open-after-300ms-{w}", picker.count() == 1 and trigger.get_attribute("aria-expanded") == "true" and top1 == top0,
+          pickers=picker.count(), scrollTop=[top0, top1])
+    for key in ("Tab", "Tab", "Shift+Tab"):
+        page.keyboard.press(key)
+        page.wait_for_timeout(150)
+    top2 = page.evaluate("document.querySelector('[data-e2e-scroller]').scrollTop")
+    focus_in = page.evaluate("() => !!document.activeElement?.closest('[data-testid=\"session-move-picker\"]')")
+    check(f"edge-tab-stays-open-{w}", picker.count() == 1 and top2 == top0 and focus_in, scrollTop=[top0, top2], focusIn=focus_in)
+
+
 def readable(page, w: int, theme: str) -> None:
     """Every picker and rail text >= 4.5:1, with the numbers in the report."""
     for part, sel in (("picker", '[data-testid="session-move-picker"]'), ("rail", '[data-testid="session-rail"]')):
@@ -132,6 +194,9 @@ with sync_playwright() as p:
                 f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
             # The theme is the stored setting before the page loads (never switched under a running transition).
             set_fixture(origin, repo=True, sessions=True, appearance={"theme": f"wicked-{theme}"})
+            edge_row_stays_open(page, w, h)
+            page.wait_for_timeout(600)  # every colour transition (140 ms) has ended
+            page.screenshot(path=str(SHOTS / f"desk-rail-move-edge-{w}x{h}-{theme}.png"))
             open_picker(page, w, h)
             page.wait_for_timeout(600)  # every colour transition (140 ms) has ended
             check(f"theme-{w}-{theme}", page.evaluate("document.documentElement.getAttribute('data-theme')") == f"wicked-{theme}")

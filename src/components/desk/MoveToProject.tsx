@@ -129,7 +129,10 @@ export function MoveToProject({ session, projectId, runs }: { session: RailSessi
   const pickerId = useId();
   const close = useCallback(() => { if (!busy) setOpen(false); }, [busy]);
   useDismissable(open, close, container, trigger);
-  useEffect(() => { if (open) picker.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(); }, [open]);
+  // crew-0183 (operator: the picker still closed at once on the bottom rows): a plain focus scrolls the rail's scroller
+  // to bring the item into view when the trigger's row sits at its edge, and the scroll listener below then closes the
+  // picker. The picker is placed against the viewport already, so its first item never needs scrolling into view.
+  useEffect(() => { if (open) picker.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true }); }, [open]);
   // studio#723: the picker is placed against the VIEWPORT (fixed), below the trigger or above it when
   // there is more room there, and never taller than that room — so the rail's scroller and its fixed
   // Workspace footer can no longer clip the last projects; it scrolls within its own box.
