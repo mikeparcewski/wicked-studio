@@ -156,6 +156,11 @@ describe('DocSubjectPicker: Add a repository (G11)', () => {
     fireEvent(await screen.findByTestId('doc-subject-register'), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
     await act(async () => { window.dispatchEvent(new Event('focus')); });
     await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(2));
+    // A return before the clone finished, then another after it: the second return reads again too (review r4).
+    listRepos.mockResolvedValue({ repos: [repo('r-late', 'late-one')] });
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(await screen.findByTestId('doc-subject-add')).not.toBeNull();
+    expect(listRepos).toHaveBeenCalledTimes(3);
   });
 
   it('Unfiled has no project to add to: it says to file the document', async () => {

@@ -91,10 +91,9 @@ export function DocSubjectPicker({
   // tab reads the repositories again, and the one just registered is offered.
   const registering = useRef(false);
   useEffect(() => {
+    // Every return reads again once the link was used (a slow clone may finish after the first return; review r4).
     const back = (): void => {
-      if (!registering.current) return;
-      registering.current = false;
-      setAttempt((n) => n + 1);
+      if (registering.current) setAttempt((n) => n + 1);
     };
     window.addEventListener('focus', back);
     return () => window.removeEventListener('focus', back);

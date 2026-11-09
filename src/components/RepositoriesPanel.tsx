@@ -233,7 +233,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
           repoAttachError = err instanceof Error ? err.message : String(err);
         }
       }
-      const runFilingError = repoAttachError === null ? registered.projectAttachError ?? null : null;
+      // Only crew's own attach can leave the run unfiled: studio's attach goes through the member route, which files the
+      // repository's onboarding run there too (review r4).
+      const runFilingError = registered.projectAttached === true ? registered.projectAttachError ?? null : null;
 
       setRepos((prev) => [...prev, repo]);
       // A just-registered repo joins the queue's register at once (its "never indexed" row).

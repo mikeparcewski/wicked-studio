@@ -112,7 +112,7 @@ describe('RepositoriesPanel register flow — project binding (slice B; crew-018
     expect(client.api.attachProjectMember).toHaveBeenCalledTimes(1);
   });
 
-  it('an older crew\'s projectAttachError (its run filing only): studio still attaches the repo and says only the run is unfiled', async () => {
+  it('an older crew\'s projectAttachError (its run filing): studio attaches the repo, whose member route files the run too: no notice', async () => {
     vi.mocked(client.api.registerRepo).mockResolvedValue({ repo: REPO, onboardRunId: 'r-onboard', projectAttachError: 'filing failed' });
     const user = userEvent.setup();
     const navigate = vi.fn();
@@ -121,9 +121,7 @@ describe('RepositoriesPanel register flow — project binding (slice B; crew-018
     await waitFor(() => expect((select as HTMLSelectElement).options.length).toBe(4));
     await user.selectOptions(select, 'q3-review-deck');
     await fillAndRegister(user);
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1', {
-      state: { projectAttachError: 'Added to q3-review-deck, but its onboarding run is not filed there: filing failed', projectAttachFor: 'q3-review-deck', projectAttachRepo: false },
-    }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1'));
     expect(client.api.attachProjectMember).toHaveBeenCalledWith('q3-review-deck', { kind: 'crew.repo', ref: 'repo-1', attachedBy: 'studio' });
   });
 });

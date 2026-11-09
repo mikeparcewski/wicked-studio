@@ -293,7 +293,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       ) : null}
       {open && p.blocked !== null && (
         <p data-testid="artifact-proposal-blocked" className="wk-proposal-blocked">
-          <b>Can’t start here yet.</b> {p.blocked}. Nothing was started.
+          <b>Can’t start here yet.</b> {p.blocked.charAt(0).toUpperCase() + p.blocked.slice(1)}. Nothing was started.
         </p>
       )}
       {(open || view.state === 'accepting') && stub && (

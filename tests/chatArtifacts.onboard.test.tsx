@@ -215,7 +215,8 @@ describe('the onboard card', () => {
     chatBody = { ...chatBody, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: blocked }] };
     page();
     await screen.findByTestId('artifact-proposal');
-    expect(text('artifact-proposal-blocked')).toMatch(/private or doesn't exist/);
+    // crew's reason, its first letter capitalized after the bold lead.
+    expect(text('artifact-proposal-blocked')).toBe("Can’t start here yet. This computer's git can't read it: the repository is private or doesn't exist. Nothing was started.");
     expect(screen.getByTestId('artifact-proposal').querySelector('[data-ask-option="go"]')?.getAttribute('aria-disabled')).toBe('true');
   });
 });
