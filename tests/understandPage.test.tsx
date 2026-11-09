@@ -104,6 +104,7 @@ describe('Understand words (pure)', () => {
     // A plain chat still carries the line to the seat; the person's bubble shows only their words.
     expect(withoutGroundingLine(questionMessage('Who calls deliver?'))).toBe('Who calls deliver?');
     expect(withoutGroundingLine('Who calls deliver?')).toBe('Who calls deliver?');
+    expect(withoutGroundingLine('Who calls Answer')).toBe('Who calls Answer');
   });
 
   it('one plain line of what an answer found, and the files it cites (verified ones only)', () => {

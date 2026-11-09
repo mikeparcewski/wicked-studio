@@ -43,7 +43,9 @@ export function questionMessage(question: string, analysis = false): string {
 /** The person's own words of a sent question: the grounding line a plain chat carried is not theirs. */
 export function withoutGroundingLine(text: string): string {
   const suffix = `\n\n${GROUNDING_LINE}`;
-  return text.endsWith(suffix) ? text.slice(0, text.length - suffix.length) : withoutGrounding(text);
+  // Only the exact line a plain chat appended is taken off; anything else is the person's own words (pi r3: the fuzzy
+  // title stripper would eat a question ending in "Answer").
+  return text.endsWith(suffix) ? text.slice(0, text.length - suffix.length) : text;
 }
 
 function isAsked(v: unknown): v is AskedQuestion {
