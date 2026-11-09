@@ -139,11 +139,39 @@ describe("a project's home (no ?tab=, the approved ui-v2-projects mockup)", () =
     expect(screen.queryByTestId('project-archived')).toBeNull();
   });
 
-  it('an archived project\'s home shows its Archived tag', async () => {
-    getProject.mockResolvedValue({ project: { ...project, status: 'archived' }, members: [] });
-    render(<ProjectDesk {...props} />);
+  it('an archived project\'s home shows its Archived tag, offers no new work, and links the restore to Settings', async () => {
+    const navigate = vi.fn();
+    getProject.mockResolvedValue({ project: { ...project, status: 'archived' }, members: [member('repo', 'crew.repo')] });
+    render(<ProjectDesk {...props} navigate={navigate} />);
     await loaded();
     expect(screen.getByTestId('project-archived')).toHaveTextContent('Archived');
+    // crew refuses a job, a chat or a repository into an archived project: none is offered, not even disabled.
+    expect(screen.queryByTestId('project-ask')).toBeNull();
+    expect(screen.queryByTestId('project-ask-input')).toBeNull();
+    expect(screen.queryByTestId('project-add-repo')).toBeNull();
+    expect(screen.queryByTestId('project-attach-repo')).toBeNull();
+    expect(screen.getByTestId('project-archived-line')).toHaveTextContent('This project is archived. Restore it in Settings to start work or add repositories.');
+    const link = screen.getByTestId('project-archived-settings');
+    expect(link).toHaveAttribute('href', '/projects/p1?tab=settings');
+    fireEvent.click(link);
+    expect(navigate).toHaveBeenCalledWith('/projects/p1?tab=settings');
+    // The repositories it holds are still listed.
+    expect(await screen.findAllByTestId('project-repo-chip')).toHaveLength(1);
+  });
+
+  it('an archived project\'s Work tab offers no first job; an active one with nothing yet does', async () => {
+    getProject.mockResolvedValue({ project: { ...project, status: 'archived' }, members: [] });
+    const view = render(<ProjectDesk {...props} runs={[]} search="?tab=work" />);
+    await loaded();
+    expect(screen.queryByTestId('project-first-run')).toBeNull();
+    expect(screen.queryAllByTestId('project-first-job')).toHaveLength(0);
+    expect(screen.getByTestId('project-archived-line')).toBeInTheDocument();
+    view.unmount();
+    getProject.mockResolvedValue({ project, members: [] });
+    render(<ProjectDesk {...props} runs={[]} search="?tab=work" />);
+    await loaded();
+    expect(await screen.findByTestId('project-first-run')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-archived-line')).toBeNull();
   });
 
   it("a ranked crew: Needs you is crew's attention filtered to the project; stale work is one tidy-up line with its spend", async () => {

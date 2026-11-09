@@ -88,3 +88,4 @@ a.wk-pj-chip--link:focus-visible { outline: 2px solid transparent; box-shadow: v
 .wk-pj-move-title { flex: 1 1 auto; min-width: 0; font-size: var(--text-body); color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-pj-move-more { padding: 8px 12px 0; }
 .wk-pj-tidy { margin-top: 8px; }
+.wk-pj-archived-line { margin: 0; font-size: var(--text-body); color: var(--ink-body); }

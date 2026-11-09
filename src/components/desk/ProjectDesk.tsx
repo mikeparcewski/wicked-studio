@@ -22,7 +22,7 @@ import { ProjectCoverage, ProjectDomain, type ProjectReadIssue, type ProjectIssu
 import { StateBanner, Skeleton, EmptyState } from '../ui/StateBanner.js';
 import { OverflowMenu } from '../ui/OverflowMenu.js';
 import { DeskV2, deskTabPath, type HostedTab } from './DeskV2.js';
-import { ProjectHome } from './ProjectHome.js';
+import { ArchivedLine, ProjectHome } from './ProjectHome.js';
 import { ProjectSettings } from './ProjectSettings.js';
 
 const RUN_KIND = 'crew.run';
@@ -199,7 +199,9 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   useEffect(() => { if (needsRegister) fetchReposCached().then(setRegister, () => setRegister([])); }, [needsRegister]);
   const used = useMemo(() => reposUsed(mine, members, register ?? getCachedRepos() ?? []), [mine, members, register]);
   const others = members.filter((m) => m.member_kind !== RUN_KIND && m.member_kind !== REPO_KIND);
-  const firstRun = !loading && project !== null && !isDefault && jobsCount === 0 && !members.some((m) => m.member_kind === REPO_KIND);
+  // An archived project takes no new work (crew refuses jobs, chats and repositories into it): its Work tab offers none.
+  const archived = !isDefault && project?.status === 'archived';
+  const firstRun = !loading && project !== null && !isDefault && !archived && jobsCount === 0 && !members.some((m) => m.member_kind === REPO_KIND);
   function handleDetach(memberId: string): void {
     if (!project) return;
     void api.detachProjectMember(project.id, memberId).catch(() => {});
@@ -250,7 +252,8 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
         </ol>
       </div>
     </section>}
-    {!isDefault && <ProjectRequirementsSection projectId={projectId} navigate={navigate} onIssue={onIssue} />}
+    {archived && <ArchivedLine navigate={navigate} base={base} />}
+    {!isDefault && <ProjectRequirementsSection projectId={projectId} navigate={navigate} onIssue={onIssue} archived={archived} />}
     <div id="project-documents"><ProjectDocumentsRoot projectId={projectId} project={project} onIssue={onIssue} onChanged={(updated) => setDetail((d) => d !== null && d.project.id === updated.id ? { ...d, project: updated } : d)} /></div>
     {others.length > 0 && <section className="wk-card" aria-labelledby="project-others-title">
       <h2 id="project-others-title" className="wk-section-title">Chats and other items</h2>

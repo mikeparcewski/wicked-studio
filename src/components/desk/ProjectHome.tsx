@@ -32,6 +32,18 @@ import { VoiceMicButton } from '../voice/VoiceMicButton.js';
 
 const NO_ITEMS: readonly SystemAttention[] = [];
 
+/** An archived project's one line where new work would start: it says why there is none, and the way back. */
+export function ArchivedLine({ navigate, base }: { navigate: Navigate; base: string }): React.ReactElement {
+  const settings = deskTabPath('settings', undefined, base);
+  return (
+    <p className="wk-calm-foot wk-pj-archived-line" data-testid="project-archived-line">
+      This project is archived. Restore it in{' '}
+      <a href={settings} onClick={go(navigate, settings)} className="wk-link" data-testid="project-archived-settings">Settings</a>
+      {' '}to start work or add repositories.
+    </p>
+  );
+}
+
 /** Needs you and In progress show at most this many rows; Needs you in full and the Jobs view have the rest. */
 const ROWS_MAX = 5;
 
@@ -132,6 +144,9 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   // "More info": the project page's first tab. Work in no project has no Settings (nothing can edit it).
   const moreInfo = deskTabPath(DESK_TABS[0]!.id, undefined, base);
   const views = isDefault ? DESK_TABS.filter((t) => t.id !== 'settings') : DESK_TABS;
+  // An archived project takes no new work (crew refuses a job, a chat or a repository into it): its home offers
+  // none, only the way back (coord 2026-11-09: no composer, no add or attach, never disabled ones).
+  const archived = !isDefault && project.status === 'archived';
 
   const start = (e: React.FormEvent): void => {
     e.preventDefault();
@@ -152,6 +167,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
         {/* Work in no project is not a project: no ask box, one line that offers to file it. */}
         {isDefault
           ? <UnfiledLine runs={allRuns} needRows={needRows} />
+          : archived ? <ArchivedLine navigate={navigate} base={base} />
           : <form className="wk-home-ask wk-pj-ask" role="search" aria-label="Start a job in this project" onSubmit={start} data-testid="project-ask">
             <label htmlFor={askId} className="sr-only">What do you want done in this project?</label>
             <input id={askId} value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="What do you want done in this project?"
@@ -225,9 +241,13 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
                 ? <a key={u.ref} href={repoDetailPath(u.repo.id, { project: projectId })} onClick={go(navigate, repoDetailPath(u.repo.id, { project: projectId }))} className="wk-pj-chip wk-pj-chip--link" data-testid="project-repo-chip" data-attached={u.attached}>{u.name}</a>
                 : <span key={u.ref} className="wk-pj-chip" data-testid="project-repo-chip" data-attached={u.attached}>{u.name}</span>)}
               {/* ux-tonight (operator 2026-11-04: "don't I see a way to onboard a repo anymore"): Add a repository
-                  registers a new one in this project (registering onboards it); Attach takes one studio already has. */}
-              <a href={addRepo} onClick={go(navigate, addRepo)} className="wk-link wk-pj-add" data-testid="project-add-repo">Add a repository</a>
-              <a href={reposTab} onClick={go(navigate, reposTab)} className="wk-link wk-pj-add" data-testid="project-attach-repo">Attach one already added</a>
+                  registers a new one in this project (registering onboards it); Attach takes one studio already has.
+                  An archived project takes neither (the archived line says how to restore it). */}
+              {!archived && <>
+                <a href={addRepo} onClick={go(navigate, addRepo)} className="wk-link wk-pj-add" data-testid="project-add-repo">Add a repository</a>
+                <a href={reposTab} onClick={go(navigate, reposTab)} className="wk-link wk-pj-add" data-testid="project-attach-repo">Attach one already added</a>
+              </>}
+              {archived && shownRepos.length === 0 && <span className="wk-calm-foot" data-testid="project-repos-none">No repositories.</span>}
             </div>
           </CalmSection>
         )}

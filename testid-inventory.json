@@ -14525,9 +14525,21 @@
       ]
     },
     {
+      "testId": "project-archived-line",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-archived-note",
       "files": [
         "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-archived-settings",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -15009,6 +15021,12 @@
       "testId": "project-repos-empty",
       "files": [
         "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repos-none",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {

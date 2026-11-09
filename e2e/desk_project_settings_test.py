@@ -140,6 +140,10 @@ with sync_playwright() as p:
     archived = patches(origin)
     page.goto(f"{origin}{base}", wait_until="networkidle")
     page.get_by_test_id("project-archived").wait_for(timeout=8000)
+    # An archived home offers no new work: no composer, no add or attach; one line links to Settings.
+    check("archived-home", page.get_by_test_id("project-ask").count() == 0 and page.get_by_test_id("project-add-repo").count() == 0
+          and page.get_by_test_id("project-attach-repo").count() == 0
+          and page.get_by_test_id("project-archived-settings").get_attribute("href") == f"{base}?tab=settings")
     page.goto(f"{origin}/projects?filter=archived", wait_until="networkidle")
     card = page.locator(f'[data-testid="projects-row"][data-project-id="{pid}"]')
     card.wait_for(timeout=8000)
