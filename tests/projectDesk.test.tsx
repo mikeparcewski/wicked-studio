@@ -471,17 +471,46 @@ describe("a project's Settings tab (operator 2026-11-09)", () => {
     fireEvent.change(screen.getByTestId('project-settings-name'), { target: { value: 'Shop front' } });
     fireEvent.click(screen.getByTestId('project-settings-save'));
     await waitFor(() => expect(updateProject).toHaveBeenCalledTimes(1));
-    // Nothing else can be typed or sent until crew answers (codex review: a slower answer undid a newer one).
-    expect(screen.getByTestId('project-settings-name')).toBeDisabled();
-    expect(screen.getByTestId('project-settings-description')).toBeDisabled();
+    // Nothing else can be typed or sent until crew answers (codex review: a slower answer undid a newer one); the
+    // fields are read-only, not disabled, so focus stays where Enter left it.
+    expect(screen.getByTestId('project-settings-name')).toHaveAttribute('readonly');
+    expect(screen.getByTestId('project-settings-description')).toHaveAttribute('readonly');
     expect(screen.getByTestId('project-archive')).toBeDisabled();
     fireEvent.click(screen.getByTestId('project-archive'));
     expect(screen.queryByTestId('project-archive-confirming')).toBeNull();
     answer({ project: { ...project, name: 'Shop front' } });
-    await waitFor(() => expect(screen.getByTestId('project-settings-name')).toBeEnabled());
+    await waitFor(() => expect(screen.getByTestId('project-settings-name')).not.toHaveAttribute('readonly'));
     expect(screen.getByTestId('project-settings-name')).toHaveValue('Shop front');
     expect(screen.getByTestId('project-settings-description')).toHaveValue('Checkout work');
     expect(updateProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes queue per project across a remount: leaving Settings mid-save keeps a new draft and the newer write wins', async () => {
+    const answers: ((v: unknown) => void)[] = [];
+    updateProject.mockImplementation(() => new Promise((r) => { answers.push(r); }));
+    const view = render(<ProjectDesk {...props} search="?tab=settings" />);
+    await loaded();
+    fireEvent.change(await screen.findByTestId('project-settings-name'), { target: { value: 'Sent rename' } });
+    fireEvent.click(screen.getByTestId('project-settings-save'));
+    await waitFor(() => expect(updateProject).toHaveBeenCalledTimes(1));
+    // Away and back while the rename is out: a fresh form.
+    view.rerender(<ProjectDesk {...props} search="?tab=work" />);
+    view.rerender(<ProjectDesk {...props} search="?tab=settings" />);
+    fireEvent.change(await screen.findByTestId('project-settings-description'), { target: { value: 'Unsaved draft' } });
+    fireEvent.click(screen.getByTestId('project-archive'));
+    fireEvent.click(screen.getByTestId('project-archive-confirm'));
+    // The archive waits for the rename: crew sees them in order, so the archived answer is the last one.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(updateProject).toHaveBeenCalledTimes(1);
+    answers[0]!({ project: { ...project, name: 'Sent rename' } });
+    await waitFor(() => expect(updateProject).toHaveBeenCalledTimes(2));
+    expect(updateProject).toHaveBeenLastCalledWith('p1', { status: 'archived' });
+    answers[1]!({ project: { ...project, name: 'Sent rename', status: 'archived' } });
+    expect(await screen.findByTestId('project-restore')).toBeInTheDocument();
+    expect(useProjectsStore.getState().projects.find((x) => x.id === 'p1')?.status).toBe('archived');
+    // The draft typed meanwhile is kept; the name follows the saved one (it still showed the old value).
+    expect(screen.getByTestId('project-settings-description')).toHaveValue('Unsaved draft');
+    expect(screen.getByTestId('project-settings-name')).toHaveValue('Sent rename');
   });
 
   it('focus follows the confirm: Cancel on open, Archive on cancel, Restore once archived; Escape cancels', async () => {

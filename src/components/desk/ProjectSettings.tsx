@@ -19,8 +19,9 @@ const ARCHIVE_WORDS = 'Archiving stops this project from taking new work: no new
  * `useProjectSave`, the one project write path (it keeps the projects store in step, and puts a restored
  * project back in it). Personality is Learn's; this links there. Archive is never one click: it asks inline
  * first, the repository Detach confirm's pattern. Restore destroys nothing, so it does not ask.
- * One save at a time (codex review): while one is out, every field and button waits, so a slower answer can
- * never undo a newer one and an edit typed meanwhile is never overwritten by the answer.
+ * One save at a time (codex review): while one is out the fields are read-only (focus stays where it was) and the
+ * buttons wait; writes queue per project (`useProjectSave`), and an answer only refreshes a field still showing the
+ * project's last value, so a draft typed meanwhile, even after leaving the tab and coming back, is kept.
  */
 export function ProjectSettings({ project, navigate, onSaved }: {
   project: Project;
@@ -36,7 +37,16 @@ export function ProjectSettings({ project, navigate, onSaved }: {
   // One write path, one save at a time; `op` says which section asked, so its error shows there.
   const { apply, error, busy } = useProjectSave(project.id, onSaved);
   const [op, setOp] = useState<'details' | 'status' | null>(null);
-  useEffect(() => { setName(project.name); setDescription(project.description ?? ''); }, [project.id, project.name, project.description]);
+  // A field follows the project only while it still shows the project's last value: a draft typed since is kept.
+  const shown = useRef({ id: project.id, name: project.name, description: project.description ?? '' });
+  useEffect(() => {
+    const was = shown.current;
+    const next = { id: project.id, name: project.name, description: project.description ?? '' };
+    const other = was.id !== next.id;
+    setName((n) => (other || n === was.name ? next.name : n));
+    setDescription((d) => (other || d === was.description ? next.description : d));
+    shown.current = next;
+  }, [project.id, project.name, project.description]);
   useEffect(() => { setConfirming(false); }, [project.id, project.status]);
   // Focus follows the confirm (keyboard and screen-reader users keep their place): into it on open (Cancel, the
   // safe choice), back to Archive on Cancel, and onto Restore or Archive once the status changed.
@@ -79,13 +89,13 @@ export function ProjectSettings({ project, navigate, onSaved }: {
         <h2 id={`${ids}-details`} className="wk-section-title">Name and description</h2>
         <form className="wk-pg-proj-stack" onSubmit={(e) => { e.preventDefault(); void save(); }}>
           <label className="wk-pg-proj-field">Project name
-            <input type="text" className="wk-field" data-testid="project-settings-name" value={name} maxLength={PROJECT_NAME_MAX} disabled={busy}
+            <input type="text" className="wk-field" data-testid="project-settings-name" value={name} maxLength={PROJECT_NAME_MAX} readOnly={busy} aria-busy={busy}
               onChange={(e) => { setName(e.target.value); setSaved(false); }} />
           </label>
           {name !== '' && nameProblem !== null && <p className="wk-field-note wk-field-note--bad" data-testid="project-settings-name-invalid">{nameProblem}</p>}
           {name === '' && <p className="wk-field-note" data-testid="project-settings-name-invalid">Enter a project name to save.</p>}
           <label className="wk-pg-proj-field">Description
-            <textarea className="wk-field" data-testid="project-settings-description" value={description} rows={3} placeholder="Describe this project" disabled={busy}
+            <textarea className="wk-field" data-testid="project-settings-description" value={description} rows={3} placeholder="Describe this project" readOnly={busy} aria-busy={busy}
               onChange={(e) => { setDescription(e.target.value); setSaved(false); }} />
           </label>
           <div className="wk-pg-proj-actions">

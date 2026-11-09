@@ -39,6 +39,10 @@ export function useProjectRows(runs: SessionView[], needRows: NeedRow[]): { rows
 
 export type ProjectPatch = { name: string; description: string } | { status: 'active' | 'archived' };
 
+/** Each project's last write, so the next one waits for it (codex review): crew answers them in order, and a slower
+ *  answer can never land after a newer one, even when the form that sent it was closed and opened again meanwhile. */
+const lastWrite = new Map<string, Promise<unknown>>();
+
 /** Rename or archive a project through crew (`PATCH /projects/:id`), keeping the projects store in step.
  *  `apply` answers whether it saved; a failure's raw words are `error` (shown behind technical details). */
 export function useProjectSave(projectId: string, onStatusChanged?: (project: Project) => void): { apply: (body: ProjectPatch) => Promise<boolean>; error: string | null; busy: boolean } {
@@ -48,8 +52,11 @@ export function useProjectSave(projectId: string, onStatusChanged?: (project: Pr
     if (busy) return false;
     setBusy(true);
     setError(null);
+    const before = lastWrite.get(projectId) ?? Promise.resolve();
+    const write = before.catch(() => undefined).then(() => api.updateProject(projectId, body));
+    lastWrite.set(projectId, write);
     try {
-      const { project } = await api.updateProject(projectId, body);
+      const { project } = await write;
       const store = useProjectsStore.getState();
       if (project.status === 'active' && !store.projects.some((p) => p.id === project.id)) store.addProject(project);
       else store.updateProject(project);
@@ -59,7 +66,10 @@ export function useProjectSave(projectId: string, onStatusChanged?: (project: Pr
       // The sentence is plain; the raw error lives behind technical details (UI-CONTRACT §4.7).
       setError(e instanceof Error ? e.message : String(e));
       return false;
-    } finally { setBusy(false); }
+    } finally {
+      if (lastWrite.get(projectId) === write) lastWrite.delete(projectId);
+      setBusy(false);
+    }
   };
   return { apply, error, busy };
 }

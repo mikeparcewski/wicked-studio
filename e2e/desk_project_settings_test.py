@@ -157,8 +157,10 @@ with sync_playwright() as p:
                 return r.status
         except urllib.error.HTTPError as e:
             return e.code
-    refused = [raw_patch(b) for b in ({"name": ""}, {"name": "x" * 121}, {"status": "gone"}, {"colour": "red"})]
-    check("fixture-refuses-bad-bodies", refused == [400, 400, 400, 400] and len(patches(origin)) == len(archived), refused=refused)
+    bodies = ({"name": ""}, {"name": "x" * 121}, {"name": "\U0001F600" * 61}, {"status": "gone"}, {"colour": "red"},
+              {"interactiveRoot": 42}, {"interactiveRoot": ""}, {"autoCapture": "yes"})
+    refused = [raw_patch(b) for b in bodies]
+    check("fixture-refuses-bad-bodies", refused == [400] * len(bodies) and len(patches(origin)) == len(archived), refused=refused)
 
     # 6. Restore from Settings.
     card.get_by_test_id("projects-row-open").click()

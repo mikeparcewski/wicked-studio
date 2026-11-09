@@ -10137,10 +10137,14 @@ class W2Handler(SimpleHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         # crew's UpdateProjectSchema (strict): name 1-120 chars, description a string, status active|archived.
         known = {"name", "description", "status", "interactiveRoot", "autoCapture"}
+        js_len = lambda v: len(v.encode("utf-16-le")) // 2  # noqa: E731 (zod counts UTF-16 code units)
         bad = (not isinstance(body, dict) or set(body) - known
-               or ("name" in body and not (isinstance(body["name"], str) and 1 <= len(body["name"]) <= 120))
+               or ("name" in body and not (isinstance(body["name"], str) and 1 <= js_len(body["name"]) <= 120))
                or ("description" in body and not isinstance(body["description"], str))
-               or ("status" in body and body["status"] not in ("active", "archived")))
+               or ("status" in body and body["status"] not in ("active", "archived"))
+               or ("interactiveRoot" in body and not (body["interactiveRoot"] is None
+                                                      or (isinstance(body["interactiveRoot"], str) and body["interactiveRoot"] != "")))
+               or ("autoCapture" in body and not (body["autoCapture"] is None or isinstance(body["autoCapture"], bool))))
         if bad:
             return self._json(400, {"error": "Invalid request body"})
         if pid == "default":
