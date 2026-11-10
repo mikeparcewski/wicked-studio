@@ -107,6 +107,7 @@ export function queueMidRunStep(runId: string, catalog: string, title: string): 
   qid = queueDecision({
     verb: 'edit-plan',
     runIds: [runId],
+    keys: [`plan:${runId}`],
     label: `${word} to “${title}”`,
     preview: `${word} joins the run’s plan at its next step. Once added it stays: a running plan only grows.`,
     closeNote: 'Close this tab before then and nothing is sent: the plan stays as it is.',
@@ -116,12 +117,12 @@ export function queueMidRunStep(runId: string, catalog: string, title: string): 
       const st = usePlanEdits.getState().byRun[runId];
       if (st?.status === 'sending') {
         // proposePlanEdit drops a second edit while one is in flight: this one was NOT sent.
-        reportDecision('not-sent', `Not added: ${word} to “${title}” — another step was still being sent. Add it again.`);
+        reportDecision('not-sent', `Not added: ${word} to “${title}” — another step was still being sent. Add it again.`, { keys: [`plan:${runId}`] });
       } else if (st?.status === 'done') {
         setAdded(runId, (l) => [...l, catalog]);
-        reportDecision('sent', `Added ${word} to “${title}”.`);
+        reportDecision('sent', `Added ${word} to “${title}”.`, { keys: [`plan:${runId}`] });
       } else {
-        reportDecision('failed', `Not added: ${word} to “${title}” — ${st?.error ?? 'the daemon did not answer'}`);
+        reportDecision('failed', `Not added: ${word} to “${title}” — ${st?.error ?? 'the daemon did not answer'}`, { keys: [`plan:${runId}`] });
       }
     },
     onUndo: removeQueued,

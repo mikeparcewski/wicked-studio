@@ -111,7 +111,7 @@ export function stopRun(runIds: readonly string[], label: string, why?: { reason
   const pending = useSheets.getState().stopping;
   const ids = runIds.filter((id) => pending[id] === undefined);
   if (ids.length === 0) {
-    reportDecision('not-sent', `Already stopping ${label} — Undo is on the notice above.`);
+    reportDecision('not-sent', `Already stopping ${label} — its Undo is right here.`, { keys: runIds.map((id) => `stop:${id}`) });
     return null;
   }
   const clear = (): void => useSheets.setState((s) => {
@@ -122,6 +122,7 @@ export function stopRun(runIds: readonly string[], label: string, why?: { reason
   const qid = queueDecision({
     verb: 'stop',
     runIds: ids,
+    keys: ids.map((id) => `stop:${id}`),
     label,
     preview: ids.length > 1 ? `${ids.length} runs stop where they are. Their work so far is kept.` : 'The run stops where it is. Its work so far is kept.',
     closeNote: 'Close this tab before then and nothing is stopped.',
@@ -131,8 +132,9 @@ export function stopRun(runIds: readonly string[], label: string, why?: { reason
       for (const id of ids) {
         try { await (why !== undefined ? api.cancelRun(id, why) : api.cancelRun(id)); } catch (e) { failed.push(`${id}: ${e instanceof Error ? e.message : String(e)}`); }
       }
-      if (failed.length === 0) reportDecision('sent', `Stopped ${label}.`);
-      else reportDecision('failed', `Not stopped: ${failed.join('; ')}`);
+      const keys = ids.map((id) => `stop:${id}`);
+      if (failed.length === 0) reportDecision('sent', `Stopped ${label}.`, { keys });
+      else reportDecision('failed', `Not stopped: ${failed.join('; ')}`, { keys });
     },
     onUndo: clear,
   });

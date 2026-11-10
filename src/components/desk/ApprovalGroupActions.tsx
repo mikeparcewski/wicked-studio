@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useGateActionStore } from '../../board/gateActions.js';
-import { QeSettingOffer } from '../QeRefusalWarning.js';
 import {
-  BATCH_NOTE_KEY, retryBatchOne, runBatchDecision, useBatchGateStore,
+  BATCH_NOTE_KEY, runBatchDecision, useBatchGateStore,
 } from '../../board/batchGates.js';
 import { decisionPreview, takeRestoredNote } from '../../board/undoQueue.js';
 
@@ -14,7 +12,7 @@ import { decisionPreview, takeRestoredNote } from '../../board/undoQueue.js';
  *
  * The logic is the classic batch bar's, reused verbatim: seed `useBatchGateStore.selected` with
  * the group's member run ids, then `runBatchDecision` fans out one `POST /runs/:id/gate` each
- * through the ONE audited send path — the single 10 s undo window (the shell's UndoToasts), the
+ * through the ONE audited send path — the single 10 s undo window (its inline Undo under the group row), the
  * per-id failure rows with a retry-just-this-one, never an optimistic "approved all". No desk
  * surface mounts the classic `BatchSelectBox`/`BatchGateBar`, so seeding the shared selection
  * here is uncontended.
@@ -29,15 +27,6 @@ export function ApprovalGroupActions({ runIds, label }: {
 }): React.ReactElement {
   const running = useBatchGateStore((s) => s.running);
   const queued = useBatchGateStore((s) => s.queued);
-  // Select the raw array (stable reference) and filter outside the selector: calling .filter()
-  // inside the selector creates a new reference on every call, causing an infinite render loop.
-  const allFailures = useBatchGateStore((s) => s.failures);
-  // Filter to this group's ids only: the store is shared, and a prior batch's failures for
-  // different run ids must not appear here (they belong to whatever row triggered that batch).
-  const failures = allFailures.filter((f) => (runIds as string[]).includes(f.runId));
-  // A member crew refused because QE acceptance hasn't passed: the row links to the setting.
-  const byGate = useGateActionStore((st) => st.byGate);
-  const qeRefused: Record<string, boolean> = Object.fromEntries(failures.map((f) => [f.runId, byGate[f.runId]?.qeRefusal === true]));
   const [reasonOpen, setReasonOpen] = useState(false);
   // A reject reason handed back by Undo re-seeds the input (never lost).
   const [note, setNote] = useState(() => takeRestoredNote(BATCH_NOTE_KEY));
@@ -134,30 +123,8 @@ export function ApprovalGroupActions({ runIds, label }: {
           </button>
         </>
       )}
-      {/* Per-id honesty (§9.2): which ids failed, why, retry-just-this-one. */}
-      {failures.map((f) => (
-        <span
-          key={f.runId}
-          data-testid="need-group-failure"
-          data-run-id={f.runId}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--status-fail)' }}
-        >
-          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {`failed: ${f.runId} (${f.error})`}
-          </span>
-          {qeRefused[f.runId] === true && <QeSettingOffer refusalKey={`batch:${f.runId}`} testId="need-group-failure-qe" />}
-          <button
-            type="button"
-            data-testid="need-group-retry"
-            data-run-id={f.runId}
-            disabled={running}
-            onClick={() => void retryBatchOne(f.runId)}
-            className="wk-need-act"
-          >
-            retry
-          </button>
-        </span>
-      ))}
+      {/* Per-id honesty (§9.2): which ids failed, why, retry-just-this-one — said ONCE per page, by the inline Undo
+          that owns the batch's result (BatchFailures, studio 0.16.4), never by every copy of these buttons. */}
     </span>
   );
 }

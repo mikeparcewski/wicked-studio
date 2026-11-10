@@ -12,6 +12,8 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.5] — 2026-11-10
+
 Patch: project pages made consistent (operator 2026-11-09). Bundled by crew 0.18.5.
 
 ### Changed
@@ -37,6 +39,31 @@ Patch: project pages made consistent (operator 2026-11-09). Bundled by crew 0.18
   archiving does (no new jobs, chats, repositories or trackers, and agents stop seeing the project in chat; nothing
   is deleted) and asks inline before it archives. An archived project's Settings offer Restore, which needs no
   confirm. Work that is not in any project has no Settings tab, because crew refuses edits to it.
+- **An archived project offers no new work.** Its homepage and Work tab say "This project is archived. Restore it in
+  Settings to start work or add repositories." (Settings links to the tab). They no longer show the ask box, Add or
+  Attach a repository, the first-job starts or Draft epics, all of which crew refuses for an archived project. The
+  repositories the project holds are still listed.
+
+## [0.16.4] — 2026-11-09
+
+Patch: the operator's "Still seeing the extra modal for undo" (bundled by crew 0.18.4).
+
+### Changed
+
+- **Undo is inline, in the block where you acted: no more floating notice.** A queued decision shows its countdown
+  ("Approving the plan for “…” in 8 s"), what will happen, the page-close note and Undo inside the card, row or bar
+  it was taken in. That covers the gate card, the proposal card, the job passage, a Desk or inbox row, the approvals
+  group, the Desk card, a Stop under the session header, the run tab, the in-flight check, a plan step, a power
+  pause, accepting memory proposals and the voice screen.
+  - When one decision appears in two places on a page (the inbox list and its reading pane), only the block you
+    acted in has the full Undo. The others read "Waiting to send · N s".
+  - Its result (sent, not sent, or failed, with the QE settings link) lands on the same block. A failure stays until
+    you dismiss it. A result for a gate whose row has gone (answered elsewhere) shows where the row was.
+  - A decision taken where nothing on screen shows it (a ⌘K Stop on a sheet opened over another page) takes you to
+    the run's page, where its Undo is.
+  - Navigating within studio doesn't cancel a queued decision. Closing the tab still sends nothing.
+  - The live region announces each decision and result once, not every second.
+  - Undo and Dismiss are buttons, and focus returns to the block's first action when the block folds.
 
 ## [0.16.3] — 2026-11-09
 
@@ -3404,7 +3431,9 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.3...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.5...HEAD
+[0.16.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.4...v0.16.5
+[0.16.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.3...v0.16.4
 [0.16.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.0...v0.16.1

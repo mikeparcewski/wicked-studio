@@ -72,7 +72,7 @@ describe('an answer waiting out its Undo window is not dropped silently on close
     await screen.findAllByTestId('session-gate-choice');
     const unload = (): boolean => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; };
     expect(unload()).toBe(false);
-    useUndoQueue.setState({ pending: [{ id: 1, verb: 'approve', runIds: [RUN], label: null, amend: null, preview: '', queuedAt: NOW, dueAt: NOW + 10_000 } as never] });
+    useUndoQueue.setState({ pending: [{ id: 1, verb: 'approve', keys: [`gate:${RUN}`], origin: null, runIds: [RUN], label: null, amend: null, preview: '', queuedAt: NOW, dueAt: NOW + 10_000 } as never] });
     rerender(<GateRow view={view} gate={cachedDispute} />);
     expect(unload()).toBe(true);
     useUndoQueue.setState({ pending: [] });

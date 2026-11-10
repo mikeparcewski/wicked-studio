@@ -10,7 +10,7 @@
     "Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show."
   ],
   "version": 1,
-  "studioVersion": "0.16.3",
+  "studioVersion": "0.16.5",
   "static": [
     {
       "testId": "accent-lgt",
@@ -2648,6 +2648,12 @@
       ]
     },
     {
+      "testId": "batch-failures",
+      "files": [
+        "src/components/desk/BatchFailures.tsx"
+      ]
+    },
+    {
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -4983,6 +4989,12 @@
     },
     {
       "testId": "desk-card-failure",
+      "files": [
+        "src/components/desk/DeskHome.tsx"
+      ]
+    },
+    {
+      "testId": "desk-card-failure-detail",
       "files": [
         "src/components/desk/DeskHome.tsx"
       ]
@@ -8036,6 +8048,78 @@
       ]
     },
     {
+      "testId": "inline-undo",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-button",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-close-note",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-dismiss",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-headline",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-host",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-live",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-preview",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-quiet",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-result",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-result-qe",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
+      "testId": "inline-undo-result-quiet",
+      "files": [
+        "src/components/InlineUndo.tsx"
+      ]
+    },
+    {
       "testId": "insights-accept",
       "files": [
         "src/components/insights/InsightsDecide.tsx"
@@ -8546,12 +8630,6 @@
       ]
     },
     {
-      "testId": "job-passage-queued",
-      "files": [
-        "src/components/session/JobPassage.tsx"
-      ]
-    },
-    {
       "testId": "job-passage-refused",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8715,12 +8793,6 @@
     },
     {
       "testId": "job-passage-try-again",
-      "files": [
-        "src/components/session/JobPassage.tsx"
-      ]
-    },
-    {
-      "testId": "job-passage-undo",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
@@ -12195,12 +12267,6 @@
       ]
     },
     {
-      "testId": "need-chosen-undo",
-      "files": [
-        "src/components/desk/QuestionRow.tsx"
-      ]
-    },
-    {
       "testId": "need-focus-note",
       "files": [
         "src/components/NeedsYouQueue.tsx"
@@ -12221,13 +12287,25 @@
     {
       "testId": "need-group-failure",
       "files": [
-        "src/components/desk/ApprovalGroupActions.tsx"
+        "src/components/desk/BatchFailures.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-failure-detail",
+      "files": [
+        "src/components/desk/BatchFailures.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-failure-open",
+      "files": [
+        "src/components/desk/BatchFailures.tsx"
       ]
     },
     {
       "testId": "need-group-failure-qe",
       "files": [
-        "src/components/desk/ApprovalGroupActions.tsx"
+        "src/components/desk/BatchFailures.tsx"
       ]
     },
     {
@@ -12251,7 +12329,7 @@
     {
       "testId": "need-group-retry",
       "files": [
-        "src/components/desk/ApprovalGroupActions.tsx"
+        "src/components/desk/BatchFailures.tsx"
       ]
     },
     {
@@ -14328,12 +14406,6 @@
     },
     {
       "testId": "power-pause-reasons",
-      "files": [
-        "src/components/session/PowerMode.tsx"
-      ]
-    },
-    {
-      "testId": "power-pause-undo",
       "files": [
         "src/components/session/PowerMode.tsx"
       ]
@@ -19148,12 +19220,6 @@
       ]
     },
     {
-      "testId": "session-gate-chosen-wait",
-      "files": [
-        "src/components/session/GateRow.tsx"
-      ]
-    },
-    {
       "testId": "session-gate-confirm",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -20132,18 +20198,6 @@
     },
     {
       "testId": "session-step-added",
-      "files": [
-        "src/components/session/RunConversation.tsx"
-      ]
-    },
-    {
-      "testId": "session-step-queued",
-      "files": [
-        "src/components/session/RunConversation.tsx"
-      ]
-    },
-    {
-      "testId": "session-step-undo",
       "files": [
         "src/components/session/RunConversation.tsx"
       ]
@@ -24633,48 +24687,6 @@
       ]
     },
     {
-      "testId": "undo-button",
-      "files": [
-        "src/components/UndoToasts.tsx"
-      ]
-    },
-    {
-      "testId": "undo-close-note",
-      "files": [
-        "src/components/UndoToasts.tsx"
-      ]
-    },
-    {
-      "testId": "undo-headline",
-      "files": [
-        "src/components/UndoToasts.tsx"
-      ]
-    },
-    {
-      "testId": "undo-preview",
-      "files": [
-        "src/components/UndoToasts.tsx"
-      ]
-    },
-    {
-      "testId": "undo-result",
-      "files": [
-        "src/components/UndoToasts.tsx"
-      ]
-    },
-    {
-      "testId": "undo-result-qe",
-      "files": [
-        "src/components/UndoToasts.tsx"
-      ]
-    },
-    {
-      "testId": "undo-toast",
-      "files": [
-        "src/components/UndoToasts.tsx"
-      ]
-    },
-    {
       "testId": "user-bubble",
       "files": [
         "src/components/ChatThread.tsx"
@@ -25127,18 +25139,6 @@
     },
     {
       "testId": "voice-type",
-      "files": [
-        "src/components/voice/VoiceFullScreen.tsx"
-      ]
-    },
-    {
-      "testId": "voice-undo",
-      "files": [
-        "src/components/voice/VoiceFullScreen.tsx"
-      ]
-    },
-    {
-      "testId": "voice-undo-button",
       "files": [
         "src/components/voice/VoiceFullScreen.tsx"
       ]

@@ -99,13 +99,13 @@ export function QeDeliveryFixLine({ refusalKey, navigate, testId }: { refusalKey
 }
 
 /**
- * The short form, inline, where a refused delivery is only listed (the decision toast, the approvals
+ * The short form, inline, where a refused delivery is only listed (the inline decision result, the approvals
  * bar): required — it can be turned off for later jobs, with the link; already off — the job keeps the
  * requirement it started with; not reported — nothing (the run's own card says the rest).
  */
 export function QeSettingOffer({ refusalKey, navigate, testId, refreshOnFocus = true }: {
   refusalKey: string; navigate?: Go | undefined; testId: string;
-  /** `false` on the toast: it lives seconds, and a re-read must not take a focused link away. */
+  /** `false` on an inline result: it may go in seconds, and a re-read must not take a focused link away. */
   refreshOnFocus?: boolean;
 }): React.ReactElement | null {
   const { loaded, setting } = useQeSetting(refusalKey, { refreshOnFocus });

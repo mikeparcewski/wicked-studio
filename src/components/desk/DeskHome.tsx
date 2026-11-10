@@ -7,8 +7,11 @@ import type { SystemAttention, SystemSnapshot } from '../../api/system.js';
 import { actionPath } from '../../board/rankedNeeds.js';
 import { toResolveWords } from '../../board/nerveCenter.js';
 import { HEALTH_RECHECKED } from '../../store/systemSnapshot.js';
-import { runBatchDecision, useBatchGateStore } from '../../board/batchGates.js';
-import { useGateActionStore } from '../../board/gateActions.js';
+import { BATCH_KEY, batchFailureWords, runBatchDecision, useBatchGateStore } from '../../board/batchGates.js';
+import { InlineUndo } from '../InlineUndo.js';
+import { TechDetails } from '../ui/TechDetails.js';
+import { keysOfKind, useUndoQueue } from '../../board/undoQueue.js';
+import { gateKeyOf, useGateActionStore } from '../../board/gateActions.js';
 import type { SetupChore } from '../../board/deskModel.js';
 import { deskGreeting, needRunId } from '../../board/deskModel.js';
 import {
@@ -82,6 +85,7 @@ export function DeskHome({
   panelId?: string;
   labelledBy?: string;
 }): React.ReactElement {
+  const homeUndoKeys = useUndoQueue((st) => [keysOfKind(st, 'gate'), keysOfKind(st, BATCH_KEY)].filter((x) => x !== '').join(' '));
   const askId = useId();
   const needsId = useId();
   const progressId = useId();
@@ -147,6 +151,10 @@ export function DeskHome({
         </header>
 
         {handover}
+
+        {/* studio 0.16.4: where the card WAS — an approve's result once its card has moved on (the next need came up,
+            or nothing waits now). Shown only when no card or row for it is on screen. */}
+        <InlineUndo host="desk-home" fallback keys={homeUndoKeys === '' ? [] : homeUndoKeys.split(' ')} className="wk-home-undo" />
 
         {(read === 'checking' || (read === 'known' && settled === 'loading')) ? (
           <section aria-label="Needs you" aria-busy="true" className="wk-home-sec" data-testid="desk-needs">
@@ -309,7 +317,7 @@ function NeedCard({ row, view, navigate, now, agentName }: { row: NeedRow; view:
     return <a href={path} onClick={(e) => { e.preventDefault(); act(m.action, row.key); }} className={cls} data-testid={testId} data-move={m.action.kind}>{m.label}</a>;
   };
   return (
-    <article className="wk-home-card" data-testid="desk-card" data-key={row.key} data-kind={row.kind}>
+    <article className="wk-home-card" data-testid="desk-card" data-undo-host="desk-card" data-key={row.key} data-kind={row.kind}>
       {words.context !== '' && <p className="wk-home-card-context" data-testid="desk-card-context">{words.context}</p>}
       <h3 className="wk-home-card-title" data-testid="desk-card-title">{words.title}</h3>
       {words.body !== null && <p className="wk-home-card-body" data-testid="desk-card-body">{words.body}</p>}
@@ -317,11 +325,18 @@ function NeedCard({ row, view, navigate, now, agentName }: { row: NeedRow; view:
         {move(words.primary, true)}
         {words.secondary !== null && move(words.secondary, false)}
       </div>
+      {/* studio 0.16.4: the approve's countdown, Undo and result, on the card it was pressed on. */}
+      {/* The card's own run (an approve here goes through the batch path, which carries each member's gate). */}
+      {runId !== null && <InlineUndo host="desk-card" keys={[gateKeyOf(runId)]} ownFailure />}
       {failed !== undefined && (
         <p className="wk-home-card-fail" role="alert" data-testid="desk-card-failure">
-          Couldn’t approve it: {failed.error}
+          {/* In studio's words (never the wire sentence); the daemon's own words under Technical details. */}
+          Couldn’t approve it: {batchFailureWords(failed.error).line}
           {byGate[failed.runId]?.qeRefusal === true && <> <QeSettingOffer refusalKey={`batch:${failed.runId}`} testId="desk-card-failure-qe" /></>}
         </p>
+      )}
+      {failed !== undefined && (
+        <TechDetails text={batchFailureWords(failed.error).detail} data-testid="desk-card-failure-detail" />
       )}
     </article>
   );

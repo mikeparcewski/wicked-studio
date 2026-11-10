@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { demoFileUrl, getDemo, makeDemoDocument, putDemoScript, rerecordNote, sendBackDemo } from '../../api/demo.js';
 import { walkthroughApi, type WalkthroughView } from '../../api/walkthrough.js';
-import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
+import { commitGateDecision, gateKeyOf, refreshGate } from '../../board/gateActions.js';
+import { InlineUndo } from '../InlineUndo.js';
 import { demoReviewLine, demoReviewPolicy, demoTakeFingerprint, escalationOpen, fixNote, fmtTime, gateVerbs, recordingOf, recordingOfDemo, SHEET_LABEL, takeFingerprint, type Recording, type RecordingKind, type UnitLike } from '../../board/walkthroughModel.js';
 import type { ArtifactBinding } from '../../editors/hostApi.js';
 import { useGateStore } from '../../store/gates.js';
@@ -151,11 +152,13 @@ function GateActions({ rec, units, reload, onEditOpen }: { rec: Recording; units
   if (!verbs.includes('fix') && !verbs.includes('edit')) {
     return note === null ? null : <p data-testid="walkthrough-note" data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>;
   }
-  return <>
+  return <div data-undo-host="editor-port" className="wk-undo-scope">
     <div data-testid="walkthrough-actions" className="wk-walk-actions">
       {verbs.includes('fix') && <button type="button" data-testid="walkthrough-fix" disabled={busy} onClick={() => void fix()} className="wk-prop-btn wk-prop-btn--primary">Ask helpers to fix</button>}
       {verbs.includes('edit') && <button type="button" data-testid="walkthrough-edit-check" disabled={busy} aria-expanded={editing} onClick={() => { if (!editing) onEditOpen?.(); setDraft(editing ? null : { take, text: storyline }); }} className="wk-prop-btn wk-prop-btn--ghost">Edit the check</button>}
     </div>
+    {/* studio 0.16.4: the send-back's countdown, Undo and result, under the buttons it was pressed on. */}
+    <InlineUndo host="editor-port" keys={[gateKeyOf(rec.runId)]} />
     {editing && verbs.includes('edit') && (
       <div data-testid="walkthrough-edit" className="wk-walk-edit">
         <p className="wk-walk-quiet">Paste the storyline with your change to the check (the author’s <code>storyline.mjs</code>, whole). Saving re-checks it and the walkthrough records again.</p>
@@ -167,7 +170,7 @@ function GateActions({ rec, units, reload, onEditOpen }: { rec: Recording; units
       </div>
     )}
     {note !== null && <p data-testid="walkthrough-note" data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>}
-  </>;
+  </div>;
 }
 
 /**
@@ -205,7 +208,7 @@ function DemoScriptActions({ runId, units, onChanged }: { runId: string; units: 
     }
   };
   return (
-    <div data-testid="demo-script-actions" className="wk-walk-actions">
+    <div data-testid="demo-script-actions" data-undo-host="editor-port" className="wk-walk-actions">
       {rec.storyline !== undefined && rec.storyline.length > 0 && (
         <details data-testid="demo-storyline" className="wk-walk-edit">
           <summary className="wk-walk-quiet">What the engine will record: {rec.storyline.length} chapter{rec.storyline.length === 1 ? '' : 's'}, read-only against the app</summary>
@@ -230,6 +233,7 @@ function DemoScriptActions({ runId, units, onChanged }: { runId: string; units: 
           </div>
         </div>
       )}
+      <InlineUndo host="editor-port" keys={[gateKeyOf(runId)]} />
       {note !== null && <p data-testid="demo-script-note" data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>}
     </div>
   );

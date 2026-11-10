@@ -99,6 +99,7 @@ import { plainGateQuestion } from '../../board/deskWords.js';
 import { needTone } from '../../board/needTone.js';
 import { displayText } from '../../board/homePath.js';
 import { isAskTurnRun } from '../../board/askTurn.js';
+import { InlineUndo } from '../InlineUndo.js';
 
 /** The project a chat's scope (`GET /chats/:id` `scope.projectId`) files it in, or null. */
 function chatScopeProject(scope: unknown): string | null {
@@ -988,6 +989,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // studio#631 (2): a chat's thread has its own Stop — the same 10 s-undo stop ⌘K offers ("Stop this
   // session"), on every run of the chat still going. Hidden when nothing in it is running.
   // An answered ask parked at its turn (`ask_turn`) is not work going on: nothing to stop (e2e-1105).
+  const stopKeys = useMemo(() => mine.map((v) => `stop:${v.session.id}`), [mine]);
+  // Where a gate card, a power pause or a plan step WAS (it left: answered elsewhere, the pause cleared): its result.
+  const gateKeys = useMemo(() => mine.flatMap((v) => [`gate:${v.session.id}`, `power:${v.session.id}`, `plan:${v.session.id}`]), [mine]);
   const liveRuns = useMemo(() => mine.filter((v) => !['completed', 'cancelled', 'failed'].includes(v.session.status)
     && !(v.session.status === 'awaiting_human' && isAskTurnRun(v.session))).map((v) => v.session.id), [mine]);
   const stopping = useSheets((s) => liveRuns.length > 0 && liveRuns.every((id) => s.stopping[id] !== undefined));
@@ -1161,6 +1165,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     <div data-testid="session-frame" className="wk-session-frame">
     <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} data-pane={pane} className={`wk-session${pane ? ' wk-session--pane' : ''}`}>
       {/* Operator 2026-10-18: the header is the title and one state badge — Stop is its only action while work is live. */}
+      <div data-undo-host="session-header" className="wk-undo-scope">
       <header className="wk-session-head wk-measure wk-measure--thread">
         <div className="wk-session-head-body">
           {/* Audit row 62: until the session's reads settle, the title is a skeleton and no state word
@@ -1196,7 +1201,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             type="button"
             data-testid="session-stop"
             disabled={stopping}
-            title={stopping ? 'Stopping — Undo is on the notice' : 'Stop this work — you confirm first, then 10 s to undo; what it did so far is kept'}
+            title={stopping ? 'Stopping — Undo is under the header' : 'Stop this work — you confirm first, then 10 s to undo; what it did so far is kept'}
             onClick={() => setConfirmStop(true)}
             className="wk-btn wk-btn--sm wk-stop-btn"
           >
@@ -1211,6 +1216,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
           </span>
         )}
       </header>
+      {/* studio 0.16.4: a Stop's countdown, what happens, Undo and the result, right under the header it was pressed in. */}
+      {mine.length > 0 && <InlineUndo host="session-header" keys={stopKeys} className="wk-measure wk-measure--thread wk-session-undo" />}
+      {/* …and where a gate's card WAS: its decision's result once the card has gone (answered elsewhere). */}
+      {mine.length > 0 && <InlineUndo host="session-gates" fallback keys={gateKeys} className="wk-measure wk-measure--thread wk-session-undo" />}
+      </div>
       {/* domain-graph-3: a job that keeps going says where it got to, on its own line under the header (the header row
           stays one line at desk widths). */}
       {progressLine !== null && <p data-testid="session-progress-line" className="wk-session-progress wk-measure wk-measure--thread">{progressLine}</p>}

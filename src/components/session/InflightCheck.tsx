@@ -7,6 +7,7 @@ import { inspectionOf, type InspectAction, type InspectVerdict, type UnitInspect
 import { checkAfterMs, costWords, elapsedWords, tokenWords, type TurnKind } from '../../board/liveTurn.js';
 import { useRunEventStore } from '../../store/events.js';
 import { stopRun } from '../../store/sheets.js';
+import { InlineUndo } from '../InlineUndo.js';
 
 /**
  * "IS THIS GOING WELL?" (operator 2026-10-30: "if it's been running long you can have an agent analyze right there, to
@@ -143,13 +144,21 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
     const line = chosen.action === 'let_run'
       ? 'You chose: Let it run'
       : chosen.action === 'stop'
-        ? `You chose: Stop ${label} · undo it on the notice above`
+        ? `You chose: Stop ${label}`
         : chosen.error !== undefined
           ? `The note could not be sent: ${chosen.error}`
           : `You sent ${seatName} a note: “${chosen.note}”`;
-    return (
+    const record = (
       <AskRecord line={line} testId="inflight-check-record" className="wk-inflight-record"
         {...(chosen.action === 'let_run' ? { meta: `studio asks again in ${minutes} min` } : {})} />
+    );
+    if (chosen.action !== 'stop') return record;
+    // studio 0.16.4: the Stop's countdown, Undo and result, under the answer that asked for it.
+    return (
+      <div data-undo-host="inflight-check" className="wk-inflight-stopped">
+        {record}
+        <InlineUndo host="inflight-check" keys={[`stop:${runId}`]} />
+      </div>
     );
   }
 
@@ -181,7 +190,7 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
       record: 'You chose: {label}',
     };
     return (
-      <section data-testid="inflight-check" data-state="done" data-verdict={record.verdict} data-source={record.source ?? ''} className="wk-ask wk-inflight" data-tone={v.tone} aria-label="How it is going">
+      <section data-testid="inflight-check" data-undo-host="inflight-check" data-state="done" data-verdict={record.verdict} data-source={record.source ?? ''} className="wk-ask wk-inflight" data-tone={v.tone} aria-label="How it is going">
         <p className="wk-ask-who">
           <span data-testid="inflight-check-verdict" className={`wk-inflight-pill wk-inflight-pill--${v.tone}`}>{v.word}</span>
           <span data-testid="inflight-check-by">

@@ -120,7 +120,7 @@ export function ReassignControl({
       setPhase('failed');
       // studio#480: after an approve the gate card may be gone by now — the refusal is said where
       // the operator is too, as a notice.
-      reportDecision('failed', `The retry was approved; the reassign to ${cli} did not land — ${why}`);
+      reportDecision('failed', `The retry was approved; the reassign to ${cli} did not land — ${why}`, { keys: [`gate:${runId}`] });
     }
   }
 

@@ -197,7 +197,7 @@ describe('the "this grew" dock (a pause, not an engine gate: POST /runs/:id/powe
     await answer();
     expect(screen.getByTestId('power-pause-chosen').textContent).toBe('You chose: Continue at high rigor');
     expect(screen.queryAllByTestId('power-pause-choice')).toHaveLength(0);
-    fireEvent.click(screen.getByTestId('power-pause-undo'));
+    fireEvent.click(screen.getByTestId('inline-undo-button'));
     expect(screen.getAllByTestId('power-pause-choice')).toHaveLength(4);
     await new Promise((r) => setTimeout(r, 20));
     expect(pausePosts()).toEqual([]);

@@ -94,7 +94,7 @@ with sync_playwright() as p:
 
     # ── 1. Approve all: one POST per member after 10 s, none before ───────────────
     group.get_by_test_id("need-group-approve-all").click()
-    page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=5000)
     pressed = time.monotonic()
     check("approve-all-queued-no-posts", len(gate_posts(origin)) == 0, posts=len(gate_posts(origin)))
     page.wait_for_timeout(max(0, int((pressed + 11.5 - time.monotonic()) * 1000)))
@@ -110,10 +110,10 @@ with sync_playwright() as p:
     # ── 2. Undo within the window: nothing is sent ────────────────────────────────
     page = desk(browser)
     page.locator(GROUP).get_by_test_id("need-group-approve-all").click()
-    page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=5000)
     pressed = time.monotonic()
     page.wait_for_timeout(2500)
-    page.get_by_test_id("undo-toast").get_by_role("button", name="Undo").click()
+    page.get_by_test_id("inline-undo").get_by_role("button", name="Undo").click()
     page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
     check("undo-nothing-sent", len(gate_posts(origin)) == 0, posts=gate_posts(origin))
     page.close()
@@ -126,7 +126,7 @@ with sync_playwright() as p:
     reason.wait_for(state="visible", timeout=5000)
     reason.fill("wrong branch")
     reason.press("Enter")
-    page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=5000)
     pressed = time.monotonic()
     page.screenshot(path=str(SHOTS / "desk-ports-gates-reason.png"))
     page.wait_for_timeout(max(0, int((pressed + 11.5 - time.monotonic()) * 1000)))
@@ -146,7 +146,7 @@ with sync_playwright() as p:
     member.get_by_test_id("need-answer").click()
     member.get_by_test_id("need-choices").wait_for(state="visible", timeout=5000)
     member.get_by_test_id("need-choices").press("2")  # the reject digit — commits at once, bare
-    page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=5000)
     pressed = time.monotonic()
     # The reason input must never appear on the keyboard fast path (boundary 2).
     check("digit-no-reason-input", member.get_by_test_id("need-choice-reason").count() == 0)

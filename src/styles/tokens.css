@@ -265,7 +265,7 @@
   --fab-clear:  calc(var(--fab-size) + var(--fab-gutter) + 8px);
 
   /* How long a queued gate decision can be undone — equals board/undoQueue.ts UNDO_WINDOW_MS;
-     the Undo toast's drain bar runs for exactly this long. */
+     the inline Undo’s drain bar runs for exactly this long. */
   --undo-window: 10s;
 
   /* Modal/backdrop scrim — the one translucent fill that must stay translucent

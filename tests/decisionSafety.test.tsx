@@ -115,7 +115,7 @@ describe('never silent', () => {
     void decideGate('b1', { approve: true });
     void decideGate('b1', { approve: false });
     expect(useUndoQueue.getState().pending).toHaveLength(1);
-    expect(results()).toEqual(['not-sent: Not sent: a run in beta already has a decision that is waiting to send (see its Undo toast).']);
+    expect(results()).toEqual(['not-sent: Not sent: a run in beta already has a decision that is waiting to send (undo it where you made it).']);
   });
 
 });

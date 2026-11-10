@@ -13,7 +13,7 @@ import { beginGateRead, gateFromInfo, gateGen, useGateStore, type GateReadTicket
 import { recordShown } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
-  cancelDecision, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote,
+  cancelDecision, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote, runOfKey,
   type DeliverTarget,
 } from './undoQueue.js';
 
@@ -51,6 +51,9 @@ export type GateAnswer = GateDecision & { plan?: LaunchPlan };
  *  (Lives here so the chip, the palette, and the triage cursor share it without
  *  a component-module cycle; `GateChip` re-exports it for its old importers.) */
 export const GATE_HASH = '#gate';
+
+/** The undo-queue key for a run's gate decisions (`board/undoQueue.ts` module note). */
+export const gateKeyOf = (runId: string): string => `gate:${runId}`;
 
 export interface GateActionState {
   /** Committed but inside the undo window (wave 2a): nothing sent yet, Undo still possible. */
@@ -154,7 +157,7 @@ useGateStore.subscribe((state, prev) => {
  * (§2.3 wire honesty).
  *
  * Wave 2a: the decision is QUEUED for the undo window (`undoQueue.ts`), never
- * POSTed on the spot — the Undo toast can take it back, and closing the tab
+ * POSTed on the spot — its inline Undo can take it back, and closing the tab
  * inside the window sends nothing. The returned promise settles when the
  * decision is sent (or undone).
  *
@@ -197,6 +200,14 @@ export function rememberWorkTitles(runs: readonly SessionView[]): void {
  * being answered, about which piece of work — "the plan for “Fix the double charge”", "the
  * hand-over of “…”", "the review for “…”" — never the run id.
  */
+/** The job a run is, in its own words ("“Fix the double charge”"), else where it is ("a run in beta", "this run"). */
+export function jobLabel(runId: string): string {
+  const title = workTitles.get(runId);
+  if (title !== undefined) return `“${title}”`;
+  const name = useMembershipStore.getState().projectNameByRun[runId];
+  return name !== undefined && name !== '' ? `a run in ${name}` : 'this run';
+}
+
 export function gateLabel(runId: string): string {
   const title = workTitles.get(runId);
   const gate = useGateStore.getState().gates[runId];
@@ -205,7 +216,8 @@ export function gateLabel(runId: string): string {
     if (gate?.gateKind === 'plan_approval' || /^\s*Approve plan rev \d+/i.test(prompt)) return `the plan for “${title}”`;
     if (gate?.gateKind === 'deliver' || /^\s*Approve delivery\b/i.test(prompt)) return `the hand-over of “${title}”`;
     // Any other gate: its question's noun ("Approve the review" → "the review for “…”"), when it has one.
-    const noun = gate === undefined ? undefined : /^Approve the ([^:()]+?)\s*$/.exec(plainGateQuestion(gate.prompt, gate.gateKind))?.[1];
+    // The question's own "?" is not part of the noun ("Approve the schema change?" → "the schema change for …").
+    const noun = gate === undefined ? undefined : /^Approve the ([^:()?]+?)\??\s*$/.exec(plainGateQuestion(gate.prompt, gate.gateKind))?.[1];
     return noun !== undefined ? `the ${noun} for “${title}”` : `“${title}”`;
   }
   // Before the run list has the run (or it has no words): the project, else "this run" — never
@@ -239,7 +251,7 @@ export function unwatchDecision(runIds: readonly string[]): void {
 
 /** The notice for a decision the double-submit guard refused. */
 function dropNotice(runId: string, cur: GateActionState): string {
-  const state = cur.queued ? 'is waiting to send (see its Undo toast)' : cur.busy ? 'is being sent' : 'was already sent';
+  const state = cur.queued ? 'is waiting to send (undo it where you made it)' : cur.busy ? 'is being sent' : 'was already sent';
   return `Not sent: ${gateLabel(runId)} already has a decision that ${state}.`;
 }
 
@@ -267,13 +279,13 @@ export function commitGateDecision(
 ): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.queued || cur.busy || cur.answered !== null) {
-    reportDecision('not-sent', dropNotice(runId, cur));
+    reportDecision('not-sent', dropNotice(runId, cur), { keys: [gateKeyOf(runId)] });
     return Promise.resolve('dropped');
   }
   if (opts.expect !== undefined) {
     const open = useGateStore.getState().gates[runId];
     if (open === undefined || !sameInstance(open, opts.expect)) {
-      reportDecision('not-sent', `Not sent: the gate on ${gateLabel(runId)} has moved on since you answered it.`);
+      reportDecision('not-sent', `Not sent: the gate on ${gateLabel(runId)} has moved on since you answered it.`, { keys: [gateKeyOf(runId)] });
       return Promise.resolve('cancelled');
     }
   }
@@ -281,7 +293,7 @@ export function commitGateDecision(
   // shown, bound here at the moment they decided (never the newest one at send time).
   const rev = seenPlanRev(runId, decision);
   if (rev === null) {
-    reportDecision('not-sent', PLAN_UNSEEN_TEXT);
+    reportDecision('not-sent', PLAN_UNSEEN_TEXT, { keys: [gateKeyOf(runId)] });
     return Promise.resolve('cancelled');
   }
   if (rev !== undefined) decision = { ...decision, planRev: rev };
@@ -309,6 +321,7 @@ export function commitGateDecision(
     const id = queueDecision({
       verb,
       runIds: [runId],
+      keys: [gateKeyOf(runId)],
       preview,
       label,
       amend,
@@ -323,10 +336,10 @@ export function commitGateDecision(
           if (opts.receipt !== undefined) {
             patch(runId, { receipt: { ...opts.receipt, sentAt: Date.now() } });
           }
-          reportDecision('sent', opts.notice?.sent ?? `${PAST[verb] ?? 'Answered'} ${label}.`);
+          reportDecision('sent', opts.notice?.sent ?? `${PAST[verb] ?? 'Answered'} ${label}.`, { keys: [gateKeyOf(runId)] });
           resolve('sent');
         } else {
-          reportDecision('failed', `Not sent: ${label} — ${error}`, { qe: useGateActionStore.getState().byGate[runId]?.qeRefusal === true });
+          reportDecision('failed', `Not sent: ${label} — ${error}`, { keys: [gateKeyOf(runId)], qe: useGateActionStore.getState().byGate[runId]?.qeRefusal === true });
           reject(new Error(error));
         }
       },
@@ -357,7 +370,7 @@ export function commitGateDecision(
 export function commitGateReassign(runId: string, cli: string, seatLabel: string): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.queued || cur.busy || cur.answered !== null) {
-    reportDecision('not-sent', dropNotice(runId, cur));
+    reportDecision('not-sent', dropNotice(runId, cur), { keys: [gateKeyOf(runId)] });
     return Promise.resolve('dropped');
   }
   patch(runId, { queued: true, ...NO_ERROR });
@@ -367,6 +380,7 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
     const id = queueDecision({
       verb: 'approve',
       runIds: [runId],
+      keys: [gateKeyOf(runId)],
       preview: `the retry moves to ${seatLabel}`,
       label,
       commit: async () => {
@@ -376,13 +390,13 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
           await api.reassignRun(runId, cli);
           patch(runId, { busy: false, answered: 'approved', receipt: { kind: 'row', chosenLabel: seatLabel, sentAt: Date.now() } });
           useGateStore.getState().clearGate(runId);
-          reportDecision('sent', `Moved ${label} to ${seatLabel}; the retry runs there.`);
+          reportDecision('sent', `Moved ${label} to ${seatLabel}; the retry runs there.`, { keys: [gateKeyOf(runId)] });
           resolve('sent');
         } catch (e) {
           const failed = failureOf(e);
           const why = failed.error;
           patch(runId, { busy: false, ...failed });
-          reportDecision('failed', `Not moved: ${label} — ${why}`, { qe: failed.qeRefusal === true });
+          reportDecision('failed', `Not moved: ${label} — ${why}`, { keys: [gateKeyOf(runId)], qe: failed.qeRefusal === true });
           reject(new Error(why));
         }
       },
@@ -434,7 +448,7 @@ export async function sendGateDecision(runId: string, decision: GateDecisionWire
 }
 
 /** What a hand-over refused because QE acceptance hasn't passed says, wherever the failure is told
- *  (the card, the toast, a batch's failure list); the card adds the way to the setting. */
+ *  (the card, the inline result, a batch’s failure list); the card adds the way to the setting. */
 export const QE_REFUSED_TEXT = 'Not delivered: QE acceptance hasn’t passed, so nothing was pushed.';
 
 /** A failed decision's state: crew's QE refusal in plain words (its sentence kept as the detail), else
@@ -516,4 +530,17 @@ export function ensureGate(runId: string): Promise<void> {
 /** A gate's one honest affordance: the session thread at the gate anchor. */
 export function gateOpenPath(_projectId: string, runId: string): string {
   return sessionPath('run:' + runId) + GATE_HASH;
+}
+
+/**
+ * studio 0.16.4 (no invisible decisions): where a decision taken with no block on screen to show it goes — its
+ * run's gate card for a gate answer, else the run's page (a Stop, a plan step, a power pause). Null for `batch` /
+ * `memory-accept`, which are only ever taken in their own block.
+ */
+export function hostlessPathOf(keys: readonly string[]): string | null {
+  // A batch (it carries its members' gates too) is only taken on its bar, so it has no single run page to go to.
+  if (keys.includes('batch')) return null;
+  const run = keys.map(runOfKey).find((r) => r !== null) ?? null;
+  if (run === null) return null;
+  return run.kind === 'gate' ? gateOpenPath('', run.runId) : sessionPath('run:' + run.runId);
 }

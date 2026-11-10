@@ -40,7 +40,7 @@ describe('studio#443: the undo notice names the work, never a run UUID', () => {
     rememberWorkTitles([makeView({ id: UUID, status: 'awaiting_human', problem: PROBLEM }, [])]);
     const label = gateLabel(UUID);
     expect(label).toBe('the plan for “Add a short "Rules for booking" section to PROPOSAL.md”');
-    const head = undoHeadline({ id: 1, verb: 'approve', runIds: [UUID], preview: '', label, amend: null, queuedAt: 0, dueAt: 8_000 }, 0);
+    const head = undoHeadline({ id: 1, verb: 'approve', keys: [], origin: null, runIds: [UUID], preview: '', label, amend: null, queuedAt: 0, dueAt: 8_000 }, 0);
     expect(head).toBe('Approving the plan for “Add a short "Rules for booking" section to PROPOSAL.md” in 8 s');
     expect(head).not.toContain(UUID);
   });
