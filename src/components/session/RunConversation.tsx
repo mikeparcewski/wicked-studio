@@ -671,7 +671,9 @@ export function RecoveryRow({ view, navigate }: { view: RunView; navigate?: Navi
 function PlanStepLines({ runId }: { runId: string }): React.ReactElement {
   const added = usePlanDrafts((s) => s.added[runId]);
   return (
-    <div data-undo-host="plan-steps" className="wk-session-steps">
+    // With nothing added yet it draws no box (the thread's gap is not spent on an empty block); its inline Undo still
+    // shows, as a child of the thread, the moment a step is queued.
+    <div data-undo-host="plan-steps" className={(added?.length ?? 0) > 0 ? 'wk-session-steps' : 'wk-undo-scope'}>
       {(added ?? []).map((c, i) => (
         <p key={`a${i}`} data-testid="session-step-added" data-catalog={c} className="wk-session-grey">Added {wordOf(c)} — it stays: a running plan only grows.</p>
       ))}

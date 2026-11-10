@@ -47,7 +47,7 @@ export function GateButtons({ runId }: { runId: string }): React.ReactElement | 
   // studio 0.16.4: an Approve pressed here shows its countdown, Undo and result here — after the gate has
   // cleared, too, so the result is not lost with the buttons.
   const undo = <InlineUndo host="run-host" keys={[gateKeyOf(runId)]} className="wk-run-gate-undo" />;
-  if (gate === undefined) return <span data-undo-host="run-host" className="wk-run-gate-actions">{undo}</span>;
+  if (gate === undefined) return <span data-undo-host="run-host" className="wk-undo-scope">{undo}</span>;
   const busy = action.queued || action.busy || action.answered !== null;
   // Fail closed (codex final review P1): the bare Approve is offered only for a gate KNOWN to be the plain
   // pre-run review (`def`) with the two plain answers. A gate whose kind is not known (a late join: GET
