@@ -106,8 +106,13 @@ function type(text: string): void {
 const row = (entry: string): HTMLElement => document.querySelector<HTMLElement>(`[data-testid="composer-menu-item"][data-entry="${entry}"]`)!;
 async function pick(entry: string, query: string): Promise<void> {
   type(`/${query}`);
-  await waitFor(() => expect(row(entry)).not.toBeNull());
-  fireEvent.mouseDown(row(entry));
+  // Press the row in the same check that finds it: the menu can re-render between a waitFor that saw the row and a
+  // separate press (CI: "Unable to fire a mousedown event"), and then the press found nothing.
+  await waitFor(() => {
+    const r = row(entry);
+    expect(r).not.toBeNull();
+    fireEvent.mouseDown(r);
+  });
 }
 const enter = (): void => { fireEvent.keyDown(box(), { key: 'Enter' }); };
 const wfChip = (key: string): { workflowId: string; entryId?: string } | undefined =>

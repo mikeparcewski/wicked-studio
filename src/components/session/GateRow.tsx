@@ -2,7 +2,7 @@ import { SKIP_QE_KEY, SKIP_QE_PLACEHOLDER } from '../../board/qeSkip.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { QeRefusalWarning } from '../QeRefusalWarning.js';
-import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
+import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, gateKeyOf, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { FLOOR_FIX_LABEL, namedSendBackNote, SEND_BACK_NAMED_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { AskCard, AskRecord, type AskReason } from '../ask/AskCard.js';
 import { askFromGate, gateOption, REASON_KEYS } from '../../board/askModel.js';
@@ -12,7 +12,8 @@ import { api } from '../../api/client.js';
 import { useDisplayPath, useDisplayText } from '../../hooks/useHomePath.js';
 import { driftLine, useDiffDrift, type DiffDrift } from '../../store/gateDiffSeen.js';
 import { diffstatOf, type DeliverRefusal } from '../gateMoveModel.js';
-import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
+import { useUndoQueue } from '../../board/undoQueue.js';
+import { InlineUndo } from '../InlineUndo.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
 import type { OpenGate } from '../../store/gates.js';
@@ -86,17 +87,6 @@ export function useRejudgeOffer(runId: string, ord: number | undefined, on: bool
  *  - Keyboard: arrows / Home / End move, digit picks-and-sends, Enter sends after moving
  *    (`pickKey` from `questionRow.ts`).
  */
-
-/** 250 ms clock while `on` (the undo countdown). */
-function useTicker(on: boolean): number {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!on) return;
-    const t = setInterval(() => setNow(Date.now), 250);
-    return () => clearInterval(t);
-  }, [on]);
-  return now;
-}
 
 /** A text field anywhere on the page (the composer, a sheet's input): a gate's arrival never yanks its caret. */
 function isEditable(el: Element | null): boolean {
@@ -670,7 +660,10 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [holding]);
-  const now = useTicker(pending !== null);
+  // studio 0.16.4: this card's inline Undo — the countdown, what happens, Undo and the result, for its run's gate.
+  const undo = <InlineUndo host="gate-card" keys={[gateKeyOf(runId)]} />;
+  // The open card says a failed send itself (its error line or the QE refusal, beside the choices it re-offers).
+  const undoOpen = <InlineUndo host="gate-card" keys={[gateKeyOf(runId)]} ownFailure />;
 
   const [chosen, setChosen] = useState<{ key: string; label: string; sentAt: number | null } | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -729,23 +722,17 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
 
   // ── Folded view: must come BEFORE model null guard so the receipt shows after clearGate ──
   if (chosen !== null && (chosen.key === gateKey || (chosen.sentAt !== null && gate === undefined))) {
-    const left = pending === null ? 0 : secondsLeft(pending, now);
     return (
-      <div data-testid="session-gate-row" ref={rowRef} tabIndex={-1} className="wk-session-gate-row" role="status">
+      <div data-testid="session-gate-row" data-undo-host="gate-card" ref={rowRef} tabIndex={-1} className="wk-session-gate-row">
         <AskRecord
           testId="session-gate-chosen"
           className="wk-session-gate-chosen"
-          // (mockup learn-and-panels h) One plain line; while the answer waits, its countdown and Undo at the end.
+          // (mockup learn-and-panels h) One plain line; while the answer waits, its countdown and Undo are in the
+          // inline block under it (studio 0.16.4: no floating toast).
           line={chosen.sentAt !== null ? `You chose: ${chosen.label}, ${formatSentTime(chosen.sentAt)}` : `You chose: ${chosen.label}`}
-          meta={pending !== null ? (
-            <>
-              <span data-testid="session-gate-chosen-wait">{left > 0 ? `Sends in ${left} s` : 'Sending'}</span>
-              <button type="button" onClick={() => { undoDecision(pending.id); setChosen(null); }} className="wk-btn wk-btn--quiet wk-session-gate-undo">
-                Undo
-              </button>
-            </>
-          ) : chosen.sentAt !== null ? 'sent' : 'Sending'}
+          meta={pending !== null ? null : chosen.sentAt !== null ? 'sent' : 'Sending'}
         />
+        {undo}
       </div>
     );
   }
@@ -753,8 +740,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // Store-receipt fallback: on remount after clearGate, chosen state is gone but store has the receipt.
   if (chosen === null && gate === undefined && action.receipt?.kind === 'row') {
     return (
-      <div data-testid="session-gate-row" ref={rowRef} tabIndex={-1} className="wk-session-gate-row" role="status">
+      <div data-testid="session-gate-row" data-undo-host="gate-card" ref={rowRef} tabIndex={-1} className="wk-session-gate-row">
         <AskRecord testId="session-gate-chosen" className="wk-session-gate-chosen" line={`You chose: ${action.receipt.chosenLabel}, ${formatSentTime(action.receipt.sentAt)}`} meta="sent" />
+        {undo}
       </div>
     );
   }
@@ -763,10 +751,10 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // log, so no choice is offered on missing evidence; the operator retries the read from the row.
   if (eventsUnavailable) {
     return (
-      <div data-testid="session-gate-row" data-reason="events-unavailable" ref={rowRef} tabIndex={-1} className="wk-session-gate-row" role="alert">
+      <div data-testid="session-gate-row" data-undo-host="gate-card" data-reason="events-unavailable" ref={rowRef} tabIndex={-1} className="wk-session-gate-row">
         <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
         {rulesLine}
-        <p data-testid="session-gate-events-error" className="wk-session-gate-error">
+        <p data-testid="session-gate-events-error" role="alert" className="wk-session-gate-error">
           The run's events could not be read, so this gate's choices are held back — nothing is offered on missing evidence.
         </p>
         <button
@@ -777,6 +765,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         >
           Retry
         </button>
+        {undo}
       </div>
     );
   }
@@ -864,6 +853,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   return (
     <div
       data-testid="session-gate-row"
+      data-undo-host="gate-card"
       data-reason={model.reason}
       ref={rowRef}
       tabIndex={-1}
@@ -980,6 +970,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         <p data-testid="session-gate-error" role="alert" className="wk-session-gate-error">{showText(action.error)}</p>
       )}
       {seat !== null && <RuleOfferBlock seat={seat} locked={action.busy} />}
+      {undoOpen}
       {/* (review of the dock) Compact by default: the explanation, the base failures, the receipt and the raw detail
           are behind one "More about this" — the dock grows (to 60% of the view) only when it is open. */}
       <details data-testid="session-gate-more-about" className="wk-gate2-about" open={more} onToggle={(e) => { const d = e.currentTarget as HTMLDetailsElement; setMore(d.open); if (d.open) requestAnimationFrame(() => d.querySelector('.wk-gate2-about-body')?.scrollIntoView?.({ block: 'nearest' })); }}>

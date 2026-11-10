@@ -146,7 +146,7 @@ describe('Copilot r1 on the proposal model', () => {
 
   it('the status sentence never says work started while an answer is queued or sending', () => {
     const g = planGate();
-    expect(statusSentence(run('r', 'awaiting_human'), EMPTY, g, { ...IDLE_GATE_ACTION, queued: true })).toBe('Your answer goes in a moment — Undo is in the notice');
+    expect(statusSentence(run('r', 'awaiting_human'), EMPTY, g, { ...IDLE_GATE_ACTION, queued: true })).toBe('Sending your answer in a moment — you can undo it on the decision card');
     expect(statusSentence(run('r', 'awaiting_human'), EMPTY, g, { ...IDLE_GATE_ACTION, busy: true })).toBe('Sending your answer');
     expect(statusSentence(run('r', 'awaiting_human'), EMPTY, g, IDLE_GATE_ACTION)).toBe('Waiting on your go for the plan');
   });

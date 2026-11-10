@@ -7,11 +7,11 @@
  *
  * Surfaces: the composer and the New job wizard (launch 400), the deliver card and the gate row (gate
  * 409), the stranded card and the Delivery card (post-hoc 409), the deliver card before it is pressed
- * (a hand-over crew will refuse), the decision toast and the approvals bar; and Settings landing on
+ * (a hand-over crew will refuse), the inline decision result and the approvals bar; and Settings landing on
  * the switch.
  */
 
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
@@ -36,8 +36,14 @@ import { RunDelivery } from '../src/components/RunDelivery.js';
 import { ChatInput } from '../src/components/ChatInput.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { SystemSettings } from '../src/components/SystemSettings.js';
-import { UndoToasts } from '../src/components/UndoToasts.js';
-import { ApprovalGroupActions } from '../src/components/desk/ApprovalGroupActions.js';
+import { InlineUndo } from '../src/components/InlineUndo.js';
+
+/** A block hosting the run's inline Undo (studio 0.16.4: results land there, not in a toast). */
+function UndoHost(): React.ReactElement {
+  return <div data-undo-host="t"><InlineUndo host="t" keys={['gate:r']} /></div>;
+}
+const onRun = { keys: ['gate:r'] } as const;
+import { BatchFailures } from '../src/components/desk/BatchFailures.js';
 
 vi.mock('../src/components/Terminal.js', () => ({ Terminal: () => <div data-testid="mock-terminal" /> }));
 
@@ -458,41 +464,41 @@ describe('post-hoc delivery refused (POST /runs/:id/deliver 409)', () => {
 });
 
 describe('where a decision’s outcome is told', () => {
-  it('the toast of a QE refusal offers the setting only when it is required; another failure’s toast offers nothing', async () => {
+  it('the inline result of a QE refusal offers the setting only when it is required; another failure’s offers nothing', async () => {
     health('required');
-    render(<UndoToasts />);
-    act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { qe: true }));
-    act(() => reportDecision('failed', 'Not sent: this run — bad ord'));
-    const results = screen.getAllByTestId('undo-result');
+    render(<UndoHost />);
+    act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { ...onRun, qe: true }));
+    act(() => reportDecision('failed', 'Not sent: this run — bad ord', onRun));
+    const results = screen.getAllByTestId('inline-undo-result');
     expect(results).toHaveLength(2);
-    await waitFor(() => expect(results[0]!.querySelector('[data-testid="undo-result-qe-link"]')).toHaveAttribute('href', '/system#qe-acceptance'));
+    await waitFor(() => expect(results[0]!.querySelector('[data-testid="inline-undo-result-qe-link"]')).toHaveAttribute('href', '/system#qe-acceptance'));
     expect(results[0]!.textContent).toMatch(/can be turned off for jobs started later/);
-    expect(results[1]!.querySelector('[data-testid="undo-result-qe"]')).toBeNull();
+    expect(results[1]!.querySelector('[data-testid="inline-undo-result-qe"]')).toBeNull();
   });
-  it('the toast when QE acceptance is already off: no link, the job keeps its requirement', async () => {
+  it('the inline result when QE acceptance is already off: no link, the job keeps its requirement', async () => {
     health('off');
-    render(<UndoToasts />);
-    act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { qe: true }));
-    const offer = await screen.findByTestId('undo-result-qe');
+    render(<UndoHost />);
+    act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { ...onRun, qe: true }));
+    const offer = await screen.findByTestId('inline-undo-result-qe');
     expect(offer).toHaveTextContent('QE acceptance is off, but this job keeps the requirement it started with.');
-    expect(screen.queryByTestId('undo-result-qe-link')).toBeNull();
+    expect(screen.queryByTestId('inline-undo-result-qe-link')).toBeNull();
   });
-  it('the toast when the service does not report the setting: no offer at all', async () => {
+  it('the inline result when the service does not report the setting: no offer at all', async () => {
     health(undefined);
-    render(<UndoToasts />);
-    act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { qe: true }));
+    render(<UndoHost />);
+    act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { ...onRun, qe: true }));
     await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
-    expect(screen.queryByTestId('undo-result-qe')).toBeNull();
+    expect(screen.queryByTestId('inline-undo-result-qe')).toBeNull();
   });
 
-  it('the approvals bar: a member crew refused for QE acceptance gets the offer (required), another failure none', async () => {
+  it('the approvals bar’s failure list (said once, by the block it was taken in): a member crew refused for QE acceptance gets the offer (required), another failure none', async () => {
     health('required');
     useGateActionStore.setState({ byGate: {
       'r-a': { queued: false, busy: false, answered: null, error: QE_REFUSED_TEXT, qeRefusal: true, errorDetail: DELIVERY_SENTENCE, receipt: null },
       'r-b': { queued: false, busy: false, answered: null, error: 'bad ord', receipt: null },
     } });
     useBatchGateStore.setState({ failures: [{ runId: 'r-a', error: QE_REFUSED_TEXT }, { runId: 'r-b', error: 'bad ord' }] } as never);
-    render(<ApprovalGroupActions runIds={['r-a', 'r-b']} label="2 approvals" />);
+    render(<BatchFailures runIds={['r-a', 'r-b']} />);
     const rows = screen.getAllByTestId('need-group-failure');
     await waitFor(() => expect(rows[0]!.querySelector('[data-testid="need-group-failure-qe-link"]')).toHaveAttribute('href', '/system#qe-acceptance'));
     expect(rows[1]!.querySelector('[data-testid="need-group-failure-qe"]')).toBeNull();
@@ -501,13 +507,13 @@ describe('where a decision’s outcome is told', () => {
     health('off');
     useGateActionStore.setState({ byGate: { 'r-a': { queued: false, busy: false, answered: null, error: QE_REFUSED_TEXT, qeRefusal: true, receipt: null } } });
     useBatchGateStore.setState({ failures: [{ runId: 'r-a', error: QE_REFUSED_TEXT }] } as never);
-    render(<ApprovalGroupActions runIds={['r-a']} label="1 approval" />);
+    render(<BatchFailures runIds={['r-a']} />);
     expect(await screen.findByTestId('need-group-failure-qe')).toHaveTextContent(/keeps the requirement it started with/);
     expect(screen.queryByTestId('need-group-failure-qe-link')).toBeNull();
   });
 });
 
-describe('codex r2: no stale advice while re-reading, and the toast link is not taken from under focus', () => {
+describe('codex r2: no stale advice while re-reading, and the result link is not taken from under focus', () => {
   it('a focus re-read hides the old advice until the new answer lands', async () => {
     health('required');
     render(<QeRefusalWarning kind="delivery" refusalKey="run-a" testId="w" />);
@@ -520,65 +526,74 @@ describe('codex r2: no stale advice while re-reading, and the toast link is not 
     await act(async () => { answer({ status: 'ok', version: 't', capabilities: { qeAcceptance: 'off' } }); await Promise.resolve(); });
     expect(await screen.findByTestId('w-fix')).toHaveTextContent(/keeps the QE requirement it started with/);
   });
-  it('a toast whose link has focus outlives its 8 s, and goes when focus leaves', async () => {
+  it('a failed result whose link has focus outlives 8 s, and stays after focus leaves until it is dismissed', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       health('required');
-      render(<UndoToasts />);
-      act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { qe: true }));
-      const link = await screen.findByTestId('undo-result-qe-link');
+      render(<UndoHost />);
+      act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { ...onRun, qe: true }));
+      const link = await screen.findByTestId('inline-undo-result-qe-link');
       act(() => { link.focus(); });
       act(() => { vi.advanceTimersByTime(9_000); });
-      expect(screen.getByTestId('undo-result-qe-link')).toBeInTheDocument();
+      expect(screen.getByTestId('inline-undo-result-qe-link')).toBeInTheDocument();
       act(() => { (document.activeElement as HTMLElement).blur(); });
-      expect(screen.queryByTestId('undo-result')).toBeNull();
+      // studio 0.16.4: a failure stays until it is dismissed, focus or not.
+      expect(screen.getByTestId('inline-undo-result')).toBeInTheDocument();
+      act(() => { fireEvent.click(screen.getByTestId('inline-undo-dismiss')); });
+      expect(screen.queryByTestId('inline-undo-result')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
   });
 });
 
-describe('codex r3: a window focus never takes a focused toast link away', () => {
-  it('the toast reads the setting once: a window focus while its link has focus leaves link and focus in place; it goes once focus leaves after its time', async () => {
+describe('codex r3: a window focus never takes a focused result link away', () => {
+  it('the inline result reads the setting once: a window focus while its link has focus leaves link and focus in place; it stays until it is dismissed', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       health('required');
-      render(<UndoToasts />);
-      act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { qe: true }));
-      const link = await screen.findByTestId('undo-result-qe-link');
+      render(<UndoHost />);
+      act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { ...onRun, qe: true }));
+      const link = await screen.findByTestId('inline-undo-result-qe-link');
       act(() => { link.focus(); });
       const reads = vi.mocked(client.api.getHealth).mock.calls.length;
       vi.mocked(client.api.getHealth).mockReturnValue(new Promise(() => {}) as never);
       act(() => { window.dispatchEvent(new Event('focus')); });
       expect(vi.mocked(client.api.getHealth).mock.calls.length).toBe(reads);
-      expect(document.activeElement).toBe(screen.getByTestId('undo-result-qe-link'));
+      expect(document.activeElement).toBe(screen.getByTestId('inline-undo-result-qe-link'));
       act(() => { vi.advanceTimersByTime(9_000); });
-      expect(screen.getByTestId('undo-result-qe-link')).toBeInTheDocument();
+      expect(screen.getByTestId('inline-undo-result-qe-link')).toBeInTheDocument();
       act(() => { (document.activeElement as HTMLElement).blur(); });
-      expect(screen.queryByTestId('undo-result')).toBeNull();
+      // studio 0.16.4: a failure stays until it is dismissed, focus or not.
+      expect(screen.getByTestId('inline-undo-result')).toBeInTheDocument();
+      act(() => { fireEvent.click(screen.getByTestId('inline-undo-dismiss')); });
+      expect(screen.queryByTestId('inline-undo-result')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
   });
 });
 
-describe('codex r4: a card re-reading beside the toast does not change the toast', () => {
-  it('a mounted warning whose focus re-read answers off leaves the focused toast link, which goes once focus leaves after its time', async () => {
+describe('codex r4: a card re-reading beside the inline result does not change it', () => {
+  it('a mounted warning whose focus re-read answers off leaves the focused result link, which stays until it is dismissed', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       health('required');
-      render(<><UndoToasts /><QeRefusalWarning kind="delivery" refusalKey="run-a" testId="w" /></>);
+      render(<><UndoHost /><QeRefusalWarning kind="delivery" refusalKey="run-a" testId="w" /></>);
       await screen.findByTestId('w-link');
-      act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { qe: true }));
-      const link = await screen.findByTestId('undo-result-qe-link');
+      act(() => reportDecision('failed', `Not sent: this run — ${QE_REFUSED_TEXT}`, { ...onRun, qe: true }));
+      const link = await screen.findByTestId('inline-undo-result-qe-link');
       act(() => { link.focus(); });
       health('off');
       act(() => { window.dispatchEvent(new Event('focus')); });
       await waitFor(() => expect(screen.getByTestId('w').dataset.setting).toBe('off'));
-      expect(document.activeElement).toBe(screen.getByTestId('undo-result-qe-link'));
+      expect(document.activeElement).toBe(screen.getByTestId('inline-undo-result-qe-link'));
       act(() => { vi.advanceTimersByTime(9_000); });
       act(() => { (document.activeElement as HTMLElement).blur(); });
-      expect(screen.queryByTestId('undo-result')).toBeNull();
+      // studio 0.16.4: a failure stays until it is dismissed, focus or not.
+      expect(screen.getByTestId('inline-undo-result')).toBeInTheDocument();
+      act(() => { fireEvent.click(screen.getByTestId('inline-undo-dismiss')); });
+      expect(screen.queryByTestId('inline-undo-result')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

@@ -148,11 +148,12 @@
     font-weight: var(--weight-strong); line-height: 1.35; text-align: left; cursor: pointer;
   }
   .wk-gate2-q { font-size: var(--text-section); }
-  /* Folded: the eyebrow, the headline and the primary move, so the operator can act without unfolding the sheet. */
-  .wk-dock-slot[data-folded="true"] .wk-gate2 > :not(.wk-gate2-q):not(.wk-gate2-decide),
+  /* Folded: the eyebrow, the headline and the primary move, so the operator can act without unfolding the sheet — and
+     a decision's inline Undo (studio 0.16.4), which is never folded away while it counts down. */
+  .wk-dock-slot[data-folded="true"] .wk-gate2 > :not(.wk-gate2-q):not(.wk-gate2-decide):not(.wk-inline-undo-wrap),
   .wk-dock-slot[data-folded="true"] .wk-gate2-next,
   .wk-dock-slot[data-folded="true"] .wk-gate2-more,
-  .wk-dock-slot[data-folded="true"] .wk-prop > :not(.wk-gate2-q):not(.wk-prop-btns):not(.wk-gate2-decide),
+  .wk-dock-slot[data-folded="true"] .wk-prop > :not(.wk-gate2-q):not(.wk-prop-btns):not(.wk-gate2-decide):not(.wk-inline-undo-wrap),
   /* (guided asks) Folded: the option you are on and its primary; every card shows while none is selected. */
   .wk-dock-slot[data-folded="true"] .wk-ask-opts:has([aria-checked="true"]) > .wk-ask-opt:not([aria-checked="true"]),
   .wk-dock-slot[data-folded="true"] .wk-ask-cons,

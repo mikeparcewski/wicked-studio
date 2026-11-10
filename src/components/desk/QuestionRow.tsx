@@ -5,7 +5,7 @@ import { commitGateDecision } from '../../board/gateActions.js';
 import {
   CARD_REASON, INITIAL_PICK, chosenLine, classifyRowGate, pickKey, type RowChoice, type RowPick,
 } from '../../board/questionRow.js';
-import { secondsLeft, takeRestoredNote, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
+import { secondsLeft, takeRestoredNote, useUndoQueue } from '../../board/undoQueue.js';
 import { useGateStore } from '../../store/gates.js';
 import { DecisionPreview } from './DecisionPreview.js';
 
@@ -16,7 +16,7 @@ import { DecisionPreview } from './DecisionPreview.js';
  * group focused, a digit, or Enter/Space on a choice the operator moved to — commits it through
  * `commitGateDecision`: the same 10 s undo window, one-decision-per-gate guard and
  * elsewhere/new-gate cancellation every gate answer has (wave2a_safety). The row then folds to
- * "You chose … · Undo N s"; Undo restores the row and sends nothing.
+ * "You chose …", with the countdown and Undo in the row's inline block; Undo restores the row and sends nothing.
  *
  * Deliver, retry and escalation gates (and anything the row cannot classify) are never answered
  * here: the row offers their card (`board/questionRow.ts`). Render only.
@@ -93,7 +93,7 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
           if (keyRef.current === key) setOpen(false);
         }
       },
-      // A failed send is reported (the toast names it); the row comes back, answerable again.
+      // A failed send is reported (inline, under the row); the row comes back, answerable again.
       () => { settle(null); },
     );
   };
@@ -125,19 +125,10 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
   // run it stays shown as sent; a NEWER gate replaces it (Copilot).
   if (chosen !== null && (chosen.key === gateKey || (chosen.sent && gate === undefined))) {
     const left = pending === null ? 0 : secondsLeft(pending, now);
+    // The countdown, what happens and Undo are in the row's inline block (NeedsYouQueue hosts it under the row).
     return (
-      <span data-testid="need-chosen" data-pending={pending !== null ? 'true' : 'false'} className="wk-need-chosen" role="status">
+      <span data-testid="need-chosen" data-pending={pending !== null ? 'true' : 'false'} className="wk-need-chosen">
         <span data-testid="need-chosen-line">{chosen.sent ? `You chose ${chosen.label} · sent` : chosenLine(chosen.label, left)}</span>
-        {pending !== null && (
-          <button
-            type="button"
-            data-testid="need-chosen-undo"
-            onClick={() => { undoDecision(pending.id); }}
-            className="wk-need-act"
-          >
-            Undo
-          </button>
-        )}
       </span>
     );
   }

@@ -172,18 +172,18 @@ with sync_playwright() as p:
     except Exception:
         fail("undo-setup", {"why": "chosen state did not appear for undo test"})
 
-    # Fold wording during the undo window: "You chose: <label>" (with colon), then "Sends in N s" and Undo
+    # Fold wording during the undo window: "You chose: <label>" (with colon), then the inline Undo under it (studio 0.16.4)
     chosen_text = page.get_by_test_id("session-gate-chosen").inner_text()
     check("chosen-wording", "You chose: Approve" in chosen_text, got=chosen_text)
 
     # The undo button appears during the undo window
     try:
-        undo_btn = page.locator(".wk-session-gate-undo")
+        undo_btn = page.get_by_test_id("inline-undo-button")
         undo_btn.wait_for(state="visible", timeout=5_000)
         undo_btn.click()
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-gate-kinds-undo.png"))
-        fail("undo-button", {"why": "Undo button did not appear within the undo window"})
+        fail("inline-undo-button", {"why": "Undo button did not appear within the undo window"})
 
     # After undo, the gate row should reappear with choices
     try:

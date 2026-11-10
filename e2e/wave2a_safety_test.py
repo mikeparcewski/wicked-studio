@@ -4,7 +4,7 @@ wave2a_safety_test.py — studio wave 2a round 3: A QUEUED DECISION IS ABOUT ONE
 
 REAL 10 s window throughout. Against the `wave1` corpus with a SIMPLE gate waiting on b1 (unit 3).
 
-  label     j, a on the board: the toast reads "Approving “migrate beta's settings page to the new form kit” in 10 s".
+  label     j, a on the board: the inline Undo reads "Approving “migrate beta's settings page to the new form kit” in 10 s".
   peek      with that decision queued, P does NOT resurface b1 (nothing else needs you).
   elsewhere the gate is answered elsewhere mid-window (a live `resumed` frame, the run moves on):
             NO POST ever reaches the daemon, and the notice reads "Not sent: … answered elsewhere".
@@ -12,7 +12,7 @@ REAL 10 s window throughout. Against the `wave1` corpus with a SIMPLE gate waiti
             the notice says a new gate opened — the old decision is never applied to the new gate.
   ord       fresh page, a, no interference: exactly ONE POST after 10 s, body {approve:true, ord:3}.
   card      on /s/run%3Ab1 (S16a-2a: the session's gate row), Approve: the row folds to "You chose:
-            Approve" (Sends in N s · Undo) with no choice left to take, so a second key answers nothing (no
+            Approve" (the inline Undo under it) with no choice left to take, so a second key answers nothing (no
             POST); Undo re-arms Approve.
 
 On the Desk (the one shell since S18d) the board is the Desk: the
@@ -61,7 +61,7 @@ def server_posts(origin: str) -> list:
 
 def notice(page) -> str:
     return page.evaluate(
-        "() => [...document.querySelectorAll('[data-testid=\"undo-result\"]')].map(n => n.dataset.kind + ': ' + n.textContent).join(' | ')")
+        "() => [...document.querySelectorAll('[data-testid=\"inline-undo-result\"]')].map(n => n.dataset.kind + ': ' + n.textContent).join(' | ')")
 
 
 dist = ensure_build(fail)
@@ -96,14 +96,14 @@ def approve_on_board(page) -> float:
     row.locator('[data-testid="need-answer"]').click()
     row.locator('[data-testid="need-choices"]').wait_for(state="visible", timeout=10000)
     page.keyboard.press("1")
-    page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
     return time.monotonic()
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
     page.keyboard.press("Alt+j")
     page.wait_for_function(
         "() => !!document.querySelector('[data-kbd-item=\"beta\"][data-kbd-selected=\"true\"]')", timeout=5000)
     page.keyboard.press("Alt+a")
-    page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
     return time.monotonic()
 
 
@@ -113,7 +113,7 @@ with sync_playwright() as p:
     # ── label + peek + answered elsewhere ───────────────────────────────────────
     page = board(browser)
     pressed = approve_on_board(page)
-    text = page.get_by_test_id("undo-toast").text_content() or ""
+    text = page.get_by_test_id("inline-undo").text_content() or ""
     check("toast-names-the-gate", "Approving “migrate beta's settings page to the new form kit” in 10 s" in text, text=text)
     page.keyboard.press("Alt+p")
     page.get_by_test_id("peek-card").wait_for(state="visible", timeout=3000)
@@ -170,10 +170,10 @@ with sync_playwright() as p:
     except Exception:  # noqa: BLE001 — reported by the check below
         pass
     chosen = page.get_by_test_id("session-gate-chosen").text_content() or "" if page.get_by_test_id("session-gate-chosen").count() else ""
-    # The row's undo fold is its queued state (guided asks): "You chose: Approve", then "Sends in N s" and Undo at the
-    # end of the line, the choices gone.
-    wait_words = page.get_by_test_id("session-gate-chosen-wait").text_content() or "" if page.get_by_test_id("session-gate-chosen-wait").count() else ""
-    check("card-queued-state", chosen == "You chose: Approve" and wait_words.startswith("Sends in ")
+    # The row's undo fold is its queued state (guided asks): "You chose: Approve", the choices gone, and under it the
+    # inline Undo (studio 0.16.4): "Approving … in N s", what happens, and Undo.
+    wait_words = page.get_by_test_id("inline-undo-headline").text_content() or "" if page.get_by_test_id("inline-undo-headline").count() else ""
+    check("card-queued-state", chosen == "You chose: Approve" and wait_words.startswith("Approving ") and " in " in wait_words
           and page.locator(APPROVE).count() == 0, chosen=chosen, wait=wait_words)
     page.get_by_test_id("session-gate-row").focus()
     page.keyboard.press("1")

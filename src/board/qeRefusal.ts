@@ -62,7 +62,7 @@ export interface QeRefusalWords {
 
 /** The link's words. */
 export const QE_SETTING_LINK = 'Open the QE acceptance setting';
-/** The short form (toast, approvals bar), when the service reports QE acceptance required. */
+/** The short form (the inline decision result, the approvals bar), when the service reports QE acceptance required. */
 export const QE_REQUIRED_OFFER = 'QE acceptance can be turned off for jobs started later.';
 /** The short form when it is already off. */
 export const QE_OFF_OFFER = 'QE acceptance is off, but this job keeps the requirement it started with.';

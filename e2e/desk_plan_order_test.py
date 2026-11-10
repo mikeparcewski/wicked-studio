@@ -22,7 +22,7 @@ before unit 2 of pa-scope → understand → design → build → review → del
      POST /runs/r-plan-gate/gate with approve: true, plan.steps = understand, design, review, build,
      and build carrying pool 2 (no other step a pool).
   7. MID-RUN: r-team's plan artifact says the order is set — every row fixed, no arrows; + Test
-     queues "Adding Test · Undo" (S7's window); Undo → 0 plan POSTs.
+     queues "Adding Test to … in 10 s" with the inline Undo (S7's window); Undo → 0 plan POSTs.
   8. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-plan-order*.png. Env: FEEDBACK_PORT (default 4356).
@@ -201,10 +201,10 @@ with sync_playwright() as p:
     plan.get_by_test_id("artifact-open").click()
     page.locator('[data-testid="artifact"][data-kind="plan"][data-size="pane"]').wait_for(state="visible", timeout=8000)
     plan.locator('[data-testid="plan-add-item"][data-catalog="test"]').click()
-    page.get_by_test_id("session-step-queued").wait_for(state="visible", timeout=8000)
-    queued = page.get_by_test_id("session-step-queued").inner_text()
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=8000)
+    queued = page.get_by_test_id("inline-undo").inner_text()
     page.screenshot(path=str(SHOTS / "desk-plan-order-midrun.png"))
-    page.get_by_test_id("session-step-undo").click()
+    page.get_by_test_id("inline-undo-button").click()
     page.wait_for_timeout(WINDOW_MS)
     check("mid-run", all(f != "no" for f in mid_fixed) and mid_arrows == 0 and "order is set" in mid_line
           and queued.startswith("Adding Test") and plan_edits() == [],

@@ -5,7 +5,7 @@ wave2a_gatecard_test.py — studio wave 2a round 2: ONE DECISION MECHANISM (1440
 The session thread's gate row (S16a-2a: moved off the run page) decides through the same undo
 window as the board. Against the `wave1` corpus with a gate waiting on b1 (`gate_now`):
 
-  approve  on /s/run%3Ab1, click the gate row's Approve: the toast reads
+  approve  on /s/run%3Ab1, click the gate row's Approve: its inline Undo reads
            "Approving “migrate beta's settings page to the new form kit” in 10 s" with Undo; ZERO POST /runs/b1/gate for the first 9 s
            (browser tap AND the fixture's server log).
   undo     Undo → still zero POSTs past the window; the gate row is still there with
@@ -51,7 +51,7 @@ def server_posts(origin: str) -> list:
 
 def toast_shown(page) -> bool:
     try:
-        page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+        page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
         return True
     except Exception:  # noqa: BLE001 — reported by the caller
         return False
@@ -91,16 +91,16 @@ with sync_playwright() as p:
     shown = toast_shown(page)
     check("card-approve-shows-toast", shown, browser_posts_after_click=len(posts),
           server_posts_after_click=len(server_posts(origin)))
-    text = page.get_by_test_id("undo-toast").text_content() or ""
+    text = page.get_by_test_id("inline-undo").text_content() or ""
     check("toast-reads-approving-in-10s", "Approving “migrate beta's settings page to the new form kit” in 10 s" in text, text=text)
-    check("toast-has-undo", page.get_by_test_id("undo-toast").get_by_role("button", name="Undo").count() == 1)
+    check("toast-has-undo", page.get_by_test_id("inline-undo").get_by_role("button", name="Undo").count() == 1)
     page.screenshot(path=str(SHOTS / "wave2a-gatecard-toast.png"))
     page.wait_for_timeout(max(0, int((pressed + 9.0 - time.monotonic()) * 1000)))
     check("zero-posts-first-9s", len(posts) == 0 and len(server_posts(origin)) == 0,
           browser_posts=len(posts), server=len(server_posts(origin)))
 
     # ── undo: the gate stays open ───────────────────────────────────────────────
-    page.get_by_test_id("undo-toast").get_by_role("button", name="Undo").click()
+    page.get_by_test_id("inline-undo").get_by_role("button", name="Undo").click()
     page.wait_for_timeout(3000)
     check("undo-zero-posts", len(posts) == 0 and len(server_posts(origin)) == 0,
           browser_posts=len(posts), server=len(server_posts(origin)))

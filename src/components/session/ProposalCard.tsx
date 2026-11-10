@@ -5,7 +5,8 @@ import type { SessionView } from '../../api/types.js';
 import type { RunDiff } from '../../api/wave6-wire.js';
 import type { ChainModel } from '../../board/chainModel.js';
 import { api } from '../../api/client.js';
-import { commitGateDecision, GATE_HASH, IDLE_GATE_ACTION, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
+import { commitGateDecision, GATE_HASH, IDLE_GATE_ACTION, gateKeyOf, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
+import { InlineUndo } from '../InlineUndo.js';
 import { deliverCardOf, deliverFailureOf, deliverLine, gateInstance, proposalCard, proposalKindOf, type ProposalKind } from '../../board/proposalCard.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { repoNameOf } from '../../board/deskWords.js';
@@ -390,7 +391,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   );
 
   return (
-    <div ref={cardRef} tabIndex={-1} data-testid="session-proposal" data-run-id={runId} data-kind={card.kind} data-state={card.state} data-variant={variant} className={`wk-prop wk-prop--${card.state}${chat ? ' wk-prop--chat' : ''}`}>
+    <div ref={cardRef} tabIndex={-1} data-testid="session-proposal" data-undo-host="proposal-card" data-run-id={runId} data-kind={card.kind} data-state={card.state} data-variant={variant} className={`wk-prop wk-prop--${card.state}${chat ? ' wk-prop--chat' : ''}`}>
       {(card.state === 'ask' || card.state === 'confirm') && (
         <>
           {/* (mockup ui-v2-gate) The cause as the headline: a hand-over QE refused says that, first. */}
@@ -515,6 +516,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           <span data-testid="session-proposal-live" className="wk-prop-live">{card.live}</span>
         </p>
       )}
+      {/* studio 0.16.4: the answer's countdown, what happens, Undo and the result, on this card. */}
+      {/* A failed send is the card's own "Didn't work" (or the QE refusal), beside Try again: not said twice. */}
+      <InlineUndo host="proposal-card" keys={[gateKeyOf(runId)]} ownFailure />
       {card.state === 'cancelled' && (
         <p className="wk-prop-status">
           <b>Cancelled</b>

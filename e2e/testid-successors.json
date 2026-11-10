@@ -159,7 +159,7 @@
     "gate-error-*": "need-row",
     "gate-latency-chart": "watchtower",
     "gate-open-*": "need-act",
-    "gate-queued-*": "need-chosen-undo",
+    "gate-queued-*": "inline-undo-button",
     "gate-reject-*": "need-choice",
     "gate-reject-note": "need-choice-reason",
     "gate-reject-note-row-*": "need-choice-reason",
@@ -1012,6 +1012,22 @@
     "repo-onboard": "repo-row-index",
     "repo-open": "repo-row",
     "plugin-coming-soon": "plugin-tile",
-    "plugin-coming-soon-tag": "plugin-tile-source"
+    "plugin-coming-soon-tag": "plugin-tile-source",
+    "undo-toast": "inline-undo",
+    "undo-headline": "inline-undo-headline",
+    "undo-preview": "inline-undo-preview",
+    "undo-close-note": "inline-undo-close-note",
+    "undo-button": "inline-undo-button",
+    "undo-result": "inline-undo-result",
+    "undo-result-qe": "inline-undo-result-qe",
+    "need-chosen-undo": "inline-undo-button",
+    "power-pause-undo": "inline-undo-button",
+    "voice-undo": "inline-undo",
+    "voice-undo-button": "inline-undo-button",
+    "job-passage-queued": "inline-undo",
+    "job-passage-undo": "inline-undo-button",
+    "session-step-queued": "inline-undo",
+    "session-step-undo": "inline-undo-button",
+    "session-gate-chosen-wait": "inline-undo-headline"
   }
 }

@@ -18,6 +18,9 @@ import { FailureWhy } from './FailureWhy.js';
 import { agentColor } from '../charts/Chart.js';
 import { Skeleton, StateBanner } from '../ui/index.js';
 import { handleTabKeyDown } from '../ui/tabKeys.js';
+import { InlineUndo } from '../InlineUndo.js';
+import { gateKeyOf } from '../../board/gateActions.js';
+import { batchFailedResult } from './BatchFailures.js';
 
 /**
  * NEEDS YOU, AS AN INBOX (DES-desk-v2 §2.1). The rows are the needs fold (`useNeedsRows` →
@@ -268,7 +271,13 @@ function ReadingPane({ row, view, queueAct, navigate, now, agentName }: {
             {archive === 'failed' && <span className="wk-viz-meta">Couldn’t archive it. Try again from the job.</span>}
           </div>
         )}
-        {row.members !== undefined && a.kind === 'batch-approve' && <div className="wk-inbox-read-acts"><ApprovalGroupActions runIds={a.runIds} label={a.label} /></div>}
+        {row.members !== undefined && a.kind === 'batch-approve' && (
+          <div data-undo-host="batch-bar" className="wk-inbox-read-batch">
+            <div className="wk-inbox-read-acts"><ApprovalGroupActions runIds={a.runIds} label={a.label} /></div>
+            {/* studio 0.16.4: the batch's countdown, Undo and result, under its buttons. */}
+            <InlineUndo host="batch-bar" keys={a.runIds.map(gateKeyOf)} renderFailed={batchFailedResult(navigate)} />
+          </div>
+        )}
         {row.kind !== 'gate' && row.kind !== 'failed-run' && row.members === undefined && (
           <div className="wk-inbox-read-acts">
             {a.kind === 'open'

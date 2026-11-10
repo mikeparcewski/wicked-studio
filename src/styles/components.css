@@ -295,36 +295,50 @@ button.wk-chip, a.wk-chip { min-height: var(--control-h-sm); cursor: pointer; fo
   border-color: var(--border-strong);
 }
 
-/* ── Toasts: an overlay card with a status rule on the left ── */
-.wk-toast {
+/* The 10 s Undo, inline in the block where the action was taken (studio 0.16.4; the floating toast is gone).
+   In the page flow, never an overlay. A bar along its foot drains over --undo-window (== UNDO_WINDOW_MS);
+   reduced motion shows it static. */
+.wk-inline-undo-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; outline: none; }
+/* Empty, it takes no room but stays focusable (focus lands here when what it showed folds away). */
+.wk-inline-undo-wrap[data-empty="true"] { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+.wk-inline-undo {
   position: relative;
   overflow: hidden;
-  background: var(--surface-overlay);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 9px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-overlay);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: inset 3px 0 0 var(--undo-tone, var(--accent));
 }
-.wk-toast--approve { box-shadow: inset 3px 0 0 var(--status-run), var(--shadow-overlay); }
-.wk-toast--reject  { box-shadow: inset 3px 0 0 var(--status-fail), var(--shadow-overlay); }
-.wk-toast--gate    { box-shadow: inset 3px 0 0 var(--status-gate), var(--shadow-overlay); }
-/* The undo window, made visible (council S4): a bar along the toast's foot drains over
-   --undo-window (== UNDO_WINDOW_MS). Reduced motion shows it static and full. */
+.wk-inline-undo--approve { --undo-tone: var(--status-run); }
+.wk-inline-undo--reject  { --undo-tone: var(--status-fail); }
 @keyframes wk-undo-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-.wk-toast--approve::after, .wk-toast--reject::after {
+.wk-inline-undo::after {
   content: '';
   position: absolute;
   left: 0; right: 0; bottom: 0;
   height: 2px;
-  background: currentColor;
-  color: var(--toast-tone, var(--accent));
+  background: var(--undo-tone, var(--accent));
   transform-origin: left;
   animation: wk-undo-drain var(--undo-window) linear forwards;
+  animation-delay: var(--undo-delay, 0ms);
   pointer-events: none;
 }
-.wk-toast--approve { --toast-tone: var(--status-run); }
-.wk-toast--reject  { --toast-tone: var(--status-fail); }
-@media (prefers-reduced-motion: reduce) {
-  .wk-toast--approve::after, .wk-toast--reject::after { animation: none; }
+@media (prefers-reduced-motion: reduce) { .wk-inline-undo::after { animation: none; } }
+.wk-inline-undo-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.wk-inline-undo-headline { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--undo-tone); font-variant-numeric: tabular-nums; }
+.wk-inline-undo-preview { margin: 0; font-size: var(--text-xs); color: var(--ink-body); overflow-wrap: anywhere; }
+.wk-inline-undo-close { margin: 0; font-size: var(--text-2xs); color: var(--ink-dim); }
+.wk-inline-undo-button { flex-shrink: 0; }
+.wk-inline-undo-quiet { margin: 0; font-size: var(--text-xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.wk-inline-undo-result { margin: 0; font-size: var(--text-xs); overflow-wrap: anywhere; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.wk-inline-undo-dismiss { font-size: var(--text-xs); }
+@media (max-width: 480px) {
+  .wk-inline-undo { flex-wrap: wrap; }
+  .wk-inline-undo-button { margin-left: auto; }
 }
 
 /* Figures line up: every number in a tile, a count or a delta uses tabular digits. */
@@ -2088,7 +2102,8 @@ button.wk-who-name:hover { text-decoration: underline; }
 /* Message timestamps: "Claude Code · Fix · 14:16–14:21" (power-mode mockup). */
 .wk-who-at { font-size: var(--text-caption); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wk-who--asking, .wk-who--made { margin-top: 6px; }
-.wk-run-gate-actions { display: inline-flex; gap: 6px; }
+.wk-run-gate-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wk-run-gate-actions > .wk-run-gate-undo { flex-basis: 100%; max-width: 480px; }
 /* H3: the full-screen chat drawer's compact thread. */
 .wk-run-chat { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .wk-run-chat-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
@@ -2136,3 +2151,12 @@ button.wk-who-name:hover { text-decoration: underline; }
 /* (wicked-core#1249) The storyline the engine will record, read-only, at the plan gate. */
 .wk-demo-storyline { margin: 6px 0 0; padding-left: 18px; font-size: var(--text-sm); color: var(--ink-high); }
 .wk-demo-storyline ul { margin: 2px 0 6px; padding-left: 16px; color: var(--ink-mid); }
+/* A block that hosts an inline Undo around siblings it does not lay out (the session header and its Undo, the run
+   tab's Stop and its confirm): a boundary in the DOM only, never a box. */
+.wk-undo-scope { display: contents; }
+/* A batch's members not sent, under its summary (said once per page, by the block it was taken in). */
+.wk-batch-failures { flex-basis: 100%; list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wk-batch-failure { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--status-fail); font-size: var(--text-xs); min-width: 0; }
+.wk-batch-failure-line { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.wk-batch-failure-acts { display: inline-flex; gap: 6px; flex-shrink: 0; }
+.wk-batch-failure > .wk-tech-details { flex-basis: 100%; color: var(--ink-dim); }

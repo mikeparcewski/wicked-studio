@@ -206,7 +206,7 @@ with sync_playwright() as p:
         gate_posts.clear()
         page.keyboard.press("Alt+a")
         page.wait_for_timeout(1000)
-        toasts = page.get_by_test_id("undo-toast").count()  # nothing queued either
+        toasts = page.get_by_test_id("inline-undo").count()  # nothing queued either
         check("r2-a-decides-nothing-while-queue-focused", gate_posts == [] and toasts == 0, posts=gate_posts, wall=wall,
               toasts=toasts)
 

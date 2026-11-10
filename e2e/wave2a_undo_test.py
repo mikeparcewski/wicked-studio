@@ -6,14 +6,14 @@ WINDOW (1440x700).
 Against the `wave1` corpus with a SIMPLE gate waiting on b1 (`gate_now` + `gate_simple`):
 beta's card sits in NEEDS YOU and the triage cursor answers it in place.
 
-  queue    j selects beta, a approves: the toast reads "Approving “migrate beta's settings page to the new form kit” in 10 s" with an Undo
+  queue    j selects beta, a approves: the inline Undo reads "Approving “migrate beta's settings page to the new form kit” in 10 s" with an Undo
            button and a what-will-happen line; ZERO POST /runs/b1/gate for the first 9 s
            (counted twice: the browser's request tap AND the fixture's server log).
   undo     Undo → still zero POSTs after the window would have closed; the gate is still
            open (b1's chip still offers Approve).
   commit   a again, no Undo → exactly ONE POST, and only after the 10 s window.
   close    a third decision queued, then the tab is CLOSED inside the window → the
-           fixture never receives a POST (the gate stays open), and the toast said so.
+           fixture never receives a POST (the gate stays open), and the inline block said so.
 
 On the Desk (the one shell since S18d) the decision is queued from
 b1's Desk row (Answer, then 1) instead of the card wall's ⌥J ⌥A, and "the gate is still open" reads
@@ -110,9 +110,9 @@ with sync_playwright() as p:
                 extra_gates=[], reset_gate_posts=True)
     page, posts = open_board(browser)
 
-    # ── queue: the toast, the preview line, zero POSTs for 9 s ──────────────────
+    # ── queue: the inline Undo, the preview line, zero POSTs for 9 s ──────────────────
     pressed = approve_with_a(page)
-    toast = page.get_by_test_id("undo-toast")
+    toast = page.get_by_test_id("inline-undo")
     try:
         toast.wait_for(state="visible", timeout=3000)
         shown = True
@@ -123,9 +123,9 @@ with sync_playwright() as p:
     text = toast.text_content() or ""
     check("toast-reads-approving-in-10s", "Approving “migrate beta's settings page to the new form kit” in 10 s" in text, text=text)
     check("toast-has-undo", toast.get_by_role("button", name="Undo").count() == 1)
-    check("toast-says-what-will-happen", toast.get_by_test_id("undo-preview").count() == 1
-          and len(toast.get_by_test_id("undo-preview").text_content() or "") > 0,
-          preview=toast.get_by_test_id("undo-preview").text_content() if toast.get_by_test_id("undo-preview").count() else None)
+    check("toast-says-what-will-happen", toast.get_by_test_id("inline-undo-preview").count() == 1
+          and len(toast.get_by_test_id("inline-undo-preview").text_content() or "") > 0,
+          preview=toast.get_by_test_id("inline-undo-preview").text_content() if toast.get_by_test_id("inline-undo-preview").count() else None)
     check("toast-says-closing-sends-nothing", "stays open" in text, text=text)
     page.screenshot(path=str(SHOTS / "wave2a-undo-toast.png"))
     page.wait_for_timeout(max(0, int((pressed + 9.0 - time.monotonic()) * 1000)))
@@ -138,12 +138,12 @@ with sync_playwright() as p:
     check("undo-zero-posts", len(posts) == 0 and len(server_posts(origin)) == 0,
           browser_posts=len(posts), server=len(server_posts(origin)))
     check("undo-gate-still-open", gate_still_open(page))
-    check("undo-toast-gone", page.get_by_test_id("undo-toast").count() == 0)
+    check("undo-toast-gone", page.get_by_test_id("inline-undo").count() == 0)
     page.screenshot(path=str(SHOTS / "wave2a-undo-after.png"))
 
     # ── commit: exactly one POST, after the window ──────────────────────────────
     pressed = approve_with_a(page)
-    page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
     page.wait_for_timeout(max(0, int((pressed + 9.3 - time.monotonic()) * 1000)))
     check("commit-nothing-before-window", len(posts) == 0, browser_posts=len(posts))
     page.wait_for_timeout(2500)
@@ -160,7 +160,7 @@ with sync_playwright() as p:
     set_fixture(origin, reset_gate_posts=True)
     page, posts = open_board(browser)
     approve_with_a(page)
-    page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=3000)
     page.close()
     time.sleep(12)
     check("closed-tab-sends-nothing", len(server_posts(origin)) == 0, server=len(server_posts(origin)))

@@ -41,7 +41,8 @@ import { LaunchPanel } from './components/LaunchPanel.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
 import { PeekCard } from './components/PeekCard.js';
-import { UndoToasts } from './components/UndoToasts.js';
+import { setHostlessHandler } from './board/undoQueue.js';
+import { hostlessPathOf } from './board/gateActions.js';
 import { VoiceRoot } from './components/voice/VoiceRoot.js';
 import { LaunchWizard } from './components/launch/LaunchWizard.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
@@ -368,6 +369,17 @@ export function App(): React.ReactElement {
   const runPath = useCallback((id: string) => sessionPath(`run:${id}`), []);
 
   const selectRun = useCallback((id: string) => navigate(runPath(id)), [navigate, runPath]);
+
+  // studio 0.16.4: no invisible decisions. One taken where no block shows it (the palette, voice, a shortcut on a
+  // page without that run) brings the person to the run's page — its gate card for a gate answer — where the
+  // countdown and Undo are.
+  useEffect(() => {
+    setHostlessHandler((keys) => {
+      const path = hostlessPathOf(keys);
+      if (path !== null) navigate(path);
+    });
+    return () => setHostlessHandler(null);
+  }, [navigate]);
 
   const onLaunched = useCallback(
     (id: string) => {
@@ -994,12 +1006,11 @@ export function App(): React.ReactElement {
           itself, so each surface documents exactly the keys it registered. */}
       <ShortcutOverlay />
 
-      {/* Wave 2a: the peek card (P) and the gate-decision Undo toasts — skins over
-          usePeekJump and board/undoQueue. */}
+      {/* Wave 2a: the peek card (P) — a skin over usePeekJump. A decision's Undo is inline in its own
+          block (InlineUndo, studio 0.16.4), never a floating toast. */}
       <PeekCard view={peek} />
       {/* Voice mode (DES-VOICE): the modal, then full screen; ⌥V or a composer's mic opens it. */}
       <VoiceRoot />
-      <UndoToasts />
 
       {/* The launch wizard (operator 2026-10-11): every start point opens this one modal. */}
       <LaunchWizard navigate={navigate} />

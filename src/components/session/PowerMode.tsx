@@ -3,7 +3,8 @@ import { CircleCheck, CircleX, FileText, Flag, GitCommitHorizontal, MessageCircl
 import { ApiError } from '../../api/errors.js';
 import { powerApi, rigorRank, type HandoffStep, type PauseDecision, type PowerState, type Rigor, type RigorChange, type RigorPlan } from '../../api/power.js';
 import type { SessionView } from '../../api/types.js';
-import { queueDecision, reportDecision, secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
+import { queueDecision, reportDecision, useUndoQueue } from '../../board/undoQueue.js';
+import { InlineUndo } from '../InlineUndo.js';
 import { clockTime } from '../../board/handover.js';
 import {
   PAUSE_CHOICES, RAISE_WORDS, changeReason, pauseReasonWords, changedBy, handoffRow, handoffWords, higherRigors, listWords, powerSwitch, rigorAt, rigorChip, settleHandoff,
@@ -382,12 +383,6 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
   const [queued, setQueued] = useState<{ id: number; reason: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pendingPause = useUndoQueue((st) => (queued === null ? null : st.pending.find((p) => p.id === queued.id) ?? null));
-  const [tick, setTick] = useState(Date.now);
-  useEffect(() => {
-    if (pendingPause === null) return;
-    const t = setInterval(() => setTick(Date.now), 250);
-    return () => clearInterval(t);
-  }, [pendingPause]);
   const reasons = pause?.reasons ?? [];
   const choose = (c: PauseChoice, reason?: string): void => {
     setError(null);
@@ -398,6 +393,7 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
       const qid = queueDecision({
         verb: decision === 'stop' ? 'stop' : 'approve',
         runIds: [id],
+        keys: [`power:${id}`],
         preview: decision === 'stop' ? 'the job stops here' : decision === 'switch_phased' ? 'the rest goes phased' : decision === 'continue_high' ? 'it continues at high rigor' : 'it finishes the original change; the rest is split off',
         label: view.session.problem ?? null,
         closeNote: 'Close this tab before then and nothing is sent: the job stays paused.',
@@ -405,10 +401,10 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
           try {
             const v = await powerApi.pause(id, decision, note);
             rememberPower(id, v);
-            reportDecision('sent', `${PAUSE_CHOICES[c].label}: sent.`);
+            reportDecision('sent', `${PAUSE_CHOICES[c].label}: sent.`, { keys: [`power:${id}`] });
           } catch (e) {
             setError(errorWords(e));
-            reportDecision('failed', `Not sent: ${errorWords(e)}`);
+            reportDecision('failed', `Not sent: ${errorWords(e)}`, { keys: [`power:${id}`] });
           } finally { setBusy(null); setQueued(null); }
         },
         onUndo: () => { setBusy(null); setQueued(null); },
@@ -438,7 +434,7 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
     })),
   };
   return (
-    <div data-testid="power-pause" data-recommended={recommended} className="wk-prop wk-prop--ask wk-prop--chat">
+    <div data-testid="power-pause" data-undo-host="power-pause" data-recommended={recommended} className="wk-prop wk-prop--ask wk-prop--chat">
       <p className="wk-dock-eyebrow pm-pause-eyebrow" data-testid="power-pause-eyebrow">Paused · this grew{pause !== null ? ` · checkpoint ${pause.checkpoint}` : ''}</p>
       <h2 className="wk-prop-text wk-gate2-q" data-testid="power-pause-question">This change grew past its plan. How should it go on?</h2>
       <p className="wk-prop-why wk-gate2-p">{who} paused at the end of its turn. Recommended: {PAUSE_CHOICES[recommended].label.toLowerCase()}.</p>
@@ -449,12 +445,7 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
         <AskRecord
           testId="power-pause-chosen"
           line={`You chose: ${PAUSE_CHOICES[busy].label}${queued?.reason ? ` · “${queued.reason}”` : ''}`}
-          meta={pendingPause !== null ? (
-            <>
-              <span>Sends in {secondsLeft(pendingPause, tick)} s</span>
-              <button type="button" data-testid="power-pause-undo" onClick={() => { undoDecision(pendingPause.id); setBusy(null); setQueued(null); }} className="wk-btn wk-btn--quiet">Undo</button>
-            </>
-          ) : 'sending'}
+          meta={pendingPause !== null ? null : 'sending'}
         />
       ) : <AskCard
         ask={ask}
@@ -467,6 +458,8 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
         onAnswer={(a) => { if (a.option !== undefined) choose(a.option as PauseChoice, a.reason); }}
       />}
       </div>
+      {/* studio 0.16.4: the answer's countdown, what happens, Undo and the result, on this card. */}
+      <InlineUndo host="power-pause" keys={[`power:${id}`]} />
       {error !== null && <p role="alert" data-testid="power-pause-error" className="pm-pause-note">Not sent: {error}</p>}
     </div>
   );

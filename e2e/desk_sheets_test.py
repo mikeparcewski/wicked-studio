@@ -13,7 +13,7 @@ Against the in-process fixture (wave1 corpus; `sheets`: every unit names a seat,
   4. HELPER SHEET: the helper chip opens its sheet; the Terminal is read-only (typing off) until
      "Let me type into it" is pressed.
   5. ⌘K ON THE POINTED OBJECT: hovering a chain step and pressing ⌘K lists "ACTIONS FOR …" first.
-  6. STOP WITH UNDO: Stop it from ⌘K → the undo toast "Stopping …" → Undo → after the window,
+  6. STOP WITH UNDO: Stop it from ⌘K → the inline Undo "Stopping …" → Undo → after the window,
      0 cancel posts.
   7. ⌥ PEEK: holding ⌥ over the step shows one fact; letting go hides it.
   8. 0 page errors, no horizontal scroll.
@@ -176,10 +176,10 @@ with sync_playwright() as p:
     page.get_by_test_id("palette-input").fill("stop it")
     page.wait_for_timeout(200)
     page.keyboard.press("Enter")
-    page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=5000)
-    headline = page.get_by_test_id("undo-headline").inner_text()
+    page.get_by_test_id("inline-undo").wait_for(state="visible", timeout=5000)
+    headline = page.get_by_test_id("inline-undo-headline").inner_text()
     page.screenshot(path=str(SHOTS / "desk-sheets-stop.png"))
-    page.get_by_test_id("undo-button").click()
+    page.get_by_test_id("inline-undo-button").click()
     page.wait_for_timeout(11_000)
     check("stop-undo", headline.startswith("Stopping") and cancels() == [], headline=headline, cancels=cancels())
 

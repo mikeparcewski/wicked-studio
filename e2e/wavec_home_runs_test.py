@@ -197,14 +197,14 @@ with sync_playwright() as p:
             page.wait_for_timeout(250)
         posts = gate_posts(origin, "r-trust-deliver")
         check("approve-sent", len(posts) == 1 and posts[0]["body"].get("approve") is True, posts=posts)
-        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="session-proposal-reason"]')]
+        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="inline-undo-result"], [data-testid="session-proposal-reason"]')]
             .some(e => e.textContent.includes('Deliveries are frozen'))""", timeout=10000)
-        msg = page.evaluate("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="session-proposal-reason"]')]
+        msg = page.evaluate("""() => [...document.querySelectorAll('[data-testid="inline-undo-result"], [data-testid="session-proposal-reason"]')]
             .map(e => e.textContent).find(t => t.includes('Deliveries are frozen'))""")
         check("frozen-refusal-is-clear", "unfreeze deliveries, then approve again" in msg
               and "incident 42" in msg and page.get_by_test_id("session-proposal-go").count() == 1, message=msg)
         page.wait_for_timeout(800)
-        report["steps"]["frozen-refusal-is-clear"]["toasts_after"] = page.get_by_test_id("undo-toast").count()
+        report["steps"]["frozen-refusal-is-clear"]["toasts_after"] = page.get_by_test_id("inline-undo").count()
         report["steps"]["frozen-refusal-is-clear"]["gate_error"] = (page.get_by_test_id("session-proposal-reason").first.text_content()
                                                                     if page.get_by_test_id("session-proposal-reason").count() else None)
         page.screenshot(path=str(SHOTS / f"wavec-desk-refused.png"))
@@ -222,7 +222,7 @@ with sync_playwright() as p:
         posts = gate_posts(origin, "r-trust-deliver")
         check("approve-goes-through-after-unfreeze", len(posts) == 2 and posts[1]["body"].get("approve") is True,
               posts=len(posts))
-        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"]')]
+        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="inline-undo-result"]')]
             .some(e => e.getAttribute('data-kind') === 'sent')""", timeout=10000)
 
     def desk_freeze() -> None:
@@ -249,9 +249,9 @@ with sync_playwright() as p:
             page.wait_for_timeout(250)
         posts = gate_posts(origin, "r-trust-deliver")
         check("approve-sent", len(posts) == 1 and posts[0]["body"].get("approve") is True, posts=posts)
-        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="session-proposal-reason"]')]
+        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="inline-undo-result"], [data-testid="session-proposal-reason"]')]
             .some(e => e.textContent.includes('Deliveries are frozen'))""", timeout=10000)
-        msg = page.evaluate("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="session-proposal-reason"]')]
+        msg = page.evaluate("""() => [...document.querySelectorAll('[data-testid="inline-undo-result"], [data-testid="session-proposal-reason"]')]
             .map(e => e.textContent).find(t => t.includes('Deliveries are frozen'))""")
         check("frozen-refusal-is-clear", "unfreeze deliveries, then approve again" in msg
               and "incident 42" in msg and page.get_by_test_id("session-proposal-go").count() == 1, message=msg)
@@ -274,7 +274,7 @@ with sync_playwright() as p:
         posts = gate_posts(origin, "r-trust-deliver")
         check("approve-goes-through-after-unfreeze", len(posts) == 2 and posts[1]["body"].get("approve") is True,
               posts=len(posts))
-        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"]')]
+        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="inline-undo-result"]')]
             .some(e => e.getAttribute('data-kind') === 'sent')""", timeout=10000)
 
     # Desk v2 (DES-desk-v2 §1, operator-reviewed first cut): the Desk's "just the top one" focus

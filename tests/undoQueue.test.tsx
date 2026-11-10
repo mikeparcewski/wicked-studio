@@ -19,7 +19,8 @@ const {
   CLOSE_NOTE, UNDO_WINDOW_MS, decisionPreview, describeDecision, isQueued, setUndoWindowForTest, undoDecision,
   undoHeadline, useUndoQueue,
 } = await import('../src/board/undoQueue.js');
-const { UndoToasts } = await import('../src/components/UndoToasts.js');
+const { InlineUndo } = await import('../src/components/InlineUndo.js');
+const { BATCH_KEY } = await import('../src/board/batchGates.js');
 const { ApprovalGroupActions } = await import('../src/components/desk/ApprovalGroupActions.js');
 
 const confirmGate = vi.mocked(api.confirmGate);
@@ -109,7 +110,7 @@ describe('a batch is one window, then the sequential fan-out', () => {
 
 describe('the copy', () => {
   it('headline counts down and names a batch', () => {
-    const p = { id: 1, verb: 'approve' as const, runIds: ['r1'], preview: '', label: null, amend: null, queuedAt: 10_000, dueAt: 20_000 };
+    const p = { id: 1, verb: 'approve' as const, keys: ['gate:r1'], origin: null, runIds: ['r1'], preview: '', label: null, amend: null, queuedAt: 10_000, dueAt: 20_000 };
     expect(undoHeadline(p, 10_000)).toBe('Approving in 10 s');
     expect(undoHeadline(p, 9_000)).toBe('Approving in 10 s'); // a stale clock never reads 11 s
     expect(undoHeadline(p, 15_500)).toBe('Approving in 5 s');
@@ -130,21 +131,22 @@ describe('the copy', () => {
   });
 });
 
-describe('the toast and the approval-group-row render the queue', () => {
-  it('shows "Approving in 10 s" with Undo; Undo clears it and the group row is answerable again', async () => {
+describe('the approval group bar shows the queue inline (studio 0.16.4: no toast)', () => {
+  it('shows "Approving in 10 s" with Undo under the bar; Undo clears it and the group row is answerable again', async () => {
     render(
-      <>
+      <div data-undo-host="batch-bar">
         <ApprovalGroupActions runIds={['r1']} label="Approve all 1" />
-        <UndoToasts />
-      </>,
+        <InlineUndo host="batch-bar" keys={[BATCH_KEY]} />
+      </div>,
     );
     act(() => { fireEvent.click(screen.getByTestId('need-group-approve-all')); });
-    const toast = screen.getByTestId('undo-toast');
-    expect(toast.textContent).toContain('Approving in 10 s');
-    expect(screen.getByTestId('undo-preview').textContent).toBe('The run resumes past this gate.');
-    expect(screen.getByTestId('undo-close-note').textContent).toBe(CLOSE_NOTE);
-    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Undo' })); });
     expect(screen.queryByTestId('undo-toast')).toBeNull();
+    const block = screen.getByTestId('inline-undo');
+    expect(block.textContent).toContain('Approving in 10 s');
+    expect(screen.getByTestId('inline-undo-preview').textContent).toBe('The run resumes past this gate.');
+    expect(screen.getByTestId('inline-undo-close-note').textContent).toBe(CLOSE_NOTE);
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Undo' })); });
+    expect(screen.queryByTestId('inline-undo')).toBeNull();
     expect(screen.getByTestId('need-group-approve-all')).not.toBeDisabled();
     await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS * 2); });
     expect(confirmGate).not.toHaveBeenCalled();

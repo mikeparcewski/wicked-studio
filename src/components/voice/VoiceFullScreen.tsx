@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { undoDecision, undoHeadline, useUndoQueue } from '../../board/undoQueue.js';
+import { InlineUndo } from '../InlineUndo.js';
 import { Mic, Volume2, VolumeX } from 'lucide-react';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
 import { useDialogFocus } from '../steer/useDialogFocus.js';
@@ -92,7 +92,7 @@ export function VoiceFullScreen(): React.ReactElement {
         </div>
         <VoiceSetup />
         <div className="wk-voice-trans" ref={trans} role="log" aria-live="polite" aria-label="Transcript" data-testid="voice-trans" tabIndex={0}>
-          {v.lines.map((l) => <Line key={l.id} l={l} />)}
+          {((undoLines) => v.lines.map((l) => <Line key={l.id} l={l} undoHere={undoLines.has(l.id)} />))(latestUndoLine(v.lines))}
         </div>
         <div className="wk-voice-foot" data-testid="voice-foot">
           <span className="wk-voice-dot" data-tone={v.mode !== null ? 'run' : 'idle'} aria-hidden /> {foot}
@@ -124,33 +124,37 @@ export function VoiceFullScreen(): React.ReactElement {
   );
 }
 
-function Line({ l }: { l: VoiceLine }): React.ReactElement {
+function Line({ l, undoHere }: { l: VoiceLine; undoHere: boolean }): React.ReactElement {
   const who = l.who === 'you' ? (l.spoken === true ? 'You · by voice' : 'You') : 'Studio';
   return (
     <div className="wk-voice-line" data-who={l.who} data-partial={l.partial === true ? 'true' : undefined} data-testid={`voice-line-${l.who}`}>
       <small>{who}</small>
       {l.text !== '' && <span className="wk-voice-text">{l.text}</span>}
       {l.ask !== undefined && (l.record !== undefined
-        ? <><AskRecord line={l.record} testId="voice-ask-record" />{(l.ask.context.kind === 'gate' || (l.ask.context.kind === 'job' && l.ask.context.action.kind === 'stop')) && <VoiceUndo runId={l.ask.context.runId} />}</>
+        ? <AskRecord line={l.record} testId="voice-ask-record" />
         : <div className="wk-voice-ask"><AskCard ask={l.ask.ask} {...(l.ask.ask.host === 'gate' ? { tag: 'Gate' } : {})} onAnswer={(a) => answerAsk(l.id, a)} testIds={{ root: `voice-ask-${l.ask.context.kind === 'job' ? l.ask.context.action.kind : l.ask.context.kind}` }} /></div>)}
+      {/* studio 0.16.4: the 10 s Undo of a decision confirmed here, inline under it. Mounted with the ask (before the
+          answer), so the decision is never sent off to a page under this full screen. */}
+      {undoHere && l.ask !== undefined && voiceUndoKeys(l.ask.context) !== null && <InlineUndo host="voice" over keys={voiceUndoKeys(l.ask.context)!} className="wk-voice-undo" />}
     </div>
   );
 }
 
-/** The 10 s undo, inline where the decision was confirmed (the page's toast is under this full screen too). */
-function VoiceUndo({ runId }: { runId: string }): React.ReactElement | null {
-  const pending = useUndoQueue((s) => s.pending.find((p) => p.runIds.includes(runId)));
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (pending === undefined) return undefined;
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, [pending]);
-  if (pending === undefined) return null;
-  return (
-    <div className="wk-voice-undo" data-testid="voice-undo" role="status">
-      <span>{undoHeadline(pending, Math.min(now, pending.dueAt))}</span>
-      <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-undo-button" onClick={() => undoDecision(pending.id)}>Undo</button>
-    </div>
-  );
+/** What a voice ask's decision is about, for its inline Undo: a gate answer, or a job's Stop. */
+function voiceUndoKeys(c: NonNullable<VoiceLine['ask']>['context']): string[] | null {
+  if (c.kind === 'gate') return [`gate:${c.runId}`];
+  if (c.kind === 'job' && c.action.kind === 'stop') return [`stop:${c.runId}`];
+  return null;
+}
+
+/** The lines that host a voice Undo: for each decision key, only the NEWEST ask about it — an older ask about the same
+ *  run (answered, undone, asked again) never claims a later decision. */
+function latestUndoLine(lines: readonly VoiceLine[]): Set<number> {
+  const byKey = new Map<string, number>();
+  for (const l of lines) {
+    if (l.ask === undefined) continue;
+    const keys = voiceUndoKeys(l.ask.context);
+    if (keys !== null) byKey.set(keys.join(' '), l.id);
+  }
+  return new Set(byKey.values());
 }

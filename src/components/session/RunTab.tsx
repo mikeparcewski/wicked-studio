@@ -57,6 +57,7 @@ import { RunPluginSection } from './RunThreadPlugin.js';
 import { TrackerSet } from '../trackers/TrackerSet.js';
 import { useMembershipStore } from '../../store/membership.js';
 import { useProjectsStore } from '../../store/projects.js';
+import { InlineUndo } from '../InlineUndo.js';
 
 function isTerminal(view: SessionView): boolean {
   return ['completed', 'cancelled', 'failed'].includes(view.session.status);
@@ -225,7 +226,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   });
   const changesWord = deliverySummary(view) ?? (delivered ? 'Nothing pushed' : 'Nothing delivered yet');
   const glance = (
-    <div data-testid="run-tab-glance" className="wk-run-glance">
+    <div data-testid="run-tab-glance" data-undo-host="run-tab" className="wk-run-glance">
       <div className="wk-run-glance-item">
         <span className="wk-run-glance-label">Progress</span>
         <span data-testid="run-tab-glance-progress" className="wk-run-glance-value">{total === 0 ? 'No steps yet' : `Step ${Math.max(1, stepAt)} of ${total}${current !== undefined ? ` · ${current.label}` : ''}`}</span>
@@ -256,6 +257,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
           <button type="button" className="wk-run-tab-button" onClick={() => setGlanceStop(false)}>Keep going</button>
         </div>
       )}
+      {/* studio 0.16.4: the Stop's countdown, Undo and result, where it was pressed. */}
+      <InlineUndo host="run-tab" keys={[`stop:${id}`]} />
     </div>
   );
 
@@ -294,6 +297,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         {finishedDeliveryArm(view, gate) === 'stranded' && (
           <p data-testid="run-tab-stranded" role="status" className="wk-run-tab-warning">Nobody has taken this work yet: its delivery card is in the thread.</p>
         )}
+        <div data-undo-host="run-tab" className="wk-undo-scope">
         <div data-testid="run-tab-actions" className="wk-run-tab-actions">
           {!nothingToStop(view) && (
             <button type="button" data-testid="run-tab-stop" className="wk-run-tab-button wk-stop-btn" disabled={stopping} onClick={() => setConfirmStop(true)}>{stopping ? 'Stopping…' : 'Stop'}</button>
@@ -307,6 +311,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
             <button type="button" data-testid="run-tab-stop-keep" className="wk-run-tab-button" onClick={() => setConfirmStop(false)}>Keep going</button>
           </div>
         )}
+        <InlineUndo host="run-tab" keys={[`stop:${id}`]} />
+        </div>
         {/* (DES-PM-001 §3.2) The trackers this job's agents may read: crew's tracker set for its project and repo. */}
         <TrackerSet projectId={runProject} projectName={runProjectName} repoId={typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' ? session.repo_ref : null} data-testid="run-tab-trackers" />
         <Item section="now" id="goal">{() => <div data-testid="sheet-goal" className="wk-sheet-section"><GoalBrief problem={session.problem} /></div>}</Item>
