@@ -10,7 +10,7 @@
     "Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show."
   ],
   "version": 1,
-  "studioVersion": "0.16.4",
+  "studioVersion": "0.16.5",
   "static": [
     {
       "testId": "accent-lgt",
@@ -5748,6 +5748,12 @@
       ]
     },
     {
+      "testId": "desk-settings",
+      "files": [
+        "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
       "testId": "desk-setup",
       "files": [
         "src/components/desk/DeskV2.tsx"
@@ -7157,24 +7163,6 @@
       "testId": "everything-panel",
       "files": [
         "src/components/everything/EverythingPage.tsx"
-      ]
-    },
-    {
-      "testId": "everything-project-archive",
-      "files": [
-        "src/components/everything/ProjectsTab.tsx"
-      ]
-    },
-    {
-      "testId": "everything-project-header",
-      "files": [
-        "src/components/everything/ProjectsTab.tsx"
-      ]
-    },
-    {
-      "testId": "everything-project-rename",
-      "files": [
-        "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
@@ -14557,8 +14545,7 @@
     {
       "testId": "project-actions",
       "files": [
-        "src/components/desk/ProjectDesk.tsx",
-        "src/components/desk/ProjectHome.tsx"
+        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
@@ -14570,7 +14557,61 @@
     {
       "testId": "project-archive",
       "files": [
-        "src/components/desk/ProjectDesk.tsx"
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-archive-cancel",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-archive-confirm",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-archive-confirming",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-archive-error",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-archive-words",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-archived",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-archived-line",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
+      "testId": "project-archived-note",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-archived-settings",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -14652,6 +14693,12 @@
       ]
     },
     {
+      "testId": "project-danger-zone",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
       "testId": "project-desc",
       "files": [
         "src/components/desk/ProjectDesk.tsx",
@@ -14713,12 +14760,6 @@
       ]
     },
     {
-      "testId": "project-documents",
-      "files": [
-        "src/components/desk/ProjectDesk.tsx"
-      ]
-    },
-    {
       "testId": "project-domain",
       "files": [
         "src/components/product/ProjectAggregates.tsx"
@@ -14770,12 +14811,6 @@
       "testId": "project-draft-epics",
       "files": [
         "src/components/product/ProjectRequirementsSection.tsx"
-      ]
-    },
-    {
-      "testId": "project-edit",
-      "files": [
-        "src/components/desk/ProjectDesk.tsx"
       ]
     },
     {
@@ -14893,15 +14928,15 @@
       ]
     },
     {
-      "testId": "project-menu",
-      "files": [
-        "src/components/desk/ProjectHome.tsx"
-      ]
-    },
-    {
       "testId": "project-meta",
       "files": [
         "src/components/desk/ProjectDesk.tsx"
+      ]
+    },
+    {
+      "testId": "project-more-info",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
       ]
     },
     {
@@ -14931,7 +14966,7 @@
     {
       "testId": "project-personality",
       "files": [
-        "src/components/desk/ProjectDesk.tsx"
+        "src/components/desk/ProjectSettings.tsx"
       ]
     },
     {
@@ -15061,6 +15096,12 @@
       ]
     },
     {
+      "testId": "project-repos-none",
+      "files": [
+        "src/components/desk/ProjectHome.tsx"
+      ]
+    },
+    {
       "testId": "project-repos-used",
       "files": [
         "src/components/ProjectRepositories.tsx"
@@ -15094,6 +15135,66 @@
       "testId": "project-requirements-unread",
       "files": [
         "src/components/product/ProjectRequirementsSection.tsx"
+      ]
+    },
+    {
+      "testId": "project-restore",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-settings",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-settings-description",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-settings-details",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-settings-error",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-settings-name",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-settings-name-invalid",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-settings-personality",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-settings-save",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
+      ]
+    },
+    {
+      "testId": "project-settings-saved",
+      "files": [
+        "src/components/desk/ProjectSettings.tsx"
       ]
     },
     {
@@ -15314,34 +15415,13 @@
       ]
     },
     {
-      "testId": "projects-row-archive",
+      "testId": "projects-row-archived",
       "files": [
-        "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
-      ]
-    },
-    {
-      "testId": "projects-row-error",
-      "files": [
-        "src/components/everything/ProjectsPage.tsx",
-        "src/components/everything/ProjectsTab.tsx"
-      ]
-    },
-    {
-      "testId": "projects-row-menu",
-      "files": [
-        "src/components/everything/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-row-open",
-      "files": [
-        "src/components/everything/ProjectsPage.tsx",
-        "src/components/everything/ProjectsTab.tsx"
-      ]
-    },
-    {
-      "testId": "projects-row-rename",
       "files": [
         "src/components/everything/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
@@ -15357,13 +15437,6 @@
       "testId": "projects-row-state",
       "files": [
         "src/components/everything/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "projects-row-unarchive",
-      "files": [
-        "src/components/everything/ProjectsPage.tsx",
-        "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {

@@ -52,7 +52,7 @@ describe('one project-name rule, the daemon\'s (studio#463)', () => {
 });
 
 describe('Desk project door', () => {
-  it('hides Start with and lands on scoped Sessions after creation and repository attachment', async () => {
+  it('hides Start with and lands on the project homepage after creation and repository attachment', async () => {
     const navigate = vi.fn();
     render(<NewProjectModal deskMode navigate={navigate} onClose={() => undefined} />);
     expect(screen.queryByTestId('new-project-start')).toBeNull();
@@ -60,14 +60,15 @@ describe('Desk project door', () => {
     const repo = await screen.findByTestId('new-project-repo');
     fireEvent.change(repo, { target: { value: 'repo-1' } });
     fireEvent.click(screen.getByTestId('new-project-create'));
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions&project=proj_1'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/projects/proj_1'));
     expect(createProject).toHaveBeenCalledWith({ name: 'api migration' });
     expect(attachProjectMember).toHaveBeenCalledWith('proj_1', { kind: 'crew.repo', ref: 'repo-1', attachedBy: 'studio' });
   });
 
   it('retries attachment without creating a duplicate project', async () => {
     attachProjectMember.mockRejectedValueOnce(new Error('attach refused'));
-    render(<NewProjectModal deskMode navigate={() => undefined} onClose={() => undefined} />);
+    const navigate = vi.fn();
+    render(<NewProjectModal deskMode navigate={navigate} onClose={() => undefined} />);
     fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'api migration' } });
     fireEvent.change(await screen.findByTestId('new-project-repo'), { target: { value: 'repo-1' } });
     fireEvent.click(screen.getByTestId('new-project-create'));
@@ -78,6 +79,9 @@ describe('Desk project door', () => {
     fireEvent.click(retry);
     await waitFor(() => expect(attachProjectMember).toHaveBeenCalledTimes(2));
     expect(createProject).toHaveBeenCalledTimes(1);
+    // The retry lands where a first-time success does: the project's homepage.
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/projects/proj_1'));
+    expect(navigate).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -110,7 +114,7 @@ describe('NewProjectModal', () => {
     const navigate = vi.fn();
     render(<NewProjectModal navigate={navigate} onClose={() => {}} />);
     await user.type(screen.getByTestId('new-project-name'), 'Team offsite{Enter}');
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions&project=proj_1'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/projects/proj_1'));
     expect(createProject).toHaveBeenCalledTimes(1);
     expect(createProject).toHaveBeenCalledWith({ name: 'Team offsite' });
   });
@@ -128,14 +132,14 @@ describe('NewProjectModal', () => {
     expect(screen.getByTestId('new-project-create')).toBeEnabled();
   });
 
-  it('Create POSTs {name, description?} and lands on the project\'s Sessions (S16a-4f)', async () => {
+  it('Create POSTs {name, description?} and lands on the project\'s homepage (operator 2026-11-09)', async () => {
     const navigate = vi.fn();
     const onClose = vi.fn();
     render(<NewProjectModal navigate={navigate} onClose={onClose} />);
     fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'api migration' } });
     fireEvent.click(screen.getByTestId('new-project-create'));
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions&project=proj_1'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/projects/proj_1'));
     // The wire shape is crew's CreateProjectBody: description omitted when blank.
     expect(createProject).toHaveBeenCalledWith({ name: 'api migration' });
     expect(onClose).toHaveBeenCalled();

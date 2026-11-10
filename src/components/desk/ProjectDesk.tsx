@@ -1,7 +1,6 @@
 import { scrollBehavior } from '../ui/motion.js';
 import { repoDetailPath } from '../../board/repoTabs.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileText } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
 import type { Project, ProjectDetail, ProjectMember, RepoEntry, SessionView } from '../../api/types.js';
@@ -10,7 +9,6 @@ import type { NeedRow } from '../../board/needsYou.js';
 import { projectMeta, projectRuns, reposUsed } from '../../board/projectModel.js';
 import { sessionPath, sessionTitle } from '../../board/sessionModel.js';
 import { relTime } from '../../board/relTime.js';
-import { useProjectsStore } from '../../store/projects.js';
 import { useMembershipStore } from '../../store/membership.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
@@ -21,12 +19,11 @@ import { ProjectTrackers } from '../ProjectTrackers.js';
 import { ProjectDocumentsRoot } from '../ProjectDocumentsRoot.js';
 import { ProjectRequirementsSection } from '../product/ProjectRequirementsSection.js';
 import { ProjectCoverage, ProjectDomain, type ProjectReadIssue, type ProjectIssueHandler } from '../product/ProjectAggregates.js';
-import { SectionTitle } from '../ui/PageFrame.js';
 import { StateBanner, Skeleton, EmptyState } from '../ui/StateBanner.js';
 import { OverflowMenu } from '../ui/OverflowMenu.js';
 import { DeskV2, deskTabPath, type HostedTab } from './DeskV2.js';
-import { ProjectHome } from './ProjectHome.js';
-import { learnPath } from '../learn/LearnHub.js';
+import { ArchivedLine, ProjectHome } from './ProjectHome.js';
+import { ProjectSettings } from './ProjectSettings.js';
 
 const RUN_KIND = 'crew.run';
 /** At most this many run members the run list does not serve are read one by one. */
@@ -94,17 +91,10 @@ const UNFILED_PROJECT: Project = { id: 'default', name: 'Not in a project', desc
 
 /** A project's page is the shared Desk with its own runs, header and Work sections. */
 export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, onRetryRuns, runsLoaded, runsError, hosted }: Props): React.ReactElement {
-  const { updateProject } = useProjectsStore();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editDesc, setEditDesc] = useState('');
-  const [editBusy, setEditBusy] = useState(false);
-  const [editErr, setEditErr] = useState<string | null>(null);
-  const [archiveBusy, setArchiveBusy] = useState(false);
   const [register, setRegister] = useState<RepoEntry[] | null>(getCachedRepos());
 
   const isDefault = projectId === 'default';
@@ -135,8 +125,6 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     }
   }, [projectId]);
   useEffect(() => {
-    setEditing(false);
-    setEditErr(null);
     setIssues({});
     void load();
     return () => { loadVersion.current += 1; };
@@ -147,7 +135,6 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   const atHome = rawTab === null;
   const tab = rawTab ?? 'work';
   const [hashTick, setHashTick] = useState(0);
-  const [scrollTarget, setScrollTarget] = useState<string | null>(null);
   useEffect(() => {
     const on = (): void => setHashTick((n) => n + 1);
     window.addEventListener('hashchange', on);
@@ -167,14 +154,13 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   }, [base, hash, hashTick, tab, atHome, navigate]);
   useEffect(() => {
     if (loading || atHome || tab !== 'work') return;
-    const id = scrollTarget ?? (hash === '#requirements' || hash === '#project-documents' ? hash.slice(1) : null);
+    const id = hash === '#requirements' || hash === '#project-documents' ? hash.slice(1) : null;
     if (id === null) return;
     const timer = setTimeout(() => {
       document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: scrollBehavior() });
-      setScrollTarget(null);
     }, 300);
     return () => clearTimeout(timer);
-  }, [loading, atHome, tab, hash, hashTick, scrollTarget]);
+  }, [loading, atHome, tab, hash, hashTick]);
 
   // A run member the run list does not serve (an archived run, an older one) is read on its own, so the
   // project shows every job it holds (the page read each member's run before concept P too).
@@ -213,45 +199,9 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   useEffect(() => { if (needsRegister) fetchReposCached().then(setRegister, () => setRegister([])); }, [needsRegister]);
   const used = useMemo(() => reposUsed(mine, members, register ?? getCachedRepos() ?? []), [mine, members, register]);
   const others = members.filter((m) => m.member_kind !== RUN_KIND && m.member_kind !== REPO_KIND);
-  const firstRun = !loading && project !== null && !isDefault && jobsCount === 0 && !members.some((m) => m.member_kind === REPO_KIND);
-  function startEdit(): void {
-    if (!project) return;
-    setEditName(project.name);
-    setEditDesc(project.description ?? '');
-    setEditErr(null);
-    setEditing(true);
-    if (atHome || tab !== 'work') navigate(deskTabPath('work', undefined, base));
-  }
-  async function saveEdit(): Promise<void> {
-    if (!project) return;
-    const trimName = editName.trim();
-    if (!trimName) return;
-    setEditBusy(true);
-    setEditErr(null);
-    try {
-      const { project: updated } = await api.updateProject(project.id, { name: trimName, description: editDesc.trim() });
-      setDetail((d) => d?.project.id === updated.id ? { ...d, project: updated } : d);
-      updateProject(updated);
-      setEditing(false);
-    } catch (e) {
-      setEditErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setEditBusy(false);
-    }
-  }
-  async function toggleArchive(): Promise<void> {
-    if (!project || isDefault) return;
-    setArchiveBusy(true);
-    try {
-      const { project: updated } = await api.updateProject(project.id, { status: project.status === 'active' ? 'archived' : 'active' });
-      setDetail((d) => d?.project.id === updated.id ? { ...d, project: updated } : d);
-      updateProject(updated);
-    } catch (e) {
-      setEditErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setArchiveBusy(false);
-    }
-  }
+  // An archived project takes no new work (crew refuses jobs, chats and repositories into it): its Work tab offers none.
+  const archived = !isDefault && project?.status === 'archived';
+  const firstRun = !loading && project !== null && !isDefault && !archived && jobsCount === 0 && !members.some((m) => m.member_kind === REPO_KIND);
   function handleDetach(memberId: string): void {
     if (!project) return;
     void api.detachProjectMember(project.id, memberId).catch(() => {});
@@ -259,16 +209,11 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
   }
 
   const childIssues = Object.values(issues);
-  const failures = [...(error !== null && !unfiledStandIn ? [{ what: 'project details', error, retry: () => void load() }] : []),
-    ...(editErr !== null ? [{ what: 'project changes', error: editErr, retry: () => setEditErr(null) }] : []), ...childIssues];
+  const failures = [...(error !== null && !unfiledStandIn ? [{ what: 'project details', error, retry: () => void load() }] : []), ...childIssues];
   const failure = failures.find((f) => readErrorKind(f.error) === 'offline') ?? failures[0];
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   const newJob = (workflowId: string | null = null): void => openLaunchWizard({ projectId: isDefault ? null : projectId, workflowId, composerKey: 'desk' });
   const chatHere = (): void => openAskDock({ projectId: isDefault ? null : projectId });
-  const scrollTo = (id: string): void => {
-    setScrollTarget(id);
-    if (atHome || tab !== 'work') navigate(deskTabPath('work', undefined, base));
-  };
   const attachedRepos = used.filter((u) => u.attached && u.repo !== null);
   const title = isDefault ? 'Not in a project' : project?.name ?? 'Project';
 
@@ -284,16 +229,6 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     </div>;
   };
   const workExtra = <div className="wk-project-desk-work">
-    {editing && <section className="wk-card wk-pg-proj-stack">
-      <SectionTitle>Edit project</SectionTitle>
-      <label className="wk-pg-proj-field">Project name<input type="text" className="wk-field" value={editName} maxLength={120} onChange={(e) => setEditName(e.target.value)} autoFocus /></label>
-      <label className="wk-pg-proj-field">Description<textarea className="wk-field" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={2} placeholder="Describe this project" /></label>
-      <div className="wk-pg-proj-actions">
-        <button type="button" className="wk-btn wk-btn--primary" onClick={() => void saveEdit()} disabled={editBusy || !editName.trim()}>{editBusy ? 'Saving…' : 'Save'}</button>
-        <button type="button" className="wk-btn wk-btn--quiet" onClick={() => setEditing(false)}>Cancel</button>
-      </div>
-      {(editBusy || !editName.trim()) && <p className="wk-field-note">{editBusy ? 'Saving your changes…' : 'Enter a project name to save.'}</p>}
-    </section>}
     {firstRun && <section data-testid="project-first-run" aria-labelledby="project-first-title" className="wk-proj-first">
       <div className="wk-card wk-proj-first-steps">
         <h2 id="project-first-title" className="wk-section-title">Get this project going</h2>
@@ -317,7 +252,8 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
         </ol>
       </div>
     </section>}
-    {!isDefault && <ProjectRequirementsSection projectId={projectId} navigate={navigate} onIssue={onIssue} />}
+    {archived && <ArchivedLine navigate={navigate} base={base} />}
+    {!isDefault && <ProjectRequirementsSection projectId={projectId} navigate={navigate} onIssue={onIssue} archived={archived} />}
     <div id="project-documents"><ProjectDocumentsRoot projectId={projectId} project={project} onIssue={onIssue} onChanged={(updated) => setDetail((d) => d !== null && d.project.id === updated.id ? { ...d, project: updated } : d)} /></div>
     {others.length > 0 && <section className="wk-card" aria-labelledby="project-others-title">
       <h2 id="project-others-title" className="wk-section-title">Chats and other items</h2>
@@ -330,19 +266,13 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
     {unshown > 0 && <StateBanner data-testid="project-jobs-unshown" kind="partial" what={unshown === 1 ? '1 job in this project' : `${unshown} jobs in this project`} />}
     {loading ? <Skeleton rows={3} variant="card" /> : !project ? !error && <EmptyState title="Project not found" /> : atHome ? <ProjectHome
       project={project} projectId={projectId} runs={mine} allRuns={runs} needRows={needRows} repos={used} now={now} known={runsLoaded && membersRead} loading={false}
-      navigate={navigate} isDefault={isDefault} menu={[
-        { id: 'documents', label: 'Documents', testId: 'project-documents', onSelect: () => scrollTo('project-documents') },
-        ...(isDefault ? [] : [
-          { id: 'edit', label: 'Edit name and description', testId: 'project-edit', onSelect: startEdit },
-          // DES-LEARN §3.3: this project's personality (an override of the person's), in Learn.
-          { id: 'personality', label: 'Personality', testId: 'project-personality', onSelect: () => navigate(learnPath('personality', projectId)) },
-          { id: 'archive', label: project.status === 'active' ? 'Archive this project' : 'Restore this project', testId: 'project-archive', onSelect: () => void toggleArchive(), disabled: archiveBusy ? 'Saving the project’s status…' : null },
-        ]),
-      ]} /> : <DeskV2
+      navigate={navigate} isDefault={isDefault} /> : <DeskV2
       projectId={projectId} runs={mine} needRows={needRows} now={now} navigate={navigate}
       runActions={(runId, runTitle) => { const m = members.find((x) => x.member_kind === RUN_KIND && x.member_ref === runId); return m === undefined ? [] : [{ id: 'detach', label: `Remove “${runTitle}” from this project`, danger: true, onSelect: () => handleDetach(m.id) }]; }}
       search={search} hosted={hostedForProject} runsLoaded={runsLoaded && membersRead} runsError={runsError ?? null}
       {...(onRetryRuns !== undefined ? { onRetryRuns } : {})} workExtra={workExtra}
+      // Settings (operator 2026-11-09): a real project's name, description, personality and danger zone; work in no project has none.
+      {...(isDefault ? {} : { settings: <ProjectSettings project={project} navigate={navigate} onSaved={(updated) => setDetail((d) => d !== null && d.project.id === updated.id ? { ...d, project: updated } : d)} /> })}
       projectHead={{ title, back: <a href={base} onClick={go(base)} className="wk-link wk-pj-back" data-testid="project-home-link"><span aria-hidden>←</span> {isDefault ? 'Not in a project' : project.name}</a>, meta: <>
         <span data-testid="project-meta">
           {project.status === 'archived' && <><span className="wk-tag">Archived</span>{' '}</>}
@@ -351,11 +281,6 @@ export function ProjectDesk({ projectId, navigate, runs, needRows, now, search, 
         {project.description && <span data-testid="project-desc" className="wk-project-desk-desc" title={project.description}>{project.description}</span>}
       </>, actions: <div className="wk-proj-actions" data-testid="project-actions">
         {attachedRepos.length > 0 && <OverflowMenu label="Open a repository this project uses" text="Open repository" tone="secondary" items={attachedRepos.map((u) => ({ id: u.ref, label: u.name, onSelect: () => navigate(repoDetailPath(u.repo!.id, { project: isDefault ? null : projectId })) }))} data-testid="project-open-repo" />}
-        <button type="button" data-testid="project-documents" className="wk-btn wk-btn--secondary" onClick={() => scrollTo('project-documents')}><FileText size={14} aria-hidden />Documents</button>
-        {!isDefault && <OverflowMenu label={`More actions for ${title}`} items={[
-          { id: 'edit', label: 'Edit name and description', onSelect: startEdit },
-          { id: 'archive', label: project.status === 'active' ? 'Archive this project' : 'Restore this project', onSelect: () => void toggleArchive(), disabled: archiveBusy ? 'Saving the project’s status…' : null },
-        ]} />}
       </div> }}
     />}
   </div>;

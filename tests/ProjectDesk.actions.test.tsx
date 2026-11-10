@@ -5,7 +5,7 @@ vi.mock('recharts', () => Object.fromEntries(['Area', 'AreaChart', 'Bar', 'BarCh
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Project, ProjectDetail } from '../src/api/types.js';
 
-/** Project actions remain available in the shared Desk header, with editing on Work. */
+/** A project's own moves (operator 2026-11-09): rename, describe, archive and restore live in its Settings tab, and only there. */
 
 const getProject = vi.fn();
 const getProjectActivity = vi.fn();
@@ -56,95 +56,86 @@ async function renderLoaded(projectId: string, navigate = vi.fn(), search = '?ta
   await screen.findByRole('heading', { level: 1, name: projectId === 'default' ? 'Not in a project' : `Project ${projectId}` });
 }
 
-/** DES-frontdoor P: Edit and Archive / Restore live in the header's ⋯ menu. */
-function menuItem(name: RegExp): HTMLElement | null {
-  const button = screen.queryByRole('button', { name: /^More actions for Project / });
-  if (button === null) return null;
-  if (button.getAttribute('aria-expanded') !== 'true') fireEvent.click(button);
-  return screen.queryByRole('menuitem', { name });
+async function renderSettings(): Promise<void> {
+  cleanup();
+  await renderLoaded('proj-1', vi.fn(), '?tab=settings');
+  await screen.findByTestId('project-settings');
 }
 
-describe('ProjectDesk — Edit', () => {
-  it('opens an inline editor on Edit click and saves name + description via updateProject', async () => {
+/** No project page offers a ⋯ with the project's moves any more. */
+const noMenu = (): void => {
+  expect(screen.queryByRole('button', { name: /^More actions for Project / })).toBeNull();
+  expect(screen.queryByRole('menuitem', { name: /^Edit|^Archive|^Restore|^Documents/ })).toBeNull();
+};
+
+describe('ProjectDesk — Settings edits the name and description', () => {
+  it('saves name + description via updateProject; the header has no Edit', async () => {
     getProject.mockResolvedValue(detail(proj('proj-1')));
     updateProject.mockResolvedValue({ project: proj('proj-1', { name: 'renamed' }) });
     await renderLoaded('proj-1');
-
-    fireEvent.click(menuItem(/^Edit/)!);
-    const nameInput = screen.getByDisplayValue('Project proj-1') as HTMLInputElement;
-    fireEvent.change(nameInput, { target: { value: 'renamed' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    await waitFor(() => expect(updateProject).toHaveBeenCalledWith('proj-1', {
-      name: 'renamed', description: '',
-    }));
-    // Cancel no longer in the DOM once saved
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull());
+    noMenu();
+    await renderSettings();
+    fireEvent.change(screen.getByTestId('project-settings-name'), { target: { value: 'renamed' } });
+    fireEvent.click(screen.getByTestId('project-settings-save'));
+    await waitFor(() => expect(updateProject).toHaveBeenCalledWith('proj-1', { name: 'renamed', description: '' }));
+    expect(await screen.findByTestId('project-settings-saved')).toBeInTheDocument();
   });
 
   it('Save is disabled on an empty name', async () => {
     getProject.mockResolvedValue(detail(proj('proj-1')));
-    await renderLoaded('proj-1');
-
-    fireEvent.click(menuItem(/^Edit/)!);
-    const nameInput = screen.getByDisplayValue('Project proj-1') as HTMLInputElement;
-    fireEvent.change(nameInput, { target: { value: '' } });
-
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await renderSettings();
+    fireEvent.change(screen.getByTestId('project-settings-name'), { target: { value: '' } });
+    expect(screen.getByTestId('project-settings-save')).toBeDisabled();
     expect(updateProject).not.toHaveBeenCalled();
   });
 });
 
-describe('ProjectDesk — Archive / Restore', () => {
-  it('Archive sends {status: "archived"} and the button flips to Restore', async () => {
-    const active = proj('proj-1', { status: 'active' });
-    getProject.mockResolvedValue(detail(active));
+describe('ProjectDesk — Archive / Restore (the Settings danger zone)', () => {
+  it('Archive asks inline, then sends {status: "archived"}, and the button becomes Restore', async () => {
+    getProject.mockResolvedValue(detail(proj('proj-1', { status: 'active' })));
     updateProject.mockResolvedValue({ project: proj('proj-1', { status: 'archived' }) });
-    await renderLoaded('proj-1');
-
-    fireEvent.click(menuItem(/^Archive/)!);
-
+    await renderSettings();
+    fireEvent.click(screen.getByTestId('project-archive'));
+    expect(updateProject).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('project-archive-confirm'));
     await waitFor(() => expect(updateProject).toHaveBeenCalledWith('proj-1', { status: 'archived' }));
-    await waitFor(() => expect(menuItem(/^Restore/)).not.toBeNull());
-    expect(menuItem(/^Archive/)).toBeNull();
+    expect(await screen.findByTestId('project-restore')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-archive')).toBeNull();
   });
 
-  it('Restore sends {status: "active"} and the button flips back to Archive', async () => {
-    const archived = proj('proj-1', { status: 'archived' });
-    getProject.mockResolvedValue(detail(archived));
+  it('Restore sends {status: "active"} with no confirm, and the button becomes Archive', async () => {
+    getProject.mockResolvedValue(detail(proj('proj-1', { status: 'archived' })));
     updateProject.mockResolvedValue({ project: proj('proj-1', { status: 'active' }) });
-    await renderLoaded('proj-1');
-
-    fireEvent.click(menuItem(/^Restore/)!);
-
+    await renderSettings();
+    fireEvent.click(screen.getByTestId('project-restore'));
     await waitFor(() => expect(updateProject).toHaveBeenCalledWith('proj-1', { status: 'active' }));
-    await waitFor(() => expect(menuItem(/^Archive/)).not.toBeNull());
-    expect(menuItem(/^Restore/)).toBeNull();
+    expect(await screen.findByTestId('project-archive')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-restore')).toBeNull();
   });
 });
 
 describe('ProjectDesk — default-project guard', () => {
-  it('the synthesized default project exposes neither Edit nor Archive/Restore', async () => {
+  it('the synthesized default project exposes no Settings, Edit or Archive/Restore', async () => {
     getProject.mockResolvedValue(detail(proj('default')));
     getProjectActivity.mockResolvedValue({ entries: [], nextCursor: null, projectId: 'default' });
     await renderLoaded('default');
-
-    expect(screen.queryByRole('button', { name: /^More actions for/ })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: /^Edit|^Archive|^Restore/ })).toBeNull();
+    noMenu();
+    expect(screen.queryByTestId('desk-tab-settings')).toBeNull();
+    expect(screen.queryByTestId('project-archive')).toBeNull();
   });
 });
 
-describe('ProjectDesk — the home keeps the moves', () => {
-  it('the home ⋯ holds Documents, Edit and Archive; Edit opens the Work view, where the editor is', async () => {
+describe('ProjectDesk — the home', () => {
+  it('the home has More info (to Work) and no ⋯; Settings is one of its views', async () => {
     getProject.mockResolvedValue(detail(proj('proj-1')));
     const navigate = vi.fn();
     await renderLoaded('proj-1', navigate, '');
     expect(screen.getByTestId('project-home')).toBeInTheDocument();
     expect(screen.queryByTestId('desk-tabs')).toBeNull();
-    expect(menuItem(/^Documents/)).not.toBeNull();
-    expect(menuItem(/^Archive/)).not.toBeNull();
-    fireEvent.click(menuItem(/^Edit/)!);
+    noMenu();
+    fireEvent.click(screen.getByTestId('project-more-info'));
     expect(navigate).toHaveBeenCalledWith('/projects/proj-1?tab=work');
+    expect(screen.getAllByTestId('project-view').at(-1)).toHaveAttribute('href', '/projects/proj-1?tab=settings');
   });
 
   it('work in no project is not a project: no ask box, no ⋯, one line offering to file it', async () => {

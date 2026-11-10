@@ -24,7 +24,9 @@ const PAGE = 40;
  * row's own actions (a project's page: Remove from project) behind its ⋯.
  * Real data only: the run list App already keeps live over `/ws`.
  */
-export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pathOf, agentName, projectName, title, showProject, panelId, labelledBy, rowActions, holds, onNewJob, onClearRefine, projectIds, onProject }: {
+export function DeskRuns({ start, runs, runsShown, refine, refineBar, now, navigate, pathOf, agentName, projectName, title, showProject, panelId, labelledBy, rowActions, holds, onNewJob, onClearRefine, projectIds, onProject }: {
+  /** Where the list starts (the address's `?filter=`, `jobsStartOf`); default Active, any status. */
+  start?: { group: JobGroup; status: RunStatusFilter };
   /** A row's own actions (a project's page: Remove from project), or none. */
   rowActions?: (runId: string, title: string) => readonly MenuItem[];
   panelId?: string;
@@ -54,8 +56,8 @@ export function DeskRuns({ runs, runsShown, refine, refineBar, now, navigate, pa
   onProject?: (id: string | null) => void;
 }): React.ReactElement {
   usePageChatFor('jobs', 'Knows Jobs: what is running, what finished and how each ended.', 'desk-runs');
-  const [group, setGroup] = useState<JobGroup>('active');
-  const [status, setStatus] = useState<RunStatusFilter>('all');
+  const [group, setGroup] = useState<JobGroup>(start?.group ?? 'active');
+  const [status, setStatus] = useState<RunStatusFilter>(start?.status ?? 'all');
   const [query, setQuery] = useState('');
   const [shown, setShown] = useState(PAGE);
   const [allTime, setAllTime] = useState(false);

@@ -188,6 +188,14 @@ describe('the dashboard’s Requirements section', () => {
     expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: DRAFT_EPICS_ID, projectId: 'shop', requirements: [] });
   });
 
+  it('an archived project still counts its requirements but offers no Draft epics (it takes no new work)', async () => {
+    const { ProjectRequirementsSection } = await import('../src/components/product/ProjectRequirementsSection.js');
+    wire(() => page([req(1), req(2)]));
+    render(<ProjectRequirementsSection projectId="shop" navigate={vi.fn()} archived />);
+    expect(await screen.findByTestId('project-requirements-line')).toHaveTextContent('2 requirements');
+    expect(screen.queryByTestId('project-draft-epics')).toBeNull();
+  });
+
   it('no repository says so, offers neither the list nor Draft epics; an older daemon draws nothing', async () => {
     const { ProjectRequirementsSection } = await import('../src/components/product/ProjectRequirementsSection.js');
     wire(() => ({ projectId: 'shop', offset: 0, limit: 1, totals: { repos: 0, ok: 0, absent: 0, errors: 0, dangling: 0, total: 0, corpus: 0 }, rows: [] }));

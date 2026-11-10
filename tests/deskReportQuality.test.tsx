@@ -108,7 +108,7 @@ describe('Report (ui-v2): quality and honesty', () => {
 describe('Desk tabs', () => {
   it('gives Desk links roving focus, navigates by keyboard, and labels every selected panel', () => {
     const navigate = vi.fn();
-    const props = { runs: [], runsLoaded: true, needRows: [], now: NOW, navigate, projectId: 'p1' };
+    const props = { runs: [], runsLoaded: true, needRows: [], now: NOW, navigate, projectId: 'p1', settings: <p>The project's settings</p> };
     const { rerender } = render(<DeskV2 {...props} search="?tab=report" />);
     const tabs = within(screen.getByTestId('desk-tabs')).getAllByRole('tab');
     expect(tabs.filter((t) => t.tabIndex === 0)).toEqual([screen.getByTestId('desk-tab-report')]);
@@ -138,13 +138,17 @@ describe('Desk views after the sidebar regroup (ui-v2, 2026-10-26): pages on the
 
   it('a project page shows every view as a tab, in the sidebar\'s names, with no More menu', () => {
     const navigate = vi.fn();
-    render(<DeskV2 {...props(navigate)} projectId="p1" search="" />);
-    const tabs = within(screen.getByTestId('desk-tabs')).getAllByRole('tab').map((t) => t.textContent);
-    expect(tabs).toEqual(['Work', 'Jobs', 'Repositories', 'Report', 'Understand', 'Steering', 'Memory', 'Helpers', 'Evaluate']);
-    expect(tabs).toEqual(DESK_TABS.map((t) => t.label));
+    const { rerender } = render(<DeskV2 {...props(navigate)} projectId="p1" search="" />);
+    const names = (): (string | null)[] => within(screen.getByTestId('desk-tabs')).getAllByRole('tab').map((t) => t.textContent);
+    // A page with no settings to show (work in no project) has no Settings tab.
+    expect(names()).toEqual(['Work', 'Jobs', 'Repositories', 'Report', 'Understand', 'Steering', 'Memory', 'Helpers', 'Evaluate']);
     expect(screen.queryByTestId('desk-tabs-more')).toBeNull();
     fireEvent.click(screen.getByTestId('desk-tab-steer'));
     expect(navigate).toHaveBeenLastCalledWith('/projects/p1?tab=steer');
+    // A project's page: Settings is the last tab (operator 2026-11-09).
+    rerender(<DeskV2 {...props(navigate)} projectId="p1" search="" settings={<p>The project's settings</p>} />);
+    expect(names()).toEqual(DESK_TABS.map((t) => t.label));
+    expect(names().at(-1)).toBe('Settings');
   });
 
   it('Needs you in full is a page of its own (/needs, the landing\'s "N more waiting"); a project page has no such tab', () => {

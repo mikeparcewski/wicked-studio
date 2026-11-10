@@ -13,7 +13,7 @@ import { sessionPath, type SessionState } from '../../board/sessionModel.js';
 import { filterRunRows, pageRunRows, runRows, sortRunRows, type RunSortKey, type SortDir } from '../../board/runsTableModel.js';
 import { openSheet } from '../../store/sheets.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
-import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
+import { projectDetailPath, projectSettingsPath, type Navigate } from '../../hooks/useRoute.js';
 import { projectTestsPath as testsPath } from '../../api/testing.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { endChatKeepingHistory } from '../../store/askDock.js';
@@ -27,8 +27,7 @@ import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { runTechParts, Tech } from '../Tech.js';
-import { ProjectEntry, ProjectsTab } from './ProjectsTab.js';
-import { projectRows } from '../../board/projectsModel.js';
+import { ProjectsTab } from './ProjectsTab.js';
 import { GroundingChip } from '../GroundingChip.js';
 import { madeOpenAddress } from '../../board/madeMoves.js';
 import { MadeOpen } from './MadeOpen.js';
@@ -182,8 +181,6 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   // Archived projects are their own read (`GET /projects?status=archived`): the board model keeps
   // the shared store to the active register, so the store cannot name them.
   const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
-  const [scopedRepos, setScopedRepos] = useState<string[]>([]);
-  const repoList = useNeedsSources((s) => s.repos);
   useEffect(() => {
     let cancelled = false;
     api.listProjects('archived')
@@ -191,21 +188,10 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
       .catch(() => { /* no register, no line — never a guessed one */ });
     return () => { cancelled = true; };
   }, [q.project]);
-  useEffect(() => {
-    if (q.project === null) return;
-    let live = true;
-    void api.listProjectMembers(q.project).then(({ members }) => {
-      if (live) setScopedRepos(members.filter((m) => m.member_kind === 'crew.repo').map((m) => repoList?.find((r) => r.id === m.member_ref)?.name ?? m.member_ref));
-    }).catch(() => undefined);
-    return () => { live = false; setScopedRepos([]); };
-  }, [q.project, repoList]);
-  const scopedProject = q.project === null ? null : projects.find((p) => p.id === q.project) ?? archivedProjects.find((p) => p.id === q.project) ?? null;
-  const projectHeader = scopedProject === null ? null : projectRows([scopedProject], items, groups, runs).map((row) => ({ ...row, repos: scopedRepos.length > 0 ? scopedRepos : row.repos }))[0] ?? null;
 
   return (
     <div data-testid="everything-sessions" data-count={total} data-filter={q.filter} data-project={q.project ?? ''}>
       {q.filter !== 'archived' && <RunsReadBanner read={read} runsError={runsError} onRetryRuns={onRetryRuns} />}
-      {projectHeader !== null && <ProjectEntry row={projectHeader} countsKnown={known} navigate={navigate} header onStatusChanged={(changed) => setArchivedProjects((old) => changed.status === 'archived' ? [changed, ...old.filter((p) => p.id !== changed.id)] : old.filter((p) => p.id !== changed.id))} />}
       {read !== 'failed' && <div className="wk-everything-bar">
         <div role="group" aria-label="Show" className="wk-everything-chips">
           {SESSION_FILTERS.map((f) => (
@@ -347,9 +333,9 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
         <p data-testid="everything-archived-projects" className="wk-everything-note">
           Archived projects:{' '}
           {archivedProjects.map((p, i) => (
-            <span key={p.id}>{i > 0 ? ', ' : ''}<a href={projectDetailPath(p.id)} onClick={go(projectDetailPath(p.id))} data-testid="everything-archived-project" data-project-id={p.id} className="wk-link">{p.name}</a></span>
+            <span key={p.id}>{i > 0 ? ', ' : ''}<a href={projectSettingsPath(p.id)} onClick={go(projectSettingsPath(p.id))} data-testid="everything-archived-project" data-project-id={p.id} className="wk-link">{p.name}</a></span>
           ))}
-          . Open one to restore it.
+          . Restore one from its Settings.
         </p>
       )}
       </>)}

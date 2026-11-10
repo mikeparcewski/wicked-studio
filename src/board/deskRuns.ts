@@ -61,6 +61,23 @@ const OF_FILTER: Record<Exclude<RunStatusFilter, 'all'>, readonly JobWord[]> = {
   stopped: ['Stopped'],
 };
 
+/**
+ * Where the Jobs list starts for an address's `?filter=`, in the Sessions filter's words
+ * (board/everythingModel `SESSION_FILTERS`, one vocabulary): a project's "Running now" opens
+ * `?tab=runs&filter=active`, its "Failed" `?tab=runs&filter=failed`. Anything else starts on Active.
+ */
+export function jobsStartOf(filter: string | null): { group: JobGroup; status: RunStatusFilter } {
+  switch (filter) {
+    case 'completed': return { group: 'finished', status: 'finished' };
+    case 'failed': return { group: 'finished', status: 'failed' };
+    case 'cancelled': return { group: 'finished', status: 'stopped' };
+    // Working (`active`) is every live job. "Waiting on you" in Sessions holds both of Jobs' "Waiting on you" and
+    // "Needs a decision", which no single Jobs status covers, so it opens Active too rather than hide one of them.
+    // `all` and Archived (a Sessions-only lens) start where Jobs always does.
+    case 'active': case 'waiting': case 'all': case 'archived': default: return { group: 'active', status: 'all' };
+  }
+}
+
 /** What a needs-you row asks of a run's person: an answer (a plain approval, a question, a steer) or a decision. */
 export type NeedHold = 'answer' | 'decision';
 

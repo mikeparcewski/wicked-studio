@@ -15,7 +15,7 @@ import { NewProjectModal } from '../NewProjectModal.js';
 import { deskReadState } from '../../board/deskModel.js';
 import { absTime, relTime } from '../../board/relTime.js';
 import { readErrorKind } from '../../api/errors.js';
-import { EmptyState, Skeleton, StatLine, StateBanner, TechDetails } from '../ui/index.js';
+import { EmptyState, Skeleton, StatLine, StateBanner } from '../ui/index.js';
 
 /** The counts line's words, in the one status vocabulary (board/statusWords.ts; studio#687 rows 35, 36). */
 const COUNT_WORDS = [
@@ -39,6 +39,10 @@ export function useProjectRows(runs: SessionView[], needRows: NeedRow[]): { rows
 
 export type ProjectPatch = { name: string; description: string } | { status: 'active' | 'archived' };
 
+/** Each project's last write, so the next one waits for it (codex review): crew answers them in order, and a slower
+ *  answer can never land after a newer one, even when the form that sent it was closed and opened again meanwhile. */
+const lastWrite = new Map<string, Promise<unknown>>();
+
 /** Rename or archive a project through crew (`PATCH /projects/:id`), keeping the projects store in step.
  *  `apply` answers whether it saved; a failure's raw words are `error` (shown behind technical details). */
 export function useProjectSave(projectId: string, onStatusChanged?: (project: Project) => void): { apply: (body: ProjectPatch) => Promise<boolean>; error: string | null; busy: boolean } {
@@ -48,8 +52,11 @@ export function useProjectSave(projectId: string, onStatusChanged?: (project: Pr
     if (busy) return false;
     setBusy(true);
     setError(null);
+    const before = lastWrite.get(projectId) ?? Promise.resolve();
+    const write = before.catch(() => undefined).then(() => api.updateProject(projectId, body));
+    lastWrite.set(projectId, write);
     try {
-      const { project } = await api.updateProject(projectId, body);
+      const { project } = await write;
       const store = useProjectsStore.getState();
       if (project.status === 'active' && !store.projects.some((p) => p.id === project.id)) store.addProject(project);
       else store.updateProject(project);
@@ -59,54 +66,36 @@ export function useProjectSave(projectId: string, onStatusChanged?: (project: Pr
       // The sentence is plain; the raw error lives behind technical details (UI-CONTRACT §4.7).
       setError(e instanceof Error ? e.message : String(e));
       return false;
-    } finally { setBusy(false); }
+    } finally {
+      if (lastWrite.get(projectId) === write) lastWrite.delete(projectId);
+      setBusy(false);
+    }
   };
   return { apply, error, busy };
 }
 
-export function ProjectEntry({ row, navigate, onStatusChanged, header = false, countsKnown = true }: {
+export function ProjectEntry({ row, navigate, countsKnown = true }: {
   row: ProjectRow;
   navigate: Navigate;
-  onStatusChanged?: (project: Project) => void;
-  header?: boolean;
   /** False while the runs read has not answered (or failed): the counts are hidden, never "0" (studio#684 row 11). */
   countsKnown?: boolean;
 }): React.ReactElement {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(row.project.name);
-  const [description, setDescription] = useState(row.project.description ?? '');
-  useEffect(() => { setName(row.project.name); setDescription(row.project.description ?? ''); }, [row.project.name, row.project.description]);
-  const { apply: save, error, busy } = useProjectSave(row.project.id, onStatusChanged);
-  const apply = async (body: ProjectPatch): Promise<void> => { if (await save(body)) setEditing(false); };
+  // Operator 2026-11-09: a row opens the project's homepage; its name, description, Archive and Restore
+  // live in the project's Settings tab, and only there.
   const archived = row.project.status === 'archived';
-  const path = everythingPath({ tab: 'sessions', project: row.project.id });
-  return <section data-testid={header ? 'everything-project-header' : 'projects-row'} data-project-id={row.project.id} className="wk-desk-card wk-everything-group">
-    {editing ? <form className="wk-project-edit" onSubmit={(e) => { e.preventDefault(); void apply({ name: name.trim(), description: description.trim() }); }}>
-      <label className="wk-project-edit-field"><span className="wk-field-label">Name</span><input className="wk-field" aria-label="Project name" value={name} onChange={(e) => setName(e.target.value)} /></label>
-      <label className="wk-project-edit-field"><span className="wk-field-label">Description</span><input className="wk-field" aria-label="Project description" value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-      <span className="wk-project-actions">
-        <button type="submit" className="wk-btn wk-btn--sm wk-btn--primary" disabled={busy || name.trim() === ''}>Save</button>
-        <button type="button" className="wk-btn wk-btn--sm wk-btn--quiet" onClick={() => setEditing(false)}>Cancel</button>
-      </span>
-    </form> : <><h2 className="wk-project-title">{row.project.name}</h2>{row.project.description ? <p className="wk-everything-note wk-project-desc" title={row.project.description}>{row.project.description}</p> : null}</>}
+  const path = projectDetailPath(row.project.id);
+  return <section data-testid="projects-row" data-project-id={row.project.id} className="wk-desk-card wk-everything-group">
+    <h2 className="wk-project-title">{row.project.name}{archived && <>{' '}<span className="wk-tag" data-testid="projects-row-archived">Archived</span></>}</h2>
+    {row.project.description ? <p className="wk-everything-note wk-project-desc" title={row.project.description}>{row.project.description}</p> : null}
     {row.repos.length > 0 && <p className="wk-everything-note">Repositories: {row.repos.join(', ')}</p>}
     {/* studio#687 row 35: one line of the non-zero states (no "working: 0" dump), hidden until the runs read answered. */}
     {countsKnown && <StatLine data-testid="project-counts" items={COUNT_WORDS.map((c) => ({ label: c.label, value: row.counts[c.state] }))} />}
     {countsKnown && row.latestMs > 0 && (
       <p className="wk-everything-note">Last activity <time dateTime={new Date(row.latestMs).toISOString()} title={absTime(row.latestMs)}>{relTime(row.latestMs)}</time></p>
     )}
-    {/* studio#687 row 37: one button system — Open, Rename and Archive are the same secondary buttons. */}
     <div className="wk-project-actions">
-      {!header && <a href={path} data-testid="projects-row-open" className="wk-btn wk-btn--sm wk-btn--secondary" onClick={(e) => { e.preventDefault(); navigate(path); }}>Open</a>}
-      <button type="button" className="wk-btn wk-btn--sm wk-btn--secondary" data-testid={header ? 'everything-project-rename' : 'projects-row-rename'} onClick={() => setEditing(true)}>Rename</button>
-      <button type="button" className="wk-btn wk-btn--sm wk-btn--secondary" disabled={busy} data-testid={header ? 'everything-project-archive' : archived ? 'projects-row-unarchive' : 'projects-row-archive'} onClick={() => { void apply({ status: archived ? 'active' : 'archived' }); }}>{archived ? 'Unarchive' : 'Archive'}</button>
+      <a href={path} data-testid="projects-row-open" className="wk-btn wk-btn--sm wk-btn--secondary" onClick={(e) => { e.preventDefault(); navigate(path); }}>Open</a>
     </div>
-    {error !== null && (
-      <div role="alert" data-testid="projects-row-error">
-        <p className="wk-field-note wk-field-note--bad">Couldn’t save the project.</p>
-        <TechDetails text={error} />
-      </div>
-    )}
   </section>;
 }
 
@@ -146,12 +135,11 @@ export function ProjectsTab({ q, runs, runsLoaded = true, runsError = null, onRe
   const { rows, unfiled } = useProjectRows(runs, needRows);
   const archivedLens = q.filter === 'archived';
   const { archived, archivedRead, archivedRepos } = useArchivedProjects(archivedLens);
-  const [hidden, setHidden] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [newOpen, setNewOpen] = useState(false);
   const shown = archivedLens ? projectRows(archived, [], [], []).map((row) => ({ ...row, repos: archivedRepos[row.project.id] ?? [] })) : rows;
   const lens = (filter: 'all' | 'archived') => navigate(lensPath !== undefined ? lensPath(filter) : everythingPath({ tab: 'projects', filter }), { replace: true });
-  const listed = filterProjectRows(shown, name).filter((row) => !archivedLens || !hidden.includes(row.project.id));
+  const listed = filterProjectRows(shown, name);
   return <div data-testid="projects-tab" className="wk-projects-tab">
     {read === 'failed' && <StateBanner data-testid="projects-failed" kind={readErrorKind(runsError)} what="your work" error={runsError} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />}
     {/* studio#687 row 37: the filters sit left, in one row with the button; no control floats mid-row. */}
@@ -176,7 +164,7 @@ export function ProjectsTab({ q, runs, runsLoaded = true, runsError = null, onRe
         </div>
       </section>
     )}
-    {listed.map((row) => <ProjectEntry key={row.project.id} row={row} countsKnown={countsKnown} navigate={navigate} onStatusChanged={(project) => { if (archivedLens && project.status === 'active') setHidden((ids) => [...ids, project.id]); }} />)}
+    {listed.map((row) => <ProjectEntry key={row.project.id} row={row} countsKnown={countsKnown} navigate={navigate} />)}
     {archivedLens && archivedRead === 'pending' && <Skeleton data-testid="projects-checking" rows={2} variant="card" />}
     {archivedLens && archivedRead === 'failed' && <StateBanner data-testid="projects-archived-failed" kind="error" what="the archived projects" />}
     {listed.length === 0 && (!archivedLens || archivedRead === 'ok') && (

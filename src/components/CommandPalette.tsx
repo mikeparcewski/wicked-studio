@@ -10,7 +10,7 @@ import { UNFILED_MOUNT } from '../api/interactive.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { fuzzyMatch, type FuzzyResult } from '../palette/fuzzy.js';
 import { runTargetHits } from '../palette/runTargets.js';
-import type { Navigate } from '../hooks/useRoute.js';
+import { projectDetailPath, type Navigate } from '../hooks/useRoute.js';
 import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
@@ -478,7 +478,8 @@ export function CommandPalette({
         group: 'projects',
         label: p.name,
         context: 'project',
-        href: everythingPath({ tab: 'sessions', project: p.id }),
+        // A project opens on its homepage (operator 2026-11-09), never a filtered session list.
+        href: projectDetailPath(p.id),
         rank: i,
       }),
     );

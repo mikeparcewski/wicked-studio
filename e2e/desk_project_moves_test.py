@@ -6,7 +6,7 @@ live on the Desk. X1 (operator ruling 2026-10-09): the shell addresses no longer
 
   1. RETIRED: /p/<pid>, /p/<pid>/build, /p/<pid>/build/new and /p/<pid>/campaigns each show the
      not-found page with the typed address kept; nothing is POSTed (no run, no chat).
-  2. SESSIONS: /everything?tab=sessions&project=<pid> shows the project header.
+  2. SESSIONS: /everything?tab=sessions&project=<pid> filters the sessions, with no project card.
   3. TESTS: /testing/campaigns?project=<pid> opens the launch wizard on the test workflow with the
      project preselected (the Testing landing retired, operator 2026-10-12).
   4. NO SHELL LINKS: no anchor on the Desk, a session or Everything (sessions, made, projects) has
@@ -82,10 +82,12 @@ with sync_playwright() as p:
               url=page.url, sent=sent)
     page.screenshot(path=str(SHOTS / "desk-project-moves-retired.png"))
 
-    # ── 2. the project's Sessions live on See everything ─────────────────────────────
+    # ── 2. the project's sessions, filtered on See everything (no second project card, 2026-11-09) ──
     page.goto(f"{origin}/everything?tab=sessions&project={PID}", wait_until="networkidle")
     try:
-        page.get_by_test_id("everything-project-header").wait_for(timeout=10000)
+        page.locator(f'[data-testid="everything-sessions"][data-project="{PID}"]').wait_for(timeout=10000)
+        if page.get_by_test_id("everything-project-header").count() != 0:
+            raise AssertionError("the filtered Sessions list still draws a project card")
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-project-moves-build-miss.png"))
         fail("project-sessions", f"{e} at {page.url}")

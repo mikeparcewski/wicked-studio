@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_REFINE, type Refine } from '../src/board/deskInsights.js';
-import { durationWords, jobLine, jobsSentence, jobWord, needHolds, NO_PROJECT, projectChoices, projectWord, runsView, type JobGroup, type NeedHold, type RunStatusFilter } from '../src/board/deskRuns.js';
+import { durationWords, jobLine, jobsSentence, jobsStartOf, jobWord, needHolds, NO_PROJECT, projectChoices, projectWord, runsView, type JobGroup, type NeedHold, type RunStatusFilter } from '../src/board/deskRuns.js';
 import type { NeedRow } from '../src/board/needsYou.js';
 import { makeUnit } from './factories.js';
 import { markHeld } from '../src/board/heldRuns.js';
@@ -213,5 +213,15 @@ describe('durationWords', () => {
   it('measures an open run to now and leaves an undated duration unknown', () => {
     expect(durationWords({ startedAt: NOW - 125 * 60_000, endedAt: null }, NOW)).toBe('2 h 5 min');
     expect(durationWords({ startedAt: null, endedAt: NOW }, NOW)).toBeNull();
+  });
+});
+
+describe('jobsStartOf: an address\'s ?filter= (the Sessions words) to where Jobs starts', () => {
+  it('maps the words Jobs can show exactly, and opens Active for the rest (never hiding a job)', () => {
+    expect(jobsStartOf('failed')).toEqual({ group: 'finished', status: 'failed' });
+    expect(jobsStartOf('completed')).toEqual({ group: 'finished', status: 'finished' });
+    expect(jobsStartOf('cancelled')).toEqual({ group: 'finished', status: 'stopped' });
+    // "Waiting on you" in Sessions holds both Jobs' "Waiting on you" and "Needs a decision" (codex review).
+    for (const f of ['active', 'waiting', 'all', 'archived', 'nonsense', null]) expect(jobsStartOf(f)).toEqual({ group: 'active', status: 'all' });
   });
 });

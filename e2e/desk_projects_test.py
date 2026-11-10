@@ -87,34 +87,33 @@ with sync_playwright() as p:
     page.get_by_test_id("new-project-name").fill("s17a journey project")
     page.get_by_test_id("new-project-repo").select_option(index=1)
     page.get_by_test_id("new-project-create").click()
-    page.wait_for_function("() => new URLSearchParams(location.search).get('project')?.startsWith('proj_')", timeout=10000)
-    created = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query)["project"][0]
+    # Operator 2026-11-09: a new project lands on its homepage, never a filtered Sessions list.
+    page.wait_for_function("() => /^\\/projects\\/proj_[0-9]+$/.test(location.pathname)", timeout=10000)
+    created = urllib.parse.urlparse(page.url).path.rsplit("/", 1)[-1]
+    page.get_by_test_id("project-home").wait_for(timeout=10000)
     check("new-project", create_posts == [{"name": "s17a journey project"}]
           and len(member_posts) == 1 and member_posts[0].get("kind") == "crew.repo"
           and member_posts[0].get("attachedBy") == "studio"
-          and address(page) == f"/everything?tab=sessions&project={created}", posts=create_posts + member_posts, landed=address(page))
+          and address(page) == f"/projects/{created}", posts=create_posts + member_posts, landed=address(page))
 
+    # A row opens the project's homepage; rename and archive are the project's Settings tab's, and only there.
     page.goto(f"{origin}/everything?tab=projects", wait_until="networkidle")
     row = page.locator('[data-testid="projects-row"][data-project-id="scratch"]')
-    row.get_by_test_id("projects-row-rename").click()
-    row.get_by_label("Project name").fill("Scratch renamed")
-    row.get_by_role("button", name="Save").click()
-    page.wait_for_function("() => document.querySelector('[data-testid=projects-row][data-project-id=scratch]')?.textContent.includes('Scratch renamed')")
-    check("rename", any(x.get("name") == "Scratch renamed" and "description" in x for x in patches), patches=patches)
-    row.get_by_test_id("projects-row-archive").click()
-    page.wait_for_function("() => !document.querySelector('[data-testid=projects-row][data-project-id=scratch]')")
-    check("archive", any(x.get("status") == "archived" for x in patches), patches=patches)
+    row.wait_for()
+    edits = page.locator('[data-testid="projects-row"] :is([data-testid="projects-row-rename"], [data-testid="projects-row-archive"], [data-testid="projects-row-unarchive"])').count()
+    check("rows-open-home", row.get_by_test_id("projects-row-open").get_attribute("href") == "/projects/scratch" and edits == 0, edits=edits)
 
     page.get_by_role("button", name="Archived").click()
     old = page.locator('[data-testid="projects-row"][data-project-id="old-proj"]')
     old.wait_for()
-    old.get_by_test_id("projects-row-unarchive").click()
-    old.wait_for(state="detached")
-    check("archived-lens", any(x.get("status") == "active" for x in patches), patches=patches)
+    check("archived-lens", old.get_by_test_id("projects-row-archived").count() == 1 and old.locator("button").count() == 0
+          and old.get_by_test_id("projects-row-open").get_attribute("href") == "/projects/old-proj" and patches == [], patches=patches)
 
+    # The Sessions list filtered to a project is a plain filter: no second project card.
     page.goto(f"{origin}/everything?tab=sessions&project=legacy-spike", wait_until="networkidle")
-    page.get_by_test_id("everything-project-header").wait_for(timeout=10000)
+    page.locator('[data-testid="everything-group"][data-project-id="legacy-spike"]').wait_for(timeout=10000)
     check("project-sessions", address(page) == "/everything?tab=sessions&project=legacy-spike"
+          and page.get_by_test_id("everything-project-header").count() == 0
           and page.locator('[data-testid="everything-group"][data-project-id="legacy-spike"]').count() == 1,
           landed=address(page))
     check("page-errors", not errors, errors=errors)

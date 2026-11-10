@@ -146,8 +146,11 @@ with sync_playwright() as p:
     real = page.evaluate(DASH)
     page.unroute("**/api/v1/projects/legacy-spike")
     check("unfiled-is-a-project-dashboard", unfiled["desk"] and unfiled["title"] == "Not in a project" and home_title == "Not in a project" and not unfiled["notFound"]
-          and unfiled["inbox"] and unfiled["blocks"] and unfiled["tabs"] == real["tabs"] and len(unfiled["tabs"]) >= 6
-          and {"project-documents"} <= set(unfiled["actions"]), unfiled=unfiled, real=real)
+          and unfiled["inbox"] and unfiled["blocks"] and len(unfiled["tabs"]) >= 6
+          # A real project adds only its Settings (last); work in no project has none (nothing can edit it).
+          and real["tabs"] == unfiled["tabs"] + ["desk-tab-settings"] and "desk-tab-settings" not in unfiled["tabs"]
+          # Operator 2026-11-09: no Documents button in either header (the documents are on Work).
+          and "project-documents" not in unfiled["actions"] + real["actions"], unfiled=unfiled, real=real)
     page.goto(f"{origin}/projects/default?tab=runs", wait_until="networkidle")
     page.wait_for_timeout(800)
     jobs = all_jobs_text(page)

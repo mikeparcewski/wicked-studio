@@ -12,7 +12,8 @@ import { TechDetails } from '../ui/TechDetails.js';
  * `limit=1`, only the totals used) — a link to the list, and "Draft epics" (the launch wizard's Draft
  * epics step, this project chosen). An older daemon without the fold draws nothing.
  */
-export function ProjectRequirementsSection({ projectId, navigate, onIssue }: { projectId: string; navigate: (path: string) => void; onIssue?: ProjectIssueHandler }): React.ReactElement | null {
+/** `archived`: the project takes no new work, so Draft epics (a job) is not offered. */
+export function ProjectRequirementsSection({ projectId, navigate, onIssue, archived = false }: { projectId: string; navigate: (path: string) => void; onIssue?: ProjectIssueHandler; archived?: boolean }): React.ReactElement | null {
   const [got, setGot] = useState<{ id: string; read: AggregateRead<ProjectRequirementsResponse> } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => { setGot(null); setAttempt((n) => n + 1); }, []);
@@ -69,7 +70,7 @@ export function ProjectRequirementsSection({ projectId, navigate, onIssue }: { p
         <>
           <p data-testid="project-requirements-line" className="wk-pg-proj-note">{line}</p>
           {totals !== null && totals.repos > 0 && unreadLine !== '' && <p data-testid="project-requirements-unread" className="wk-field-note">{unreadLine}.</p>}
-          {totals !== null && totals.total > 0 && (
+          {!archived && totals !== null && totals.total > 0 && (
             <div className="wk-pg-proj-actions">
               <button type="button" data-testid="project-draft-epics" className="wk-btn wk-btn--secondary"
                 onClick={() => openLaunchWizard({ workflowId: DRAFT_EPICS_ID, projectId, composerKey: 'desk' })}>
