@@ -385,11 +385,6 @@ function boxShown(el: Element): boolean {
   return typeof check === 'function' ? check.call(el, { visibilityProperty: true }) : true;
 }
 
-function hostedNow(keys: readonly string[]): boolean {
-  for (const h of hosts.values()) if (visible(h.el) && h.keys.some((k) => keys.includes(k))) return true;
-  return false;
-}
-
 /** How long a decision may wait for a block to show it, once the shell has been asked to bring one on screen (a cold
  *  run page reads its runs first); well inside the 10 s window, and the send itself checks again. */
 export const SHOW_GRACE_MS = 4_000;

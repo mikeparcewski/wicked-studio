@@ -266,13 +266,14 @@ describe('a block inside a display: contents scope (the session header) is on sc
   // jsdom has no layout: stand in for the browser's checkVisibility (a box-less or display:none element is not shown).
   const proto = Element.prototype as Element & { checkVisibility?: () => boolean };
   beforeEach(() => {
-    proto.checkVisibility = function (this: Element): boolean {
-      for (let e: Element | null = this; e !== null; e = e.parentElement) {
+    const shownBox = (el: Element): boolean => {
+      for (let e: Element | null = el; e !== null; e = e.parentElement) {
         const d = getComputedStyle(e).display;
-        if (d === 'none' || (e === this && d === 'contents')) return false;
+        if (d === 'none' || (e === el && d === 'contents')) return false;
       }
       return true;
     };
+    proto.checkVisibility = function (this: Element): boolean { return shownBox(this); };
   });
   afterEach(() => { Reflect.deleteProperty(proto, 'checkVisibility'); });
   it('a Stop under the header is shown there and is not cancelled as unseen', async () => {
