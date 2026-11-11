@@ -108,6 +108,14 @@ function signInFailure(name: string, error: unknown): { lead: string; tone: 'fai
     return result('Docker or Rancher needs to be started.', 'Start Docker Desktop or Rancher Desktop, then try again.',
       'The container runtime isn’t running. Start Docker Desktop or Rancher Desktop, then try again.');
   }
+  // The k8s runner's refusals (crew maps wicked-core's kinds; its sentence names the repair).
+  if (code === 'cluster_unreachable') return result('Kubernetes needs to be started.', 'Start Rancher Desktop or Docker Desktop with Kubernetes on, then try again.', line);
+  if (code === 'no_cluster' || code === 'controller_missing') return result('This computer’s cluster isn’t set up for helpers yet.', 'Run wicked-core cluster install, then try again.', line);
+  if (code === 'pids_unlimited') return result('The cluster needs a process limit first.', 'Set the kubelet’s pod-max-pids to 4096, then try again.', line);
+  if (code === 'policy_refused') return result('The cluster refused the sign-in.', 'Fix what it names, then try again.', line);
+  if (code === 'admission_pending') return result('The cluster is full right now.', 'Try again when other work ends.', line);
+  if (code === 'image_unavailable') return result(`${name}’s image isn’t in the cluster yet.`, `Build ${name}’s image, then try again.`, line);
+  if (code === 'exec_stream_lost') return result('The sign-in lost its connection.', 'Try again.', line);
   if (code === 'cli_not_installed' || code === undefined && /is not installed on this host/i.test(raw)) {
     return result(`${name} isn’t installed on this computer.`, `Install ${name} on this computer, then try again.`,
       `${name} signs in with its own program on this computer, and it isn’t installed here. Install ${name} on this computer, then try again.`);

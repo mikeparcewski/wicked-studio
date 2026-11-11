@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+
+- Kubernetes runner (with crew's cluster rows and the wicked-core k8s-swap train): the Agents page reads crew's
+  "Kubernetes isn't running" as a stopped runtime (row button "Start Kubernetes"; the card says to start Rancher Desktop
+  or Docker Desktop with Kubernetes on), and a sign-in refused by the cluster gets its own lead and next move per code:
+  `cluster_unreachable`, `no_cluster`, `controller_missing`, `pids_unlimited`, `policy_refused`, `admission_pending`,
+  `image_unavailable`, `exec_stream_lost`. The Nerve Center's new Kubernetes cluster row renders like every infra row.
+
 ### Changed
 
 - **Pins wicked-crew-api-types 0.205.0** (was 0.197.0): the contract with `McpGhCliState`, `ChatSeatsBody` and

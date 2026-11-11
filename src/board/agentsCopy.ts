@@ -91,8 +91,16 @@ export function helperNotInstalled(row: AgentRow): boolean {
 export function helperRuntimeDown(row: AgentRow): string | null {
   const health = row.seat.health;
   const message = health?.status === 'inactive' ? health.message ?? row.seat.council_ineligible_reason : null;
-  return typeof message === 'string' && /^(?:Docker(?: Desktop)?|Rancher(?: Desktop)?) (?:isn.t|is not) running[.!]?$/i.test(message.trim())
+  return typeof message === 'string' && /^(?:Docker(?: Desktop)?|Rancher(?: Desktop)?|Kubernetes) (?:isn.t|is not) running[.!]?$/i.test(message.trim())
     ? displayText(message) : null;
+}
+
+/** What is stopped and how to start it, from crew's runtime-down words: the k8s runner's seats need
+ *  Kubernetes ("Kubernetes isn't running"); the container runtime's need Docker or Rancher. */
+export function runtimeStart(message: string): { what: string; button: string; step: string } {
+  return /kubernetes/i.test(message)
+    ? { what: 'Kubernetes is stopped', button: 'Start Kubernetes', step: 'Start Rancher Desktop or Docker Desktop with Kubernetes on,' }
+    : { what: 'Docker or Rancher is stopped', button: 'Start Docker or Rancher', step: 'Start Docker Desktop or Rancher Desktop,' };
 }
 
 /**
@@ -103,9 +111,9 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
   const runtime = helperRuntimeDown(row);
   if (runtime !== null) return {
     title: runtime,
-    what: `Studio can’t check ${row.name} while Docker or Rancher is stopped.`,
+    what: `Studio can’t check ${row.name} while ${runtimeStart(runtime).what}.`,
     why: 'This helper can’t take work yet.',
-    fix: [step('Start Docker Desktop or Rancher Desktop,', 'then check again.')],
+    fix: [step(runtimeStart(runtime).step, 'then check again.')],
     tech: null,
   };
   if (helperNotInstalled(row)) return {
