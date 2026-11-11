@@ -5,6 +5,7 @@ on:
     paths:
       - "site/**"
       - ".github/workflows/site-e2e.yml"
+      - ".github/scripts/pw-install.sh"
   workflow_dispatch:
 
 permissions:
@@ -32,7 +33,7 @@ jobs:
         run: npm ci
         working-directory: site
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/pw-install.sh" node chromium
         working-directory: site
       - name: Build site
         run: npm run build

@@ -113,7 +113,8 @@ jobs:
         # desk_everything_archive fail on every branch while passing on 1.64.1. Move the pin on purpose, in its own PR.
         run: |
           python -m pip install playwright==1.64.1
-          python -m playwright install --with-deps chromium
+          # No apt unless the browser cannot launch without it (runner apt mirrors fail DNS: .github/scripts/pw-install.sh).
+          bash .github/scripts/pw-install.sh python chromium
 
       - name: Same-origin build
         if: steps.desk.outputs.count != '0'
@@ -161,7 +162,7 @@ jobs:
       - name: Install Python Playwright + ${{ matrix.browser }}
         run: |
           python -m pip install playwright==1.64.1
-          python -m playwright install --with-deps ${{ matrix.browser }}
+          bash .github/scripts/pw-install.sh python ${{ matrix.browser }}
 
       - name: Same-origin build
         run: VITE_API_HOST= npx vite build --outDir dist-sameorigin
