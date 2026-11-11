@@ -165,6 +165,33 @@ describe('frozen sign-in refusals and next actions', () => {
     await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
     expect(result).toHaveTextContent('Start Rancher Desktop or Docker Desktop with Kubernetes on, then try again.');
   });
+  it.each([['no_cluster'], ['controller_missing']])('a coded %s without crew sentence gives the whole install command', async (code) => {
+    refusal = { status: 503, body: { code, error: '' } };
+    page('?fix=claude');
+    fireEvent.click(await screen.findByTestId('agents-signin'));
+    const result = await screen.findByTestId('agents-check-result');
+    await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
+    expect(result).toHaveTextContent('wicked-core cluster install --admin-context <your cluster context> --home <this daemon’s state home>');
+  });
+  it.each([[''], ['   '], [undefined]])('a policy refusal with no sentence (%j) says so and where to look', async (error) => {
+    refusal = { status: 503, body: { code: 'policy_refused', ...(error !== undefined ? { error } : {}) } };
+    page('?fix=claude');
+    fireEvent.click(await screen.findByTestId('agents-signin'));
+    const result = await screen.findByTestId('agents-check-result');
+    await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
+    expect(result).toHaveTextContent('It gave no reason.');
+    expect(result).toHaveTextContent('Open Nerve Center → Infra');
+  });
+  it('a cluster refusal never shows a credential or an escaped home path from the cluster’s diagnostic', async () => {
+    const escaped = ['C:', 'Users', 'alice', 'config'].join('\\\\');
+    refusal = { status: 503, body: { code: 'policy_refused', error: `The cluster refused the Claude Code sign-in pod. The cluster said: webhook at ${escaped} token=hunter2hunter2 Authorization: Bearer abc.def.ghi ghp_abcdefghijklmnopqrstuvwxyz123456. Fix what it names, then try again.` } };
+    page('?fix=claude');
+    fireEvent.click(await screen.findByTestId('agents-signin'));
+    const result = await screen.findByTestId('agents-check-result');
+    await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
+    for (const leak of ['alice', 'hunter2hunter2', 'abc.def.ghi', 'ghp_abcdefghijklmnopqrstuvwxyz123456']) expect(result.textContent).not.toContain(leak);
+    expect(result).toHaveTextContent('The cluster refused the Claude Code sign-in pod.');
+  });
   it('a coded refusal without crew sentence still gets studio’s action', async () => {
     refusal = { status: 502, body: { code: 'container_runtime_down', error: '' } };
     page('?fix=claude');
