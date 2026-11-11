@@ -10,8 +10,9 @@ import { useJobBinding } from '../src/store/jobBinding.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
 import { jobProposal, CHAT } from './jobFixtures.js';
 
-// Local wire fixtures for the optional CS12 fields the pinned api-types lack.
-interface InputToken extends Omit<ProposalToken, 'kind'> {
+// Wire fixtures for the documents and sources tokens. The contract types both lists; these keep them unknown so a
+// test can send a malformed one, which the passage must survive.
+interface InputToken extends Omit<ProposalToken, 'kind' | 'documents' | 'sources'> {
   kind: 'documents' | 'sources';
   documents?: unknown;
   sources?: unknown;

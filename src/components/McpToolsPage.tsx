@@ -351,7 +351,8 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   saved: ReadonlyArray<string>;
 }): React.ReactElement {
   const [name, setName] = useState('');
-  const [kind, setKind] = useState<McpUpstreamKind>('mcp-stdio');
+  /** The kinds this form writes; `web` is written by its install route only (the contract's `McpServerConfigBody.kind`). */
+  const [kind, setKind] = useState<Exclude<McpUpstreamKind, 'web'>>('mcp-stdio');
   const [target, setTarget] = useState('');
   /** `rest` only: where crew fetches the API's OpenAPI document. */
   const [openapiUrl, setOpenapiUrl] = useState('');
@@ -486,7 +487,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
         </label>
         <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
           Kind
-          <select data-testid="mcp-add-kind" value={kind} onChange={(e) => { setKind(e.target.value as McpUpstreamKind); setPreview(null); }} className={input} >
+          <select data-testid="mcp-add-kind" value={kind} onChange={(e) => { setKind(e.target.value as Exclude<McpUpstreamKind, 'web'>); setPreview(null); }} className={input} >
             <option value="mcp-stdio">stdio command</option>
             <option value="mcp-http">http URL</option>
             <option value="rest">REST API (OpenAPI)</option>

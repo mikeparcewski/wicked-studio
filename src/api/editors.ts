@@ -5,13 +5,17 @@ import { PROTOCOL_VERSION } from '../editors/protocol.js';
 import type { EditorGrantsResponse, EditorView, ListEditorsResponse } from 'wicked-crew-api-types';
 export type { EditorGrantsResponse, EditorView, ListEditorsResponse };
 
-/** Additive CS7 fields, until the published wire package carries them. Read as unknown at the boundary. */
-export interface RunPluginView extends EditorView {
+/**
+ * A registry row as the run-plugin reader takes it. The contract types the CS7 fields (`inline`, `observe`,
+ * `granted_topics`, `run_panels`), but a pack writes them, so the reader keeps them unknown and validates each one
+ * (store/runPlugins.ts). Every `EditorView` is a `RunPluginView`.
+ */
+export type RunPluginView = Omit<EditorView, 'inline' | 'observe' | 'granted_topics' | 'run_panels'> & {
   inline?: unknown;
   observe?: unknown;
   granted_topics?: unknown;
   run_panels?: unknown;
-}
+};
 
 type RegistryChange = { editors: EditorView[]; none?: true } | { id: string; enabled: boolean } | { removed: string };
 const registryListeners = new Set<(change: RegistryChange) => void>();

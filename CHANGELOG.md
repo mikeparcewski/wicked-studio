@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+
+- **Pins wicked-crew-api-types 0.205.0** (was 0.197.0): the contract with `McpGhCliState`, `ChatSeatsBody` and
+  `ChatSeatsResponse`, and `WorkUnitRepoChecks.targeted_test`. Studio's own copies that met the published types are
+  gone or narrowed: the run-plugin reader takes the contract's `EditorView` and still validates the pack-written
+  fields itself, and the Add server form's kind excludes `web`, which only the web source's install route writes.
+  Supersedes #1058 (the 0.198.0 move).
+
 ## [0.16.5] — 2026-11-10
 
 Patch: project pages made consistent (operator 2026-11-09). Bundled by crew 0.18.5.
