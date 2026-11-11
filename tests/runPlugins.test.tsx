@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiBase } from '../src/api/client.js';
-import { listEditors, removeEditor, setEditorEnabled, type RunPluginView } from '../src/api/editors.js';
+import { listEditors, removeEditor, setEditorEnabled, type EditorView, type RunPluginView } from '../src/api/editors.js';
 import type { CoreEvent } from '../src/api/types.js';
 import { pluginSections } from '../src/board/runPluginPanels.js';
 import { RunEventFeed, type EventsBatch } from '../src/editors/runEvents.js';
@@ -18,6 +18,8 @@ export const installed: RunPluginView = {
   observe: [{ topic: A, why: 'Measure steps.' }, { topic: B, why: 'Show spending.' }], granted_topics: [A],
   run_panels: [{ slot: 'run.details', id: 'cost', title: 'Cost', order: 15 }],
 };
+/** The store holds the contract's rows; these fixtures carry pack-written fields the reader must validate. */
+const wire = (...rows: RunPluginView[]): EditorView[] => rows as EditorView[];
 const event = (type: string, seq: number): CoreEvent => ({ type, seq, ts: 1, session: 'run-1' }) as CoreEvent;
 
 beforeEach(() => { useEditors.setState({ editors: [], state: 'idle' }); });
@@ -25,12 +27,12 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('installed run plugins', () => {
   it('merges installs, keeps disabled cards but drops their sections, and built-ins win an id clash', () => {
-    useEditors.setState({ editors: [installed, { ...installed, id: RUN_PLUGINS[0]!.id }] });
+    useEditors.setState({ editors: wire(installed, { ...installed, id: RUN_PLUGINS[0]!.id }) });
     expect(useRunPluginStore.getState().active.map((p) => p.id)).toEqual([...RUN_PLUGINS.map((p) => p.id), installed.id]);
     const p = useRunPluginStore.getState().active.at(-1)!;
     expect(p).toMatchObject({ grantedBy: 'install', firstParty: false, permissions: [], enabled: true });
     expect(p.entryUrl).toBe(`${apiBase()}/editors/acme-cost/1.0.0/entry?sha=${installed.sha256}`);
-    useEditors.setState({ editors: [{ ...installed, enabled: false }] });
+    useEditors.setState({ editors: wire({ ...installed, enabled: false }) });
     expect(useRunPluginStore.getState().catalog.at(-1)?.enabled).toBe(false);
     expect(useRunPluginStore.getState().active).toEqual(RUN_PLUGINS);
     expect(mergeRunPlugins([{ ...installed, inline: undefined }])).toEqual(RUN_PLUGINS);
@@ -126,7 +128,7 @@ describe('installed run plugins', () => {
       if (init?.method === 'POST') return new Response(JSON.stringify({ ...installed, enabled: false }));
       return new Promise<Response>((resolve) => { answerList = resolve; });
     }));
-    useEditors.setState({ editors: [installed] });
+    useEditors.setState({ editors: wire(installed) });
     const read = listEditors();
     await act(async () => { await setEditorEnabled(installed.id, false); });
     expect(useRunPluginStore.getState().active.some((p) => p.id === installed.id)).toBe(false);
@@ -173,7 +175,7 @@ describe('installed run plugins', () => {
 
   it('older daemons without the route leave only the built-ins', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"not found"}', { status: 404 })));
-    useEditors.setState({ editors: [installed] });
+    useEditors.setState({ editors: wire(installed) });
     await listEditors();
     await waitFor(() => expect(useRunPluginStore.getState().active).toEqual(RUN_PLUGINS));
   });
