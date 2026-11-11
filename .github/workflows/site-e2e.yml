@@ -5,6 +5,7 @@ on:
     paths:
       - "site/**"
       - ".github/workflows/site-e2e.yml"
+      - ".github/scripts/pw-install.sh"
   workflow_dispatch:
 
 permissions:
