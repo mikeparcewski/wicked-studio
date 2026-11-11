@@ -1,0 +1,27 @@
+# The wicked product self-test (wicked-ci `selftest/`, profile `pr`) on this pull request: this repo packed from the
+# PR's merge commit, crew, studio and garden from their main, one hermetic daemon with stub seats, the API steps and
+# the studio journeys (J1-J5), screenshots and traces in the artifact. See wicked-ci selftest/README.md.
+#
+# ADVISORY for now: the job stays green and its real verdict is the warning annotation and the job summary, so a flake
+# can't block a merge while the flake rate is measured. It is not a required check. Bump the pin (both places) with
+# wicked-ci.
+name: selftest
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore: ['docs/**', 'site/**', '.product/**', '**/*.md']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selftest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  selftest:
+    uses: mikeparcewski/wicked-ci/.github/workflows/selftest.yml@40d9ec2c4e2d18ee07dced50e5595277e99b8a31
+    with:
+      under_test: studio
+      wicked_ci_ref: 40d9ec2c4e2d18ee07dced50e5595277e99b8a31
