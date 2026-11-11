@@ -182,15 +182,15 @@ describe('frozen sign-in refusals and next actions', () => {
     expect(result).toHaveTextContent('It gave no reason.');
     expect(result).toHaveTextContent('Open Nerve Center → Infra');
   });
-  it('a cluster refusal never shows a credential or an escaped home path from the cluster’s diagnostic', async () => {
+  it('a cluster refusal masks escaped home paths and keeps the field its fix names', async () => {
     const escaped = ['C:', 'Users', 'alice', 'config'].join('\\\\');
-    refusal = { status: 503, body: { code: 'policy_refused', error: `The cluster refused the Claude Code sign-in pod. The cluster said: webhook at ${escaped} token=hunter2hunter2 Authorization: Bearer abc.def.ghi ghp_abcdefghijklmnopqrstuvwxyz123456. Fix what it names, then try again.` } };
+    refusal = { status: 503, body: { code: 'policy_refused', error: `The cluster refused the Claude Code sign-in pod. The cluster said: webhook at ${escaped}: set securityContext.allowPrivilegeEscalation=false. Fix what it names, then try again.` } };
     page('?fix=claude');
     fireEvent.click(await screen.findByTestId('agents-signin'));
     const result = await screen.findByTestId('agents-check-result');
     await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
-    for (const leak of ['alice', 'hunter2hunter2', 'abc.def.ghi', 'ghp_abcdefghijklmnopqrstuvwxyz123456']) expect(result.textContent).not.toContain(leak);
-    expect(result).toHaveTextContent('The cluster refused the Claude Code sign-in pod.');
+    expect(result.textContent).not.toContain('alice');
+    expect(result).toHaveTextContent('securityContext.allowPrivilegeEscalation=false');
   });
   it('a coded refusal without crew sentence still gets studio’s action', async () => {
     refusal = { status: 502, body: { code: 'container_runtime_down', error: '' } };

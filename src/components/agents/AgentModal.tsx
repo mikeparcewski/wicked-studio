@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { helperNotInstalled, helperRuntimeDown, issueCopy, SEVERITY_WORD, type CopyCommand } from '../../board/agentsCopy.js';
-import { authOf, commandDisplay, countWords, maskIds, rowForKey, type AgentIssue, type AgentRow } from '../../board/agentsModel.js';
+import { authOf, commandDisplay, countWords, rowForKey, type AgentIssue, type AgentRow } from '../../board/agentsModel.js';
 import { healthText } from '../../board/rowHeadline.js';
 import { hookOffers, SignInNotCompleted, useAgentLogin, useAuthOps } from './agentLogin.js';
 import { holdInert, useLoginCover } from './inertHold.js';
@@ -100,9 +100,10 @@ function signInFailure(name: string, error: unknown): { lead: string; tone: 'fai
     ? error.body as Record<string, unknown> : {};
   const raw = error instanceof ApiError ? error.wire : error instanceof Error ? error.message : '';
   const code = body['code'];
-  // Crew's sentence can carry the cluster's own diagnostic (a policy refusal): no home folder (JSON-escaped and
-  // behind a URL scheme too) and nothing credential-shaped reaches the page.
-  const line = typeof body['error'] === 'string' ? maskIds(healthText(body['error'])) : 'Try again.';
+  // Crew's sentence can carry the cluster's own diagnostic (a policy refusal). Crew redacts credentials where it
+  // builds the sentence; studio masks every home folder (JSON-escaped and behind a URL scheme too) and keeps the
+  // words whole: a Kubernetes field the fix names (`allowPrivilegeEscalation`) must stay readable.
+  const line = typeof body['error'] === 'string' ? healthText(body['error']) : 'Try again.';
   // Crew's sentence already says what to do (fr-crew: "… Start Docker Desktop or Rancher Desktop, then try again."): the
   // action line is studio's only when crew sent no sentence of its own.
   const crewSaid = typeof body['error'] === 'string' && body['error'].trim() !== '';
