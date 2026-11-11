@@ -269,6 +269,21 @@ describe('against a crew with the system snapshot', () => {
     expect(screen.queryByTestId('nc-attention')).toBeNull();
   });
 
+  it('Infra: the k8s runner\'s Kubernetes cluster row renders like every row (down with its remedy, then ok)', async () => {
+    const cluster = { key: 'cluster', label: 'Kubernetes cluster', state: 'down' as const, reason: "Kubernetes isn't answering (context rancher-desktop), so governed seats cannot start", remedy: 'Start Rancher Desktop (or Docker Desktop) with Kubernetes on, then re-check.', checkedAt: iso(NOW), durationMs: 900, details: { context: 'rancher-desktop', reachable: false } };
+    systemAnswer = () => Promise.resolve({ ...SNAPSHOT, infra: [...SNAPSHOT.infra, cluster] });
+    renderBoth(vi.fn(), '?tab=infra');
+    const row = (await screen.findAllByTestId('nc-infra')).find((r) => r.getAttribute('data-key') === 'cluster')!;
+    expect(row).toHaveAttribute('data-state', 'down');
+    expect(row).toHaveTextContent('Kubernetes cluster');
+    expect(row).toHaveTextContent("Kubernetes isn't answering");
+    expect(within(row).getByTestId('nc-infra-remedy')).toHaveTextContent('with Kubernetes on');
+    systemAnswer = () => Promise.resolve({ ...SNAPSHOT, infra: [...SNAPSHOT.infra, { ...cluster, state: 'ok' as const, reason: 'ready (context rancher-desktop): 1 run namespace', remedy: null }] });
+    fireEvent.click(within(row).getByTestId('nc-infra-recheck'));
+    await waitFor(() => expect(screen.getAllByTestId('nc-infra').find((r) => r.getAttribute('data-key') === 'cluster')).toHaveAttribute('data-state', 'ok'));
+    expect(within(screen.getAllByTestId('nc-infra').find((r) => r.getAttribute('data-key') === 'cluster')!).queryByTestId('nc-infra-remedy')).toBeNull();
+  });
+
   it('the landing is decided once: All the details opens Attention on the address, and it stays there when attention empties', async () => {
     const navigate = renderBoth();
     await screen.findAllByTestId('nc-slow');

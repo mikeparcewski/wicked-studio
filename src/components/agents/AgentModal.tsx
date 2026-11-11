@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { helperNotInstalled, helperRuntimeDown, issueCopy, SEVERITY_WORD, type CopyCommand } from '../../board/agentsCopy.js';
 import { authOf, commandDisplay, countWords, rowForKey, type AgentIssue, type AgentRow } from '../../board/agentsModel.js';
+import { healthText } from '../../board/rowHeadline.js';
 import { hookOffers, SignInNotCompleted, useAgentLogin, useAuthOps } from './agentLogin.js';
 import { holdInert, useLoginCover } from './inertHold.js';
 import type { RosterSeat } from '../../api/types.js';
@@ -99,7 +100,10 @@ function signInFailure(name: string, error: unknown): { lead: string; tone: 'fai
     ? error.body as Record<string, unknown> : {};
   const raw = error instanceof ApiError ? error.wire : error instanceof Error ? error.message : '';
   const code = body['code'];
-  const line = typeof body['error'] === 'string' ? displayText(body['error']) : 'Try again.';
+  // Crew's sentence can carry the cluster's own diagnostic (a policy refusal). Crew redacts credentials where it
+  // builds the sentence; studio masks every home folder (JSON-escaped and behind a URL scheme too) and keeps the
+  // words whole: a Kubernetes field the fix names (`allowPrivilegeEscalation`) must stay readable.
+  const line = typeof body['error'] === 'string' ? healthText(body['error']) : 'Try again.';
   // Crew's sentence already says what to do (fr-crew: "… Start Docker Desktop or Rancher Desktop, then try again."): the
   // action line is studio's only when crew sent no sentence of its own.
   const crewSaid = typeof body['error'] === 'string' && body['error'].trim() !== '';
@@ -108,6 +112,17 @@ function signInFailure(name: string, error: unknown): { lead: string; tone: 'fai
     return result('Docker or Rancher needs to be started.', 'Start Docker Desktop or Rancher Desktop, then try again.',
       'The container runtime isn’t running. Start Docker Desktop or Rancher Desktop, then try again.');
   }
+  // The k8s runner's refusals (crew maps wicked-core's kinds; its sentence names the repair).
+  if (code === 'cluster_unreachable') return result('Kubernetes needs to be started.', 'Start Rancher Desktop or Docker Desktop with Kubernetes on, then try again.', line);
+  if (code === 'no_cluster' || code === 'controller_missing') return result('This computer’s cluster isn’t set up for helpers yet.', 'Run wicked-core cluster install --admin-context <your cluster context> --home <this daemon’s state home>, then try again.', line);
+  if (code === 'pids_unlimited') return result('The cluster needs a process limit first.', 'Set the kubelet’s pod-max-pids to 4096, then try again.', line);
+  if (code === 'policy_refused') {
+    return crewSaid ? result('The cluster refused the sign-in.', 'Fix what it names, then try again.', line)
+      : { lead: 'The cluster refused the sign-in.', tone: 'fail', line: 'It gave no reason.', action: 'Open Nerve Center → Infra and check the Kubernetes cluster, then try again.' };
+  }
+  if (code === 'admission_pending') return result('The cluster is full right now.', 'Try again when other work ends.', line);
+  if (code === 'image_unavailable') return result(`${name}’s image isn’t in the cluster yet.`, `Build ${name}’s image, then try again.`, line);
+  if (code === 'exec_stream_lost') return result('The sign-in lost its connection.', 'Try again.', line);
   if (code === 'cli_not_installed' || code === undefined && /is not installed on this host/i.test(raw)) {
     return result(`${name} isn’t installed on this computer.`, `Install ${name} on this computer, then try again.`,
       `${name} signs in with its own program on this computer, and it isn’t installed here. Install ${name} on this computer, then try again.`);

@@ -128,6 +128,15 @@ describe('saved setup decisions', () => {
 describe('frozen sign-in refusals and next actions', () => {
   it.each([
     [502, 'container_runtime_down', 'Docker or Rancher needs to be started.', 'Start Docker Desktop or Rancher Desktop'],
+    // The k8s runner's refusal kinds (crew maps wicked-core's FloorUnarmed kinds to these codes).
+    [503, 'cluster_unreachable', 'Kubernetes needs to be started.', 'Start Rancher Desktop or Docker Desktop with Kubernetes on'],
+    [503, 'no_cluster', 'This computer’s cluster isn’t set up for helpers yet.', 'Run wicked-core cluster install'],
+    [503, 'controller_missing', 'This computer’s cluster isn’t set up for helpers yet.', 'Run wicked-core cluster install'],
+    [503, 'pids_unlimited', 'The cluster needs a process limit first.', 'pod-max-pids'],
+    [503, 'policy_refused', 'The cluster refused the sign-in.', 'Fix what it names'],
+    [503, 'admission_pending', 'The cluster is full right now.', 'Try again when other work ends'],
+    [503, 'image_unavailable', 'Claude Code’s image isn’t in the cluster yet.', 'Build Claude Code’s image'],
+    [503, 'exec_stream_lost', 'The sign-in lost its connection.', 'Try signing in'],
     [502, 'cli_not_installed', 'Claude Code isn’t installed on this computer.', 'Install Claude Code on this computer'],
     [409, 'signin_already_open', 'Claude Code’s sign-in is already open.', 'Finish the open sign-in'],
     [409, 'signin_superseded', 'Another sign-in replaced this one.', 'Continue with the newer sign-in'],
@@ -147,6 +156,41 @@ describe('frozen sign-in refusals and next actions', () => {
     else expect(result).not.toHaveTextContent(String(action));
     expect(result.textContent).not.toContain('Technical details');
     expect(result).not.toHaveTextContent('alice');
+  });
+  it('a coded cluster refusal without crew sentence still gets studio’s action (k8s runner)', async () => {
+    refusal = { status: 503, body: { code: 'cluster_unreachable', error: '' } };
+    page('?fix=claude');
+    fireEvent.click(await screen.findByTestId('agents-signin'));
+    const result = await screen.findByTestId('agents-check-result');
+    await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
+    expect(result).toHaveTextContent('Start Rancher Desktop or Docker Desktop with Kubernetes on, then try again.');
+  });
+  it.each([['no_cluster'], ['controller_missing']])('a coded %s without crew sentence gives the whole install command', async (code) => {
+    refusal = { status: 503, body: { code, error: '' } };
+    page('?fix=claude');
+    fireEvent.click(await screen.findByTestId('agents-signin'));
+    const result = await screen.findByTestId('agents-check-result');
+    await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
+    expect(result).toHaveTextContent('wicked-core cluster install --admin-context <your cluster context> --home <this daemon’s state home>');
+  });
+  it.each([[''], ['   '], [undefined]])('a policy refusal with no sentence (%j) says so and where to look', async (error) => {
+    refusal = { status: 503, body: { code: 'policy_refused', ...(error !== undefined ? { error } : {}) } };
+    page('?fix=claude');
+    fireEvent.click(await screen.findByTestId('agents-signin'));
+    const result = await screen.findByTestId('agents-check-result');
+    await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
+    expect(result).toHaveTextContent('It gave no reason.');
+    expect(result).toHaveTextContent('Open Nerve Center → Infra');
+  });
+  it('a cluster refusal masks escaped home paths and keeps the field its fix names', async () => {
+    const escaped = ['C:', 'Users', 'alice', 'config'].join('\\\\');
+    refusal = { status: 503, body: { code: 'policy_refused', error: `The cluster refused the Claude Code sign-in pod. The cluster said: webhook at ${escaped}: set securityContext.allowPrivilegeEscalation=false. Fix what it names, then try again.` } };
+    page('?fix=claude');
+    fireEvent.click(await screen.findByTestId('agents-signin'));
+    const result = await screen.findByTestId('agents-check-result');
+    await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
+    expect(result.textContent).not.toContain('alice');
+    expect(result).toHaveTextContent('securityContext.allowPrivilegeEscalation=false');
   });
   it('a coded refusal without crew sentence still gets studio’s action', async () => {
     refusal = { status: 502, body: { code: 'container_runtime_down', error: '' } };
@@ -213,6 +257,17 @@ describe('unfinished sign-in cancellation', () => {
 });
 
 describe('helper sign-in wording and stopped Docker', () => {
+  it('shows crew’s Kubernetes message and the Kubernetes start action (k8s runner)', async () => {
+    roster = [helper({ auth: 'unknown', signed_in: null, health: { status: 'inactive', since: new Date().toISOString(), message: "Kubernetes isn't running" }, council_ineligible_reason: "Kubernetes isn't running", issues: [] })];
+    page('?fix=claude');
+    const row = await screen.findByTestId('agents-row');
+    expect(row).toHaveTextContent("Kubernetes isn't running");
+    expect(within(row).getByRole('button', { name: 'Start Kubernetes' })).toBeInTheDocument();
+    expect(row).not.toHaveTextContent(/Not checked|signed out|Not signed in/i);
+    const modal = await screen.findByTestId('agents-modal');
+    expect(modal).toHaveTextContent('Start Rancher Desktop or Docker Desktop with Kubernetes on');
+    expect(modal).not.toHaveTextContent(/Docker or Rancher is stopped|Sign-in couldn’t be read/i);
+  });
   it('describes both possible sign-in paths truthfully by default, including the terminal layer', async () => {
     page('?fix=claude');
     const modal = await screen.findByTestId('agents-modal');

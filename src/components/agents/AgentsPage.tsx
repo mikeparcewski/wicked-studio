@@ -5,7 +5,7 @@ import { readErrorKind } from '../../api/errors.js';
 import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
 import { agentTiles, authOf, fixLabel, readyNote, type AgentRow, type Cell } from '../../board/agentsModel.js';
 import { agentStatus, agentsSentence, agentWeekLine } from '../../board/calmAgents.js';
-import { helperRuntimeDown } from '../../board/agentsCopy.js';
+import { helperRuntimeDown, runtimeStart } from '../../board/agentsCopy.js';
 import { relTime } from '../../board/relTime.js';
 import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
@@ -64,7 +64,7 @@ function AgentLine({ r, open }: { r: AgentRow; open: (key: string) => void }): R
       sub={sub}
       meta={status.move === 'signin' ? undefined : <span data-testid="agents-status">{status.word}</span>} metaTone={TONE[status.tone]}
       onOpen={() => open(r.key)} openTestId={/* testid */ 'agents-open'} openData={{ agent: r.key }} openLabel={`Open ${r.name}: new work, sign-in and sign-out`}
-      trailing={runtime !== null ? <CalmButton onClick={() => open(r.key)}>Start Docker or Rancher</CalmButton> : status.move === 'signin'
+      trailing={runtime !== null ? <CalmButton onClick={() => open(r.key)}>{runtimeStart(runtime).button}</CalmButton> : status.move === 'signin'
         ? <button type="button" data-testid="agents-fix" data-agent={r.key} data-tone={fix?.tone ?? 'fail'} className="wk-calm-btn wk-calm-btn--link"
             aria-label={`Sign in to ${r.name}`} onClick={() => open(r.key)}>Sign in</button>
         // A problem always shows; a warning only beside a ready word (a bench's word already says what is wrong).
