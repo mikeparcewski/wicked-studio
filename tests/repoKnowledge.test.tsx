@@ -83,6 +83,27 @@ describe('what we know (pure)', () => {
     expect(knowledgeSentence(Object.values(m))).toContain('Requirements graph build 3 · 38 domains');
   });
 
+  it('leads with weighted coverage while tone and meter follow the stated minimum', () => {
+    const coverage = { ...COV, realPct: 86, weightedPct: 62 };
+    const mark = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'ok', coverage, build: null } }), NOW)).reqs!;
+    expect(mark).toMatchObject({ value: '62% weighted · 86% stated', tone: 'ok', meter: { pct: 86, min: 80 } });
+    expect(mark.title).toBe('Requirements: 62% confidence-weighted, 86% stated (3,476 of 4,333), minimum 80%, 836 placeholders');
+    const share = { ...coverage, realPct: 54 };
+    const unbuilt = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'none', share } }), NOW)).reqs!;
+    expect(unbuilt).toMatchObject({ value: '62% weighted · 54% stated', tone: 'warn', meter: { pct: 54, min: 80 } });
+    expect(unbuilt.title).toContain('; not built into a graph yet');
+  });
+
+  it('shows weighted shares rounded to zero without hiding stated requirements', () => {
+    const coverage = { ...COV, realPct: 0, weightedPct: 0 };
+    const mark = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'ok', coverage, build: null } }), NOW)).reqs!;
+    expect(mark.value).toBe('<1% weighted · <1% stated');
+    expect(mark.title).toContain('Requirements: <1% confidence-weighted, <1% stated');
+    const empty = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'none', share: { ...coverage, real: 0 } } }), NOW)).reqs!;
+    // Nothing extracted yet stays "none yet", weighted share or not.
+    expect(empty).toMatchObject({ value: 'none yet', tone: 'none' });
+  });
+
   it('below the minimum, a graph behind, and none extracted yet', () => {
     const below = { ...COV, realPct: 54, real: 2340 };
     const m = byId(knowledgeMarks(repo('crew'), RUNS, known({ reqs: { state: 'ok', coverage: below, build: { generation: 2, coverage: null, behind: true } } }), NOW));
