@@ -127,3 +127,32 @@ describe('core#820 — the row', () => {
     expect(vi.mocked(client.api.confirmGate).mock.calls[0]![1]).toMatchObject({ approve: true, action: 'consent:operator', ord: 9 });
   });
 });
+
+// A consent gate without the install file lists (no `writeTargets`) still draws every answer it lists, and is never
+// left with nothing to answer.
+describe('a consent gate without install file lists', () => {
+  const bare = (choices?: string[], frame?: Record<string, unknown>) => {
+    const g: OpenGate = { runId: RUN, ord: 9, prompt: PROMPT, lifecycle: 'open', receivedAt: NOW, gateKind: 'consent', ...(choices !== undefined ? { choices } : {}) };
+    const events = frame === undefined ? [] : [{ type: 'awaitingHuman', session: RUN, ord: 9, prompt: PROMPT, gateKind: 'consent', ...frame } as unknown as CoreEvent];
+    return sessionGateChoices({ runId: RUN, gate: g, units: UNITS, events, pool: [], roster: null })!;
+  };
+
+  it('offering consent:worker and consent:operator: both are drawn, with the gate\'s labels, and send their action', () => {
+    const m = bare(['consent:worker', 'consent:operator', 'reject'], { choices: ['consent:worker', 'consent:operator', 'reject'], choiceLabels: { 'consent:worker': 'Install for workers' } });
+    expect(m.choices.map((c) => [c.label, c.decision])).toEqual([
+      ['Install for workers', { approve: true, action: 'consent:worker' }],
+      ['operator', { approve: true, action: 'consent:operator' }],
+      ['Decline', { approve: false }],
+    ]);
+  });
+
+  it('offering only approve / reject: Approve / Decline', () => {
+    expect(bare(['approve', 'reject']).choices.map((c) => [c.label, c.decision])).toEqual([['Approve', { approve: true }], ['Decline', { approve: false }]]);
+    expect(bare().choices.map((c) => c.label)).toEqual(['Approve', 'Decline']);
+  });
+
+  it('offering nothing that maps: still Approve / Decline, never zero choices', () => {
+    expect(bare(['mystery']).choices.map((c) => c.label)).toEqual(['Approve', 'Decline']);
+    expect(bare([]).choices.map((c) => c.label)).toEqual(['Approve', 'Decline']);
+  });
+});

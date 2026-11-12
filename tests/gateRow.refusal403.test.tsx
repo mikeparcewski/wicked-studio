@@ -212,3 +212,32 @@ describe('studio#920 — the engine\'s [exit N] is not the reason; a preflight c
     expect(many.changed!.at(-1)).toBe('packages/crew/src/generated/file-29.ts');
   });
 });
+
+// studio#1102: the arm is read from the gate's own action list, not from the wording around it. The after-lift
+// prompt words the retry differently; the card still offers the judgment. Each variant is synthetic (the
+// incident's prompt was not captured) but keeps the engine's list shape: options start, then `(action ...)`.
+describe('a refused hand-over: the card\'s actions equal the gate\'s action list (studio#1102)', () => {
+  const START = 'Approve to re-run the deliver phase now';
+  const wordings: Record<string, string> = {
+    'the retry explained as before': '(the engine re-lifts and re-verifies first; no second deliver gate)',
+    'no retry explanation': '',
+    'the retry explained after a lift': '(the engine re-checks the lifted tree)',
+  };
+  for (const [name, retry] of Object.entries(wordings)) {
+    it(`offers the judgment when ${name}`, () => {
+      const prompt = `The deliver phase refused: deliver: the lift changed the tree, and the repository's own checks FAILED on it: test: exit 1. ${START} ${retry}, ${OFFER} or reject to cancel the run and keep the worktree.`;
+      expect(offersDeliverFloorOverride(prompt)).toBe(true);
+      const m = sessionGateChoices({ runId: RUN, gate: gate(prompt), units: UNITS, events: [], pool: [], roster: null })!;
+      expect(m.choices.map((c) => c.key)).toEqual(['retry', FLOOR_OVERRIDE_KEY, 'stop']);
+      expect(m.choices[1]!.needsNote).toBe(true);
+      expect(m.choices[1]!.decision).toEqual({ approve: true, action: 'operator_judgment' });
+    });
+  }
+
+  it('offers nothing the list does not name', () => {
+    for (const p of [REMOTE_PROMPT, IDENTITY_PROMPT]) {
+      const m = sessionGateChoices({ runId: RUN, gate: gate(p), units: UNITS, events: [], pool: [], roster: null })!;
+      expect(m.choices.map((c) => c.key)).toEqual(['retry', 'stop']);
+    }
+  });
+});

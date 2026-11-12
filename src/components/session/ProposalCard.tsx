@@ -1,3 +1,5 @@
+import { gateOffers, offerActions, OFFER_APPROVE, OFFER_REJECT } from '../../board/gateOffers.js';
+import { useGateSkipQe } from '../../hooks/useGateSkipQe.js';
 import { SKIP_QE_ACTION, SKIP_QE_CONSEQUENCE, SKIP_QE_SEND } from '../../board/qeSkip.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { TechDetails } from '../ui/TechDetails.js';
@@ -146,6 +148,11 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? (handedOver ? 'deliver' : null), ask, deliverFailure: deliverFailure === null ? null : showText(deliverFailure) });
   // Crew refuses this delivery (QE acceptance required, not passed): Deliver is not offered as if it works.
   const deliverRefused = card?.kind === 'deliver' && accept?.blocksDeliver === true;
+  // studio#1102: the answers this card draws are the gate's own list — its `choices` and, on a hand-over QE refused,
+  // crew's `skipQe` offer (kept on the gate when it was read, else read now) — never a template per card kind.
+  // What stays here is wording, and the client-side moves that answer nothing (Run QE again, Not now, Edit, Drop).
+  const readSkipQe = useGateSkipQe(runId, gateInstance(gate), gate?.ord, deliverRefused && gate !== undefined && gate.skipQe === undefined);
+  const offered = new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices, skipQe: gate.skipQe ?? readSkipQe })));
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
@@ -303,11 +310,11 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     ways.push({ id: 'qe-again', token: 'qe-again', label: 'Run QE again', consequence: rerun.offer.consequence, recommended: true, testid: 'session-proposal-qe-again',
       ...(rerun.state.kind === 'sending' ? { disabled: 'Starting it again…' } : {}), run: () => { void rerun.rerun(); } });
   }
-  if (deliverRefused) {
+  if (offered.has(SKIP_QE_ACTION)) {
     ways.push({ id: 'skip-qe', token: SKIP_QE_ACTION, label: 'Skip QE with a reason…', consequence: SKIP_QE_CONSEQUENCE, needsReason: true, testid: 'session-proposal-skip-qe',
-      ...(rerun.offer === null ? { recommended: true } : {}), run: (r) => skipQe(r ?? '') });
+      ...(rerun.offer === null && deliverRefused ? { recommended: true } : {}), run: (r) => skipQe(r ?? '') });
   }
-  ways.push({
+  if (offered.has(OFFER_APPROVE)) ways.push({
     id: 'go', token: 'approve', label: draft !== null ? 'Approve with these changes' : card.act, testid: deliverRefused ? 'session-proposal-go' : 'session-proposal-option',
     consequence: card.kind === 'deliver'
       ? `${card.why ?? 'Hands the work over.'} You confirm once more before it leaves studio.`
@@ -338,7 +345,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // (mockup learn-and-panels h: "Don't start") A plan gate's own reject arm is a card too: the job stops before anything
   // is built. The ask path's End and the hand-over's Stop the run are the card's own words.
   const endLabel = card.end ?? (card.kind === 'plan' && ask === null && gate !== undefined ? PLAN_STOP : undefined);
-  if (endLabel !== undefined) {
+  if (endLabel !== undefined && offered.has(OFFER_REJECT)) {
     ways.push({ id: 'end', token: 'reject', label: endLabel, tone: 'danger', needsReason: true, testid: 'session-proposal-end',
       consequence: card.kind === 'deliver' ? 'The job stops here; nothing is pushed.'
         : ask === null ? 'The job stops before anything is built; nothing changes in the repository.' : 'The conversation ends; the helpers stand down.',
