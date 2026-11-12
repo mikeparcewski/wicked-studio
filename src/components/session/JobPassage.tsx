@@ -549,7 +549,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           {textQuestion?.input !== undefined && (
             // Keyed by the lineage and the input it fills, so a re-resolution of the same question keeps what was typed
             // (review r1); disabled while a change or a Start/Not now of this job is in flight.
-            <QuestionInput key={`${lineage.lineage}:${textQuestion.input.edit}`} label={textQuestion.input.label}
+            <QuestionInput key={`${lineage.lineage}:${textQuestion.input.edit}`} label={textQuestion.input.label} target={pt}
               disabled={v.tokensHeld || local.deciding[lineage.lineage] === true}
               onAnswer={(words) => {
                 const st = useJobLocal.getState();
@@ -916,20 +916,28 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
   );
 }
 
-/** A missing text input with no choices: only an explicit answer revises the job. */
-function QuestionInput({ label, disabled, onAnswer }: { label: string; disabled: boolean; onAnswer: (words: string) => void }): React.ReactElement {
+/** A missing text input with no choices: only an explicit answer revises the job. The words are sent only for the version
+ *  of the job they were typed against (`target`): when the job changed meanwhile, the press says so and the next press
+ *  sends (review r2). */
+function QuestionInput({ label, target, disabled, onAnswer }: { label: string; target: string; disabled: boolean; onAnswer: (words: string) => void }): React.ReactElement {
   const [words, setWords] = useState('');
+  const [typedFor, setTypedFor] = useState(target);
+  const [changed, setChanged] = useState(false);
   const text = words.trim();
   return (
     <form className="wk-pass-sub" onSubmit={(e) => {
       e.preventDefault();
-      if (!disabled && text !== '') onAnswer(text);
+      if (disabled || text === '') return;
+      if (typedFor !== target) { setTypedFor(target); setChanged(true); return; }
+      setChanged(false);
+      onAnswer(text);
     }}>
       <label className="wk-field-label">
         {label}
         <input type="text" data-testid="job-passage-question-input" className="wk-field" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '4px var(--control-px)' }}
-          value={words} disabled={disabled} onChange={(e) => setWords(e.target.value)} />
+          value={words} disabled={disabled} onChange={(e) => { setWords(e.target.value); setTypedFor(target); setChanged(false); }} />
       </label>
+      {changed && <p data-testid="job-passage-question-changed" role="status" className="wk-pass-grey">This job changed while you typed. Check your answer and press Answer again.</p>}
       <button type="submit" data-testid="job-passage-question-answer" className="wk-btn wk-btn--primary wk-btn--sm" disabled={disabled || text === ''}>Answer</button>
     </form>
   );

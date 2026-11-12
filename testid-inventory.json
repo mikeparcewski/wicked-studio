@@ -8648,6 +8648,12 @@
       ]
     },
     {
+      "testId": "job-passage-question-changed",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-question-input",
       "files": [
         "src/components/session/JobPassage.tsx"

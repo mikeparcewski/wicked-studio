@@ -893,6 +893,24 @@ describe('choice-less text questions (studio#1134)', () => {
     expect(posts).toEqual([]);
   });
 
+  it('review r2: words typed against one version are not sent for a newer one without a second press', async () => {
+    show();
+    const field = await screen.findByTestId('job-passage-question-input');
+    fireEvent.change(field, { target: { value: 'http://127.0.0.1:4319/' } });
+    // A newer version of the job arrives with the same question (crew re-resolved it) while the words sit in the field.
+    const newer = jobProposal({ pid: `${CHAT}:t2`, turnId: 't2', revises: `${CHAT}:t1`, what: { ...asking().what, label: 'Changed job' },
+      question: asking().question! });
+    await frame({ at: T0 + 3, turnId: 't2', kind: 'proposal', proposal: newer });
+    await waitFor(() => expect(screen.getByTestId('job-passage-question-input')).toBeTruthy());
+    expect((screen.getByTestId('job-passage-question-input') as HTMLInputElement).value).toBe('http://127.0.0.1:4319/');
+    fireEvent.click(screen.getByTestId('job-passage-question-answer'));
+    expect(await screen.findByTestId('job-passage-question-changed')).toBeTruthy();
+    expect(posts).toEqual([]);
+    fireEvent.click(screen.getByTestId('job-passage-question-answer'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({ body: { revises: `${CHAT}:t2`, edits: { inputs: { url: { kind: 'text', value: 'http://127.0.0.1:4319/' } } } } });
+  });
+
   it('submits the field with Enter', async () => {
     const user = userEvent.setup();
     show();
