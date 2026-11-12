@@ -39,10 +39,6 @@ export function ChatProposalCards({ chatId, onOpenFull }: { chatId: string; onOp
   const replySeq = useAskThreadStore((s) => s.replySeq[chatId] ?? 0);
   const [tick, setTick] = useState(0);
   const [records, setRecords] = useState<{ chatId: string; records: readonly unknown[] } | null>(null);
-  const pointerMemory = useRef({ chatId, settled: new Set<string>(), heads: new Map<string, string>() });
-  if (pointerMemory.current.chatId !== chatId) {
-    pointerMemory.current = { chatId, settled: new Set(), heads: new Map() };
-  }
 
   // `/ws` replays nothing: what was recorded while the socket was down is read back when it returns.
   const wsStatus = useConnectionStore((s) => s.status);
@@ -84,24 +80,10 @@ export function ChatProposalCards({ chatId, onOpenFull }: { chatId: string; onOp
     const folded = reconcileProposals(chatId, foldChatProposals(records.records));
     const passageOwns = (e: ProposalEntry): boolean => passage.has(e.pid) || (jobsOn && (e.proposal as { sentence?: unknown }).sentence !== undefined);
     const entries = folded.filter((e) => e.state !== 'superseded' && !passageOwns(e));
-    // Only the passage's fold owns pointers. Remember settled/replaced pids across reads so an older transcript
-    // cannot bring them back, including when it contains only the predecessor of a head already seen here.
-    const { settled, heads } = pointerMemory.current;
-    const pointers = lineages.filter((l) => {
-      for (const v of l.versions) {
-        if (v.pid !== l.head.pid) settled.add(v.pid);
-        if (v.proposal.revises != null) settled.add(v.proposal.revises);
-      }
-      if (settled.has(l.head.pid)) return false;
-      const previous = heads.get(l.lineage);
-      if (previous !== undefined && previous !== l.head.pid) settled.add(previous);
-      heads.set(l.lineage, l.head.pid);
-      if (l.state === 'decided' || l.state === 'superseded') {
-        settled.add(l.head.pid);
-        return false;
-      }
-      return true;
-    });
+    // Only the passage's fold owns pointers: one per lineage that is not settled, at its newest head. The transcript is
+    // append-only and each read replaces the last (an answered read's effect is cancelled when a newer one starts), and
+    // a pointer only opens the full chat, where the passage answers it, so no memory across reads is kept here.
+    const pointers = lineages.filter((l) => l.state !== 'decided' && l.state !== 'superseded');
     return { entries, pointers };
   }, [proposalsOn, jobsOn, records, chatId]);
 

@@ -172,7 +172,7 @@ describe('the side chat draws the proposal card', () => {
       expect(screen.queryByTestId('artifact-proposal')).toBeNull();
     });
 
-    it.each(['go', 'not_now'])('decided %s draws no pointer, even after a stale read', async (decision) => {
+    it.each(['go', 'not_now'])('decided %s draws no pointer', async (decision) => {
       useCapabilities.setState({ chatJobProposals: true });
       const p = proposal();
       const open = [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: p }];
@@ -187,38 +187,26 @@ describe('the side chat draws the proposal card', () => {
         result: decision === 'go' ? { runId: 'run-1', artifactRef: null, adopted: false, stub: false } : null }];
       await reread(1);
       expect(screen.queryByTestId('chat-job-pointer')).toBeNull();
-      records = open;
-      await reread(2);
-      expect(screen.queryByTestId('chat-job-pointer')).toBeNull();
       expect(screen.queryByTestId('chat-job-pointer-open')).toBeNull();
     });
 
-    it.each([true, false])('replaces the old head with one pointer for the new head and never brings the old one back (predecessor seen: %s)', async (seenFirst) => {
+    it('a revised job draws one pointer, for its new head', async () => {
       useCapabilities.setState({ chatJobProposals: true });
       const first = proposal();
       const head = jobProposal({ ...first, pid: 'chat-1:t2', turnId: 't2', revises: first.pid, what: { ...first.what, label: 'Revised job' } });
       const open = [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: first }];
-      const revised = [{ at: 4, turnId: 't2', kind: 'proposal', proposal: head }];
-      let records: unknown[] = seenFirst ? open : revised;
+      let records: unknown[] = open;
       getChat.mockImplementation(() => Promise.resolve({ chatId: 'chat-1', seats: ['claude'], messages: records }));
       const user = userEvent.setup();
       dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
       await user.type(screen.getByTestId('assist-input'), 'revise the job');
       await user.click(screen.getByTestId('assist-send'));
-      expect((await screen.findByTestId('chat-job-pointer')).getAttribute('data-pid')).toBe(seenFirst ? first.pid : head.pid);
-      // Even a read containing just the new head retires its predecessor, whether seen here or named by revises.
-      records = revised;
+      expect((await screen.findByTestId('chat-job-pointer')).getAttribute('data-pid')).toBe(first.pid);
+      records = [...open, { at: 4, turnId: 't2', kind: 'proposal', proposal: head }];
       await reread(1);
       expect(screen.getAllByTestId('chat-job-pointer')).toHaveLength(1);
       expect(screen.getByTestId('chat-job-pointer').getAttribute('data-pid')).toBe(head.pid);
       expect(within(screen.getByTestId('chat-job-pointer')).getByText(head.what.label)).toBeTruthy();
-      records = open;
-      await reread(2);
-      expect(screen.queryByTestId('chat-job-pointer')).toBeNull();
-      records = [...open, ...revised];
-      await reread(3);
-      expect(screen.getAllByTestId('chat-job-pointer')).toHaveLength(1);
-      expect(screen.getByTestId('chat-job-pointer').getAttribute('data-pid')).toBe(head.pid);
     });
 
     it('keeps revising visible and returns to open guidance after release', async () => {
