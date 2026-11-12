@@ -215,13 +215,16 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
   const value = useMemo<DockCtx>(() => ({ slot, activeKey, focus, setReply }), [slot, activeKey, focus, setReply]);
   const reply = activeKey !== null ? replies[activeKey] ?? null : null;
   const collapsed = phone && !expanded;
-  // A tap in the folded sheet unfolds it (the primary still acts), so what the tap opens is in view. A DOM listener:
-  // the renderer is portalled in, so React's events bubble to its thread-side parent, never to the slot.
+  // A tap in the folded sheet unfolds it (the primary still acts), so what the tap opens is in view; so does a key that
+  // acts there (picking a card by arrow or digit shows its "If you choose this:"), but not moving focus through it.
+  // DOM listeners: the renderer is portalled in, so React's events bubble to its thread-side parent, never to the slot.
   useEffect(() => {
     if (slot === null || !collapsed) return;
     const unfold = (): void => setExpanded(true);
+    const unfoldOnKey = (e: KeyboardEvent): void => { if (e.key !== 'Tab' && e.key !== 'Shift' && e.key !== 'Escape') unfold(); };
     slot.addEventListener('click', unfold, true);
-    return () => slot.removeEventListener('click', unfold, true);
+    slot.addEventListener('keydown', unfoldOnKey, true);
+    return () => { slot.removeEventListener('click', unfold, true); slot.removeEventListener('keydown', unfoldOnKey, true); };
   }, [slot, collapsed]);
 
   return (

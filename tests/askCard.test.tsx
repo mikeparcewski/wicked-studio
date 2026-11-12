@@ -93,9 +93,13 @@ describe('choose', () => {
       expect(calls).toEqual([]);
       fireEvent.click(opt('phased'));
       expect(calls).toEqual([screen.getByTestId('ask-consequence')]);
+      // The keyboard picks too: an arrow to the next card brings its line into view.
+      fireEvent.keyDown(opt('phased'), { key: 'ArrowUp' });
+      expect(opt('split').getAttribute('aria-checked')).toBe('true');
+      expect(calls.filter((e) => e === screen.getByTestId('ask-consequence'))).toHaveLength(2);
       // An option that opens a reason box scrolls the box, not the line.
       fireEvent.click(opt('stop'));
-      expect(calls.filter((e) => e === screen.getByTestId('ask-consequence'))).toHaveLength(1);
+      expect(calls.filter((e) => e === screen.getByTestId('ask-consequence'))).toHaveLength(2);
     } finally {
       spy.mockRestore();
     }

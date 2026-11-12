@@ -198,6 +198,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
     if (to === undefined) return;
     e.preventDefault();
     setSel(to.id);
+    setPicked((n) => n + 1);
     setMissing(false);
     setEngaged(null);
     focusOption(to.id);
@@ -206,11 +207,20 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
   const tabStop = sel !== null && enabled.some((o) => o.id === sel) ? sel : enabled[0]?.id ?? null;
   const confirmWords = current === null ? 'Choose an option' : reasonCfg?.send ?? confirmLabel?.(current) ?? current.label;
   const consId = `${autoId}-cons`;
-  // A picked card's "If you choose this:" is what the primary will send, so it comes into view, above the dock's sticky
-  // primary (its room is the line's scroll-margin, ask-card.css); a reason box that opens brings itself into view instead.
+  // A card the person picks (a click, or the keyboard) makes its "If you choose this:" what the primary will send, so the
+  // line comes into view; a reason box that opens brings itself into view instead. Never on render or a hover.
   useEffect(() => {
     if (picked === 0 || reasonFor_ !== null) return;
-    document.getElementById(consId)?.scrollIntoView?.({ block: 'nearest' });
+    const cons = document.getElementById(consId);
+    if (cons === null) return;
+    // In the decision dock the primary's row is sticky (ask-card.css) and wraps to any height: the line keeps that
+    // row's room, plus the sheet's bottom padding, below it.
+    const go = cons.parentElement?.querySelector<HTMLElement>(':scope > .wk-ask-go') ?? null;
+    const dock = cons.closest<HTMLElement>('.wk-dock-surface');
+    cons.style.scrollMarginBottom = go !== null && dock !== null && getComputedStyle(go).position === 'sticky'
+      ? `${go.offsetHeight + (parseFloat(getComputedStyle(dock).paddingBottom) || 0) + 8}px`
+      : '';
+    cons.scrollIntoView?.({ block: 'nearest' });
   }, [picked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
