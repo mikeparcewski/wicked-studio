@@ -28,7 +28,7 @@ describe('displayPath — a path under the home directory reads as ~', () => {
     expect(displayPath('C:\\Users\\Jane Doe')).toBe('C:\\Users\\Jane Doe'); // a bare spaced Windows name: left whole, never half-abbreviated
   });
   it('accepts the account names people have: dotted, hyphenated, underscored, digits', () => {
-    expect(displayPath('/Users/michael.parcewski/Projects/x')).toBe('~/Projects/x');
+    expect(displayPath('/Users/alex.rivera/Projects/x')).toBe('~/Projects/x');
     expect(displayPath('/home/ci-runner_2/work')).toBe('~/work');
   });
   it('is the home directory itself, with nothing after it', () => {
@@ -72,7 +72,7 @@ describe('displayText — every home path inside prose reads as ~', () => {
   });
   it('keeps the prose punctuation after a bare home directory', () => {
     expect(displayText('Saved in /home/alice, then exited')).toBe('Saved in ~, then exited');
-    expect(displayText('The state home is /Users/michael.parcewski.')).toBe('The state home is ~.');
+    expect(displayText('The state home is /Users/alex.rivera.')).toBe('The state home is ~.');
     expect(displayText('home: /Users/mika; root: /Users/mika/w')).toBe('home: ~; root: ~/w');
     expect(displayText('under "/Users/mika" today')).toBe('under "~" today');
     expect(displayText('Saved in /home/alice! Then /home/alice? Yes')).toBe('Saved in ~! Then ~? Yes');

@@ -22,7 +22,7 @@
 
 /** One run of name characters: no separator, whitespace, quote, bracket or sentence punctuation. */
 const RUN = String.raw`[^\/\\\s"'\`()\[\]<>,;:.!?]+`;
-/** A POSIX account name: dot-separated runs (`michael.parcewski`, `ci-runner_2`). */
+/** A POSIX account name: dot-separated runs (`alex.rivera`, `ci-runner_2`). */
 const NAME = String.raw`${RUN}(?:\.${RUN})*`;
 /** A Windows account name: runs joined by dots or apostrophes (`O'Neil`, `jane.doe`). */
 const WIN_NAME = String.raw`${RUN}(?:['.]${RUN})*`;
