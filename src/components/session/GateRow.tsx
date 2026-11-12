@@ -319,9 +319,10 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         <ul data-testid="session-gate-rule-causes" className="wk-gate-rule-causes">
           {ruleCauseList.map((c) => (
             <li key={`${c.kind}:${c.text}`} data-testid="session-gate-rule-cause" data-kind={c.kind} className="wk-gate-rule-cause">
-              <b>{c.text}</b> <span className="wk-gate-rule-causes-ids">({c.ruleIds.map((id, i) => (
-                <Fragment key={id}>{i > 0 ? ', ' : ''}<span className="wk-rule-id" title={id}>{id}</span></Fragment>
-              ))})</span>
+              {/* Each id keeps its bracket or comma on its line (a bracket alone at a line end reads as a stray). */}
+              <b>{c.text}</b> <span className="wk-gate-rule-causes-ids">{c.ruleIds.map((id, i) => (
+                <Fragment key={id}>{i > 0 ? ' ' : ''}<span className="wk-rule-id-group">{i === 0 ? '(' : ''}<span className="wk-rule-id" title={id}>{id}</span>{i === c.ruleIds.length - 1 ? ')' : ','}</span></Fragment>
+              ))}</span>
               {c.remedy !== null && <span className="wk-gate-rule-causes-remedy"> {c.remedy}.</span>}
             </li>
           ))}

@@ -118,6 +118,8 @@ describe('the gate card says the rule line under its question', () => {
     expect(ids.map((el) => [el.textContent, el.getAttribute('title')])).toEqual([
       ['SEC-1002', 'SEC-1002'], ['DEV-2004', 'DEV-2004'], ['learn-linked-issue', 'learn-linked-issue'],
     ]);
+    // The bracket and comma stay on the id's line: no "(" alone at a line end.
+    expect([...list.querySelectorAll('.wk-rule-id-group')].map((el) => el.textContent)).toEqual(['(SEC-1002,', 'DEV-2004)', '(learn-linked-issue)']);
     expect(items[0]!.textContent).toBe('The judge could not run: seat containers failed to start (SEC-1002, DEV-2004) Re-check runs the judge again once a seat is free.');
     expect(items[1]!.textContent).toBe('The judge ran but gave no line on this rule (learn-linked-issue) Re-check asks the judge again.');
   });

@@ -1228,6 +1228,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-gate-rule-causes-ids, .wk-gate-rule-causes-remedy { color: var(--ink-muted); }
 /* Keep each id together; an id wider than the card keeps its full text in the title. */
 .wk-rule-id { display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.wk-rule-id-group { white-space: nowrap; }
+.wk-rule-id-group > .wk-rule-id { max-width: calc(100% - 2ch); }
 .wk-assurance-rules-summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; color: var(--ink-body); }
 .wk-assurance-rules-summary::-webkit-details-marker { display: none; }
 .wk-assurance-rules-summary::before { content: '▸'; font-size: var(--text-sm); line-height: 1; color: var(--ink-dim); }
