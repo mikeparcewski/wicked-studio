@@ -282,6 +282,11 @@ describe('ProposalCard submits, for each answer it draws, the decision the gate 
     expect(document.querySelector('[data-option="skip-qe"]')).toBeNull();
     expect(screen.getByTestId('session-proposal-why').textContent).not.toMatch(/skip QE here/i);
   });
+  it('a complex gate read (`options: null`) still draws the plan card\'s approve and reject', async () => {
+    const gate = gateOf({ ord: 1, gateKind: 'plan_approval', choices: null, prompt: 'Approve plan rev 1: build, review.' });
+    expect(tokenOf(await sendWay(gate, false, 'go'))).toBe('approve');
+    expect(tokenOf(await sendWay(gate, false, 'end'))).toBe('reject');
+  });
   it('deliver, QE refused with skipQe: reject still stops the run', async () => {
     const gate = gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP, prompt: 'Approve delivery before unit 3 runs.' });
     expect(tokenOf(await sendWay(gate, true, 'end'))).toBe('reject');

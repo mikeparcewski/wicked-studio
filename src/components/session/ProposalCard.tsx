@@ -154,7 +154,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const readSkipQe = useGateSkipQe(runId, gateInstance(gate), gate?.ord, deliverRefused && gate !== undefined && gate.skipQe === undefined);
   // A stored offer is crew's answer at the time it was read; it is drawn only while QE still refuses this delivery
   // (crew drops `skipQe` once QE passes, and the store keeps the gate it already holds).
-  const offered = new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices, skipQe: deliverRefused ? gate.skipQe ?? readSkipQe : undefined })));
+  // A `null` list (`options: null` on the gate read) marks a COMPLEX gate answered on its card, not a free-text-only
+  // gate: this card has no free-text answer, and the daemon takes approve / reject on every gate (as before #1102).
+  const offered = new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices ?? undefined, skipQe: deliverRefused ? gate.skipQe ?? readSkipQe : undefined })));
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
