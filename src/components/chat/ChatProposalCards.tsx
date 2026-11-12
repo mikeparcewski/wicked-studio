@@ -22,7 +22,7 @@ const RUN_LANDING_GRACE_MS = 2 * 60_000;
  * session thread — so a refine the seat proposed there showed only its prose, and the card (Keep it / Let this change
  * it, Make the change) lived only on the chat's full view (`/s/<chat>`). This is the same card, folded from the same
  * transcript records with the same rules as the full view (`foldChatProposals`, `reconcileProposals`; a job's or a v2
- * create's proposal belongs to its passage there, so an open one points to the full chat here; a superseded card says
+ * create's proposal belongs to its passage there, so an unsettled one points to the full chat here; a superseded card says
  * nothing to act on), answered through `POST /chats/:id/proposals/:pid` like everywhere else.
  *
  * The transcript is read when the block opens, whenever crew says the chat changed (a `chatProposal`, `chatReply`,
@@ -39,6 +39,10 @@ export function ChatProposalCards({ chatId, onOpenFull }: { chatId: string; onOp
   const replySeq = useAskThreadStore((s) => s.replySeq[chatId] ?? 0);
   const [tick, setTick] = useState(0);
   const [records, setRecords] = useState<{ chatId: string; records: readonly unknown[] } | null>(null);
+  const pointerMemory = useRef({ chatId, settled: new Set<string>(), heads: new Map<string, string>() });
+  if (pointerMemory.current.chatId !== chatId) {
+    pointerMemory.current = { chatId, settled: new Set(), heads: new Map() };
+  }
 
   // `/ws` replays nothing: what was recorded while the socket was down is read back when it returns.
   const wsStatus = useConnectionStore((s) => s.status);
@@ -80,13 +84,24 @@ export function ChatProposalCards({ chatId, onOpenFull }: { chatId: string; onOp
     const folded = reconcileProposals(chatId, foldChatProposals(records.records));
     const passageOwns = (e: ProposalEntry): boolean => passage.has(e.pid) || (jobsOn && (e.proposal as { sentence?: unknown }).sentence !== undefined);
     const entries = folded.filter((e) => e.state !== 'superseded' && !passageOwns(e));
-    const byPid = new Map(folded.map((e) => [e.pid, e]));
-    // One pointer per open lineage head; reconciliation keeps a stale read from reopening a settled proposal.
-    // A v2 create outside the lineage fold still gets the same pointer, under the same ownership rule.
-    const pointers = [
-      ...lineages.filter((l) => l.state === 'open' && (byPid.get(l.head.pid)?.state ?? 'open') === 'open').map((l) => l.head),
-      ...folded.filter((e) => e.state === 'open' && !passage.has(e.pid) && passageOwns(e)),
-    ];
+    // Only the passage's fold owns pointers. Remember settled/replaced pids across reads so an older transcript
+    // cannot bring them back, including when it contains only the predecessor of a head already seen here.
+    const { settled, heads } = pointerMemory.current;
+    const pointers = lineages.filter((l) => {
+      for (const v of l.versions) {
+        if (v.pid !== l.head.pid) settled.add(v.pid);
+        if (v.proposal.revises != null) settled.add(v.proposal.revises);
+      }
+      if (settled.has(l.head.pid)) return false;
+      const previous = heads.get(l.lineage);
+      if (previous !== undefined && previous !== l.head.pid) settled.add(previous);
+      heads.set(l.lineage, l.head.pid);
+      if (l.state === 'decided' || l.state === 'superseded') {
+        settled.add(l.head.pid);
+        return false;
+      }
+      return true;
+    });
     return { entries, pointers };
   }, [proposalsOn, jobsOn, records, chatId]);
 
@@ -96,19 +111,28 @@ export function ChatProposalCards({ chatId, onOpenFull }: { chatId: string; onOp
   const seatName = (key: string): string => seatLabel(getCachedRoster()?.find((r) => r.key === key) ?? { key });
   return (
     <div data-testid="chat-proposal-cards" className="wk-dock-proposals">
-      {pointers.map((p) => (
-        <section key={p.pid} data-testid="chat-job-pointer" data-pid={p.pid} className="wk-ask wk-proposal">
-          <p className="wk-ask-q">{p.proposal.what.label}</p>
-          <p className="wk-ask-sub">Proposal from {seatName(p.proposal.seat)} · nothing starts until you choose · Open the full chat to answer it.</p>
-          {onOpenFull !== undefined && (
-            <div>
-              <button type="button" data-testid="chat-job-pointer-open" className="wk-btn wk-btn--primary wk-btn--sm" onClick={onOpenFull}>
-                Open in full chat
-              </button>
-            </div>
-          )}
-        </section>
-      ))}
+      {pointers.map((l) => {
+        const p = l.head;
+        const seat = seatName(p.proposal.seat);
+        const guidance = l.state === 'open'
+          ? 'nothing starts until you choose · Open the full chat to answer it.'
+          : l.state === 'revising'
+            ? 'being updated from your message · Open the full chat to follow it.'
+            : 'starting, or stopped before it started · Open the full chat to see it.';
+        return (
+          <section key={p.pid} data-testid="chat-job-pointer" data-pid={p.pid} className="wk-ask wk-proposal" aria-label={`Proposal from ${seat}: ${p.proposal.what.label}`}>
+            <p className="wk-ask-q">{p.proposal.what.label}</p>
+            <p className="wk-ask-sub" aria-live="polite">Proposal from {seat} · {guidance}</p>
+            {onOpenFull !== undefined && (
+              <div>
+                <button type="button" data-testid="chat-job-pointer-open" className="wk-btn wk-btn--primary wk-btn--sm" onClick={onOpenFull}>
+                  Open in full chat
+                </button>
+              </div>
+            )}
+          </section>
+        );
+      })}
       {entries.map((e) => (
         <ArtifactProposalCard
           key={e.pid}
