@@ -12,6 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.6] — 2026-11-12
+
+Patch: the Kubernetes runner on the Agents page and the Nerve Center (#1107), and gate cards that draw the gate's
+own actions, skip-QE and operator judgment included (#1120, #1102). Pins wicked-crew-api-types 0.205.0 (#1106).
+Bundled by wicked-crew 0.18.11, whose daemon reports the cluster this release reads.
+
 ### Added
 
 - Kubernetes runner (with crew's cluster rows and the wicked-core k8s-swap train): the Agents page reads crew's
@@ -3451,7 +3457,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.5...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.6...HEAD
+[0.16.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.5...v0.16.6
 [0.16.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.4...v0.16.5
 [0.16.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.3...v0.16.4
 [0.16.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.2...v0.16.3
