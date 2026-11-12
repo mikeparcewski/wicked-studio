@@ -413,12 +413,18 @@ describe('the phone sheet, folded (live nit 2026-10-27: act without expanding th
     fireEvent.click(screen.getByTestId('decision-dock-handle'));
     expect(slot.dataset.folded).toBe('true');
     expect(slot.querySelector('[data-dock-option="true"]')).toHaveTextContent('Stop');
+    // A person's pick stands when the host's start changes afterwards (a late gate read never replaces it).
     rerender(content(null));
-    expect(slot.querySelector('[data-dock-option="true"]')).toHaveTextContent('Skip QE with a reason…');
-    expect(within(slot).getByTestId('ask-confirm')).toBeDisabled();
+    expect(slot.querySelector('[data-dock-option="true"]')).toHaveTextContent('Stop');
+    // A fresh card with no start: nothing selected, so the folded sheet shows the enabled recommendation.
+    cleanup();
+    render(content(null));
+    const fresh = screen.getByTestId('decision-dock-slot');
+    expect(fresh.querySelector('[data-dock-option="true"]')).toHaveTextContent('Skip QE with a reason…');
+    expect(within(fresh).getByTestId('ask-confirm')).toBeDisabled();
     expect(foldedAway()).toEqual([
-      within(slot).getByRole('radio', { name: /^Deliver/ }),
-      within(slot).getByRole('radio', { name: 'Stop' }),
+      within(fresh).getByRole('radio', { name: /^Deliver/ }),
+      within(fresh).getByRole('radio', { name: 'Stop' }),
     ]);
   });
 

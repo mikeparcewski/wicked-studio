@@ -185,6 +185,19 @@ describe('choose', () => {
     expect(onAnswer).not.toHaveBeenCalled();
   });
 
+  it('a derived start that arrives after the person picked never replaces their pick (a late gate read)', () => {
+    const onAnswer = vi.fn();
+    const { rerender } = render(<AskCard ask={PAUSE} onAnswer={onAnswer} start="split" />);
+    fireEvent.click(opt('phased'));
+    rerender(<AskCard ask={PAUSE} onAnswer={onAnswer} start="stop" />);
+    expect(opt('phased')).toHaveAttribute('aria-checked', 'true');
+    // Without a pick, a new start still moves the selection.
+    cleanup();
+    const second = render(<AskCard ask={PAUSE} onAnswer={onAnswer} start="split" />);
+    second.rerender(<AskCard ask={PAUSE} onAnswer={onAnswer} start="phased" />);
+    expect(opt('phased')).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('a disabled option stays visible with why, and cannot be chosen', () => {
     const { onAnswer } = renderAsk(PAUSE);
     const frozen = opt('frozen') as HTMLButtonElement;

@@ -137,9 +137,10 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
   useEffect(() => {
     const changedStart = start !== startRef.current;
     startRef.current = start;
-    // An explicit new start is still the host's reset (including null to clear the selection).
-    if (changedStart && start !== undefined) { setSel(initialOption(ask, start)); return; }
+    // A person's own pick is never moved: a host's derived move that arrives after it (a gate read resolving late)
+    // does not replace what they chose. Before a pick, a new start moves the selection (null clears it).
     if (pickedRef.current) return;
+    if (changedStart && start !== undefined) { setSel(initialOption(ask, start)); return; }
     setSel((selected) => options.some((o) => o.id === selected && o.disabled === undefined)
       ? selected : initialOption(ask, start));
   }, [start, ask, options]);
