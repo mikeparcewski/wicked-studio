@@ -19538,6 +19538,18 @@
       ]
     },
     {
+      "testId": "session-gate-rule-cause",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-causes",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-rule-error",
       "files": [
         "src/components/session/GateDepth.tsx"

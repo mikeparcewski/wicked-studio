@@ -748,10 +748,10 @@ describe('(e2e-1105 CJ9) a broken warning the engine marks waivable is skipped w
     expect(mix.notePlaceholder).toBeUndefined();
   });
 
-  it('a waivable broken row beside a disputed one: both are offered, confirm or skip', () => {
+  it('a waivable broken row beside a disputed one: both are offered, skip (nothing waived to confirm)', () => {
     const all = offered(log([{ ...row('learn-linked-issue', 'broken'), waivable: true }, row('POL-2101', 'disputed')]));
     const skip = all.find((c) => c.key === 'skip-rules')!;
-    expect(skip.label).toBe('Confirm or skip 2 rules');
+    expect(skip.label).toBe('Skip 2 rules');
     expect(skip.skipRuleIds).toEqual(['learn-linked-issue', 'POL-2101']);
   });
 });

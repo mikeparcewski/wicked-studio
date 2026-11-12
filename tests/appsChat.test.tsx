@@ -226,13 +226,13 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
   const steps = () => screen.getAllByTestId('app-chat-step').map((s) => s.getAttribute('data-state'));
   afterEach(() => { useGateStore.setState({ gates: {} }); useRunEventStore.setState({ byRun: {} }); resetTurnHoldReads(); });
 
-  it('reads the run\'s trail, then shows the run page\'s gate with Re-check the rules and Confirm or skip; the held review reads waiting, not failed', async () => {
+  it('reads the run\'s trail, then shows the run page\'s gate with Re-check the rules and Skip; the held review reads waiting, not failed', async () => {
     const { calls } = serve(holdTrail);
     useGateStore.setState({ gates: { [RUN]: gate } });
     show(runs);
     expect(steps()).toStrictEqual(['done', 'done', 'now']);
     await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Re-check the rules'));
-    expect(screen.getByTestId('app-chat-gate').textContent).toContain('Confirm or skip learn-accessible');
+    expect(screen.getByTestId('app-chat-gate').textContent).toContain('Skip learn-accessible');
     expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(1);
     // The busy line and the gate's heading say it is a call on a rule, in plain words (not "asks a question", not
     // "The step was escalated").
@@ -295,7 +295,7 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     useRunEventStore.setState({ byRun: { [RUN]: [holdTrail[0]!] } });
     useGateStore.setState({ gates: { [RUN]: gate } });
     const { unmount } = show(bareRuns(undefined));
-    await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Confirm or skip learn-accessible'));
+    await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Skip learn-accessible'));
     expect(steps()).toStrictEqual(['done', 'done', 'now']);
     unmount();
   });

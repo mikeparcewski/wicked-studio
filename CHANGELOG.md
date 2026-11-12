@@ -20,6 +20,7 @@ npm publish dates. Every version listed here exists on
 
 - Pins `wicked-crew-api-types` 0.206.0 (carries `McpServersResponse.ghCli` / `McpGhCliState`).
 - Requirements headers lead with confidence-weighted coverage when available; the minimum and progress bar still use stated coverage.
+- **A gate held on steering rules says why, and the choice says what it does** (studio#1084, studio#1085). The card now lists each cause the gate record carries, rules with a shared cause on one line, with the remedy where there is one: the judge could not run (with the engine's detail), the judge gave no line, no council could seat (only when its seats were benched), the record part could not be settled. The choice reads "Skip N rules" when every held rule is unchecked or disputed, since each is recorded as skipped by you; "Confirm or skip" stays for rules waived by your instruction, and the hover text says which.
 
 ### Fixed
 

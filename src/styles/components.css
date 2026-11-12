@@ -1223,6 +1223,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-assurance-dim { color: var(--ink-muted); }
 /* DES-RULE-CHECK-001: the steering-rule line, expandable to every rule's row. The verdict word carries the tone. */
 .wk-assurance-rules { margin: 2px 0; }
+.wk-gate-rule-causes { margin: 6px 0; padding-left: 18px; font-size: var(--text-sm); line-height: 1.4; overflow-wrap: anywhere; }
+.wk-gate-rule-causes-ids, .wk-gate-rule-causes-remedy { color: var(--ink-muted); }
 .wk-assurance-rules-summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; color: var(--ink-body); }
 .wk-assurance-rules-summary::-webkit-details-marker { display: none; }
 .wk-assurance-rules-summary::before { content: '▸'; font-size: var(--text-sm); line-height: 1; color: var(--ink-dim); }
