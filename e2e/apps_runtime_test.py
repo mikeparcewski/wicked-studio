@@ -178,6 +178,17 @@ def layout_checks(page, frame, width: int) -> None:
             controls, count: filter.querySelector('[aria-live]').textContent,
             lastOption: last.textContent, lastDisabled: last.disabled};
     }""")
+    if width == 1440:
+        # A three-column filter: the search keeps at least 6ch of room and every visible control stays in the cell.
+        narrow = frame.evaluate("""() => {
+            const body = document.querySelector('[data-component="case_filter_narrow"] .wk-cell-body').getBoundingClientRect();
+            const s = document.querySelector('[data-component="case_filter_narrow"] input[type="search"]').getBoundingClientRect();
+            const shown = [...document.querySelectorAll('[data-component="case_filter_narrow"] select, [data-component="case_filter_narrow"] input')]
+                .map(e => e.getBoundingClientRect());
+            return {search: s.width, inside: shown.every(r => r.left >= body.left - 1 && r.right <= body.right + 1
+                && r.top >= body.top - 1 && r.bottom <= body.bottom + 1)};
+        }""")
+        check("narrow_filter_search", narrow["search"] >= 48 and narrow["inside"], **narrow)
     check(f"layout_{width}", geometry["documentFits"] and (width != 390 or geometry["tableScrolls"])
           and geometry["token"] == "CASE-A00224" and geometry["lines"] == 1
           and geometry["tabFocused"] and (width != 390 or geometry["tabScroll"] > 0)
@@ -188,7 +199,7 @@ def layout_checks(page, frame, width: int) -> None:
           and geometry["count"] == "200 of 457" and geometry["lastDisabled"]
           and geometry["lastOption"] == "Showing 200 of 457: search to narrow", **geometry)
 
-    search = frame.get_by_role('searchbox', name='Search Case options', exact=True)
+    search = frame.locator('[data-component="case_filter"]').get_by_role('searchbox', name='Search Case options', exact=True)
     search.fill('CASE-A0032')
     search.evaluate("e => e.setSelectionRange(2, 7, 'backward')")
     # Programmatic change refreshes queries while leaving keyboard focus in option search.

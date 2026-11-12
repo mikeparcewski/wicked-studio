@@ -125,6 +125,29 @@ describe('studio#1119: phone tables, tabs and large select filters', () => {
     expect(rule('.wk-app[data-mode="edit"] .wk-cell, .wk-handle')).toContain('touch-action: none');
   });
 
+  it('keeps every identifier unbroken whatever its length, and gives the scroller a keyboard stop (approver r2)', async () => {
+    const long = `${'A'.repeat(70)}-SUFFIX`;
+    await boot({ framed: false, mode: 'preview' }, { rows: { t: [[1, long], [2, 'CASE-A00224'], [3, 'two words']] } });
+    const cells = [...document.querySelectorAll<HTMLElement>('.wk-table tbody td:nth-child(2)')];
+    expect(cells.map((td) => td.className)).toEqual(['wk-token wk-token--long', 'wk-token', 'wk-prose']);
+    expect(cells[0]!.title).toBe(long);
+    expect(cells[1]!.title).toBe('');
+    expect(getComputedStyle(cells[0]!).whiteSpace).toBe('nowrap');
+    expect(rule('.wk-table td.wk-token--long')).toContain('text-overflow: ellipsis');
+    const scroll = document.querySelector<HTMLElement>('.wk-table-scroll')!;
+    expect(scroll.tabIndex).toBe(0);
+    expect(scroll.getAttribute('role')).toBe('region');
+    expect(scroll.getAttribute('aria-label')).toBe('Table, scrolls sideways');
+    expect(rule('.wk-table-scroll:focus-visible')).toContain('outline');
+  });
+
+  it('a narrow filter keeps a usable search on its one row: the count, then the label, leave the row', () => {
+    expect(TEMPLATE).toMatch(/\.wk-filter-select \{[^}]*container: wkfilter \/ inline-size;/u);
+    expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 300px\) \{\s*\.wk-filter-options \.wk-muted \{ position: absolute;/u);
+    expect(TEMPLATE).toMatch(/\.wk-filter-options \.wk-input \{ flex-basis: 0; min-width: 6ch; \}/u);
+    expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 200px\) \{\s*\.wk-filter-select \.wk-filter-label \{ position: absolute;/u);
+  });
+
   it('keeps every page tab inside a width-constrained horizontal scroller', async () => {
     await boot({ framed: false, mode: 'preview' }, { spec: { ...SPEC, pages: [...SPEC.pages,
       ...Array.from({ length: 5 }, (_, i) => ({ id: `page-${i}`, title: `Another page ${i}`, components: [] })),
@@ -212,9 +235,9 @@ describe('studio#1119: phone tables, tabs and large select filters', () => {
     expect(picker().querySelector('[aria-live]')!.getAttribute('title')).toBe(countText());
   });
 
-  it('keeps short single tokens unbroken, gives prose room, and top-aligns table cells', async () => {
+  it('keeps single tokens unbroken at any length, gives prose room, and top-aligns table cells', async () => {
     await boot({ framed: false, mode: 'preview' }, { rows: { t: [
-      [1, 'CASE-A00224'], [2, 'A'.repeat(64)], [3, 'A'.repeat(65)],
+      [1, 'CASE-A00224'], [2, 'A'.repeat(65)], [3, 'Review the renewal terms'],
     ] } });
     const cells = [...document.querySelectorAll<HTMLElement>('.wk-table tbody td:nth-child(2)')];
     expect(cells.map((c) => getComputedStyle(c).whiteSpace)).toEqual(['nowrap', 'nowrap', 'normal']);

@@ -72,6 +72,10 @@ SPEC_A["pages"].extend([
     {"id": "case_filter", "type": "filter", "filter": "select", "label": "Case",
      "box": {"x": 0, "y": 0, "w": 6, "h": 1},
      "options": {"kind": "query", "query": {"query": "case_options"}, "value": "case_id", "label": "label"}},
+    # The default filter width (three columns): its search must stay usable on its one row.
+    {"id": "case_filter_narrow", "type": "filter", "filter": "select", "label": "Case",
+     "box": {"x": 6, "y": 0, "w": 3, "h": 1},
+     "options": {"kind": "query", "query": {"query": "case_options"}, "value": "case_id", "label": "label"}},
     {"id": "cases", "type": "table", "title": "Cases", "data": {"query": "cases"},
      "box": {"x": 0, "y": 1, "w": 12, "h": 6}},
 ]}])

@@ -491,8 +491,13 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       for (const col of shown) {
         const v = r[at(col.column)];
         const text = cellText(v, col.format, locale);
-        const cls = typeof v === 'number' ? 'wk-num' : /^\S{1,64}$/u.test(text) ? 'wk-token' : 'wk-prose';
-        tr.append(el('td', cls, text));
+        // An identifier (no whitespace) never breaks, whatever its length; a very long one is cut with an ellipsis and
+        // keeps its whole text as the title. Prose wraps between words (studio#1119).
+        const token = /^\S+$/u.test(text);
+        const cls = typeof v === 'number' ? 'wk-num' : token ? (text.length > 64 ? 'wk-token wk-token--long' : 'wk-token') : 'wk-prose';
+        const td = el('td', cls, text);
+        if (token && text.length > 64) td.title = text;
+        tr.append(td);
       }
       if ((c.rowActions ?? []).length > 0) {
         const td = el('td', 'wk-td-actions');
@@ -503,6 +508,10 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
     }
     table.append(tbody);
     const scroll = el('div', 'wk-table-scroll');
+    // A keyboard stop, so the columns past the edge are reachable without a pointer (WebKit gives a scroller none).
+    scroll.tabIndex = 0;
+    scroll.setAttribute('role', 'region');
+    scroll.setAttribute('aria-label', `${lineOf(c.title ?? 'Table', 80)}, scrolls sideways`);
     scroll.append(table);
     body.append(scroll);
     if (rows.rows.length === 0) body.append(el('p', 'wk-muted', 'No rows'));
@@ -556,7 +565,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       const tools = el('div', 'wk-filter-options');
       const search = el('input', 'wk-input');
       search.type = 'search';
-      search.placeholder = 'Search options';
+      search.placeholder = 'Search';
       search.setAttribute('aria-label', `Search ${lineOf(c.label ?? 'Filter', 60)} options`);
       search.value = optionSearch.get(c.id) ?? '';
       const count = el('span', 'wk-muted');
