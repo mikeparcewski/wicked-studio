@@ -487,8 +487,12 @@ describe('sessionGateChoices — escalation offers (gate 15 Item 1)', () => {
     expect((m.whyNot ?? []).join(' ')).not.toMatch(/targeted/);
   });
 
-  it('a legacy prompt naming neither keeps the choice', () => {
-    expect(timeoutModel(ESC_TIMEOUT_PROMPT).all.map((c) => c.key)).toContain('offer:targeted');
+  it('a legacy prompt naming neither keeps the choice, and does not promise that nothing is waived', () => {
+    const t = timeoutModel(ESC_TIMEOUT_PROMPT).all.find((c) => c.key === 'offer:targeted')!;
+    expect(t).toBeDefined();
+    // An engine before core-ts 0.15.38 waived the test set on a targeted re-run with no command (api-types, wicked-core#1392).
+    expect(t.title).not.toMatch(/waives nothing/);
+    expect(t.title).toMatch(/before core-ts 0\.15\.38 waives the test set/);
   });
 
   it('a quoted failure naming no-command is not the engine\'s offer', () => {

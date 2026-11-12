@@ -279,7 +279,7 @@ function mapChoiceTitle(value: string): string {
     case 'request_changes': return 'Return to the creator with the reviewer\'s findings.';
     case 'reject': return 'Cancel the run; the work stops here.';
     case 'extend': return 'Re-run floor checks with 2× time bounds.';
-    case 'targeted': return 'Re-run with the declared targeted test command; refused when none is declared.';
+    case 'targeted': return 'Re-run with the declared targeted test command; refused when none is declared (an engine before core-ts 0.15.38 waives the test set instead).';
     case 'accept_partial': return 'Waive the tests that did not finish (tests waived by the operator) and continue.';
     case 'accept_suggestion': return 'Apply the restored edit and rewind to the creator.';
     default: return '';

@@ -593,11 +593,15 @@ export function escalationOffers(
       },
     ];
     // The engine's own text is the offer: with no targeted command declared it refuses `targeted` (wicked-core#1392).
-    if (targetedOfferIn(prompt, view.denial?.reason).state !== 'unavailable') {
+    const targeted = targetedOfferIn(prompt, view.denial?.reason).state;
+    if (targeted !== 'unavailable') {
       offers.push({
         action: 'targeted',
         label: 'Re-run with the targeted tests',
-        consequence: "Re-runs the checks with the repo's declared targeted test command in place of the full test set. It waives nothing: with no targeted command declared the engine refuses it and the gate stays open. The seat does not run again.",
+        // Only an engine that names the declared command (core-ts ≥ 0.15.38) is known to refuse rather than waive.
+        consequence: targeted === 'declared'
+          ? "Re-runs the checks with the repo's declared targeted test command in place of the full test set. It waives nothing: with no targeted command declared the engine refuses it and the gate stays open. The seat does not run again."
+          : "Re-runs the checks with the repo's declared targeted test command in place of the full test set. This engine doesn't say whether one is declared: with none, a current engine refuses it and the gate stays open, but an engine before core-ts 0.15.38 waives the test set instead (named in the floor note). The seat does not run again.",
       });
     }
     const waive = view.floor === null
