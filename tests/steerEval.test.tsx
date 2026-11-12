@@ -458,9 +458,25 @@ describe('MCP in the type picker (operator 2026-11-12)', () => {
     const pick = screen.getByTestId('steer-type-pick') as HTMLSelectElement;
     const options = [...pick.querySelectorAll('option')];
     expect(options.map((o) => o.value)).toEqual(['all', 'architecture', 'development', 'security', 'testing', 'operations', 'compliance', 'design-ux', 'mcp']);
-    expect(screen.getByTestId('steer-type-pick-mcp')).toHaveTextContent('MCP (2)');
+    expect(pick.querySelector('option[value="mcp"]')).toHaveTextContent('MCP (2)');
     await user.selectOptions(pick, 'mcp');
     expect(navigate).toHaveBeenLastCalledWith('/steering/policies?mcp=1');
+  });
+
+  it('the picker follows the address it navigated to', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [...RULES, mcpRule('MCP-POL-100')] });
+    wire();
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    const { rerender } = render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={navigate} />);
+    await screen.findAllByTestId('rules-row');
+    const pick = (): HTMLSelectElement => screen.getByTestId('steer-type-pick') as HTMLSelectElement;
+    expect(pick().value).toBe('mcp');
+    await user.selectOptions(pick(), 'security');
+    rerender(<SteerSurface pathname="/steering/policies" search={new URL(String(navigate.mock.calls.at(-1)?.[0]), 'http://x').search} runs={[]} navigate={navigate} />);
+    await waitFor(() => expect(screen.getAllByTestId('rules-row')).toHaveLength(RULES.length + 1));
+    expect(pick().value).toBe('security');
+    expect(screen.queryByTestId('steer-mcp-note')).toBeNull();
   });
 
   it('on the MCP choice the list is the MCP rules of every type, and Add a rule opens an MCP policy', async () => {
@@ -473,13 +489,19 @@ describe('MCP in the type picker (operator 2026-11-12)', () => {
     expect((await screen.findByTestId('steering-form-id') as HTMLInputElement).value).toBe('MCP-POL-101');
   });
 
-  it('a type with MCP (the table can make that address) shows the type, and MCP in the note', async () => {
+  it('a type with MCP (the table can make that address) is its own entry; picking the type alone is a change', async () => {
     wire();
-    render(<SteerSurface pathname="/steering/policies" search="?type=security&mcp=1" runs={[]} navigate={vi.fn()} />);
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<SteerSurface pathname="/steering/policies" search="?type=security&mcp=1" runs={[]} navigate={navigate} />);
     await screen.findByTestId('steer-rules-empty');
-    expect((screen.getByTestId('steer-type-pick') as HTMLSelectElement).value).toBe('security');
+    const pick = screen.getByTestId('steer-type-pick') as HTMLSelectElement;
+    expect(pick.value).toBe('type+mcp');
+    expect(pick.selectedOptions[0]).toHaveTextContent('Security · MCP (0)');
     expect(screen.getByTestId('steer-mcp-note')).toBeInTheDocument();
     expect(screen.getByTestId('steer-rules-empty')).toHaveTextContent('No rule matches these filters.');
+    await user.selectOptions(pick, 'security');
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?type=security');
   });
 });
 

@@ -395,8 +395,9 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   // MCP is the picker's last choice: the rules that govern MCP calls (`?mcp=1`). They are rules of
   // any type that name an `mcp` token, not an eighth type on the wire. The picker holds ONE choice, so
   // picking anything sets exactly that choice. A type and MCP together (the table's chips can make
-  // that address) shows the type here and MCP in the note under the list.
-  const pickValue = mcpOnly && type === null ? 'mcp' : (type ?? 'all');
+  // that address) is its own entry, `Security · MCP`, so picking Security from it is a change too.
+  const both = mcpOnly && type !== null;
+  const pickValue = both ? 'type+mcp' : mcpOnly ? 'mcp' : (type ?? 'all');
   const pickRules = view === 'retired' ? retiredRules : live;
   const typePick = (
     <label className="wk-calm-typepick">
@@ -404,14 +405,16 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       <select className="wk-calm-pick" data-testid="steer-type-pick" value={pickValue} aria-label="Steering type"
         onChange={(e) => {
           const v = e.target.value;
+          if (v === 'type+mcp') return;
           navigate(v === 'mcp' ? policiesPath(null, true) : policiesPath(v === 'all' ? null : (v as SteeringType), false));
         }}>
+        {both && <option value="type+mcp">{`${STEERING_TYPE_LABELS[type]} · MCP${read.kind === 'ok' ? ` (${pickRules.filter((r) => steeringTypeOf(r) === type && isMcpRule(r)).length})` : ''}`}</option>}
         <option value="all">{view === 'retired' ? 'Retired · all types' : 'All rules'}</option>
         {STEERING_TYPES.map((t) => {
           const n = read.kind === 'ok' ? pickRules.filter((r) => steeringTypeOf(r) === t).length : null;
           return <option key={t} value={t}>{`${STEERING_TYPE_LABELS[t]}${n === null ? '' : ` (${n})`}`}</option>;
         })}
-        <option value="mcp" data-testid="steer-type-pick-mcp">{`MCP${read.kind === 'ok' ? ` (${pickRules.filter((r) => isMcpRule(r)).length})` : ''}`}</option>
+        <option value="mcp">{`MCP${read.kind === 'ok' ? ` (${pickRules.filter((r) => isMcpRule(r)).length})` : ''}`}</option>
       </select>
     </label>
   );
