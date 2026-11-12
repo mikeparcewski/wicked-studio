@@ -371,13 +371,13 @@ describe('studio#1119: phone tables, tabs and large select filters', () => {
     expect(countText()).toContain('Showing 12 matches');
   });
 
-  it('keeps a selected value absent from fetched options selectable', async () => {
+  it('never invents an option for a selected value the source no longer returns (the options stay the source\'s)', async () => {
     await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query', 'saved-case'), rows: { cases } });
-    await vi.waitFor(() => expect(countText()).toContain('Showing 199 of 457'));
+    await vi.waitFor(() => expect(countText()).toContain('Showing 200 of 457'));
+    // All, the 200 shown, and the disabled notice (its value empty, so it is never one of the options' values).
     expect(select().options).toHaveLength(202);
-    expect(select().value).toBe('saved-case');
-    find('rare');
-    expect(select().selectedOptions[0]!.textContent).toBe('saved-case');
+    expect([...select().options].some((o) => o.value === 'saved-case')).toBe(false);
+    expect([...select().options].filter((o) => o.value !== '')).toHaveLength(200);
     expect(select().options[0]!.textContent).toBe('All');
   });
 

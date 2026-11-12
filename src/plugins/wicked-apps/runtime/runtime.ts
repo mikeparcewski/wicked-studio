@@ -596,10 +596,12 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
         const matches = opts.filter((o) => o.label.toLowerCase().includes(needle));
         const shown = matches.slice(0, 200);
         const value = typeof filters[c.id] === 'string' ? filters[c.id] as string : '';
-        // Keep the selection inside the cap, including while its label does not match the search or a refresh.
-        if (value !== '' && !shown.some((o) => o.value === value)) {
+        // Keep a fetched selection inside the cap while the search or the cap would hide it. A value the source no
+        // longer returns is not invented as an option (as before: the select's options are the source's).
+        const kept = value === '' ? undefined : opts.find((o) => o.value === value);
+        if (kept !== undefined && !shown.includes(kept)) {
           if (shown.length === 200) shown.pop();
-          shown.push(opts.find((o) => o.value === value) ?? { value, label: value });
+          shown.push(kept);
         }
         select.replaceChildren();
         for (const o of [{ value: '', label: 'All' }, ...shown]) {
@@ -615,6 +617,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
         if (n < matches.length || incomplete) {
           const more = el('option', undefined, `${description}: search to narrow`);
           more.disabled = true;
+          more.value = ''; // a notice, not a value: the select's values stay the options' own (apps-standalone reads them)
           select.append(more);
         }
         select.value = value;
