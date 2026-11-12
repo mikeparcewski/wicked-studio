@@ -45,6 +45,9 @@ describe('the run host context', () => {
   it('the phase is the live run’s current step, in plain words; a finished run has none', () => {
     expect(phaseOf(run('r1', 'executing'))).toBe('Code review');
     expect(phaseOf(run('r1', 'completed'))).toBeNull();
+    // review r2 P3: an engine-numbered or attempt-qualified suffix is never a phase name.
+    expect(phaseOf(makeView({ status: 'executing' }, [makeUnit({ phase_ref: 'wf-0a1b2c3d4e5f:unit-8:a6', stage: 'build' as never } as never)]))).toBe('Build');
+    expect(phaseOf(makeView({ status: 'executing' }, [makeUnit({ id: 'r1:u0', stage: null, phase_ref: null } as never)]))).toBeNull();
     // A chat's own answer run is not a step of the artifact: the header says no phase for it.
     expect(phaseOf(makeView({ status: 'awaiting_human', ask_path: true } as never, [makeUnit({ id: 'c408bf71:recon', stage: 'recon' as never })]))).toBeNull();
   });

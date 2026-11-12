@@ -85,9 +85,12 @@ export function phaseOf(view: RunView | null): string | null {
   const unit = view.units.find((u) => u.ord === view.session.unit_ix);
   for (const raw of [unit?.phase_ref, unit?.stage, unit?.id]) {
     if (typeof raw !== 'string') continue;
-    const name = raw.slice(raw.lastIndexOf(':') + 1).trim();
+    // The last segment that is not an engine number (u0) or an attempt (a6): `wf-…:unit-8:a6` -> `unit-8` (an id).
+    // A qualified ref's first segment is the run or workflow, never the phase.
+    const segs = raw.split(':').map((x) => x.trim());
+    const name = segs.slice(segs.length > 1 ? 1 : 0).filter((x) => !/^[ua]\d+$/i.test(x)).pop() ?? '';
     // Workflow refs end in unit-N; UUIDs and run ids are identifiers, never a phase label.
-    if (/^(?:wf|unit)-|[0-9a-f]{8,}/i.test(name)) continue;
+    if (name === '' || /^(?:wf|unit)-|[0-9a-f]{8,}/i.test(name)) continue;
     const words = name.replace(/[-_]+/g, ' ').trim();
     if (!/[a-z]/i.test(words)) continue;
     return words.charAt(0).toUpperCase() + words.slice(1);
