@@ -185,10 +185,14 @@ def layout_checks(page, frame, width: int) -> None:
             const s = document.querySelector('[data-component="case_filter_narrow"] input[type="search"]').getBoundingClientRect();
             const shown = [...document.querySelectorAll('[data-component="case_filter_narrow"] select, [data-component="case_filter_narrow"] input')]
                 .map(e => e.getBoundingClientRect());
-            return {search: s.width, inside: shown.every(r => r.left >= body.left - 1 && r.right <= body.right + 1
+            const sel = document.querySelector('[data-component="case_filter_narrow"] select').getBoundingClientRect();
+            const status = document.querySelector('[data-component="status_filter"] .wk-filter-label').getBoundingClientRect();
+            return {search: s.width, select: sel.width, overlap: sel.right - s.left, statusLabel: status.width,
+                inside: shown.every(r => r.left >= body.left - 1 && r.right <= body.right + 1
                 && r.top >= body.top - 1 && r.bottom <= body.bottom + 1)};
         }""")
-        check("narrow_filter_search", narrow["search"] >= 48 and narrow["inside"], **narrow)
+        check("narrow_filter_search", narrow["search"] >= 48 and narrow["select"] >= 48 and narrow["overlap"] <= 0
+              and narrow["inside"] and narrow["statusLabel"] > 20, **narrow)
     check(f"layout_{width}", geometry["documentFits"] and (width != 390 or geometry["tableScrolls"])
           and geometry["token"] == "CASE-A00224" and geometry["lines"] == 1
           and geometry["tabFocused"] and (width != 390 or geometry["tabScroll"] > 0)

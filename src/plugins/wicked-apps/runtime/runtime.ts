@@ -534,7 +534,10 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
 
   const drawFilter = (c: AppFilterComponent, body: HTMLElement): void => {
     const label = el('label', 'wk-filter');
-    label.append(el('span', 'wk-filter-label', lineOf(c.label ?? (c.filter === 'search' ? 'Search' : c.filter === 'date-range' ? 'Dates' : 'Filter'), 60)));
+    const labelText = lineOf(c.label ?? (c.filter === 'search' ? 'Search' : c.filter === 'date-range' ? 'Dates' : 'Filter'), 60);
+    const labelEl = el('span', 'wk-filter-label', labelText);
+    labelEl.title = labelText; // its full words when a narrow row cuts it (studio#1119)
+    label.append(labelEl);
     const changed = (): void => { queryAll(); };
     if (c.filter === 'search') {
       const input = el('input', 'wk-input');
@@ -610,7 +613,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       select.addEventListener('change', () => { filters[c.id] = select.value; fill(); changed(); });
       label.append(select);
       box.append(label);
-      if (searchable) { tools.append(search, count); box.append(tools); }
+      if (searchable) { box.classList.add('wk-filter-select--search'); tools.append(search, count); box.append(tools); }
       body.append(box);
       return;
     } else {

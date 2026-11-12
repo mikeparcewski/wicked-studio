@@ -79,15 +79,15 @@
   .wk-text--caption { font-size: 12px; color: var(--ink-muted); }
   .wk-filter { display: flex; align-items: center; gap: 6px; height: 100%; }
   .wk-filter-select { display: flex; align-items: center; gap: 6px; min-width: 0; height: 100%; container: wkfilter / inline-size; }
-  /* A narrow filter (the default three columns) keeps a usable search on its one row: the count leaves the row (it stays
-     in the select's last option and for screen readers), then the label (the select keeps it as its name). */
+  /* A select with an option search shares its one row: the label gives way first (an ellipsis, its full words in its
+     title), the select and the search each keep 6ch, so nothing overlaps; in a narrow filter (the default three
+     columns) the count leaves the row (it stays in the select's last option and for screen readers). A select without
+     a search keeps its layout and its label. */
+  .wk-filter-select--search .wk-filter-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .wk-filter-select--search .wk-filter .wk-input { flex: 1 1 0; width: 0; min-width: 6ch; }
+  .wk-filter-select--search .wk-filter-options .wk-input { flex: 1 1 0; min-width: 6ch; }
   @container wkfilter (max-width: 300px) {
-    .wk-filter-options .wk-muted { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .wk-filter-options .wk-input { flex-basis: 0; min-width: 6ch; }
-    .wk-filter-select .wk-filter .wk-input { min-width: 6ch; }
-  }
-  @container wkfilter (max-width: 200px) {
-    .wk-filter-select .wk-filter-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .wk-filter-select--search .wk-filter-options .wk-muted { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   }
   .wk-filter-select .wk-filter { height: auto; flex: 1 1 0; min-width: 0; }
   .wk-filter-options { display: flex; flex: 1 1 0; min-width: 0; align-items: center; gap: 6px; }

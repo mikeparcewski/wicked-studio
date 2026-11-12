@@ -73,9 +73,13 @@ SPEC_A["pages"].extend([
      "box": {"x": 0, "y": 0, "w": 6, "h": 1},
      "options": {"kind": "query", "query": {"query": "case_options"}, "value": "case_id", "label": "label"}},
     # The default filter width (three columns): its search must stay usable on its one row.
-    {"id": "case_filter_narrow", "type": "filter", "filter": "select", "label": "Case",
+    {"id": "case_filter_narrow", "type": "filter", "filter": "select", "label": "Customer account",
      "box": {"x": 6, "y": 0, "w": 3, "h": 1},
      "options": {"kind": "query", "query": {"query": "case_options"}, "value": "case_id", "label": "label"}},
+    # A small select at the same width has no search: it keeps its label.
+    {"id": "status_filter", "type": "filter", "filter": "select", "label": "Status",
+     "box": {"x": 9, "y": 0, "w": 3, "h": 1},
+     "options": {"kind": "values", "values": [{"value": "open"}, {"value": "closed"}]}},
     {"id": "cases", "type": "table", "title": "Cases", "data": {"query": "cases"},
      "box": {"x": 0, "y": 1, "w": 12, "h": 6}},
 ]}])

@@ -141,11 +141,24 @@ describe('studio#1119: phone tables, tabs and large select filters', () => {
     expect(rule('.wk-table-scroll:focus-visible')).toContain('outline');
   });
 
-  it('a narrow filter keeps a usable search on its one row: the count, then the label, leave the row', () => {
+  it('a narrow filter keeps a usable search on its one row; a select without a search keeps its label (approver r3)', async () => {
     expect(TEMPLATE).toMatch(/\.wk-filter-select \{[^}]*container: wkfilter \/ inline-size;/u);
-    expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 300px\) \{\s*\.wk-filter-options \.wk-muted \{ position: absolute;/u);
-    expect(TEMPLATE).toMatch(/\.wk-filter-options \.wk-input \{ flex-basis: 0; min-width: 6ch; \}/u);
-    expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 200px\) \{\s*\.wk-filter-select \.wk-filter-label \{ position: absolute;/u);
+    expect(TEMPLATE).toMatch(/\.wk-filter-select--search \.wk-filter-label \{ flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; \}/u);
+    expect(TEMPLATE).toMatch(/\.wk-filter-select--search \.wk-filter \.wk-input \{ flex: 1 1 0; width: 0; min-width: 6ch; \}/u);
+    expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 300px\) \{\s*\.wk-filter-select--search \.wk-filter-options \.wk-muted \{ position: absolute;/u);
+    // No rule hides a label outright any more.
+    expect(TEMPLATE).not.toMatch(/\.wk-filter-label \{ position: absolute;/u);
+    await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query'), rows: { cases } });
+    await vi.waitFor(() => expect(select().options.length).toBeGreaterThan(200));
+    expect(picker().querySelector('.wk-filter-select')!.classList.contains('wk-filter-select--search')).toBe(true);
+    expect(picker().querySelector('.wk-filter-label')!.getAttribute('title')).toBe('Case');
+  });
+
+  it('a small select has no search and no search layout', async () => {
+    await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('values', '', 3), rows: { cases } });
+    await vi.waitFor(() => expect(select().options.length).toBe(4));
+    expect(picker().querySelector('.wk-filter-select')!.classList.contains('wk-filter-select--search')).toBe(false);
+    expect(picker().querySelector('input[type="search"]')).toBeNull();
   });
 
   it('keeps every page tab inside a width-constrained horizontal scroller', async () => {
