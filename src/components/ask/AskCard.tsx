@@ -33,6 +33,8 @@ export interface AskReason {
   send?: string;
   /** Said before the box (what the move does, when it must be read before the words: a floor override). */
   note?: React.ReactNode;
+  /** Keep a host's consequence id on the shared consequence instead of repeating it above the reason. */
+  consequenceTestId?: string;
   /** The label's test id (a gate keeps its journeys' ids). */
   labelTestId?: string;
 }
@@ -114,7 +116,7 @@ export function AskCard(props: AskCardProps): React.ReactElement {
 function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabel, optionProps, optionExtra, confirmProps, confirmExtra, footnote, aside, leadAct, onSelect, onReasonOpen, onCancelReason, testIds, reasonId }: AskCardProps): React.ReactElement {
   const options = useMemo(() => ask.options ?? [], [ask.options]);
   const enabled = options.filter((o) => o.disabled === undefined);
-  const [sel, setSel] = useState<string | null>(() => (start !== undefined ? start : initialOption(ask)));
+  const [sel, setSel] = useState<string | null>(() => initialOption(ask, start));
   const [hover, setHover] = useState<string | null>(null);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [missing, setMissing] = useState(false);
@@ -129,18 +131,25 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const autoId = useId();
   const boxId = reasonId ?? `${autoId}-reason`;
-  // A new start (the host's derived move arrived) moves the selection once.
+  // Late offers can supply the first usable choice. Once the person picks, keep their choice even if it is refused.
+  const pickedRef = useRef(false);
   const startRef = useRef(start);
   useEffect(() => {
-    if (start === startRef.current) return;
+    const changedStart = start !== startRef.current;
     startRef.current = start;
-    if (start !== undefined) setSel(start);
-  }, [start]);
+    // An explicit new start is still the host's reset (including null to clear the selection).
+    if (changedStart && start !== undefined) { setSel(initialOption(ask, start)); return; }
+    if (pickedRef.current) return;
+    setSel((selected) => options.some((o) => o.id === selected && o.disabled === undefined)
+      ? selected : initialOption(ask, start));
+  }, [start, ask, options]);
   useEffect(() => { onSelect?.(sel); }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const current = options.find((o) => o.id === sel) ?? null;
   // The hovered card is only a preview: the consequence line and the button always describe `current`.
   const preview = hover !== null && hover !== sel ? options.find((o) => o.id === hover) ?? null : null;
+  // Folded on a phone, the dock shows this one card: the enabled selection, else the enabled recommendation (#1115).
+  const dockOption = current !== null && current.disabled === undefined ? current : enabled.find((o) => o.recommended === true) ?? null;
   const needsReason = current !== null && (current.needsReason === true || ask.kind === 'confirm_reason');
   const open = needsReason && current !== null && engaged === current.id;
   const reasonCfg: AskReason | null = current === null || !open ? null
@@ -163,6 +172,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
 
   const commit = (o: AskOption | null): void => {
     if (o === null || o.disabled !== undefined || busy) return;
+    pickedRef.current = true;
     const needs = o.needsReason === true || ask.kind === 'confirm_reason';
     if (needs) {
       if (o.id !== sel || engaged !== o.id) { setSel(o.id); setEngaged(o.id); return; }
@@ -176,6 +186,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
 
   const pick = (o: AskOption): void => {
     if (o.disabled !== undefined) return;
+    pickedRef.current = true;
     setSel(o.id);
     setPicked((n) => n + 1);
     setMissing(false);
@@ -197,6 +208,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
     else if (e.key === 'Enter') { e.preventDefault(); if (sel !== o.id) setSel(o.id); commit(o); return; }
     if (to === undefined) return;
     e.preventDefault();
+    pickedRef.current = true;
     setSel(to.id);
     setPicked((n) => n + 1);
     setMissing(false);
@@ -205,7 +217,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
   };
 
   const tabStop = sel !== null && enabled.some((o) => o.id === sel) ? sel : enabled[0]?.id ?? null;
-  const confirmWords = current === null ? 'Choose an option' : reasonCfg?.send ?? confirmLabel?.(current) ?? current.label;
+  const confirmWords = current === null || current.disabled !== undefined ? 'Choose an option' : reasonCfg?.send ?? confirmLabel?.(current) ?? current.label;
   const consId = `${autoId}-cons`;
   // A card the person picks (a click, or the keyboard) makes its "If you choose this:" what the primary will send, so the
   // line comes into view; a reason box that opens brings itself into view instead. Never on render or a hover.
@@ -247,6 +259,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
               data-ask-option={o.id}
               data-testid={tid(testIds, 'option', /* testid */ 'ask-option')}
               data-selected={on ? 'true' : 'false'}
+              data-dock-option={o.id === dockOption?.id ? 'true' : undefined}
               {...(o.tone !== undefined ? { 'data-tone': o.tone } : {})}
               tabIndex={o.id === tabStop ? 0 : -1}
               {...(o.id === tabStop ? { 'data-ask-focus': 'true' } : {})}
@@ -273,7 +286,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
       </div>
       {/* What will be sent, for the SELECTED option: reserved height, so hovering never moves a card. */}
       <p id={consId} data-testid={tid(testIds, 'consequence', /* testid */ 'ask-consequence')} {...(current !== null ? { 'data-option': current.id } : {})} aria-live="polite" className="wk-ask-cons">
-        {current?.consequence !== undefined ? <><b>If you choose this:</b> {current.consequence}</> : null}
+        {current?.consequence !== undefined ? <><b>If you choose this:</b> <span data-testid={reasonCfg?.consequenceTestId}>{current.consequence}</span></> : null}
       </p>
       {/* A hovered other option, visibly a preview and never the confirmation; its own reserved line. */}
       <p data-testid={`${tid(testIds, 'consequence', /* testid */ 'ask-consequence')}-preview`} {...(preview !== null ? { 'data-preview': 'true', 'data-option': preview.id } : {})} className="wk-ask-preview">
@@ -308,7 +321,8 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
               type="button"
               data-testid={open ? tid(testIds, 'send', /* testid */ 'ask-send') : tid(testIds, 'confirm', /* testid */ 'ask-confirm')}
               data-option={current?.id}
-              disabled={busy || current === null || (open && reasonText.trim() === '')}
+              disabled={busy || current === null || current.disabled !== undefined || (open && reasonText.trim() === '')}
+              title={current?.disabled}
               onClick={() => commit(current)}
               className={`wk-gate2-btn ${current?.tone === 'danger' ? 'wk-ask-btn--danger' : 'wk-gate2-btn--primary'}`}
               {...(confirmProps?.(current) ?? {})}

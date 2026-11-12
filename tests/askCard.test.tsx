@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Ask, AskAnswer } from '../src/api/ask.js';
 import * as client from '../src/api/client.js';
-import { askFromElicitation, elicitationContent, isYesNo, recordLine } from '../src/board/askModel.js';
+import { askFromElicitation, elicitationContent, initialOption, isYesNo, recordLine } from '../src/board/askModel.js';
 import { AskCard, AskRecord } from '../src/components/ask/AskCard.js';
 import { ElicitationPrompt } from '../src/components/ElicitationPrompt.js';
 import { RunQuestions } from '../src/components/session/ThreadQuestions.js';
@@ -103,6 +103,86 @@ describe('choose', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it.each(['default', 'start', 'updated start'] as const)('a refused %s uses the enabled recommendation, then the first enabled option', (source) => {
+    const ask: Ask = { ...PAUSE, default: 'frozen', options: [PAUSE.options![1]!, PAUSE.options![0]!, PAUSE.options![2]!] };
+    expect(initialOption(ask)).toBe('split');
+    const onAnswer = vi.fn();
+    const { rerender } = render(<AskCard ask={ask} onAnswer={onAnswer} {...(source === 'default' ? {} : { start: source === 'start' ? 'frozen' : 'phased' })} />);
+    if (source === 'updated start') rerender(<AskCard ask={ask} onAnswer={onAnswer} start="frozen" />);
+    expect(opt('split')).toHaveAttribute('aria-checked', 'true');
+    const noRec: Ask = { ...ask, options: ask.options!.map((o) => ({ ...o, recommended: false })) };
+    expect(initialOption(noRec)).toBe('phased');
+    cleanup();
+    render(<AskCard ask={noRec} onAnswer={onAnswer} start="frozen" />);
+    expect(opt('phased')).toHaveAttribute('aria-checked', 'true');
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it('when every option is refused, nothing is selected and the primary waits for a choice', () => {
+    renderAsk({ ...PAUSE, options: PAUSE.options!.map((o) => ({ ...o, disabled: 'Not available' })) }, { start: 'split' });
+    expect(document.querySelector('[aria-checked="true"]')).toBeNull();
+    expect(screen.getByTestId('ask-confirm')).toBeDisabled();
+    expect(screen.getByTestId('ask-confirm')).toHaveTextContent('Choose an option');
+  });
+
+  it.each([undefined, 'go', null])('a late enabled recommendation selects itself unless start is explicitly null (%s)', (start) => {
+    const refused: Ask = { ...PAUSE, default: 'go', options: [{ id: 'go', token: 'go', label: 'Deliver', disabled: 'QE refused' }] };
+    const onAnswer = vi.fn();
+    const startProps = start === undefined ? {} : { start };
+    const { rerender } = render(<AskCard ask={refused} {...startProps} onAnswer={onAnswer} />);
+    expect(screen.getByTestId('ask-confirm')).toBeDisabled();
+    const ready: Ask = { ...refused, options: [...refused.options!, { id: 'skip-qe', token: 'skip_qe', label: 'Skip QE with a reason…', recommended: true, needsReason: true }] };
+    rerender(<AskCard ask={ready} {...startProps} onAnswer={onAnswer} />);
+    expect(opt('skip-qe')).toHaveAttribute('aria-checked', start === null ? 'false' : 'true');
+    const primary = screen.getByTestId('ask-confirm');
+    if (start === null) expect(primary).toBeDisabled();
+    else {
+      expect(primary).toBeEnabled();
+      expect(primary).toHaveTextContent('Skip QE with a reason…');
+    }
+    expect(screen.queryByTestId('ask-reason')).toBeNull();
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it('an untouched selection that becomes refused switches to the enabled recommendation', () => {
+    const onAnswer = vi.fn();
+    const { rerender } = render(<AskCard ask={PAUSE} onAnswer={onAnswer} />);
+    const updated: Ask = { ...PAUSE, options: PAUSE.options!.map((o) => o.id === 'split' ? { ...o, disabled: 'QE refused' } : { ...o, recommended: o.id === 'phased' }) };
+    rerender(<AskCard ask={updated} onAnswer={onAnswer} />);
+    expect(opt('phased')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('ask-confirm')).toBeEnabled();
+    expect(screen.getByTestId('ask-confirm')).toHaveTextContent('Switch to phased');
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it.each(['pointer', 'keyboard'])('an options update never replaces a person’s %s pick, even if it becomes refused', (input) => {
+    const onAnswer = vi.fn();
+    const { rerender } = render(<AskCard ask={PAUSE} onAnswer={onAnswer} />);
+    if (input === 'pointer') fireEvent.click(opt('phased'));
+    else fireEvent.keyDown(opt('split'), { key: 'ArrowRight' });
+    const updated: Ask = { ...PAUSE, options: [...PAUSE.options!, { id: 'new', token: 'new', label: 'New choice', recommended: true }] };
+    rerender(<AskCard ask={updated} onAnswer={onAnswer} />);
+    expect(opt('phased')).toHaveAttribute('aria-checked', 'true');
+    rerender(<AskCard ask={{ ...updated, options: updated.options!.map((o) => o.id === 'phased' ? { ...o, disabled: 'QE refused' } : o) }} onAnswer={onAnswer} />);
+    expect(opt('phased')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('ask-confirm')).toBeDisabled();
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it('a selected action that becomes refused disables the primary and explains why', () => {
+    const onAnswer = vi.fn();
+    const { rerender } = render(<AskCard ask={PAUSE} onAnswer={onAnswer} />);
+    fireEvent.click(opt('split'));
+    const refused: Ask = { ...PAUSE, options: PAUSE.options!.map((o) => o.id === 'split' ? { ...o, disabled: 'Refused until QE acceptance passes' } : o) };
+    rerender(<AskCard ask={refused} onAnswer={onAnswer} />);
+    const go = screen.getByTestId('ask-confirm');
+    expect(go).toBeDisabled();
+    expect(go).toHaveTextContent('Choose an option');
+    expect(go).toHaveAttribute('title', 'Refused until QE acceptance passes');
+    fireEvent.click(go);
+    expect(onAnswer).not.toHaveBeenCalled();
   });
 
   it('a disabled option stays visible with why, and cannot be chosen', () => {

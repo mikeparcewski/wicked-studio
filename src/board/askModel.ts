@@ -7,13 +7,17 @@ import type { GateRowChoice } from './gateRowModel.js';
  * `content`, a pause decision).
  */
 
-/** The option a choose / confirm ask starts on: its `default`, else the recommended option, else none. */
-export function initialOption(ask: Ask): string | null {
+/** Start on an enabled default or recommendation; replace a refused start with the first enabled option if needed. */
+export function initialOption(ask: Ask, start?: string | null): string | null {
   const opts = ask.options ?? [];
   const usable = (id: string | undefined): id is string => id !== undefined && opts.some((o) => o.id === id && o.disabled === undefined);
-  if (typeof ask.default === 'string' && usable(ask.default)) return ask.default;
+  if (start === null) return null;
+  const wanted = start ?? (typeof ask.default === 'string' ? ask.default : undefined);
+  if (usable(wanted)) return wanted;
   const rec = opts.find((o) => o.recommended === true && o.disabled === undefined);
-  return rec?.id ?? null;
+  if (rec !== undefined) return rec.id;
+  if (wanted !== undefined || opts.some((o) => o.recommended === true)) return opts.find((o) => o.disabled === undefined)?.id ?? null;
+  return null;
 }
 
 /** The picks a pick ask starts with: its `default` ids that can be picked. */

@@ -832,7 +832,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     ...(c.key === 'rerun' && rerunOffer !== null && rerunOffer.minutes !== null ? { sub: `Keeps the steps before it · about ${rerunOffer.minutes} min` }
       : c.reassignCli !== undefined && builders.includes(c.reassignCli) ? { sub: `${builderName(c.reassignCli)} checks its own work (reduced assurance)` } : {}),
     // The suggested move says crew's consequence when crew wrote one for it.
-    consequence: c.key === recKey && model.consequence !== null ? model.consequence : c.key === FLOOR_OVERRIDE_KEY ? FLOOR_OVERRIDE_CONSEQUENCE : null,
+    consequence: c.key === FLOOR_OVERRIDE_KEY && model.refusal !== undefined ? c.title
+      : c.key === recKey && model.consequence !== null ? model.consequence : c.key === FLOOR_OVERRIDE_KEY ? FLOOR_OVERRIDE_CONSEQUENCE : null,
     recommended: c.key === recKey,
   }));
   const ask = askFromGate({ id: gateKey, prompt: question, from: 'The engine asks', options, recommended: recKey });
@@ -840,7 +841,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     const c = choices.find((x) => x.key === o.id);
     // The floor override says what it does FIRST, then asks why (the rationale is required, never prefilled).
     if (o.id === FLOOR_OVERRIDE_KEY) return { label: 'Your rationale (required)', labelTestId: /* testid */ 'session-gate-floor-override-label', placeholder: FLOOR_OVERRIDE_PLACEHOLDER, send: FLOOR_OVERRIDE_SEND,
-      note: <p data-testid="session-gate-floor-override-consequence" className="wk-gate-consequence">{FLOOR_OVERRIDE_CONSEQUENCE}</p> };
+      consequenceTestId: /* testid */ 'session-gate-floor-override-consequence' };
     if (o.id === SKIP_QE_KEY) return { label: 'Your reason (required, kept with the delivery)', placeholder: SKIP_QE_PLACEHOLDER, send: o.label };
     if (o.id === 'stop') return { label: 'Why stop? (kept with the record)', placeholder: 'One line is enough', send: 'Stop the run with this reason' };
     // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.

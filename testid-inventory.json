@@ -27056,6 +27056,12 @@
       ]
     },
     {
+      "expression": "reasonCfg?.consequenceTestId",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
       "expression": "sentenceTestId",
       "files": [
         "src/components/calm/Calm.tsx"

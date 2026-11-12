@@ -154,9 +154,10 @@
   .wk-dock-slot[data-folded="true"] .wk-gate2-next,
   .wk-dock-slot[data-folded="true"] .wk-gate2-more,
   .wk-dock-slot[data-folded="true"] .wk-prop > :not(.wk-gate2-q):not(.wk-prop-btns):not(.wk-gate2-decide):not(.wk-inline-undo-wrap),
-  /* (guided asks) Folded: the option you are on and its primary; every card shows while none is selected. */
-  .wk-dock-slot[data-folded="true"] .wk-ask-opts:has([aria-checked="true"]) > .wk-ask-opt:not([aria-checked="true"]),
-  .wk-dock-slot[data-folded="true"] .wk-ask-cons,
+  /* (guided asks) Folded: the enabled selection, else the enabled recommendation, and its primary (#1115); every card
+     shows while neither exists. The consequence stays hidden unless a reason box is open (it is read before the words). */
+  .wk-dock-slot[data-folded="true"] .wk-ask-opts:has([data-dock-option="true"]) > .wk-ask-opt:not([data-dock-option="true"]),
+  .wk-dock-slot[data-folded="true"] .wk-ask:not(:has(.wk-ask-reason)) > .wk-ask-cons,
   .wk-dock-slot[data-folded="true"] .wk-ask-preview,
   .wk-dock-slot[data-folded="true"] .wk-ask-foot,
   .wk-dock-slot[data-folded="true"] .wk-gate-ask-more,

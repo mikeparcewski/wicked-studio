@@ -369,7 +369,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const primaryId = deliverRefused ? 'session-proposal-primary' : 'session-proposal-go';
   const reasonOf = (o: AskOption): AskReason => o.id === 'skip-qe'
     ? { label: 'Why QE acceptance is skipped', placeholder: 'Why QE acceptance is skipped (the seats couldn’t run the tests, you checked it yourself)…', send: SKIP_QE_SEND,
-      note: <p data-testid="session-proposal-skip-qe-consequence" className="wk-gate-consequence">{SKIP_QE_CONSEQUENCE}</p> }
+      consequenceTestId: /* testid */ 'session-proposal-skip-qe-consequence' }
     : { label: card.kind === 'deliver' || ask === null ? 'Why stop? (kept with the record)' : 'Why end it? (kept with the record)', placeholder: 'One line is enough',
       send: card.kind === 'deliver' || ask === null ? 'Stop with this reason' : 'End with this reason' };
   const waysCard = (

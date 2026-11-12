@@ -93,9 +93,9 @@ describe('ProposalCard: the card\'s answers equal the gate\'s list', () => {
   });
   afterEach(() => cleanup());
 
-  const answers = (gate: OpenGate, refused: boolean): string[] => {
+  const answers = (gate: OpenGate, refused: boolean, units = UNITS): string[] => {
     useGateStore.setState({ gates: { [RUN]: gate } });
-    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, units);
     Object.assign(view.session as object, { assurance: { mode: 'full', required: ['qe_acceptance'], qe: { status: 'required', basis: 'diff', score: 100, threshold: 20, reason: 'required', reasons: [], ord: 2, tree: 'abc' } } });
     const acceptance = refused ? { required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' } : { required: false, satisfied: true, walkthrough: null, line: '' };
     render(<ProposalCard view={view} chain={CHAIN} acceptance={acceptance as never} />);
@@ -110,15 +110,39 @@ describe('ProposalCard: the card\'s answers equal the gate\'s list', () => {
     expect(answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.' }), false)).toEqual(['approve', 'reject']);
   });
   it('deliver, QE refused, crew\'s gate read carries skipQe', () => {
-    expect(answers(gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP!, prompt: 'Approve delivery before unit 3 runs.' }), true)).toEqual(['approve', 'reject', 'skip_qe']);
+    const noRerun = UNITS.map((u) => ({ ...u, status: 'pending' as const }));
+    expect(answers(gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP!, prompt: 'Approve delivery before unit 3 runs.' }), true, noRerun)).toEqual(['approve', 'reject', 'skip_qe']);
+    expect(screen.getByTestId('session-proposal-skip-qe')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('session-proposal-go')).toBeDisabled();
+    expect(screen.getByTestId('session-proposal-primary')).toHaveTextContent('Skip QE with a reason…');
+  });
+  it('skip QE says its consequence once, including while its reason box is open', () => {
+    answers(gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP!, prompt: 'Approve delivery before unit 3 runs.' }), true);
+    const line = screen.getByTestId('session-proposal-consequence');
+    const selectedText = line.textContent;
+    const selectedOption = line.getAttribute('data-option');
+    fireEvent.mouseEnter(screen.getByTestId('session-proposal-not-now'));
+    expect(line.textContent).toBe(selectedText);
+    expect(line.getAttribute('data-option')).toBe(selectedOption);
+    expect(screen.getByTestId('session-proposal-consequence-preview')).toHaveAttribute('data-option', 'not-now');
+    expect(screen.getByTestId('session-proposal-consequence-preview')).toHaveTextContent(/^Preview: /);
+    fireEvent.mouseLeave(screen.getByTestId('session-proposal-not-now'));
+    expect(screen.getByTestId('session-proposal-consequence-preview')).toBeEmptyDOMElement();
+    fireEvent.click(screen.getByTestId('session-proposal-skip-qe'));
+    expect(line).toHaveTextContent('If you choose this: Delivers without a QE pass.');
+    expect(line).toContainElement(screen.getByTestId('session-proposal-skip-qe-consequence'));
+    expect(screen.getAllByText(/Delivers without a QE pass\./)).toHaveLength(1);
+    expect(screen.queryByText('Preview:')).toBeNull();
   });
   it('deliver, QE refused, but the gate lists no skip: none is drawn', () => {
     expect(answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.' }), true)).toEqual(['approve', 'reject']);
   });
   it('deliver, QE refused, opened live: the skip is read from the gate', async () => {
     (client.api.getGate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ runId: RUN, ord: 3, prompt: 'p', lifecycle: 'open', receivedAt: '', skipQe: SKIP });
-    answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.' }), true);
-    expect(await screen.findByTestId('session-proposal-skip-qe')).toBeTruthy();
+    answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.' }), true, UNITS.map((u) => ({ ...u, status: 'pending' as const })));
+    expect(await screen.findByTestId('session-proposal-skip-qe')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('session-proposal-primary')).toBeEnabled();
+    expect(screen.getByTestId('session-proposal-primary')).toHaveTextContent('Skip QE with a reason…');
   });
 });
 
@@ -183,6 +207,20 @@ describe('GateRow submits, for each action it draws, the decision the gate lists
     vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false });
   });
   afterEach(() => cleanup());
+
+  it('judgment after a lift says approval re-runs deliver, once above the rationale', async () => {
+    const gate = gateOf({ ord: 3, gateKind: 'escalation', prompt: "The deliver phase refused: deliver: the lift changed the tree, and the repository's own checks FAILED on it: test: exit 1. " + OPTIONS + JUDGMENT + CLOSE });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    useRunEventStore.setState({ byRun: { [RUN]: [] } });
+    vi.spyOn(client.api, 'getGate').mockRejectedValue(new Error('no read'));
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} gate={gate} navigate={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('radio', { name: /Approve as your own judgment/ }));
+    const line = screen.getByTestId('session-gate-consequence');
+    expect(line).toHaveTextContent('Approving re-runs the deliver phase with your judgment on the record.');
+    expect(line).toContainElement(screen.getByTestId('session-gate-floor-override-consequence'));
+    expect(screen.getAllByText(/Overrides the failed floor/)).toHaveLength(1);
+    expect(screen.queryByText('Preview:')).toBeNull();
+  });
 
   const submitted = async (c: EscCase, key: string): Promise<{ action?: string; approve?: boolean } | null> => {
     vi.mocked(client.api.confirmGate).mockClear();
