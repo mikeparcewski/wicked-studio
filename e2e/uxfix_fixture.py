@@ -362,17 +362,26 @@ def click_gate_choice(page, key: str, scope=None, timeout: int = 10000, reason: 
 
 
 def choice_consequence(page, key: str, scope=None) -> str:
-    """What a gate choice says it does BEFORE it is taken, where the person reads it: the line under the cards for the
-    option under the pointer ("If you choose this: …"), without the lead-in. "" when nothing is drawn."""
+    """What a gate choice says it does BEFORE it is taken, where the person reads it, without the lead-in; "" when
+    nothing is drawn. studio#1100: "If you choose this:" describes only the SELECTED card; hovering another card shows
+    its consequence on a separate line marked "Preview: <label>: …" (`session-gate-consequence-preview`)."""
     loc = gate_choice(page, key, scope)
     loc.hover()
-    line = _scope(page, scope).locator(f'[data-testid="session-gate-consequence"][data-option="{key}"]').first
+    s = _scope(page, scope)
+    line = s.locator(f'[data-testid="session-gate-consequence"][data-option="{key}"], '
+                     f'[data-testid="session-gate-consequence-preview"][data-option="{key}"]').first
     try:
         line.wait_for(state="attached", timeout=3000)
     except Exception:
         return ""
     text = (line.text_content() or "").strip()
-    return text[len("If you choose this:"):].strip() if text.startswith("If you choose this:") else text
+    if text.startswith("If you choose this:"):
+        return text[len("If you choose this:"):].strip()
+    if text.startswith("Preview:"):
+        rest = text[len("Preview:"):].strip()
+        label = (loc.locator(".wk-ask-opt-label").first.text_content() or "").strip()
+        return rest[len(label) + 1:].strip() if label and rest.startswith(label + ":") else rest
+    return text
 
 
 def open_more_about(page, scope=None) -> None:
