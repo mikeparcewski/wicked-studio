@@ -494,6 +494,11 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
   const replies = v.replies;
   const progress = v.progress;
+  const headQuestion = head.proposal.question;
+  const textQuestion = headQuestion?.choices.length === 0 && headQuestion.input?.edit.startsWith('inputs.') === true
+    && !asksForProject(head.proposal) && !asksForRepo(head.proposal) ? headQuestion : null;
+  // Keep this form visible but disabled until crew answers the revision.
+  const question = v.question ?? (v.tokensHeld ? textQuestion : null);
 
   return (
     <section
@@ -533,14 +538,26 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         </p>
       )}
 
-      {v.phase === 'asking' && v.question !== null && (
+      {question !== null && (
         <div data-testid="job-passage-question" className="wk-pass-ask">
-          <span className="wk-pass-ask-who">{v.question.kind === 'lost_check' ? 'wicked asks · only your press changes the checks' : 'wicked asks'}</span>
-          <p>{v.question.text}</p>
+          <span className="wk-pass-ask-who">{question.kind === 'lost_check' ? 'wicked asks · only your press changes the checks' : 'wicked asks'}</span>
+          <p>{question.text}</p>
           {/* F39: crew asks for the project with nothing to press; the passage offers the projects (a new chat there). */}
           {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
           {/* F41: crew asks for the repository with nothing to press (a new chat has none in scope): the registered ones. */}
           {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
+          {textQuestion?.input !== undefined && (
+            // Keyed by the lineage and the input it fills, so a re-resolution of the same question keeps what was typed
+            // (review r1); disabled while a change or a Start/Not now of this job is in flight.
+            <QuestionInput key={`${lineage.lineage}:${textQuestion.input.edit}`} label={textQuestion.input.label} target={pt}
+              disabled={v.tokensHeld || local.deciding[lineage.lineage] === true}
+              onAnswer={(words) => {
+                const st = useJobLocal.getState();
+                if (v.phase !== 'asking' || st.swapPending[lineage.lineage] === pid || st.deciding[lineage.lineage] === true) return;
+                // No composer recovery for a refused inline answer: the words stay in this field (review r1).
+                revise(withWords(textQuestion, {}, words), 'question', undefined, null, null);
+              }} />
+          )}
         </div>
       )}
       {/* Power mode for new jobs is on (operator ruling 2026-11-06): the Start's choice, shown before Start; where crew
@@ -896,6 +913,33 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
         </ul>
       )}
     </span>
+  );
+}
+
+/** A missing text input with no choices: only an explicit answer revises the job. The words are sent only for the version
+ *  of the job they were typed against (`target`): when the job changed meanwhile, the press says so and the next press
+ *  sends (review r2). */
+function QuestionInput({ label, target, disabled, onAnswer }: { label: string; target: string; disabled: boolean; onAnswer: (words: string) => void }): React.ReactElement {
+  const [words, setWords] = useState('');
+  const [typedFor, setTypedFor] = useState(target);
+  const [changed, setChanged] = useState(false);
+  const text = words.trim();
+  return (
+    <form className="wk-pass-sub" onSubmit={(e) => {
+      e.preventDefault();
+      if (disabled || text === '') return;
+      if (typedFor !== target) { setTypedFor(target); setChanged(true); return; }
+      setChanged(false);
+      onAnswer(text);
+    }}>
+      <label className="wk-field-label">
+        {label}
+        <input type="text" data-testid="job-passage-question-input" className="wk-field" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '4px var(--control-px)' }}
+          value={words} disabled={disabled} onChange={(e) => { setWords(e.target.value); setTypedFor(target); setChanged(false); }} />
+      </label>
+      {changed && <p data-testid="job-passage-question-changed" role="status" className="wk-pass-grey">This job changed while you typed. Check your answer and press Answer again.</p>}
+      <button type="submit" data-testid="job-passage-question-answer" className="wk-btn wk-btn--primary wk-btn--sm" disabled={disabled || text === ''}>Answer</button>
+    </form>
   );
 }
 
