@@ -2,12 +2,16 @@
 // composer, never a chat bubble; the thread keeps a one-line marker; the reply box answers the decision or asks a
 // separate question, as the draft's intent (the platform's prompt routing) or the person's override says.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import * as client from '../src/api/client.js';
 import type { SessionView } from '../src/api/types.js';
 import { SessionPage } from '../src/components/session/SessionView.js';
 import { DecisionDockFrame, DecisionMarker, Docked, eyebrowWords } from '../src/components/session/DecisionDock.js';
 import { GateRow, judgeSeats } from '../src/components/session/GateRow.js';
+import { AskCard } from '../src/components/ask/AskCard.js';
+import type { Ask } from '../src/api/ask.js';
 import { peekRetryPrefill } from '../src/store/retryPrefill.js';
 import { useSheets } from '../src/store/sheets.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -380,6 +384,49 @@ describe('the phone sheet, folded (live nit 2026-10-27: act without expanding th
     }) as unknown as MediaQueryList);
   };
   afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('a folded 390×844 sheet keeps the enabled selection, or the recommendation when none is enabled', () => {
+    phone(true);
+    vi.stubGlobal('innerWidth', 390);
+    vi.stubGlobal('innerHeight', 844);
+    const ask: Ask = { id: 'deliver', host: 'gate', from: { kind: 'engine', id: 'engine', label: 'Hand-over' }, prompt: 'Deliver?', kind: 'choose', answeredBy: 'person', record: 'You chose: {label}', options: [
+      { id: 'go', token: 'approve', label: 'Deliver', disabled: 'Refused until QE acceptance passes' },
+      { id: 'skip', token: 'skip_qe', label: 'Skip QE with a reason…', recommended: true, needsReason: true },
+      { id: 'stop', token: 'reject', label: 'Stop' },
+    ] };
+    const content = (start: string | null) => <DecisionDockFrame items={[{ key: 'deliver', who: null, since: null, question: 'Deliver?', tone: 'waiting' }]}>
+      <Docked dockKey="deliver" open marker={null}><AskCard ask={ask} start={start} onAnswer={vi.fn()} /></Docked>
+    </DecisionDockFrame>;
+    const { rerender } = render(content('go'));
+    const slot = screen.getByTestId('decision-dock-slot');
+    // Use the shipped folding selector: jsdom does not apply media-query styles at phone widths.
+    const foldedSelector = readFileSync(resolve(__dirname, '../src/styles/sections/decision-dock.css'), 'utf8')
+      .split('\n').find((line) => line.includes('.wk-ask-opts:has('))!.trim().replace(/,$/, '');
+    const foldedAway = () => [...document.querySelectorAll(foldedSelector)];
+    expect(slot.dataset.folded).toBe('true');
+    expect(slot.querySelector('[data-dock-option="true"]')).toHaveTextContent('Skip QE with a reason…');
+    expect(within(slot).getByTestId('ask-confirm')).toHaveTextContent('Skip QE with a reason…');
+    expect(within(slot).getByRole('radio', { name: /^Deliver/ })).toBeDisabled();
+    expect(foldedAway()).not.toContain(within(slot).getByRole('radio', { name: /^Skip QE/ }));
+    fireEvent.click(within(slot).getByRole('radio', { name: 'Stop' }));
+    // Choosing a card unfolds the sheet; fold it again to check the next collapsed state.
+    fireEvent.click(screen.getByTestId('decision-dock-handle'));
+    expect(slot.dataset.folded).toBe('true');
+    expect(slot.querySelector('[data-dock-option="true"]')).toHaveTextContent('Stop');
+    // A person's pick stands when the host's start changes afterwards (a late gate read never replaces it).
+    rerender(content(null));
+    expect(slot.querySelector('[data-dock-option="true"]')).toHaveTextContent('Stop');
+    // A fresh card with no start: nothing selected, so the folded sheet shows the enabled recommendation.
+    cleanup();
+    render(content(null));
+    const fresh = screen.getByTestId('decision-dock-slot');
+    expect(fresh.querySelector('[data-dock-option="true"]')).toHaveTextContent('Skip QE with a reason…');
+    expect(within(fresh).getByTestId('ask-confirm')).toBeDisabled();
+    expect(foldedAway()).toEqual([
+      within(fresh).getByRole('radio', { name: /^Deliver/ }),
+      within(fresh).getByRole('radio', { name: 'Stop' }),
+    ]);
+  });
 
   it('folded: the eyebrow, the renderer\'s own headline and its primary move are in the sheet; no stand-in peek', async () => {
     phone(true);

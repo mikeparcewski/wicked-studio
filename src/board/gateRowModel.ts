@@ -564,7 +564,7 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
 }
 
 /** The judgment at a refused hand-over: the override is recorded, then the deliver phase re-runs on the same tree. */
-export const REFUSAL_JUDGMENT_TITLE = `${FLOOR_OVERRIDE_CONSEQUENCE} Write why the failed checks are not this work's; the deliver phase then runs again on this tree.`;
+export const REFUSAL_JUDGMENT_TITLE = `${FLOOR_OVERRIDE_CONSEQUENCE} Approving re-runs the deliver phase with your judgment on the record.`;
 
 /** How a refused hand-over words each answer the gate lists. Membership is never decided here: an answer the list
  *  does not name is not drawn, and one this does not know is drawn disabled (no wire for it yet). */
