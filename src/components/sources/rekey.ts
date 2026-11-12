@@ -28,10 +28,23 @@ export function ownsKeychainEntry(server: Pick<McpServer, 'name' | 'auth'> | nul
   return server != null && server.auth?.ref === keychainRef(server.name);
 }
 
-/** Where crew reads a saved source's secret: its own keychain entry, a daemon variable, another keychain entry, none. */
-export function secretRefKind(server: Pick<McpServer, 'name' | 'auth'> | null | undefined): 'own' | 'env' | 'other' | 'none' {
+/** The prefix of a GitHub source's `auth.ref` that names the GitHub CLI login crew reads at use (no secret at all). */
+export const GH_CLI_REF = 'gh-cli:';
+
+/** The `auth.ref` a GitHub source saved with the GitHub CLI option carries for `login`. */
+export const ghCliRef = (login: string): string => `${GH_CLI_REF}${login}`;
+
+/** The GitHub login a saved source's `auth.ref` names, or `null` when it does not use the GitHub CLI. */
+export function ghCliLoginOf(server: Pick<McpServer, 'auth'> | null | undefined): string | null {
+  const ref = server?.auth?.ref;
+  return typeof ref === 'string' && ref.startsWith(GH_CLI_REF) && ref.length > GH_CLI_REF.length ? ref.slice(GH_CLI_REF.length) : null;
+}
+
+/** Where crew reads a saved source's secret: its own keychain entry, a daemon variable, another keychain entry, the GitHub CLI's login (no secret), none. */
+export function secretRefKind(server: Pick<McpServer, 'name' | 'auth'> | null | undefined): 'own' | 'env' | 'other' | 'gh' | 'none' {
   const ref = server?.auth?.ref;
   if (server == null || typeof ref !== 'string' || ref === '') return 'none';
+  if (ref.startsWith(GH_CLI_REF)) return 'gh';
   return ref === keychainRef(server.name) ? 'own' : ref.startsWith('env:') ? 'env' : 'other';
 }
 

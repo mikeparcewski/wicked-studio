@@ -97,6 +97,10 @@
 .wk-pm-guide { padding: var(--space-2) var(--space-3); border-left: 3px solid var(--status-warn); border-radius: var(--radius-md); background: var(--status-warn-dim); font-size: var(--text-caption); line-height: 1.5; color: var(--ink-body); }
 .wk-pm-guide[data-tone="ok"] { border-left-color: var(--status-ok); background: var(--status-ok-dim); }
 .wk-pm-guide b { color: var(--ink-high); }
+.wk-pm-auth { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.wk-pm-auth-opt { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-body); color: var(--ink-high); cursor: pointer; }
+.wk-pm-auth-pick { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) var(--space-3); margin-left: var(--space-4); border-left: 3px solid var(--status-ok); border-radius: var(--radius-md); background: var(--status-ok-dim); min-width: 0; }
+.wk-pm-auth-select { min-width: 0; max-width: 100%; }
 .wk-pm-lines { margin: 0; padding-left: var(--space-4); font-size: var(--text-caption); line-height: 1.55; color: var(--ink-body); }
 .wk-pm-tools { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .wk-pm-tool { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2) 0; border-top: 1px solid var(--border-subtle); }

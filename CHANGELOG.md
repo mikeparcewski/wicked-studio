@@ -12,8 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+
+- Data sources → Add → GitHub Issues offers "Use the GitHub CLI login" when crew reports the GitHub CLI signed in: preselected, with an account picker, no token field, and no token sent (the source saves `auth.ref` `gh-cli:<login>`). With the CLI missing or signed out the sheet says so in plain words and keeps the token field; an older crew that reports nothing keeps the token flow. crew's named refusals (`gh_account_mismatch`, `gh_not_installed`, `gh_signed_out`, `gh_token_unavailable`, `gh_cli_not_allowed`) read in plain words through `translateWireError`. A saved CLI-login source offers no Replace token.
+
 ### Changed
 
+- Pins `wicked-crew-api-types` 0.206.0 (carries `McpServersResponse.ghCli` / `McpGhCliState`).
 - Requirements headers lead with confidence-weighted coverage when available; the minimum and progress bar still use stated coverage.
 
 ### Fixed
