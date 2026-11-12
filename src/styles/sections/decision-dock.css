@@ -157,6 +157,7 @@
   /* (guided asks) Folded: the option you are on and its primary; every card shows while none is selected. */
   .wk-dock-slot[data-folded="true"] .wk-ask-opts:has([aria-checked="true"]) > .wk-ask-opt:not([aria-checked="true"]),
   .wk-dock-slot[data-folded="true"] .wk-ask-cons,
+  .wk-dock-slot[data-folded="true"] .wk-ask-preview,
   .wk-dock-slot[data-folded="true"] .wk-ask-foot,
   .wk-dock-slot[data-folded="true"] .wk-gate-ask-more,
   .wk-dock-slot[data-folded="true"] .wk-prop-btns > :not(.wk-gate2-btn--primary),

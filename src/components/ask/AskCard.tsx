@@ -8,9 +8,9 @@ import { initialOption, initialPicks, pickBounds } from '../../board/askModel.js
  * every question a person answers inline: a gate, a seat's or MCP server's question, the power-mode pause, a setup
  * step. It replaces button rows inside bubbles:
  *
- *  - choose / confirm_reason: option cards in a radio group, the recommended one marked and preselected; the option
- *    you are on (hovered, else selected) says what happens ("If you choose this: …"); a danger option asks for a
- *    reason; nothing is sent until the primary button.
+ *  - choose / confirm_reason: option cards in a radio group, the recommended one marked and preselected; the
+ *    SELECTED option says what happens ("If you choose this: …", what the button will send); a hovered other option
+ *    is only ever a separate line marked "Preview:"; a danger option asks for a reason; nothing is sent until the primary button.
  *  - confirm: two halves; picking one is the answer.
  *  - pick: chips (checkboxes) with a count, Select all, and the bounds; a disabled chip stays visible with why.
  *  - scale: a slider over named steps, with the step's consequence.
@@ -138,7 +138,8 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
   useEffect(() => { onSelect?.(sel); }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const current = options.find((o) => o.id === sel) ?? null;
-  const shown = options.find((o) => o.id === (hover ?? sel)) ?? null;
+  // The hovered card is only a preview: the consequence line and the button always describe `current`.
+  const preview = hover !== null && hover !== sel ? options.find((o) => o.id === hover) ?? null : null;
   const needsReason = current !== null && (current.needsReason === true || ask.kind === 'confirm_reason');
   const open = needsReason && current !== null && engaged === current.id;
   const reasonCfg: AskReason | null = current === null || !open ? null
@@ -252,9 +253,13 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
           );
         })}
       </div>
-      {/* What happens next, for the option you are on: reserved height, so hovering never moves a card. */}
-      <p id={consId} data-testid={tid(testIds, 'consequence', /* testid */ 'ask-consequence')} {...(shown !== null ? { 'data-option': shown.id } : {})} aria-live="polite" className="wk-ask-cons">
-        {shown?.consequence !== undefined ? <><b>If you choose this:</b> {shown.consequence}</> : null}
+      {/* What will be sent, for the SELECTED option: reserved height, so hovering never moves a card. */}
+      <p id={consId} data-testid={tid(testIds, 'consequence', /* testid */ 'ask-consequence')} {...(current !== null ? { 'data-option': current.id } : {})} aria-live="polite" className="wk-ask-cons">
+        {current?.consequence !== undefined ? <><b>If you choose this:</b> {current.consequence}</> : null}
+      </p>
+      {/* A hovered other option, visibly a preview and never the confirmation; its own reserved line. */}
+      <p data-testid={`${tid(testIds, 'consequence', /* testid */ 'ask-consequence')}-preview`} {...(preview !== null ? { 'data-preview': 'true', 'data-option': preview.id } : {})} className="wk-ask-preview">
+        {preview?.consequence !== undefined ? <><b>Preview:</b> {preview.label}: {preview.consequence}</> : null}
       </p>
       {reasonCfg !== null && current !== null && (
         <div className="wk-ask-reason" data-testid="ask-reason">

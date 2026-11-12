@@ -18,7 +18,7 @@ export interface AskOption {
   id: string;
   label: string;
   sub?: string;
-  /** What happens if this option is taken: shown while it is hovered or selected ("If you choose this: …"). */
+  /** What happens if this option is taken: shown as "If you choose this: …" while it is selected, and as a marked "Preview:" while another option is hovered. */
   consequence?: string;
   /** The wire answer (a gate action token, an elicitation option, a pause decision). */
   token: string;

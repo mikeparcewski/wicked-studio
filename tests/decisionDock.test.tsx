@@ -330,8 +330,14 @@ describe('the gate card, compact (review of the dock)', () => {
     const other = choices.querySelector<HTMLElement>('[aria-checked="false"]:not(:disabled)')!;
     fireEvent.mouseEnter(other);
     expect(screen.getByTestId('session-gate-consequence')).toBe(line);
-    expect(line.getAttribute('data-option')).toBe(other.dataset['choiceKey']);
+    // #1100: the line stays on the selection; the hover is a separate, marked preview.
+    expect(line.getAttribute('data-option')).toBe(selected!.dataset['choiceKey']);
+    expect(line.textContent).toMatch(/^If you choose this: /);
+    const preview = screen.getByTestId('session-gate-consequence-preview');
+    expect(preview.getAttribute('data-preview')).toBe('true');
+    expect(preview.getAttribute('data-option')).toBe(other.dataset['choiceKey']);
     fireEvent.mouseLeave(other);
+    expect(preview.hasAttribute('data-preview')).toBe(false);
     expect(line.getAttribute('data-option')).toBe(selected!.dataset['choiceKey']);
   });
 
