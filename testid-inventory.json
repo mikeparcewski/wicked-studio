@@ -13973,6 +13973,30 @@
       ]
     },
     {
+      "testId": "pm-auth-gh",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-auth-mode",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-auth-saved",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-auth-token",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "pm-cancel",
       "files": [
         "src/components/sources/PmSourceSheet.tsx"
@@ -13986,6 +14010,24 @@
     },
     {
       "testId": "pm-email",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-gh-account",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-gh-note",
+      "files": [
+        "src/components/sources/PmSourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "pm-gh-state",
       "files": [
         "src/components/sources/PmSourceSheet.tsx"
       ]

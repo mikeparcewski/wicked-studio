@@ -26,9 +26,30 @@
 
 import { planRefusalWords } from './planRefusal.js';
 
-/** Translate one wire refusal to its operator-facing sentence (EC33). */
-export function translateWireError(status: number, wire: string): string {
+/**
+ * The GitHub CLI login refusals crew names on a PM source's preview and save (crew's `gh-cli:` auth: four 409s and a
+ * 400). Each gets plain words first, the daemon's own sentence kept whole after them; nothing was saved by any.
+ */
+const GH_CLI_REFUSALS: Readonly<Record<string, string>> = {
+  gh_account_mismatch: 'That account isn’t the one the GitHub CLI is signed in as: choose another, or check again. Nothing was saved.',
+  gh_not_installed: 'The GitHub CLI isn’t installed where crew runs. Nothing was saved.',
+  gh_signed_out: 'The GitHub CLI is signed out where crew runs. Nothing was saved.',
+  gh_token_unavailable: 'The GitHub CLI couldn’t supply a login for that account. Nothing was saved.',
+  gh_cli_not_allowed: 'This source can’t use the GitHub CLI login. Nothing was saved.',
+};
+
+/** Whether `code` is one of the GitHub CLI refusals crew names (the sheet re-reads crew's gh state for the first four). */
+export function isGhCliRefusal(code: string | null): boolean {
+  return code !== null && Object.hasOwn(GH_CLI_REFUSALS, code);
+}
+
+/** Translate one wire refusal to its operator-facing sentence (EC33). `code` is the refusal body's named code, if any. */
+export function translateWireError(status: number, wire: string, code?: string | null): string {
   const detail = wire.trim();
+  if (code != null && Object.hasOwn(GH_CLI_REFUSALS, code)) {
+    const plain = GH_CLI_REFUSALS[code]!;
+    return detail === '' ? plain : `${plain} — ${detail}`;
+  }
   if (detail === '') {
     // A body-less refusal still gets an honest, complete sentence — the code
     // is stated in words, never as the bare `API NNN:` framing EC33 retires.
@@ -51,7 +72,8 @@ export class ApiError extends Error {
    *  independent review of #263, F-8). `undefined` for a non-JSON body or a bare status. */
   readonly body: unknown;
   constructor(status: number, wire: string, body?: unknown) {
-    super(translateWireError(status, wire));
+    const code = typeof body === 'object' && body !== null ? (body as { code?: unknown }).code : undefined;
+    super(translateWireError(status, wire, typeof code === 'string' ? code : null));
     this.name = 'ApiError';
     this.status = status;
     this.wire = wire;

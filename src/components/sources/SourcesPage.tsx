@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { agentSwitchWrites } from '../../api/sourceAgents.js';
 import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
+import type { McpGhCliState } from '../../api/mcp-wire.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -65,6 +66,8 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
   /** (DES-PM-001) The project-management sources (Jira, GitHub Issues): their own list and sheet, never an app's data. */
   const pmOn = useTrackerLinksSupported();
   const [pmSources, setPmSources] = useState<McpServer[]>([]);
+  /** What crew's latest list said about the GitHub CLI: absent from an older crew (the sheet then keeps the token field). */
+  const [ghCli, setGhCli] = useState<McpGhCliState | null>(null);
   const [pmSheet, setPmSheet] = useState<PmSheetTarget | null>(null);
   /** (CS9) The web source: `null` = this crew has none (the box is not shown). */
   const [web, setWeb] = useState<WebSourceSetup | 'unreadable' | null>(null);
@@ -111,6 +114,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
       // A record with a PM marker this studio can't read is quarantined with them, never shown as app data.
       setSources(r.servers.filter((x) => appReadable(x) && !hasPmMarker(x as { pm?: unknown })));
       setPmSources(r.servers.filter((x) => hasPmMarker(x as { pm?: unknown })));
+      setGhCli(r.ghCli ?? null);
       setError(null);
       toVerify.current.clear();
       setUnverified((cur) => (cur.size === 0 ? cur : new Set()));
@@ -271,6 +275,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           target={pmSheet}
           existing={[...sources, ...pmSources].map((s) => s.name)}
           servers={pmSources}
+          ghCli={ghCli}
           agentsUnverified={unverified}
           onReread={() => void refresh()}
           onSaved={(saved) => {

@@ -36,9 +36,11 @@ const jiraServer = (over: Record<string, unknown> = {}) => ({
 
 let calls: Array<{ path: string; method: string; body: unknown }> = [];
 let servers: unknown[] = [];
+let cliAnswer: unknown;
 beforeEach(() => {
   calls = [];
   servers = [];
+  cliAnswer = undefined;
   useCapabilities.setState({ loaded: true, dataSources: true, trackerLinks: true });
   apiFetch.mockReset();
   apiFetch.mockImplementation((path: string, init?: RequestInit) => {
@@ -47,7 +49,7 @@ beforeEach(() => {
     calls.push({ path, method, body });
     if (path === '/mcp/servers/preview') return Promise.resolve({ previewHash: 'ph-1', expiresAt: '2026-11-04T20:00:00Z', server: { ...body, command: null, args: [] }, serverInfo: { name: 'atlassian-mcp', version: '2.0' }, tools: jiraTools, diff: null });
     if (path === '/mcp/servers' && method === 'POST') { servers = [jiraServer()]; return Promise.resolve(jiraServer()); }
-    if (path === '/mcp/servers') return Promise.resolve({ servers, discovered: [] });
+    if (path === '/mcp/servers') return Promise.resolve({ servers, discovered: [], ...(cliAnswer !== undefined ? { ghCli: cliAnswer } : {}) });
     if (path === '/sources/jira/trackers') {
       return Promise.resolve({ name: 'jira', next: 'c2', trackers: [
         { tenant: 'cloud-1', tenantLabel: 'acme.atlassian.net', key: 'BILL', label: 'Billing', links: [] },
@@ -170,6 +172,23 @@ describe('the Data sources page', () => {
     fireEvent.click(await screen.findByTestId('source-kind-jira'));
     expect(await screen.findByTestId('pm-sheet')).toHaveAttribute('data-system', 'jira');
     expect(screen.queryByTestId('source-sheet')).toBeNull();
+  });
+
+  it('the page hands crew’s ghCli to the GitHub sheet it opens, and an older crew’s silence keeps the token field', async () => {
+    cliAnswer = { available: true, accounts: ['octo-a'], active: 'octo-a' };
+    render(<SourcesPage navigate={vi.fn()} search="" />);
+    await waitFor(() => expect(calls.some((c) => c.path === '/mcp/servers')).toBe(true));
+    fireEvent.click(await screen.findByTestId('sources-add'));
+    fireEvent.click(await screen.findByTestId('source-kind-github'));
+    expect(await screen.findByTestId('pm-auth-gh')).toBeChecked();
+    expect(screen.getByTestId('pm-gh-account')).toHaveValue('octo-a');
+    cleanup();
+    cliAnswer = undefined;
+    render(<SourcesPage navigate={vi.fn()} search="" />);
+    fireEvent.click(await screen.findByTestId('sources-add'));
+    fireEvent.click(await screen.findByTestId('source-kind-github'));
+    expect(await screen.findByTestId('pm-secret')).toBeInTheDocument();
+    expect(screen.queryByTestId('pm-auth-gh')).toBeNull();
   });
 
   it('a PM marker this studio can’t read is never offered as app data, and is said', async () => {
@@ -305,5 +324,163 @@ describe('the real Atlassian v2 server (pm-real-jira)', () => {
     expect(within(chip).getByTestId('pm-tool-chip-granted')).toHaveTextContent('granted');
     expect(screen.queryAllByTestId('pm-tool-grant')).toHaveLength(0);
     expect(screen.getByRole('heading', { name: /Not part of trackers \(Confluence\)/ })).toBeInTheDocument();
+  });
+});
+
+describe('the GitHub CLI login option', () => {
+  const cliState = (over: Record<string, unknown> = {}) => ({ available: true, accounts: ['octo-a', 'octo-b'], active: 'octo-b', ...over });
+  const open = (ghCli?: unknown, onReread = vi.fn()) => render(<PmSourceSheet target={{ mode: 'new', system: 'github' }} existing={[]} ghCli={ghCli as never} onReread={onReread} onSaved={vi.fn()} onClose={vi.fn()} />);
+  const previews = () => calls.filter((c) => c.path === '/mcp/servers/preview');
+
+  it('signed in: the option is preselected with the account picker on the active account, and no token field', () => {
+    const onReread = vi.fn();
+    open(cliState(), onReread);
+    expect(screen.getByTestId('pm-auth-gh')).toBeChecked();
+    expect(screen.getByTestId('pm-gh-account')).toHaveValue('octo-b');
+    expect(within(screen.getByTestId('pm-gh-account')).getAllByRole('option').map((o) => o.textContent)).toEqual(['octo-a', 'octo-b']);
+    expect(screen.queryByTestId('pm-secret')).toBeNull();
+    expect(screen.getByTestId('pm-test-run')).toBeEnabled();
+    // The sheet reads crew again as it opens, so a login done after the page loaded is seen.
+    expect(onReread).toHaveBeenCalledTimes(1);
+  });
+
+  it('no active account: the first is chosen', () => {
+    open(cliState({ active: null }));
+    expect(screen.getByTestId('pm-gh-account')).toHaveValue('octo-a');
+  });
+
+  it.each([
+    ['missing', { available: false, accounts: [], active: null }, 'isn’t installed'],
+    ['signedOut', { available: true, accounts: [], active: null }, 'signed out'],
+  ])('CLI %s: says so in plain words and offers the token field', (state, ghCli, words) => {
+    open(ghCli);
+    expect(screen.getByTestId('pm-gh-state')).toHaveAttribute('data-state', state);
+    expect(screen.getByTestId('pm-gh-state')).toHaveTextContent(words);
+    expect(screen.getByTestId('pm-secret')).toBeInTheDocument();
+    expect(screen.queryByTestId('pm-auth-gh')).toBeNull();
+  });
+
+  it('an older crew (no ghCli): the token flow as ever', () => {
+    open(undefined);
+    expect(screen.getByTestId('pm-secret')).toBeInTheDocument();
+    expect(screen.queryByTestId('pm-gh-state')).toBeNull();
+    expect(screen.queryByTestId('pm-auth-mode')).toBeNull();
+  });
+
+  it('Test then Save with the option: the preview names the login with the same header and prefix, and no secret rides anywhere', async () => {
+    open(cliState());
+    fireEvent.change(screen.getByTestId('pm-gh-account'), { target: { value: 'octo-a' } });
+    fireEvent.click(screen.getByTestId('pm-test-run'));
+    await screen.findByTestId('pm-test-lines');
+    const body = previews()[0]!.body as Record<string, unknown>;
+    expect(body['auth']).toEqual({ ref: 'gh-cli:octo-a', header: 'Authorization', prefix: 'Bearer ' });
+    expect(Object.hasOwn(body, 'secret')).toBe(false);
+    fireEvent.click(screen.getByTestId('pm-save'));
+    await waitFor(() => expect(calls.some((c) => c.path === '/mcp/servers' && c.method === 'POST')).toBe(true));
+    expect(calls.find((c) => c.path === '/mcp/servers' && c.method === 'POST')!.body).toEqual({ previewHash: 'ph-1' });
+  });
+
+  it('changing the account drops a held preview, and a late older preview does not bring Save back', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/mcp/servers/preview' && previews().length === 0) { calls.push({ path, method: 'POST', body: JSON.parse(init!.body as string) }); return new Promise((r) => { release = r; }); }
+      return base(path, init);
+    });
+    open(cliState());
+    fireEvent.click(screen.getByTestId('pm-test-run'));
+    await waitFor(() => expect(previews()).toHaveLength(1));
+    fireEvent.change(screen.getByTestId('pm-gh-account'), { target: { value: 'octo-a' } });
+    release({ previewHash: 'old', tools: jiraTools });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByTestId('pm-save')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('pm-test-run'));
+    await screen.findByTestId('pm-test-lines');
+    expect(screen.getByTestId('pm-save')).toBeEnabled();
+    expect((previews()[1]!.body as { auth: { ref: string } }).auth.ref).toBe('gh-cli:octo-a');
+  });
+
+  it('switching to a typed token requires one; switching back never carries it', async () => {
+    open(cliState());
+    fireEvent.click(screen.getByTestId('pm-auth-token'));
+    expect(screen.getByTestId('pm-test-run')).toBeDisabled();
+    const secret = screen.getByTestId('pm-secret') as HTMLInputElement;
+    secret.value = TOKEN;
+    fireEvent.input(secret);
+    fireEvent.click(screen.getByTestId('pm-auth-gh'));
+    expect(screen.queryByTestId('pm-secret')).toBeNull();
+    fireEvent.click(screen.getByTestId('pm-test-run'));
+    await screen.findByTestId('pm-test-lines');
+    expect(JSON.stringify(previews()[0]!.body)).not.toContain(TOKEN);
+    expect((previews()[0]!.body as { auth: { ref: string } }).auth.ref).toBe('gh-cli:octo-b');
+    fireEvent.click(screen.getByTestId('pm-auth-token'));
+    expect((screen.getByTestId('pm-secret') as HTMLInputElement).value).toBe('');
+    expect(screen.getByTestId('pm-test-run')).toBeDisabled();
+  });
+
+  it('an account that vanishes from crew’s latest word falls back to the default and drops the held preview', async () => {
+    const { rerender } = open(cliState());
+    fireEvent.click(screen.getByTestId('pm-test-run'));
+    await screen.findByTestId('pm-test-lines');
+    rerender(<PmSourceSheet target={{ mode: 'new', system: 'github' }} existing={[]} ghCli={cliState({ accounts: ['octo-a'], active: 'octo-a' })} onSaved={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByTestId('pm-gh-account')).toHaveValue('octo-a');
+    expect(screen.getByTestId('pm-save')).toBeDisabled();
+  });
+
+  it.each([
+    [409, 'gh_account_mismatch', 'isn’t the one the GitHub CLI is signed in as'],
+    [409, 'gh_not_installed', 'isn’t installed'],
+    [409, 'gh_signed_out', 'is signed out'],
+    [409, 'gh_token_unavailable', 'couldn’t supply a login'],
+    [400, 'gh_cli_not_allowed', 'can’t use the GitHub CLI login'],
+  ])('a %i %s refusal at the preview is shown in translateWireError’s words', async (status, code, words) => {
+    const base = apiFetch.getMockImplementation()!;
+    const wire = `crew says ${code}`;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => (path === '/mcp/servers/preview' ? Promise.reject(new ApiError(status, wire, { error: wire, code })) : base(path, init)));
+    const onReread = vi.fn();
+    open(cliState(), onReread);
+    onReread.mockClear();
+    fireEvent.click(screen.getByTestId('pm-test-run'));
+    const err = await screen.findByTestId('pm-sheet-error');
+    expect(err).toHaveTextContent(words);
+    expect(err).toHaveTextContent('Nothing was saved.');
+    // The refusals about crew's CLI state send the page to read it again; "not allowed" does not.
+    expect(onReread).toHaveBeenCalledTimes(code === 'gh_cli_not_allowed' ? 0 : 1);
+  });
+
+  it('a refusal at Save drops the held preview and says so', async () => {
+    open(cliState());
+    fireEvent.click(screen.getByTestId('pm-test-run'));
+    await screen.findByTestId('pm-test-lines');
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => (path === '/mcp/servers' && init?.method === 'POST'
+      ? Promise.reject(new ApiError(409, 'signed out', { error: 'signed out', code: 'gh_signed_out' })) : base(path, init)));
+    fireEvent.click(screen.getByTestId('pm-save'));
+    expect(await screen.findByTestId('pm-sheet-error')).toHaveTextContent('is signed out');
+    expect(screen.getByTestId('pm-save')).toBeDisabled();
+  });
+
+  it('the Test caption names the login in CLI mode and the token in token mode', () => {
+    open(cliState());
+    expect(screen.getByText('Test connects to the server with the GitHub CLI login and lists its tools. It reads no issues.')).toBeInTheDocument();
+    expect(screen.queryByText(/with your token/)).toBeNull();
+    fireEvent.click(screen.getByTestId('pm-auth-token'));
+    const secret = screen.getByTestId('pm-secret') as HTMLInputElement;
+    secret.value = TOKEN;
+    fireEvent.input(secret);
+    expect(screen.getByText('Test connects to the server with your token and lists its tools. It reads no issues.')).toBeInTheDocument();
+    expect(screen.queryByText(/GitHub CLI login and lists/)).toBeNull();
+  });
+
+  it('a saved CLI-login source offers no Replace token and says the login is read from the CLI', () => {
+    const server = jiraServer({ name: 'github', pm: { system: 'github' }, url: 'https://api.githubcopilot.com/mcp/', auth: { ref: 'gh-cli:octo-a', header: 'Authorization', prefix: 'Bearer ' } });
+    render(<PmSourceSheet target={{ mode: 'saved', server: server as never }} existing={[]} onSaved={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByTestId('pm-auth-saved')).toHaveTextContent('octo-a');
+    expect(screen.queryByTestId('pm-secret')).toBeNull();
+    expect(screen.queryByText('Replace token')).toBeNull();
+  });
+
+  it('savedWords names the GitHub CLI, not a token, for such a source', () => {
+    expect(savedWords({ code: null, cause: 'secret_missing' }, 'gh')).toContain('GitHub CLI');
   });
 });

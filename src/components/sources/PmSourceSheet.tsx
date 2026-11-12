@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Check, X } from 'lucide-react';
-import { ApiError } from '../../api/errors.js';
+import { ApiError, isGhCliRefusal } from '../../api/errors.js';
 import { sourcesApi, type McpPreviewResponse, type McpServer, type McpServerConfigBody } from '../../api/sources.js';
+import type { McpGhCliState } from '../../api/mcp-wire.js';
 import { agentAccessOf, type SourceAgentAccess } from '../../api/sourceAgents.js';
 import {
   sourceTrackersOf,
@@ -19,7 +20,7 @@ import { useModalEscape } from '../Modal.js';
 import { TrackerBadge } from '../trackers/TrackerParts.js';
 import { AgentAccess } from './AgentAccess.js';
 import { SecretField, type SecretHandle } from './SecretField.js';
-import { elsewhereWords, refusalWords, rekeyFailure, rekeyPending, rekeySource, secretRefKind, secretShapeProblem, takeRekeyOutcome } from './rekey.js';
+import { elsewhereWords, ghCliLoginOf, ghCliRef, refusalWords, rekeyFailure, rekeyPending, rekeySource, secretRefKind, secretShapeProblem, takeRekeyOutcome } from './rekey.js';
 import { keychainRef, NAME_RE } from './sourceModel.js';
 import { useDialogFocus } from './useDialogFocus.js';
 
@@ -153,8 +154,9 @@ export function toolGroupsOf(system: 'jira' | 'github', reviews: readonly ToolRe
 }
 
 /** What the sheet may say about the saved source when its test failed: no more than crew's answer supports. */
-export function savedWords(crew: { code: string | null; cause: string | null } | null, refKind: 'own' | 'env' | 'other' | 'none' = 'own'): string {
+export function savedWords(crew: { code: string | null; cause: string | null } | null, refKind: 'own' | 'env' | 'other' | 'gh' | 'none' = 'own'): string {
   if (crew?.code === 'source_not_found') return 'crew no longer has this source: it was removed since this page was read.';
+  if (refKind === 'gh') return 'The source is saved. This test failed: crew reads its login from the GitHub CLI, so check that gh is signed in where crew runs; nothing else changed.';
   if (crew?.cause === 'secret_missing') {
     return refKind === 'env' || refKind === 'other' ? `The source is saved, but crew can’t read its token. ${elsewhereWords(refKind, 'token')}`
       : 'The source is saved, but crew can’t read its token: type it again above and choose Save token.';
@@ -202,15 +204,34 @@ export function jiraBasic(email: string, token: string): string {
 }
 
 /** The registration crew previews: the vendor's MCP server over HTTP, marked as a PM system, its token as a header. */
-export function pmConfigBody(system: 'jira' | 'github', name: string, url: string, hasSecret: boolean): McpServerConfigBody {
+export function pmConfigBody(system: 'jira' | 'github', name: string, url: string, hasSecret: boolean, ghLogin: string | null = null): McpServerConfigBody {
   const n = name.trim();
+  // The GitHub CLI option: the same header and prefix as a typed token, the ref naming the login crew reads from gh at use
+  // (and no secret rides the preview).
+  const ref = system === 'github' && ghLogin !== null ? ghCliRef(ghLogin) : hasSecret ? keychainRef(n) : null;
   return {
     name: n,
     kind: 'mcp-http',
     url: url.trim(),
-    auth: hasSecret ? { ref: keychainRef(n), header: 'Authorization', prefix: system === 'jira' ? 'Basic ' : 'Bearer ' } : null,
+    auth: ref !== null ? { ref, header: 'Authorization', prefix: system === 'jira' ? 'Basic ' : 'Bearer ' } : null,
     pm: { system },
   } as McpServerConfigBody;
+}
+
+/**
+ * How the GitHub sheet offers its credential, from what crew reported about the GitHub CLI (`ghCli` on its server list):
+ * `none` (Jira, or an older crew that reports nothing: the token field as ever), `missing` (gh isn't installed where crew
+ * runs), `signedOut` (installed, no account), or `ready` (accounts to choose from; `login` is the one chosen by default:
+ * the active account when it is listed, else the first).
+ */
+export type GhSheetMode = { kind: 'none' | 'missing' | 'signedOut' } | { kind: 'ready'; accounts: readonly string[]; login: string };
+
+export function ghSheetMode(system: 'jira' | 'github', gh: McpGhCliState | null | undefined): GhSheetMode {
+  if (system !== 'github' || gh == null || typeof gh !== 'object') return { kind: 'none' };
+  if (gh.available === false) return { kind: 'missing' };
+  const accounts = Array.isArray(gh.accounts) ? gh.accounts.filter((a): a is string => typeof a === 'string' && a !== '') : [];
+  if (accounts.length === 0) return { kind: 'signedOut' };
+  return { kind: 'ready', accounts, login: typeof gh.active === 'string' && accounts.includes(gh.active) ? gh.active : accounts[0]! };
 }
 
 /** What Test connection on a saved PM source read: the sites (or the host) its token reaches, and how many projects. */
@@ -261,11 +282,13 @@ const codeOf = (e: unknown): string | null => {
   return typeof c === 'string' ? c : null;
 };
 
-export function PmSourceSheet({ target, existing, servers, agentsUnverified, onReread, onSaved, onRekeyed, onAgents, onClose }: {
+export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverified, onReread, onSaved, onRekeyed, onAgents, onClose }: {
   target: PmSheetTarget;
   existing: readonly string[];
   /** The page's latest read of the registry: a sheet opened as new follows its saved source there. */
   servers?: readonly McpServer[];
+  /** What crew's latest list said about the GitHub CLI (`ghCli`); absent from an older crew, which keeps the token field. */
+  ghCli?: McpGhCliState | null;
   agentsUnverified?: ReadonlySet<string>;
   onReread?: () => void;
   onSaved: (server: McpServer) => void;
@@ -299,6 +322,9 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   const secret = useRef<SecretHandle | null>(null);
   const [hasSecret, setHasSecret] = useState(false);
   const [secretEdits, setSecretEdits] = useState(0);
+  /** What the person chose between the GitHub CLI login and a typed token, and which account: unset follows crew's latest word. */
+  const [authPick, setAuthPick] = useState<'gh' | 'token' | null>(null);
+  const [loginPick, setLoginPick] = useState<string | null>(null);
   /** The typed token went with a preview and the field let go of it: it is sent once per test, so a new test needs it typed again. */
   const [tokenSent, setTokenSent] = useState(false);
   /** The write tools the person grants at the save (crew's G1 `enabledWrites`): only a granted write can be asked for at the deliver gate. */
@@ -315,13 +341,24 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   const projects = useProjectsStore((s) => s.projects);
 
   const isNew = saved === null && target.mode === 'new';
-  const key = JSON.stringify([pmConfigBody(system, name, url, hasSecret || tokenSent), system === 'jira' ? email.trim() : '', secretEdits]);
+  // A new GitHub sheet reads crew's list once as it opens, so a gh login done after the page loaded is seen (no polling).
+  useEffect(() => {
+    if (target.mode === 'new' && target.system === 'github') onReread?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, as the sheet opens
+  }, []);
+  // The GitHub CLI option, for a new GitHub source while crew reports an account: an account that vanished from crew's
+  // latest word falls back to its default, and no account leaves the token field, so a held preview never outlives either.
+  const ghMode = ghSheetMode(system, isNew ? ghCli : null);
+  const useGh = ghMode.kind === 'ready' && (authPick ?? 'gh') === 'gh';
+  const ghLogin = ghMode.kind === 'ready' && useGh ? (loginPick !== null && ghMode.accounts.includes(loginPick) ? loginPick : ghMode.login) : null;
+  const key = JSON.stringify([pmConfigBody(system, name, url, hasSecret || tokenSent, ghLogin), system === 'jira' ? email.trim() : '', secretEdits]);
   const preview = held !== null && held.key === key ? held.preview : null;
   const blocker = !isNew ? null
     : !NAME_RE.test(name.trim()) ? 'Name: 1-63 of a-z 0-9 _ -, starting with a letter or digit'
       : name.trim() === 'crew' ? '"crew" is the built-in source; choose another name'
         : !/^https:\/\/\S+$/.test(url.trim()) ? 'Server is an https URL'
           : system === 'jira' && !/^\S+@\S+$/.test(email.trim()) ? 'Account email is needed'
+            : ghLogin !== null ? null
             : !hasSecret ? (tokenSent ? 'Type the token again to test again: it is sent once per test' : system === 'jira' ? 'API token is needed' : 'Personal access token is needed') : null;
 
   const test = async (): Promise<void> => {
@@ -331,19 +368,26 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
     setBusy('test');
     setError(null);
     setHeld(null);
-    const token = secret.current?.read() ?? '';
-    // Sent once: the field lets go of the token as it goes (a retest needs it typed again; Save uses this preview).
-    secret.current?.clear();
-    setHasSecret(false);
-    setTokenSent(true);
+    // The GitHub CLI option sends no token: only the ref naming the login.
+    const token = ghLogin !== null ? '' : secret.current?.read() ?? '';
+    if (ghLogin === null) {
+      // Sent once: the field lets go of the token as it goes (a retest needs it typed again; Save uses this preview).
+      secret.current?.clear();
+      setHasSecret(false);
+      setTokenSent(true);
+    }
     try {
-      const p = await sourcesApi.preview(pmConfigBody(system, name, url, true), system === 'jira' ? jiraBasic(email.trim(), token) : token);
+      const p = await sourcesApi.preview(pmConfigBody(system, name, url, true, ghLogin), ghLogin !== null ? null : system === 'jira' ? jiraBasic(email.trim(), token) : token);
       if (mine !== seq.current) return;
       // Held only when it is crew's whole preview: a hash to save, and every tool readable.
       if (!previewReadable(p)) { setError('crew answered the test in a form this studio can’t read, so nothing can be saved from it: update studio or crew.'); return; }
       setHeld({ key: asked, preview: p });
     } catch (e) {
-      if (mine === seq.current) setError(codeOf(e) === 'pm_source_human_only' ? 'Only a person signed in to studio can register a project-management tool. Nothing was saved.' : words(e));
+      if (mine === seq.current) {
+        setError(codeOf(e) === 'pm_source_human_only' ? 'Only a person signed in to studio can register a project-management tool. Nothing was saved.' : words(e));
+        // crew's word on the GitHub CLI changed under the sheet: read it again (the account list follows).
+        if (isGhCliRefusal(codeOf(e)) && codeOf(e) !== 'gh_cli_not_allowed') onReread?.();
+      }
     } finally {
       if (mine === seq.current) setBusy(null);
     }
@@ -381,7 +425,8 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
     try {
       const granted = grants.key === key ? [...grants.names] : [];
       const s = await sourcesApi.save(preview.previewHash, undefined, granted).catch((e: unknown) => {
-        if (codeOf(e) === 'preview_stale' || codeOf(e) === 'preview_required') setHeld(null);
+        if (codeOf(e) === 'preview_stale' || codeOf(e) === 'preview_required' || isGhCliRefusal(codeOf(e))) setHeld(null);
+        if (isGhCliRefusal(codeOf(e)) && codeOf(e) !== 'gh_cli_not_allowed') onReread?.();
         throw e;
       });
       // crew wrote the token to the keychain with the save: the field lets go of it now.
@@ -516,6 +561,15 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
   const frozen = busy === 'save';
   const tokenNote = tokenSent ? 'Sent once, with this test. Save keeps it in your keychain; type it again only to test again.' : 'Kept in your keychain. Never shown again, never in a file, a log or an agent’s context.';
   const savedNote = !isNew && savedAuth !== 'none' && (refKind === 'env' || refKind === 'other') ? elsewhereWords(refKind, 'token') : tokenNote;
+  /** Between the GitHub CLI login and a typed token: whatever was typed before is let go, so neither mode inherits the other's. */
+  const switchAuth = (to: 'gh' | 'token'): void => {
+    if (to === (useGh ? 'gh' : 'token')) return;
+    setAuthPick(to);
+    setHasSecret(false);
+    setTokenSent(false);
+    setSecretEdits((n) => n + 1);
+    setError(null);
+  };
   const secretField = (label: string): React.ReactElement => (
     <SecretField ref={secret} label={label} data-testid="pm-secret" note={isNew ? tokenNote : savedNote}
       savedState={savedAuth} disabled={busy !== null}
@@ -571,7 +625,46 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                   )}
                   {secretField('API token')}
                 </div>
-              ) : secretField('Personal access token')}
+              ) : !isNew && refKind === 'gh' ? (
+                <div className="wk-pm-guide" data-tone="ok" data-testid="pm-auth-saved">
+                  <b>Uses the GitHub CLI login.</b> crew reads the login of {ghCliLoginOf(shownServer)} from the GitHub CLI where it runs, so there is no token to replace here.
+                </div>
+              ) : ghMode.kind === 'ready' ? (
+                <fieldset className="wk-pm-auth" data-testid="pm-auth-mode" disabled={frozen || busy !== null}>
+                  <legend className="wk-src-label">Sign in to GitHub with</legend>
+                  <label className="wk-pm-auth-opt">
+                    <input type="radio" name={`${titleId}-auth`} data-testid="pm-auth-gh" checked={useGh} onChange={() => switchAuth('gh')} />
+                    <span>Use the GitHub CLI login</span>
+                  </label>
+                  {useGh && (
+                    <div className="wk-pm-auth-pick">
+                      <label className="wk-src-field"><span className="wk-src-label">GitHub account</span>
+                        <select className="wk-field wk-src-input wk-pm-auth-select" data-testid="pm-gh-account" aria-describedby={`${titleId}-gh-note`} value={ghLogin ?? ''}
+                          onChange={(e) => { setLoginPick(e.target.value); setError(null); }}>
+                          {ghMode.accounts.map((a) => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                      </label>
+                      <span id={`${titleId}-gh-note`} className="wk-src-note" data-testid="pm-gh-note">crew uses this account’s login from the GitHub CLI where it runs. No token is typed or stored by studio.</span>
+                    </div>
+                  )}
+                  <label className="wk-pm-auth-opt">
+                    <input type="radio" name={`${titleId}-auth`} data-testid="pm-auth-token" checked={!useGh} onChange={() => switchAuth('token')} />
+                    <span>Type a token</span>
+                  </label>
+                  {!useGh && secretField('Personal access token')}
+                </fieldset>
+              ) : (
+                <>
+                  {(ghMode.kind === 'missing' || ghMode.kind === 'signedOut') && (
+                    <div className="wk-pm-guide" data-tone="warn" data-testid="pm-gh-state" data-state={ghMode.kind}>
+                      {ghMode.kind === 'missing'
+                        ? <><b>The GitHub CLI isn’t installed</b> where crew runs, so it can’t supply a login. Type a token instead.</>
+                        : <><b>The GitHub CLI is installed but signed out.</b> Run <code>gh auth login</code> where crew runs, or type a token instead.</>}
+                    </div>
+                  )}
+                  {secretField('Personal access token')}
+                </>
+              )}
               {rekeyOpen && (
                 <div className="wk-src-rekey" data-testid="pm-rekey">
                   <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="pm-rekey-save" disabled={rekeyBlocker !== null || busy !== null} title={rekeyBlocker ?? undefined} onClick={() => void rekey()}>
@@ -584,6 +677,10 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
               {system === 'jira' ? (
                 <div className="wk-pm-guide" data-tone="warn" data-testid="pm-token-advice">
                   <b>Jira API tokens can’t be limited to projects.</b> crew limits every call to the Jira projects you link: it sets the site, adds your linked projects to every search, and drops anything else from an answer before an agent sees it.
+                </div>
+              ) : ghLogin !== null || (!isNew && refKind === 'gh') ? (
+                <div className="wk-pm-guide" data-tone="ok" data-testid="pm-token-advice">
+                  <b>No token is kept.</b> crew reads the login from the GitHub CLI each time it connects, and still limits every call to the repositories you link.
                 </div>
               ) : (
                 <div className="wk-pm-guide" data-tone="ok" data-testid="pm-token-advice">
@@ -605,7 +702,7 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
                   {!isNew && reach?.ok === false && <span className="wk-tag wk-tag--fail" data-testid="pm-test-fail">Test failed</span>}
                   <span className="wk-src-cap">reads no issues</span>
                 </div>
-                {isNew && preview === null && busy !== 'test' && <p className="wk-src-note">{blocker ?? 'Test connects to the server with your token and lists its tools. It reads no issues.'}</p>}
+                {isNew && preview === null && busy !== 'test' && <p className="wk-src-note">{blocker ?? `Test connects to the server with ${ghLogin !== null ? 'the GitHub CLI login' : 'your token'} and lists its tools. It reads no issues.`}</p>}
                 {isNew && preview !== null && (
                   <ul className="wk-pm-lines" data-testid="pm-test-lines">
                     <li>Connected{serverInfoWords(preview)}: {tools?.length ?? 0} tool{tools?.length === 1 ? '' : 's'}, each listed with its review.</li>
@@ -705,7 +802,7 @@ export function PmSourceSheet({ target, existing, servers, agentsUnverified, onR
         </div>
         <footer className="wk-src-sheet-foot">
           {error !== null ? <p role="alert" className="wk-src-note wk-src-tone-fail wk-src-foot-msg" data-testid="pm-sheet-error">{error}</p>
-            : <span className="wk-src-cap wk-src-foot-msg" data-testid="pm-sheet-foot">{isNew ? (preview !== null ? 'Saving keeps the token in your keychain.' : blocker ?? 'Test it first: Save registers exactly what the test saw.') : 'Saved. Link its trackers on a project or a repository.'}</span>}
+            : <span className="wk-src-cap wk-src-foot-msg" data-testid="pm-sheet-foot">{isNew ? (preview !== null ? (ghLogin !== null ? 'Saving keeps no token: crew reads the login from the GitHub CLI.' : 'Saving keeps the token in your keychain.') : blocker ?? 'Test it first: Save registers exactly what the test saw.') : 'Saved. Link its trackers on a project or a repository.'}</span>}
           {isNew ? (
             <>
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="pm-cancel" onClick={onClose}>Cancel</button>
