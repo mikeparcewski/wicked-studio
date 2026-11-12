@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSpec } from '../src/api/types.js';
 import { colourOf, Sheet } from '../src/plugins/wicked-apps/runtime/sheet.js';
@@ -45,7 +46,10 @@ function mountTemplate(): void {
   document.head.append(el);
 }
 
-async function boot(app: { framed: boolean; mode: 'edit' | 'preview'; propsHost?: boolean }): Promise<{ host: MessagePort; seen: Array<{ type?: string; payload?: unknown }> }> {
+async function boot(app: { framed: boolean; mode: 'edit' | 'preview'; propsHost?: boolean }, fixture: {
+  spec?: AppSpec; rows?: Record<string, unknown[][]>; hasMore?: boolean; truncated?: boolean;
+} = {}): Promise<{ host: MessagePort; seen: Array<{ type?: string; payload?: unknown }> }> {
+  const spec = fixture.spec ?? SPEC;
   vi.resetModules();
   mountTemplate();
   const { startRuntime } = await import('../src/plugins/wicked-apps/runtime/runtime.js');
@@ -57,10 +61,10 @@ async function boot(app: { framed: boolean; mode: 'edit' | 'preview'; propsHost?
     seen.push(d);
     if (d.id === undefined) return;
     const reply = (payload: unknown): void => ch.port1.postMessage({ p: 'wicked.editor', v: 1, re: d.id, ok: true, payload });
-    if (d.type === 'artifact.read') reply({ version: 1, content: { type: 'app', spec: SPEC } });
+    if (d.type === 'artifact.read') reply({ version: 1, content: { type: 'app', spec } });
     if (d.type === 'data.query') {
-      const q = SPEC.queries.find((x) => x.id === d.payload['query'])!;
-      reply({ columns: q.output, rows: ROWS[q.id], truncated: false, hasMore: false, ms: 1, cachedAt: null });
+      const q = spec.queries.find((x) => x.id === d.payload['query'])!;
+      reply({ columns: q.output, rows: fixture.rows?.[q.id] ?? ROWS[q.id], truncated: fixture.truncated ?? false, hasMore: fixture.hasMore ?? false, ms: 1, cachedAt: null });
     }
   };
   const hello = Object.assign(new Event('message'), {
@@ -72,8 +76,253 @@ async function boot(app: { framed: boolean; mode: 'edit' | 'preview'; propsHost?
   return { host: ch.port1, seen };
 }
 
-beforeEach(() => { document.head.innerHTML = ''; document.body.innerHTML = ''; });
-afterEach(() => { delete (window as unknown as { __pwned?: unknown }).__pwned; });
+beforeEach(() => {
+  document.head.innerHTML = ''; document.body.innerHTML = '';
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: vi.fn(), configurable: true });
+});
+afterEach(() => {
+  Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  delete (window as unknown as { __pwned?: unknown }).__pwned;
+});
+
+describe('studio#1119: phone tables, tabs and large select filters', () => {
+  const cases = Array.from({ length: 457 }, (_, i) => [`case-${i}`, `${i < 310 ? 'Open' : i < 322 ? 'Rare' : 'Closed'} case ${i}`]);
+  const filterSpec = (kind: 'query' | 'values', selected = '', count = 457): AppSpec => ({
+    ...SPEC,
+    queries: [...SPEC.queries, { id: 'cases', source: 's', kind: 'sql', output: [{ name: 'id', type: 'string' }, { name: 'label', type: 'string' }] }],
+    pages: [{ ...SPEC.pages[0]!, components: [...SPEC.pages[0]!.components, {
+      id: 'case_picker', type: 'filter', filter: 'select', label: 'Case', default: selected,
+      options: kind === 'query' ? { kind: 'query', query: { query: 'cases' }, value: 'id', label: 'label' }
+        : { kind: 'values', values: cases.slice(0, count).map(([value, label]) => ({ value: value!, label: label! })) },
+      box: { x: 0, y: 13, w: 6, h: 1 },
+    }] }],
+  });
+  const picker = (): HTMLElement => document.querySelector('[data-component="case_picker"]')!;
+  const select = (): HTMLSelectElement => picker().querySelector('select')!;
+  const countText = (): string | null => picker().querySelector('[aria-live]')?.getAttribute('aria-label') ?? null;
+  const search = (): HTMLInputElement => picker().querySelector('input[type="search"]')!;
+  const find = (value: string): void => { search().value = value; search().dispatchEvent(new Event('input', { bubbles: true })); };
+  const rule = (selector: string): string => {
+    const rules = (document.getElementById('wk-apps-sheet') as HTMLStyleElement).sheet!.cssRules;
+    return [...rules].filter((r) => (r as CSSStyleRule).selectorText === selector).map((r) => r.cssText).join('\n');
+  };
+
+  it('contains the table in its own horizontal scroller and wraps cells only at word boundaries', async () => {
+    await boot({ framed: false, mode: 'preview' });
+    const table = document.querySelector('.wk-table')!;
+    expect(table.parentElement?.className).toBe('wk-table-scroll');
+    expect(table.closest('.wk-cell-body')).not.toBeNull();
+    expect(rule('.wk-table-scroll')).toContain('overflow-x: auto');
+    expect(rule('.wk-table-scroll')).toContain('max-width: 100%');
+    expect(rule('.wk-table td')).toContain('overflow-wrap: normal');
+    expect(rule('.wk-table td')).toContain('word-break: normal');
+    const prose = document.querySelector('.wk-table tbody td:nth-child(2)')!;
+    expect(getComputedStyle(prose).whiteSpace).toBe('normal');
+    expect(getComputedStyle(prose).minWidth).toBe('16ch');
+    expect(getComputedStyle(prose).maxWidth).toBe('60ch');
+    // A touch-action:none ancestor would prevent phone users from swiping the scroller.
+    expect(rule('.wk-cell, .wk-handle')).toBe('');
+    expect(rule('.wk-app[data-mode="edit"] .wk-cell, .wk-handle')).toContain('touch-action: none');
+  });
+
+  it('keeps every page tab inside a width-constrained horizontal scroller', async () => {
+    await boot({ framed: false, mode: 'preview' }, { spec: { ...SPEC, pages: [...SPEC.pages,
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `page-${i}`, title: `Another page ${i}`, components: [] })),
+    ] } });
+    expect(document.querySelectorAll('.wk-pages .wk-page')).toHaveLength(6);
+    expect(rule('.wk-pages')).toContain('overflow-x: auto');
+    expect(rule('.wk-pages')).toContain('max-width: 100%');
+    expect(rule('.wk-page')).toContain('flex: 0 0 auto');
+    expect(rule('.wk-main')).toContain('overflow-x: hidden');
+  });
+
+  it('restores tab scroll and active focus after a click, keyboard activation and a redraw', async () => {
+    const user = userEvent.setup();
+    const { host } = await boot({ framed: false, mode: 'preview' }, { spec: { ...SPEC, pages: [...SPEC.pages,
+      ...Array.from({ length: 6 }, (_, i) => ({ id: `page-${i}`, title: `Another page ${i}`, components: [] })),
+    ] } });
+    const nav = (): HTMLElement => document.querySelector('.wk-pages')!;
+    nav().scrollLeft = 423;
+    (nav().lastElementChild as HTMLButtonElement).click();
+    expect(nav().scrollLeft).toBe(423);
+    expect(document.activeElement).toBe(nav().lastElementChild);
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest', inline: 'nearest' });
+    // Native button keyboard activation must hand focus to the replacement button too.
+    (nav().firstElementChild as HTMLButtonElement).focus();
+    await user.keyboard('{Enter}');
+    expect(document.activeElement).toBe(nav().firstElementChild);
+    expect(nav().scrollLeft).toBe(423);
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'host.theme', payload: { theme: {} } });
+    const old = nav();
+    await vi.waitFor(() => expect(nav()).not.toBe(old));
+    expect(nav().scrollLeft).toBe(423);
+    expect(document.activeElement).toBe(nav().firstElementChild);
+  });
+
+  it('restores option-search text, focus and selection through query refresh without stealing focus', async () => {
+    const { host, seen } = await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query'), rows: { cases } });
+    await vi.waitFor(() => expect(search()).not.toBeNull());
+    find('Case 32');
+    search().focus();
+    search().setSelectionRange(2, 6, 'backward');
+    const old = search();
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'data.invalidate', payload: {} });
+    await vi.waitFor(() => expect(search()).not.toBe(old));
+    expect(document.activeElement).toBe(search());
+    expect(search().value).toBe('Case 32');
+    expect([search().selectionStart, search().selectionEnd, search().selectionDirection]).toEqual([2, 6, 'backward']);
+    const other = document.querySelector<HTMLButtonElement>('.wk-page')!;
+    other.focus();
+    const queries = seen.filter((m) => m.type === 'data.query').length;
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'data.invalidate', payload: {} });
+    const previous = search();
+    await vi.waitFor(() => expect(search()).not.toBe(previous));
+    expect(seen.filter((m) => m.type === 'data.query').length).toBeGreaterThan(queries);
+    expect(document.activeElement).toBe(other);
+    expect(search().value).toBe('Case 32');
+  });
+
+  it('defers a query redraw until option-search composition ends', async () => {
+    const { host, seen } = await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query'), rows: { cases } });
+    await vi.waitFor(() => expect(search()).not.toBeNull());
+    search().focus();
+    const old = search();
+    const oldChart = document.querySelector('[data-component="trend_area"] polyline');
+    old.dispatchEvent(new CompositionEvent('compositionstart'));
+    find('Case 32');
+    const queries = seen.filter((m) => m.type === 'data.query').length;
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'data.invalidate', payload: {} });
+    await vi.waitFor(() => expect(seen.filter((m) => m.type === 'data.query').length).toBeGreaterThan(queries));
+    // Wait for the refresh batch to redraw the chart before ending composition.
+    await vi.waitFor(() => expect(document.querySelector('[data-component="trend_area"] polyline')).not.toBe(oldChart));
+    expect(search()).toBe(old);
+    old.dispatchEvent(new CompositionEvent('compositionend'));
+    expect(search()).not.toBe(old);
+    expect(document.activeElement).toBe(search());
+    expect(search().value).toBe('Case 32');
+  });
+
+  it('fits select controls in one desktop row with a short, accessible count', async () => {
+    await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('values') });
+    const box = picker().querySelector('.wk-filter-select')!;
+    expect(getComputedStyle(box).flexDirection).not.toBe('column');
+    expect(rule('.wk-filter-options')).not.toContain('flex-wrap: wrap');
+    expect(picker().querySelector('[aria-live]')!.textContent).toBe('200 of 457');
+    expect(countText()).toBe('Showing 200 of 457');
+    expect(picker().querySelector('[aria-live]')!.getAttribute('title')).toBe(countText());
+  });
+
+  it('keeps short single tokens unbroken, gives prose room, and top-aligns table cells', async () => {
+    await boot({ framed: false, mode: 'preview' }, { rows: { t: [
+      [1, 'CASE-A00224'], [2, 'A'.repeat(64)], [3, 'A'.repeat(65)],
+    ] } });
+    const cells = [...document.querySelectorAll<HTMLElement>('.wk-table tbody td:nth-child(2)')];
+    expect(cells.map((c) => getComputedStyle(c).whiteSpace)).toEqual(['nowrap', 'nowrap', 'normal']);
+    expect(cells.every((c) => getComputedStyle(c).verticalAlign === 'top')).toBe(true);
+    expect(getComputedStyle(cells[2]!).minWidth).toBe('16ch');
+    expect(getComputedStyle(cells[2]!).maxWidth).toBe('60ch');
+  });
+
+  it.each(['query', 'values'] as const)('ends a capped %s select with a disabled search notice', async (kind) => {
+    await boot({ framed: false, mode: 'preview' }, { spec: filterSpec(kind), rows: { cases } });
+    await vi.waitFor(() => expect(select().options.length).toBeGreaterThan(200));
+    const last = select().options[select().options.length - 1]!;
+    expect(last.disabled).toBe(true);
+    expect(last.textContent).toBe('Showing 200 of 457: search to narrow');
+    expect([...select().options].filter((option) => !option.disabled)).toHaveLength(201);
+  });
+
+  it('shows 200 of 457 query options, searches all fetched labels, and keeps the selection and All', async () => {
+    const { seen } = await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query'), rows: { cases } });
+    await vi.waitFor(() => expect(countText()).toContain('Showing 200 of 457'));
+    expect(select().options).toHaveLength(202);
+    expect(select().options[0]!.textContent).toBe('All');
+    expect(select().options[201]!.textContent).toBe('Showing 200 of 457: search to narrow');
+    expect(select().options[201]!.disabled).toBe(true);
+    expect(picker().querySelector('[aria-live]')!.textContent).toBe('200 of 457');
+    expect(picker().querySelector('[aria-live]')!.getAttribute('title')).toBe('Showing 200 of 457');
+    expect(search().getAttribute('aria-label')).toBe('Search Case options');
+    select().value = 'case-1';
+    select().dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(seen.filter((m) => m.type === 'data.query' && (m.payload as { query: string }).query === 'cases')).toHaveLength(2));
+    await vi.waitFor(() => expect(select().value).toBe('case-1'));
+    const queries = seen.filter((m) => m.type === 'data.query').length;
+    find('rArE');
+    expect(countText()).toContain('Showing 12 matches');
+    expect(select().options).toHaveLength(14); // All, twelve matches and the current selection.
+    expect(select().value).toBe('case-1');
+    expect(select().selectedOptions[0]!.textContent).toBe('Open case 1');
+    expect([...select().options].some((o) => o.value === 'case-321')).toBe(true);
+    find('OPEN CASE');
+    expect(countText()).toContain('Showing 200 of 310 matches');
+    expect(select().options).toHaveLength(202);
+    find('nothing matches');
+    expect(countText()).toContain('Showing 0 matches');
+    expect(select().options).toHaveLength(2);
+    expect(select().value).toBe('case-1');
+    find('');
+    expect(countText()).toContain('Showing 200 of 457');
+    expect(seen.filter((m) => m.type === 'data.query')).toHaveLength(queries);
+  });
+
+  it.each(['hasMore', 'truncated'] as const)('marks the query count as incomplete when %s is true', async (flag) => {
+    await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query'), rows: { cases }, [flag]: true });
+    await vi.waitFor(() => expect(countText()).toContain('Showing 200 of 457+'));
+    expect(select().options[select().options.length - 1]!.textContent).toBe('Showing 200 of 457+: search to narrow');
+    expect(select().options[select().options.length - 1]!.disabled).toBe(true);
+    find('rare');
+    expect(countText()).toContain('Showing 12 matches in fetched rows');
+  });
+
+  it('offers search even below the cap when the source has more rows', async () => {
+    await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query'), rows: { cases: cases.slice(0, 20) }, hasMore: true });
+    await vi.waitFor(() => expect(countText()).toContain('Showing 20 of 20+'));
+    expect(search()).not.toBeNull();
+  });
+
+  it('gives values-fed selects the same count and search, reserving a slot for a selected value past the cap', async () => {
+    const { host } = await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('values', 'case-456') });
+    expect(countText()).toContain('Showing 200 of 457');
+    expect(select().options).toHaveLength(202);
+    expect(select().value).toBe('case-456');
+    expect(select().selectedOptions[0]!.textContent).toBe('Closed case 456');
+    find('open case');
+    expect(countText()).toContain('Showing 199 of 310 matches');
+    expect(select().options).toHaveLength(202);
+    expect(select().value).toBe('case-456');
+    find('rare');
+    expect(countText()).toContain('Showing 12 matches');
+    expect(select().value).toBe('case-456');
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'host.theme', payload: { theme: { '--ink-high': '#eeeeee', '--surface-raised': '#151515' } } });
+    await vi.waitFor(() => expect(rule(':root')).toContain('--ink-high: #eeeeee'));
+    expect(search().value).toBe('rare');
+    expect(select().value).toBe('case-456');
+    expect(rule('.wk-input')).toContain('var(--surface-raised)');
+    expect(rule('.wk-muted')).toContain('var(--ink-muted)');
+    select().value = '';
+    select().dispatchEvent(new Event('change', { bubbles: true }));
+    expect(select().value).toBe('');
+    expect(select().options).toHaveLength(13);
+    expect(countText()).toContain('Showing 12 matches');
+  });
+
+  it('keeps a selected value absent from fetched options selectable', async () => {
+    await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query', 'saved-case'), rows: { cases } });
+    await vi.waitFor(() => expect(countText()).toContain('Showing 199 of 457'));
+    expect(select().options).toHaveLength(202);
+    expect(select().value).toBe('saved-case');
+    find('rare');
+    expect(select().selectedOptions[0]!.textContent).toBe('saved-case');
+    expect(select().options[0]!.textContent).toBe('All');
+  });
+
+  it('leaves a complete small values list without a count or search', async () => {
+    await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('values', '', 20) });
+    expect(select().options).toHaveLength(21);
+    expect(search()).toBeNull();
+    expect(picker().textContent).not.toContain('Showing');
+  });
+});
 
 describe('S4 / S12: values are text', () => {
   it('hostile cells, titles, text and chart labels render as their characters; nothing runs; no network image', async () => {

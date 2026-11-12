@@ -18,6 +18,7 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- **Apps on phones (#1119).** A table scrolls sideways inside its card, an identifier such as CASE-A00224 stays on one line and text wraps only between words; the tab row scrolls (keeping the chosen tab in view), and the app spans the phone's width with its panel minimised (no 48 px right gutter). A select fed by more than 200 options says "200 of 457", ends with "Showing 200 of 457: search to narrow" and offers a search over every fetched option, keeping the current selection.
 - **A gate card's "If you choose this:" always describes the selected option (#1100).** It used to follow the card under the
   pointer, so with "Confirm or skip" selected it could read "Cancel the run" while the pointer rested on Stop. Hovering
   another option now shows a separate line marked "Preview:" that disappears on leave; the send button names the

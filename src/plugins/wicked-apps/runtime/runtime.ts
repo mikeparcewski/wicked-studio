@@ -107,6 +107,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
   let pageId: string | null = null;
   let selected: string | null = null;
   const filters = dict<string | DateRange>();
+  const optionSearch = new Map<string, string>();
   const forms = dict<Record<string, string | boolean>>();
   const url = dict<string>();
   const results = new Map<string, Result>();
@@ -363,9 +364,22 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
   let propsFor: string | null = null;
   const bodies = new Map<string, HTMLElement>();
 
+  const composingSearches = new WeakSet<HTMLInputElement>();
+  const pendingSearches = new WeakSet<HTMLInputElement>();
   const drawBody = (c: AppComponent, body: HTMLElement): void => {
+    const old = body.querySelector<HTMLInputElement>('.wk-filter-options input[type="search"]');
+    const focused = old !== null && document.activeElement === old;
+    // Replacing an IME's input would end its composition before the user finishes the word.
+    if (focused && composingSearches.has(old)) { pendingSearches.add(old); return; }
+    const selection = focused ? [old.selectionStart, old.selectionEnd, old.selectionDirection] as const : null;
+    if (focused) optionSearch.set(c.id, old.value);
     drawBodyNow(c, body);
     markInline(c, body);
+    if (selection !== null) {
+      const next = body.querySelector<HTMLInputElement>('.wk-filter-options input[type="search"]');
+      next?.focus({ preventScroll: true });
+      next?.setSelectionRange(selection[0], selection[1], selection[2] ?? undefined);
+    }
   };
   /**
    * Edit: a component's own words (its title, a Text's text, a Button's, Link's or Filter's label) are edited in place
@@ -476,7 +490,9 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       rows.columns.forEach((col, i) => { record[col.name] = r[i] ?? null; });
       for (const col of shown) {
         const v = r[at(col.column)];
-        tr.append(el('td', typeof v === 'number' ? 'wk-num' : undefined, cellText(v, col.format, locale)));
+        const text = cellText(v, col.format, locale);
+        const cls = typeof v === 'number' ? 'wk-num' : /^\S{1,64}$/u.test(text) ? 'wk-token' : 'wk-prose';
+        tr.append(el('td', cls, text));
       }
       if ((c.rowActions ?? []).length > 0) {
         const td = el('td', 'wk-td-actions');
@@ -486,7 +502,9 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       tbody.append(tr);
     }
     table.append(tbody);
-    body.append(table);
+    const scroll = el('div', 'wk-table-scroll');
+    scroll.append(table);
+    body.append(scroll);
     if (rows.rows.length === 0) body.append(el('p', 'wk-muted', 'No rows'));
     const foot = el('div', 'wk-table-foot');
     if (pages > 1) {
@@ -522,20 +540,70 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       label.append(input);
     } else if (c.filter === 'select') {
       const select = el('select', 'wk-input');
-      const opts: Array<{ value: string; label: string }> = [{ value: '', label: 'All' }];
-      if (c.options?.kind === 'values') for (const o of c.options.values.slice(0, 200)) opts.push({ value: lineOf(o.value, 200), label: lineOf(o.label ?? o.value, 200) });
+      const opts: Array<{ value: string; label: string }> = [];
+      let incomplete = false;
+      if (c.options?.kind === 'values') for (const o of c.options.values) opts.push({ value: lineOf(o.value, 200), label: lineOf(o.label ?? o.value, 200) });
       if (c.options?.kind === 'query') {
         const res = results.get(c.id);
         if (res?.state === 'rows') {
+          incomplete = res.rows.hasMore || res.rows.truncated;
           const vi = res.rows.columns.findIndex((col) => col.name === (c.options as { value: string }).value);
           const li = res.rows.columns.findIndex((col) => col.name === ((c.options as { label?: string }).label ?? ''));
-          for (const r of res.rows.rows.slice(0, 200)) if (vi >= 0) opts.push({ value: cellText(r[vi], undefined, locale), label: cellText(r[li >= 0 ? li : vi], undefined, locale) });
+          for (const r of res.rows.rows) if (vi >= 0) opts.push({ value: cellText(r[vi], undefined, locale), label: cellText(r[li >= 0 ? li : vi], undefined, locale) });
         }
       }
-      for (const o of opts) { const opt = el('option', undefined, o.label); opt.value = o.value; select.append(opt); }
-      select.value = typeof filters[c.id] === 'string' ? filters[c.id] as string : '';
-      select.addEventListener('change', () => { filters[c.id] = select.value; changed(); });
+      const box = el('div', 'wk-filter-select');
+      const tools = el('div', 'wk-filter-options');
+      const search = el('input', 'wk-input');
+      search.type = 'search';
+      search.placeholder = 'Search options';
+      search.setAttribute('aria-label', `Search ${lineOf(c.label ?? 'Filter', 60)} options`);
+      search.value = optionSearch.get(c.id) ?? '';
+      const count = el('span', 'wk-muted');
+      count.setAttribute('aria-live', 'polite');
+      const searchable = opts.length > 200 || incomplete;
+      const fill = (): void => {
+        const needle = searchable ? search.value.toLowerCase() : '';
+        const matches = opts.filter((o) => o.label.toLowerCase().includes(needle));
+        const shown = matches.slice(0, 200);
+        const value = typeof filters[c.id] === 'string' ? filters[c.id] as string : '';
+        // Keep the selection inside the cap, including while its label does not match the search or a refresh.
+        if (value !== '' && !shown.some((o) => o.value === value)) {
+          if (shown.length === 200) shown.pop();
+          shown.push(opts.find((o) => o.value === value) ?? { value, label: value });
+        }
+        select.replaceChildren();
+        for (const o of [{ value: '', label: 'All' }, ...shown]) {
+          const opt = el('option', undefined, o.label); opt.value = o.value; select.append(opt);
+        }
+        const n = shown.filter((o) => matches.includes(o)).length;
+        const summary = needle === '' ? `${n} of ${opts.length}${incomplete ? '+' : ''}`
+          : `${n}${n < matches.length ? ` of ${matches.length}` : ''} matches`;
+        const description = `Showing ${summary}${needle !== '' && incomplete ? ' in fetched rows' : ''}`;
+        count.textContent = summary;
+        count.title = description;
+        count.setAttribute('aria-label', description);
+        if (n < matches.length || incomplete) {
+          const more = el('option', undefined, `${description}: search to narrow`);
+          more.disabled = true;
+          select.append(more);
+        }
+        select.value = value;
+      };
+      search.addEventListener('input', () => { optionSearch.set(c.id, search.value); fill(); });
+      search.addEventListener('compositionstart', () => { composingSearches.add(search); });
+      search.addEventListener('compositionend', () => {
+        composingSearches.delete(search);
+        optionSearch.set(c.id, search.value);
+        if (pendingSearches.delete(search)) redraw(c.id);
+      });
+      fill();
+      select.addEventListener('change', () => { filters[c.id] = select.value; fill(); changed(); });
       label.append(select);
+      box.append(label);
+      if (searchable) { tools.append(search, count); box.append(tools); }
+      body.append(box);
+      return;
     } else {
       const v = (filters[c.id] ?? { from: '', to: '' }) as DateRange;
       const from = el('input', 'wk-input wk-input--date');
@@ -937,7 +1005,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
    * its text and caret, goes back where the words now are. Otherwise (another tab changed those words, the component
    * is gone, Edit ended) the field closes first, with nothing sent (codex r9/r10).
    */
-  const draw = (opts: { keepProps?: boolean } = {}): void => {
+  const draw = (opts: { keepProps?: boolean; focusPage?: boolean } = {}): void => {
     const open = inline;
     let carry = false;
     if (open !== null) {
@@ -951,7 +1019,10 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
     drawNow(opts);
     if (carry && open !== null && inline === open) open.place();
   };
-  const drawNow = (opts: { keepProps?: boolean }): void => {
+  const drawNow = (opts: { keepProps?: boolean; focusPage?: boolean }): void => {
+    const oldNav = root.querySelector<HTMLElement>('.wk-pages');
+    const navScroll = oldNav?.scrollLeft ?? 0;
+    const focusPage = opts.focusPage === true || (oldNav?.contains(document.activeElement) ?? false);
     const had = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.getAttribute('data-prop') : null;
     bodies.clear();
     index.clear();
@@ -972,7 +1043,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       const b = el('button', pg.id === pageId ? 'wk-page is-on' : 'wk-page', lineOf(pg.title, 80));
       b.type = 'button';
       b.setAttribute('aria-current', pg.id === pageId ? 'page' : 'false');
-      b.addEventListener('click', () => { if (pageId !== pg.id) { pageId = pg.id; select(null); draw(); queryAll(); } });
+      b.addEventListener('click', () => { if (pageId !== pg.id) { pageId = pg.id; select(null); draw({ focusPage: true }); queryAll(); } });
       nav.append(b);
     }
     main.append(nav);
@@ -1027,15 +1098,23 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
     main.append(grid);
     parts.push(main);
     const sel = editing() && selected !== null ? list.find((c) => c.id === selected) : undefined;
+    const restoreNav = (): void => {
+      nav.scrollLeft = navScroll;
+      const active = nav.querySelector<HTMLElement>('.is-on');
+      if (focusPage) active?.focus({ preventScroll: true });
+      active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    };
     const keep = opts.keepProps === true && sel !== undefined && propsNode !== null && propsFor === sel.id && propsNode.parentNode === root;
     if (keep) {
       for (const ch of [...root.childNodes]) if (ch !== propsNode) ch.remove();
       for (const part of parts) root.insertBefore(part, propsNode);
+      restoreNav();
       return;
     }
     propsNode = propsHost ? null : sel !== undefined ? drawProps(sel) : editing() ? drawPropsEmpty() : null;
     propsFor = sel?.id ?? null;
     root.replaceChildren(...parts, ...(propsNode !== null ? [propsNode] : []));
+    restoreNav();
     if (had !== null) [...root.querySelectorAll<HTMLElement>('[data-prop]')].find((e) => e.getAttribute('data-prop') === had)?.focus({ preventScroll: true });
   };
 

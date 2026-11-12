@@ -62,6 +62,25 @@ SPEC_A = {
     ],
 }
 
+# Extra pages leave Main, dashboard card counts and their KPI reads unchanged.
+# The last page exercises studio#1119 with enough tabs to require phone scrolling.
+CASE_COLUMNS = [{"name": name, "type": "string"} for name in
+                ("case_id", "account", "segment", "workflow", "owner", "reference", "notes")]
+SPEC_A["pages"].extend([
+    {"id": f"extra-{i}", "title": f"Case overview {i}", "components": []} for i in range(1, 6)
+] + [{"id": "cases", "title": "Case operations", "components": [
+    {"id": "case_filter", "type": "filter", "filter": "select", "label": "Case",
+     "box": {"x": 0, "y": 0, "w": 6, "h": 1},
+     "options": {"kind": "query", "query": {"query": "case_options"}, "value": "case_id", "label": "label"}},
+    {"id": "cases", "type": "table", "title": "Cases", "data": {"query": "cases"},
+     "box": {"x": 0, "y": 1, "w": 12, "h": 6}},
+]}])
+SPEC_A["queries"].extend([
+    {"id": "cases", "source": "support-pg", "kind": "sql", "output": CASE_COLUMNS},
+    {"id": "case_options", "source": "support-pg", "kind": "sql", "output": [
+        {"name": "case_id", "type": "string"}, {"name": "label", "type": "string"}]},
+])
+
 HOSTILE = ["<img src=x onerror=window.__pwned=1>", "javascript:alert(1)", "<script>window.__pwned=3</script>"]
 ROWS_A = {
     "open_count": [[4]],
@@ -70,6 +89,13 @@ ROWS_A = {
     "per_week": [["W1", 1, 2], ["W2", 5, 3], ["W3", 6, 4], ["W4", 2, 3]],
     "tickets": [[4821, HOSTILE[0], "unassigned"], [4822, HOSTILE[1], "unassigned"], [4823, HOSTILE[2], "m.chen"], [4824, "Printer on fire", "unassigned"]],
 }
+
+ROWS_A.update({
+    "cases": [["CASE-A00224", "Acme", "MID_MARKET", "ENTERPRISE_RENEWAL",
+               "renewals-specialist", "RENEWAL_CASE_A00224_NORTH_AMERICA_APPROVAL_PENDING",
+               "Review the renewal terms with every regional account before the next deadline."]],
+    "case_options": [[f"CASE-A{i:05d}", f"CASE-A{i:05d} · Acme"] for i in range(1, 458)],
+})
 
 # App B: a query app A's frame must never reach (S7).
 SPEC_B = {
