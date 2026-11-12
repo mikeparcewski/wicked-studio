@@ -3416,6 +3416,18 @@
       ]
     },
     {
+      "testId": "chat-job-pointer",
+      "files": [
+        "src/components/chat/ChatProposalCards.tsx"
+      ]
+    },
+    {
+      "testId": "chat-job-pointer-open",
+      "files": [
+        "src/components/chat/ChatProposalCards.tsx"
+      ]
+    },
+    {
       "testId": "chat-minimize",
       "files": [
         "src/components/chat/ChatWindow.tsx"

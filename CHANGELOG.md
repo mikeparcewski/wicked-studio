@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- The floating chat says where a proposed job is: a seat's document/deck/page proposal now draws a pointer with Open in full chat, instead of nothing (the card lives on the chat's job passage).
+
 ## [0.16.7] — 2026-11-12
 
 Patch: the requirements header leads with the confidence-weighted share (S22), gate cards say why a gate is held on
