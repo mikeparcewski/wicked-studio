@@ -80,11 +80,22 @@ export function GateButtons({ runId }: { runId: string }): React.ReactElement | 
 /** The phase a live run is in, for the full-screen header: its current step's phase, in plain words. */
 export function phaseOf(view: RunView | null): string | null {
   if (view === null || TERMINAL.has(view.session.status)) return null;
+  // A chat's own answer run (the ask path) is not a step of the artifact shown: no phase is said for it.
+  if ((view.session as { ask_path?: unknown }).ask_path === true) return null;
   const unit = view.units.find((u) => u.ord === view.session.unit_ix);
-  const raw = unit?.phase_ref ?? unit?.stage ?? null;
-  if (typeof raw !== 'string' || raw.trim() === '') return null;
-  const words = raw.replace(/[-_]+/g, ' ').trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  for (const raw of [unit?.phase_ref, unit?.stage, unit?.id]) {
+    if (typeof raw !== 'string') continue;
+    // The last segment that is not an engine number (u0) or an attempt (a6): `wf-…:unit-8:a6` -> `unit-8` (an id).
+    // A qualified ref's first segment is the run or workflow, never the phase.
+    const segs = raw.split(':').map((x) => x.trim());
+    const name = segs.slice(segs.length > 1 ? 1 : 0).filter((x) => !/^[ua]\d+$/i.test(x)).pop() ?? '';
+    // Workflow refs end in unit-N; UUIDs and run ids are identifiers, never a phase label.
+    if (name === '' || /^(?:wf|unit)-|[0-9a-f]{8,}/i.test(name)) continue;
+    const words = name.replace(/[-_]+/g, ' ').trim();
+    if (!/[a-z]/i.test(words)) continue;
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+  return null;
 }
 
 /** The run host context for the page's artifacts. `renderChat` is the session's compact thread. */

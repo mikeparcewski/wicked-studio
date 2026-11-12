@@ -45,6 +45,28 @@ describe('the run host context', () => {
   it('the phase is the live run’s current step, in plain words; a finished run has none', () => {
     expect(phaseOf(run('r1', 'executing'))).toBe('Code review');
     expect(phaseOf(run('r1', 'completed'))).toBeNull();
+    // review r2 P3: an engine-numbered or attempt-qualified suffix is never a phase name.
+    expect(phaseOf(makeView({ status: 'executing' }, [makeUnit({ phase_ref: 'wf-0a1b2c3d4e5f:unit-8:a6', stage: 'build' as never } as never)]))).toBe('Build');
+    expect(phaseOf(makeView({ status: 'executing' }, [makeUnit({ id: 'r1:u0', stage: null, phase_ref: null } as never)]))).toBeNull();
+    // A chat's own answer run is not a step of the artifact: the header says no phase for it.
+    expect(phaseOf(makeView({ status: 'awaiting_human', ask_path: true } as never, [makeUnit({ id: 'c408bf71:recon', stage: 'recon' as never })]))).toBeNull();
+  });
+
+  it.each([
+    { phase_ref: 'wf-e246ea98-cfcc-42b8-8a56-38c25c7659b2:unit-1', stage: null, id: 'c408bf71:unit-1', expected: null },
+    { phase_ref: null, stage: null, id: 'c408bf71:critique', expected: 'Critique' },
+    { phase_ref: 'wf-e246ea98-cfcc-42b8-8a56-38c25c7659b2:unit-1', stage: 'draft', id: 'c408bf71:unit-1', expected: 'Draft' },
+    { phase_ref: 'workflow:code_review', stage: null, id: 'c408bf71:unit-1', expected: 'Code review' },
+    { phase_ref: 'wf-internal', stage: 'unit-build', id: 'c408bf71:unit-1', expected: null },
+    { phase_ref: 'step-c408bf71', stage: 'e246ea98-cfcc-42b8-8a56-38c25c7659b2', id: 'c408bf71:unit-1', expected: null },
+    { phase_ref: '  ', stage: null, id: 'c408bf71:unit-1', expected: null },
+  ])('shows a readable phase or nothing for $phase_ref / $stage / $id', ({ expected, ...unit }) => {
+    // Live ask-path runs can carry no stage, or a phase name outside the contract's legacy StageKind enum.
+    expect(phaseOf(makeView({ status: 'executing' }, [makeUnit({ ...unit, stage: unit.stage as never })]))).toBe(expected);
+  });
+
+  it.each(['completed', 'cancelled', 'failed'] as const)('hides even a readable phase for a %s run', (status) => {
+    expect(phaseOf(makeView({ status }, [makeUnit({ id: 'c408bf71:critique' })]))).toBeNull();
   });
 
   it('an artifact of the run with the open gate gets Approve (queued, undoable) and the way to the gate card', () => {
