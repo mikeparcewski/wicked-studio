@@ -418,6 +418,30 @@ describe('the GitHub CLI login option', () => {
     expect(screen.getByTestId('pm-test-run')).toBeDisabled();
   });
 
+  it.each([
+    ['ready -> signed out', { available: true, accounts: ['octo-a', 'octo-b'], active: 'octo-b' }, { available: true, accounts: [], active: null }],
+    ['missing -> ready', { available: false, accounts: [], active: null }, { available: true, accounts: ['octo-a'], active: 'octo-a' }],
+  ])('a CLI-state reread (%s) after a token is typed never tests without it', async (_label, before, after) => {
+    const { rerender } = open(before);
+    if (screen.queryByTestId('pm-auth-token') !== null) fireEvent.click(screen.getByTestId('pm-auth-token'));
+    const secret = screen.getByTestId('pm-secret') as HTMLInputElement;
+    secret.value = TOKEN;
+    fireEvent.input(secret);
+    expect(screen.getByTestId('pm-test-run')).toBeEnabled();
+    rerender(<PmSourceSheet target={{ mode: 'new', system: 'github' }} existing={[]} ghCli={after as never} onSaved={vi.fn()} onClose={vi.fn()} />);
+    const field = screen.queryByTestId('pm-secret') as HTMLInputElement | null;
+    if (field !== null && field.value === '') {
+      // The field came back empty: Test waits for the token again.
+      expect(screen.getByTestId('pm-test-run')).toBeDisabled();
+    } else {
+      // Otherwise Test may run, but never with a keychain ref and no secret.
+      fireEvent.click(screen.getByTestId('pm-test-run'));
+      await screen.findByTestId('pm-test-lines');
+      const body = previews()[0]!.body as { auth?: { ref?: string }; secret?: string };
+      expect(body.auth?.ref?.startsWith('keychain:') === true && body.secret === undefined).toBe(false);
+    }
+  });
+
   it('an account that vanishes from crew’s latest word falls back to the default and drops the held preview', async () => {
     const { rerender } = open(cliState());
     fireEvent.click(screen.getByTestId('pm-test-run'));

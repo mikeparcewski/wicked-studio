@@ -351,6 +351,17 @@ export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverifi
   const ghMode = ghSheetMode(system, isNew ? ghCli : null);
   const useGh = ghMode.kind === 'ready' && (authPick ?? 'gh') === 'gh';
   const ghLogin = ghMode.kind === 'ready' && useGh ? (loginPick !== null && ghMode.accounts.includes(loginPick) ? loginPick : ghMode.login) : null;
+  // A reread of crew's CLI state that moves the token field into or out of the sign-in choice remounts it empty: the typed
+  // token goes with it (as on switchAuth), so Test is never enabled for a token the field no longer holds.
+  const tokenInChoice = ghMode.kind === 'ready';
+  const tokenInChoiceWas = useRef(tokenInChoice);
+  useEffect(() => {
+    if (tokenInChoiceWas.current === tokenInChoice) return;
+    tokenInChoiceWas.current = tokenInChoice;
+    setHasSecret(false);
+    setTokenSent(false);
+    setSecretEdits((n) => n + 1);
+  }, [tokenInChoice]);
   const key = JSON.stringify([pmConfigBody(system, name, url, hasSecret || tokenSent, ghLogin), system === 'jira' ? email.trim() : '', secretEdits]);
   const preview = held !== null && held.key === key ? held.preview : null;
   const blocker = !isNew ? null
