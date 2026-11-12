@@ -52,14 +52,34 @@ describe('choose', () => {
     expect(onAnswer).toHaveBeenCalledWith({ askId: 'p1', option: 'phased' });
   });
 
-  it('the hovered option says its consequence on the same line; leaving goes back to the selected one', () => {
-    renderAsk(PAUSE);
+  it('#1100: hovering another option never changes what the selection says or sends; the hover is a marked preview that leaves with the pointer', () => {
+    const { onAnswer } = renderAsk(PAUSE);
+    fireEvent.click(opt('split'));
     const line = screen.getByTestId('ask-consequence');
+    const preview = screen.getByTestId('ask-consequence-preview');
     fireEvent.mouseEnter(opt('stop'));
-    expect(line.textContent).toBe('If you choose this: Stops the job.');
-    expect(line.getAttribute('data-option')).toBe('stop');
-    fireEvent.mouseLeave(opt('stop'));
+    expect(line.textContent).toBe('If you choose this: Two jobs from here.');
     expect(line.getAttribute('data-option')).toBe('split');
+    expect(screen.getByTestId('ask-confirm').textContent).toBe('Split into two lanes');
+    expect(preview.getAttribute('data-preview')).toBe('true');
+    expect(preview.textContent).toMatch(/^Preview: .*Stops the job\.$/);
+    fireEvent.click(screen.getByTestId('ask-confirm'));
+    expect(onAnswer).toHaveBeenCalledWith({ askId: 'p1', option: 'split' });
+    fireEvent.mouseLeave(opt('stop'));
+    expect(preview.textContent).toBe('');
+    expect(preview.hasAttribute('data-preview')).toBe(false);
+    expect(line.getAttribute('data-option')).toBe('split');
+  });
+
+  it('#1100: with Stop selected, hovering a safe option leaves Stop described, named on the button and sent', () => {
+    renderAsk(PAUSE);
+    fireEvent.click(opt('stop'));
+    fireEvent.mouseEnter(opt('split'));
+    expect(screen.getByTestId('ask-consequence').textContent).toBe('If you choose this: Stops the job.');
+    expect(screen.getByTestId('ask-consequence').getAttribute('data-option')).toBe('stop');
+    expect(screen.getByTestId('ask-consequence-preview').textContent).toMatch(/^Preview: /);
+    expect(screen.getByRole('radiogroup').getAttribute('aria-describedby')).toBe(screen.getByTestId('ask-consequence').id);
+    expect((screen.getByTestId('ask-send') as HTMLElement).getAttribute('data-option')).toBe('stop');
   });
 
   it('a disabled option stays visible with why, and cannot be chosen', () => {

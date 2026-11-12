@@ -109,11 +109,14 @@ with sync_playwright() as p:
         return choice_consequence(page, key)
 
     def consequence_on(key: str) -> bool:
-        """The consequence of the card under the pointer is on the one line under the cards (its room reserved, so it
-        never moves a card), naming that card."""
+        """The consequence of the card under the pointer is under the cards (its room reserved, so it never moves a
+        card), naming that card: the "If you choose this:" line when it is the selected card, else the line marked
+        "Preview:" (studio#1100)."""
         page.locator(CHOICE.format(key)).first.hover()
-        return (page.locator(f'[data-testid="session-gate-consequence"][data-option="{key}"]').count() == 1
-                and page.evaluate(ABOVE_SEL, ['[data-testid="session-gate-choices"]', '[data-testid="session-gate-consequence"]']))
+        sel = (f'[data-testid="session-gate-consequence"][data-option="{key}"], '
+               f'[data-testid="session-gate-consequence-preview"][data-option="{key}"]')
+        return (page.locator(sel).count() == 1
+                and page.evaluate(ABOVE_SEL, ['[data-testid="session-gate-choices"]', sel]))
 
     def section_timeout() -> None:
         # S16a-2a: the gate is answered in the session thread's row (/s/run%3Ar-timeout).

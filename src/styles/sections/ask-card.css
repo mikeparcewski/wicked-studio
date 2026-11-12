@@ -41,6 +41,10 @@
   font-size: var(--text-sm); line-height: 1.45; box-sizing: border-box; }
 .wk-ask-cons:empty { background: transparent; }
 .wk-ask-cons b { color: var(--ink-high); }
+/* A hovered, not-selected option: one reserved line under the selected consequence, marked "Preview:". */
+.wk-ask-preview { margin: 4px 0 0; padding: 0 12px; height: 1.45em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.45; }
+.wk-ask-preview b { color: var(--ink-body); }
+.wk-ask-yn + .wk-ask-cons:empty + .wk-ask-preview:empty { display: none; }
 .wk-ask-go { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
 .wk-ask-foot { color: var(--ink-muted); font-size: var(--text-xs); }
 .wk-ask-btn--danger { border: 0; background: var(--status-fail); color: var(--accent-fg); }
@@ -96,6 +100,7 @@
   .wk-ask-q { font-size: var(--text-md); }
   .wk-ask-opt { min-height: 52px; }
   .wk-ask-cons { min-height: 0; }
+  .wk-ask-preview:empty { display: none; }
 }
 
 /* A gate's other ways on that are not answers (start again with reduced assurance), and the helpers that cannot take

@@ -166,7 +166,7 @@ describe('S16a-1b — the rewind is offered only where Send back is an arm', () 
 
 describe('S16a-2a — the row says a choice\'s consequence before it is taken; the whole verdict', () => {
   afterEach(() => { cleanup(); });
-  it('hovering an escalation arm says what it does on the line under the choices; leaving goes back to the selected one', async () => {
+  it('hovering an escalation arm is a marked preview under the selected line; leaving clears it', async () => {
     vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' });
     const RUN = 'run-peek';
     const units: WorkUnit[] = [
@@ -180,18 +180,22 @@ describe('S16a-2a — the row says a choice\'s consequence before it is taken; t
     useRunEventStore.setState({ byRun: { [RUN]: [] } });
     render(<GateRow view={view} gate={gate} />);
     const stop = await waitFor(() => screen.getAllByTestId('session-gate-choice').find((b) => b.dataset.choiceKey === 'stop')!);
-    // (guided asks) The line says what the option you are on does: the preselected suggestion, else the hovered one.
+    // #1100: the line says what the SELECTED option does; a hover is a separate line marked "Preview:".
     const line = screen.getByTestId('session-gate-consequence');
+    const preview = screen.getByTestId('session-gate-consequence-preview');
     const before = line.getAttribute('data-option');
     expect(before).not.toBe('stop');
     await userEvent.hover(stop);
-    expect(line).toHaveTextContent('If you choose this: Cancel the run; the work stops here.');
-    expect(line).toHaveAttribute('data-option', 'stop');
+    expect(line.getAttribute('data-option')).toBe(before);
+    expect(line.textContent).not.toMatch(/Cancel the run/);
+    expect(preview).toHaveTextContent('Preview: ');
+    expect(preview).toHaveTextContent('Cancel the run; the work stops here.');
+    expect(preview).toHaveAttribute('data-preview', 'true');
     // Below the choices: the line never moves the button under the pointer.
     expect(screen.getByTestId('session-gate-choices').compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.unhover(stop);
     expect(line.getAttribute('data-option')).toBe(before);
-    expect(line.textContent).not.toMatch(/Cancel the run/);
+    expect(preview.textContent).toBe('');
   });
 
   it('studio#430: a head-cut verdict is read whole — the send-back note carries the first findings', () => {

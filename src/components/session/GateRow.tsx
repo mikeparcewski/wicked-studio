@@ -842,7 +842,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     if (o.id === FLOOR_OVERRIDE_KEY) return { label: 'Your rationale (required)', labelTestId: /* testid */ 'session-gate-floor-override-label', placeholder: FLOOR_OVERRIDE_PLACEHOLDER, send: FLOOR_OVERRIDE_SEND,
       note: <p data-testid="session-gate-floor-override-consequence" className="wk-gate-consequence">{FLOOR_OVERRIDE_CONSEQUENCE}</p> };
     if (o.id === SKIP_QE_KEY) return { label: 'Your reason (required, kept with the delivery)', placeholder: SKIP_QE_PLACEHOLDER, send: o.label };
-    if (o.id === 'stop') return { label: 'Why stop? (kept with the record)', placeholder: 'One line is enough', send: 'Stop with this reason' };
+    if (o.id === 'stop') return { label: 'Why stop? (kept with the record)', placeholder: 'One line is enough', send: 'Stop the run with this reason' };
     // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.
     if (o.id === 'steer' && c?.label === FLOOR_FIX_LABEL) return { label: 'What the fixing helper should change', placeholder: 'What should the fixing helper change…', prefill: model.noteDefault, send: o.label };
     if (o.id === 'steer') return { label: 'Your note', placeholder: 'Steer the next step…', prefill: model.noteDefault, send: o.label };
@@ -850,7 +850,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     if (o.id === 'send-back') return { label: 'What to fix', placeholder: 'Explain what to fix…', prefill: leadChoice?.key === 'send-back' && lead?.prefill !== undefined ? lead.prefill : model.noteDefault, send: o.label };
     // (DES-RULE-CHECK-001) A rule skip's words are the skipped rules' recorded reason: asked for, never prefilled.
     if (c?.skipRuleIds !== undefined) return { label: 'Your reason (required, labelled on the run, the gate and the delivery)', labelTestId: /* testid */ 'session-gate-skip-rules-label', placeholder: c.notePlaceholder ?? 'Why this can go without a check…', send: o.label };
-    return { label: 'Your answer', placeholder: 'Add a note…', prefill: model.noteDefault, send: 'Send' };
+    return { label: 'Your answer', placeholder: 'Add a note…', prefill: model.noteDefault, send: o.label };
   };
   const split = model.failingTests?.split;
   // One sentence under the headline: the failures in a line, a refused hand-over's reason, a QE review's why.
@@ -932,7 +932,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         onReasonOpen={setCardNoteOpen}
         onSelect={setSelectedKey}
         reasonId={`session-gate-note-${runId}`}
-        confirmLabel={(o) => (o.id === 'rerun' && rerunOffer !== null ? `Rerun from ${rerunOffer.phase}` : o.label)}
+        confirmLabel={(o) => (o.id === 'rerun' && rerunOffer !== null ? `Rerun from ${rerunOffer.phase}` : o.id === 'stop' ? 'Stop the run' : o.label)}
         testIds={{ root: /* testid */ 'session-gate-ask', group: /* testid */ 'session-gate-choices', option: /* testid */ 'session-gate-choice', consequence: /* testid */ 'session-gate-consequence', confirm: /* testid */ 'session-gate-confirm', send: /* testid */ 'session-gate-send', reason: /* testid */ 'session-gate-note', reasonLabel: /* testid */ 'session-gate-note-label' }}
         optionProps={(o) => ({ 'data-choice-key': o.id, 'data-recommended': o.id === engineRec ? 'true' : 'false' })}
         optionExtra={(o) => {

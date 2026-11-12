@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- **A gate card's "If you choose this:" always describes the selected option (#1100).** It used to follow the card under the
+  pointer, so with "Confirm or skip" selected it could read "Cancel the run" while the pointer rested on Stop. Hovering
+  another option now shows a separate line marked "Preview:" that disappears on leave; the send button names the
+  selected action ("Stop the run", "Stop the run with this reason", or the option's own label instead of a bare "Send").
+
 ## [0.16.6] — 2026-11-12
 
 Patch: the Kubernetes runner on the Agents page and the Nerve Center (#1107), and gate cards that draw the gate's

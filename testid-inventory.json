@@ -26148,6 +26148,12 @@
       ]
     },
     {
+      "pattern": "*-preview",
+      "files": [
+        "src/components/ask/AskCard.tsx"
+      ]
+    },
+    {
       "pattern": "*-process",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
