@@ -22,15 +22,15 @@ const RUN_LANDING_GRACE_MS = 2 * 60_000;
  * session thread — so a refine the seat proposed there showed only its prose, and the card (Keep it / Let this change
  * it, Make the change) lived only on the chat's full view (`/s/<chat>`). This is the same card, folded from the same
  * transcript records with the same rules as the full view (`foldChatProposals`, `reconcileProposals`; a job's or a v2
- * create's proposal belongs to its passage there, so it is not drawn here either; a superseded card says nothing to act
- * on), answered through `POST /chats/:id/proposals/:pid` like everywhere else.
+ * create's proposal belongs to its passage there, so an unsettled one points to the full chat here; a superseded card says
+ * nothing to act on), answered through `POST /chats/:id/proposals/:pid` like everywhere else.
  *
  * The transcript is read when the block opens, whenever crew says the chat changed (a `chatProposal`, `chatReply`,
  * `chatDecisions` or `chatCitations` frame ticks the chat's `replySeq`), when the socket comes back (frames are not
  * replayed), and after a card recorded an answer. A read that fails keeps what the cards showed. A started refine's run
  * is read so its card can say what became of it.
  */
-export function ChatProposalCards({ chatId }: { chatId: string }): React.ReactElement | null {
+export function ChatProposalCards({ chatId, onOpenFull }: { chatId: string; onOpenFull?: (() => void) | undefined }): React.ReactElement | null {
   const proposalsOn = useCapabilities((s) => s.chatProposals);
   const historyOn = useCapabilities((s) => s.chatList);
   const jobsOn = useCapabilities((s) => s.chatJobProposals);
@@ -72,20 +72,49 @@ export function ChatProposalCards({ chatId }: { chatId: string }): React.ReactEl
     return () => { cancelled = true; };
   }, [chatId, proposalsOn, historyOn, replySeq, tick]);
 
-  const entries = useMemo<ProposalEntry[]>(() => {
-    if (!proposalsOn || records === null || records.chatId !== chatId) return [];
+  const { entries, pointers } = useMemo(() => {
+    if (!proposalsOn || records === null || records.chatId !== chatId) return { entries: [], pointers: [] };
     // The proposals a job's passage owns (and a v2 create under job proposals) are answered there, as on the full view.
-    const passage = jobsOn ? new Set(foldJobLineages(records.records).flatMap((l) => l.versions.map((v) => v.pid))) : new Set<string>();
-    return reconcileProposals(chatId, foldChatProposals(records.records)).filter((e) =>
-      e.state !== 'superseded' && !passage.has(e.pid) && !(jobsOn && (e.proposal as { sentence?: unknown }).sentence !== undefined));
+    const lineages = jobsOn ? foldJobLineages(records.records) : [];
+    const passage = new Set(lineages.flatMap((l) => l.versions.map((v) => v.pid)));
+    const folded = reconcileProposals(chatId, foldChatProposals(records.records));
+    const passageOwns = (e: ProposalEntry): boolean => passage.has(e.pid) || (jobsOn && (e.proposal as { sentence?: unknown }).sentence !== undefined);
+    const entries = folded.filter((e) => e.state !== 'superseded' && !passageOwns(e));
+    // Only the passage's fold owns pointers: one per lineage that is not settled, at its newest head. The transcript is
+    // append-only and each read replaces the last (an answered read's effect is cancelled when a newer one starts), and
+    // a pointer only opens the full chat, where the passage answers it, so no memory across reads is kept here.
+    const pointers = lineages.filter((l) => l.state !== 'decided' && l.state !== 'superseded');
+    return { entries, pointers };
   }, [proposalsOn, jobsOn, records, chatId]);
 
   const runs = useStartedRuns(entries, tick + replySeq);
-  if (entries.length === 0) return null;
+  if (entries.length === 0 && pointers.length === 0) return null;
   // The proposing seat's one name (the roster's, else its key title-cased), as the full view names it.
   const seatName = (key: string): string => seatLabel(getCachedRoster()?.find((r) => r.key === key) ?? { key });
   return (
     <div data-testid="chat-proposal-cards" className="wk-dock-proposals">
+      {pointers.map((l) => {
+        const p = l.head;
+        const seat = seatName(p.proposal.seat);
+        const guidance = l.state === 'open'
+          ? 'nothing starts until you choose · Open the full chat to answer it.'
+          : l.state === 'revising'
+            ? 'being updated from your message · Open the full chat to follow it.'
+            : 'starting, or stopped before it started · Open the full chat to see it.';
+        return (
+          <section key={p.pid} data-testid="chat-job-pointer" data-pid={p.pid} className="wk-ask wk-proposal" aria-label={`Proposal from ${seat}: ${p.proposal.what.label}`}>
+            <p className="wk-ask-q">{p.proposal.what.label}</p>
+            <p className="wk-ask-sub" aria-live="polite">Proposal from {seat} · {guidance}</p>
+            {onOpenFull !== undefined && (
+              <div>
+                <button type="button" data-testid="chat-job-pointer-open" className="wk-btn wk-btn--primary wk-btn--sm" onClick={onOpenFull}>
+                  Open in full chat
+                </button>
+              </div>
+            )}
+          </section>
+        );
+      })}
       {entries.map((e) => (
         <ArtifactProposalCard
           key={e.pid}

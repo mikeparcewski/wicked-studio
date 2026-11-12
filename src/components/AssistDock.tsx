@@ -311,10 +311,11 @@ type ResumeProbe = { kind: 'gone' } | { kind: 'ended' } | { kind: 'error'; messa
 /** A chat's kept history (the system chat's past chats): its records, and whether it has ended. */
 export type ChatHistoryLoader = (chatId: string) => Promise<{ records: readonly unknown[]; closed: boolean }>;
 
-function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns, flow = false, userText }: {
+function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns, flow = false, userText, onOpenFull }: {
   /** crew-0183: how the person's own words are shown (a page strips what it appended for the seat). */
   userText?: ((text: string) => string) | undefined;
   chatId: string;
+  onOpenFull?: (() => void) | undefined;
   /** A chat window or page chat (journey 2026-11-04): the block is the conversation itself, not a box in a dock. No
    *  seat-chip header and no inner scroller: the thread around it is the one scroller, so no line of an answer ever
    *  sits under a header. The narrow dock (Steering) keeps the boxed, capped block. */
@@ -618,8 +619,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
           ))
         )}
       </div>
-      {/* e2e 2026-11-07 (G4): what the seat proposed is answerable here too, the same card as the chat's full view. */}
-      <ChatProposalCards chatId={chatId} />
+      {/* The same proposal cards as the full view; open jobs point to their passage there. */}
+      <ChatProposalCards chatId={chatId} onOpenFull={onOpenFull} />
       {/* Outside the reply box's own scroll, so the check never hides inside it. */}
       {pathRun !== null && liveOrd !== null && (
         <LiveActivity runId={pathRun} ord={liveOrd} kind="chat" seat={pathPa} label="this answer" />
@@ -1172,6 +1173,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
               <DockChat
                 key={item.chatId}
                 chatId={item.chatId}
+                onOpenFull={onExpandChat !== undefined ? () => onExpandChat(item.chatId) : undefined}
                 resumed={item.resumed === true}
                 onResumeProbe={item.resumed === true ? (outcome) => onResumeProbe(item.chatId, outcome) : undefined}
                 onStatus={onStatus}

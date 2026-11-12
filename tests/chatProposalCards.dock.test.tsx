@@ -1,7 +1,8 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistVerbs } from '../src/components/AssistDock.js';
+import { jobProposal } from './jobFixtures.js';
 
 /**
  * e2e 2026-11-07 (plugins-complete G4, studio#1034): a refine asked from the document's side chat ("Ask about this")
@@ -52,8 +53,20 @@ const TURN = [
   { at: 2, turnId: 't1', kind: 'seat', cliKey: 'claude', ok: true, text: 'I can tighten the intro of the open document.' },
 ];
 
-function dock(v: AssistVerbs): void {
-  render(<AssistDock context={{ surface: 'page-doc', title: 'Chat', contextLabel: 'tiny math overview', placeholder: 'Ask…' }} verbs={v} open onOpenChange={() => undefined} />);
+function createProposal() {
+  return jobProposal({
+    chatId: 'chat-1', pid: 'chat-1:t1', lineage: 'chat-1:t1', kind: 'create',
+    what: { ...REFINE.what, label: 'New · tiny math overview' },
+    sentence: { text: 'I will write a short overview.', tokens: [], notes: [], ask: null },
+  });
+}
+
+async function reread(seq: number): Promise<void> {
+  await act(async () => { useAskThreadStore.setState({ replySeq: { 'chat-1': seq } }); });
+}
+
+function dock(v: AssistVerbs, onExpandChat?: (chatId: string) => void): void {
+  render(<AssistDock context={{ surface: 'page-doc', title: 'Chat', contextLabel: 'tiny math overview', placeholder: 'Ask…' }} verbs={v} open onOpenChange={() => undefined} onExpandChat={onExpandChat} />);
 }
 
 beforeEach(() => {
@@ -109,20 +122,140 @@ describe('the side chat draws the proposal card', () => {
 
   it('review r1: a v2 create (a job passage’s on the full view) is not drawn here as a legacy card', async () => {
     useCapabilities.setState({ chatJobProposals: true });
-    const base: Record<string, unknown> = { ...REFINE };
-    delete base['target'];
-    delete base['protected'];
-    const CREATE = { ...base, pid: 'chat-1:t1', kind: 'create', what: { ...REFINE.what, label: 'New · tiny math overview' }, sentence: 'I will write a short overview.' };
+    const CREATE = createProposal();
     getChat.mockResolvedValue({ chatId: 'chat-1', seats: ['claude'], messages: [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: CREATE }] });
     const user = userEvent.setup();
     dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
     await user.type(screen.getByTestId('assist-input'), 'write an overview');
     await user.click(screen.getByTestId('assist-send'));
     await screen.findByTestId('assist-chat');
-    await waitFor(() => expect(getChat).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 30));
+    const pointer = await screen.findByTestId('chat-job-pointer');
+    expect(pointer.getAttribute('data-pid')).toBe(CREATE.pid);
+    expect(within(pointer).getByText(CREATE.what.label)).toBeTruthy();
     expect(screen.queryByTestId('artifact-proposal')).toBeNull();
     // The same record is a valid card where crew has no job proposals: only the passage rule kept it out.
+    act(() => { useCapabilities.setState({ chatJobProposals: false }); });
+    expect((await screen.findByTestId('artifact-proposal')).getAttribute('data-kind')).toBe('create');
+  });
+
+  it('opens the proposed job in the full view of the chat the dock renders', async () => {
+    useCapabilities.setState({ chatJobProposals: true });
+    const chatId = 'chat-pointer';
+    const proposal = jobProposal({ ...createProposal(), chatId, pid: `${chatId}:t1`, lineage: `${chatId}:t1`, kind: 'create', sentence: { text: 'I will write a short overview.', tokens: [], notes: [], ask: null } });
+    getChat.mockResolvedValue({ chatId, seats: ['claude'], messages: [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal }] });
+    const onExpandChat = vi.fn();
+    const user = userEvent.setup();
+    dock({ send: vi.fn().mockResolvedValue({ chatId }) }, onExpandChat);
+    await user.type(screen.getByTestId('assist-input'), 'write an overview');
+    await user.click(screen.getByTestId('assist-send'));
+    const button = await screen.findByTestId('chat-job-pointer-open');
+    expect(button.textContent).toBe('Open in full chat');
+    await user.click(button);
+    expect(onExpandChat).toHaveBeenCalledExactlyOnceWith(chatId);
+  });
+
+  describe.each(['create', 'job'] as const)('%s passage pointers', (kind) => {
+    const proposal = () => jobProposal({ ...createProposal(), kind });
+
+    it('draws accessible open guidance without a dead button when expanding is unavailable', async () => {
+      useCapabilities.setState({ chatJobProposals: true });
+      const p = proposal();
+      getChat.mockResolvedValue({ chatId: 'chat-1', seats: ['claude'], messages: [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: p }] });
+      const user = userEvent.setup();
+      dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
+      await user.type(screen.getByTestId('assist-input'), 'write an overview');
+      await user.click(screen.getByTestId('assist-send'));
+      const pointer = await screen.findByRole('region', { name: `Proposal from Claude: ${p.what.label}` });
+      expect(pointer.getAttribute('data-pid')).toBe(p.pid);
+      expect(within(pointer).getByText('Proposal from Claude · nothing starts until you choose · Open the full chat to answer it.').getAttribute('aria-live')).toBe('polite');
+      expect(screen.queryByTestId('chat-job-pointer-open')).toBeNull();
+      expect(screen.queryByTestId('artifact-proposal')).toBeNull();
+    });
+
+    it.each(['go', 'not_now'])('decided %s draws no pointer', async (decision) => {
+      useCapabilities.setState({ chatJobProposals: true });
+      const p = proposal();
+      const open = [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: p }];
+      let records: unknown[] = open;
+      getChat.mockImplementation(() => Promise.resolve({ chatId: 'chat-1', seats: ['claude'], messages: records }));
+      const user = userEvent.setup();
+      dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) }, vi.fn());
+      await user.type(screen.getByTestId('assist-input'), 'write an overview');
+      await user.click(screen.getByTestId('assist-send'));
+      await screen.findByTestId('chat-job-pointer');
+      records = [...open, { at: 4, turnId: 't1', kind: 'proposal_decided', pid: p.pid, actor: 'local', decision,
+        result: decision === 'go' ? { runId: 'run-1', artifactRef: null, adopted: false, stub: false } : null }];
+      await reread(1);
+      expect(screen.queryByTestId('chat-job-pointer')).toBeNull();
+      expect(screen.queryByTestId('chat-job-pointer-open')).toBeNull();
+    });
+
+    it('a revised job draws one pointer, for its new head', async () => {
+      useCapabilities.setState({ chatJobProposals: true });
+      const first = proposal();
+      const head = jobProposal({ ...first, pid: 'chat-1:t2', turnId: 't2', revises: first.pid, what: { ...first.what, label: 'Revised job' } });
+      const open = [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: first }];
+      let records: unknown[] = open;
+      getChat.mockImplementation(() => Promise.resolve({ chatId: 'chat-1', seats: ['claude'], messages: records }));
+      const user = userEvent.setup();
+      dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
+      await user.type(screen.getByTestId('assist-input'), 'revise the job');
+      await user.click(screen.getByTestId('assist-send'));
+      expect((await screen.findByTestId('chat-job-pointer')).getAttribute('data-pid')).toBe(first.pid);
+      records = [...open, { at: 4, turnId: 't2', kind: 'proposal', proposal: head }];
+      await reread(1);
+      expect(screen.getAllByTestId('chat-job-pointer')).toHaveLength(1);
+      expect(screen.getByTestId('chat-job-pointer').getAttribute('data-pid')).toBe(head.pid);
+      expect(within(screen.getByTestId('chat-job-pointer')).getByText(head.what.label)).toBeTruthy();
+    });
+
+    it('keeps revising visible and returns to open guidance after release', async () => {
+      useCapabilities.setState({ chatJobProposals: true });
+      const p = proposal();
+      const open = [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: p }];
+      let records: unknown[] = open;
+      getChat.mockImplementation(() => Promise.resolve({ chatId: 'chat-1', seats: ['claude'], messages: records }));
+      const user = userEvent.setup();
+      dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
+      await user.type(screen.getByTestId('assist-input'), 'revise the job');
+      await user.click(screen.getByTestId('assist-send'));
+      await screen.findByTestId('chat-job-pointer');
+      records = [...open, { at: 4, turnId: 't2', kind: 'proposal_revising', pid: p.pid }];
+      await reread(1);
+      expect(within(screen.getByTestId('chat-job-pointer')).getByText('Proposal from Claude · being updated from your message · Open the full chat to follow it.').getAttribute('aria-live')).toBe('polite');
+      records = [...records, { at: 5, turnId: 't2', kind: 'proposal_released', pid: p.pid, note: null }];
+      await reread(2);
+      expect(within(screen.getByTestId('chat-job-pointer')).getByText('Proposal from Claude · nothing starts until you choose · Open the full chat to answer it.')).toBeTruthy();
+    });
+
+    it.each([Date.now(), 1])('keeps an accepting Go visible (accepted at %s)', async (at) => {
+      useCapabilities.setState({ chatJobProposals: true });
+      const p = proposal();
+      getChat.mockResolvedValue({ chatId: 'chat-1', seats: ['claude'], messages: [
+        ...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: p },
+        { at, turnId: 't1', kind: 'proposal_accepting', pid: p.pid, actor: 'local', edits: null, resolution: p, identity: { runId: 'run-1', artifactRef: null } },
+      ] });
+      const user = userEvent.setup();
+      dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
+      await user.type(screen.getByTestId('assist-input'), 'start the job');
+      await user.click(screen.getByTestId('assist-send'));
+      const pointer = await screen.findByTestId('chat-job-pointer');
+      expect(within(pointer).getByText('Proposal from Claude · starting, or stopped before it started · Open the full chat to see it.').getAttribute('aria-live')).toBe('polite');
+    });
+  });
+
+  it('a sentence rejected by the passage gets neither a pointer nor a legacy card', async () => {
+    useCapabilities.setState({ chatJobProposals: true });
+    const malformed = { ...createProposal(), sentence: 'I will write a short overview.' };
+    getChat.mockResolvedValue({ chatId: 'chat-1', seats: ['claude'], messages: [...TURN, { at: 3, turnId: 't1', kind: 'proposal', proposal: malformed }] });
+    const user = userEvent.setup();
+    dock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) });
+    await user.type(screen.getByTestId('assist-input'), 'write an overview');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+    await reread(1);
+    expect(screen.queryByTestId('chat-job-pointer')).toBeNull();
+    expect(screen.queryByTestId('artifact-proposal')).toBeNull();
     act(() => { useCapabilities.setState({ chatJobProposals: false }); });
     expect((await screen.findByTestId('artifact-proposal')).getAttribute('data-kind')).toBe('create');
   });
