@@ -159,7 +159,8 @@ function reqsMark(reqs: ReqsRead): KnowMark {
   const met = c.realPct >= c.minPct;
   return {
     ...base,
-    value: c.weightedPct !== undefined ? `${weighted} weighted` : `${pct} real`,
+    // The meter is the stated share against the minimum (the gate), so the value names both numbers.
+    value: c.weightedPct !== undefined ? `${weighted} weighted · ${pct} stated` : `${pct} real`,
     title: `Requirements: ${share} (${c.real.toLocaleString('en-US')} of ${c.behaviorBearing.toLocaleString('en-US')}), minimum ${c.minPct}%`
       + `${c.placeholders > 0 ? `, ${plural(c.placeholders, 'placeholder')}` : ''}${reqs.state === 'none' ? '; not built into a graph yet' : ''}`,
     tone: met ? 'ok' : 'warn',
