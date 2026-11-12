@@ -193,3 +193,11 @@ describe('code age, minimum and mismatches (crew api-types 0.197.0)', () => {
     expect(m.mismatchCountOf({})).toBeNull();
   });
 });
+
+describe('the confidence weighting line (S22, core#1445)', () => {
+  it('says what each kind counts, including what counts 0, over the code with behaviour', () => {
+    // Pinned on purpose: the line must not say an unscored risk counts 0.75 (approver r1 on S22).
+    expect(m.WEIGHTED_NOTE).toBe('Over the code with behaviour: a validated requirement counts 1, a rule counts its confidence, '
+      + 'a resolved one with no score counts 0.75, and risks and unmapped code count 0.');
+  });
+});
