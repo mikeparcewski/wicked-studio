@@ -302,12 +302,14 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
 
   // A new rule's id is checked against the rules in force: until they have loaded there is nothing to
   // check against, and a suggested id could overwrite one (codex r1 #1).
+  const addMcp = (): void => { if (read.kind === 'ok') setCreating({ type: 'security', token: ++opened.current, rule: { ...MCP_POLICY_TEMPLATE, id: nextMcpPolicyId(rules) } }); };
   const addRule = (): void => {
     if (read.kind !== 'ok') return;
+    // On the MCP choice a new rule is an MCP policy, as on a type it is a rule of that type.
+    if (mcpOnly && type === null) { addMcp(); return; }
     const t = pageType;
     setCreating({ type: t, token: ++opened.current, rule: { ...STEERING_RULE_TEMPLATE, steering_type: t, id: nextRuleId(rules, 'pattern') } });
   };
-  const addMcp = (): void => { if (read.kind === 'ok') setCreating({ type: 'security', token: ++opened.current, rule: { ...MCP_POLICY_TEMPLATE, id: nextMcpPolicyId(rules) } }); };
   // The assistant authors for the page's type, whichever type it was first opened on (codex r2 #3).
   const openChat = (): void => {
     if (dock === null) setDock({ text: '', key: Date.now() });
@@ -390,16 +392,26 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   const action = <CalmMenu menu={moreMoves} menuLabel="More ways to add and manage rules" menuTestId={/* testid */ 'steer-more'} />;
 
   // The seven steering types are sub-pages of one layout: a quiet picker stands in for the list's label.
+  // MCP is the picker's last choice: the rules that govern MCP calls (`?mcp=1`). They are rules of
+  // any type that name an `mcp` token, not an eighth type on the wire. The picker holds ONE choice, so
+  // picking anything sets exactly that choice. A type and MCP together (the table's chips can make
+  // that address) shows the type here and MCP in the note under the list.
+  const pickValue = mcpOnly && type === null ? 'mcp' : (type ?? 'all');
+  const pickRules = view === 'retired' ? retiredRules : live;
   const typePick = (
     <label className="wk-calm-typepick">
       <span className="sr-only">Steering type</span>
-      <select className="wk-calm-pick" data-testid="steer-type-pick" value={type ?? 'all'} aria-label="Steering type"
-        onChange={(e) => { const t = e.target.value === 'all' ? null : (e.target.value as SteeringType); navigate(policiesPath(t, mcpOnly)); }}>
+      <select className="wk-calm-pick" data-testid="steer-type-pick" value={pickValue} aria-label="Steering type"
+        onChange={(e) => {
+          const v = e.target.value;
+          navigate(v === 'mcp' ? policiesPath(null, true) : policiesPath(v === 'all' ? null : (v as SteeringType), false));
+        }}>
         <option value="all">{view === 'retired' ? 'Retired · all types' : 'All rules'}</option>
         {STEERING_TYPES.map((t) => {
-          const n = read.kind === 'ok' ? (view === 'retired' ? retiredRules : live).filter((r) => steeringTypeOf(r) === t).length : null;
+          const n = read.kind === 'ok' ? pickRules.filter((r) => steeringTypeOf(r) === t).length : null;
           return <option key={t} value={t}>{`${STEERING_TYPE_LABELS[t]}${n === null ? '' : ` (${n})`}`}</option>;
         })}
+        <option value="mcp" data-testid="steer-type-pick-mcp">{`MCP${read.kind === 'ok' ? ` (${pickRules.filter((r) => isMcpRule(r)).length})` : ''}`}</option>
       </select>
     </label>
   );
@@ -504,7 +516,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
           action={<CalmButton onClick={() => openChat()}>Describe them in a chat</CalmButton>} />
       ) : listed.length === 0 ? (
         <CalmEmpty data-testid="steer-rules-empty"
-          title={needle !== '' ? 'No rule matches that search.' : facet !== null || mcpOnly || unusedIds !== null ? 'No rule matches these filters.' : view === 'retired' ? 'Nothing retired.' : type !== null ? `No ${STEERING_TYPE_LABELS[type]} rules yet.` : 'No rules in force.'}
+          title={needle !== '' ? 'No rule matches that search.' : mcpOnly && type === null && facet === null && unusedIds === null && view === 'live' ? 'No MCP policies yet.' : facet !== null || mcpOnly || unusedIds !== null ? 'No rule matches these filters.' : view === 'retired' ? 'Nothing retired.' : type !== null ? `No ${STEERING_TYPE_LABELS[type]} rules yet.` : 'No rules in force.'}
           body={view === 'retired' ? <p>A retired rule stays listed here, never deleted.</p> : needle !== '' || facet !== null ? undefined : <p>Add one with Add a rule in the ⋯ menu, or describe what you want in a chat.</p>}
           action={needle !== '' || facet !== null ? <CalmButton onClick={() => { setQ(''); setFacet(null); }}>Clear the search</CalmButton> : undefined} />
       ) : (

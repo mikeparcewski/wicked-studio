@@ -675,8 +675,9 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
     <div className="wk-pg-mcp-scroll">
       <PageFrame data-testid="mcp-tools-page" title={PAGE_NAMES.mcp} intro="Choose the tools your helpers can use and when they need your approval."
         actions={<>
-          <a className="wk-link" href={`${policiesPath()}?mcp=1`} onClick={(e) => { e.preventDefault(); navigate(`${policiesPath()}?mcp=1`); }} data-testid="mcp-steering-link">MCP policies</a>
-          <a className="wk-link" href={mcpInspectPath()} onClick={(e) => { e.preventDefault(); navigate(mcpInspectPath()); }} data-testid="mcp-inspector-link">Inspector</a>
+          {/* Steering opens the Policies list on its MCP choice: the rules that govern MCP calls. */}
+          <a className="wk-btn wk-btn--secondary" href={policiesPath(null, true)} onClick={(e) => { e.preventDefault(); navigate(policiesPath(null, true)); }} data-testid="mcp-steering-link">Steering</a>
+          <a className="wk-btn wk-btn--secondary" href={mcpInspectPath()} onClick={(e) => { e.preventDefault(); navigate(mcpInspectPath()); }} data-testid="mcp-inspector-link">Inspector</a>
           {view === 'servers' && loaded !== null && !adding && <button type="button" data-testid="mcp-add-open" onClick={() => setAdding(true)} className="wk-btn wk-btn--primary">Add existing server</button>}
           <button type="button" className="wk-btn wk-btn--secondary" onClick={() => { void load(); setUsageRefresh((n) => n + 1); }}>Refresh</button>
         </>}>

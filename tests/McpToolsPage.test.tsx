@@ -121,6 +121,24 @@ describe('MCP tools: servers and the posture summary', () => {
   });
 });
 
+describe('MCP tools: the header moves (operator 2026-11-12)', () => {
+  it('Steering and Inspector are buttons; Steering opens the Policies list on its MCP choice', async () => {
+    wire();
+    render(<McpToolsPage navigate={navigate} search="" />);
+    await screen.findByTestId('mcp-server-row');
+    const steering = screen.getByTestId('mcp-steering-link');
+    const inspector = screen.getByTestId('mcp-inspector-link');
+    expect(steering.textContent).toBe('Steering');
+    expect(screen.queryByText('MCP policies')).toBeNull();
+    for (const el of [steering, inspector]) expect(el.className).toMatch(/\bwk-btn\b/);
+    expect(steering.getAttribute('href')).toBe('/steering/policies?mcp=1');
+    fireEvent.click(steering);
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?mcp=1');
+    fireEvent.click(inspector);
+    expect(navigate).toHaveBeenLastCalledWith(inspector.getAttribute('href'));
+  });
+});
+
 describe('MCP tools: Approve and Revoke are audited policy edits crew makes', () => {
   it('approve first use of the server, then one write tool, then revoke it; the page reloads each answer', async () => {
     wire();
