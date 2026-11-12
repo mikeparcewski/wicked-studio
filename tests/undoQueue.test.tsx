@@ -125,6 +125,8 @@ describe('the copy', () => {
     expect(decisionPreview('reject', 1)).toMatch(/cancelled/);
     expect(decisionPreview('reject', 1, true)).toMatch(/your note/);
     expect(describeDecision({ approve: true, amend: 'go' }).preview).toMatch(/guidance/);
+    expect(describeDecision({ approve: true, action: 'accept_partial' } as never).preview).toMatch(/waived by the operator/);
+    expect(describeDecision({ approve: true, action: 'targeted' } as never).preview).toMatch(/Nothing is waived/);
     expect(describeDecision({ approve: false, action: 'request_changes', amend: 'x' } as never).verb).toBe('request-changes');
     expect(CLOSE_NOTE).toMatch(/nothing is sent/);
     expect(CLOSE_NOTE).toMatch(/stays open/);

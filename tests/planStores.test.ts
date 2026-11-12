@@ -225,6 +225,23 @@ describe('a gate decision that outlived its gate', () => {
   });
 });
 
+describe('a refused targeted re-run (wicked-core#1392)', () => {
+  it('shows the translated refusal, leaves the gate open and un-answered', async () => {
+    useGateStore.getState().setGate({ runId: 'r1', ord: 1, prompt: 'gate 1', lifecycle: 'open', receivedAt: 1 });
+    const refusal = new ApiError(409, 'refused', { error: 'refused', code: 'targeted_refused' });
+    confirmGate.mockRejectedValueOnce(refusal);
+    const error = await sendGateDecision('r1', { approve: true, action: 'targeted', ord: 1 } as never);
+    // The card shows the translated message (ApiError.message), never the raw wire sentence; the typed fields are what is asserted.
+    expect(error).toBe(refusal.message);
+    expect(refusal.status).toBe(409);
+    expect((refusal.body as { code: string }).code).toBe('targeted_refused');
+    expect(confirmGate).toHaveBeenCalledTimes(1);
+    expect(getGate).not.toHaveBeenCalled();
+    expect(useGateStore.getState().gates['r1']).toMatchObject({ ord: 1 });
+    expect(useGateActionStore.getState().byGate['r1']).toMatchObject({ busy: false, answered: null });
+  });
+});
+
 describe('before:N on a launch the PA scopes first', () => {
   const input = {
     plan: { steps: [{ catalog: 'build' }] },

@@ -461,6 +461,56 @@ describe('sessionGateChoices — escalation offers (gate 15 Item 1)', () => {
     expect(extend.needsNote).toBe(false);
   });
 
+  const timeoutModel = (prompt: string) => {
+    const gate: OpenGate = { runId: ESC_RUN, ord: 1, prompt, lifecycle: 'open', receivedAt: NOW };
+    const m = sessionGateChoices({ runId: ESC_RUN, gate, units: ESC_TIMEOUT_UNITS, events: ESC_TIMEOUT_EVENTS, pool: [], roster: null })!;
+    return { m, all: [...m.choices, ...m.overflow] };
+  };
+  const TAIL = ' — confirm to retry the phase, or reject to cancel the run';
+
+  it('no targeted command declared: targeted is withheld with the engine\'s reason; the waiver stays, labelled', () => {
+    const { m, all } = timeoutModel(`${ESC_TIMEOUT_PROMPT.replace(TAIL, '')} — extend, none is declared, so a targeted re-run is not offered, or accept what passed${TAIL}`);
+    expect(all.map((c) => c.key)).not.toContain('offer:targeted');
+    expect(all.map((c) => c.key)).toContain('offer:extend');
+    const partial = all.find((c) => c.key === 'offer:accept_partial')!;
+    expect(partial.label).toMatch(/waive the tests/);
+    expect(partial.title).toMatch(/tests waived by the operator/);
+    expect(m.whyNot?.join(' ')).toMatch(/No targeted test command is declared/);
+  });
+
+  it('a declared targeted command: targeted offered, and it promises no waiver', () => {
+    const { m, all } = timeoutModel(`${ESC_TIMEOUT_PROMPT.replace(TAIL, '')} — re-run with the targeted tests (\`npm run test:fast\`)${TAIL}`);
+    const t = all.find((c) => c.key === 'offer:targeted')!;
+    expect(t).toBeDefined();
+    expect(t.title).toMatch(/waives nothing/);
+    expect(t.title).not.toMatch(/the test set is waived/);
+    expect((m.whyNot ?? []).join(' ')).not.toMatch(/targeted/);
+  });
+
+  it('a legacy prompt naming neither keeps the choice', () => {
+    expect(timeoutModel(ESC_TIMEOUT_PROMPT).all.map((c) => c.key)).toContain('offer:targeted');
+  });
+
+  it('a quoted failure naming no-command is not the engine\'s offer', () => {
+    const quoted = `Unit 1 failed its deterministic floor (repo_checks_timeout): Repository checks did not finish: none is declared, so a targeted re-run is not offered ${'x'.repeat(700)}${TAIL}`;
+    expect(timeoutModel(quoted).all.map((c) => c.key)).toContain('offer:targeted');
+  });
+
+  it('a SHORT legacy prompt whose quoted failure names no-command keeps the choice (no padding)', () => {
+    const reason = 'Repository checks did not finish: none is declared, so a targeted re-run is not offered';
+    expect(ESC_TIMEOUT_PROMPT.replace('Repository checks did not finish: test timed out after 600.0s', reason).length).toBeLessThan(500);
+    // the fixture's denial reason is the quoted one: swap both so the gate's own verdict names it
+    const events = ESC_TIMEOUT_EVENTS.map((e) => {
+      const r = e as unknown as { type: string; denialReason?: string; denial?: { reason: string } };
+      return r.type === 'gateEvaluated' ? { ...r, denialReason: reason, denial: { ...r.denial, reason } } : e;
+    }) as unknown as CoreEvent[];
+    const prompt = ESC_TIMEOUT_PROMPT.replace('Repository checks did not finish: test timed out after 600.0s', reason);
+    const gate: OpenGate = { runId: ESC_RUN, ord: 1, prompt, lifecycle: 'open', receivedAt: NOW };
+    const m = sessionGateChoices({ runId: ESC_RUN, gate, units: ESC_TIMEOUT_UNITS, events, pool: [], roster: null })!;
+    expect([...m.choices, ...m.overflow].map((c) => c.key)).toContain('offer:targeted');
+    expect((m.whyNot ?? []).join(' ')).not.toMatch(/targeted/);
+  });
+
   it('worktree_guard restored → accept_suggestion offer present', () => {
     const gate: OpenGate = { runId: ESC_SUGGEST_RUN, ord: 2, prompt: ESC_SUGGEST_PROMPT, lifecycle: 'open', receivedAt: NOW };
     const model = sessionGateChoices({ runId: ESC_SUGGEST_RUN, gate, units: ESC_SUGGEST_UNITS, events: ESC_SUGGEST_EVENTS, pool: [], roster: null })!;

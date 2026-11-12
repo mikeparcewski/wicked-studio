@@ -18,6 +18,10 @@ npm publish dates. Every version listed here exists on
   pointer, so with "Confirm or skip" selected it could read "Cancel the run" while the pointer rested on Stop. Hovering
   another option now shows a separate line marked "Preview:" that disappears on leave; the send button names the
   selected action ("Stop the run", "Stop the run with this reason", or the option's own label instead of a bare "Send").
+- Timeout gate card (#1101): "Re-run with the targeted tests" no longer promises a waiver. It runs the declared
+  targeted command and is withheld, with the engine's reason, when the denial text says none is declared
+  (wicked-core#1392); an older prompt keeps the choice. "Accept what passed" is now labelled as the waiver
+  ("waive the tests", "tests waived by the operator").
 
 ## [0.16.6] — 2026-11-12
 

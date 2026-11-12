@@ -584,8 +584,8 @@ export function deliverPreview(t: DeliverTarget): string {
 /** The inline Undo's line for each escalation arm (`GateDecision.action`, api-types 0.57.0). */
 const ESCALATION_PREVIEW: Record<string, string> = {
   extend: 'The checks re-run on the tree as it stands, each under twice its time bound.',
-  targeted: "The checks re-run with the repo's targeted tests in place of the full test set.",
-  accept_partial: 'The checks that passed re-run; the ones that did not pass or did not run are waived and named in the floor note.',
+  targeted: "The checks re-run with the repo's declared targeted test command in place of the full test set. Nothing is waived; with none declared the engine refuses it and the gate stays open.",
+  accept_partial: 'Tests waived by the operator: the checks that passed re-run; the ones that did not pass or did not run are waived and named in the floor note.',
   accept_suggestion: "The evaluator's edit is applied and the run goes back to the creator phase to rework it.",
   // wicked-core#555: the amendment changes what the run is JUDGED against, from here on. Say that
   // — an operator pressing this is descoping, and "the run resumes" would hide it.

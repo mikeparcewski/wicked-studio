@@ -2505,7 +2505,8 @@ def _esc_run(rid: str, unit_ix: int, units: list) -> dict:
 
 
 ESC_TIMEOUT_PROMPT = ("Unit 1 failed its deterministic floor (repo_checks_timeout): Repository checks did not "
-                      "finish: test timed out after 600.0s — confirm to retry the phase, or reject to cancel the run")
+                      "finish: test timed out after 600.0s — re-run with the targeted tests (`npm run test:fast`), "
+                      "confirm to retry the phase, or reject to cancel the run")
 ESC_SUGGEST_PROMPT = ("Unit 2 verdict is NOT PASS — the read-only `verify` phase changed the tree under review "
                       "(M src/importer.ts); its edit was discarded and the creator's verified tree restored. "
                       "Approve to retry the phase against the restored tree, or reject to cancel the run")

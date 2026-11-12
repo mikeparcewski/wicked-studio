@@ -24,6 +24,7 @@ Env: FEEDBACK_PORT (default 4472). JSON report; exit 0/1.
 
 import json
 import os
+from pathlib import Path
 import sys
 import time
 import urllib.request
@@ -33,7 +34,7 @@ from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, choice_co
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4472"))
 W, H = 1440, 700
-SHOTS = REPO / "e2e" / "shots"
+SHOTS = Path(os.environ["WICKED_NOTES_ROOT"]) / "shots" if os.environ.get("WICKED_NOTES_ROOT") else REPO / "e2e" / "shots"
 report: dict = {"ok": False, "steps": {}}
 
 
@@ -129,8 +130,10 @@ with sync_playwright() as p:
         for a in ("extend", "targeted", "accept_partial"):
             line = peek(f"offer:{a}")
             check(f"consequence-above-{a}", line != "" and consequence_on(f"offer:{a}"), line=line)
+        tg = peek("offer:targeted")
+        check("targeted-promises-no-waiver", "waives nothing" in tg and "is waived" not in tg, text=tg)
         waived = peek("offer:accept_partial")
-        check("accept-partial-names-the-waiver", "waives test" in waived, text=waived)
+        check("accept-partial-names-the-waiver", "waives test" in waived.lower() and "tests waived by the operator" in waived, text=waived)
         ks = keys()
         check("escalation-layout", "approve" not in ks and "offer:accept_suggestion" not in ks
               and page.evaluate("""() => { const c = [...document.querySelectorAll('[data-testid="session-gate-choices"] [data-testid="session-gate-choice"]')]; return c[c.length - 1].dataset.choiceKey === 'stop'; }"""), keys=ks)
