@@ -16,10 +16,16 @@ import type { GateInfo } from '../api/types.js';
 
 const ACTION = /\(action\s+`([a-z_]+)`/g;
 
-/** The action names the engine lists in the options that begin at the LAST occurrence of `optionsStart`. */
-export function enginePromptActions(prompt: string | undefined, optionsStart: string): string[] {
+/** The LAST occurrence of any start marker: an earlier clause may be quoted inside the refusal. */
+export function engineOptionsStart(prompt: string, optionsStart: string | readonly string[]): number {
+  const markers = typeof optionsStart === 'string' ? [optionsStart] : optionsStart;
+  return Math.max(-1, ...markers.map((marker) => prompt.lastIndexOf(marker)));
+}
+
+/** The action names the engine lists in the options that begin at the LAST occurrence of any `optionsStart`. */
+export function enginePromptActions(prompt: string | undefined, optionsStart: string | readonly string[]): string[] {
   if (prompt === undefined) return [];
-  const at = prompt.lastIndexOf(optionsStart);
+  const at = engineOptionsStart(prompt, optionsStart);
   if (at < 0) return [];
   const found: string[] = [];
   for (const m of prompt.slice(at).matchAll(ACTION)) {
@@ -41,7 +47,10 @@ export const OFFER_REJECT = 'reject';
 export const OFFER_ANSWER = 'answer';
 
 /** Where a refused hand-over's options begin (wicked-core `deliver_refusal_prompt`). */
-const REFUSAL_OPTIONS_START = 'Approve to re-run the deliver phase now';
+export const REFUSAL_OPTIONS_START = [
+  'Approve to re-run the deliver phase now',
+  'Approve to re-run the checks on this same tree',
+] as const;
 
 /**
  * The answers a REFUSED HAND-OVER lists, in the engine's order: approve (re-run the deliver phase), every

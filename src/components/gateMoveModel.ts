@@ -1,5 +1,6 @@
 import type { CoreEvent, WorkUnit } from '../api/types.js';
 import { DELIVER_STEP, type PlanGateView } from '../board/planModel.js';
+import { engineOptionsStart, REFUSAL_OPTIONS_START } from '../board/gateOffers.js';
 import { checkOutcome, phaseLabel, type GateVerdictView } from './gateVerdictModel.js';
 
 /**
@@ -622,8 +623,8 @@ const PREFLIGHT_CHANGED = /deliver:\s*PREFLIGHT CHANGED the verified tree:\s*([^
 const DELIVER_REFUSED_HEAD = /^\s*The deliver phase refused:\s*/i;
 export function deliverRefusalOf(prompt: string | undefined): DeliverRefusal | null {
   if (prompt === undefined || !DELIVER_REFUSED_HEAD.test(prompt)) return null;
-  const tail = prompt.search(/\.\s*Approve to re-run the deliver phase\b/i);
-  const body = (tail === -1 ? prompt : prompt.slice(0, tail)).replace(DELIVER_REFUSED_HEAD, '');
+  const tail = engineOptionsStart(prompt, REFUSAL_OPTIONS_START);
+  const body = (tail === -1 ? prompt : prompt.slice(0, tail).replace(/\.\s*$/, '')).replace(DELIVER_REFUSED_HEAD, '');
   const remote = /the remote refused the push of (\S+?)(?: after commit: ([\s\S]+?)| because ([\s\S]+?)); the work is committed on/i.exec(body);
   if (remote !== null) {
     const why = (remote[2] ?? remote[3] ?? '').replace(/\s+/g, ' ').trim();

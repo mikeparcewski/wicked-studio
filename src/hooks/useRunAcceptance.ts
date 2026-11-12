@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { RunAcceptanceView, SessionView } from '../api/types.js';
 import type { ChainModel } from '../board/chainModel.js';
 import { overrideRemovedWalkthrough } from '../board/checkState.js';
-import { isDeliverGate } from '../components/gateMoveModel.js';
+import { proposalKindOf } from '../board/proposalCard.js';
 import type { OpenGate } from '../store/gates.js';
 import { useRunAcceptanceStore } from '../store/runAcceptance.js';
 
@@ -18,7 +18,7 @@ import { useRunAcceptanceStore } from '../store/runAcceptance.js';
 export function useRunAcceptance(view: SessionView, chain: ChainModel, gate: OpenGate | undefined, finished = false): RunAcceptanceView | null {
   const id = view.session.id;
   const walkthrough = chain.steps.some((s) => s.catalog === 'walkthrough_review' && s.state !== 'struck' && s.state !== 'replaced');
-  const deliver = gate !== undefined && isDeliverGate(id, view.units, gate.ord);
+  const deliver = proposalKindOf(id, gate, view.units) === 'deliver';
   // The pair removed by the accepted plan's override (WT §4.9): crew's read is the only place
   // "end-to-end testing is yours" comes from, so it is asked for although no step names a walkthrough.
   const wants = walkthrough || deliver || overrideRemovedWalkthrough(view.session) || (finished && view.session.status === 'completed');

@@ -19,7 +19,7 @@
  * Studio pins an older `wicked-crew-api-types`, so the wire shapes are typed here and read null-safe.
  */
 
-import { enginePromptActions } from './gateOffers.js';
+import { refusalOffers } from './gateOffers.js';
 
 export const FLOOR_OVERRIDE_ACTION = 'operator_judgment';
 /** The choice key on the gate row. */
@@ -87,10 +87,6 @@ export function engineNamesFloorOverride(
   return [summary, verdict?.denial?.reason].some((t) => typeof t === 'string' && t.includes(OVERRIDE_IS_THE_PATH) && !/\[regression\b/.test(t));
 }
 
-/** Where the engine's deliver refusal options begin (wicked-core `deliver_refusal_prompt`). They follow the
- *  quoted refusal, so their LAST occurrence is the engine's own. */
-const DELIVER_OPTIONS_START = 'Approve to re-run the deliver phase now';
-
 /** Whether the gate's own action list (the engine's options at a REFUSED HAND-OVER: the deliver phase's
  *  re-verify failed on the tree it would ship) names the operator's judgment. Read from the list, not from
  *  the wording around the arm (studio#1102: an after-lift prompt words the retry differently). There is no
@@ -98,7 +94,7 @@ const DELIVER_OPTIONS_START = 'Approve to re-run the deliver phase now';
  *  corroborates: only the engine's last options count, never a clause quoted inside the refusal. The
  *  engine refuses an answer it does not take (409, gate left open). */
 export function offersDeliverFloorOverride(prompt: string | undefined): boolean {
-  return enginePromptActions(prompt, DELIVER_OPTIONS_START).includes(FLOOR_OVERRIDE_ACTION);
+  return refusalOffers({ prompt }).some((offer) => offer.action === FLOOR_OVERRIDE_ACTION);
 }
 
 /** `OperatorJudgment.floorOverride` off the wire (api-types 0.135.0), or `null`. */

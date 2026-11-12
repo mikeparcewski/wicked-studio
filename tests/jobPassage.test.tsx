@@ -13,6 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/hooks/useEventStream.js', () => ({ useEventStream: () => undefined }));
 
+const { api } = await import('../src/api/client.js');
+const { resetRunAcceptanceForTest } = await import('../src/store/runAcceptance.js');
 const { SessionPage } = await import('../src/components/session/SessionView.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
 const { useAskThreadStore } = await import('../src/store/askThread.js');
@@ -21,7 +23,7 @@ const { useGateStore } = await import('../src/store/gates.js');
 const { usePlanGateStore } = await import('../src/store/planGates.js');
 const { useSheets } = await import('../src/store/sheets.js');
 const { useJobBinding } = await import('../src/store/jobBinding.js');
-const { useHandOff } = await import('../src/components/session/JobPassage.js');
+const { JobPassage, useHandOff } = await import('../src/components/session/JobPassage.js');
 const { useElicitationStore } = await import('../src/store/elicitations.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { resetJobLocal, useJobLocal } = await import('../src/hooks/useJobStream.js');
@@ -29,6 +31,7 @@ const { flushDecisionsForTest, resetDecisionsForTest, setUndoWindowForTest } = a
 const { makeUnit, makeView } = await import('./factories.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { jobProposal } = await import('./jobFixtures.js');
+const { foldJobLineages } = await import('../src/board/jobStream.js');
 
 const CHAT = 'chat-j';
 const T0 = 1_700_000_000_000;
@@ -56,6 +59,7 @@ beforeEach(() => {
   team = { teamed: false, rows: [], units: [] };
   reviseAnswer = () => ok({ view: {} }, 201);
   resetJobLocal();
+  resetRunAcceptanceForTest();
   resetDecisionsForTest();
   useJobBinding.setState({ binding: null });
   useHandOff.setState({ intent: null });
@@ -84,7 +88,7 @@ beforeEach(() => {
     return Promise.resolve(new Response('{}', { status: 404 }));
   }));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetDecisionsForTest(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); resetDecisionsForTest(); resetRunAcceptanceForTest(); });
 
 const page = (runs: ReturnType<typeof makeView>[] = []) => render(<SessionPage sessionId={CHAT} runs={runs} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
 const reply = (id: string): HTMLButtonElement => screen.getAllByTestId('job-passage-reply').find((b) => b.dataset['reply'] === id) as HTMLButtonElement;
@@ -467,11 +471,86 @@ describe('review round 2 folds', () => {
     expect((await screen.findByTestId('job-passage-gate')).dataset['kind']).toBe('gate');
   });
 
+  for (const walkthrough of [false, true]) {
+    it(`a non-deliver passage gate makes no acceptance requests (walkthrough ${walkthrough ? 'present' : 'removed by override'})`, async () => {
+      const steps = [{ id: 'build', catalog: 'build' }, ...(walkthrough ? [{ id: 'walkthrough', catalog: 'walkthrough_review' }] : []), { id: 'deliver', catalog: 'deliver' }];
+      team = { teamed: true, rows: [
+        { event_id: 8, event_type: 'wicked.team.plan.accepted', payload: { plan_rev: 2, steps } },
+        { event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } },
+      ], units: [] };
+      useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Review the build?', lifecycle: 'open', receivedAt: 7, gateKind: 'escalation' } }, approaching: {} });
+      const acceptance = vi.spyOn(api, 'getRunAcceptance').mockResolvedValue({ runId: RUN, summary: null } as never);
+      const view = run();
+      if (!walkthrough) Object.assign(view.session, { team_plan: { accepted: { floor_override: { remove: ['walkthrough_plan', 'walkthrough_review'] } } } });
+      // Render the passage alone: SessionPage has other legitimate acceptance consumers.
+      const lineage = foldJobLineages(messages)[0]!;
+      render(<JobPassage chatId={CHAT} lineage={lineage} runs={[view]} sessionId={CHAT} say={() => {}} onChanged={() => {}} />);
+      expect((await screen.findByTestId('job-passage-gate')).dataset['kind']).toBe('gate');
+      await waitFor(() => expect(useTeamPlanStore.getState().byRun[RUN]?.rows).toHaveLength(2));
+      // Flush effects after the accepted plan (including its walkthrough) reached PassageGate.
+      await act(async () => { await Promise.resolve(); });
+      expect(acceptance).not.toHaveBeenCalled();
+    });
+  }
+
   it('a hand-over gate is the hand-over card in place', async () => {
     team = { teamed: true, rows: [{ event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } }], units: [] };
     useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 2, prompt: 'Deliver?', lifecycle: 'open', receivedAt: 7, gateKind: 'deliver' } }, approaching: {} });
     page([run('awaiting_human')]);
     expect((await screen.findByTestId('job-passage-gate')).dataset['kind']).toBe('deliver');
+  });
+
+  it('an isolated deliver passage wires refused acceptance to the card without a skipQe offer', async () => {
+    team = { teamed: true, rows: [{ event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } }], units: [] };
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 2, prompt: 'Deliver?', lifecycle: 'open', receivedAt: 7, gateKind: 'deliver' } }, approaching: {} });
+    const line = 'Not accepted yet: FAIL — repository checks failed.';
+    const acceptance = vi.spyOn(api, 'getRunAcceptance').mockResolvedValue({
+      runId: RUN, summary: { required: true, satisfied: false, walkthrough: null, line },
+    } as never);
+    const gateRead = vi.spyOn(api, 'getGate').mockResolvedValue({
+      runId: RUN, ord: 2, prompt: 'Deliver?', lifecycle: 'open', receivedAt: '', gateKind: 'deliver',
+    } as never);
+    const view = run();
+    expect(view.units[2]).toMatchObject({ id: `${RUN}:u2`, stage: 'build', phase_ref: 'deliver' });
+    Object.assign(view.session, { assurance: { mode: 'full', required: ['qe_acceptance'], qe: { status: 'required', basis: 'diff', score: 100, threshold: 20, reason: 'required', reasons: [], ord: 1, tree: 'abc' } } });
+    // No SessionPage or RunTabDetails: only the passage can read and forward acceptance.
+    const lineage = foldJobLineages(messages)[0]!;
+    render(<JobPassage chatId={CHAT} lineage={lineage} runs={[view]} sessionId={CHAT} say={() => {}} onChanged={() => {}} />);
+    const passage = await screen.findByTestId('job-passage-gate');
+    expect(passage.dataset['kind']).toBe('deliver');
+    await waitFor(() => expect(acceptance).toHaveBeenCalledWith(RUN));
+    expect(await within(passage).findByText(line)).toBeTruthy();
+    const deliver = passage.querySelector<HTMLElement>('[data-option="go"]')!;
+    expect(deliver.getAttribute('aria-disabled')).toBe('true');
+    expect(within(deliver).queryByTestId('ask-recommended')).toBeNull();
+    expect(within(passage).queryByTestId('session-proposal-skip-qe')).toBeNull();
+    expect(useGateStore.getState().gates[RUN]?.skipQe).toBeUndefined();
+    expect(gateRead).toHaveBeenCalledWith(RUN);
+  });
+
+  it('a numbered deliver unit reads acceptance and does not recommend a refused delivery', async () => {
+    team = { teamed: true, rows: [{ event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } }], units: [] };
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 2, prompt: 'Deliver?', lifecycle: 'open', receivedAt: 7, gateKind: 'deliver' } }, approaching: {} });
+    const acceptance = vi.spyOn(api, 'getRunAcceptance').mockResolvedValue({
+      runId: RUN, summary: { required: true, satisfied: false, walkthrough: null, line: 'Not accepted yet: FAIL — repository checks failed.' },
+    } as never);
+    const gateRead = vi.spyOn(api, 'getGate').mockResolvedValue({
+      runId: RUN, ord: 2, prompt: 'Deliver?', lifecycle: 'open', receivedAt: '', gateKind: 'deliver',
+      skipQe: { action: 'skip_qe', reasonRequired: true, actor: 'human_operator', label: 'QE acceptance skipped by operator', qeAcceptance: {} },
+    } as never);
+    const view = run();
+    expect(view.units[2]).toMatchObject({ id: `${RUN}:u2`, stage: 'build', phase_ref: 'deliver' });
+    Object.assign(view.session, { assurance: { mode: 'full', required: ['qe_acceptance'], qe: { status: 'required', basis: 'diff', score: 100, threshold: 20, reason: 'required', reasons: [], ord: 1, tree: 'abc' } } });
+    page([view]);
+    const passage = await screen.findByTestId('job-passage-gate');
+    expect(passage.dataset['kind']).toBe('deliver');
+    await waitFor(() => expect(acceptance).toHaveBeenCalledWith(RUN));
+    expect((await within(passage).findByTestId('session-proposal-skip-qe')).textContent).toContain('Skip QE with a reason…');
+    const deliver = passage.querySelector<HTMLElement>('[data-option="go"]')!;
+    expect(within(deliver).queryByTestId('ask-recommended')).toBeNull();
+    expect(deliver.getAttribute('aria-disabled')).toBe('true');
+    expect(acceptance).toHaveBeenCalledWith(RUN);
+    expect(gateRead).toHaveBeenCalledWith(RUN);
   });
 
   it('Something else… leaves focus in the bound composer', async () => {
