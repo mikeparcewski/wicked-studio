@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.7] — 2026-11-12
+
+Patch: the requirements header leads with the confidence-weighted share (S22), gate cards say why a gate is held on
+steering rules and offer "Skip N rules" (#1132), never offer a refused action as the way on, and keep the consequence
+on the selected option (#1124, #1127, #1129), apps work on phones (#1130), and GitHub Issues sources can use the
+GitHub CLI login (#1128). A refused hand-over on the job passage offers its ways forward (Skip QE with a reason,
+approve as your own judgment; #1131). Carries #1123, #1124, #1125, #1127, #1128, #1129, #1130, #1131 and #1132. Pins
+wicked-crew-api-types 0.206.0 (#1128); the weighted header reads `coverage.weightedPct` (api-types 0.208.0) from the
+wire directly. Bundled by wicked-crew 0.18.12, whose daemon sends that field.
+
 ### Added
 
 - Data sources → Add → GitHub Issues offers "Use the GitHub CLI login" when crew reports the GitHub CLI signed in: preselected, with an account picker, no token field, and no token sent (the source saves `auth.ref` `gh-cli:<login>`). With the CLI missing or signed out the sheet says so in plain words and keeps the token field; an older crew that reports nothing keeps the token flow. crew's named refusals (`gh_account_mismatch`, `gh_not_installed`, `gh_signed_out`, `gh_token_unavailable`, `gh_cli_not_allowed`) read in plain words through `translateWireError`. A saved CLI-login source offers no Replace token.
@@ -3492,7 +3502,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.6...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.7...HEAD
+[0.16.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.6...v0.16.7
 [0.16.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.5...v0.16.6
 [0.16.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.4...v0.16.5
 [0.16.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.3...v0.16.4
