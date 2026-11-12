@@ -154,11 +154,13 @@ function reqsMark(reqs: ReqsRead): KnowMark {
     return { ...base, value: 'none yet', title: `Requirements: not extracted yet (0 of ${c.behaviorBearing.toLocaleString('en-US')} behaviours${c.placeholders > 0 ? `, ${plural(c.placeholders, 'placeholder')}` : ''}). A domain extraction job states them`, tone: 'none' };
   }
   const pct = c.realPct === 0 && c.real > 0 ? '<1%' : `${c.realPct}%`;
+  const weighted = c.weightedPct === 0 && c.real > 0 ? '<1%' : `${c.weightedPct}%`;
+  const share = c.weightedPct !== undefined ? `${weighted} confidence-weighted, ${pct} stated` : `${pct} real`;
   const met = c.realPct >= c.minPct;
   return {
     ...base,
-    value: `${pct} real`,
-    title: `Requirements: ${pct} real (${c.real.toLocaleString('en-US')} of ${c.behaviorBearing.toLocaleString('en-US')}), minimum ${c.minPct}%`
+    value: c.weightedPct !== undefined ? `${weighted} weighted` : `${pct} real`,
+    title: `Requirements: ${share} (${c.real.toLocaleString('en-US')} of ${c.behaviorBearing.toLocaleString('en-US')}), minimum ${c.minPct}%`
       + `${c.placeholders > 0 ? `, ${plural(c.placeholders, 'placeholder')}` : ''}${reqs.state === 'none' ? '; not built into a graph yet' : ''}`,
     tone: met ? 'ok' : 'warn',
     meter: { pct: Math.max(0, Math.min(100, c.realPct)), min: Math.max(0, Math.min(100, c.minPct)) },

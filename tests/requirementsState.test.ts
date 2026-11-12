@@ -33,6 +33,27 @@ describe('requirementsNotGenerated (lane repo-page)', () => {
 const LIVE = { realPct: 54, minPct: 80, behaviorBearing: 5786, real: 3182, placeholders: 2577, unmapped: 27, notProduct: 2380 };
 
 describe('the real-requirements label (domain-real WIRE 2026-11-01)', () => {
+  it('leads with confidence-weighted coverage when supplied, then the stated share', () => {
+    expect(m.coverageHeadline({ ...LIVE, realPct: 86, weightedPct: 62 })).toBe('62% confidence-weighted · 86% stated · minimum 80%');
+    expect(m.coverageHeadline({ ...LIVE, realPct: 0, weightedPct: 0 })).toBe('Under 1% confidence-weighted · Under 1% stated · minimum 80%');
+    expect(m.coverageHeadline({ ...LIVE, realPct: 1, weightedPct: 0 })).toBe('Under 1% confidence-weighted · 1% stated · minimum 80%');
+    expect(m.coverageHeadline({ ...LIVE, realPct: 0, weightedPct: 0, real: 0 })).toBe('0% confidence-weighted · 0% stated · minimum 80%');
+  });
+
+  it.each([0, 62, 100])('reads weightedPct %s from the wire and graph build', (weightedPct) => {
+    const coverage = { ...LIVE, weightedPct };
+    expect(m.coverageOf({ coverage })).toEqual(coverage);
+    expect(m.graphBuildOf({ graphBuild: { generation: 2, coverage, behind: false } })?.coverage).toEqual(coverage);
+    expect(m.requirementsNotGenerated(new ApiError(404, 'x', { code: 'notGenerated', coverage }))?.share).toEqual(coverage);
+  });
+
+  it.each([undefined, null, -1, 101, 62.5, '62', true, {}, NaN, Infinity])('ignores invalid or missing weightedPct %s without losing coverage', (weightedPct) => {
+    const coverage = m.coverageOf({ coverage: { ...LIVE, weightedPct } });
+    expect(coverage).toEqual(LIVE);
+    expect(coverage).not.toHaveProperty('weightedPct');
+    expect(m.coverageOf({ coverage: LIVE })).toEqual(LIVE);
+  });
+
   it('says the real share against the minimum, and what the rest is', async () => {
     const { coverageHeadline, coverageBreakdown } = await import('../src/board/requirementsState.js');
     expect(coverageHeadline(LIVE)).toBe('54% real requirements · minimum 80%');

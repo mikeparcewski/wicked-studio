@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+
+- Requirements headers lead with confidence-weighted coverage when available; the minimum and progress bar still use stated coverage.
+
 ### Fixed
 
 - **A gate card's "If you choose this:" always describes the selected option (#1100).** It used to follow the card under the

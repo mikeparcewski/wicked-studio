@@ -44,10 +44,12 @@ export interface Corroboration {
  * How much of a repository's behaviour REAL requirements cover (crew api-types 0.164.0 `RequirementsCoverage`;
  * domain-real WIRE 2026-11-01). `real + placeholders + unmapped == behaviorBearing`; `notProduct` (tests, data,
  * manifests, docs) is left out of it. `realPct` counts real requirements only: a placeholder is unconfirmed and is
- * never shown as progress.
+ * never shown as progress. Optional `weightedPct` discounts those requirements by confidence; the minimum still
+ * compares `realPct` to `minPct`.
  */
 export interface RequirementsCoverage {
   realPct: number;
+  weightedPct?: number;
   minPct: number;
   behaviorBearing: number;
   real: number;
@@ -92,16 +94,23 @@ export function coverageOf(holder: unknown): RequirementsCoverage | null {
   if (!COVERAGE_KEYS.every((k) => isCount(c[k]))) return null;
   const out = Object.fromEntries(COVERAGE_KEYS.map((k) => [k, c[k]])) as unknown as RequirementsCoverage;
   if (out.realPct > 100 || out.minPct < 1 || out.minPct > 100) return null;
+  if (isCount(c['weightedPct']) && c['weightedPct'] <= 100) out.weightedPct = c['weightedPct'];
   return out;
 }
 
 const count = (n: number): string => n.toLocaleString('en-US');
 
-/** "54% real requirements · minimum 80%" ("Under 1%" when some are real and the whole percentage rounds to 0). */
+/** Lead with confidence-weighted coverage when supplied; "Under 1%" when some are real but the share rounds to 0. */
 export function coverageHeadline(c: RequirementsCoverage): string {
   const pct = c.realPct === 0 && c.real > 0 ? 'Under 1%' : `${c.realPct}%`;
+  if (c.weightedPct !== undefined) {
+    const weighted = c.weightedPct === 0 && c.real > 0 ? 'Under 1%' : `${c.weightedPct}%`;
+    return `${weighted} confidence-weighted · ${pct} stated · minimum ${c.minPct}%`;
+  }
   return `${pct} real requirements · minimum ${c.minPct}%`;
 }
+
+export const WEIGHTED_NOTE = 'Each requirement counts by confidence: a validated one counts fully, a rule counts its confidence, an unscored one counts 0.75.';
 
 export interface CoveragePart {
   key: 'real' | 'placeholders' | 'unmapped' | 'notProduct';

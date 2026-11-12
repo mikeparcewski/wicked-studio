@@ -46,6 +46,18 @@ describe('the domain-graph modal: real requirements, never placeholders as progr
     expect(cov.querySelector('[data-part="placeholders"]')).toHaveAttribute('data-unconfirmed', 'true');
   });
 
+  it.each([true, false])('leads with weighted coverage from the wire (graph built: %s)', async (built) => {
+    const coverage = { ...LIVE, realPct: 86, weightedPct: 62 };
+    getRepoDomainGraph.mockResolvedValue({ graph: built ? GRAPH : null, coverage: OLD_DOMAIN_COVERAGE });
+    if (built) listRequirements.mockResolvedValue({ total: 1, items: [], coverage });
+    else listRequirements.mockRejectedValue(new ApiError(404, 'x', { code: 'notGenerated', coverage }));
+    await openDomainTab();
+    const cov = await screen.findByTestId('domain-graph-coverage');
+    expect(cov).toHaveAttribute('data-weighted-pct', '62');
+    expect(screen.getByTestId('domain-graph-coverage-headline').textContent).toBe('62% confidence-weighted · 86% stated · minimum 80%');
+    if (!built) expect(cov.querySelector('.wk-reqcov-fill')).toHaveStyle({ width: '86%' });
+  });
+
   it('no graph yet: the share from crew\'s notGenerated answer, the bar filling the real share only', async () => {
     getRepoDomainGraph.mockResolvedValue({ graph: null, coverage: OLD_DOMAIN_COVERAGE });
     listRequirements.mockRejectedValue(new ApiError(404, 'x', { code: 'notGenerated', workflow: 'domain-extraction', coverage: LIVE }));
