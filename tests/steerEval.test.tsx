@@ -414,17 +414,20 @@ describe('codex r2 fixes', () => {
     expect(document.querySelector('.wk-se-scroll')?.hasAttribute('inert')).toBe(false);
   });
 
-  it('#9 the type picker keeps the MCP filter', async () => {
+  it('#9 MCP is a choice in the type picker; the picker holds one choice', async () => {
     wire();
     const user = userEvent.setup();
     const navigate = vi.fn();
     render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={navigate} />);
-    // No rule here governs MCP calls: the list is empty because of the filter; the picker still moves.
-    await screen.findByTestId('steer-rules-empty');
-    await user.selectOptions(screen.getByTestId('steer-type-pick'), 'security');
-    const to = String(navigate.mock.calls.at(-1)?.[0]);
-    expect(to).toContain('mcp=1');
-    expect(to).toContain('security');
+    // No rule here governs MCP calls: the list is empty because of the filter, and says so.
+    expect(await screen.findByTestId('steer-rules-empty')).toHaveTextContent('No MCP policies yet.');
+    const pick = screen.getByTestId('steer-type-pick') as HTMLSelectElement;
+    expect(pick.value).toBe('mcp');
+    // Picking a type sets that type alone, as the other choices do.
+    await user.selectOptions(pick, 'security');
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?type=security');
+    await user.selectOptions(pick, 'all');
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies');
   });
 
   it('#5 the tag filter (targets, applies_to) is back', async () => {
@@ -439,6 +442,66 @@ describe('codex r2 fixes', () => {
     await user.type(screen.getByTestId('steer-facet-input'), 'applies_to=build');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.getAllByTestId('rules-row').map((r) => r.getAttribute('data-rule-id'))).toEqual(['A-1']));
+  });
+});
+
+describe('MCP in the type picker (operator 2026-11-12)', () => {
+  const mcpRule = (id: string): SteeringRule => ({ ...rule(id), applies_to: ['mcp:jira/create_issue'] });
+
+  it('lists MCP after the seven types, counts the rules that govern MCP calls, and opens them', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [...RULES, mcpRule('MCP-POL-100'), { ...rule('OPS-1'), steering_type: 'operations', applies_to: ['mcp'] } as SteeringRule] });
+    wire();
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<SteerSurface pathname="/steering/policies" search="" runs={[]} navigate={navigate} />);
+    await screen.findAllByTestId('rules-row');
+    const pick = screen.getByTestId('steer-type-pick') as HTMLSelectElement;
+    const options = [...pick.querySelectorAll('option')];
+    expect(options.map((o) => o.value)).toEqual(['all', 'architecture', 'development', 'security', 'testing', 'operations', 'compliance', 'design-ux', 'mcp']);
+    expect(pick.querySelector('option[value="mcp"]')).toHaveTextContent('MCP (2)');
+    await user.selectOptions(pick, 'mcp');
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?mcp=1');
+  });
+
+  it('the picker follows the address it navigated to', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [...RULES, mcpRule('MCP-POL-100')] });
+    wire();
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    const { rerender } = render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={navigate} />);
+    await screen.findAllByTestId('rules-row');
+    const pick = (): HTMLSelectElement => screen.getByTestId('steer-type-pick') as HTMLSelectElement;
+    expect(pick().value).toBe('mcp');
+    await user.selectOptions(pick(), 'security');
+    rerender(<SteerSurface pathname="/steering/policies" search={new URL(String(navigate.mock.calls.at(-1)?.[0]), 'http://x').search} runs={[]} navigate={navigate} />);
+    await waitFor(() => expect(screen.getAllByTestId('rules-row')).toHaveLength(RULES.length + 1));
+    expect(pick().value).toBe('security');
+    expect(screen.queryByTestId('steer-mcp-note')).toBeNull();
+  });
+
+  it('on the MCP choice the list is the MCP rules of every type, and Add a rule opens an MCP policy', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [...RULES, mcpRule('MCP-POL-100'), { ...rule('OPS-1'), steering_type: 'operations', applies_to: ['mcp'] } as SteeringRule] });
+    wire();
+    const user = userEvent.setup();
+    render(<SteerSurface pathname="/steering/policies" search="?mcp=1" runs={[]} navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('rules-row').map((r) => r.getAttribute('data-rule-id')).sort()).toEqual(['MCP-POL-100', 'OPS-1']));
+    await more(user, 'steer-add-rule');
+    expect((await screen.findByTestId('steering-form-id') as HTMLInputElement).value).toBe('MCP-POL-101');
+  });
+
+  it('a type with MCP (the table can make that address) is its own entry; picking the type alone is a change', async () => {
+    wire();
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<SteerSurface pathname="/steering/policies" search="?type=security&mcp=1" runs={[]} navigate={navigate} />);
+    await screen.findByTestId('steer-rules-empty');
+    const pick = screen.getByTestId('steer-type-pick') as HTMLSelectElement;
+    expect(pick.value).toBe('type+mcp');
+    expect(pick.selectedOptions[0]).toHaveTextContent('Security · MCP (0)');
+    expect(screen.getByTestId('steer-mcp-note')).toBeInTheDocument();
+    expect(screen.getByTestId('steer-rules-empty')).toHaveTextContent('No rule matches these filters.');
+    await user.selectOptions(pick, 'security');
+    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?type=security');
   });
 });
 
