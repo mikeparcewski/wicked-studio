@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CoreEvent, GateInfo } from '../api/types.js';
+import type { CoreEvent, GateInfo, SkipQeOffer } from '../api/types.js';
 import { isAwaitingPinned } from './awaitingPins.js';
 import { isAskTurnGate } from '../board/askThread.js';
 import { useAskThreadStore } from './askThread.js';
@@ -39,6 +39,9 @@ export interface OpenGate {
    * only ever PRESELECTS (S5): Enter still waits for the operator to move.
    */
   recommended?: number;
+  /** (api-types 0.146.0) A deliver gate whose delivery QE acceptance refuses: crew's in-place QE skip, read off
+   *  `GET /runs/:id/gate`. A live `awaitingHuman` frame never carries it; absent once QE passes. */
+  skipQe?: SkipQeOffer;
   /** F31: set when the gate came from a `GET /runs/:id/gate` read (a page load, a late join), not a live frame. The
    *  toast strip orders read gates by their runs' age and queues live ones after them in arrival order. */
   fromRead?: true;
@@ -95,6 +98,7 @@ export function gateFromInfo(g: GateInfo): OpenGate {
     receivedAt: Date.parse(g.receivedAt) || Date.now(),
     ...(choices !== undefined ? { choices } : {}),
     ...(recommended !== undefined ? { recommended } : {}),
+    ...(g.skipQe !== undefined && g.skipQe !== null ? { skipQe: g.skipQe } : {}),
     ...gateKindOf(g),
   };
 }

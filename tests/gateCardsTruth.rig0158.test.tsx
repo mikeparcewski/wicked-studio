@@ -265,7 +265,9 @@ describe('1 on the rendered deliver card', () => {
 
 describe('studio#923: a hand-over QE refused takes the skip in place', () => {
   const CHAIN: ChainModel = { source: 'units', steps: [], proposed: false, transportLine: null, done: 0, total: 0, checked: null };
-  const deliverGate: OpenGate = { runId: RUN, ord: 3, prompt: 'Approve delivery before unit 3 runs.', lifecycle: 'open', receivedAt: NOW, gateKind: 'deliver' };
+  // crew's gate read for a hand-over QE refused carries the in-place skip (api-types 0.146.0 `GateInfo.skipQe`).
+  const SKIP_OFFER = { action: 'skip_qe', reasonRequired: true, actor: 'human_operator', label: 'QE acceptance skipped by operator', qeAcceptance: {} } as unknown as OpenGate['skipQe'];
+  const deliverGate: OpenGate = { runId: RUN, ord: 3, prompt: 'Approve delivery before unit 3 runs.', lifecycle: 'open', receivedAt: NOW, gateKind: 'deliver', skipQe: SKIP_OFFER! };
   const REFUSED: RunAcceptanceSummary = { required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' };
   beforeEach(() => {
     vi.restoreAllMocks();
