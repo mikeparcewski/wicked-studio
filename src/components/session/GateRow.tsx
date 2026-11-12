@@ -11,7 +11,9 @@ import { repoNameOf, stepNoun } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
 import { useDisplayPath, useDisplayText } from '../../hooks/useHomePath.js';
 import { driftLine, useDiffDrift, type DiffDrift } from '../../store/gateDiffSeen.js';
-import { diffstatOf, type DeliverRefusal } from '../gateMoveModel.js';
+import { deliverRefusalOf, diffstatOf, isDeliverGate, type DeliverRefusal } from '../gateMoveModel.js';
+import { gateInstance } from '../../board/proposalCard.js';
+import { useGateSkipQe } from '../../hooks/useGateSkipQe.js';
 import { useUndoQueue } from '../../board/undoQueue.js';
 import { InlineUndo } from '../InlineUndo.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
@@ -167,9 +169,14 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const rejudge = useRejudgeOffer(runId, gate?.ord, waitingForJudge);
   // (PRODUCT-WORKS J4) The seats this run benched: a reassign never offers one while its bench holds.
   const benched = useMemo(() => runBenchesOf(view.session), [view.session]);
+  // studio#1102: a refused hand-over that opened live carries no `skipQe` (a live frame never does), so it is read
+  // from crew's gate read, as a reload does: the row then lists the same answers live and after a reload.
+  const refusedHandOver = gate !== undefined && gate.skipQe === undefined && isDeliverGate(runId, view.units, gate.ord) && deliverRefusalOf(gate.prompt) !== null;
+  const liveSkipQe = useGateSkipQe(runId, gateInstance(gate), gate?.ord, refusedHandOver);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
-    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(gate, events), units: view.units, events, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge });
+    const read = gate.skipQe === undefined && liveSkipQe !== null ? { ...gate, skipQe: liveSkipQe } : gate;
+    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(read, events), units: view.units, events, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge });
     if (result === null) return null;
     const toBuilder = steerReachesBuilder(view.units, gate.ord);
     // Label each arm by its effect: the denied-step approve re-runs the step; a steer on a review gate
@@ -181,7 +188,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         ? { ...choice, label: 'Approve with a note for the next step', title: 'Approve, and your note goes to the next step — not to the builder. To have the builder change something, Send back.' }
         : choice;
     return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
-  }, [runId, gate, view.units, events, pool, roster, benched, rerunOffer, fullVerdict, rejudge]);
+  }, [runId, gate, liveSkipQe, view.units, events, pool, roster, benched, rerunOffer, fullVerdict, rejudge]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
     isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',

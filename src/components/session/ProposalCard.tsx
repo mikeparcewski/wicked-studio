@@ -152,7 +152,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // crew's `skipQe` offer (kept on the gate when it was read, else read now) — never a template per card kind.
   // What stays here is wording, and the client-side moves that answer nothing (Run QE again, Not now, Edit, Drop).
   const readSkipQe = useGateSkipQe(runId, gateInstance(gate), gate?.ord, deliverRefused && gate !== undefined && gate.skipQe === undefined);
-  const offered = new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices, skipQe: gate.skipQe ?? readSkipQe })));
+  // A stored offer is crew's answer at the time it was read; it is drawn only while QE still refuses this delivery
+  // (crew drops `skipQe` once QE passes, and the store keeps the gate it already holds).
+  const offered = new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices, skipQe: deliverRefused ? gate.skipQe ?? readSkipQe : undefined })));
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
@@ -404,7 +406,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           {/* (mockup ui-v2-gate) The cause as the headline: a hand-over QE refused says that, first. */}
           <h2 data-testid="session-proposal-text" className="wk-prop-text wk-gate2-q">{deliverRefused && card.state === 'ask' ? QE_REFUSED_DELIVER : card.text}</h2>
           {deliverRefused && card.state === 'ask'
-            ? <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">Delivery is refused until QE acceptance passes. {rerun.offer !== null ? 'Run it again so QE checks it, or skip QE here with a reason.' : 'Skip QE here with a reason, or stop it.'}</p>
+            ? <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">Delivery is refused until QE acceptance passes. {offered.has(SKIP_QE_ACTION)
+              ? (rerun.offer !== null ? 'Run it again so QE checks it, or skip QE here with a reason.' : 'Skip QE here with a reason, or stop it.')
+              : (rerun.offer !== null ? 'Run it again so QE checks it, or stop it.' : 'Start it again with QE skipped, or stop it.')}</p>
             : card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">{card.why}</p>}
           {card.state === 'confirm' && card.confirm !== null ? (
             <div data-testid="session-proposal-confirm" role="alertdialog" aria-label={`Are you sure? ${card.confirm.q}`} className="wk-prop-confirm">

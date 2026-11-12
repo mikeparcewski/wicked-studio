@@ -151,6 +151,14 @@ describe('a consent gate without install file lists', () => {
     expect(bare().choices.map((c) => c.label)).toEqual(['Approve', 'Decline']);
   });
 
+  it('a reopened gate: its own list wins over an older frame at the same ord', () => {
+    const m = bare(['consent:new', 'reject'], { choices: ['consent:old', 'reject'], choiceLabels: { 'consent:old': 'Old install', 'consent:new': 'New install' } });
+    expect(m.choices.map((c) => [c.label, c.decision])).toEqual([
+      ['New install', { approve: true, action: 'consent:new' }],
+      ['Decline', { approve: false }],
+    ]);
+  });
+
   it('offering nothing that maps: still Approve / Decline, never zero choices', () => {
     expect(bare(['mystery']).choices.map((c) => c.label)).toEqual(['Approve', 'Decline']);
     expect(bare([]).choices.map((c) => c.label)).toEqual(['Approve', 'Decline']);

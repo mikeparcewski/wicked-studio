@@ -234,6 +234,38 @@ describe('a refused hand-over: the card\'s actions equal the gate\'s action list
     });
   }
 
+  it('Stop stays however the engine words its closing arm, or when the options end at the retry', () => {
+    const tails = [
+      `${START} (the engine re-checks the lifted tree), ${OFFER} or reject to stop the run.`,
+      `${START}`,
+    ];
+    for (const tail of tails) {
+      const m = sessionGateChoices({ runId: RUN, gate: gate(`The deliver phase refused: deliver: test: exit 1. ${tail}`), units: UNITS, events: [], pool: [], roster: null })!;
+      expect(m.choices.at(-1)!.key).toBe('stop');
+      expect(m.choices.at(-1)!.decision).toEqual({ approve: false });
+    }
+  });
+
+  it('the judgment here says the deliver phase runs again (it is not a floor override that skips the step)', () => {
+    const m = sessionGateChoices({ runId: RUN, gate: gate(REVERIFY_PROMPT), units: UNITS, events: [], pool: [], roster: null })!;
+    const judgment = m.choices.find((c) => c.key === FLOOR_OVERRIDE_KEY)!;
+    expect(judgment.title).toMatch(/deliver phase then runs again/);
+    expect(judgment.title).not.toMatch(/does not run again/);
+  });
+
+  it('a refused hand-over that opened live reads crew\'s skipQe offer, as a reload does', async () => {
+    vi.restoreAllMocks();
+    useGateStore.setState({ gates: { [RUN]: gate(REVERIFY_PROMPT) } });
+    useGateActionStore.setState({ byGate: {} });
+    useRunEventStore.setState({ byRun: { [RUN]: [] } });
+    vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '' } as never);
+    const get = vi.spyOn(client.api, 'getGate').mockResolvedValue({ runId: RUN, ord: 2, prompt: REVERIFY_PROMPT, lifecycle: 'open', receivedAt: '', skipQe: { action: 'skip_qe', reasonRequired: true } } as never);
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human', clis: ['claude'] } as never, UNITS)} gate={gate(REVERIFY_PROMPT)} navigate={vi.fn()} />);
+    await waitFor(() => expect(document.querySelector('[data-choice-key="skip-qe"]')).not.toBeNull());
+    expect(get).toHaveBeenCalled();
+    cleanup();
+  });
+
   it('offers nothing the list does not name', () => {
     for (const p of [REMOTE_PROMPT, IDENTITY_PROMPT]) {
       const m = sessionGateChoices({ runId: RUN, gate: gate(p), units: UNITS, events: [], pool: [], roster: null })!;

@@ -266,6 +266,22 @@ describe('ProposalCard submits, for each answer it draws, the decision the gate 
     expect(tokenOf(body)).toBe('skip_qe');
     expect(body).toMatchObject({ amend: 'because the evidence says so' });
   });
+  it('a stored skipQe offer is not drawn once QE no longer refuses the delivery', () => {
+    useGateStore.setState({ gates: { [RUN]: gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP, prompt: 'Approve delivery before unit 3 runs.' }) } });
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    const passed = { required: true, satisfied: true, walkthrough: null, line: 'QE acceptance passed' };
+    render(<ProposalCard view={view} chain={CHAIN} acceptance={passed as never} />);
+    expect(document.querySelector('[data-option="skip-qe"]')).toBeNull();
+    expect(screen.queryByTestId('session-proposal-skip-qe')).toBeNull();
+  });
+  it('QE refused with no skipQe offer: the card neither draws Skip QE nor tells the operator to use it', () => {
+    useGateStore.setState({ gates: { [RUN]: gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.' }) } });
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    Object.assign(view.session as object, { assurance: { mode: 'full', required: ['qe_acceptance'], qe: { status: 'required', basis: 'diff', score: 100, threshold: 20, reason: 'required', reasons: [], ord: 2, tree: 'abc' } } });
+    render(<ProposalCard view={view} chain={CHAIN} acceptance={{ required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' } as never} />);
+    expect(document.querySelector('[data-option="skip-qe"]')).toBeNull();
+    expect(screen.getByTestId('session-proposal-why').textContent).not.toMatch(/skip QE here/i);
+  });
   it('deliver, QE refused with skipQe: reject still stops the run', async () => {
     const gate = gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP, prompt: 'Approve delivery before unit 3 runs.' });
     expect(tokenOf(await sendWay(gate, true, 'end'))).toBe('reject');
@@ -283,10 +299,26 @@ describe('the resolver keeps every action the gate lists', () => {
   it('a reopened gate at the same ordinal reads its skipQe offer again', async () => {
     const { renderHook } = await import('@testing-library/react');
     const { useGateSkipQe } = await import('../src/hooks/useGateSkipQe.js');
-    const get = vi.spyOn(client.api, 'getGate').mockResolvedValue({ runId: RUN, ord: 3, prompt: 'p', lifecycle: 'open', receivedAt: '' } as never);
-    const { rerender } = renderHook(({ at }) => useGateSkipQe(RUN, `3:${at}`, 3, true), { initialProps: { at: 1 } });
-    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    const first = { action: 'skip_qe', label: 'first gate' };
+    const second = { action: 'skip_qe', label: 'second gate' };
+    const get = vi.spyOn(client.api, 'getGate')
+      .mockResolvedValueOnce({ runId: RUN, ord: 3, prompt: 'p', lifecycle: 'open', receivedAt: '2026-11-11T00:00:01Z', skipQe: first } as never)
+      .mockResolvedValueOnce({ runId: RUN, ord: 3, prompt: 'p', lifecycle: 'open', receivedAt: '2026-11-11T00:00:02Z', skipQe: second } as never);
+    const { result, rerender } = renderHook(({ at }) => useGateSkipQe(RUN, `3:${at}`, 3, true), { initialProps: { at: 1 } });
+    await waitFor(() => expect(result.current).toEqual(first));
     rerender({ at: 2 });
-    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    // The reopened gate never shows the previous instance's offer while its own read is in flight, then shows its own.
+    expect(result.current).toBeNull();
+    await waitFor(() => expect(result.current).toEqual(second));
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+  it('a read for another ordinal is no offer for this gate', async () => {
+    const { renderHook } = await import('@testing-library/react');
+    const { useGateSkipQe } = await import('../src/hooks/useGateSkipQe.js');
+    const get = vi.spyOn(client.api, 'getGate').mockResolvedValue({ runId: RUN, ord: 5, prompt: 'p', lifecycle: 'open', receivedAt: '', skipQe: { action: 'skip_qe' } } as never);
+    const { result } = renderHook(() => useGateSkipQe(RUN, '3:1', 3, true));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current).toBeNull();
   });
 });

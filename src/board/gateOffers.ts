@@ -40,23 +40,18 @@ export const OFFER_REJECT = 'reject';
 /** A free-text gate's one answer: the operator's words. */
 export const OFFER_ANSWER = 'answer';
 
-/** Where a refused hand-over's options begin, and the engine's closing arm (wicked-core `deliver_refusal_prompt`). */
+/** Where a refused hand-over's options begin (wicked-core `deliver_refusal_prompt`). */
 const REFUSAL_OPTIONS_START = 'Approve to re-run the deliver phase now';
-const REFUSAL_REJECT = /\breject to cancel the run\b/;
 
 /**
  * The answers a REFUSED HAND-OVER lists, in the engine's order: approve (re-run the deliver phase), every
- * `(action ...)` arm its options name, reject. Read from the engine's last options clause. A refusal whose
- * options this cannot read still has the engine's two arms (studio#403: approve re-runs, reject cancels), so the
- * row is never left with nothing to answer.
+ * `(action ...)` arm its options name, reject. The named arms are read from the engine's last options clause.
+ * Approve and reject are the engine's two arms on every refused hand-over (studio#403: approve re-runs, reject
+ * cancels), so they never depend on how the options are worded and the row is never left without Stop.
  */
 export function refusalOffers(gate: { prompt: string | undefined } & GateOfferSource): GateOffer[] {
-  const { prompt } = gate;
-  const actions = enginePromptActions(prompt, REFUSAL_OPTIONS_START);
-  const at = prompt === undefined ? -1 : prompt.lastIndexOf(REFUSAL_OPTIONS_START);
-  const readable = prompt !== undefined && at >= 0;
-  const reject = !readable || REFUSAL_REJECT.test((prompt as string).slice(at));
-  const offers: GateOffer[] = [{ action: OFFER_APPROVE }, ...actions.map((action) => ({ action })), ...(reject ? [{ action: OFFER_REJECT }] : [])];
+  const actions = enginePromptActions(gate.prompt, REFUSAL_OPTIONS_START).filter((a) => a !== OFFER_APPROVE && a !== OFFER_REJECT);
+  const offers: GateOffer[] = [{ action: OFFER_APPROVE }, ...actions.map((action) => ({ action })), { action: OFFER_REJECT }];
   return withSkipQe(offers, gate.skipQe);
 }
 

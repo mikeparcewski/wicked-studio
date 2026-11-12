@@ -562,6 +562,9 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   };
 }
 
+/** The judgment at a refused hand-over: the override is recorded, then the deliver phase re-runs on the same tree. */
+export const REFUSAL_JUDGMENT_TITLE = `${FLOOR_OVERRIDE_CONSEQUENCE} Write why the failed checks are not this work's; the deliver phase then runs again on this tree.`;
+
 /** How a refused hand-over words each answer the gate lists. Membership is never decided here: an answer the list
  *  does not name is not drawn, and one this does not know is drawn disabled (no wire for it yet). */
 function refusalChoice(offer: GateOffer): GateRowChoice {
@@ -571,7 +574,8 @@ function refusalChoice(offer: GateOffer): GateRowChoice {
     case FLOOR_OVERRIDE_ACTION:
       // wicked-core: the deliver phase's own re-verify failed (a lift moved the tree onto a red base);
       // the operator's judgment over exactly that result, then the deliver phase re-runs on it.
-      return { key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, needsNote: true, title: FLOOR_OVERRIDE_TITLE };
+      // Not FLOOR_OVERRIDE_TITLE: here the deliver phase DOES run again, on the tree the judgment covers.
+      return { key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, needsNote: true, title: REFUSAL_JUDGMENT_TITLE };
     case SKIP_QE_ACTION:
       return { key: SKIP_QE_KEY, label: SKIP_QE_LABEL, decision: { approve: true, action: SKIP_QE_ACTION } as unknown as GateAnswer, needsNote: true, title: SKIP_QE_GATE_TITLE };
     case OFFER_REJECT:
@@ -595,7 +599,9 @@ function consentFallbackChoices(gate: OpenGate, events: readonly CoreEvent[] | n
     const e = events![i] as unknown as Record<string, unknown>;
     if (e['type'] === 'awaitingHuman' && e['ord'] === gate.ord) { frame = e; break; }
   }
-  const tokens = frame !== null && Array.isArray(frame['choices'])
+  // The open gate's own list wins: an older frame at the same ord (a reopened gate whose new frame has not arrived)
+  // never decides the answers. The frame's list is read only when the gate carries none.
+  const tokens = gate.choices === undefined && frame !== null && Array.isArray(frame['choices'])
     ? (frame['choices'] as unknown[]).filter((t): t is string => typeof t === 'string')
     : offerActions(rowOffers(gate, false, []));
   const labels = (frame?.['choiceLabels'] ?? {}) as Record<string, unknown>;
