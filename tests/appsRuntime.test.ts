@@ -151,7 +151,9 @@ describe('studio#1119: phone tables, tabs and large select filters', () => {
     expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 300px\) \{\s*\.wk-filter-select--search \.wk-filter-options \.wk-muted \{ position: absolute;/u);
     // Only a searchable select's label ever leaves its row, and only when the filter is too narrow for it.
     expect(TEMPLATE.match(/\.wk-filter-label \{ position: absolute;/gu) ?? []).toHaveLength(1);
-    expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 170px\) \{\s*\.wk-filter-select--search \.wk-filter-label \{ position: absolute;/u);
+    // A narrow (<=200px) searchable row: the label leaves it and the controls split 1:1 with no ch floors, so a wider
+    // font (WebKit) cannot push a control out of the cell (CI r1).
+    expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 200px\) \{\s*\.wk-filter-select--search \.wk-filter-label \{ position: absolute;[^}]*\}\s*\.wk-filter-select\.wk-filter-select--search > \.wk-filter, \.wk-filter-select\.wk-filter-select--search > \.wk-filter-options \{ flex-grow: 1; \}\s*\.wk-filter-select--search \.wk-filter \.wk-input, \.wk-filter-select--search \.wk-filter-options \.wk-input \{ min-width: 0; \}/u);
     await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query'), rows: { cases } });
     await vi.waitFor(() => expect(select().options.length).toBeGreaterThan(200));
     expect(picker().querySelector('.wk-filter-select')!.classList.contains('wk-filter-select--search')).toBe(true);

@@ -92,9 +92,13 @@
   @container wkfilter (max-width: 300px) {
     .wk-filter-select--search .wk-filter-options .wk-muted { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   }
-  /* Too narrow for a readable label beside both controls: the label leaves the row (it still names the select). */
-  @container wkfilter (max-width: 170px) {
+  /* A narrow searchable filter (200px or less: the default three columns): the label leaves the row (it still names the
+     select), and the select and the search split the row 1:1 with no ch floors, so neither can overflow the cell
+     whatever the font's ch (WebKit's is wider: the floors pushed a control out of a three-column filter there). */
+  @container wkfilter (max-width: 200px) {
     .wk-filter-select--search .wk-filter-label { position: absolute; width: 1px; height: 1px; min-width: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .wk-filter-select.wk-filter-select--search > .wk-filter, .wk-filter-select.wk-filter-select--search > .wk-filter-options { flex-grow: 1; }
+    .wk-filter-select--search .wk-filter .wk-input, .wk-filter-select--search .wk-filter-options .wk-input { min-width: 0; }
   }
   .wk-filter-select .wk-filter { height: auto; flex: 1 1 0; min-width: 0; }
   .wk-filter-options { display: flex; flex: 1 1 0; min-width: 0; align-items: center; gap: 6px; }
