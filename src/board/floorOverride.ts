@@ -140,3 +140,36 @@ export function floorOverrideOf(v: unknown): FloorOverrideView | null {
     attempt: int(v['attempt'], at?.[2]),
   };
 }
+
+/**
+ * The engine's word on the timeout gate's targeted re-run (wicked-core#1392): its denial text offers
+ * "re-run with the targeted tests (`<source>`)" when the floor names a targeted command, and says
+ * "none is declared, so a targeted re-run is not offered" when it names none — in which case the engine
+ * refuses the `targeted` answer. An older prompt says neither: `unknown`, and the card keeps the choice.
+ *
+ * The quoted failure text (the denial reason) is removed first; a phrase then only counts inside the options'
+ * tail: the last 500 characters before the engine's last closer ("or reject to cancel the run").
+ * Both phrases at once is no reading (`unknown`).
+ */
+export type TargetedOffer = { state: 'declared' | 'unknown' } | { state: 'unavailable'; reason: string };
+
+const TARGETED_DECLARED = /re-run with the targeted tests\s*\(`[^`]+`\)/;
+const TARGETED_NONE = /none is declared, so a targeted re-run is not offered/;
+const OPTIONS_TAIL = 500;
+
+export function targetedOfferIn(prompt: string | undefined, denialReason?: string | null): TargetedOffer {
+  if (prompt === undefined) return { state: 'unknown' };
+  // The quoted failure is the gate's own denial reason (first line, cut to 240 chars): take it out first, so a phrase
+  // inside it can never read as the engine's option, however short the prompt.
+  const head = typeof denialReason === 'string' ? (denialReason.split('\n')[0] ?? '').slice(0, 240) : '';
+  const body = head !== '' ? prompt.split(head).join(' ') : prompt;
+  const last = body.lastIndexOf(CLOSER);
+  if (last < 0) return { state: 'unknown' };
+  const tail = body.slice(Math.max(0, last + CLOSER.length - OPTIONS_TAIL), last + CLOSER.length);
+  const declared = TARGETED_DECLARED.test(tail);
+  const none = TARGETED_NONE.test(tail);
+  if (declared === none) return { state: 'unknown' };
+  return declared
+    ? { state: 'declared' }
+    : { state: 'unavailable', reason: 'No targeted test command is declared for this repository, so the engine does not offer a targeted re-run.' };
+}

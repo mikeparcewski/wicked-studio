@@ -406,6 +406,20 @@ describe('the phone sheet, folded (live nit 2026-10-27: act without expanding th
     expect(within(dock).getByTestId('decision-dock-slot').dataset.folded).toBe('false');
   });
 
+  it('a key that acts in the folded sheet unfolds it; moving focus through it does not', async () => {
+    phone(true);
+    page();
+    const dock = await screen.findByTestId('decision-dock');
+    const card = within(dock).getAllByTestId('session-gate-choice')[0]!;
+    fireEvent.keyDown(card, { key: 'Tab' });
+    fireEvent.keyDown(card, { key: 'Control' });
+    fireEvent.keyDown(card, { key: 'Meta' });
+    expect(dock.dataset.collapsed).toBe('true');
+    fireEvent.keyDown(card, { key: 'ArrowDown' });
+    expect(dock.dataset.collapsed).toBe('false');
+    expect(within(dock).getByTestId('decision-dock-slot').dataset.folded).toBe('false');
+  });
+
   it('a desk never folds', async () => {
     phone(false);
     page();

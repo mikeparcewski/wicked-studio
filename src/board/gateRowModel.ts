@@ -15,6 +15,7 @@ import {
 import {
   checkOutcome,
   escalationOffers,
+  escalationWhyNot,
   failedSeatOf,
   isEscalationGate,
   isLaunchRefusal,
@@ -278,8 +279,8 @@ function mapChoiceTitle(value: string): string {
     case 'request_changes': return 'Return to the creator with the reviewer\'s findings.';
     case 'reject': return 'Cancel the run; the work stops here.';
     case 'extend': return 'Re-run floor checks with 2× time bounds.';
-    case 'targeted': return 'Re-run with the targeted test set only.';
-    case 'accept_partial': return 'Waive the checks that did not finish and continue.';
+    case 'targeted': return 'Re-run with the declared targeted test command; refused when none is declared (an engine before core-ts 0.15.38 waives the test set instead).';
+    case 'accept_partial': return 'Waive the tests that did not finish (tests waived by the operator) and continue.';
     case 'accept_suggestion': return 'Apply the restored edit and rewind to the creator.';
     default: return '';
   }
@@ -900,7 +901,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // (read below off its prompt and structured offers). The template words and orders them; it never adds one.
     const rulesHold = rulesHoldAt(events, units, gate.ord);
     const ruleChoices = deadSeat === null ? ruleChoicesAt(rulesHold) : [];
-    const escOffers = escalationOffers(verdict, gate.ord, units, runId);
+    const escOffers = escalationOffers(verdict, gate.ord, units, runId, gate.prompt);
     const overrideOffered = deadSeat === null && offersFloorOverride(gate.prompt, verdict, gate.ord);
     const skipHere = deadSeat === null && offersSkipQeHere(gate.prompt);
     const named = [
@@ -1000,6 +1001,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
         ? `Your own judgment isn’t offered while QE has no verdict on this tree.${skipHere ? ' Skip QE with a reason first, and this question comes back with it.' : ''}`
         : 'Your own judgment isn’t offered here: the job takes it only when the failed checks are all that stop this step.');
     }
+    if (floorDenied && deadSeat === null) whyNot.push(...escalationWhyNot(gate.prompt, verdict?.denial?.reason));
     if (skipQeAtDelivery(gate.prompt)) whyNot.push('Skipping QE is offered at the hand-over, not here.');
     if (landHeld) {
       // A broken rule that cannot be skipped (error or critical) still needs the send-back, whatever else is open.
@@ -1091,7 +1093,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
 
   if (reason === 'retry') {
     // studio#1102: the retry gate's list: its `choices` (else approve / reject) and the arms the engine named for it.
-    const retryOffers = escalationOffers(verdict, gate.ord, units, runId);
+    const retryOffers = escalationOffers(verdict, gate.ord, units, runId, gate.prompt);
     const ruleArms = ruleChoicesAt(rulesHoldAt(events, units, gate.ord));
     const listed = new Set(offerActions(rowOffers(gate, false, [...retryOffers.map((o) => o.action), ...ruleArms.map((c) => decisionAction(c.decision as { approve?: boolean; action?: string } | null)).filter((t): t is string => t !== null)])));
     if (listed.has(OFFER_APPROVE)) choices.push({ key: 'retry', label: 'Retry', decision: { approve: true }, needsNote: false, title: 'Try the same unit again with the same seat.' });

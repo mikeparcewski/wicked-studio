@@ -1,6 +1,7 @@
 import type { CoreEvent, RepoCheckRun, RosterSeat, UnitDenial, WorkUnit, WorktreeChangedPath } from '../api/types.js';
 import { gateUngated, gateUngatedReason, judgeSkippedOf, judgeVerdictOf, type EscalationAction } from '../api/wave6-wire.js';
 import { parseDenial } from './denialCopy.js';
+import { targetedOfferIn } from '../board/floorOverride.js';
 
 /**
  * gateVerdict — the evaluator's record for the gate the operator is answering, read off the run's
@@ -533,6 +534,12 @@ export interface EscalationOffer {
   consequence: string;
 }
 
+/** The timeout arms the engine's prompt does not offer, each with the engine's reason (shown as the row's why-not). */
+export function escalationWhyNot(prompt: string | undefined, denialReason?: string | null): string[] {
+  const t = targetedOfferIn(prompt, denialReason);
+  return t.state === 'unavailable' ? [t.reason] : [];
+}
+
 /**
  * studio#612 (wicked-core#782 / #811): whether "approve with a note" at this gate is a FLOOR FIX —
  * the gate's unit is a read-only phase (worktree-guarded, `executes_code: false`) whose own
@@ -574,6 +581,7 @@ export function escalationOffers(
   gateOrd: number | undefined,
   units: readonly WorkUnit[] | undefined,
   runId: string,
+  prompt?: string,
 ): EscalationOffer[] {
   if (view === null || typeof gateOrd !== 'number' || view.ord !== gateOrd || view.outcome !== 'fail') return [];
   if (view.denial?.source === 'repo_checks_timeout') {
@@ -583,20 +591,27 @@ export function escalationOffers(
         label: 'Re-run the checks with twice the time',
         consequence: 'Re-runs every check on the tree as it stands, each under twice its time bound. The seat does not run again; the result goes through the ordinary gate.',
       },
-      {
+    ];
+    // The engine's own text is the offer: with no targeted command declared it refuses `targeted` (wicked-core#1392).
+    const targeted = targetedOfferIn(prompt, view.denial?.reason).state;
+    if (targeted !== 'unavailable') {
+      offers.push({
         action: 'targeted',
         label: 'Re-run with the targeted tests',
-        consequence: "Re-runs the checks with the repo's declared targeted test command in place of the full test set (with none declared, the test set is waived and the floor note says so). The seat does not run again.",
-      },
-    ];
+        // Only an engine that names the declared command (core-ts ≥ 0.15.38) is known to refuse rather than waive.
+        consequence: targeted === 'declared'
+          ? "Re-runs the checks with the repo's declared targeted test command in place of the full test set. It waives nothing: with no targeted command declared the engine refuses it and the gate stays open. The seat does not run again."
+          : "Re-runs the checks with the repo's declared targeted test command in place of the full test set. This engine doesn't say whether one is declared: with none, a current engine refuses it and the gate stays open, but an engine before core-ts 0.15.38 waives the test set instead (named in the floor note). The seat does not run again.",
+      });
+    }
     const waive = view.floor === null
       ? []
       : [...view.floor.checks.filter((c) => !checkOutcome(c).ok).map((c) => c.name), ...view.floor.skipped];
     if (waive.length > 0) {
       offers.push({
         action: 'accept_partial',
-        label: 'Accept what passed',
-        consequence: `Re-runs the checks that passed and waives ${waive.join(', ')} (the checks that did not pass or did not run). The waiver is named in the gate's floor note, so the record shows what was not verified.`,
+        label: 'Accept what passed — waive the tests',
+        consequence: `Waives ${waive.join(', ')} (the checks that did not pass or did not run) and re-runs the ones that passed. Recorded as “tests waived by the operator”, and named in the gate's floor note, so the record shows what was not verified.`,
       });
     }
     return offers;
