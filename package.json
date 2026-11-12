@@ -1,6 +1,6 @@
 {
   "name": "wicked-studio",
-  "version": "0.16.6",
+  "version": "0.16.7",
   "description": "The ADE (agentic development environment) for running a team of coding agents: start a job with a chat, sign your agents in once, watch them work in sandboxes, and answer the decisions that need you, with the evidence. Build apps and dashboards over your data by chat, and decide what agents may read from each data source. The browser UI for wicked-crew.",
   "type": "module",
   "repository": {
