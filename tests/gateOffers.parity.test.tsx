@@ -7,13 +7,16 @@
  * inline and in its overflow, through `GateRow`'s model and through `ProposalCard`'s rendered ways.
  * Client-side moves that answer nothing (Run QE again, Not now, Edit, Drop, Start again) are not answers.
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import type { ChainModel } from '../src/board/chainModel.js';
 import { useGateActionStore } from '../src/board/gateActions.js';
 import { gateFromInfo, useGateStore, type OpenGate } from '../src/store/gates.js';
+import { offerActions, refusalOffers } from '../src/board/gateOffers.js';
+import { offersDeliverFloorOverride } from '../src/board/floorOverride.js';
+import { deliverRefusalOf } from '../src/components/gateMoveModel.js';
 import { sessionGateChoices } from '../src/board/gateRowModel.js';
 import { ProposalCard } from '../src/components/session/ProposalCard.js';
 import { GateRow } from '../src/components/session/GateRow.js';
@@ -77,6 +80,35 @@ describe('GateRow: the row\'s actions equal the gate\'s list', () => {
   });
 });
 
+describe('refused hand-over options after an earlier override (core#1114)', () => {
+  const SAME_TREE = 'Approve to re-run the checks on this same tree (`f890f717e0`) now (the engine re-lifts and re-verifies first; no second deliver gate), ';
+  const variants = [OPTIONS, SAME_TREE];
+
+  it('keeps approve, operator judgment and reject when the lift changed the previously overridden tree', () => {
+    const prompt = 'The deliver phase refused: deliver: test: exit 1. The tree changed since the floor was overridden (was `8c9499abff`, now `f890f717e0`); that earlier override covered `8c9499abff` only. ' + SAME_TREE + JUDGMENT + CLOSE;
+    expect(offerActions(refusalOffers({ prompt }))).toEqual(['approve', 'operator_judgment', 'reject']);
+    expect(offersDeliverFloorOverride(prompt)).toBe(true);
+    expect(rowActions(gateOf({ ord: 3, gateKind: 'escalation', prompt }))).toEqual(sorted(['approve', 'operator_judgment', 'reject']));
+  });
+
+  for (const options of variants) {
+    it(`ignores quoted action clauses before the last marker: ${options}`, () => {
+      // The refusal detail may quote either variant, including its full options clause.
+      for (const quoted of variants) {
+        const prompt = 'The deliver phase refused: deliver: quoted: ' + quoted + JUDGMENT + CLOSE + ' ' + options + CLOSE;
+        expect(offerActions(refusalOffers({ prompt }))).toEqual(['approve', 'reject']);
+        expect(offersDeliverFloorOverride(prompt)).toBe(false);
+        expect(rowActions(gateOf({ ord: 3, gateKind: 'escalation', prompt }))).toEqual(['approve', 'reject']);
+      }
+    });
+
+    it(`keeps the refusal reason before the last options clause: ${options}`, () => {
+      const prompt = 'The deliver phase refused: deliver: quoted: ' + OPTIONS + JUDGMENT + CLOSE + '\ndeliver: test: exit 1. ' + options + CLOSE;
+      expect(deliverRefusalOf(prompt)?.reason).toBe('test: exit 1');
+    });
+  }
+});
+
 describe('ProposalCard: the card\'s answers equal the gate\'s list', () => {
   const CHAIN: ChainModel = { source: 'units', steps: [], proposed: false, transportLine: null, done: 0, total: 0, checked: null };
   const CLIENT_MOVES = new Set(['qe-again', 'relaunch', 'not-now', 'edit', 'drop']);
@@ -93,12 +125,12 @@ describe('ProposalCard: the card\'s answers equal the gate\'s list', () => {
   });
   afterEach(() => cleanup());
 
-  const answers = (gate: OpenGate, refused: boolean, units = UNITS): string[] => {
+  const answers = (gate: OpenGate, refused: boolean | null, units = UNITS): string[] => {
     useGateStore.setState({ gates: { [RUN]: gate } });
     const view = makeView({ id: RUN, status: 'awaiting_human' } as never, units);
     Object.assign(view.session as object, { assurance: { mode: 'full', required: ['qe_acceptance'], qe: { status: 'required', basis: 'diff', score: 100, threshold: 20, reason: 'required', reasons: [], ord: 2, tree: 'abc' } } });
-    const acceptance = refused ? { required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' } : { required: false, satisfied: true, walkthrough: null, line: '' };
-    render(<ProposalCard view={view} chain={CHAIN} acceptance={acceptance as never} />);
+    const acceptance = refused ? { required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' } : { required: true, satisfied: true, walkthrough: null, line: 'QE acceptance passed' };
+    render(<ProposalCard view={view} chain={CHAIN} acceptance={refused === null ? null : acceptance as never} />);
     const group = screen.getByTestId('session-proposal-choices');
     return sorted([...group.querySelectorAll<HTMLElement>('[data-option]')].map((el) => el.dataset['option']!).filter((id) => !CLIENT_MOVES.has(id)).map((id) => (id === 'go' ? 'approve' : id === 'end' ? 'reject' : id === 'skip-qe' ? 'skip_qe' : id)));
   };
@@ -137,6 +169,39 @@ describe('ProposalCard: the card\'s answers equal the gate\'s list', () => {
   it('deliver, QE refused, but the gate lists no skip: none is drawn', () => {
     expect(answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.' }), true)).toEqual(['approve', 'reject']);
   });
+  for (const summary of [null, false] as const) {
+    it(`deliver reads crew's skipQe offer and ${summary === null ? 'defers to it while acceptance is pending or failed' : 'keeps Deliver available when acceptance passed'}`, async () => {
+      vi.mocked(client.api.getGate).mockResolvedValue({ runId: RUN, ord: 3, prompt: 'Deliver?', lifecycle: 'open', receivedAt: '', skipQe: SKIP } as never);
+      answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Deliver?' }), summary);
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.queryByTestId('session-proposal-skip-qe') !== null).toBe(summary === null);
+      const deliver = document.querySelector<HTMLElement>('[data-option="go"]')!;
+      expect(within(deliver).queryByTestId('ask-recommended') !== null).toBe(summary !== null);
+      expect(deliver.getAttribute('aria-disabled') === 'true').toBe(summary === null);
+      expect(client.api.getGate).toHaveBeenCalledWith(RUN);
+    });
+  }
+
+  it('deliver without acceptance or a skipQe offer keeps Deliver recommended', async () => {
+    vi.mocked(client.api.getGate).mockResolvedValue({ runId: RUN, ord: 3, prompt: 'Deliver?', lifecycle: 'open', receivedAt: '' } as never);
+    answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Deliver?' }), null);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByTestId('session-proposal-skip-qe')).toBeNull();
+    const deliver = document.querySelector<HTMLElement>('[data-option="go"]')!;
+    expect(within(deliver).getByTestId('ask-recommended')).toBeTruthy();
+    expect(deliver.getAttribute('aria-disabled')).not.toBe('true');
+    expect(client.api.getGate).toHaveBeenCalledWith(RUN);
+  });
+
+  it('deliver uses a skipQe offer already on the gate without acceptance or another read', async () => {
+    answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Deliver?', skipQe: SKIP! }), null);
+    expect(await screen.findByTestId('session-proposal-skip-qe')).toBeTruthy();
+    const deliver = document.querySelector<HTMLElement>('[data-option="go"]')!;
+    expect(within(deliver).queryByTestId('ask-recommended')).toBeNull();
+    expect(deliver.getAttribute('aria-disabled')).toBe('true');
+    expect(client.api.getGate).not.toHaveBeenCalled();
+  });
+
   it('deliver, QE refused, opened live: the skip is read from the gate', async () => {
     (client.api.getGate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ runId: RUN, ord: 3, prompt: 'p', lifecycle: 'open', receivedAt: '', skipQe: SKIP });
     answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.' }), true, UNITS.map((u) => ({ ...u, status: 'pending' as const })));
@@ -304,13 +369,61 @@ describe('ProposalCard submits, for each answer it draws, the decision the gate 
     expect(tokenOf(body)).toBe('skip_qe');
     expect(body).toMatchObject({ amend: 'because the evidence says so' });
   });
-  it('a stored skipQe offer is not drawn once QE no longer refuses the delivery', () => {
+  it('a delayed skipQe refusal replaces the Deliver primary with the recommended QE rerun', async () => {
+    let resolveGate!: (info: Awaited<ReturnType<typeof client.api.getGate>>) => void;
+    vi.mocked(client.api.getGate).mockReturnValue(new Promise((resolve) => { resolveGate = resolve; }));
+    useGateStore.setState({ gates: { [RUN]: gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Deliver?' }) } });
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    render(<ProposalCard view={view} chain={CHAIN} />);
+
+    const initialPrimary = screen.getByTestId('session-proposal-go') as HTMLButtonElement;
+    expect(initialPrimary.textContent).toBe('Deliver');
+    expect(initialPrimary.disabled).toBe(false);
+    expect(client.api.getGate).toHaveBeenCalledWith(RUN);
+
+    await act(async () => {
+      resolveGate({ runId: RUN, ord: 3, prompt: 'Deliver?', lifecycle: 'open', receivedAt: '', skipQe: SKIP } as never);
+    });
+
+    const primary = screen.getByTestId('session-proposal-primary') as HTMLButtonElement;
+    expect(primary.textContent).toBe('Run QE again');
+    expect(primary.disabled).toBe(false);
+    fireEvent.click(primary);
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(client.api.confirmGate).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(client.api.confirmGate).mock.calls[0]?.[1]).toMatchObject({ approve: false, action: 'request_changes' });
+  });
+  it('a passing acceptance summary keeps Deliver available despite a cached skipQe offer', () => {
     useGateStore.setState({ gates: { [RUN]: gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP, prompt: 'Approve delivery before unit 3 runs.' }) } });
     const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
     const passed = { required: true, satisfied: true, walkthrough: null, line: 'QE acceptance passed' };
     render(<ProposalCard view={view} chain={CHAIN} acceptance={passed as never} />);
-    expect(document.querySelector('[data-option="skip-qe"]')).toBeNull();
     expect(screen.queryByTestId('session-proposal-skip-qe')).toBeNull();
+    const deliver = document.querySelector<HTMLElement>('[data-option="go"]')!;
+    expect(within(deliver).getByTestId('ask-recommended')).toBeTruthy();
+    expect(deliver.getAttribute('aria-disabled')).not.toBe('true');
+  });
+  it('the same gate with cached skipQe offers Deliver again when acceptance changes from refused to satisfied', () => {
+    const gate = gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP, prompt: 'Deliver?' });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    const refused = { required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' };
+    const passed = { ...refused, satisfied: true, line: 'QE acceptance passed' };
+    const { rerender } = render(<ProposalCard view={view} chain={CHAIN} acceptance={refused as never} />);
+    expect(screen.getByTestId('session-proposal-skip-qe')).toBeTruthy();
+    const refusedDeliver = document.querySelector<HTMLElement>('[data-option="go"]')!;
+    expect(refusedDeliver.getAttribute('aria-disabled')).toBe('true');
+    expect(within(refusedDeliver).queryByTestId('ask-recommended')).toBeNull();
+
+    rerender(<ProposalCard view={view} chain={CHAIN} acceptance={passed as never} />);
+
+    expect(useGateStore.getState().gates[RUN]).toBe(gate);
+    expect(client.api.getGate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('session-proposal-skip-qe')).toBeNull();
+    expect(document.querySelector('[data-option="skip-qe"]')).toBeNull();
+    const deliver = document.querySelector<HTMLElement>('[data-option="go"]')!;
+    expect(deliver.getAttribute('aria-disabled')).not.toBe('true');
+    expect(within(deliver).getByTestId('ask-recommended')).toBeTruthy();
   });
   it('QE refused with no skipQe offer: the card neither draws Skip QE nor tells the operator to use it', () => {
     useGateStore.setState({ gates: { [RUN]: gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.' }) } });

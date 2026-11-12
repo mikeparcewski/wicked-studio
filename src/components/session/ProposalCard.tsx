@@ -146,17 +146,18 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const seat = useSeatTrust(view, openKind === 'deliver' ? gate : undefined, { isPlanGate: openKind === 'plan', isDeliverGate: openKind === 'deliver', isEscalation: false });
   const deliverFailure = openKind === 'deliver' ? deliverFailureOf(eventsRaw ?? [], gate?.ord) : null;
   const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? (handedOver ? 'deliver' : null), ask, deliverFailure: deliverFailure === null ? null : showText(deliverFailure) });
-  // Crew refuses this delivery (QE acceptance required, not passed): Deliver is not offered as if it works.
-  const deliverRefused = card?.kind === 'deliver' && accept?.blocksDeliver === true;
   // studio#1102: the answers this card draws are the gate's own list — its `choices` and, on a hand-over QE refused,
   // crew's `skipQe` offer (kept on the gate when it was read, else read now) — never a template per card kind.
   // What stays here is wording, and the client-side moves that answer nothing (Run QE again, Not now, Edit, Drop).
-  const readSkipQe = useGateSkipQe(runId, gateInstance(gate), gate?.ord, deliverRefused && gate !== undefined && gate.skipQe === undefined);
-  // A stored offer is crew's answer at the time it was read; it is drawn only while QE still refuses this delivery
-  // (crew drops `skipQe` once QE passes, and the store keeps the gate it already holds).
+  const readSkipQe = useGateSkipQe(runId, gateInstance(gate), gate?.ord, card?.kind === 'deliver' && gate !== undefined && gate.skipQe === undefined);
+  const skipQeOffer = gate?.skipQe ?? readSkipQe;
+  // Crew withdraws skipQe once acceptance passes. A passing summary wins over a cached offer; while the
+  // acceptance read is pending or failed, the current gate's offer still says this delivery is refused.
+  const deliverRefused = card?.kind === 'deliver' && (accept?.blocksDeliver === true ||
+    (skipQeOffer != null && (acceptance === null || (acceptance.required && !acceptance.satisfied))));
   // A `null` list (`options: null` on the gate read) marks a COMPLEX gate answered on its card, not a free-text-only
   // gate: this card has no free-text answer, and the daemon takes approve / reject on every gate (as before #1102).
-  const offered = new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices ?? undefined, skipQe: deliverRefused ? gate.skipQe ?? readSkipQe : undefined })));
+  const offered = new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices ?? undefined, skipQe: deliverRefused ? skipQeOffer : undefined })));
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
@@ -374,8 +375,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       send: card.kind === 'deliver' || ask === null ? 'Stop with this reason' : 'End with this reason' };
   const waysCard = (
     <AskCard
-      // Opening or closing the editor puts the selection back on the move (its words may have changed with a draft).
-      key={`${instance}:${editing ? 'e' : ''}:${draft !== null ? 'd' : ''}`}
+      // Editor, draft or refusal changes put the selection back on the recommended move.
+      key={`${instance}:${editing ? 'e' : ''}:${draft !== null ? 'd' : ''}:${deliverRefused ? 'refused' : ''}`}
       ask={proposalAsk}
       header={false}
       busy={action.busy}

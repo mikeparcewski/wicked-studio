@@ -25,7 +25,7 @@ import { Switch } from '../ui/Switch.js';
 import { usePressBinding } from '../../hooks/usePressBinding.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import { useGateStore } from '../../store/gates.js';
+import { useGateStore, type OpenGate } from '../../store/gates.js';
 import { useRunEventStore } from '../../store/events.js';
 import { failureWhy } from '../../board/failureWhy.js';
 import { focusSessionComposer, useJobBinding } from '../../store/jobBinding.js';
@@ -46,6 +46,7 @@ import { movedFrom, useJobMoves } from '../../store/jobMoves.js';
 import { openChat } from '../../store/chatFlow.js';
 import { PowerPauseCard } from './PowerMode.js';
 import { usePower } from '../../hooks/usePower.js';
+import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 
 /**
  * WICKED'S PASSAGE (DES-CATALOG-002 rev 7 §2.8.1, the v4 "Ink" direction, mockup new-job-v5): the job, inline in the
@@ -927,15 +928,21 @@ function useJobTicking(lineage: JobLineage, runs: readonly SessionView[]): boole
 /** A gate under its step (§2.8.1): the existing renderers, unchanged and in place. A hand-over is the plan and
  *  hand-over card's (its consent, receipt and drift), every other gate GateRow's. */
 function PassageGate({ run, gate, navigate }: { run: SessionView; gate: ReturnType<typeof useGateStore.getState>['gates'][string] | undefined; navigate?: Navigate }): React.ReactElement {
-  const { chain } = useRunChain(run);
   const deliver = gate !== undefined && proposalKindOf(run.session.id, gate, run.units) === 'deliver';
   return (
     <div className="wk-pass-gate" data-testid="job-passage-gate" data-kind={deliver ? 'deliver' : 'gate'}>
       <Undocked>
-        {deliver ? <ProposalCard view={run} chain={chain} variant="chat" /> : <GateRow view={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
+        {deliver ? <PassageDeliverCard run={run} gate={gate} /> : <GateRow view={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
       </Undocked>
     </div>
   );
+}
+
+/** Only the hand-over consumes acceptance here; an ordinary GateRow never mounts its read. */
+function PassageDeliverCard({ run, gate }: { run: SessionView; gate: OpenGate }): React.ReactElement {
+  const { chain } = useRunChain(run);
+  const acceptance = useRunAcceptance(run, chain, gate);
+  return <ProposalCard view={run} chain={chain} acceptance={acceptance?.summary ?? null} variant="chat" />;
 }
 
 /** The run's other in-place renderers, unchanged: a daemon restart's Resume, a power checkpoint (not an engine gate:
