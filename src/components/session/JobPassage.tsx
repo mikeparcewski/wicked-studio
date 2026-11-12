@@ -927,7 +927,7 @@ function QuestionInput({ label, disabled, onAnswer }: { label: string; disabled:
     }}>
       <label className="wk-field-label">
         {label}
-        <input type="text" data-testid="job-passage-question-input" className="wk-field" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
+        <input type="text" data-testid="job-passage-question-input" className="wk-field" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '4px var(--control-px)' }}
           value={words} disabled={disabled} onChange={(e) => setWords(e.target.value)} />
       </label>
       <button type="submit" data-testid="job-passage-question-answer" className="wk-btn wk-btn--primary wk-btn--sm" disabled={disabled || text === ''}>Answer</button>
