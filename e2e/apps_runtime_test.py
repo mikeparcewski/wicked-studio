@@ -191,8 +191,9 @@ def layout_checks(page, frame, width: int) -> None:
                 inside: shown.every(r => r.left >= body.left - 1 && r.right <= body.right + 1
                 && r.top >= body.top - 1 && r.bottom <= body.bottom + 1)};
         }""")
+        named = frame.locator('[data-component="case_filter_narrow"]').get_by_role('combobox', name='Customer account').count()
         check("narrow_filter_search", narrow["search"] >= 48 and narrow["select"] >= 48 and narrow["overlap"] <= 0
-              and narrow["inside"] and narrow["statusLabel"] > 20, **narrow)
+              and narrow["inside"] and narrow["statusLabel"] > 20 and named == 1, named=named, **narrow)
     check(f"layout_{width}", geometry["documentFits"] and (width != 390 or geometry["tableScrolls"])
           and geometry["token"] == "CASE-A00224" and geometry["lines"] == 1
           and geometry["tabFocused"] and (width != 390 or geometry["tabScroll"] > 0)

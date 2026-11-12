@@ -366,6 +366,23 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
 
   const composingSearches = new WeakSet<HTMLInputElement>();
   const pendingSearches = new WeakSet<HTMLInputElement>();
+  // A whole-page draw (a theme or an artifact change) while an option search is being typed in: it waits for an IME
+  // composition to end, and otherwise puts the focus and the caret back on the new search (approver r4).
+  let pendingFullDraw: { keepProps?: boolean; focusPage?: boolean } | null = null;
+  const focusedSearch = (): { id: string; el: HTMLInputElement; range: readonly [number | null, number | null, 'forward' | 'backward' | 'none' | null] } | null => {
+    const a = document.activeElement;
+    if (!(a instanceof HTMLInputElement) || a.type !== 'search' || a.closest('.wk-filter-options') === null) return null;
+    const id = a.closest<HTMLElement>('[data-component]')?.getAttribute('data-component');
+    return id === null || id === undefined ? null : { id, el: a, range: [a.selectionStart, a.selectionEnd, a.selectionDirection] as const };
+  };
+  const restoreSearch = (fs: ReturnType<typeof focusedSearch>): void => {
+    if (fs === null) return;
+    const next = [...root.querySelectorAll<HTMLElement>('[data-component]')].find((e) => e.getAttribute('data-component') === fs.id)
+      ?.querySelector<HTMLInputElement>('.wk-filter-options input[type="search"]');
+    if (next === undefined || next === null || next === fs.el) return;
+    next.focus({ preventScroll: true });
+    next.setSelectionRange(fs.range[0], fs.range[1], fs.range[2] ?? undefined);
+  };
   const drawBody = (c: AppComponent, body: HTMLElement): void => {
     const old = body.querySelector<HTMLInputElement>('.wk-filter-options input[type="search"]');
     const focused = old !== null && document.activeElement === old;
@@ -607,7 +624,8 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       search.addEventListener('compositionend', () => {
         composingSearches.delete(search);
         optionSearch.set(c.id, search.value);
-        if (pendingSearches.delete(search)) redraw(c.id);
+        if (pendingFullDraw !== null) { const o = pendingFullDraw; pendingFullDraw = null; pendingSearches.delete(search); draw(o); }
+        else if (pendingSearches.delete(search)) redraw(c.id);
       });
       fill();
       select.addEventListener('change', () => { filters[c.id] = select.value; fill(); changed(); });
@@ -1035,6 +1053,9 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
     const oldNav = root.querySelector<HTMLElement>('.wk-pages');
     const navScroll = oldNav?.scrollLeft ?? 0;
     const focusPage = opts.focusPage === true || (oldNav?.contains(document.activeElement) ?? false);
+    const fs = focusedSearch();
+    if (fs !== null && composingSearches.has(fs.el)) { pendingFullDraw = opts; return; }
+    if (fs !== null) optionSearch.set(fs.id, fs.el.value);
     const had = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.getAttribute('data-prop') : null;
     bodies.clear();
     index.clear();
@@ -1121,12 +1142,14 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       for (const ch of [...root.childNodes]) if (ch !== propsNode) ch.remove();
       for (const part of parts) root.insertBefore(part, propsNode);
       restoreNav();
+      restoreSearch(fs);
       return;
     }
     propsNode = propsHost ? null : sel !== undefined ? drawProps(sel) : editing() ? drawPropsEmpty() : null;
     propsFor = sel?.id ?? null;
     root.replaceChildren(...parts, ...(propsNode !== null ? [propsNode] : []));
     restoreNav();
+    restoreSearch(fs);
     if (had !== null) [...root.querySelectorAll<HTMLElement>('[data-prop]')].find((e) => e.getAttribute('data-prop') === had)?.focus({ preventScroll: true });
   };
 

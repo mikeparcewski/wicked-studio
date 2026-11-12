@@ -83,13 +83,18 @@
      title), the select and the search each keep 6ch, so nothing overlaps; in a narrow filter (the default three
      columns) the count leaves the row (it stays in the select's last option and for screen readers). A select without
      a search keeps its layout and its label. */
-  .wk-filter-select--search .wk-filter-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .wk-filter-select--search .wk-filter-label { flex: 0 1 auto; min-width: 3ch; overflow: hidden; text-overflow: ellipsis; }
   .wk-filter-select--search .wk-filter .wk-input { flex: 1 1 0; width: 0; min-width: 6ch; }
-  .wk-filter-select--search > .wk-filter { flex-grow: 3; }
-  .wk-filter-select--search > .wk-filter-options { flex-grow: 2; }
+  /* (specificity over the shorthand below) The select's group takes 3/5 of the row; neither group draws over the other. */
+  .wk-filter-select.wk-filter-select--search > .wk-filter { flex-grow: 3; overflow: clip; overflow-clip-margin: 4px; }
+  .wk-filter-select.wk-filter-select--search > .wk-filter-options { flex-grow: 2; overflow: clip; overflow-clip-margin: 4px; }
   .wk-filter-select--search .wk-filter-options .wk-input { flex: 1 1 0; min-width: 6ch; }
   @container wkfilter (max-width: 300px) {
     .wk-filter-select--search .wk-filter-options .wk-muted { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  }
+  /* Too narrow for a readable label beside both controls: the label leaves the row (it still names the select). */
+  @container wkfilter (max-width: 170px) {
+    .wk-filter-select--search .wk-filter-label { position: absolute; width: 1px; height: 1px; min-width: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   }
   .wk-filter-select .wk-filter { height: auto; flex: 1 1 0; min-width: 0; }
   .wk-filter-options { display: flex; flex: 1 1 0; min-width: 0; align-items: center; gap: 6px; }

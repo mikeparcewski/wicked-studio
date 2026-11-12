@@ -143,11 +143,15 @@ describe('studio#1119: phone tables, tabs and large select filters', () => {
 
   it('a narrow filter keeps a usable search on its one row; a select without a search keeps its label (approver r3)', async () => {
     expect(TEMPLATE).toMatch(/\.wk-filter-select \{[^}]*container: wkfilter \/ inline-size;/u);
-    expect(TEMPLATE).toMatch(/\.wk-filter-select--search \.wk-filter-label \{ flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; \}/u);
+    expect(TEMPLATE).toMatch(/\.wk-filter-select--search \.wk-filter-label \{ flex: 0 1 auto; min-width: 3ch; overflow: hidden; text-overflow: ellipsis; \}/u);
+    // The 3:2 share must out-rank the later `.wk-filter-select .wk-filter { flex: 1 1 0 }` shorthand (approver r4).
+    expect(TEMPLATE).toMatch(/\.wk-filter-select\.wk-filter-select--search > \.wk-filter \{ flex-grow: 3; overflow: clip;/u);
+    expect(TEMPLATE).toMatch(/\.wk-filter-select\.wk-filter-select--search > \.wk-filter-options \{ flex-grow: 2; overflow: clip;/u);
     expect(TEMPLATE).toMatch(/\.wk-filter-select--search \.wk-filter \.wk-input \{ flex: 1 1 0; width: 0; min-width: 6ch; \}/u);
     expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 300px\) \{\s*\.wk-filter-select--search \.wk-filter-options \.wk-muted \{ position: absolute;/u);
-    // No rule hides a label outright any more.
-    expect(TEMPLATE).not.toMatch(/\.wk-filter-label \{ position: absolute;/u);
+    // Only a searchable select's label ever leaves its row, and only when the filter is too narrow for it.
+    expect(TEMPLATE.match(/\.wk-filter-label \{ position: absolute;/gu) ?? []).toHaveLength(1);
+    expect(TEMPLATE).toMatch(/@container wkfilter \(max-width: 170px\) \{\s*\.wk-filter-select--search \.wk-filter-label \{ position: absolute;/u);
     await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query'), rows: { cases } });
     await vi.waitFor(() => expect(select().options.length).toBeGreaterThan(200));
     expect(picker().querySelector('.wk-filter-select')!.classList.contains('wk-filter-select--search')).toBe(true);
@@ -216,6 +220,29 @@ describe('studio#1119: phone tables, tabs and large select filters', () => {
     expect(seen.filter((m) => m.type === 'data.query').length).toBeGreaterThan(queries);
     expect(document.activeElement).toBe(other);
     expect(search().value).toBe('Case 32');
+  });
+
+  it('a whole-page redraw (a theme change) keeps the option search focused with its caret, and waits for a composition', async () => {
+    const { host } = await boot({ framed: false, mode: 'preview' }, { spec: filterSpec('query'), rows: { cases } });
+    await vi.waitFor(() => expect(search()).not.toBeNull());
+    find('Case 32');
+    search().focus();
+    search().setSelectionRange(2, 6, 'backward');
+    const old = search();
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'host.theme', payload: { theme: { '--ink-high': '#222222' } } });
+    await vi.waitFor(() => expect(search()).not.toBe(old));
+    expect(document.activeElement).toBe(search());
+    expect(search().value).toBe('Case 32');
+    expect([search().selectionStart, search().selectionEnd, search().selectionDirection]).toEqual([2, 6, 'backward']);
+    // Mid-composition the page is not redrawn under the IME; it redraws once the composition ends.
+    const composing = search();
+    composing.dispatchEvent(new CompositionEvent('compositionstart'));
+    host.postMessage({ p: 'wicked.editor', v: 1, type: 'host.theme', payload: { theme: { '--ink-high': '#333333' } } });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(search()).toBe(composing);
+    composing.dispatchEvent(new CompositionEvent('compositionend'));
+    expect(search()).not.toBe(composing);
+    expect(document.activeElement).toBe(search());
   });
 
   it('defers a query redraw until option-search composition ends', async () => {
