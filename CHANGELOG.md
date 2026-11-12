@@ -27,7 +27,8 @@ npm publish dates. Every version listed here exists on
   acceptance and crew's gate offer, restoring "Skip QE with a reason…" and withholding the Deliver recommendation
   even while acceptance is unread. A deliver refused after a lift that changed a previously overridden tree
   (core#1114's "Approve to re-run the checks on this same tree" wording) offers "Approve as your own judgment" again;
-  only the engine's last options clause of either wording counts.
+  only the engine's last options clause of either wording counts, and the refusal headline names all three ways
+  forward when that clause offers the judgment.
 
 - **Apps on phones (#1119).** A table scrolls sideways inside its card, an identifier such as CASE-A00224 stays on one line and text wraps only between words; the tab row scrolls (keeping the chosen tab in view), and the app spans the phone's width with its panel minimised (no 48 px right gutter). A select fed by more than 200 options says "200 of 457", ends with "Showing 200 of 457: search to narrow" and offers a search over every fetched option, keeping the current selection.
 - **Gate cards never offer a refused action as the way on (#1115, #1116).** A card starts on the enabled recommendation, not a refused option (also when the recommendation arrives after the card is drawn, such as Skip QE at a QE-refused hand-over); a selected refused option disables the primary. Folded on a phone, the decision dock shows that way: "Skip QE with a reason…", no longer the refused Deliver with an enabled Deliver button. The skip-QE and floor-override consequence shows once, not again above the reason box, and the judgment at a refused hand-over says approving re-runs the deliver phase.

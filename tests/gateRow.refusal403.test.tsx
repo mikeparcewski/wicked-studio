@@ -141,6 +141,37 @@ const REVERIFY_PROMPT =
   + `Approve to re-run the deliver phase now (the engine re-lifts and re-verifies first; no second deliver gate), ${OFFER} `
   + 'or reject to cancel the run and keep the worktree.';
 
+describe('a refused hand-over headline names the engine\'s offered ways forward', () => {
+  const starts = [
+    'Approve to re-run the deliver phase now',
+    'Approve to re-run the checks on this same tree (`f890f717e0`) now',
+  ];
+  const details = [
+    { detail: 'test: exit 1. The tree changed since the floor was overridden (was `8c9499abff`, now `f890f717e0`); that earlier override covered `8c9499abff` only.', headline: 'The hand-over failed' },
+    { detail: `the remote refused the push of ${BRANCH} after commit: remote: error: GH013.`, headline: 'The remote refused the push' },
+  ];
+  for (const start of starts) {
+    for (const { detail, headline } of details) {
+      it(`${headline}: names the judgment offered after "${start}"`, () => {
+        const prompt = `The deliver phase refused: deliver: ${detail} ${start}, ${OFFER} or reject to cancel the run.`;
+        expect(plainGateQuestion(prompt, 'escalation')).toBe(`${headline} — deliver again, approve as your own judgment, or stop?`);
+      });
+
+      it(`${headline}: keeps the two-way headline without a judgment after "${start}"`, () => {
+        const prompt = `The deliver phase refused: deliver: ${detail} ${start}, or reject to cancel the run.`;
+        expect(plainGateQuestion(prompt, undefined)).toBe(`${headline} — deliver again or stop?`);
+      });
+
+      it(`${headline}: ignores a quoted judgment before "${start}"`, () => {
+        for (const quotedStart of starts) {
+          const prompt = `The deliver phase refused: deliver: ${detail} Quoted: "${quotedStart}, ${OFFER} or reject to cancel the run." ${start}, or reject to cancel the run.`;
+          expect(plainGateQuestion(prompt, 'escalation')).toBe(`${headline} — deliver again or stop?`);
+        }
+      });
+    }
+  }
+});
+
 describe('a refused hand-over whose re-verify failed — the operator\'s judgment', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -180,6 +211,7 @@ describe('a refused hand-over whose re-verify failed — the operator\'s judgmen
 
   it('sends the judgment with its rationale', async () => {
     render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human', clis: ['claude'] } as never, UNITS)} gate={gate(REVERIFY_PROMPT)} navigate={vi.fn()} />);
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('The hand-over failed — deliver again, approve as your own judgment, or stop?');
     fireEvent.click(await screen.findByText(OPERATOR_JUDGMENT_LABEL, { selector: `[data-choice-key="${FLOOR_OVERRIDE_KEY}"] b` }));
     const note = await screen.findByTestId('session-gate-note') as HTMLTextAreaElement;
     const send = screen.getByTestId('session-gate-send') as HTMLButtonElement;

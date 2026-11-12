@@ -1,6 +1,7 @@
 import type { SessionView } from '../api/types.js';
 import { deliverUnit, deliveryOf } from '../components/delivery.js';
 import { humanTitle, onboardTitle } from '../components/runIdentity.js';
+import { refusalOffers } from './gateOffers.js';
 import { REPEAT_QUESTION } from './repeatProgress.js';
 
 /**
@@ -50,7 +51,10 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
   // studio#403: the engine's retry gate after a refused hand-over — the remote's refusal, or the
   // deliver script's own failure; the reason itself leads the row, under this question.
   if (/^The deliver phase refused:/i.test(p)) {
-    return /the remote refused the push of /i.test(p) ? 'The remote refused the push — deliver again or stop?' : 'The hand-over failed — deliver again or stop?';
+    const headline = /the remote refused the push of /i.test(p) ? 'The remote refused the push' : 'The hand-over failed';
+    const ways = refusalOffers({ prompt: p }).some((offer) => offer.action === 'operator_judgment')
+      ? 'deliver again, approve as your own judgment, or stop?' : 'deliver again or stop?';
+    return `${headline} — ${ways}`;
   }
   // A deliver gate (crew's "Approve delivery before unit N runs. <card>"): the hand-over (studio#441).
   if (gateKind === 'deliver' || /^Approve delivery\b/i.test(p)) return 'Approve the hand-over';
