@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -845,6 +846,90 @@ describe('review round 5 folds', () => {
     await waitFor(() => expect(posts[0]?.body).toMatchObject({ edits: { skipQe: { reason: 'a prototype nobody uses' }, confirmLoss: true }, source: 'question' }));
     await screen.findByTestId('job-passage-error');
     await waitFor(() => expect((screen.getByTestId('session-composer-input') as HTMLTextAreaElement).value).toBe('a prototype nobody uses'));
+  });
+});
+
+describe('choice-less text questions (studio#1134)', () => {
+  const asking = (id = 'url', label = 'The running app') => jobProposal({
+    question: { kind: 'missing', text: `${label}?`, choices: [], input: { kind: 'text', label, edit: `inputs.${id}` } },
+  });
+  const show = (proposal = asking()): void => {
+    messages = [USER, SEAT, { at: T0 + 2, turnId: 't1', kind: 'proposal', proposal }];
+    page();
+  };
+
+  it.each([
+    ['url', 'The running app', 'http://127.0.0.1:4319/'],
+    ['audience', 'Who it is for', 'People trying the app'],
+    ['show', 'What to show', 'Create a project'],
+  ])('answers %s through the passage revision API only on Answer', async (id, label, value) => {
+    show(asking(id, label));
+    const field = await screen.findByTestId('job-passage-question-input');
+    expect(screen.getByLabelText(label)).toBe(field);
+    const answer = screen.getByTestId('job-passage-question-answer') as HTMLButtonElement;
+    expect(answer.textContent).toBe('Answer');
+    fireEvent.change(field, { target: { value: `  ${value}  ` } });
+    expect(answer.disabled).toBe(false);
+    expect(posts).toEqual([]);
+    fireEvent.click(answer);
+    await waitFor(() => expect(posts).toEqual([{
+      path: `/chats/${CHAT}/proposals`,
+      body: { revises: `${CHAT}:t1`, edits: { inputs: { [id!]: { kind: 'text', value } } }, source: 'question', requestId: expect.any(String) },
+    }]));
+    expect(answer.disabled).toBe(true);
+    fireEvent.click(answer);
+    expect(posts).toHaveLength(1);
+  });
+
+  it('keeps Answer disabled for empty or whitespace-only words and posts nothing', async () => {
+    show();
+    const field = await screen.findByTestId('job-passage-question-input');
+    const answer = screen.getByTestId('job-passage-question-answer') as HTMLButtonElement;
+    expect(answer.disabled).toBe(true);
+    fireEvent.click(answer);
+    fireEvent.change(field, { target: { value: '   ' } });
+    expect(answer.disabled).toBe(true);
+    fireEvent.submit(field.closest('form')!);
+    expect(posts).toEqual([]);
+  });
+
+  it('submits the field with Enter', async () => {
+    const user = userEvent.setup();
+    show();
+    const field = await screen.findByTestId('job-passage-question-input');
+    await user.type(field, 'http://127.0.0.1:4319/{Enter}');
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({ path: `/chats/${CHAT}/proposals`, body: { edits: { inputs: { url: { kind: 'text', value: 'http://127.0.0.1:4319/' } } }, source: 'question' } });
+  });
+
+  it('keeps F39 project choices without a text field', async () => {
+    vi.spyOn(api, 'listProjects').mockResolvedValue({ projects: [{ id: 'p1', name: 'Demo project' }] } as never);
+    vi.spyOn(api, 'listProjectMembers').mockResolvedValue({ members: [] });
+    show(jobProposal({
+      needs: [{ id: 'project', label: 'Project', kind: 'project', required: true, status: 'missing' }],
+      question: { kind: 'missing', text: 'Project?', choices: [] },
+    }));
+    expect((await screen.findByTestId('job-passage-project')).textContent).toBe('Demo project');
+    expect(screen.queryByTestId('job-passage-question-input')).toBeNull();
+    expect(screen.queryByTestId('job-passage-question-answer')).toBeNull();
+    expect(posts).toEqual([]);
+  });
+
+  it('keeps choices when a text question has choices', async () => {
+    const proposal = asking();
+    show(jobProposal({ question: { ...proposal.question!, choices: [{ label: 'Use another app…', edit: { inputs: { url: { kind: 'text', value: '' } } } }] } }));
+    await screen.findByTestId('job-passage-question');
+    expect(reply('choice:0').textContent).toBe('Use another app…');
+    expect(screen.queryByTestId('job-passage-question-input')).toBeNull();
+    expect(screen.queryByTestId('job-passage-question-answer')).toBeNull();
+  });
+
+  it('never offers the form for skipQe.reason without a choice', async () => {
+    show(jobProposal({ question: { kind: 'lost_check', text: 'Skip QE?', choices: [], input: { kind: 'text', label: 'Why skip QE', edit: 'skipQe.reason' } } }));
+    await screen.findByTestId('job-passage-question');
+    expect(screen.queryByTestId('job-passage-question-input')).toBeNull();
+    expect(screen.queryByTestId('job-passage-question-answer')).toBeNull();
+    expect(posts).toEqual([]);
   });
 });
 

@@ -15,6 +15,7 @@ npm publish dates. Every version listed here exists on
 ### Fixed
 
 - The floating chat says where a proposed job is: a seat's document/deck/page proposal now draws a pointer with Open in full chat, instead of nothing (the card lives on the chat's job passage).
+- A job's passage answers a question that asks for words: the app address, who a demo is for, what to show — a field and Answer, where before there was nothing to press (studio#1134).
 
 ## [0.16.7] — 2026-11-12
 

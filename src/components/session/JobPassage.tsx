@@ -494,6 +494,11 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
   const replies = v.replies;
   const progress = v.progress;
+  const headQuestion = head.proposal.question;
+  const textQuestion = headQuestion?.choices.length === 0 && headQuestion.input?.edit.startsWith('inputs.') === true
+    && !asksForProject(head.proposal) && !asksForRepo(head.proposal) ? headQuestion : null;
+  // Keep this form visible but disabled until crew answers the revision.
+  const question = v.question ?? (v.tokensHeld ? textQuestion : null);
 
   return (
     <section
@@ -533,14 +538,21 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         </p>
       )}
 
-      {v.phase === 'asking' && v.question !== null && (
+      {question !== null && (
         <div data-testid="job-passage-question" className="wk-pass-ask">
-          <span className="wk-pass-ask-who">{v.question.kind === 'lost_check' ? 'wicked asks · only your press changes the checks' : 'wicked asks'}</span>
-          <p>{v.question.text}</p>
+          <span className="wk-pass-ask-who">{question.kind === 'lost_check' ? 'wicked asks · only your press changes the checks' : 'wicked asks'}</span>
+          <p>{question.text}</p>
           {/* F39: crew asks for the project with nothing to press; the passage offers the projects (a new chat there). */}
           {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
           {/* F41: crew asks for the repository with nothing to press (a new chat has none in scope): the registered ones. */}
           {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
+          {textQuestion?.input !== undefined && (
+            <QuestionInput key={`${pt}:${textQuestion.input.edit}`} label={textQuestion.input.label} disabled={v.tokensHeld}
+              onAnswer={(words) => {
+                if (v.phase !== 'asking' || useJobLocal.getState().swapPending[lineage.lineage] === pid) return;
+                revise(withWords(textQuestion, {}, words), 'question', undefined, null, words);
+              }} />
+          )}
         </div>
       )}
       {/* Power mode for new jobs is on (operator ruling 2026-11-06): the Start's choice, shown before Start; where crew
@@ -896,6 +908,25 @@ function TokenButton({ token, choices, unavailable, label, wash, open, expanded,
         </ul>
       )}
     </span>
+  );
+}
+
+/** A missing text input with no choices: only an explicit answer revises the job. */
+function QuestionInput({ label, disabled, onAnswer }: { label: string; disabled: boolean; onAnswer: (words: string) => void }): React.ReactElement {
+  const [words, setWords] = useState('');
+  const text = words.trim();
+  return (
+    <form className="wk-pass-sub" onSubmit={(e) => {
+      e.preventDefault();
+      if (!disabled && text !== '') onAnswer(text);
+    }}>
+      <label className="wk-field-label">
+        {label}
+        <input type="text" data-testid="job-passage-question-input" className="wk-field" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
+          value={words} disabled={disabled} onChange={(e) => setWords(e.target.value)} />
+      </label>
+      <button type="submit" data-testid="job-passage-question-answer" className="wk-btn wk-btn--primary wk-btn--sm" disabled={disabled || text === ''}>Answer</button>
+    </form>
   );
 }
 
