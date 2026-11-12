@@ -168,8 +168,10 @@ def layout_checks(page, frame, width: int) -> None:
         const controls = [...filter.querySelectorAll('select, input, [aria-live]')].map(e => {
             const r = e.getBoundingClientRect();
             return {width: r.width, height: r.height, top: r.top, bottom: r.bottom,
+                // 1px across; 4px down: engines draw native controls a few px taller (WebKit on Linux), while a
+                // wrapped second row would be a whole control lower.
                 inside: r.left >= body.left - 1 && r.right <= body.right + 1
-                    && r.top >= body.top - 1 && r.bottom <= body.bottom + 1};
+                    && r.top >= body.top - 4 && r.bottom <= body.bottom + 4};
         });
         const last = filter.querySelector('select').lastElementChild;
         return {documentFits: document.scrollingElement.scrollWidth <= document.scrollingElement.clientWidth,
@@ -188,8 +190,9 @@ def layout_checks(page, frame, width: int) -> None:
             const sel = document.querySelector('[data-component="case_filter_narrow"] select').getBoundingClientRect();
             const status = document.querySelector('[data-component="status_filter"] .wk-filter-label').getBoundingClientRect();
             return {search: s.width, select: sel.width, overlap: sel.right - s.left, statusLabel: status.width,
+                rects: [body, ...shown].map(r => [Math.round(r.left), Math.round(r.right), Math.round(r.top), Math.round(r.bottom)]),
                 inside: shown.every(r => r.left >= body.left - 1 && r.right <= body.right + 1
-                && r.top >= body.top - 1 && r.bottom <= body.bottom + 1)};
+                && r.top >= body.top - 4 && r.bottom <= body.bottom + 4)};
         }""")
         named = frame.locator('[data-component="case_filter_narrow"]').get_by_role('combobox', name='Customer account').count()
         check("narrow_filter_search", narrow["search"] >= 48 and narrow["select"] >= 48 and narrow["overlap"] <= 0
