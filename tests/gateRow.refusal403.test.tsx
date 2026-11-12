@@ -249,7 +249,7 @@ describe('a refused hand-over: the card\'s actions equal the gate\'s action list
   it('the judgment here says the deliver phase runs again (it is not a floor override that skips the step)', () => {
     const m = sessionGateChoices({ runId: RUN, gate: gate(REVERIFY_PROMPT), units: UNITS, events: [], pool: [], roster: null })!;
     const judgment = m.choices.find((c) => c.key === FLOOR_OVERRIDE_KEY)!;
-    expect(judgment.title).toMatch(/deliver phase then runs again/);
+    expect(judgment.title).toMatch(/Approving re-runs the deliver phase/);
     expect(judgment.title).not.toMatch(/does not run again/);
   });
 
