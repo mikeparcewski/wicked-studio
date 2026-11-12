@@ -1132,16 +1132,24 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     placeholder: "Ask about this, or say what's next — / adds a step, @ a helper",
     variant: 'session' as const,
   };
-  // H3 (HOST-API §6): full screen's chat drawer is this run's own thread, compact — its conversation turns,
-  // each with who responded, and the same composer (the run's cards stay in the thread behind it).
+  const renderArtifactProposal = (e: Extract<ThreadEntry, { kind: 'artifact' }>): React.ReactNode => ref.kind === 'chat'
+    ? <ArtifactProposalCard chatId={ref.chatId} entry={e.entry} seatName={whoOfEntry(e).name} stub={proposalIsStub(proposalsStub, proposalsStubOps, e.entry.proposal.kind)} onChanged={() => setChatTry((n) => n + 1)}
+        run={slots.get(e.entry.pid)?.run ?? null} />
+    : null;
+  // H3 (HOST-API §6): full screen's chat drawer is this run's own thread, compact — the last 12 turns and,
+  // for a chat, artifact proposal cards, in thread order, with the same composer. Job passages and the made
+  // artifacts stay in the thread behind it; the artifact already has its full-size editor here.
   // The drawer's composer is the same box: a job binding answers there as it does in the thread.
   const drawerBinding = useJobBinding((st) => (st.binding !== null && st.binding.sessionId === sessionId ? st.binding : null));
-  const drawerTurns = entries.filter((e): e is Extract<ThreadEntry, { kind: 'turn' }> => e.kind === 'turn').slice(-12);
+  const drawerEntries = entries.filter((e): e is Extract<ThreadEntry, { kind: 'turn' | 'artifact' }> =>
+    e.kind === 'turn' || (ref.kind === 'chat' && e.kind === 'artifact')).slice(-12);
   const renderChat = (): React.ReactNode => (
     <div data-testid="run-chat-drawer" className="wk-run-chat">
       <div className="wk-run-chat-thread">
-        {drawerTurns.length === 0 && <p className="wk-session-grey">Nothing has been said in this run yet.</p>}
-        {drawerTurns.map((e) => (
+        {drawerEntries.length === 0 && <p className="wk-session-grey">Nothing has been said in this run yet.</p>}
+        {drawerEntries.map((e) => e.kind === 'artifact'
+          ? <Fragment key={e.key}>{renderArtifactProposal(e)}</Fragment>
+          : (
           <div key={e.key} data-testid="run-chat-turn" className="wk-run-chat-turn">
             <TurnWho who={turnResponder(e.who, roster)} at={e.clock !== undefined ? e.clock : e.at} />
             <p className="wk-session-text">{e.text}</p>
@@ -1366,8 +1374,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               : e.kind === 'artifact' && ref.kind === 'chat'
                 ? (
                   <Fragment key={e.key}>
-                    <ArtifactProposalCard chatId={ref.chatId} entry={e.entry} seatName={who.name} stub={proposalIsStub(proposalsStub, proposalsStubOps, e.entry.proposal.kind)} onChanged={() => setChatTry((n) => n + 1)}
-                      run={slots.get(e.entry.pid)?.run ?? null} />
+                    {renderArtifactProposal(e)}
                     {slots.has(e.entry.pid) && <ProposalSlotView slot={slots.get(e.entry.pid)!} sessionId={sessionId} />}
                   </Fragment>
                 )

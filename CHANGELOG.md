@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- At full size, the editor's chat shows what the seat proposed — the change card with Make the change — instead of only the words before it, so a change asked for in full screen can be answered there.
+
 ## [0.16.8] — 2026-11-12
 
 Patch: the floating chat points to a proposed job instead of drawing nothing (#1135), and a job's passage gives a
