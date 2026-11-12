@@ -136,6 +136,9 @@ function usePhone(): boolean {
   return phone;
 }
 
+/** The keys a docked card acts on (AskCard: pick by arrow, Home/End or digit; Enter and Space take it). */
+const ACTING_KEY = /^(?:Arrow(?:Up|Down|Left|Right)|Home|End|Enter| |[1-9])$/;
+
 /**
  * The provider and the dock surface. `items` are the session's open decisions, in the thread's order; the dock
  * renders around `children` (the thread), between it and the composer (`composer`).
@@ -216,12 +219,13 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
   const reply = activeKey !== null ? replies[activeKey] ?? null : null;
   const collapsed = phone && !expanded;
   // A tap in the folded sheet unfolds it (the primary still acts), so what the tap opens is in view; so does a key that
-  // acts there (picking a card by arrow or digit shows its "If you choose this:"), but not moving focus through it.
+  // acts there (picking a card by arrow or digit shows its "If you choose this:"), but not moving focus through it or a
+  // bare modifier.
   // DOM listeners: the renderer is portalled in, so React's events bubble to its thread-side parent, never to the slot.
   useEffect(() => {
     if (slot === null || !collapsed) return;
     const unfold = (): void => setExpanded(true);
-    const unfoldOnKey = (e: KeyboardEvent): void => { if (e.key !== 'Tab' && e.key !== 'Shift' && e.key !== 'Escape') unfold(); };
+    const unfoldOnKey = (e: KeyboardEvent): void => { if (ACTING_KEY.test(e.key)) unfold(); };
     slot.addEventListener('click', unfold, true);
     slot.addEventListener('keydown', unfoldOnKey, true);
     return () => { slot.removeEventListener('click', unfold, true); slot.removeEventListener('keydown', unfoldOnKey, true); };

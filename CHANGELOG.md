@@ -22,8 +22,9 @@ npm publish dates. Every version listed here exists on
   targeted command and is withheld, with the engine's reason, when the denial text says none is declared
   (wicked-core#1392); an older prompt keeps the choice and says that an engine before core-ts 0.15.38 waives the test set
   instead. "Accept what passed" is now labelled as the waiver
-  ("waive the tests", "tests waived by the operator"). Picking an option on a gate card brings its "If you choose this:"
-  into view, above the decision dock's sticky primary, so the waiver is read before it is sent.
+  ("waive the tests", "tests waived by the operator"). Picking an option on a gate card (a click or the keyboard) brings
+  its "If you choose this:" into view, above the decision dock's sticky primary, so the waiver is read before it is sent;
+  on a phone, a key that picks in the folded sheet unfolds it, as a tap does.
 
 ## [0.16.6] — 2026-11-12
 

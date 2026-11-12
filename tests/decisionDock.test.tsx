@@ -412,6 +412,8 @@ describe('the phone sheet, folded (live nit 2026-10-27: act without expanding th
     const dock = await screen.findByTestId('decision-dock');
     const card = within(dock).getAllByTestId('session-gate-choice')[0]!;
     fireEvent.keyDown(card, { key: 'Tab' });
+    fireEvent.keyDown(card, { key: 'Control' });
+    fireEvent.keyDown(card, { key: 'Meta' });
     expect(dock.dataset.collapsed).toBe('true');
     fireEvent.keyDown(card, { key: 'ArrowDown' });
     expect(dock.dataset.collapsed).toBe('false');
