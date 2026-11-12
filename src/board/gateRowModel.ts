@@ -1177,9 +1177,12 @@ function ruleChoicesAt(hold: { held: boolean; rows: readonly RuleRow[]; behind: 
   const skippable = hold.rows.filter(ruleSkippable);
   const held = skippable.map((r) => r.ruleId);
   if (held.length > 0) {
-    // A broken warning is skipped, not confirmed: say "Skip" when every row offered is one.
+    // Only a rule waived by the person's instruction can be confirmed. An unchecked or disputed rule, or a broken
+    // warning, can only be skipped (the engine records each as skipped by the operator): say "Skip" then.
     const brokenOnly = skippable.every((r) => r.status === 'broken');
-    const verb = brokenOnly ? 'Skip' : 'Confirm or skip';
+    const confirmable = skippable.some((r) => r.status === 'waived');
+    const verb = confirmable ? 'Confirm or skip' : 'Skip';
+    const broken = hold.rows.some((r) => r.status === 'broken' && r.blocking);
     // (e2e-1105 CJ9, coord) "Every other reason … still stands" only when there IS another one: a rule this skip
     // leaves (broken or held), or a layer that is not a steering rule (a reviewer's FAIL, a failed check).
     const othersOpen = hold.otherCause === true
@@ -1191,7 +1194,7 @@ function ruleChoicesAt(hold: { held: boolean; rows: readonly RuleRow[]; behind: 
       needsNote: true,
       skipRuleIds: held,
       ...(brokenOnly ? { notePlaceholder: SKIP_WARNING_PLACEHOLDER } : {}),
-      title: `Skip ${held.join(', ')} with your written reason. The skip is labelled on the run, the gate and the delivery; a broken warning can be skipped, a broken error or critical rule cannot.${othersOpen ? ' Every other reason this step was stopped still stands.' : ''}`,
+      title: `${verb} ${held.join(', ')}. ${confirmable ? 'A rule waived by your instruction is confirmed; any other is recorded as skipped by you.' : 'Recorded as skipped by you.'} Labelled on the run, the gate and the delivery.${broken ? ' A broken warning can be skipped, a broken error or critical rule cannot.' : ''}${othersOpen ? ' Every other reason this step was stopped still stands.' : ''}`,
     });
   }
   return out;

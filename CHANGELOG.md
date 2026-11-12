@@ -20,11 +20,14 @@ npm publish dates. Every version listed here exists on
 
 - Pins `wicked-crew-api-types` 0.206.0 (carries `McpServersResponse.ghCli` / `McpGhCliState`).
 - Requirements headers lead with confidence-weighted coverage when available; the minimum and progress bar still use stated coverage.
+- **A gate held on steering rules says why, and the choice says what it does** (studio#1084, studio#1085). The card now lists each cause the gate record carries, rules with a shared cause on one line, with the remedy where there is one: the judge could not run (with the engine's detail), the judge gave no line, no council could seat (only when its seats were benched), the record part could not be settled. The choice reads "Skip N rules" when every held rule is unchecked or disputed, since each is recorded as skipped by you; "Confirm or skip" stays for rules waived by your instruction, and the hover text says which.
 
 ### Fixed
 
 - **Apps on phones (#1119).** A table scrolls sideways inside its card, an identifier such as CASE-A00224 stays on one line and text wraps only between words; the tab row scrolls (keeping the chosen tab in view), and the app spans the phone's width with its panel minimised (no 48 px right gutter). A select fed by more than 200 options says "200 of 457", ends with "Showing 200 of 457: search to narrow" and offers a search over every fetched option, keeping the current selection.
 - **Gate cards never offer a refused action as the way on (#1115, #1116).** A card starts on the enabled recommendation, not a refused option (also when the recommendation arrives after the card is drawn, such as Skip QE at a QE-refused hand-over); a selected refused option disables the primary. Folded on a phone, the decision dock shows that way: "Skip QE with a reason…", no longer the refused Deliver with an enabled Deliver button. The skip-QE and floor-override consequence shows once, not again above the reason box, and the judgment at a refused hand-over says approving re-runs the deliver phase.
+- **Picking a choice that needs a reason brings the reason box into view above the decision dock's sticky button.** On a
+  phone the button row covered the box; it now also has a top border, so content scrolling under it reads as continuing.
 - **A gate card's "If you choose this:" always describes the selected option (#1100).** It used to follow the card under the
   pointer, so with "Confirm or skip" selected it could read "Cancel the run" while the pointer rested on Stop. Hovering
   another option now shows a separate line marked "Preview:" that disappears on leave; the send button names the

@@ -51,6 +51,8 @@ export interface AskCardProps {
   start?: string | null;
   /** The reason box for an option that asks for one; absent: "Why? (kept with the record)". */
   reasonFor?: (o: AskOption) => AskReason;
+  /** Known rule ids in the consequence: keep each together, with a title if it is too wide to fit. */
+  consequenceIds?: readonly string[];
   /** The primary button's words for the selected option (absent: the option's label). */
   confirmLabel?: (o: AskOption) => string;
   /** More attributes on an option's card (a gate's legacy test ids, its title). */
@@ -83,6 +85,24 @@ export interface AskCardProps {
 
 const tid = (ids: AskCardProps['testIds'], k: keyof NonNullable<AskCardProps['testIds']>, d: string): string => ids?.[k] ?? d;
 
+function consequenceText(text: string, ids: readonly string[]): React.ReactNode {
+  const known = [...new Set(ids)].filter(Boolean).sort((a, b) => b.length - a.length);
+  if (known.length === 0) return text;
+  const pattern = new RegExp(`(${known.map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
+  return text.split(pattern).map((part, i) => known.includes(part)
+    ? <span key={i} className="wk-rule-id" title={part}>{part}</span> : part);
+}
+
+/** Leave room for the dock's sticky primary, including when its button row wraps. */
+function scrollAbovePrimary(el: HTMLElement): void {
+  const go = el.closest('.wk-ask')?.querySelector<HTMLElement>(':scope > .wk-ask-go') ?? null;
+  const dock = el.closest<HTMLElement>('.wk-dock-surface');
+  el.style.scrollMarginBottom = go !== null && dock !== null && getComputedStyle(go).position === 'sticky'
+    ? `${go.offsetHeight + (parseFloat(getComputedStyle(dock).paddingBottom) || 0) + 8}px`
+    : '';
+  el.scrollIntoView?.({ block: 'nearest' });
+}
+
 export function AskCard(props: AskCardProps): React.ReactElement {
   const { ask, header = true } = props;
   return (
@@ -113,7 +133,7 @@ export function AskCard(props: AskCardProps): React.ReactElement {
 }
 
 /** Choose one (and confirm, confirm_reason): radio cards, the consequence line, the reason box, the primary. */
-function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabel, optionProps, optionExtra, confirmProps, confirmExtra, footnote, aside, leadAct, onSelect, onReasonOpen, onCancelReason, testIds, reasonId }: AskCardProps): React.ReactElement {
+function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequenceIds = [], confirmLabel, optionProps, optionExtra, confirmProps, confirmExtra, footnote, aside, leadAct, onSelect, onReasonOpen, onCancelReason, testIds, reasonId }: AskCardProps): React.ReactElement {
   const options = useMemo(() => ask.options ?? [], [ask.options]);
   const enabled = options.filter((o) => o.disabled === undefined);
   const [sel, setSel] = useState<string | null>(() => initialOption(ask, start));
@@ -167,8 +187,8 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
     if (el === null) return;
     el.focus({ preventScroll: true });
     try { el.setSelectionRange(el.value.length, el.value.length); } catch { /* a field that refuses a selection still has focus */ }
-    // Into view above the dock's sticky primary (its room is the box's scroll-margin, ask-card.css).
-    el.scrollIntoView?.({ block: 'nearest' });
+    // Bring the label and the box above the dock's sticky primary together.
+    scrollAbovePrimary(el.parentElement ?? el);
   }, [reasonFor_]);
 
   const commit = (o: AskOption | null): void => {
@@ -226,14 +246,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
     if (picked === 0 || reasonFor_ !== null) return;
     const cons = document.getElementById(consId);
     if (cons === null) return;
-    // In the decision dock the primary's row is sticky (ask-card.css) and wraps to any height: the line keeps that
-    // row's room, plus the sheet's bottom padding, below it.
-    const go = cons.parentElement?.querySelector<HTMLElement>(':scope > .wk-ask-go') ?? null;
-    const dock = cons.closest<HTMLElement>('.wk-dock-surface');
-    cons.style.scrollMarginBottom = go !== null && dock !== null && getComputedStyle(go).position === 'sticky'
-      ? `${go.offsetHeight + (parseFloat(getComputedStyle(dock).paddingBottom) || 0) + 8}px`
-      : '';
-    cons.scrollIntoView?.({ block: 'nearest' });
+    scrollAbovePrimary(cons);
   }, [picked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -287,7 +300,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
       </div>
       {/* What will be sent, for the SELECTED option: reserved height, so hovering never moves a card. */}
       <p id={consId} data-testid={tid(testIds, 'consequence', /* testid */ 'ask-consequence')} {...(current !== null ? { 'data-option': current.id } : {})} aria-live="polite" className="wk-ask-cons">
-        {current?.consequence !== undefined ? <><b>If you choose this:</b> <span data-testid={reasonCfg?.consequenceTestId}>{current.consequence}</span></> : null}
+        {current?.consequence !== undefined ? <><b>If you choose this:</b> <span data-testid={reasonCfg?.consequenceTestId}>{consequenceText(current.consequence, consequenceIds)}</span></> : null}
       </p>
       {/* A hovered other option, visibly a preview and never the confirmation; its own reserved line. */}
       <p data-testid={`${tid(testIds, 'consequence', /* testid */ 'ask-consequence')}-preview`} {...(preview !== null ? { 'data-preview': 'true', 'data-option': preview.id } : {})} className="wk-ask-preview">

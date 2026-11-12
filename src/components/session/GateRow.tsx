@@ -31,6 +31,7 @@ import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
+import { ruleCauses } from '../../board/ruleCauses.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel, RulesChecked } from './AssuranceReceipt.js';
 import { RunDataUse } from './RunDataUse.js';
 import { actionJobTitle, TrackerActions } from '../trackers/TrackerActions.js';
@@ -232,6 +233,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // offer never disagree; at a retry gate too.
   const hold = gate !== undefined && (model?.reason === 'escalation' || model?.reason === 'retry') ? rulesHoldAt(events, view.units, gate.ord) : null;
   const ruleRows = hold !== null && hold.held && hold.rows.length > 0 ? hold.rows : receipt?.rules ?? hold?.rows ?? [];
+  const ruleCauseList = hold !== null && hold.held ? ruleCauses(hold.rows) : [];
   const reduced = isReduced(sessionAssurance(view, events));
   // QE-IN-APP-WORKFLOWS: the run's current QE decision on every gate (a plan gate has no receipt yet;
   // a receipt that carries its own decision says it there).
@@ -312,6 +314,19 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
           name={(cli) => seatName(cli, roster?.find((r) => r.key === cli)?.display_name ?? null)}
           {...(navigate !== undefined ? { navigate } : {})}
         />
+      )}
+      {ruleCauseList.length > 0 && (
+        <ul data-testid="session-gate-rule-causes" className="wk-gate-rule-causes">
+          {ruleCauseList.map((c) => (
+            <li key={`${c.kind}:${c.text}`} data-testid="session-gate-rule-cause" data-kind={c.kind} className="wk-gate-rule-cause">
+              {/* Each id keeps its bracket or comma on its line (a bracket alone at a line end reads as a stray). */}
+              <b>{c.text}</b> <span className="wk-gate-rule-causes-ids">{c.ruleIds.map((id, i) => (
+                <Fragment key={id}>{i > 0 ? ' ' : ''}<span className="wk-rule-id-group">{i === 0 ? '(' : ''}<span className="wk-rule-id" title={id}>{id}</span>{i === c.ruleIds.length - 1 ? ')' : ','}</span></Fragment>
+              ))}</span>
+              {c.remedy !== null && <span className="wk-gate-rule-causes-remedy"> {c.remedy}.</span>}
+            </li>
+          ))}
+        </ul>
       )}
       {seatRefusal && <CreatorSeatRefusal view={view} {...(navigate !== undefined ? { navigate } : {})} />}
     </>
@@ -930,6 +945,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         busy={action.busy}
         start={recKey}
         reasonFor={reasonFor}
+        consequenceIds={choices.flatMap((c) => c.skipRuleIds ?? [])}
         onReasonOpen={setCardNoteOpen}
         onSelect={setSelectedKey}
         reasonId={`session-gate-note-${runId}`}
