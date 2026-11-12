@@ -547,10 +547,15 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           {/* F41: crew asks for the repository with nothing to press (a new chat has none in scope): the registered ones. */}
           {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
           {textQuestion?.input !== undefined && (
-            <QuestionInput key={`${pt}:${textQuestion.input.edit}`} label={textQuestion.input.label} disabled={v.tokensHeld}
+            // Keyed by the lineage and the input it fills, so a re-resolution of the same question keeps what was typed
+            // (review r1); disabled while a change or a Start/Not now of this job is in flight.
+            <QuestionInput key={`${lineage.lineage}:${textQuestion.input.edit}`} label={textQuestion.input.label}
+              disabled={v.tokensHeld || local.deciding[lineage.lineage] === true}
               onAnswer={(words) => {
-                if (v.phase !== 'asking' || useJobLocal.getState().swapPending[lineage.lineage] === pid) return;
-                revise(withWords(textQuestion, {}, words), 'question', undefined, null, words);
+                const st = useJobLocal.getState();
+                if (v.phase !== 'asking' || st.swapPending[lineage.lineage] === pid || st.deciding[lineage.lineage] === true) return;
+                // No composer recovery for a refused inline answer: the words stay in this field (review r1).
+                revise(withWords(textQuestion, {}, words), 'question', undefined, null, null);
               }} />
           )}
         </div>
