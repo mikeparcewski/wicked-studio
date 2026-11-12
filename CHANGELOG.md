@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.8] — 2026-11-12
+
+Patch: the floating chat points to a proposed job instead of drawing nothing (#1135), and a job's passage gives a
+question that asks for words a field and Answer (#1136, studio#1134), so a chat-made demo video can be told the app
+address. Carries #1135 and #1136. Bundled by wicked-crew 0.18.13, whose daemon takes a typed answer for that address
+(crew#1539).
+
 ### Fixed
 
 - The floating chat says where a proposed job is: a seat's document/deck/page proposal now draws a pointer with Open in full chat, instead of nothing (the card lives on the chat's job passage).
@@ -3507,7 +3514,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.7...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.8...HEAD
+[0.16.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.7...v0.16.8
 [0.16.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.6...v0.16.7
 [0.16.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.5...v0.16.6
 [0.16.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.4...v0.16.5
