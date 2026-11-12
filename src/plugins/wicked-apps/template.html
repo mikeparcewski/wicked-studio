@@ -24,13 +24,13 @@
   html, body { height: 100%; margin: 0; }
   body { font: 13px/1.4 var(--font-sans); color: var(--ink-high); background: var(--surface-base); overflow: hidden; }
   .wk-app { display: flex; height: 100%; min-width: 0; }
-  .wk-main { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 14px 18px 24px; }
+  .wk-main { flex: 1 1 auto; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 14px 18px 24px; }
   .wk-app[data-mode="edit"] .wk-main {
     background-image: radial-gradient(circle, color-mix(in srgb, var(--ink-muted) 28%, transparent) 1px, transparent 1px);
     background-size: 16px 16px;
   }
-  .wk-pages { display: flex; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--border); }
-  .wk-page { font: inherit; font-size: 14px; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--ink-muted); cursor: pointer; }
+  .wk-pages { display: flex; min-width: 0; max-width: 100%; overflow-x: auto; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--border); }
+  .wk-page { flex: 0 0 auto; white-space: nowrap; font: inherit; font-size: 14px; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--ink-muted); cursor: pointer; }
   .wk-page.is-on { color: var(--ink-high); border-bottom-color: var(--ink-high); font-weight: 600; }
   .wk-page:focus-visible, .wk-btn:focus-visible, .wk-tile:focus-visible, .wk-link:focus-visible, .wk-cell:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
   .wk-grid { position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: var(--row); gap: var(--gap); }
@@ -53,9 +53,14 @@
   .wk-kpi-caption { margin-top: 4px; font-size: 12px; color: var(--ink-muted); }
   .wk-delta--up { color: var(--status-fail); }
   .wk-delta--down { color: var(--status-ok); }
+  .wk-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
   .wk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .wk-table th { text-align: left; font-weight: 500; color: var(--ink-muted); padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-  .wk-table td { padding: 6px 8px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); color: var(--ink-high); overflow-wrap: anywhere; }
+  .wk-table td { padding: 6px 8px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); color: var(--ink-high); overflow-wrap: normal; word-break: normal; vertical-align: top; }
+  .wk-table td.wk-token { white-space: nowrap; }
+  .wk-table td.wk-token--long { max-width: 48ch; overflow: hidden; text-overflow: ellipsis; }
+  .wk-table-scroll:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+  .wk-table td.wk-prose { min-width: 16ch; max-width: 60ch; white-space: normal; }
   .wk-table td.wk-num { font-family: var(--font-mono); text-align: right; white-space: nowrap; }
   .wk-td-actions { white-space: nowrap; text-align: right; }
   .wk-td-actions .wk-btn + .wk-btn { margin-left: 4px; }
@@ -73,6 +78,32 @@
   .wk-text--heading { font-size: 18px; font-weight: 650; }
   .wk-text--caption { font-size: 12px; color: var(--ink-muted); }
   .wk-filter { display: flex; align-items: center; gap: 6px; height: 100%; }
+  .wk-filter-select { display: flex; align-items: center; gap: 6px; min-width: 0; height: 100%; container: wkfilter / inline-size; }
+  /* A select with an option search shares its one row: the label gives way first (an ellipsis, its full words in its
+     title), the select and the search each keep 6ch, so nothing overlaps; in a narrow filter (the default three
+     columns) the count leaves the row (it stays in the select's last option and for screen readers). A select without
+     a search keeps its layout and its label. */
+  .wk-filter-select--search .wk-filter-label { flex: 0 1 auto; min-width: 3ch; overflow: hidden; text-overflow: ellipsis; }
+  .wk-filter-select--search .wk-filter .wk-input { flex: 1 1 0; width: 0; min-width: 6ch; }
+  /* (specificity over the shorthand below) The select's group takes 3/5 of the row; neither group draws over the other. */
+  .wk-filter-select.wk-filter-select--search > .wk-filter { flex-grow: 3; overflow: clip; overflow-clip-margin: 4px; }
+  .wk-filter-select.wk-filter-select--search > .wk-filter-options { flex-grow: 2; overflow: clip; overflow-clip-margin: 4px; }
+  .wk-filter-select--search .wk-filter-options .wk-input { flex: 1 1 0; min-width: 6ch; }
+  @container wkfilter (max-width: 300px) {
+    .wk-filter-select--search .wk-filter-options .wk-muted { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  }
+  /* A narrow searchable filter (200px or less: the default three columns): the label leaves the row (it still names the
+     select), and the select and the search split the row 1:1 with no ch floors, so neither can overflow the cell
+     whatever the font's ch (WebKit's is wider: the floors pushed a control out of a three-column filter there). */
+  @container wkfilter (max-width: 200px) {
+    .wk-filter-select--search .wk-filter-label { position: absolute; width: 1px; height: 1px; min-width: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .wk-filter-select.wk-filter-select--search > .wk-filter, .wk-filter-select.wk-filter-select--search > .wk-filter-options { flex-grow: 1; }
+    .wk-filter-select--search .wk-filter .wk-input, .wk-filter-select--search .wk-filter-options .wk-input { min-width: 0; }
+  }
+  .wk-filter-select .wk-filter { height: auto; flex: 1 1 0; min-width: 0; }
+  .wk-filter-options { display: flex; flex: 1 1 0; min-width: 0; align-items: center; gap: 6px; }
+  .wk-filter-options .wk-muted { flex: 0 0 auto; white-space: nowrap; }
+  .wk-filter-options .wk-input { width: 0; flex: 1 1 100px; }
   .wk-filter-label { font-size: 12px; color: var(--ink-muted); white-space: nowrap; }
   .wk-input { font: inherit; min-width: 0; flex: 1 1 auto; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-raised); color: var(--ink-high); }
   .wk-input--date { flex: 0 1 140px; }
@@ -118,7 +149,7 @@
   .wk-prop-label { font-size: 12px; color: var(--ink-muted); }
   .wk-prop-box { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .wk-check { align-self: flex-start; }
-  .wk-cell, .wk-handle { touch-action: none; }
+  .wk-app[data-mode="edit"] .wk-cell, .wk-handle { touch-action: none; }
   /* Edit in place: a component's own words show they can be edited (an outline and a pencil on hover). */
   .wk-app[data-mode="edit"] .wk-editable { cursor: text; border-radius: 3px; }
   .wk-app[data-mode="edit"] .wk-editable:hover { outline: 1px dashed var(--ui-accent); outline-offset: 2px; }
@@ -140,6 +171,8 @@
     .wk-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
     .wk-grid > .wk-cell { grid-column: 1 !important; grid-row: auto !important; min-height: var(--row); }
     .wk-cell--chart, .wk-cell--table { min-height: 220px; }
+    .wk-filter-select { flex-wrap: wrap; height: auto; }
+    .wk-filter-select .wk-filter, .wk-filter-options { flex-basis: 100%; }
     .wk-palette, .wk-props { display: none; }
   }
 </style>

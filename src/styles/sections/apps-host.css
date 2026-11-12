@@ -196,6 +196,9 @@
   /* The panel is a bottom sheet; minimised, it is its tab bar. The app keeps the page above it. */
   .wk-apps-body[data-chat='true'] .wk-apps-side { position: fixed; left: 0; right: 0; bottom: 0; z-index: 44; height: 62vh; border-top: 1px solid var(--border-strong); box-shadow: var(--shadow-card); background: var(--surface-base); }
   .wk-apps-body[data-chat='true'][data-panel='collapsed'] .wk-apps-side { height: auto; }
+  /* studio#1119: the desktop rule above keeps a 48px rail column for the minimised panel; on a phone the panel is a
+     fixed sheet, so that column was an empty right gutter beside the app. One column here. */
+  .wk-apps-body[data-chat='true'][data-panel='collapsed'] { grid-template-columns: minmax(0, 1fr); }
   .wk-apps-body[data-chat='true'] .wk-apps-frame { height: auto; min-height: 60vh; padding-bottom: 64px; }
   .wk-apppanel--collapsed.wk-apppanel--sheet { flex-direction: row; justify-content: flex-start; padding: var(--space-2) var(--space-3); }
   .wk-apppanel--sheet .wk-apppanel-rail-btn { width: auto; padding: 0 var(--space-3); }

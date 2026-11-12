@@ -133,6 +133,98 @@ def shot(page, name: str) -> None:
     page.screenshot(path=str(SHOTS / f"apps-runtime-{BROWSER}-{name}.png"), caret="initial")
 
 
+def layout_checks(page, frame, width: int) -> None:
+    """Rendered geometry, focus and refresh regression checks at desktop and phone sizes."""
+    toggle = page.locator('[data-testid="app-panel-toggle"][aria-expanded="true"]')
+    if width == 390 and toggle.count():
+        toggle.click()
+        page.wait_for_selector('[data-testid="app-panel"][data-collapsed="true"]')
+    if width == 390:
+        # studio#1119: no right gutter beside the app on a phone, the panel minimised or not.
+        frame_w = page.evaluate("() => document.querySelector('.wk-apps-frame').getBoundingClientRect().width")
+        check("phone_no_gutter", abs(frame_w - 390) <= 1, frame_width=frame_w)
+    # Playwright scrolls the old button into view before clicking it. The runtime must keep
+    # the replacement row scrolled, with the new active button visible and focused.
+    frame.locator('.wk-pages .wk-page').last.click()
+    frame.wait_for_selector('[data-component="cases"] .wk-table tbody tr', timeout=20_000)
+    frame.wait_for_function("""() => document.querySelector(
+        '[data-component="case_filter"] [aria-live]')?.textContent === '200 of 457'""")
+    frame.wait_for_function("""() => {
+        const nav = document.querySelector('.wk-pages').getBoundingClientRect();
+        const active = document.querySelector('.wk-page.is-on').getBoundingClientRect();
+        return active.left >= nav.left - 1 && active.right <= nav.right + 1;
+    }""")
+    geometry = frame.evaluate("""() => {
+        const nav = document.querySelector('.wk-pages');
+        const active = nav.querySelector('.is-on');
+        const scroll = document.querySelector('[data-component="cases"] .wk-table-scroll');
+        const token = scroll.querySelector('tbody td');
+        const range = document.createRange();
+        range.selectNodeContents(token);
+        const lines = [...new Set([...range.getClientRects()].filter(r => r.width && r.height)
+            .map(r => Math.round(r.top)))].length;
+        const filter = document.querySelector('[data-component="case_filter"] .wk-cell-body');
+        const body = filter.getBoundingClientRect();
+        const controls = [...filter.querySelectorAll('select, input, [aria-live]')].map(e => {
+            const r = e.getBoundingClientRect();
+            return {width: r.width, height: r.height, top: r.top, bottom: r.bottom,
+                // 1px across; 4px down: engines draw native controls a few px taller (WebKit on Linux), while a
+                // wrapped second row would be a whole control lower.
+                inside: r.left >= body.left - 1 && r.right <= body.right + 1
+                    && r.top >= body.top - 4 && r.bottom <= body.bottom + 4};
+        });
+        const last = filter.querySelector('select').lastElementChild;
+        return {documentFits: document.scrollingElement.scrollWidth <= document.scrollingElement.clientWidth,
+            tableScrolls: scroll.scrollWidth > scroll.clientWidth, token: token.textContent, lines,
+            tabFocused: document.activeElement === active, tabScroll: nav.scrollLeft,
+            controls, count: filter.querySelector('[aria-live]').textContent,
+            lastOption: last.textContent, lastDisabled: last.disabled};
+    }""")
+    if width == 1440:
+        # A three-column filter: the search keeps at least 6ch of room and every visible control stays in the cell.
+        narrow = frame.evaluate("""() => {
+            const body = document.querySelector('[data-component="case_filter_narrow"] .wk-cell-body').getBoundingClientRect();
+            const s = document.querySelector('[data-component="case_filter_narrow"] input[type="search"]').getBoundingClientRect();
+            const shown = [...document.querySelectorAll('[data-component="case_filter_narrow"] select, [data-component="case_filter_narrow"] input')]
+                .map(e => e.getBoundingClientRect());
+            const sel = document.querySelector('[data-component="case_filter_narrow"] select').getBoundingClientRect();
+            const status = document.querySelector('[data-component="status_filter"] .wk-filter-label').getBoundingClientRect();
+            return {search: s.width, select: sel.width, overlap: sel.right - s.left, statusLabel: status.width,
+                rects: [body, ...shown].map(r => [Math.round(r.left), Math.round(r.right), Math.round(r.top), Math.round(r.bottom)]),
+                inside: shown.every(r => r.left >= body.left - 1 && r.right <= body.right + 1
+                && r.top >= body.top - 4 && r.bottom <= body.bottom + 4)};
+        }""")
+        named = frame.locator('[data-component="case_filter_narrow"]').get_by_role('combobox', name='Customer account').count()
+        check("narrow_filter_search", narrow["search"] >= 48 and narrow["select"] >= 48 and narrow["overlap"] <= 0
+              and narrow["inside"] and narrow["statusLabel"] > 20 and named == 1, named=named, **narrow)
+    check(f"layout_{width}", geometry["documentFits"] and (width != 390 or geometry["tableScrolls"])
+          and geometry["token"] == "CASE-A00224" and geometry["lines"] == 1
+          and geometry["tabFocused"] and (width != 390 or geometry["tabScroll"] > 0)
+          and len(geometry["controls"]) == 3
+          and all(c["inside"] and c["width"] > 0 and c["height"] > 0 for c in geometry["controls"])
+          and (width != 1440 or max(c["top"] for c in geometry["controls"])
+               < min(c["bottom"] for c in geometry["controls"]))
+          and geometry["count"] == "200 of 457" and geometry["lastDisabled"]
+          and geometry["lastOption"] == "Showing 200 of 457: search to narrow", **geometry)
+
+    search = frame.locator('[data-component="case_filter"]').get_by_role('searchbox', name='Search Case options', exact=True)
+    search.fill('CASE-A0032')
+    search.evaluate("e => e.setSelectionRange(2, 7, 'backward')")
+    # Programmatic change refreshes queries while leaving keyboard focus in option search.
+    frame.evaluate("() => { window.__layoutSearch = document.activeElement; }")
+    frame.locator('[data-component="case_filter"] select').evaluate("e => e.dispatchEvent(new Event('change', {bubbles:true}))")
+    frame.wait_for_function("() => document.querySelector('.wk-filter-options input') !== window.__layoutSearch")
+    focus = search.evaluate("""e => ({focused: document.activeElement === e, value: e.value,
+        start: e.selectionStart, end: e.selectionEnd, direction: e.selectionDirection})""")
+    check(f"option_focus_{width}", focus == {"focused": True, "value": "CASE-A0032", "start": 2, "end": 7, "direction": "backward"}, **focus)
+    search.evaluate('e => e.blur()')
+    frame.evaluate("() => { window.__layoutSearch = document.querySelector('.wk-filter-options input'); }")
+    frame.locator('[data-component="case_filter"] select').evaluate("e => e.dispatchEvent(new Event('change', {bubbles:true}))")
+    frame.wait_for_function("() => document.querySelector('.wk-filter-options input') !== window.__layoutSearch")
+    check(f"option_no_focus_steal_{width}", search.evaluate('e => document.activeElement !== e'))
+    shot(page, f"layout-{width}")
+
+
 def main() -> None:
     from playwright.sync_api import sync_playwright
 
@@ -570,7 +662,16 @@ def main() -> None:
         check("phone", pp.locator('[data-testid="apps-mode-edit"]').count() == 0 and pp.locator('[data-testid="apps-undo"]').count() == 0
               and pp.locator('[data-testid="apps-versions-open"]').count() == 0 and pp.locator('[data-testid="apps-phone-note"]').count() == 1
               and len(lefts) == 1 and no_style(pf) == 0, lefts=lefts)
+        layout_checks(pp, pf, 390)
         phone.close()
+
+        desktop = browser.new_context(viewport={"width": 1440, "height": 700})
+        dp = desktop.new_page()
+        dp.goto(origin + url)
+        df = app_frame(dp)
+        df.wait_for_selector('.wk-table tbody tr', timeout=20_000)
+        layout_checks(dp, df, 1440)
+        desktop.close()
 
         check("page_errors", errors == [], errors=errors[:5])
         browser.close()

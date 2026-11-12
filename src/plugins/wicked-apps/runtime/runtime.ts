@@ -107,6 +107,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
   let pageId: string | null = null;
   let selected: string | null = null;
   const filters = dict<string | DateRange>();
+  const optionSearch = new Map<string, string>();
   const forms = dict<Record<string, string | boolean>>();
   const url = dict<string>();
   const results = new Map<string, Result>();
@@ -363,9 +364,39 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
   let propsFor: string | null = null;
   const bodies = new Map<string, HTMLElement>();
 
+  const composingSearches = new WeakSet<HTMLInputElement>();
+  const pendingSearches = new WeakSet<HTMLInputElement>();
+  // A whole-page draw (a theme or an artifact change) while an option search is being typed in: it waits for an IME
+  // composition to end, and otherwise puts the focus and the caret back on the new search (approver r4).
+  let pendingFullDraw: { keepProps?: boolean; focusPage?: boolean } | null = null;
+  const focusedSearch = (): { id: string; el: HTMLInputElement; range: readonly [number | null, number | null, 'forward' | 'backward' | 'none' | null] } | null => {
+    const a = document.activeElement;
+    if (!(a instanceof HTMLInputElement) || a.type !== 'search' || a.closest('.wk-filter-options') === null) return null;
+    const id = a.closest<HTMLElement>('[data-component]')?.getAttribute('data-component');
+    return id === null || id === undefined ? null : { id, el: a, range: [a.selectionStart, a.selectionEnd, a.selectionDirection] as const };
+  };
+  const restoreSearch = (fs: ReturnType<typeof focusedSearch>): void => {
+    if (fs === null) return;
+    const next = [...root.querySelectorAll<HTMLElement>('[data-component]')].find((e) => e.getAttribute('data-component') === fs.id)
+      ?.querySelector<HTMLInputElement>('.wk-filter-options input[type="search"]');
+    if (next === undefined || next === null || next === fs.el) return;
+    next.focus({ preventScroll: true });
+    next.setSelectionRange(fs.range[0], fs.range[1], fs.range[2] ?? undefined);
+  };
   const drawBody = (c: AppComponent, body: HTMLElement): void => {
+    const old = body.querySelector<HTMLInputElement>('.wk-filter-options input[type="search"]');
+    const focused = old !== null && document.activeElement === old;
+    // Replacing an IME's input would end its composition before the user finishes the word.
+    if (focused && composingSearches.has(old)) { pendingSearches.add(old); return; }
+    const selection = focused ? [old.selectionStart, old.selectionEnd, old.selectionDirection] as const : null;
+    if (focused) optionSearch.set(c.id, old.value);
     drawBodyNow(c, body);
     markInline(c, body);
+    if (selection !== null) {
+      const next = body.querySelector<HTMLInputElement>('.wk-filter-options input[type="search"]');
+      next?.focus({ preventScroll: true });
+      next?.setSelectionRange(selection[0], selection[1], selection[2] ?? undefined);
+    }
   };
   /**
    * Edit: a component's own words (its title, a Text's text, a Button's, Link's or Filter's label) are edited in place
@@ -476,7 +507,14 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       rows.columns.forEach((col, i) => { record[col.name] = r[i] ?? null; });
       for (const col of shown) {
         const v = r[at(col.column)];
-        tr.append(el('td', typeof v === 'number' ? 'wk-num' : undefined, cellText(v, col.format, locale)));
+        const text = cellText(v, col.format, locale);
+        // An identifier (no whitespace) never breaks, whatever its length; a very long one is cut with an ellipsis and
+        // keeps its whole text as the title. Prose wraps between words (studio#1119).
+        const token = /^\S+$/u.test(text);
+        const cls = typeof v === 'number' ? 'wk-num' : token ? (text.length > 64 ? 'wk-token wk-token--long' : 'wk-token') : 'wk-prose';
+        const td = el('td', cls, text);
+        if (token && text.length > 64) td.title = text;
+        tr.append(td);
       }
       if ((c.rowActions ?? []).length > 0) {
         const td = el('td', 'wk-td-actions');
@@ -486,7 +524,13 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       tbody.append(tr);
     }
     table.append(tbody);
-    body.append(table);
+    const scroll = el('div', 'wk-table-scroll');
+    // A keyboard stop, so the columns past the edge are reachable without a pointer (WebKit gives a scroller none).
+    scroll.tabIndex = 0;
+    scroll.setAttribute('role', 'region');
+    scroll.setAttribute('aria-label', `${lineOf(c.title ?? 'Table', 80)}, scrolls sideways`);
+    scroll.append(table);
+    body.append(scroll);
     if (rows.rows.length === 0) body.append(el('p', 'wk-muted', 'No rows'));
     const foot = el('div', 'wk-table-foot');
     if (pages > 1) {
@@ -507,7 +551,10 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
 
   const drawFilter = (c: AppFilterComponent, body: HTMLElement): void => {
     const label = el('label', 'wk-filter');
-    label.append(el('span', 'wk-filter-label', lineOf(c.label ?? (c.filter === 'search' ? 'Search' : c.filter === 'date-range' ? 'Dates' : 'Filter'), 60)));
+    const labelText = lineOf(c.label ?? (c.filter === 'search' ? 'Search' : c.filter === 'date-range' ? 'Dates' : 'Filter'), 60);
+    const labelEl = el('span', 'wk-filter-label', labelText);
+    labelEl.title = labelText; // its full words when a narrow row cuts it (studio#1119)
+    label.append(labelEl);
     const changed = (): void => { queryAll(); };
     if (c.filter === 'search') {
       const input = el('input', 'wk-input');
@@ -522,20 +569,74 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       label.append(input);
     } else if (c.filter === 'select') {
       const select = el('select', 'wk-input');
-      const opts: Array<{ value: string; label: string }> = [{ value: '', label: 'All' }];
-      if (c.options?.kind === 'values') for (const o of c.options.values.slice(0, 200)) opts.push({ value: lineOf(o.value, 200), label: lineOf(o.label ?? o.value, 200) });
+      const opts: Array<{ value: string; label: string }> = [];
+      let incomplete = false;
+      if (c.options?.kind === 'values') for (const o of c.options.values) opts.push({ value: lineOf(o.value, 200), label: lineOf(o.label ?? o.value, 200) });
       if (c.options?.kind === 'query') {
         const res = results.get(c.id);
         if (res?.state === 'rows') {
+          incomplete = res.rows.hasMore || res.rows.truncated;
           const vi = res.rows.columns.findIndex((col) => col.name === (c.options as { value: string }).value);
           const li = res.rows.columns.findIndex((col) => col.name === ((c.options as { label?: string }).label ?? ''));
-          for (const r of res.rows.rows.slice(0, 200)) if (vi >= 0) opts.push({ value: cellText(r[vi], undefined, locale), label: cellText(r[li >= 0 ? li : vi], undefined, locale) });
+          for (const r of res.rows.rows) if (vi >= 0) opts.push({ value: cellText(r[vi], undefined, locale), label: cellText(r[li >= 0 ? li : vi], undefined, locale) });
         }
       }
-      for (const o of opts) { const opt = el('option', undefined, o.label); opt.value = o.value; select.append(opt); }
-      select.value = typeof filters[c.id] === 'string' ? filters[c.id] as string : '';
-      select.addEventListener('change', () => { filters[c.id] = select.value; changed(); });
+      const box = el('div', 'wk-filter-select');
+      const tools = el('div', 'wk-filter-options');
+      const search = el('input', 'wk-input');
+      search.type = 'search';
+      search.placeholder = 'Search';
+      search.setAttribute('aria-label', `Search ${lineOf(c.label ?? 'Filter', 60)} options`);
+      search.value = optionSearch.get(c.id) ?? '';
+      const count = el('span', 'wk-muted');
+      count.setAttribute('aria-live', 'polite');
+      const searchable = opts.length > 200 || incomplete;
+      const fill = (): void => {
+        const needle = searchable ? search.value.toLowerCase() : '';
+        const matches = opts.filter((o) => o.label.toLowerCase().includes(needle));
+        const shown = matches.slice(0, 200);
+        const value = typeof filters[c.id] === 'string' ? filters[c.id] as string : '';
+        // Keep a fetched selection inside the cap while the search or the cap would hide it. A value the source no
+        // longer returns is not invented as an option (as before: the select's options are the source's).
+        const kept = value === '' ? undefined : opts.find((o) => o.value === value);
+        if (kept !== undefined && !shown.includes(kept)) {
+          if (shown.length === 200) shown.pop();
+          shown.push(kept);
+        }
+        select.replaceChildren();
+        for (const o of [{ value: '', label: 'All' }, ...shown]) {
+          const opt = el('option', undefined, o.label); opt.value = o.value; select.append(opt);
+        }
+        const n = shown.filter((o) => matches.includes(o)).length;
+        const summary = needle === '' ? `${n} of ${opts.length}${incomplete ? '+' : ''}`
+          : `${n}${n < matches.length ? ` of ${matches.length}` : ''} matches`;
+        const description = `Showing ${summary}${needle !== '' && incomplete ? ' in fetched rows' : ''}`;
+        count.textContent = summary;
+        count.title = description;
+        count.setAttribute('aria-label', description);
+        if (n < matches.length || incomplete) {
+          const more = el('option', undefined, `${description}: search to narrow`);
+          more.disabled = true;
+          more.value = ''; // a notice, not a value: the select's values stay the options' own (apps-standalone reads them)
+          select.append(more);
+        }
+        select.value = value;
+      };
+      search.addEventListener('input', () => { optionSearch.set(c.id, search.value); fill(); });
+      search.addEventListener('compositionstart', () => { composingSearches.add(search); });
+      search.addEventListener('compositionend', () => {
+        composingSearches.delete(search);
+        optionSearch.set(c.id, search.value);
+        if (pendingFullDraw !== null) { const o = pendingFullDraw; pendingFullDraw = null; pendingSearches.delete(search); draw(o); }
+        else if (pendingSearches.delete(search)) redraw(c.id);
+      });
+      fill();
+      select.addEventListener('change', () => { filters[c.id] = select.value; fill(); changed(); });
       label.append(select);
+      box.append(label);
+      if (searchable) { box.classList.add('wk-filter-select--search'); tools.append(search, count); box.append(tools); }
+      body.append(box);
+      return;
     } else {
       const v = (filters[c.id] ?? { from: '', to: '' }) as DateRange;
       const from = el('input', 'wk-input wk-input--date');
@@ -937,7 +1038,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
    * its text and caret, goes back where the words now are. Otherwise (another tab changed those words, the component
    * is gone, Edit ended) the field closes first, with nothing sent (codex r9/r10).
    */
-  const draw = (opts: { keepProps?: boolean } = {}): void => {
+  const draw = (opts: { keepProps?: boolean; focusPage?: boolean } = {}): void => {
     const open = inline;
     let carry = false;
     if (open !== null) {
@@ -951,7 +1052,13 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
     drawNow(opts);
     if (carry && open !== null && inline === open) open.place();
   };
-  const drawNow = (opts: { keepProps?: boolean }): void => {
+  const drawNow = (opts: { keepProps?: boolean; focusPage?: boolean }): void => {
+    const oldNav = root.querySelector<HTMLElement>('.wk-pages');
+    const navScroll = oldNav?.scrollLeft ?? 0;
+    const focusPage = opts.focusPage === true || (oldNav?.contains(document.activeElement) ?? false);
+    const fs = focusedSearch();
+    if (fs !== null && composingSearches.has(fs.el)) { pendingFullDraw = opts; return; }
+    if (fs !== null) optionSearch.set(fs.id, fs.el.value);
     const had = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.getAttribute('data-prop') : null;
     bodies.clear();
     index.clear();
@@ -972,7 +1079,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       const b = el('button', pg.id === pageId ? 'wk-page is-on' : 'wk-page', lineOf(pg.title, 80));
       b.type = 'button';
       b.setAttribute('aria-current', pg.id === pageId ? 'page' : 'false');
-      b.addEventListener('click', () => { if (pageId !== pg.id) { pageId = pg.id; select(null); draw(); queryAll(); } });
+      b.addEventListener('click', () => { if (pageId !== pg.id) { pageId = pg.id; select(null); draw({ focusPage: true }); queryAll(); } });
       nav.append(b);
     }
     main.append(nav);
@@ -1027,15 +1134,25 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
     main.append(grid);
     parts.push(main);
     const sel = editing() && selected !== null ? list.find((c) => c.id === selected) : undefined;
+    const restoreNav = (): void => {
+      nav.scrollLeft = navScroll;
+      const active = nav.querySelector<HTMLElement>('.is-on');
+      if (focusPage) active?.focus({ preventScroll: true });
+      active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    };
     const keep = opts.keepProps === true && sel !== undefined && propsNode !== null && propsFor === sel.id && propsNode.parentNode === root;
     if (keep) {
       for (const ch of [...root.childNodes]) if (ch !== propsNode) ch.remove();
       for (const part of parts) root.insertBefore(part, propsNode);
+      restoreNav();
+      restoreSearch(fs);
       return;
     }
     propsNode = propsHost ? null : sel !== undefined ? drawProps(sel) : editing() ? drawPropsEmpty() : null;
     propsFor = sel?.id ?? null;
     root.replaceChildren(...parts, ...(propsNode !== null ? [propsNode] : []));
+    restoreNav();
+    restoreSearch(fs);
     if (had !== null) [...root.querySelectorAll<HTMLElement>('[data-prop]')].find((e) => e.getAttribute('data-prop') === had)?.focus({ preventScroll: true });
   };
 
