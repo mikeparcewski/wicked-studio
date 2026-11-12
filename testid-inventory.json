@@ -26506,6 +26506,18 @@
       ]
     },
     {
+      "pattern": "*-weighted-note",
+      "files": [
+        "src/components/RequirementsCoverageSummary.tsx"
+      ]
+    },
+    {
+      "pattern": "*-weighted-why",
+      "files": [
+        "src/components/RequirementsCoverageSummary.tsx"
+      ]
+    },
+    {
       "pattern": "*-who",
       "files": [
         "src/components/trackers/TrackerActions.tsx"

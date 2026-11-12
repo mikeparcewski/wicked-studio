@@ -2141,6 +2141,10 @@ button.wk-who-name:hover { text-decoration: underline; }
 .wk-reqcov--inline { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 12px; row-gap: 2px; }
 .wk-reqcov-head { margin: 0; font-size: var(--text-body); font-weight: var(--weight-strong); color: var(--ink-high); font-variant-numeric: tabular-nums; }
 .wk-reqcov-note { font-weight: var(--weight-regular); color: var(--ink-muted); }
+.wk-reqcov-why { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; margin: 0 2px; padding: 0; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--ink-muted); vertical-align: middle; cursor: pointer; }
+.wk-reqcov-why:hover, .wk-reqcov-why[aria-expanded="true"] { color: var(--ink-high); }
+.wk-reqcov-why:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-reqcov-why-note { display: block; margin: 0; font-size: var(--text-caption); color: var(--ink-muted); }
 .wk-reqcov-parts { margin: 0; font-size: var(--text-caption); color: var(--ink-muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .wk-reqcov-unconfirmed { color: var(--status-warn); text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .wk-reqcov-bar { position: relative; height: 6px; border-radius: var(--radius-full); background: var(--surface-raised); }

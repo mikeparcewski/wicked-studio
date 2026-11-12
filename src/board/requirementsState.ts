@@ -110,7 +110,8 @@ export function coverageHeadline(c: RequirementsCoverage): string {
   return `${pct} real requirements · minimum ${c.minPct}%`;
 }
 
-export const WEIGHTED_NOTE = 'Each requirement counts by confidence: a validated one counts fully, a rule counts its confidence, an unscored one counts 0.75.';
+/** One line on how the confidence-weighted share is counted (core#1445): the tooltip, and the line its help button opens. */
+export const WEIGHTED_NOTE = 'Over the code with behaviour: a validated requirement counts 1, a rule counts its confidence, a resolved one with no score counts 0.75, and risks and unmapped code count 0.';
 
 export interface CoveragePart {
   key: 'real' | 'placeholders' | 'unmapped' | 'notProduct';

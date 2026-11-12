@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { WEIGHTED_NOTE } from '../src/board/requirementsState.js';
 import { describe, expect, it } from 'vitest';
 import { RequirementsCoverageSummary } from '../src/components/RequirementsCoverageSummary.js';
 
 const coverage = { realPct: 86, minPct: 80, behaviorBearing: 100, real: 86, placeholders: 10, unmapped: 4, notProduct: 5 };
-const weightedNote = 'Each requirement counts by confidence: a validated one counts fully, a rule counts its confidence, an unscored one counts 0.75.';
+const weightedNote = WEIGHTED_NOTE;
 
 describe('RequirementsCoverageSummary', () => {
   it('leads with weighted coverage and explains it for hover and assistive technology, keeping the stated bar', () => {
@@ -14,6 +15,14 @@ describe('RequirementsCoverageSummary', () => {
     const weighted = screen.getByText('62% confidence-weighted');
     expect(weighted).toHaveAttribute('title', weightedNote);
     expect(weighted).toHaveAccessibleDescription(weightedNote);
+    // Keyboard and touch: a help button shows the same line (hover is not the only way to read it).
+    const why = screen.getByTestId('requirements-coverage-weighted-why');
+    expect(why).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('requirements-coverage-weighted-note')).toHaveClass('wk-visually-hidden');
+    fireEvent.click(why);
+    expect(why).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('requirements-coverage-weighted-note')).toHaveClass('wk-reqcov-why-note');
+    expect(screen.getByTestId('requirements-coverage-weighted-note').textContent).toBe(weightedNote);
     expect(root.querySelector('.wk-reqcov-fill')).toHaveStyle({ width: '86%' });
     expect(root.querySelector('.wk-reqcov-min')).toHaveStyle({ left: '80%' });
   });
@@ -24,6 +33,7 @@ describe('RequirementsCoverageSummary', () => {
     expect(screen.getByTestId('requirements-coverage-headline').textContent).toBe('86% real requirements · minimum 80% · more detail');
     expect(screen.getByRole('img')).toHaveAccessibleName('86% real requirements; the minimum is 80%');
     expect(screen.queryByTitle(weightedNote)).toBeNull();
+    expect(screen.queryByTestId('requirements-coverage-weighted-why')).toBeNull();
     expect(screen.getByTestId('requirements-coverage-breakdown').textContent).toBe('86 real · 10 placeholders (unconfirmed) · 4 unmapped · 5 not product code');
   });
 

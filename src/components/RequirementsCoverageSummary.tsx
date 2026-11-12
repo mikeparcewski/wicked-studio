@@ -1,4 +1,5 @@
-import { Fragment, useId } from 'react';
+import { Fragment, useId, useState } from 'react';
+import { CircleHelp } from 'lucide-react';
 import { coverageHeadline, coverageParts, PLACEHOLDER_NOTE, WEIGHTED_NOTE, type RequirementsCoverage } from '../board/requirementsState.js';
 
 /**
@@ -17,6 +18,8 @@ export function RequirementsCoverageSummary({ coverage: c, testId = 'requirement
   note?: string;
 }): React.ReactElement {
   const weightedNoteId = useId();
+  // The weighting's one line: a hover title, and a help button that shows it (keyboard and touch have no hover).
+  const [whyOpen, setWhyOpen] = useState(false);
   const headline = coverageHeadline(c);
   const weightedEnd = headline.indexOf(' · ');
   return (
@@ -24,11 +27,17 @@ export function RequirementsCoverageSummary({ coverage: c, testId = 'requirement
       <p className="wk-reqcov-head" data-testid={`${testId}-headline`}>
         {c.weightedPct !== undefined ? <>
           <span title={WEIGHTED_NOTE} aria-describedby={weightedNoteId}>{headline.slice(0, weightedEnd)}</span>
+          <button type="button" data-testid={`${testId}-weighted-why`} aria-expanded={whyOpen} aria-controls={weightedNoteId}
+            aria-label="How the confidence weighting counts" title={WEIGHTED_NOTE} onClick={() => setWhyOpen((v) => !v)} className="wk-reqcov-why">
+            <CircleHelp aria-hidden size={13} />
+          </button>
           {headline.slice(weightedEnd)}
         </> : headline}
         {note !== undefined && <span className="wk-reqcov-note"> · {note}</span>}
       </p>
-      {c.weightedPct !== undefined && <span id={weightedNoteId} className="wk-visually-hidden">{WEIGHTED_NOTE}</span>}
+      {c.weightedPct !== undefined && (
+        <span id={weightedNoteId} data-testid={`${testId}-weighted-note`} className={whyOpen ? 'wk-reqcov-why-note' : 'wk-visually-hidden'}>{WEIGHTED_NOTE}</span>
+      )}
       {bar && (
         <div className="wk-reqcov-bar" role="img" aria-label={`${c.realPct}% real requirements; the minimum is ${c.minPct}%`}>
           <span className="wk-reqcov-fill" style={{ width: `${c.realPct}%` }} />
