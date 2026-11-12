@@ -78,14 +78,41 @@ describe('the skip choice says what it does', () => {
   it('unchecked and disputed rules: "Skip N rules", recorded as skipped by you', () => {
     const c = choiceFor([raw('A', 'unchecked'), raw('B', 'disputed')]);
     expect(c.label).toBe('Skip 2 rules');
-    expect(c.title).toMatch(/recorded as skipped by you/);
+    expect(c.title).toMatch(/Recorded as skipped by you/);
     expect(c.title).not.toMatch(/Confirm/);
     expect(choiceFor([raw('A', 'unchecked')]).label).toBe('Skip A');
+  });
+  it('four held rules have a concise consequence, with ids, the skip record and its labels', () => {
+    const ids = ['SEC-1002', 'DEV-2004', 'TST-3001', 'ARC-1007'];
+    const c = choiceFor(ids.map((id, i) => raw(id, i % 2 === 0 ? 'unchecked' : 'disputed')));
+    expect(c.label).toBe('Skip 4 rules');
+    expect(c.skipRuleIds).toEqual(ids);
+    expect(c.title!.length).toBeLessThanOrEqual(200);
+    expect(c.title).toContain(`Skip ${ids.join(', ')}`);
+    expect(c.title).toContain('Recorded as skipped by you');
+    expect(c.title).toContain('Labelled on the run, the gate and the delivery');
+    expect(c.title).not.toMatch(/confirm|broken warning|written reason|with your reason|Every other reason/i);
+  });
+  it('the broken-rule limit appears only for a broken row offered or still holding the gate', () => {
+    const warning = { ...raw('WARN-1', 'broken'), waivable: true };
+    const error = raw('ERR-1', 'broken');
+    for (const rows of [[warning], [raw('A', 'unchecked'), error]]) {
+      const c = choiceFor(rows);
+      expect(c.title).toContain('A broken warning can be skipped, a broken error or critical rule cannot.');
+    }
+    const c = choiceFor([raw('A', 'unchecked'), error]);
+    expect(c.skipRuleIds).toEqual(['A']);
+    expect(c.title).toContain('Every other reason this step was stopped still stands.');
+    expect(choiceFor([raw('A', 'unchecked'), { ...error, blocking: false }]).title).not.toMatch(/broken warning|Every other reason/);
   });
   it('a rule waived by instruction keeps "Confirm or skip"', () => {
     const c = choiceFor([raw('A', 'unchecked'), raw('W', 'waived')]);
     expect(c.label).toBe('Confirm or skip 2 rules');
     expect(c.title).toMatch(/waived by your instruction is confirmed/);
+    expect(c.title).toContain('any other is recorded as skipped by you');
+    expect(c.title).toContain('Labelled on the run, the gate and the delivery');
+    expect(c.title).not.toContain('The skip is labelled');
+    expect(c.skipRuleIds).toEqual(['A', 'W']);
     expect(choiceFor([raw('W', 'waived')]).label).toBe('Confirm or skip W');
   });
 });

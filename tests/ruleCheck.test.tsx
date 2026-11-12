@@ -94,6 +94,34 @@ describe('the gate held on rules offers the re-check and the confirm-or-skip', (
 });
 
 describe('the gate card says the rule line under its question', () => {
+  it('separates causes and keeps each grouped id together without changing its text', async () => {
+    const { GateRow } = await import('../src/components/session/GateRow.js');
+    const { useRunEventStore } = await import('../src/store/events.js');
+    const RUN = 'r-causes-markup';
+    const units = [makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, role: 'evaluator', status: 'rejected' })] as WorkUnit[];
+    const reason = 'the judge could not run: seat containers failed to start';
+    useRunEventStore.setState({ byRun: { [RUN]: [
+      { type: 'gateEvaluated', session: RUN, ord: 2, denial: { source: 'rules_unchecked', reason: 'x' }, assurance: { ...base, rules: [row('SEC-1002', 'unchecked', reason), row('DEV-2004', 'unchecked', reason), row('learn-linked-issue', 'unchecked', 'the judge gave no line')] } },
+    ] as unknown as CoreEvent[] } });
+    const gate: OpenGate = { runId: RUN, ord: 2, prompt: 'Unit 2 steering rules are UNCHECKED', lifecycle: 'open', receivedAt: 1, gateKind: 'escalation' };
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, units)} gate={gate} />);
+    const list = screen.getByTestId('session-gate-rule-causes');
+    expect(list.tagName).toBe('UL');
+    expect(list.classList.contains('wk-gate-rule-causes')).toBe(true);
+    const items = screen.getAllByTestId('session-gate-rule-cause');
+    expect(items).toHaveLength(2);
+    for (const item of items) {
+      expect(item.tagName).toBe('LI');
+      expect(item.classList.contains('wk-gate-rule-cause')).toBe(true);
+    }
+    const ids = [...list.querySelectorAll('.wk-rule-id')];
+    expect(ids.map((el) => [el.textContent, el.getAttribute('title')])).toEqual([
+      ['SEC-1002', 'SEC-1002'], ['DEV-2004', 'DEV-2004'], ['learn-linked-issue', 'learn-linked-issue'],
+    ]);
+    expect(items[0]!.textContent).toBe('The judge could not run: seat containers failed to start (SEC-1002, DEV-2004) Re-check runs the judge again once a seat is free.');
+    expect(items[1]!.textContent).toBe('The judge ran but gave no line on this rule (learn-linked-issue) Re-check asks the judge again.');
+  });
+
   it('renders session-gate-rules and leaves the receipt foot without a second one', async () => {
     const client = await import('../src/api/client.js');
     vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '' } as never);

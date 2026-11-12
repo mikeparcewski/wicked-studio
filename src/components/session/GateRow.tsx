@@ -318,8 +318,10 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       {ruleCauseList.length > 0 && (
         <ul data-testid="session-gate-rule-causes" className="wk-gate-rule-causes">
           {ruleCauseList.map((c) => (
-            <li key={`${c.kind}:${c.text}`} data-testid="session-gate-rule-cause" data-kind={c.kind}>
-              <b>{c.text}</b> <span className="wk-gate-rule-causes-ids">({c.ruleIds.join(', ')})</span>
+            <li key={`${c.kind}:${c.text}`} data-testid="session-gate-rule-cause" data-kind={c.kind} className="wk-gate-rule-cause">
+              <b>{c.text}</b> <span className="wk-gate-rule-causes-ids">({c.ruleIds.map((id, i) => (
+                <Fragment key={id}>{i > 0 ? ', ' : ''}<span className="wk-rule-id" title={id}>{id}</span></Fragment>
+              ))})</span>
               {c.remedy !== null && <span className="wk-gate-rule-causes-remedy"> {c.remedy}.</span>}
             </li>
           ))}
@@ -942,6 +944,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         busy={action.busy}
         start={recKey}
         reasonFor={reasonFor}
+        consequenceIds={choices.flatMap((c) => c.skipRuleIds ?? [])}
         onReasonOpen={setCardNoteOpen}
         onSelect={setSelectedKey}
         reasonId={`session-gate-note-${runId}`}

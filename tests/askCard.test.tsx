@@ -208,6 +208,15 @@ describe('choose', () => {
     expect(onAnswer).not.toHaveBeenCalled();
   });
 
+  it('known rule ids stay together and retain their text, including long ids and punctuation', () => {
+    const ids = ['DEV-2004', 'learn-linked-issue', 'rule-with-a-very-long-id-that-cannot-fit-on-a-phone', 'rule[a].b'];
+    const consequence = `Skip ${ids.join(', ')}. Recorded as skipped by you.`;
+    renderAsk({ ...PAUSE, default: 'skip', options: [{ id: 'skip', token: 'skip', label: 'Skip 4 rules', consequence }] }, { consequenceIds: ids });
+    const line = screen.getByTestId('ask-consequence');
+    expect(line.textContent).toBe(`If you choose this: ${consequence}`);
+    expect([...line.querySelectorAll('.wk-rule-id')].map((el) => [el.textContent, el.getAttribute('title')])).toEqual(ids.map((id) => [id, id]));
+  });
+
   it('Stop asks for a reason (required) before it is sent, with the reason in the answer', () => {
     const { onAnswer } = renderAsk(PAUSE);
     fireEvent.click(opt('stop'));

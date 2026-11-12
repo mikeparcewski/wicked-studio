@@ -1182,6 +1182,7 @@ function ruleChoicesAt(hold: { held: boolean; rows: readonly RuleRow[]; behind: 
     const brokenOnly = skippable.every((r) => r.status === 'broken');
     const confirmable = skippable.some((r) => r.status === 'waived');
     const verb = confirmable ? 'Confirm or skip' : 'Skip';
+    const broken = hold.rows.some((r) => r.status === 'broken' && r.blocking);
     // (e2e-1105 CJ9, coord) "Every other reason … still stands" only when there IS another one: a rule this skip
     // leaves (broken or held), or a layer that is not a steering rule (a reviewer's FAIL, a failed check).
     const othersOpen = hold.otherCause === true
@@ -1193,7 +1194,7 @@ function ruleChoicesAt(hold: { held: boolean; rows: readonly RuleRow[]; behind: 
       needsNote: true,
       skipRuleIds: held,
       ...(brokenOnly ? { notePlaceholder: SKIP_WARNING_PLACEHOLDER } : {}),
-      title: `${confirmable ? `Confirm or skip ${held.join(', ')}` : `Skip ${held.join(', ')}`} with your written reason. ${confirmable ? 'A rule waived by your instruction is confirmed; any other is recorded as skipped by you.' : `Nothing is confirmed as kept: ${held.length === 1 ? 'the rule is' : 'each rule is'} recorded as skipped by you, with your reason.`} The skip is labelled on the run, the gate and the delivery; a broken warning can be skipped, a broken error or critical rule cannot.${othersOpen ? ' Every other reason this step was stopped still stands.' : ''}`,
+      title: `${verb} ${held.join(', ')}. ${confirmable ? 'A rule waived by your instruction is confirmed; any other is recorded as skipped by you.' : 'Recorded as skipped by you.'} Labelled on the run, the gate and the delivery.${broken ? ' A broken warning can be skipped, a broken error or critical rule cannot.' : ''}${othersOpen ? ' Every other reason this step was stopped still stands.' : ''}`,
     });
   }
   return out;

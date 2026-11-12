@@ -233,6 +233,10 @@ describe('the app chat: a review held on steering rules is answered here (F22)',
     expect(steps()).toStrictEqual(['done', 'done', 'now']);
     await waitFor(() => expect(screen.getByTestId('app-chat-gate').textContent).toContain('Re-check the rules'));
     expect(screen.getByTestId('app-chat-gate').textContent).toContain('Skip learn-accessible');
+    fireEvent.click(screen.getAllByTestId('session-gate-choice').find((el) => el.dataset.choiceKey === 'skip-rules')!);
+    const consequence = screen.getByTestId('session-gate-consequence');
+    expect(consequence.querySelector('.wk-rule-id')?.textContent).toBe('learn-accessible');
+    expect(consequence.textContent).toBe('If you choose this: Skip learn-accessible. Recorded as skipped by you. Labelled on the run, the gate and the delivery.');
     expect(calls.filter((c) => c.path === `/runs/${RUN}/events`)).toHaveLength(1);
     // The busy line and the gate's heading say it is a call on a rule, in plain words (not "asks a question", not
     // "The step was escalated").
