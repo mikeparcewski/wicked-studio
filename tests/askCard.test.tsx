@@ -82,6 +82,25 @@ describe('choose', () => {
     expect((screen.getByTestId('ask-send') as HTMLElement).getAttribute('data-option')).toBe('stop');
   });
 
+  it('a picked option brings its "If you choose this:" into view (studio#1101 shots), never on render or a hover', () => {
+    const calls: Element[] = [];
+    // tests/setup.ts stubs HTMLElement.prototype.scrollIntoView (jsdom has none): spy on that one.
+    const spy = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function (this: HTMLElement) { calls.push(this); });
+    try {
+      renderAsk(PAUSE);
+      expect(calls).toEqual([]);
+      fireEvent.mouseEnter(opt('phased'));
+      expect(calls).toEqual([]);
+      fireEvent.click(opt('phased'));
+      expect(calls).toEqual([screen.getByTestId('ask-consequence')]);
+      // An option that opens a reason box scrolls the box, not the line.
+      fireEvent.click(opt('stop'));
+      expect(calls.filter((e) => e === screen.getByTestId('ask-consequence'))).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('a disabled option stays visible with why, and cannot be chosen', () => {
     const { onAnswer } = renderAsk(PAUSE);
     const frozen = opt('frozen') as HTMLButtonElement;

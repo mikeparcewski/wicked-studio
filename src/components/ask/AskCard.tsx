@@ -118,6 +118,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
   const [hover, setHover] = useState<string | null>(null);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [missing, setMissing] = useState(false);
+  const [picked, setPicked] = useState(0);
   // An option that asks for words opens its box once the person takes it (picks it, or presses the primary on it):
   // a preselected one never opens a box, or a prefilled one would be sent unread, and never takes the caret.
   const [engaged, setEngagedState] = useState<string | null>(null);
@@ -176,6 +177,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
   const pick = (o: AskOption): void => {
     if (o.disabled !== undefined) return;
     setSel(o.id);
+    setPicked((n) => n + 1);
     setMissing(false);
     setEngaged(o.needsReason === true || ask.kind === 'confirm_reason' ? o.id : null);
     if (ask.kind === 'confirm' && o.needsReason !== true) onAnswer({ askId: ask.id, option: o.id });
@@ -204,6 +206,12 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, confirmLabe
   const tabStop = sel !== null && enabled.some((o) => o.id === sel) ? sel : enabled[0]?.id ?? null;
   const confirmWords = current === null ? 'Choose an option' : reasonCfg?.send ?? confirmLabel?.(current) ?? current.label;
   const consId = `${autoId}-cons`;
+  // A picked card's "If you choose this:" is what the primary will send, so it comes into view, above the dock's sticky
+  // primary (its room is the line's scroll-margin, ask-card.css); a reason box that opens brings itself into view instead.
+  useEffect(() => {
+    if (picked === 0 || reasonFor_ !== null) return;
+    document.getElementById(consId)?.scrollIntoView?.({ block: 'nearest' });
+  }, [picked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
