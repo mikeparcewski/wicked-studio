@@ -54,6 +54,17 @@
 .wk-full-drawer-head { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); font-size: var(--text-sm); color: var(--ink-muted); }
 .wk-full-drawer-head b { color: var(--ink-high); margin-right: 6px; }
 .wk-full-drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-3) var(--space-4); }
+/* Keep desktop controls at their natural width: shrinking the segment clips Advanced, and wrapping just
+   the plugin actions strands Options. Below this width, reserve the first row for the title instead. */
+@media (min-width: 600px) {
+  .wk-full-head > .wk-seg, .wk-full-actions { flex: 0 0 auto; flex-wrap: nowrap; white-space: nowrap; }
+  .wk-full-phase { flex: 0 0 auto; }
+}
+@media (min-width: 600px) and (max-width: 1599px) {
+  .wk-full-head { flex-wrap: wrap; }
+  .wk-full-head > .wk-full-title { flex: 1 1 0; }
+  .wk-full-head > .wk-full-gap { flex: 0 0 100%; height: 0; }
+}
 /* A phone (G14): the header wraps — tag, title and Esc on the first row, every control on the next — and the chat
    drawer lies over the artifact instead of taking a 360 px column beside it. */
 @media (max-width: 599px) {

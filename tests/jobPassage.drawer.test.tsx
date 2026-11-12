@@ -261,6 +261,30 @@ describe('full screen’s chat drawer: transcript entries', () => {
     expect(drawer.querySelector('.wk-run-chat-thread')?.lastElementChild?.getAttribute('data-testid')).toBe('artifact-proposal');
   });
 
+  it.each(['open', 'accepting', 'decided'] as const)('keeps an old %s refine only while it still needs an answer, after 13 later turns', async (state) => {
+    messages = [
+      ask, proposalRecord,
+      ...(state === 'accepting' ? [{ at: T0 + 3, turnId: 't2', kind: 'proposal_accepting', pid: refine.pid, resolution: refine }] : []),
+      ...(state === 'decided' ? [{ at: T0 + 3, turnId: 't2', kind: 'proposal_decided', pid: refine.pid, decision: 'not_now', result: null }] : []),
+      ...Array.from({ length: 13 }, (_, i) => ({ ...USER, at: T0 + 4 + i, turnId: `later-${i}`, text: `Later message ${i}` })),
+    ];
+    page();
+    // The old proposal is in the main thread even when the drawer should omit it.
+    await screen.findByTestId('artifact-proposal');
+    const drawer = openDrawer();
+    expect(within(drawer).getAllByTestId('run-chat-turn').map((e) => within(e).getByText(/^Later message/).textContent))
+      .toEqual(Array.from({ length: 12 }, (_, i) => `Later message ${i + 1}`));
+    if (state === 'decided') {
+      expect(within(drawer).queryByTestId('artifact-proposal')).toBeNull();
+      expect(within(drawer).queryByTestId('artifact-proposal-confirm')).toBeNull();
+    } else {
+      const card = within(drawer).getByTestId('artifact-proposal');
+      if (state === 'open') expect(within(card).getByTestId('artifact-proposal-confirm')).toHaveTextContent('Make the change');
+      else expect(within(card).getByTestId('artifact-proposal-go-again')).toHaveTextContent('Go again');
+      expect(drawer.querySelector('.wk-run-chat-thread')?.firstElementChild).toBe(card);
+    }
+  });
+
   it('keeps the empty-state line when no eligible entries exist', async () => {
     messages = [P1];
     page();

@@ -14,6 +14,7 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- The full-size header names the step in words (or nothing), never a run or unit id, and its controls no longer overlap: it wraps as a whole when they don't fit on one row.
 - At full size, the editor's chat shows what the seat proposed — the change card with Make the change — instead of only the words before it, so a change asked for in full screen can be answered there.
 
 ## [0.16.8] — 2026-11-12

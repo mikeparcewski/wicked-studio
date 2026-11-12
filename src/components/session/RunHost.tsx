@@ -80,11 +80,19 @@ export function GateButtons({ runId }: { runId: string }): React.ReactElement | 
 /** The phase a live run is in, for the full-screen header: its current step's phase, in plain words. */
 export function phaseOf(view: RunView | null): string | null {
   if (view === null || TERMINAL.has(view.session.status)) return null;
+  // A chat's own answer run (the ask path) is not a step of the artifact shown: no phase is said for it.
+  if ((view.session as { ask_path?: unknown }).ask_path === true) return null;
   const unit = view.units.find((u) => u.ord === view.session.unit_ix);
-  const raw = unit?.phase_ref ?? unit?.stage ?? null;
-  if (typeof raw !== 'string' || raw.trim() === '') return null;
-  const words = raw.replace(/[-_]+/g, ' ').trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  for (const raw of [unit?.phase_ref, unit?.stage, unit?.id]) {
+    if (typeof raw !== 'string') continue;
+    const name = raw.slice(raw.lastIndexOf(':') + 1).trim();
+    // Workflow refs end in unit-N; UUIDs and run ids are identifiers, never a phase label.
+    if (/^(?:wf|unit)-|[0-9a-f]{8,}/i.test(name)) continue;
+    const words = name.replace(/[-_]+/g, ' ').trim();
+    if (!/[a-z]/i.test(words)) continue;
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+  return null;
 }
 
 /** The run host context for the page's artifacts. `renderChat` is the session's compact thread. */

@@ -1141,8 +1141,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // artifacts stay in the thread behind it; the artifact already has its full-size editor here.
   // The drawer's composer is the same box: a job binding answers there as it does in the thread.
   const drawerBinding = useJobBinding((st) => (st.binding !== null && st.binding.sessionId === sessionId ? st.binding : null));
-  const drawerEntries = entries.filter((e): e is Extract<ThreadEntry, { kind: 'turn' | 'artifact' }> =>
-    e.kind === 'turn' || (ref.kind === 'chat' && e.kind === 'artifact')).slice(-12);
+  // The last 12, plus any card still waiting on the person (open, or an interrupted Go) however far back it is (review r1).
+  const drawerAll = entries.filter((e): e is Extract<ThreadEntry, { kind: 'turn' | 'artifact' }> =>
+    e.kind === 'turn' || (ref.kind === 'chat' && e.kind === 'artifact'));
+  const drawerEntries = drawerAll.filter((e, i) => i >= drawerAll.length - 12
+    || (e.kind === 'artifact' && (e.entry.state === 'open' || e.entry.state === 'accepting')));
   const renderChat = (): React.ReactNode => (
     <div data-testid="run-chat-drawer" className="wk-run-chat">
       <div className="wk-run-chat-thread">
