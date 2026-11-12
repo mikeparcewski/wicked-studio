@@ -217,6 +217,26 @@ describe('choose', () => {
     expect([...line.querySelectorAll('.wk-rule-id')].map((el) => [el.textContent, el.getAttribute('title')])).toEqual(ids.map((id) => [id, id]));
   });
 
+  it('a reason choice scrolls its label and textarea above the measured sticky primary', () => {
+    const calls: Array<{ el: HTMLElement; margin: string }> = [];
+    const spy = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function (this: HTMLElement) {
+      calls.push({ el: this, margin: this.style.scrollMarginBottom });
+    });
+    try {
+      render(<div className="wk-dock-surface" style={{ paddingBottom: '18px' }}><AskCard ask={PAUSE} header={false} onAnswer={vi.fn()} /></div>);
+      const go = document.querySelector<HTMLElement>('.wk-ask-go')!;
+      go.style.position = 'sticky';
+      Object.defineProperty(go, 'offsetHeight', { configurable: true, value: 124 });
+      expect(calls).toEqual([]);
+      fireEvent.click(opt('stop'));
+      expect(calls).toEqual([{ el: screen.getByTestId('ask-reason'), margin: '150px' }]);
+      expect(document.activeElement).toBe(screen.getByTestId('ask-reason-text'));
+      expect(screen.getByTestId('ask-reason').contains(screen.getByTestId('ask-reason-label'))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('Stop asks for a reason (required) before it is sent, with the reason in the answer', () => {
     const { onAnswer } = renderAsk(PAUSE);
     fireEvent.click(opt('stop'));
