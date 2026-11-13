@@ -12,10 +12,20 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.9] — 2026-11-12
+
+Patch: at full size the editor's chat shows the seat's change card, and the full-size header names the step without
+a run id and no longer overlaps its controls (#1139); MCP is a choice in the Steering type picker, and Settings → MCP
+links to Steering and the Inspector as buttons (#1141). Carries #1139 and #1141. Bundled by wicked-crew 0.18.14.
+
 ### Fixed
 
 - The full-size header names the step in words (or nothing), never a run or unit id, and its controls no longer overlap: it wraps as a whole when they don't fit on one row.
 - At full size, the editor's chat shows what the seat proposed — the change card with Make the change — instead of only the words before it, so a change asked for in full screen can be answered there.
+
+### Changed
+
+- The Steering type picker lists MCP (the MCP policies, `?mcp=1`), and Settings → MCP names its links "Steering" and "Inspector" as buttons.
 
 ## [0.16.8] — 2026-11-12
 
@@ -3519,7 +3529,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.8...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.9...HEAD
+[0.16.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.8...v0.16.9
 [0.16.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.7...v0.16.8
 [0.16.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.6...v0.16.7
 [0.16.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.5...v0.16.6
