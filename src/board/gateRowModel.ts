@@ -407,6 +407,39 @@ export function isReviewAdjudication(gate: { gateKind?: string | undefined; prom
   return gate.gateKind === 'review_adjudication'
     || (/^\s*Unit\s+\d+\s+verdict is NOT PASS again\b/i.test(gate.prompt) && /\bApprove = LAND WITH CARRIED ITEMS\b/i.test(gate.prompt));
 }
+export const APPROVE_COMPLETION_LABEL = 'Approve completion';
+export const APPROVE_COMPLETION_TITLE = 'Finish the run: the work you landed is accepted, with the reviewer\'s carried items on the record.';
+
+/**
+ * studio#1143: whether the person already landed this ord's capped review (a `review_adjudication` frame at the ord
+ * answered with an approve, no later adjudication reopened it). The terminal gate that follows is the workflow's
+ * final confirm, not an escalation: the review's last FAIL verdict is stale there.
+ */
+export function landedReviewAt(events: readonly CoreEvent[] | null, ord: number | undefined): boolean {
+  if (events === null || typeof ord !== 'number') return false;
+  let pending = false;
+  let landed = false;
+  for (const ev of events) {
+    const e = ev as unknown as Record<string, unknown>;
+    if (e['ord'] !== ord) continue;
+    if (e['type'] === 'awaitingHuman') {
+      const adj = isReviewAdjudication({ gateKind: typeof e['gateKind'] === 'string' ? e['gateKind'] : undefined, prompt: typeof e['prompt'] === 'string' ? e['prompt'] : '' });
+      pending = adj;
+      if (adj) landed = false;
+    } else if (e['type'] === 'gateDecided' && pending && e['allow'] === true) {
+      landed = true;
+      pending = false;
+    }
+  }
+  return landed;
+}
+
+/** The terminal gate of a run whose person landed the review at this ord (studio#1143), else false. */
+function isLandedTerminal(gate: OpenGate, events: readonly CoreEvent[] | null): boolean {
+  const kind = gate.gateKind ?? (events === null ? undefined : gateFrameFor(events, gate.ord)?.gateKind ?? undefined);
+  return kind === 'terminal' && landedReviewAt(events, gate.ord);
+}
+
 export const RETRY_NOTE_TITLE = 'Run this step again with your note; the run does not move on. To have the builder change something, Send back.';
 /** Whether the engine's approve at this gate re-runs the phase (its prompt says so). */
 export function approveRetriesPhase(prompt: string): boolean {
@@ -494,6 +527,10 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
  */
 function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   const { runId, gate, units, events } = input;
+  // studio#1143: the landed terminal row has no verdict to recommend from, no failing criteria and no rewind.
+  if (isLandedTerminal(gate, events)) {
+    return { ...base, consequence: null, source: gateSourceLine('terminal'), failing: [], reviewedOrd: null };
+  }
   const raw = gateVerdictFor(events, gate.ord, gate.prompt);
   const escalationGate = isEscalationGate(gate.prompt, raw);
   const { verdict, summary: wholeSummary } = wholeVerdict(raw, escalationSummaryFor(events, raw?.ord ?? gate.ord) ?? null, input.fullVerdict);
@@ -671,6 +708,25 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       recommended: null,
       detailItems: [shownPrompt(gate.prompt)],
       refusal,
+    };
+  }
+
+  // studio#1143: the final confirm after the person landed a capped review. Not an escalation, whatever the review's last
+  // verdict said: Approve completion leads (it finishes the run), the carried items are listed, Stop stays.
+  if (isLandedTerminal(gate, events)) {
+    const { verdict, summary } = wholeVerdict(gateVerdictFor(events!, gate.ord, gate.prompt), escalationSummaryFor(events!, gate.ord) ?? null, input.fullVerdict);
+    const carried = failingItems(verdict, summary ?? undefined);
+    return {
+      reason: 'def',
+      question: gate.prompt,
+      choices: [
+        { key: 'approve', label: APPROVE_COMPLETION_LABEL, decision: { approve: true }, needsNote: false, title: APPROVE_COMPLETION_TITLE },
+        { key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' },
+      ],
+      overflow: [],
+      noteDefault: '',
+      recommended: 0,
+      detailItems: [shownPrompt(gate.prompt), ...(carried.length > 0 ? ['Carried items:', ...carried] : [])],
     };
   }
 
