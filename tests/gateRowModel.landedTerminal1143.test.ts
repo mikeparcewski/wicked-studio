@@ -116,3 +116,33 @@ describe('studio#1143 — the Desk row classifies the same gate the same way', (
     expect(classify(noLand)).toEqual({ kind: 'card', reason: 'escalation' });
   });
 });
+
+describe('studio#1143 — newer same-ord activity after the land clears it', () => {
+  const termFrame = landed[landed.length - 1]!;
+  const afterLand = landed.slice(0, -1);
+  const evaluated = { type: 'gateEvaluated', session: RUN, ord: ORD, ts: 5, combined: false, denial: { source: 'evaluator_verdict', reason: FAIL_REASON } } as unknown as CoreEvent;
+  const escalated = { type: 'gateEscalated', session: RUN, ord: ORD, ts: 5, attempt: 1, condition: 'verdict_not_pass', denialSource: 'evaluator_verdict', verdictSummary: FAIL_REASON } as unknown as CoreEvent;
+  const other = { type: 'awaitingHuman', session: RUN, ord: ORD, ts: 5, prompt: 'Approve the step?', gateKind: 'def' } as unknown as CoreEvent;
+  const classify = (events: CoreEvent[]) => classifyRowGate({ runId: RUN, gate: terminal(), units, events });
+
+  for (const [name, newer] of [['a new gateEvaluated (FAIL)', evaluated], ['a new gateEscalated', escalated], ['a different non-terminal gate', other]] as const) {
+    it(`land → ${name} → terminal: escalation arms, no Approve completion`, () => {
+      const events = [...afterLand, newer, termFrame] as CoreEvent[];
+      expect(landedReviewAt(events, ORD)).toBe(false);
+      const m = rowOf(events);
+      expect(m.reason).toBe('escalation');
+      expect(all(m).map((c) => c.label)).not.toContain(APPROVE_COMPLETION_LABEL);
+      expect(all(m).map((c) => c.label)).toContain(RETRY_NOTE_LABEL);
+      expect(classify(events)).toEqual({ kind: 'card', reason: 'escalation' });
+    });
+  }
+
+  it('the plain land → terminal case still offers Approve completion, recommended, with no retry label', () => {
+    expect(landedReviewAt(landed, ORD)).toBe(true);
+    const m = rowOf(landed);
+    expect(m.choices[0]!.label).toBe(APPROVE_COMPLETION_LABEL);
+    expect(m.recommended).toBe(0);
+    expect(all(m).some((c) => /retry/i.test(c.label))).toBe(false);
+    expect(classify(landed)).toMatchObject({ kind: 'answer', recommended: 0 });
+  });
+});

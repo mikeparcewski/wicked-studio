@@ -653,7 +653,8 @@ export function isReviewAdjudication(gate: { gateKind?: string | undefined; prom
 }
 /**
  * studio#1143: whether the person already landed this ord's capped review (a `review_adjudication` frame at the ord
- * answered with an approve, no later adjudication reopened it). The terminal gate that follows is the workflow's
+ * answered with an approve, and no newer gate activity at the ord since: a later `gateEvaluated`, `gateEscalated`
+ * or non-terminal `awaitingHuman` means the review ran again). The terminal gate that follows is the workflow's
  * final confirm, not an escalation: the review's last FAIL verdict is stale there.
  */
 export function landedReviewAt(events: readonly CoreEvent[] | null, ord: number | undefined): boolean {
@@ -666,7 +667,12 @@ export function landedReviewAt(events: readonly CoreEvent[] | null, ord: number 
     if (e['type'] === 'awaitingHuman') {
       const adj = isReviewAdjudication({ gateKind: typeof e['gateKind'] === 'string' ? e['gateKind'] : undefined, prompt: typeof e['prompt'] === 'string' ? e['prompt'] : '' });
       pending = adj;
-      if (adj) landed = false;
+      // Any other gate at the ord than the final confirm is newer activity: the landing no longer stands.
+      if (adj || e['gateKind'] !== 'terminal') landed = false;
+    } else if (e['type'] === 'gateEvaluated' || e['type'] === 'gateEscalated') {
+      // The review ran again after the land: its new verdict is the one that counts.
+      landed = false;
+      pending = false;
     } else if (e['type'] === 'gateDecided' && pending && e['allow'] === true) {
       landed = true;
       pending = false;
