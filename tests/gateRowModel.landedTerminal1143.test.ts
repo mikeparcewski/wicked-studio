@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import type { OpenGate } from '../src/store/gates.js';
 import { APPROVE_COMPLETION_LABEL, RETRY_NOTE_LABEL, landedReviewAt, sessionGateChoices } from '../src/board/gateRowModel.js';
+import { classifyRowGate } from '../src/board/questionRow.js';
 import { makeUnit } from './factories.js';
 
 // studio#1143: the run's own order after a capped review is landed — awaitingHuman review_adjudication → resumed →
@@ -95,5 +96,23 @@ describe('studio#1143 — what stays as it was', () => {
     const gate: OpenGate = { runId: RUN, ord: ORD, prompt: ADJ, gateKind: 'review_adjudication', lifecycle: 'open', receivedAt: 3 };
     const m = rowOf(review, gate);
     expect(m.choices.map((c) => c.label)).not.toContain(APPROVE_COMPLETION_LABEL);
+  });
+});
+
+describe('studio#1143 — the Desk row classifies the same gate the same way', () => {
+  const classify = (events: CoreEvent[]) => classifyRowGate({ runId: RUN, gate: terminal(), units, events });
+
+  it('answers the landed terminal in its row: Approve completion first and recommended, then Stop', () => {
+    const c = classify(landed);
+    expect(c.kind).toBe('answer');
+    if (c.kind !== 'answer') return;
+    expect(c.choices.map((x) => x.label)).toEqual([APPROVE_COMPLETION_LABEL, 'Stop']);
+    expect(c.choices[0]!.decision).toEqual({ approve: true });
+    expect(c.recommended).toBe(0);
+  });
+
+  it('a terminal gate with no landed review still opens the escalation card', () => {
+    const noLand = [...landed.slice(0, 2), landed[landed.length - 1]!];
+    expect(classify(noLand)).toEqual({ kind: 'card', reason: 'escalation' });
   });
 });

@@ -646,6 +646,42 @@ export function gateSourceLine(kind: string | null | undefined): string | null {
   }
 }
 
+/** Whether the gate is a capped review's adjudication (its approve lands the work and advances). */
+export function isReviewAdjudication(gate: { gateKind?: string | undefined; prompt: string }): boolean {
+  return gate.gateKind === 'review_adjudication'
+    || (/^\s*Unit\s+\d+\s+verdict is NOT PASS again\b/i.test(gate.prompt) && /\bApprove = LAND WITH CARRIED ITEMS\b/i.test(gate.prompt));
+}
+/**
+ * studio#1143: whether the person already landed this ord's capped review (a `review_adjudication` frame at the ord
+ * answered with an approve, no later adjudication reopened it). The terminal gate that follows is the workflow's
+ * final confirm, not an escalation: the review's last FAIL verdict is stale there.
+ */
+export function landedReviewAt(events: readonly CoreEvent[] | null, ord: number | undefined): boolean {
+  if (events === null || typeof ord !== 'number') return false;
+  let pending = false;
+  let landed = false;
+  for (const ev of events) {
+    const e = ev as unknown as Record<string, unknown>;
+    if (e['ord'] !== ord) continue;
+    if (e['type'] === 'awaitingHuman') {
+      const adj = isReviewAdjudication({ gateKind: typeof e['gateKind'] === 'string' ? e['gateKind'] : undefined, prompt: typeof e['prompt'] === 'string' ? e['prompt'] : '' });
+      pending = adj;
+      if (adj) landed = false;
+    } else if (e['type'] === 'gateDecided' && pending && e['allow'] === true) {
+      landed = true;
+      pending = false;
+    }
+  }
+  return landed;
+}
+
+/** The terminal gate of a run whose person landed the review at this ord (studio#1143), else false. */
+export function isLandedTerminal(gate: { gateKind?: string | null | undefined; ord: number }, events: readonly CoreEvent[] | null): boolean {
+  const kind = gate.gateKind ?? (events === null ? undefined : gateFrameFor(events, gate.ord)?.gateKind ?? undefined);
+  return kind === 'terminal' && landedReviewAt(events, gate.ord);
+}
+
+
 /** The run's latest `awaitingHuman` for `ord`: the engine's gate kind and the unit it reviews. */
 export function gateFrameFor(events: readonly CoreEvent[], ord: number | undefined): { gateKind: string | null; reviewingOrd: number | null } | null {
   if (typeof ord !== 'number') return null;

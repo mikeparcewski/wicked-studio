@@ -1,6 +1,6 @@
 import type { CoreEvent, GateDecision, WorkUnit } from '../api/types.js';
 import { proposalKindOf } from './proposalCard.js';
-import { gateFrameFor, gateVerdictFor, isEscalationGate, isLaunchRefusal, isRestoredRetry } from '../components/gateVerdictModel.js';
+import { gateFrameFor, gateVerdictFor, isEscalationGate, isLandedTerminal, isLaunchRefusal, isRestoredRetry } from '../components/gateVerdictModel.js';
 import type { OpenGate } from '../store/gates.js';
 
 /**
@@ -86,6 +86,11 @@ export function classifyRowGate(input: {
   // Fail closed: a gate kind this row does not know is never answered inline (Copilot).
   if (kind !== undefined && !ROW_KINDS.has(kind)) return { kind: 'card', reason: 'unknown' };
   if (events === null) return { kind: 'checking' };
+  // studio#1143: the final confirm after the person landed a capped review is not an escalation (the review's last FAIL
+  // verdict is stale): the row answers it, Approve completion first.
+  if (isLandedTerminal(gate, events)) {
+    return { kind: 'answer', choices: [{ key: 'approve', label: 'Approve completion', decision: { approve: true } }, { key: 'reject', label: 'Stop', decision: { approve: false } }], recommended: 0 };
+  }
   const verdict = gateVerdictFor(events, gate.ord, gate.prompt);
   if (isEscalationGate(gate.prompt, verdict)) return { kind: 'card', reason: 'escalation' };
 
