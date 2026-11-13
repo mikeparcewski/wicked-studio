@@ -146,3 +146,26 @@ describe('studio#1143 — newer same-ord activity after the land clears it', () 
     expect(classify(landed)).toMatchObject({ kind: 'answer', recommended: 0 });
   });
 });
+
+describe('studio#1143 — landing at a different ord does not count', () => {
+  const OTHER = 4;
+  // The adjudication and its allow:true sit at ord 4; the FAIL verdict and the terminal gate stay at ord 5.
+  const elsewhere: CoreEvent[] = [
+    { type: 'awaitingHuman', session: RUN, ord: OTHER, ts: 1, prompt: ADJ, gateKind: 'review_adjudication' },
+    { type: 'gateDecided', session: RUN, ord: OTHER, ts: 2, allow: true },
+    { type: 'gateEvaluated', session: RUN, ord: ORD, ts: 3, combined: false, denial: { source: 'evaluator_verdict', reason: FAIL_REASON } },
+    { type: 'awaitingHuman', session: RUN, ord: ORD, ts: 4, prompt: TERMINAL, gateKind: 'terminal' },
+  ] as unknown as CoreEvent[];
+
+  it('sessionGateChoices: landing at a different ord does not count — the escalation arms stay, no Approve completion', () => {
+    expect(landedReviewAt(elsewhere, ORD)).toBe(false);
+    const m = rowOf(elsewhere);
+    expect(m.reason).toBe('escalation');
+    expect(all(m).map((c) => c.label)).not.toContain(APPROVE_COMPLETION_LABEL);
+    expect(all(m).map((c) => c.label)).toContain(RETRY_NOTE_LABEL);
+  });
+
+  it('classifyRowGate: landing at a different ord does not count — the gate opens the escalation card', () => {
+    expect(classifyRowGate({ runId: RUN, gate: terminal(), units, events: elsewhere })).toEqual({ kind: 'card', reason: 'escalation' });
+  });
+});
