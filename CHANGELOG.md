@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- After "Land with carried items and a note" on a capped review, the workflow's final card ("Approve completion after the
+  final phase") now offers **Approve completion** first and recommended, lists the carried items, and keeps Stop. It
+  no longer reads the review's stale FAIL verdict as an escalation, so there is no Send back as the suggestion and no
+  "Retry this step with a note" (studio#1143). A terminal gate with no landed review is unchanged.
+
 ## [0.16.9] — 2026-11-12
 
 Patch: at full size the editor's chat shows the seat's change card, and the full-size header names the step without

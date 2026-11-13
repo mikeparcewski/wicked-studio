@@ -18,6 +18,9 @@ import {
   escalationWhyNot,
   failedSeatOf,
   isEscalationGate,
+  isLandedTerminal,
+  isReviewAdjudication,
+  landedReviewAt,
   isLaunchRefusal,
   isOfferable,
   isSeatFailure,
@@ -402,11 +405,10 @@ export const RETRY_NOTE_LABEL = 'Retry this step with a note';
  */
 export const LAND_NOTE_LABEL = 'Land with carried items and a note';
 export const LAND_NOTE_TITLE = 'Accept the work as it stands, with the reviewer\'s open items carried and your note on the record; the run moves on. For one more review round, Send back.';
-/** Whether the gate is a capped review's adjudication (its approve lands the work and advances). */
-export function isReviewAdjudication(gate: { gateKind?: string | undefined; prompt: string }): boolean {
-  return gate.gateKind === 'review_adjudication'
-    || (/^\s*Unit\s+\d+\s+verdict is NOT PASS again\b/i.test(gate.prompt) && /\bApprove = LAND WITH CARRIED ITEMS\b/i.test(gate.prompt));
-}
+export { isReviewAdjudication, landedReviewAt };
+export const APPROVE_COMPLETION_LABEL = 'Approve completion';
+export const APPROVE_COMPLETION_TITLE = 'Finish the run: the work you landed is accepted, with the reviewer\'s carried items on the record.';
+
 export const RETRY_NOTE_TITLE = 'Run this step again with your note; the run does not move on. To have the builder change something, Send back.';
 /** Whether the engine's approve at this gate re-runs the phase (its prompt says so). */
 export function approveRetriesPhase(prompt: string): boolean {
@@ -494,6 +496,10 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
  */
 function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   const { runId, gate, units, events } = input;
+  // studio#1143: the landed terminal row has no verdict to recommend from, no failing criteria and no rewind.
+  if (isLandedTerminal(gate, events)) {
+    return { ...base, consequence: null, source: gateSourceLine('terminal'), failing: [], reviewedOrd: null };
+  }
   const raw = gateVerdictFor(events, gate.ord, gate.prompt);
   const escalationGate = isEscalationGate(gate.prompt, raw);
   const { verdict, summary: wholeSummary } = wholeVerdict(raw, escalationSummaryFor(events, raw?.ord ?? gate.ord) ?? null, input.fullVerdict);
@@ -671,6 +677,25 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       recommended: null,
       detailItems: [shownPrompt(gate.prompt)],
       refusal,
+    };
+  }
+
+  // studio#1143: the final confirm after the person landed a capped review. Not an escalation, whatever the review's last
+  // verdict said: Approve completion leads (it finishes the run), the carried items are listed, Stop stays.
+  if (isLandedTerminal(gate, events)) {
+    const { verdict, summary } = wholeVerdict(gateVerdictFor(events!, gate.ord, gate.prompt), escalationSummaryFor(events!, gate.ord) ?? null, input.fullVerdict);
+    const carried = failingItems(verdict, summary ?? undefined);
+    return {
+      reason: 'def',
+      question: gate.prompt,
+      choices: [
+        { key: 'approve', label: APPROVE_COMPLETION_LABEL, decision: { approve: true }, needsNote: false, title: APPROVE_COMPLETION_TITLE },
+        { key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' },
+      ],
+      overflow: [],
+      noteDefault: '',
+      recommended: 0,
+      detailItems: [shownPrompt(gate.prompt), ...(carried.length > 0 ? ['Carried items:', ...carried] : [])],
     };
   }
 
