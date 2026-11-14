@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.10] — 2026-11-14
+
+Patch: after "Land with carried items and a note" on a capped review, the workflow's final card offers Approve
+completion instead of reading the stale FAIL verdict as an escalation (#1144, studio#1143). Also carries #1151, the
+graph rings model and its code blast-radius adapter (part 1 of 5; not wired into the UI yet, no new dependencies).
+Carries #1144 and #1151. Bundled by wicked-crew 0.18.15.
+
 ### Fixed
 
 - After "Land with carried items and a note" on a capped review, the workflow's final card ("Approve completion after the
@@ -3536,7 +3543,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.9...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.10...HEAD
+[0.16.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.9...v0.16.10
 [0.16.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.8...v0.16.9
 [0.16.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.7...v0.16.8
 [0.16.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.6...v0.16.7
