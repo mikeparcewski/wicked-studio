@@ -2,9 +2,69 @@ import { useEffect, useRef, useState } from 'react';
 import cytoscape from 'cytoscape';
 import fcose from 'cytoscape-fcose';
 import type { CodeGraphNode, CodeGraphEdge } from '../api/types.js';
-import { resolveToken } from '../styles/resolveToken.js';
+import { resolveToken, resolveTokenValue } from '../styles/resolveToken.js';
+import { observeTheme } from './graph/cytoBase.js';
 
 cytoscape.use(fcose as Parameters<typeof cytoscape.use>[0]);
+
+// The mono stack comes from the design token (--font-mono), resolved at (re)build time so a theme
+// override reaches cytoscape; the literal is only the non-browser / unresolved fallback.
+const monoStack = (): string =>
+  resolveTokenValue('--font-mono') || 'ui-monospace, SFMono-Regular, Menlo, monospace';
+
+// The cytoscape stylesheet, rebuilt from freshly resolved tokens. Called once at build and again on
+// every theme change (the MutationObserver below), never re-running the layout.
+function cytoStyle(): cytoscape.StylesheetJson {
+  return [
+    {
+      selector: 'node',
+      style: {
+        'background-color': 'data(color)',
+        label: 'data(label)',
+        'font-size': 10,
+        'font-family': monoStack(),
+        color: resolveToken('--ink-high'),
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'text-outline-color': 'data(color)',
+        'text-outline-width': 2,
+        'text-max-width': '120px',
+        'text-wrap': 'ellipsis',
+        width: 'data(size)',
+        height: 'data(size)',
+        'border-width': 0,
+        'overlay-padding': 4,
+      },
+    },
+    {
+      selector: 'node:selected',
+      style: {
+        'border-width': 3,
+        'border-color': resolveToken('--accent'),
+        'border-opacity': 1,
+      },
+    },
+    { selector: 'node.dimmed', style: { opacity: 0.15 } },
+    { selector: 'node.highlighted', style: { opacity: 1 } },
+    {
+      selector: 'edge',
+      style: {
+        width: 1,
+        'line-color': resolveToken('--ink-body'),
+        'target-arrow-color': resolveToken('--ink-muted'),
+        'target-arrow-shape': 'triangle',
+        'arrow-scale': 0.7,
+        'curve-style': 'bezier',
+        opacity: 0.5,
+      },
+    },
+    {
+      selector: 'edge.highlighted',
+      style: { 'line-color': resolveToken('--accent'), 'target-arrow-color': resolveToken('--accent'), opacity: 0.9, width: 2 },
+    },
+    { selector: 'edge.dimmed', style: { opacity: 0.05 } },
+  ] as cytoscape.StylesheetJson;
+}
 
 interface Props {
   nodes: CodeGraphNode[];
@@ -106,64 +166,7 @@ export function CytoGraph({ nodes, edges, externalSelectedId, onNodeClick, onNod
     const cy = cytoscape({
       container: containerRef.current,
       elements,
-      style: [
-        {
-          selector: 'node',
-          style: {
-            'background-color': 'data(color)',
-            label: 'data(label)',
-            'font-size': 10,
-            'font-family': 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            color: resolveToken('--ink-high'),
-            'text-valign': 'center',
-            'text-halign': 'center',
-            'text-outline-color': 'data(color)',
-            'text-outline-width': 2,
-            'text-max-width': '120px',
-            'text-wrap': 'ellipsis',
-            width: 'data(size)',
-            height: 'data(size)',
-            'border-width': 0,
-            'overlay-padding': 4,
-          },
-        },
-        {
-          selector: 'node:selected',
-          style: {
-            'border-width': 3,
-            'border-color': resolveToken('--accent'),
-            'border-opacity': 1,
-          },
-        },
-        {
-          selector: 'node.dimmed',
-          style: { opacity: 0.15 },
-        },
-        {
-          selector: 'node.highlighted',
-          style: { opacity: 1 },
-        },
-        {
-          selector: 'edge',
-          style: {
-            width: 1,
-            'line-color': resolveToken('--ink-body'),
-            'target-arrow-color': resolveToken('--ink-muted'),
-            'target-arrow-shape': 'triangle',
-            'arrow-scale': 0.7,
-            'curve-style': 'bezier',
-            opacity: 0.5,
-          },
-        },
-        {
-          selector: 'edge.highlighted',
-          style: { 'line-color': resolveToken('--accent'), 'target-arrow-color': resolveToken('--accent'), opacity: 0.9, width: 2 },
-        },
-        {
-          selector: 'edge.dimmed',
-          style: { opacity: 0.05 },
-        },
-      ],
+      style: cytoStyle(),
       layout: {
         name: 'fcose',
         animate: false,
@@ -201,8 +204,12 @@ export function CytoGraph({ nodes, edges, externalSelectedId, onNodeClick, onNod
 
     cy.ready(() => { if (!cy.destroyed()) cy.fit(undefined, 40); });
 
+    // A theme change re-resolves the tokens and re-applies the stylesheet; the layout is untouched.
+    const stopTheme = observeTheme(() => { if (!cy.destroyed()) cy.style(cytoStyle()); });
+
     setCy(cy);
     return () => {
+      stopTheme();
       cy.destroy();
       setCy(null);
     };

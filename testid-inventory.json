@@ -17803,6 +17803,12 @@
       ]
     },
     {
+      "testId": "ring-graph",
+      "files": [
+        "src/components/graph/RingGraph.tsx"
+      ]
+    },
+    {
       "testId": "role-badge",
       "files": [
         "src/components/DecisionsLedger.tsx"

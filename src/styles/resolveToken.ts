@@ -36,3 +36,42 @@ export function resolveToken(name: string): string {
   // else (jsdom's unset '' / uncomputed passthrough) keeps the '' contract.
   return /^(rgb|hsl|color|#)/i.test(computed) && !computed.includes('var(') ? computed : '';
 }
+
+/**
+ * resolveTokenValue — read a token as its RAW computed string, not forced through a colour probe.
+ *
+ * For non-colour tokens a sink needs verbatim: a font stack (`--font-mono`,`--font-sans`) that
+ * cytoscape's `font-family` takes as a comma list, a duration, a raw number. Reads the property off a
+ * probe so a theme override still reaches it. Returns '' in non-browser environments (jsdom), where
+ * stylesheet custom properties are not computed — the consumer falls back to its own default.
+ */
+export function resolveTokenValue(name: string): string {
+  if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') return '';
+  const probe = document.createElement('div');
+  // Register the lookup on a real property so getPropertyValue returns the cascaded value.
+  probe.style.setProperty('--resolve-probe', `var(${name})`);
+  document.body.appendChild(probe);
+  const computed = getComputedStyle(probe).getPropertyValue('--resolve-probe').trim();
+  probe.remove();
+  return computed.includes('var(') ? '' : computed;
+}
+
+/**
+ * resolveTokenPx — read a length token as a NUMBER of pixels (e.g. `--text-caption` → 12).
+ *
+ * cytoscape's `font-size` wants a number, and label geometry runs in raw pixels. Resolves the token
+ * through a probe's computed length (the browser normalises rem/em to px), returning NaN in
+ * non-browser environments so the caller can fall back to a constant.
+ */
+export function resolveTokenPx(name: string): number {
+  if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') return NaN;
+  const probe = document.createElement('div');
+  // Do NOT set --name on the probe: that would shadow the real token with an invalid value and the
+  // width would resolve to auto/NaN. The probe inherits the token from the cascade instead (F3).
+  probe.style.width = `var(${name})`;
+  document.body.appendChild(probe);
+  const computed = getComputedStyle(probe).width.trim();
+  probe.remove();
+  const n = Number.parseFloat(computed);
+  return Number.isFinite(n) && /px$/.test(computed) ? n : NaN;
+}
