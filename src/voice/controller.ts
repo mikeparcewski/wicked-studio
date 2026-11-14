@@ -1003,9 +1003,10 @@ export async function openVoice(opts: { focus?: string | null } = {}): Promise<v
   // The dashboard's first read starts now, so full screen opens on the live system (and says what it sees).
   void loadDashboard().then(() => readDashboardData());
   await refreshStatus();
-  // Read-aloud's own readiness (piper on this machine) loads beside speech input; entry doesn't block on it.
-  void refreshTts();
   await startMic();
+  // Read-aloud readiness (piper on this machine) is known before the first spoken line, so the entry question is
+  // actually read aloud when read-aloud is ready (and the setup note shows when it is not).
+  await refreshTts();
   if (S.getState().phase === 'ask') await say('Do you want to enter voice mode?');
 }
 
