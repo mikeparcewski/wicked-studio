@@ -32,6 +32,13 @@
 .wk-voice-setup[data-state="error"] { color: var(--status-warn); }
 .wk-voice-progress { height: 6px; border-radius: 999px; background: var(--surface-base); overflow: hidden; }
 .wk-voice-progress span { display: block; height: 100%; background: var(--accent); transition: width .3s var(--ease-out); }
+.wk-voice-note { margin: 0; padding: 6px 10px; border-radius: 10px; background: color-mix(in oklab, var(--status-warn) 14%, transparent); color: var(--status-warn); font-size: var(--text-sm); }
+.wk-voice-trow { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--surface-base); }
+.wk-voice-trow p { margin: 0; }
+.wk-voice-trow-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wk-voice-choose { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-muted); font-size: var(--text-sm); cursor: pointer; }
+[data-testid="voice-tts"][data-state="ready"] { display: flex; flex-direction: column; gap: 8px; }
+[data-testid="voice-tts"][data-state="error"], [data-testid="voice-tts"][data-state="unsupported"] { color: var(--status-warn); }
 .wk-voice-type { display: flex; gap: 8px; align-items: center; }
 .wk-voice-type input { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 10px; background: var(--surface-base); color: var(--ink-high); box-shadow: inset 0 0 0 1px var(--border-input); font-size: var(--text-sm); }
 .wk-voice-type input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
