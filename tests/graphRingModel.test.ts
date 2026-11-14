@@ -236,6 +236,9 @@ describe('buildScaffold', () => {
     const sc = buildScaffold(items, 'q:', 2, parentOwner, drawnIds);
     const depth = bfsScaffoldDepth('q:', sc.edges);
     for (const it of items) expect(depth.get(it.id)).toBe(it.level);
+    // guides gd:1..gd:maxDrawnLevel, spines sp:1..sp:(max-1)
+    expect(sc.guides).toEqual(['gd:1', 'gd:2']);
+    expect(sc.spines).toEqual(['sp:1']);
   });
 });
 

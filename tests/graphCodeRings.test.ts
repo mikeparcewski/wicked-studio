@@ -357,6 +357,9 @@ describe('scaffold over seeded random graphs', () => {
         if (it.level < 1) continue;
         expect(depth.get(it.id)).toBe(it.level);
       }
+      // one guide ring per drawn level, up to maxDrawnLevel
+      const maxDrawn = Math.max(0, ...m.items.map((it) => it.level));
+      expect(m.scaffold.guides).toEqual(Array.from({ length: maxDrawn }, (_, i) => `gd:${i + 1}`));
     }
   });
 });

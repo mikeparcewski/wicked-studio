@@ -104,6 +104,8 @@ export interface ScaffoldEdge {
 
 export interface Scaffold {
   spines: NodeId[];
+  /** concentric guide-ring ids gd:1…gd:maxDrawnLevel (layout-only, drawn as circles by a later run). */
+  guides: NodeId[];
   edges: ScaffoldEdge[];
 }
 
@@ -437,7 +439,8 @@ export function radii(drawnPerLevel: number[], maxDrawnLevel: number): number[] 
 
 /**
  * The layout-only tree scaffold: spines sp:1…sp:(max−1) chained focus→sp:1→sp:2…, and one edge per
- * drawn item at k ≥ 1 from its parent owner (when that owner is drawn at k−1) else sp:(k−1).
+ * drawn item at k ≥ 1 from its parent owner (when that owner is drawn at k−1) else sp:(k−1). Guide
+ * rings gd:1…gd:maxDrawnLevel accompany the spines (one per drawn ring), layout-only.
  */
 export function buildScaffold(
   items: Item[],
@@ -447,7 +450,9 @@ export function buildScaffold(
   drawnIds: ReadonlySet<NodeId>,
 ): Scaffold {
   const spines: NodeId[] = [];
+  const guides: NodeId[] = [];
   const edges: ScaffoldEdge[] = [];
+  for (let k = 1; k <= maxDrawnLevel; k++) guides.push(`gd:${k}`);
   for (let k = 1; k <= maxDrawnLevel - 1; k++) spines.push(`sp:${k}`);
   let prev: NodeId = focusId;
   for (const sp of spines) {
@@ -461,7 +466,7 @@ export function buildScaffold(
     const src = po !== null && drawnIds.has(po) ? po : spineAt(it.level - 1);
     edges.push({ src, tgt: it.id });
   }
-  return { spines, edges };
+  return { spines, guides, edges };
 }
 
 /**
