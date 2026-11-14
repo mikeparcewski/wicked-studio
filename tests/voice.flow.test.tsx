@@ -463,6 +463,19 @@ describe('voice setup: what it needs before it can hear', () => {
     expect(screen.getByTestId('voice-engine-missing').textContent).toMatch(/too old for voice.*brew upgrade whisper-cpp/);
     closeVoice();
   });
+
+  it('read-aloud on but piper not set up: it does not speak and the view says setup is needed', async () => {
+    // A speaker that is not available stands in for piper not being installed.
+    setVoiceDeps({ speaker: { available: false, say: async (t) => { said.push(t); }, cancel: () => undefined } });
+    render(<VoiceRoot />);
+    await act(async () => { await openVoice(); });
+    await speak('yes');
+    await waitFor(() => expect(screen.getByTestId('voice-full')).toBeTruthy());
+    expect(said).toEqual([]); // nothing was ever spoken
+    expect(useVoiceStore.getState().readAloudNeedsSetup).toBe(true);
+    expect(screen.getByTestId('voice-readaloud-note').textContent).toMatch(/Read-aloud needs Voice setup/);
+    closeVoice();
+  });
 });
 
 describe('voice dashboard widgets', () => {

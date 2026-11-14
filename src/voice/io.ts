@@ -166,6 +166,7 @@ export class PiperSpeaker implements Speaker {
   private readonly deps: PiperDeps;
   private controller: AbortController | null = null;
   private source: AudioBufferSourceNode | null = null;
+  private playResolve: (() => void) | null = null;
   private token = 0;
 
   constructor(deps: PiperDeps) { this.deps = deps; }
@@ -205,13 +206,15 @@ export class PiperSpeaker implements Speaker {
 
   private play(ctx: AudioContext, buf: ArrayBuffer, mine: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      const done = (): void => { if (this.playResolve === resolve) this.playResolve = null; resolve(); };
+      this.playResolve = resolve;
       // decodeAudioData detaches the buffer; a copy keeps the caller's bytes intact if it ever reuses them.
       ctx.decodeAudioData(buf.slice(0)).then((audio) => {
-        if (mine !== this.token) { resolve(); return; }
+        if (mine !== this.token) { done(); return; }
         const src = ctx.createBufferSource();
         src.buffer = audio;
         src.connect(ctx.destination);
-        src.onended = () => { if (this.source === src) this.source = null; resolve(); };
+        src.onended = () => { if (this.source === src) this.source = null; done(); };
         this.source = src;
         src.start();
       }).catch(reject);
@@ -228,6 +231,8 @@ export class PiperSpeaker implements Speaker {
       try { src.stop(); } catch { /* not started */ }
       try { src.disconnect(); } catch { /* already gone */ }
     }
+    // Release a `say` that is awaiting the current sentence's playback: cancel resolves it at once.
+    if (this.playResolve !== null) { const r = this.playResolve; this.playResolve = null; r(); }
   }
 }
 
