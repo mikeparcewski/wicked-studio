@@ -17,14 +17,20 @@
  *   GET    /voice/tts/sample/:v  a short sample of one installed voice → audio/wav
  *
  * ── INTEGRATION POINT ──────────────────────────────────────────────────────────────────────────
- * The whisper shapes mirror `wicked-crew-api-types` 0.156.0 and the piper shapes 0.209.0, field for field
- * (`VoiceStatus`, `VoiceTranscribeResponse`, `VoiceDashboard`, `VoiceWidgetManifest`, `VoiceTtsStatus`); studio
- * pins an older contract (0.206.0 — no piper types yet), so swap these for the contract's on the next pin. A crew
- * without the routes answers 404: {@link isVoiceUnsupported}.
+ * The whisper shapes mirror `wicked-crew-api-types` 0.156.0 field for field (`VoiceStatus`,
+ * `VoiceTranscribeResponse`, `VoiceDashboard`, `VoiceWidgetManifest`); the piper read-aloud shapes
+ * (`VoiceTtsStatus`, `PostVoiceTtsBody`, `PostVoiceSpeakBody`) are imported from `wicked-crew-api-types` 0.209.0
+ * and re-exported here. A crew without the routes answers 404: {@link isVoiceUnsupported}.
  */
 
+import type { VoiceTtsStatus, PostVoiceTtsBody, PostVoiceSpeakBody } from 'wicked-crew-api-types';
 import { apiBase, apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
+
+export type { VoiceTtsStatus, PostVoiceTtsBody, PostVoiceSpeakBody };
+/** One offered read-aloud voice — the inline shape of {@link VoiceTtsStatus.voices} (api-types 0.209.0 has no
+ *  named per-voice type). An alias, not a copy. */
+export type VoiceTtsVoice = VoiceTtsStatus['voices'][string];
 
 export interface VoiceStatus {
   local: true;
@@ -86,35 +92,14 @@ export function putVoiceDashboard(body: { layout: string[]; widgets: VoiceWidget
 
 // ── Read-aloud (piper text to speech) ────────────────────────────────────────────────────────
 
-/** One offered read-aloud voice (api-types 0.209.0 `VoiceTtsVoice`). `reason`/`version` nullability is unconfirmed
- *  against the pin (0.206.0 carries no piper types), so the nullable fields are typed defensively. */
-export interface VoiceTtsVoice {
-  installed: boolean;
-  name: string;
-  accent: string;
-  licence: string;
-  bytes: number;
-  source: string;
-}
-
-/** The read-aloud state on this machine (api-types 0.209.0 `VoiceTtsStatus`). */
-export interface VoiceTtsStatus {
-  /** Whether piper can run here at all (a platform with no python, say): `reason` is the remedy to show. */
-  supported: { ok: boolean; reason: string | null };
-  python: { found: boolean; path: string | null; version: string | null };
-  engine: { found: boolean; version: string | null };
-  voices: Record<string, VoiceTtsVoice>;
-  /** An install in flight (one at a time): `step` is the stage, `error` the failure text. */
-  install: { state: 'running' | 'failed'; step: string; error: string | null } | null;
-}
-
 export function getVoiceTts(): Promise<VoiceTtsStatus> {
   return apiFetch<VoiceTtsStatus>('/voice/tts');
 }
 
 /** The person said yes to installing piper and these voices. Exactly `{consent: true, voices}` on the wire. */
 export function installVoiceTts(voices: string[]): Promise<VoiceTtsStatus> {
-  return apiFetch<VoiceTtsStatus>('/voice/tts', { method: 'POST', body: JSON.stringify({ consent: true, voices }) });
+  const body: PostVoiceTtsBody = { consent: true, voices };
+  return apiFetch<VoiceTtsStatus>('/voice/tts', { method: 'POST', body: JSON.stringify(body) });
 }
 
 export function removeVoiceTts(): Promise<VoiceTtsStatus> {
@@ -147,7 +132,8 @@ async function voiceWavFetch(path: string, init?: RequestInit): Promise<ArrayBuf
 /** Speak one piece of text on this machine with the chosen voice (POST /voice/speak → audio/wav). `signal` lets the
  *  speaker abort a pending fetch when the person barges in. */
 export function speakVoiceText(text: string, voice: string, signal?: AbortSignal): Promise<ArrayBuffer> {
-  return voiceWavFetch('/voice/speak', { method: 'POST', body: JSON.stringify({ text, voice }), ...(signal !== undefined ? { signal } : {}) });
+  const body: PostVoiceSpeakBody = { text, voice };
+  return voiceWavFetch('/voice/speak', { method: 'POST', body: JSON.stringify(body), ...(signal !== undefined ? { signal } : {}) });
 }
 
 /** A short sample of one installed voice (GET /voice/tts/sample/:voice → audio/wav). */

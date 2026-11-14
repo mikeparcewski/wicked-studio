@@ -167,6 +167,8 @@
 @media (prefers-reduced-motion: reduce) {
   .wk-voice-wave i, .wk-voice-tile[data-alert="true"], .wk-voice-scrim, .wk-voice-full { animation: none !important; }
   .wk-voice-wave[data-who="it"] i { height: calc(var(--h, 48px) * .6); }
+  /* The indeterminate install bar keeps no motion under reduced-motion: a static part-width bar stands in. */
+  .wk-voice-progress--busy span { animation: none !important; width: 35%; }
 }
 
 @media (max-width: 1000px) {
