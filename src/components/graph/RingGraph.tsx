@@ -482,11 +482,10 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
     const placed = applyLabels(ctx, selectedId, hoverLevel);
     writeLabelAttrs(host, cy, placed);
 
-    // A hover-only change never touches zoom or pan, and starts no animation (F5).
-    if (!selectionChanged) {
-      host.dataset.animating = 'false';
-      return;
-    }
+    // A hover-only change never touches zoom or pan, and starts no animation. It must NOT clear
+    // data-animating either: a selection's 300 ms fit may still be in flight, and only its complete
+    // callback (or the headless/reduced-motion branch) may set the flag false (F5).
+    if (!selectionChanged) return;
 
     // The selection changed — record its rendered position synchronously, then recentre (F5).
     host.dataset.selectedXy = selectedXY(cy);

@@ -482,6 +482,33 @@ describe('F5: hover never refits; a selection stops the prior animation and reco
       global.requestAnimationFrame = origRaf;
     }
   });
+
+  it('a hover-only change never clears data-animating (a prior selection animation may still run)', () => {
+    const m = chainModel();
+    const base = { view: 'rings' as const, onSelect: () => {}, onActivate: () => {} };
+    const { rerender, getByTestId } = render(<RingGraph model={m} selectedId="n:B" hoverLevel={null} {...base} />);
+    const el = getByTestId('ring-graph');
+    // Simulate a selection's 300 ms fit still in flight (a real renderer sets this; only its complete
+    // callback clears it). A hover-only change must leave it untouched — the exact F5 defect where
+    // data-animating turned false while a later animation was still running.
+    el.dataset.animating = 'true';
+    rerender(<RingGraph model={m} selectedId="n:B" hoverLevel={2} {...base} />); // hover only, selection unchanged
+    expect(el.dataset.animating).toBe('true');
+  });
+
+  it('data-selected-xy matches the selected node rendered position after a zoom refresh', async () => {
+    const m = chainModel();
+    const { getByTestId } = render(
+      <RingGraph model={m} view="rings" selectedId="n:B" hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />,
+    );
+    const cy = latestCy();
+    const el = getByTestId('ring-graph');
+    cy.zoom(cy.zoom() * 1.7); // fires 'zoom' → schedules a refresh frame that re-reads renderedPosition
+    await waitFor(() => {
+      const rp = cy.$id('n:B').renderedPosition();
+      expect(el.dataset.selectedXy).toBe(`${Math.round(rp.x)},${Math.round(rp.y)}`);
+    });
+  });
 });
 
 describe('F6: lifecycle — aria-label ref, pending-frame cleanup, cached measure canvas', () => {

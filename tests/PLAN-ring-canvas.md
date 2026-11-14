@@ -63,7 +63,7 @@ Source: `tests/RingGraph.test.tsx`
 | RG-11 | F1 — hover dimming never lands on the selection or its selected chain (focus-selected stays lit; a selected level-2 node and its chain are not dimmed) | deterministic | covered (RingGraph.test.tsx, "F1: hover dimming never lands on the selection or its selected chain") |
 | RG-12 | F2 — edge hover dimming compares the real colorLevel, not the 1..5 colour clamp (level 6/7 edges dim on hover 5; the level-5 edge dims on hover 6) | deterministic | covered (RingGraph.test.tsx, "F2: edge hover dimming compares the real colorLevel") |
 | RG-13 | F3 — a hovered ring's labels win a collision over dimmed labels of equal base rank; swapping the hover swaps the winner | deterministic | covered (RingGraph.test.tsx, "F3: a hovered ring's labels win a collision") |
-| RG-14 | F5 — a hover-only change never refits (zoom/pan untouched, no animation); a selection calls cy.stop() before cy.animate() and writes data-selected-xy synchronously | deterministic | covered (RingGraph.test.tsx, "F5: hover never refits; a selection stops the prior animation") |
+| RG-14 | F5 — a hover-only change never refits (zoom/pan untouched, no animation) and never clears data-animating while a selection fit is in flight; a selection calls cy.stop() before cy.animate(), writes data-selected-xy synchronously, and a zoom refresh writes data-selected-xy = the selected node's rounded renderedPosition() | deterministic | covered (RingGraph.test.tsx, "F5: hover never refits; a selection stops the prior animation") |
 | RG-15 | F6 — a label-only prop change updates aria-label and survives a zoom refresh; a pending setTimeout frame is cleared on unmount; a failed getContext is cached (one measure canvas) | deterministic | covered (RingGraph.test.tsx, "F6: lifecycle — aria-label ref, pending-frame cleanup, cached measure canvas") |
 | RG-16 | F7 — the mounted canvas lays every non-guide node on its model radius (hypot ≈ model.radii[level] ±0.5) and shifts a single node off 12 o'clock | deterministic | covered (RingGraph.test.tsx, "F7: the mounted canvas lays nodes on their model radii, off 12 o'clock") |
 
@@ -103,7 +103,7 @@ TESTID_BASE_REF=bf0c2055f5c2be9f13cc4a9a9c1e96fede6a16c0 \
   tests/typeScale.lint.test.ts tests/testidRemovals.test.ts
 ```
 
-Result: **Test Files 7 passed (7) · Tests 100 passed (100) · exit 0** — every scenario above executed
+Result: **Test Files 7 passed (7) · Tests 102 passed (102) · exit 0** — every scenario above executed
 and passed; nothing skipped. The full repository suite (`npm test`) is green on a clean checkout
 (746 files, 9355 passed, 1 skip only when no base ref is supplied — the `testidRemovals` merge-base
 guard, which runs green with the base pinned as above and in CI).
