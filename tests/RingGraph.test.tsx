@@ -28,7 +28,9 @@ vi.mock('../src/styles/resolveToken.js', () => ({
   resolveToken: (n: string) => document.documentElement.style.getPropertyValue(n).trim() || '',
   resolveTokenValue: (n: string) =>
     document.documentElement.style.getPropertyValue(n).trim() || (n === '--font-mono' ? 'monospace' : 'system-ui'),
-  resolveTokenPx: () => 12,
+  // Theme-aware so the F6 re-measure test can make a theme change alter the caption size: the
+  // 'bigcap' theme resolves --text-caption to 24, every other theme (and none) to 12.
+  resolveTokenPx: () => (document.documentElement.getAttribute('data-theme') === 'bigcap' ? 24 : 12),
 }));
 
 const { RingGraph } = await import('../src/components/graph/RingGraph.js');
@@ -568,6 +570,50 @@ describe('F6: lifecycle — aria-label ref, pending-frame cleanup, cached measur
     } finally {
       createSpy.mockRestore();
       HTMLCanvasElement.prototype.getContext = origGetContext;
+    }
+  });
+
+  it('a theme change re-measures labels with the new caption size', async () => {
+    const m = chainModel();
+    render(<RingGraph model={m} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />);
+    const cy = latestCy();
+    const before = cy.$id('n:A').data('fsize') as number; // captionPx (12) / zoom
+    expect(before).toBeGreaterThan(0);
+    // The 'bigcap' theme resolves --text-caption to 24: the observeTheme handler must recompute
+    // ctx.cap (and the measurer) and refresh, so the label font size doubles. Without the re-measure
+    // the handler keeps the build-time cap and fsize never changes.
+    document.documentElement.setAttribute('data-theme', 'bigcap');
+    await waitFor(() => expect(cy.$id('n:A').data('fsize') as number).not.toBe(before));
+    expect(cy.$id('n:A').data('fsize') as number).toBeCloseTo(before * 2, 5);
+  });
+
+  it('a scheduled zoom frame no-ops if the instance was destroyed before it ran (defensive guard)', () => {
+    const origRaf = global.requestAnimationFrame;
+    const captured: FrameRequestCallback[] = [];
+    global.requestAnimationFrame = ((cb: FrameRequestCallback) => { captured.push(cb); return captured.length; }) as unknown as typeof requestAnimationFrame;
+    try {
+      const m = chainModel();
+      const { unmount, getByTestId } = render(
+        <RingGraph model={m} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />,
+      );
+      const el = getByTestId('ring-graph');
+      // Identify the component's refresh frame among the captured callbacks: while the instance is
+      // alive it writes a data-* attribute (cytoscape's own headless frame does not).
+      let refreshFrame: FrameRequestCallback | null = null;
+      for (const cb of [...captured]) {
+        el.removeAttribute('data-label-overlaps');
+        try { cb(0); } catch { /* ignore cytoscape's own internal frame */ }
+        if (el.getAttribute('data-label-overlaps') !== null) { refreshFrame = cb; break; }
+      }
+      expect(typeof refreshFrame).toBe('function');
+      unmount(); // destroys the cytoscape instance
+      el.dataset.labelsShown = 'SENTINEL';
+      // The frame fired after destroy (e.g. a race the cancellation lost): the guard must make it a
+      // no-op — no throw and no write. Without the guard it calls refresh() on the destroyed cy.
+      expect(() => refreshFrame!(0)).not.toThrow();
+      expect(el.dataset.labelsShown).toBe('SENTINEL');
+    } finally {
+      global.requestAnimationFrame = origRaf;
     }
   });
 });
