@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Ask } from '../api/ask.js';
-import type { VoiceStatus } from '../api/voice.js';
+import type { VoiceStatus, VoiceTtsStatus } from '../api/voice.js';
 import type { JobAction } from '../voice/jobs.js';
 
 /**
@@ -51,6 +51,14 @@ export interface VoiceState {
   heard: string | null;
   status: VoiceStatus | null;
   statusError: string | null;
+  /** Read-aloud (piper) state on this machine (separate readiness from speech input). */
+  tts: VoiceTtsStatus | null;
+  /** The 404 upgrade line for a crew with no read-aloud routes, else null. */
+  ttsError: string | null;
+  /** The chosen read-aloud voice id (kept per person in localStorage), or null until one is chosen. */
+  ttsVoice: string | null;
+  /** Read-aloud is on but piper isn't set up: the view says so and does not speak. */
+  readAloudNeedsSetup: boolean;
   /** The browser said no to the mic (or it has none). */
   micError: string | null;
   micOn: boolean;
@@ -80,7 +88,8 @@ export interface VoiceState {
 }
 
 export const INITIAL_VOICE: VoiceState = {
-  phase: 'off', mode: null, modal: [], lines: [], heard: null, status: null, statusError: null, micError: null,
+  phase: 'off', mode: null, modal: [], lines: [], heard: null, status: null, statusError: null,
+  tts: null, ttsError: null, ttsVoice: null, readAloudNeedsSetup: false, micError: null,
   micOn: false, bars: [], speaking: 'idle', holding: false, transcribing: false, readAloud: true, openAsk: null,
   awaitingGate: null, error: null, preview: null, lastChoice: [], pageFocus: null,
 };

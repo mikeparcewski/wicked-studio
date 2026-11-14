@@ -6,8 +6,8 @@
  *     tapped or Esc) closes it; Yes opens full screen.
  *  2. Full screen: the transcript in the middle, the live system dashboard around it, and the second question:
  *     streaming, or space bar (push-to-talk).
- *  3. Speech to text on this machine (crew's whisper.cpp), read-aloud by the browser's speechSynthesis; captions
- *     are always on.
+ *  3. Speech to text on this machine (crew's whisper.cpp), read-aloud by piper on this machine (crew's /voice/speak);
+ *     captions are always on.
  *  4. Questions go to the system chat. A steer is proposed with Send / Not that. A gate answer by voice ALWAYS stops
  *     at an on-screen Confirm, then the usual 10 s undo, and carries `input: "voice"`.
  *
@@ -28,7 +28,7 @@ import { jobTitle } from '../board/deskWords.js';
 import { stopRun } from '../store/sheets.js';
 import { actionWords, CLASSIFY_PROMPT, nextRigor, otherJob, parseJobWords, readClass, resolveJob, type JobAction, type JobRef, type Rigor } from './jobs.js';
 import type { RosterSeat } from '../api/types.js';
-import { downloadVoiceModel, getVoiceStatus, isVoiceUnsupported, voiceErrorCode, type VoiceStatus } from '../api/voice.js';
+import { downloadVoiceModel, getVoiceStatus, getVoiceTts, installVoiceTts, isVoiceUnsupported, voiceErrorCode, voiceSampleBuffer, type VoiceStatus, type VoiceTtsStatus } from '../api/voice.js';
 import { defaultSelection } from '../board/chatOpen.js';
 import { commitGateDecision, gateLabel, type GateAnswer } from '../board/gateActions.js';
 import { plainGateQuestion } from '../board/deskWords.js';
@@ -40,7 +40,7 @@ import type { SystemSnapshot } from '../api/system.js';
 import { loadDashboard, readDashboardData, useDashStore } from './dashboardStore.js';
 import { INITIAL_VOICE, lineId, useVoiceStore, type ListenMode, type VoiceAskContext, type VoiceLine } from '../store/voice.js';
 import { isLeave, parseConfirm, parseEntry, parseGateAnswer, parseMode } from './intent.js';
-import { BrowserMic, BrowserSpeaker, crewStt, type MicSource, type Speaker, type SttEngine } from './io.js';
+import { BrowserMic, browserPiperSpeaker, crewStt, type MicSource, type Speaker, type SttEngine } from './io.js';
 import { Vad } from './vad.js';
 import { isRunningJob } from './widgets.js';
 
@@ -152,7 +152,7 @@ async function inspectNow(runId: string): Promise<UnitInspection> {
 const defaults = (): VoiceDeps => ({
   mic: () => new BrowserMic(),
   stt: crewStt,
-  speaker: new BrowserSpeaker(),
+  speaker: browserPiperSpeaker({ voice: () => S.getState().ttsVoice, ready: ttsReady }),
   ask: askSystemChat,
   steer: async (runId, text) => {
     try {
@@ -226,15 +226,84 @@ const S = useVoiceStore;
 const snapshotNow = (): SystemSnapshot | null => useDashStore.getState().system ?? useSystemStore.getState().snapshot;
 const set = (p: Partial<ReturnType<typeof S.getState>>): void => S.setState(p);
 const READ_ALOUD_KEY = 'studio.voice.readAloud';
+const TTS_VOICE_KEY = 'studio.voice.ttsVoice';
 
 function savedReadAloud(): boolean {
   try { return localStorage.getItem(READ_ALOUD_KEY) !== 'off'; } catch { return true; }
 }
 
+function savedTtsVoice(): string | null {
+  try { return localStorage.getItem(TTS_VOICE_KEY); } catch { return null; }
+}
+
+/** Read-aloud is ready only when the engine is installed AND the chosen voice is installed (the speaker reads this). */
+function ttsReady(): boolean {
+  const s = S.getState();
+  const v = s.ttsVoice;
+  return s.tts !== null && s.tts.engine.found && v !== null && s.tts.voices[v]?.installed === true;
+}
+
 export function setReadAloud(on: boolean): void {
   set({ readAloud: on });
   try { localStorage.setItem(READ_ALOUD_KEY, on ? 'on' : 'off'); } catch { /* private mode */ }
-  if (!on) deps.speaker.cancel();
+  if (!on) { deps.speaker.cancel(); set({ readAloudNeedsSetup: false }); }
+  else void refreshTts();
+}
+
+/** Read what read-aloud needs on this machine (piper + the voices). On a crew without the routes, the upgrade line. */
+export async function refreshTts(): Promise<VoiceTtsStatus | null> {
+  try {
+    const tts = await getVoiceTts();
+    const installed = Object.entries(tts.voices).filter(([, v]) => v.installed).map(([id]) => id);
+    const cur = S.getState().ttsVoice ?? savedTtsVoice();
+    // Keep a saved choice only while it is still installed; otherwise default to the first installed voice.
+    const chosen = cur !== null && installed.includes(cur) ? cur : installed[0] ?? null;
+    set({ tts, ttsError: null, ttsVoice: chosen });
+    if (ttsReady()) set({ readAloudNeedsSetup: false });
+    return tts;
+  } catch (e) {
+    set({ tts: null, ttsError: isVoiceUnsupported(e) ? 'This crew has no read-aloud yet. Upgrade wicked-crew to use read-aloud.' : e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+/** The person said yes to installing piper and one voice. Polls until it lands or fails. */
+export async function consentToVoice(id: string): Promise<void> {
+  try {
+    set({ tts: await installVoiceTts([id]), ttsError: null });
+  } catch (e) {
+    set({ ttsError: e instanceof Error ? e.message : String(e) });
+    return;
+  }
+  const gen = generation;
+  for (let i = 0; i < 900 && gen === generation; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const st = await refreshTts();
+    if (st === null || st.voices[id]?.installed === true || st.install?.state === 'failed') break;
+  }
+}
+
+/** Pick the read-aloud voice (an installed one), kept per person. */
+export function chooseVoice(id: string): void {
+  set({ ttsVoice: id, readAloudNeedsSetup: false });
+  try { localStorage.setItem(TTS_VOICE_KEY, id); } catch { /* private mode */ }
+}
+
+let sampleCtx: AudioContext | null = null;
+/** Play a short sample of one installed voice (GET /voice/tts/sample/:id), through a shared one-shot player. */
+export async function playSample(id: string): Promise<void> {
+  try {
+    const buf = await voiceSampleBuffer(id);
+    sampleCtx ??= new AudioContext();
+    if (sampleCtx.state === 'suspended') await sampleCtx.resume().catch(() => undefined);
+    const audio = await sampleCtx.decodeAudioData(buf.slice(0));
+    const src = sampleCtx.createBufferSource();
+    src.buffer = audio;
+    src.connect(sampleCtx.destination);
+    src.start();
+  } catch (e) {
+    set({ ttsError: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 // ── Asks (drawn by the guided-ask renderer) ───────────────────────────────────────────────────
@@ -274,10 +343,12 @@ function openAsk(ask: Ask, context: VoiceAskContext, text = ''): number {
   return id;
 }
 
-/** Say it (captions are the transcript line; read aloud unless turned off). */
+/** Say it (captions are the transcript line; read aloud unless turned off). When read-aloud is on but piper isn't set
+ *  up, nothing is spoken and the view says so (the setup rows show the remedy); captions are unaffected. */
 async function say(text: string): Promise<void> {
   if (!S.getState().readAloud || text.trim() === '') return;
-  set({ speaking: 'it' });
+  if (!deps.speaker.available) { set({ readAloudNeedsSetup: true }); return; }
+  set({ speaking: 'it', readAloudNeedsSetup: false });
   try { await deps.speaker.say(text); } finally { if (S.getState().speaking === 'it') set({ speaking: 'idle' }); }
 }
 
@@ -928,10 +999,12 @@ export async function openVoice(opts: { focus?: string | null } = {}): Promise<v
   generation += 1;
   finals.length = 0;
   recentCache = null;
-  set({ ...INITIAL_VOICE, phase: 'ask', readAloud: savedReadAloud(), heard: null, pageFocus: opts.focus ?? pageRun });
+  set({ ...INITIAL_VOICE, phase: 'ask', readAloud: savedReadAloud(), ttsVoice: savedTtsVoice(), heard: null, pageFocus: opts.focus ?? pageRun });
   // The dashboard's first read starts now, so full screen opens on the live system (and says what it sees).
   void loadDashboard().then(() => readDashboardData());
   await refreshStatus();
+  // Read-aloud's own readiness (piper on this machine) loads beside speech input; entry doesn't block on it.
+  void refreshTts();
   await startMic();
   if (S.getState().phase === 'ask') await say('Do you want to enter voice mode?');
 }
