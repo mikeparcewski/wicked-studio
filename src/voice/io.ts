@@ -256,7 +256,8 @@ export class PiperSpeaker implements Speaker {
         src.start();
       }).catch((e: unknown) => {
         if (this.playResolve === resolve) this.playResolve = null;
-        if (this.source !== null) { try { this.source.stop(); } catch { /* not started */ } this.source = null; }
+        // Only the current utterance may touch the source: a cancelled one's late decode failure must not cut a newer reply.
+        if (mine === this.token && this.source !== null) { try { this.source.stop(); } catch { /* not started */ } this.source = null; }
         reject(e);
       });
     });

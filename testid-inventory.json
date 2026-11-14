@@ -25210,9 +25210,21 @@
       ]
     },
     {
+      "testId": "voice-readaloud-failed",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
       "testId": "voice-readaloud-note",
       "files": [
         "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-readaloud-retry",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
       ]
     },
     {
@@ -25265,6 +25277,12 @@
     },
     {
       "testId": "voice-tts-progress",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-tts-retry",
       "files": [
         "src/components/voice/VoiceSetup.tsx"
       ]
@@ -27071,6 +27089,12 @@
     },
     {
       "pattern": "voice-tts-consent-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-tts-row-error-*",
       "files": [
         "src/components/voice/VoiceSetup.tsx"
       ]

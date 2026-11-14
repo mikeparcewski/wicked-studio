@@ -86,6 +86,25 @@ function piper(fetchWav: PiperDeps['fetchWav'], c: FakeCtx = new FakeCtx()): { s
 }
 
 describe('PiperSpeaker: promises it starts', () => {
+  it('a cancelled utterance’s late decode failure does not stop the replacement’s source', async () => {
+    const c = new FakeCtx();
+    let failFirst: (e: Error) => void = () => undefined;
+    let n = 0;
+    c.decodeAudioData = (buf: ArrayBuffer) => (++n === 1 ? new Promise((_r, rej) => { failFirst = rej; }) : Promise.resolve({ buf }));
+    const { speaker } = piper(() => Promise.resolve(new ArrayBuffer(8)), c);
+    const first = speaker.say('One.').catch(() => undefined);
+    await flush();
+    const second = speaker.say('Two.'); // cancels the first while its decode is pending
+    await flush(); await flush();
+    expect(c.sources).toHaveLength(1);
+    failFirst(new Error('late decode failure'));
+    await flush();
+    await first;
+    expect(c.sources[0]!.stopped).toBe(false);
+    c.sources[0]!.end();
+    await second;
+  });
+
   it('a prefetch that rejects while the current sentence plays is no unhandled rejection, and say() settles', async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (e: unknown): void => { unhandled.push(e); };
