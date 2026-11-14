@@ -105,7 +105,15 @@ function levelsAttr(model: VisibleModel): string {
   return model.levels.map((r) => `${r.k}:${r.placed}`).join(',');
 }
 
-/** The selected chain: nodes + primary (incl. aggregate-primary) edges from the selection in to the focus. */
+/**
+ * The selected chain: nodes + primary (incl. aggregate-primary) edges from the selection in to the focus.
+ *
+ * POL-2101: this is a hand-written pointer chase, not cytoscape traversal (bfs/aStar/successors), on purpose.
+ * Each node has at most one primary parent (computeParents, src/graph/ringModel.ts:220), so the chain is an
+ * O(depth) walk up a single-parent map, not a search. It runs on the pure VisibleModel that the build and
+ * selection effects share, so its tests need no renderer or cy instance. It has no weights, heuristics or
+ * search order, so cytoscape's graph search would add machinery without changing the single path returned.
+ */
 function selectedChain(model: VisibleModel, selectedId: string | null, focusId: string): { nodes: Set<string>; edges: Set<string> } {
   const nodes = new Set<string>();
   const edges = new Set<string>();
