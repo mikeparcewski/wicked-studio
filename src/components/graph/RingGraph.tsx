@@ -237,13 +237,26 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
   const cyRef = useRef<cytoscape.Core | null>(null);
   const idMapRef = useRef<Map<string, string>>(new Map()); // model id → safe cy id
   const rafRef = useRef<number | null>(null);
-  const firstSelRef = useRef(true);
+  // Latest selection/hover, so the zoom + theme callbacks (which outlive the build render) read the
+  // CURRENT values, not the ones captured when the graph was built (F2).
+  const selectedIdRef = useRef(selectedId);
+  const hoverLevelRef = useRef(hoverLevel);
+  // The {selectedId, hoverLevel} the canvas was last painted with (by either effect). The selection
+  // effect compares against it instead of a skip-once flag, so a model-only rebuild never swallows the
+  // next selection or hover change (F1).
+  const lastAppliedRef = useRef<{ selectedId: string | null; hoverLevel: number | null } | null>(null);
+  // Whether this instance has a real renderer; a headless instance (jsdom tests) must not animate.
+  const rendersRef = useRef(true);
   const onSelectRef = useRef(onSelect);
   const onActivateRef = useRef(onActivate);
   useEffect(() => {
     onSelectRef.current = onSelect;
     onActivateRef.current = onActivate;
   }, [onSelect, onActivate]);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+    hoverLevelRef.current = hoverLevel;
+  });
 
   // Build / rebuild on a model (or view) change.
   useEffect(() => {
@@ -297,6 +310,7 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
       }));
 
     const renders = canRender();
+    rendersRef.current = renders;
     const cy = cytoscape({
       ...(renders ? { container: host } : { headless: true, styleEnabled: true }),
       elements: [...nodeEls, ...guideEls, ...edgeEls],
@@ -333,9 +347,10 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
         ringPosition(pos, node.data('level') as number, model.radii, counts),
     }).run();
 
-    // Apply placement + the derived data attributes for the current zoom and state.
+    // Apply placement + the derived data attributes for the current zoom and state. Reads the latest
+    // selection through the ref so a later zoom / theme frame never reverts to a stale selection (F2).
     const refresh = (): void => {
-      const placed = applyLabels(ctx, selectedId);
+      const placed = applyLabels(ctx, selectedIdRef.current);
       writeModelAttrs(host, ctx, view, ariaLabel);
       writeLabelAttrs(host, cy, placed);
     };
@@ -365,7 +380,8 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
     host.dataset.selectedXy = selectedXY(cy);
     host.dataset.animating = 'false';
 
-    firstSelRef.current = true; // the build effect owns this model's initial paint; the selection effect skips it
+    // Record what this build painted; the selection effect skips an apply only while it still matches.
+    lastAppliedRef.current = { selectedId, hoverLevel };
 
     return () => {
       stopTheme();
@@ -383,8 +399,12 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
     const cy = cyRef.current;
     const host = containerRef.current;
     if (cy === null || host === null || cy.destroyed()) return;
-    // The build effect already painted this model's initial selection/hover state; only react to changes.
-    if (firstSelRef.current) { firstSelRef.current = false; return; }
+    // The build effect already painted the current selection/hover (it records it in lastAppliedRef).
+    // Skip only while this effect's values still match that paint; otherwise apply — a model-only
+    // rebuild updates lastAppliedRef to the current values, so the NEXT real change still applies (F1).
+    const prev = lastAppliedRef.current;
+    if (prev !== null && prev.selectedId === selectedId && prev.hoverLevel === hoverLevel) return;
+    lastAppliedRef.current = { selectedId, hoverLevel };
     const cap = captionPx();
     const ctx: Ctx = { cy, model, cyIdOf: idMapRef.current, focusId: focusIdOf(model), cap, measure: makeMeasure(cap) };
 
@@ -392,7 +412,9 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
     const placed = applyLabels(ctx, selectedId);
     writeLabelAttrs(host, cy, placed);
 
-    if (reducedMotion()) {
+    // Animate only when there is a renderer to animate and motion is allowed (a headless instance has
+    // no render loop; cy.animate's rAF step would dereference a missing viewport).
+    if (reducedMotion() || !rendersRef.current) {
       cy.fit(cy.nodes(), PADDING);
       host.dataset.selectedXy = selectedXY(cy);
       host.dataset.animating = 'false';
@@ -433,9 +455,21 @@ function ringStyle(): cytoscape.StylesheetJson {
       },
     },
     { selector: 'node[isFocus = 1]', style: { 'background-color': resolveToken('--accent') } },
+    // The generic edge rules come BEFORE the per-level primary-edge colours below: cytoscape keeps the
+    // LAST matching declaration (no specificity), so the per-level hop colour must win over this
+    // ink-dim base, not the other way round (F4).
+    {
+      selector: 'edge',
+      style: {
+        'curve-style': 'bezier', 'line-color': resolveToken('--ink-dim'),
+        'target-arrow-color': resolveToken('--ink-dim'), 'arrow-scale': 0.7,
+      },
+    },
+    { selector: 'edge[ecls = "primary"]', style: { width: 1.5, 'line-opacity': 0.6, 'target-arrow-shape': 'triangle' } },
   ];
 
-  // Per-level hop colours (1–5; 5 covers every deeper ring).
+  // Per-level hop colours (1–5; 5 covers every deeper ring). The primary-edge colour rule follows the
+  // generic edge rule above, so it wins (F4).
   for (let k = 1; k <= 5; k++) {
     const colour = resolveToken(`--graph-level-${k}`);
     style.push({ selector: `node[clamp = ${k}][isFocus = 0][isGuide = 0]`, style: { 'background-color': colour } });
@@ -454,15 +488,7 @@ function ringStyle(): cytoscape.StylesheetJson {
         'text-background-opacity': 0, 'z-index': 0, events: 'no',
       },
     },
-    // Edges.
-    {
-      selector: 'edge',
-      style: {
-        'curve-style': 'bezier', 'line-color': resolveToken('--ink-dim'),
-        'target-arrow-color': resolveToken('--ink-dim'), 'arrow-scale': 0.7,
-      },
-    },
-    { selector: 'edge[ecls = "primary"]', style: { width: 1.5, 'line-opacity': 0.6, 'target-arrow-shape': 'triangle' } },
+    // Secondary + aggregate edges (they never match the per-level primary rule, so order is free).
     {
       selector: 'edge[ecls = "same"], edge[ecls = "alt"], edge[ecls = "skip"]',
       style: { width: 1, 'line-style': 'dashed', 'line-dash-pattern': [2, 4], 'line-color': resolveToken('--ink-dim'), 'line-opacity': 0.3 },

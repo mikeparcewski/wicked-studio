@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type cytoscape from 'cytoscape';
 
 import { buildCodeRings, type CodeBlastInput, type CodeRawEdge, type CodeRow } from '../src/graph/codeRings.js';
-import type { Item } from '../src/graph/ringModel.js';
+import type { Item, ItemKind, ItemSize, ModelEdge, VisibleModel } from '../src/graph/ringModel.js';
 
 const cyInstances: cytoscape.Core[] = [];
 vi.mock('cytoscape', async (orig) => {
@@ -160,6 +160,118 @@ describe('tap selects and activates', () => {
     safe.emit('tap');
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: activatable!.id }));
     expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ id: activatable!.id }));
+  });
+});
+
+// ── hand-crafted models for the send-back regressions (F2, F4) ──
+function mkItem(over: Partial<Item> & Pick<Item, 'id' | 'kind' | 'size' | 'level' | 'order' | 'colorLevel' | 'label'>): Item {
+  return { outlined: false, refocusable: false, activatable: true, count: 0, hiddenLinks: 0, ...over };
+}
+function mkModel(items: Item[], radii: number[], edges: ModelEdge[], levels: VisibleModel['levels']): VisibleModel {
+  return {
+    items, openLevel: Math.max(0, ...items.map((i) => i.level)), edges, levels, radii,
+    scaffold: { spines: [], guides: [], edges: [] },
+    counts: { visible: items.length, symbols: items.filter((i) => i.kind === 'symbol').length, unplaced: 0, loadedNotPlaced: 0, droppedEdges: 0 },
+  };
+}
+// A ring-1 symbol and a ring-2 placeholder that land at the same angle (6 o'clock, n=1 per ring) on
+// close rings far from the focus, so their long labels collide with each OTHER (not the focus label)
+// at any zoom — selection then decides which of the two wins. The large radii keep the collision clear
+// of the focus label even at the headless fit zoom (~0.1).
+function collisionModel(): VisibleModel {
+  const long = (c: string): string => c.repeat(20);
+  return mkModel(
+    [
+      mkItem({ id: 'q:F', kind: 'focus' as ItemKind, size: 'focus' as ItemSize, level: 0, order: 0, colorLevel: 0, label: 'F', activatable: false }),
+      mkItem({ id: 'n:L', kind: 'symbol' as ItemKind, size: 'node' as ItemSize, level: 1, order: 1, colorLevel: 1, label: long('L') }),
+      mkItem({ id: 'g:2:P', kind: 'group' as ItemKind, size: 'placeholder' as ItemSize, level: 2, order: 2, colorLevel: 2, label: long('P'), count: 3 }),
+    ],
+    [0, 500, 510], [],
+    [{ k: 1, placed: 1, shown: 1, label: '1 hop' }, { k: 2, placed: 1, shown: 1, label: '2 hops' }],
+  );
+}
+// A primary edge on level 2 and a secondary (same-level) edge, to check the stylesheet precedence.
+function edgeModel(): VisibleModel {
+  return mkModel(
+    [
+      mkItem({ id: 'q:F', kind: 'focus' as ItemKind, size: 'focus' as ItemSize, level: 0, order: 0, colorLevel: 0, label: 'F', activatable: false }),
+      mkItem({ id: 'n:A', kind: 'symbol' as ItemKind, size: 'node' as ItemSize, level: 1, order: 1, colorLevel: 1, label: 'A' }),
+      mkItem({ id: 'n:B', kind: 'symbol' as ItemKind, size: 'node' as ItemSize, level: 2, order: 2, colorLevel: 2, label: 'B' }),
+      mkItem({ id: 'n:D', kind: 'symbol' as ItemKind, size: 'node' as ItemSize, level: 2, order: 3, colorLevel: 2, label: 'D' }),
+    ],
+    [0, 100, 200],
+    [
+      { src: 'n:B', tgt: 'n:A', cls: 'primary', colorLevel: 2, count: 1, aggregate: false },
+      { src: 'n:B', tgt: 'n:D', cls: 'same', colorLevel: 2, count: 1, aggregate: false },
+    ],
+    [{ k: 1, placed: 1, shown: 1, label: '1 hop' }, { k: 2, placed: 2, shown: 2, label: '2 hops' }],
+  );
+}
+
+const nodeFor = (cy: cytoscape.Core, origId: string): cytoscape.NodeSingular =>
+  cy.nodes().filter((n) => n.data('origId') === origId).first() as unknown as cytoscape.NodeSingular;
+
+describe('F1: a model-only rerender does not swallow the next selection or hover change', () => {
+  it('after a new model with the same selection, the next selectedId change is applied', () => {
+    const a = buildCodeRings(fixture()); const m1 = a.model(a.defaultState());
+    const b = buildCodeRings(fixture()); const m2 = b.model(b.defaultState());
+    const target = m2.items.find((i) => i.level === 1 && i.kind === 'symbol')!;
+    const base = { view: 'rings' as const, hoverLevel: null, onSelect: () => {}, onActivate: () => {} };
+    const { rerender, getByTestId } = render(<RingGraph model={m1} selectedId={null} {...base} />);
+    rerender(<RingGraph model={m2} selectedId={null} {...base} />); // model-only change
+    rerender(<RingGraph model={m2} selectedId={target.id} {...base} />); // then select
+    const cy = latestCy();
+    expect(cy.nodes(':selected').length).toBe(1);
+    expect(getByTestId('ring-graph').dataset.selected).toBe(target.id);
+    expect(nodeFor(cy, target.id).hasClass('chain')).toBe(true);
+  });
+
+  it('after a new model with the same hover, the next hoverLevel change dims the other levels', () => {
+    const a = buildCodeRings(fixture()); const m1 = a.model(a.defaultState());
+    const b = buildCodeRings(fixture()); const m2 = b.model(b.defaultState());
+    const base = { view: 'rings' as const, selectedId: null, onSelect: () => {}, onActivate: () => {} };
+    const { rerender } = render(<RingGraph model={m1} hoverLevel={null} {...base} />);
+    rerender(<RingGraph model={m2} hoverLevel={null} {...base} />); // model-only change
+    rerender(<RingGraph model={m2} hoverLevel={2} {...base} />); // then hover
+    const cy = latestCy();
+    const off = cy.nodes('[isGuide = 0][level != 2]');
+    expect(off.nonempty()).toBe(true);
+    off.forEach((n) => expect(n.hasClass('dim'), String(n.data('origId'))).toBe(true));
+    cy.nodes('[isGuide = 0][level = 2]').forEach((n) => expect(n.hasClass('dim')).toBe(false));
+  });
+});
+
+describe('F2: a later refresh keeps label priority on the current selection, not the build-time one', () => {
+  it('after selecting a different node, a theme refresh keeps the new selection prioritised', async () => {
+    const m = collisionModel();
+    const base = { view: 'rings' as const, hoverLevel: null, onSelect: () => {}, onActivate: () => {} };
+    const { rerender, getByTestId } = render(<RingGraph model={m} selectedId="n:L" {...base} />);
+    rerender(<RingGraph model={m} selectedId="g:2:P" {...base} />); // select P (model unchanged)
+    const cy = latestCy();
+    // P is now the selection, so P's label wins the collision and L's is hidden.
+    expect(nodeFor(cy, 'g:2:P').data('dlabel')).not.toBe('');
+    expect(nodeFor(cy, 'n:L').data('dlabel')).toBe('');
+    // A theme refresh must recompute priority from the CURRENT selection (P), not the build-time L.
+    document.documentElement.setAttribute('data-theme', 'wicked-light');
+    // Wait until the theme observer's refresh has run (it stamps data-style-theme), then check priority.
+    await waitFor(() => expect(getByTestId('ring-graph').dataset.styleTheme).toBe('wicked-light'));
+    expect(nodeFor(cy, 'g:2:P').data('dlabel')).not.toBe('');
+    expect(nodeFor(cy, 'n:L').data('dlabel')).toBe('');
+  });
+});
+
+describe('F4: primary edges keep their per-level hop colour; secondary edges stay ink-dim', () => {
+  it('a level-2 primary edge is the level-2 token; a secondary edge is ink-dim', () => {
+    document.documentElement.style.setProperty('--graph-level-2', 'rgb(10, 100, 200)');
+    document.documentElement.style.setProperty('--ink-dim', 'rgb(50, 50, 50)');
+    const base = { view: 'rings' as const, selectedId: null, hoverLevel: null, onSelect: () => {}, onActivate: () => {} };
+    render(<RingGraph model={edgeModel()} {...base} />);
+    const cy = latestCy();
+    const primary = cy.edges('[ecls = "primary"]').first();
+    const secondary = cy.edges('[ecls = "same"]').first();
+    expect(primary.style('line-color')).toBe('rgb(10,100,200)');
+    expect(primary.style('target-arrow-color')).toBe('rgb(10,100,200)');
+    expect(secondary.style('line-color')).toBe('rgb(50,50,50)');
   });
 });
 

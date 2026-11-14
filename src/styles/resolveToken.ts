@@ -66,7 +66,8 @@ export function resolveTokenValue(name: string): string {
 export function resolveTokenPx(name: string): number {
   if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') return NaN;
   const probe = document.createElement('div');
-  probe.style.setProperty(name, 'initial');
+  // Do NOT set --name on the probe: that would shadow the real token with an invalid value and the
+  // width would resolve to auto/NaN. The probe inherits the token from the cascade instead (F3).
   probe.style.width = `var(${name})`;
   document.body.appendChild(probe);
   const computed = getComputedStyle(probe).width.trim();
