@@ -3,17 +3,17 @@ import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { VoiceSetup } from '../src/components/voice/VoiceSetup.js';
 import { INITIAL_VOICE, useVoiceStore } from '../src/store/voice.js';
 import { refreshTts, resetVoice } from '../src/voice/controller.js';
-import type { VoiceTtsStatus } from '../src/api/voice.js';
+import type { VoiceTtsStatus, VoiceTtsVoice } from '../src/api/voice.js';
+
+const AMY: VoiceTtsVoice = { installed: true, name: 'Amy', accent: 'US English', licence: 'CC BY 4.0', bytes: 63 * 1048576, source: 'Hugging Face rhasspy/piper-voices' };
+const RYAN: VoiceTtsVoice = { installed: false, name: 'Ryan', accent: 'US English', licence: 'MIT', bytes: 75 * 1048576, source: 'Hugging Face rhasspy/piper-voices' };
 
 function tts(over: Partial<VoiceTtsStatus> = {}): VoiceTtsStatus {
   return {
     supported: { ok: true, reason: null },
     python: { found: true, path: '/usr/bin/python3', version: '3.11.4' },
     engine: { found: true, version: '1.8.0' },
-    voices: {
-      amy: { installed: true, name: 'Amy', accent: 'US English', licence: 'CC BY 4.0', bytes: 63 * 1048576, source: 'Hugging Face rhasspy/piper-voices' },
-      ryan: { installed: false, name: 'Ryan', accent: 'US English', licence: 'MIT', bytes: 75 * 1048576, source: 'Hugging Face rhasspy/piper-voices' },
-    },
+    voices: { amy: { ...AMY }, ryan: { ...RYAN } },
     install: null,
     ...over,
   };
@@ -75,7 +75,7 @@ describe('read-aloud setup rows', () => {
   });
 
   it('choosing a voice persists in localStorage', () => {
-    useVoiceStore.setState({ tts: tts({ voices: { ...tts().voices, ryan: { ...tts().voices.ryan, installed: true } } }), ttsVoice: 'amy', readAloud: true });
+    useVoiceStore.setState({ tts: tts({ voices: { amy: { ...AMY }, ryan: { ...RYAN, installed: true } } }), ttsVoice: 'amy', readAloud: true });
     render(<VoiceSetup />);
     fireEvent.click(screen.getByTestId('voice-tts-choose-ryan').querySelector('input')!);
     expect(localStorage.getItem('studio.voice.ttsVoice')).toBe('ryan');
@@ -83,7 +83,7 @@ describe('read-aloud setup rows', () => {
   });
 
   it('defaults the chosen voice to the first installed, and keeps a still-installed saved choice', async () => {
-    const both = tts({ voices: { amy: { ...tts().voices.amy }, ryan: { ...tts().voices.ryan, installed: true } } });
+    const both = tts({ voices: { amy: { ...AMY }, ryan: { ...RYAN, installed: true } } });
     vi.stubGlobal('fetch', vi.fn(async () => okResponse(both)));
     // No saved choice → first installed (amy).
     await act(async () => { await refreshTts(); });
