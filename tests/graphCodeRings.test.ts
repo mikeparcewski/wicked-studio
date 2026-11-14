@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { buildCodeRings, type CodeBlastInput, type CodeRawEdge, type CodeRow } from '../src/graph/codeRings.js';
+import { bfsLevels, buildCodeRings, type CodeBlastInput, type CollapseState, type CodeRawEdge, type CodeRow } from '../src/graph/codeRings.js';
 
 // ---- small helpers ----
 const rows = (n: number, level: number, file: string, prefix: string): CodeRow[] =>
@@ -431,5 +431,230 @@ describe('the worked fixture', () => {
     st = cr.closeGroup(st, aFirstGid);
     m = cr.model(st);
     expect([m.counts.visible, m.counts.symbols]).toEqual([31, 9]);
+  });
+});
+
+describe('R1: placeholder parents resolve through drawn owners', () => {
+  it('a closed level-2 group hangs off the closed level-1 group, not a spine', () => {
+    const input: CodeBlastInput = {
+      query: 'Q',
+      rows: [...rows(25, 1, 'a.ts', 'a'), ...rows(25, 2, 'b.ts', 'b')],
+      // every level-2 member's parent is a level-1 member (a00)
+      edges: rows(25, 2, 'b.ts', 'b').map((r): CodeRawEdge => ({ src: r.symbolId, tgt: 'a00' })),
+    };
+    const cr = buildCodeRings(input);
+    const st = cr.defaultState();
+    const m = cr.model(st);
+    expect(m.items.some((i) => i.id === 'g:1:a.ts')).toBe(true);
+    expect(m.items.some((i) => i.id === 'g:2:b.ts')).toBe(true);
+    const edge = m.scaffold.edges.find((e) => e.tgt === 'g:2:b.ts')!;
+    expect(edge.src).toBe('g:1:a.ts'); // the level-1 group, not sp:1
+  });
+});
+
+describe('R4: hiddenLinks over the drawn model', () => {
+  it('a same-level edge inside one closed group counts once', () => {
+    const input: CodeBlastInput = {
+      query: 'Q',
+      rows: rows(25, 1, 'big.ts', 'm'),
+      edges: [{ src: 'm00', tgt: 'm01' }], // same-level, both in the closed group
+    };
+    const cr = buildCodeRings(input);
+    const m = cr.model(cr.defaultState());
+    const group = m.items.find((i) => i.id === 'g:1:big.ts')!;
+    expect(group.hiddenLinks).toBe(1);
+  });
+
+  it('a folded summary holding a child→parent primary and no secondaries counts 0', () => {
+    const input: CodeBlastInput = {
+      query: 'Q',
+      rows: [...rows(1, 1, 'a.ts', 'a'), ...rows(1, 2, 'p.ts', 'p'), ...rows(1, 3, 'c.ts', 'c')],
+      edges: [
+        { src: 'a00', tgt: 'Q' },
+        { src: 'p00', tgt: 'a00' },
+        { src: 'c00', tgt: 'p00' }, // child(3) → parent(2), both fold into the summary
+      ],
+    };
+    const cr = buildCodeRings(input);
+    const st = cr.openToLevel(cr.defaultState(), 1); // levels 2,3 → summary s:2
+    const m = cr.model(st);
+    const summary = m.items.find((i) => i.kind === 'summary')!;
+    expect(summary.id).toBe('s:2');
+    expect(summary.hiddenLinks).toBe(0);
+  });
+});
+
+describe('R5: owner lookup is O(1)', () => {
+  it('model() over 50k rows + 50k edges with one closed group finishes under 1s and agrees with brute force', () => {
+    const N = 50000;
+    const rowsBig: CodeRow[] = Array.from({ length: N }, (_, i) => ({ symbolId: `s${i}`, name: `s${i}`, file: 'big.ts', depth: 1 }));
+    const edgesBig: CodeRawEdge[] = Array.from({ length: N }, (_, i) => ({ src: `s${i}`, tgt: i === 0 ? 'Q' : `s${i - 1}` }));
+    const cr = buildCodeRings({ query: 'Q', rows: rowsBig, edges: edgesBig });
+    const st = cr.defaultState(); // one level, one closed group
+    const t0 = performance.now();
+    const m = cr.model(st);
+    const elapsed = performance.now() - t0;
+    expect(elapsed).toBeLessThan(1000);
+    expect(m.counts.visible).toBe(2); // focus + one closed group
+    // brute-force owner check on sampled ids: a closed single-file group owns every member
+    const expectedGroup = `g:1:${encodeURIComponent('big.ts')}`;
+    const owner = cr.view(st).ownerOf;
+    for (const i of [0, 1, 1234, 25000, N - 1]) expect(owner(`n:s${i}`)).toBe(expectedGroup);
+  });
+});
+
+describe('R6: unplaced rows are retained and listable', () => {
+  it('exposes unplacedRows with id, name, file and raw depth', () => {
+    const input: CodeBlastInput = {
+      query: 'Q',
+      rows: [
+        { symbolId: 's1', name: 's1', file: 'f.ts', depth: 1 },
+        { symbolId: 'u1', name: 'u1', file: 'bad.ts', depth: null },
+        { symbolId: 'u2', name: 'u2', file: 'bad.ts', depth: 0 },
+        { symbolId: 'u3', name: 'u3', file: 'bad.ts', depth: 1.5 },
+      ],
+      edges: [],
+    };
+    const cr = buildCodeRings(input);
+    const m = cr.model(cr.defaultState());
+    expect(m.counts.unplaced).toBe(3);
+    expect(m.unplacedRows).toHaveLength(3);
+    expect(m.unplacedRows).toContainEqual({ id: 'n:u1', name: 'u1', file: 'bad.ts', depth: null });
+    expect(m.unplacedRows).toContainEqual({ id: 'n:u2', name: 'u2', file: 'bad.ts', depth: 0 });
+    expect(m.unplacedRows).toContainEqual({ id: 'n:u3', name: 'u3', file: 'bad.ts', depth: 1.5 });
+  });
+
+  it('a duplicate id with one valid depth is placed, not unplaced', () => {
+    const input: CodeBlastInput = {
+      query: 'Q',
+      rows: [
+        { symbolId: 'd', name: 'd', file: 'f.ts', depth: null }, // invalid
+        { symbolId: 'd', name: 'd', file: 'f.ts', depth: 2 }, // valid → places d
+      ],
+      edges: [],
+    };
+    const cr = buildCodeRings(input);
+    const m = cr.model(cr.defaultState());
+    expect(m.counts.unplaced).toBe(0);
+    expect(m.unplacedRows).toHaveLength(0);
+    expect(m.items.some((i) => i.id === 'n:d')).toBe(true);
+  });
+});
+
+describe('R7: the 150 default stops before overflow', () => {
+  it('seven levels of 24 inline symbols default to level 6 (visible 146) with a summary over level 7', () => {
+    const rowList: CodeRow[] = [];
+    for (let lvl = 1; lvl <= 7; lvl++) rowList.push(...rows(24, lvl, `f${lvl}.ts`, `s${lvl}_`));
+    const cr = buildCodeRings({ query: 'Q', rows: rowList, edges: [] });
+    const st = cr.defaultState();
+    expect(st.openLevel).toBe(6); // all-open would be 169 > 150; level 6 closed view is 146
+    const m = cr.model(st);
+    expect(m.counts.visible).toBe(146);
+    const summary = m.items.find((i) => i.kind === 'summary')!;
+    expect(summary.id).toBe('s:7');
+    expect(summary.label).toBe('7 hops · 24');
+    expect(summary.count).toBe(24);
+    expect(summary.level).toBe(7);
+    expect(cr.view(st).ownerOf('n:s7_00')).toBe('s:7'); // level-7 rows owned by the summary
+    expect(m.levels.map((r) => r.k)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    for (const r of m.levels) expect(r.placed).toBe(24);
+  });
+});
+
+describe('R8: conservation against the drawn model', () => {
+  it('every placed symbol has exactly one drawn owner, across paging/expansion/summary', () => {
+    const input: CodeBlastInput = {
+      query: 'Q',
+      rows: [
+        ...rows(9, 1, 'h.ts', 'h'),
+        ...rows(25, 2, 'big.ts', 'm'),
+        ...Array.from({ length: 14 }, (_, i) => ({ symbolId: `g${i}`, name: `g${i}`, file: `p${String(i).padStart(2, '0')}.ts`, depth: 2 })),
+        ...rows(30, 3, 'deep.ts', 'd'),
+      ],
+      edges: [],
+    };
+    const cr = buildCodeRings(input);
+    const placedIds = cr.ringInput().nodes.map((n) => n.id);
+    const states: CollapseState[] = [
+      cr.defaultState(),
+      cr.openToLevel(cr.defaultState(), 1),
+      cr.openGroup(cr.openToLevel(cr.defaultState(), 2), 'g:2:big.ts'),
+      cr.moreGroups(cr.openToLevel(cr.defaultState(), 2), 2),
+    ];
+    for (const st of states) {
+      const m = cr.model(st);
+      const drawn = new Set(m.items.map((i) => i.id));
+      const owner = cr.view(st).ownerOf;
+      for (const id of placedIds) expect(drawn.has(owner(id))).toBe(true);
+      expect(m.levels.map((r) => r.k)).toEqual([1, 2, 3]);
+    }
+  });
+});
+
+describe('R9: reveal(g:...) behind a collapsed level and a later file page', () => {
+  it('opens the level and file page, leaving expansion and a non-default member page untouched', () => {
+    const input: CodeBlastInput = {
+      query: 'Q',
+      rows: [
+        ...rows(9, 1, 'h.ts', 'h'),
+        // 20 files of 2 symbols each → 40 symbols force grouping (inline is ≤ 24)
+        ...Array.from({ length: 40 }, (_, i) => ({ symbolId: `g${i}`, name: `g${i}`, file: `f${String(Math.floor(i / 2)).padStart(2, '0')}.ts`, depth: 2 })),
+      ],
+      edges: [],
+    };
+    const cr = buildCodeRings(input);
+    const target = 'g:2:f15.ts'; // file index 15 → behind page 1 (shows 12)
+    const start: CollapseState = { openLevel: 1, filePages: {}, openGroups: new Set(), memberPages: { [target]: 3 } };
+    expect(cr.model(start).items.some((i) => i.id === target)).toBe(false); // collapsed
+    const next = cr.reveal(start, target);
+    expect(next.openLevel).toBe(2); // collapsed level opened
+    expect(next.filePages[2]).toBe(2); // later file page opened (ceil(16/12))
+    expect(cr.model(next).items.some((i) => i.id === target)).toBe(true);
+    expect(next.openGroups.has(target)).toBe(false); // expansion unchanged
+    expect(next.memberPages[target]).toBe(3); // non-default member page unchanged
+  });
+});
+
+describe('R11: moreGroups through exhaustion and blocks()', () => {
+  it('pages all file groups into view and drops the "+N more files"', () => {
+    const cr = buildCodeRings({
+      query: 'Q',
+      rows: Array.from({ length: 30 }, (_, i) => ({ symbolId: `s${i}`, name: `s${i}`, file: `f${String(i).padStart(2, '0')}.ts`, depth: 1 })),
+      edges: [],
+    });
+    let st = cr.defaultState();
+    expect(cr.model(st).items.filter((i) => i.kind === 'group').length).toBe(12);
+    expect(cr.model(st).items.some((i) => i.id === 'm:1:files')).toBe(true);
+    st = cr.moreGroups(st, 1); // page 2 → 24
+    expect(cr.model(st).items.filter((i) => i.kind === 'group').length).toBe(24);
+    st = cr.moreGroups(st, 1); // page 3 → all 30, no more-files
+    expect(cr.model(st).items.filter((i) => i.kind === 'group').length).toBe(30);
+    expect(cr.model(st).items.some((i) => i.id === 'm:1:files')).toBe(false);
+  });
+
+  it('blocks() lists descriptors in block order, a full member list for a group, and a trailing more-files', () => {
+    const cr = buildCodeRings({
+      query: 'Q',
+      rows: [...rows(25, 1, 'big.ts', 'm'), ...Array.from({ length: 15 }, (_, i) => ({ symbolId: `o${i}`, name: `o${i}`, file: `s${String(i).padStart(2, '0')}.ts`, depth: 1 }))],
+      edges: [],
+    });
+    const st = cr.openGroup(cr.defaultState(), 'g:1:big.ts');
+    const bl = cr.blocks(st, 1);
+    expect(bl[0]!.kind).toBe('group');
+    expect(bl[0]!.label).toBe('big.ts'); // count 25 sorts first
+    expect(bl[0]!.count).toBe(25);
+    expect(bl[0]!.open).toBe(true);
+    expect(bl[0]!.members).toHaveLength(25); // full list regardless of paging
+    const last = bl[bl.length - 1]!;
+    expect(last.kind).toBe('more-files');
+    expect(last.label).toBe('+4 more files'); // 16 files, 12 shown
+    expect(last.count).toBe(4);
+  });
+});
+
+describe('R13: bfsLevels is re-exported from the adapter', () => {
+  it('exposes bfsLevels from codeRings', () => {
+    const depth = bfsLevels('a', [{ src: 'a', tgt: 'b' }, { src: 'b', tgt: 'c' }], 'out');
+    expect(Object.fromEntries(depth)).toEqual({ a: 0, b: 1, c: 2 });
   });
 });

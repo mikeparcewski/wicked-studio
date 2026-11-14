@@ -16,9 +16,12 @@ import {
   project,
   radii,
   tryApply,
+  visibleModel,
+  type AdapterView,
   type ClassifiedEdge,
   type Item,
   type RingEdge,
+  type RingInput,
 } from '../src/graph/ringModel.js';
 
 const levelMap = (m: Record<string, number | null>) => (id: string): number | null => (id in m ? m[id]! : null);
@@ -170,6 +173,31 @@ describe('classifyEdges', () => {
   });
 });
 
+describe('project (R4 hiddenLinks: distinct secondaries per owner, never primaries)', () => {
+  it('counts a same-level secondary whose two ends collapse into one placeholder once, not twice', () => {
+    const classified: ClassifiedEdge[] = [{ src: 'm1', tgt: 'm2', cls: 'same', colorLevel: 2 }];
+    const ownerOf = (id: string): string => (id.startsWith('m') ? 'G' : id); // both ends → G
+    const { hiddenLinks } = project(classified, ownerOf);
+    expect(hiddenLinks.get('G')).toBe(1); // was 2 before the fix (bumped per end)
+  });
+
+  it('counts a secondary across two distinct placeholders once on each', () => {
+    const classified: ClassifiedEdge[] = [{ src: 'a1', tgt: 'b1', cls: 'skip', colorLevel: 3 }];
+    const ownerOf = (id: string): string => (id.startsWith('a') ? 'A' : id.startsWith('b') ? 'B' : id);
+    const { hiddenLinks } = project(classified, ownerOf);
+    expect(hiddenLinks.get('A')).toBe(1);
+    expect(hiddenLinks.get('B')).toBe(1);
+  });
+
+  it('never counts an internal primary whose two ends collapse into one placeholder', () => {
+    const classified: ClassifiedEdge[] = [{ src: 'm1', tgt: 'm2', cls: 'primary', colorLevel: 2 }];
+    const ownerOf = (id: string): string => (id.startsWith('m') ? 'G' : id);
+    const { edges, hiddenLinks } = project(classified, ownerOf);
+    expect(hiddenLinks.get('G')).toBeUndefined(); // was 1 before the fix
+    expect(edges).toHaveLength(0); // nothing drawn either
+  });
+});
+
 describe('project', () => {
   it('keeps real edges, aggregates a primary with a placeholder end apart from primaries, and counts secondaries on hiddenLinks', () => {
     const classified: ClassifiedEdge[] = [
@@ -238,6 +266,16 @@ describe('radii', () => {
     const b = radii([1, 0, 0, 1], 3); // drawn on 0,3 only
     for (let k = 1; k < b.length; k++) expect(b[k]!).toBeGreaterThan(b[k - 1]!);
   });
+
+  it('R10: r0 = 0, steps RING_STEP through empty levels, and lets n·26/2π decide a crowded ring', () => {
+    expect(radii([1], 0)).toEqual([0]); // r0 = 0
+    // empty levels 1..3 → each is prev + 150
+    expect(radii([1, 0, 0, 0], 3)).toEqual([0, 150, 300, 450]);
+    // a crowded ring: 100 items on ring 1 → 100·26/2π ≈ 413.8 beats the 150 step
+    const crowded = radii([1, 100], 1);
+    expect(crowded[1]).toBeCloseTo((100 * 26) / (2 * Math.PI), 6);
+    expect(crowded[1]!).toBeGreaterThan(150);
+  });
 });
 
 describe('buildScaffold', () => {
@@ -267,6 +305,69 @@ describe('tryApply', () => {
     const no = tryApply('A', 'B', (s) => (s === 'B' ? 501 : 10));
     expect(no.state).toBe('A');
     expect(no.refused).toEqual({ visible: 501 });
+  });
+
+  it('R12: accepts exactly 500 and refuses 501, keeping prev on refusal', () => {
+    const at = tryApply('A', 'B', (s) => (s === 'B' ? 500 : 0));
+    expect(at.state).toBe('B'); // 500 is accepted (boundary)
+    expect(at.refused).toBeUndefined();
+    const over = tryApply('A', 'B', (s) => (s === 'B' ? 501 : 7));
+    expect(over.state).toBe('A'); // previous state kept
+    expect(over.refused).toEqual({ visible: 501 });
+  });
+});
+
+describe('visibleModel scaffold (R2: parent owner only one ring in; focus never parented in hint mode)', () => {
+  function mkI(id: string, level: number): Item {
+    return {
+      id,
+      kind: level === 0 ? 'focus' : 'symbol',
+      size: level === 0 ? 'focus' : 'node',
+      outlined: false,
+      refocusable: level > 0,
+      activatable: false,
+      level,
+      order: level,
+      colorLevel: level,
+      label: id,
+      count: 1,
+      hiddenLinks: 0,
+    };
+  }
+
+  it('a hinted parent on level 1 with its child on level 3 → child hangs off sp:2 and BFS depth = level', () => {
+    const items: Item[] = [mkI('root', 0), mkI('P', 1), mkI('C', 3)];
+    const view: AdapterView = {
+      items,
+      openLevel: 3,
+      ownerOf: (id) => id, // every node drawn as itself
+      levelLabel: (k, c) => `${k}:${c}`,
+      membersOf: (id) => [id],
+      centreMembers: new Set(),
+      placedLevels: [1, 3],
+      placedCount: (k) => (k === 1 || k === 3 ? 1 : 0),
+      shownCount: (k) => items.filter((it) => it.level === k).length,
+      unplaced: 0,
+      loadedNotPlaced: 0,
+    };
+    const input: RingInput = {
+      focusId: 'root',
+      nodes: [
+        { id: 'P', label: 'P', level: 1, groupKey: '' },
+        { id: 'C', label: 'C', level: 3, groupKey: '' },
+      ],
+      edges: [{ src: 'P', tgt: 'root' }],
+      parentHint: { P: 'root', C: 'P', root: 'C' }, // the root hint must be ignored
+    };
+    const m = visibleModel(input, view);
+    // C's parent owner (P) is at level 1, not level 2, so C falls to the spine sp:2.
+    const cEdge = m.scaffold.edges.find((e) => e.tgt === 'C')!;
+    expect(cEdge.src).toBe('sp:2');
+    // the focus is never parented, even though the hint names root→C
+    expect(m.scaffold.edges.some((e) => e.tgt === 'root')).toBe(false);
+    // BFS depth over the scaffold equals the item level for every drawn item
+    const depth = bfsScaffoldDepth('root', m.scaffold.edges);
+    for (const it of items) expect(depth.get(it.id)).toBe(it.level);
   });
 });
 
