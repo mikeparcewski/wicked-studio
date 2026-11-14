@@ -24,7 +24,7 @@
  */
 
 import type { VoiceTtsStatus, PostVoiceTtsBody, PostVoiceSpeakBody } from 'wicked-crew-api-types';
-import { apiBase, apiFetch } from './client.js';
+import { apiBase, apiFetch, errorFromResponse } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
 
 export type { VoiceTtsStatus, PostVoiceTtsBody, PostVoiceSpeakBody };
@@ -114,18 +114,9 @@ export function removeVoiceTts(): Promise<VoiceTtsStatus> {
 async function voiceWavFetch(path: string, init?: RequestInit): Promise<ArrayBuffer> {
   const headers = init?.body !== undefined && init?.body !== null ? { 'Content-Type': 'application/json', ...init?.headers } : { ...init?.headers };
   const res = await fetch(`${apiBase()}${path}`, { ...init, headers });
-  if (!res.ok) {
-    const text = await res.text();
-    let msg: string;
-    let parsed: unknown;
-    try {
-      const body = JSON.parse(text) as { error?: unknown; message?: unknown };
-      parsed = body;
-      const raw = body.error ?? body.message ?? text;
-      msg = typeof raw === 'string' ? raw : JSON.stringify(raw);
-    } catch { msg = text; }
-    throw new ApiError(res.status, msg || res.statusText, parsed);
-  }
+  // One shared parse (`errorFromResponse`), so a read-aloud refusal reads identically to every other
+  // route (`voiceErrorCode`, `isVoiceUnsupported`).
+  if (!res.ok) throw await errorFromResponse(res);
   return res.arrayBuffer();
 }
 

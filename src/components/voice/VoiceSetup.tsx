@@ -2,8 +2,11 @@ import { chooseVoice, consentToModel, consentToVoice, playSample, refreshStatus 
 import { useShallow } from 'zustand/react/shallow';
 import { useVoiceStore } from '../../store/voice.js';
 import type { VoiceTtsVoice } from '../../api/voice.js';
+import { translateWireError } from '../../api/errors.js';
 
 const mb = (n: number): string => `${Math.round(n / 1048576)} MB`;
+/** Read-aloud voice sizes are shown in decimal MB (bytes ÷ 1e6), to match crew's manifest figures. */
+const mbDec = (n: number): string => `${Math.round(n / 1e6)} MB`;
 
 /**
  * What voice needs before it can hear and speak, said plainly (DES-VOICE §3, §4; wicked-crew#1548):
@@ -120,7 +123,8 @@ function buildReadAloud(
     );
   }
   if (tts.install?.state === 'failed') {
-    inner.push(<p key="failed" data-testid="voice-tts-failed">The last install failed: {tts.install.error}</p>);
+    // Never render crew's raw sentence: route it through the one translator (EC33), like every other daemon line.
+    inner.push(<p key="failed" data-testid="voice-tts-failed">The last install failed: {translateWireError(500, tts.install.error ?? '')}</p>);
   }
 
   for (const [id, v] of Object.entries(tts.voices)) {
@@ -145,7 +149,7 @@ function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boo
   return (
     <div key={`voice-${id}`} className="wk-voice-trow" data-testid={`voice-tts-voice-${id}`}>
       <p>
-        <b>{v.name}</b> · {v.accent} · {v.licence} · {mb(v.bytes)}{' '}
+        <b>{v.name}</b> · {v.accent} · {v.licence} · {mbDec(v.bytes)}{' '}
         <span className="wk-voice-src">({v.source})</span>
       </p>
       {!v.installed ? (
@@ -156,7 +160,7 @@ function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boo
           disabled={installing}
           onClick={() => void consentToVoice(id)}
         >
-          Download {v.name} ({mb(v.bytes)})
+          Download {v.name} ({mbDec(v.bytes)})
         </button>
       ) : (
         <div className="wk-voice-trow-actions">

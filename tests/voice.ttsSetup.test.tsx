@@ -4,13 +4,15 @@ import { VoiceSetup } from '../src/components/voice/VoiceSetup.js';
 import { INITIAL_VOICE, useVoiceStore } from '../src/store/voice.js';
 import { refreshTts, resetVoice } from '../src/voice/controller.js';
 import type { VoiceTtsStatus, VoiceTtsVoice } from '../src/api/voice.js';
+import { translateWireError } from '../src/api/errors.js';
 
 // Only the voices crew's manifest offers (wicked-crew#1548): Joe (en_US-joe-medium, CC0) and Cori (en_GB-cori-high,
 // public domain). `JOE` is the installed one, `CORI` the not-yet-installed one.
 const JOE_ID = 'en_US-joe-medium';
 const CORI_ID = 'en_GB-cori-high';
-const JOE: VoiceTtsVoice = { installed: true, name: 'Joe', accent: 'US English', licence: 'CC0', bytes: 63 * 1048576, source: 'Hugging Face rhasspy/piper-voices' };
-const CORI: VoiceTtsVoice = { installed: false, name: 'Cori', accent: 'UK English', licence: 'Public domain', bytes: 85 * 1048576, source: 'Hugging Face rhasspy/piper-voices' };
+// Crew 0.18.15's manifest bytes; shown in decimal MB (bytes ÷ 1e6): Joe 63 MB, Cori 114 MB.
+const JOE: VoiceTtsVoice = { installed: true, name: 'Joe', accent: 'US English', licence: 'CC0', bytes: 63227449, source: 'Hugging Face rhasspy/piper-voices' };
+const CORI: VoiceTtsVoice = { installed: false, name: 'Cori', accent: 'UK English', licence: 'Public domain', bytes: 114224315, source: 'Hugging Face rhasspy/piper-voices' };
 
 function tts(over: Partial<VoiceTtsStatus> = {}): VoiceTtsStatus {
   return {
@@ -51,7 +53,7 @@ describe('read-aloud setup rows', () => {
     expect(disc.textContent).toContain('Hugging Face');
     // A voice row names its size and licence.
     const cori = screen.getByTestId(`voice-tts-voice-${CORI_ID}`);
-    expect(cori.textContent).toContain('85 MB');
+    expect(cori.textContent).toContain('114 MB');
     expect(cori.textContent).toContain('Public domain');
     expect(fetchSpy).not.toHaveBeenCalled(); // nothing fetched just by showing the rows
   });
@@ -134,6 +136,34 @@ describe('read-aloud setup rows', () => {
     });
     render(<VoiceSetup />);
     expect(screen.getByTestId('voice-tts-unsupported').textContent).toContain('Install Python 3.10+');
+  });
+
+  it('shows voice sizes in decimal MB on both rows and both Download buttons (63 MB / 114 MB)', () => {
+    // Both offered as not-yet-installed so each has a row AND a Download button to read.
+    useVoiceStore.setState({
+      tts: tts({ voices: { [JOE_ID]: { ...JOE, installed: false }, [CORI_ID]: { ...CORI } } }),
+      readAloud: true,
+    });
+    render(<VoiceSetup />);
+    const joeRow = screen.getByTestId(`voice-tts-voice-${JOE_ID}`);
+    const coriRow = screen.getByTestId(`voice-tts-voice-${CORI_ID}`);
+    expect(joeRow.textContent).toContain('63 MB');
+    expect(coriRow.textContent).toContain('114 MB');
+    // The Download buttons restate the size — never the 1024-based 60 / 109.
+    expect(screen.getByTestId(`voice-tts-consent-${JOE_ID}`).textContent).toContain('63 MB');
+    expect(screen.getByTestId(`voice-tts-consent-${CORI_ID}`).textContent).toContain('114 MB');
+    expect(joeRow.textContent).not.toContain('60 MB');
+    expect(coriRow.textContent).not.toContain('109 MB');
+  });
+
+  it('renders a failed install through translateWireError, never crew\'s raw sentence', () => {
+    const raw = 'piper exited 1: could not fetch voice';
+    useVoiceStore.setState({ tts: tts({ install: { state: 'failed', step: `voice:${CORI_ID}`, error: raw } }), readAloud: true });
+    render(<VoiceSetup />);
+    const failed = screen.getByTestId('voice-tts-failed');
+    expect(failed.textContent).toContain(translateWireError(500, raw));
+    // The translated sentence carries its own framing, so the bare raw string is never shown alone.
+    expect(failed.textContent).not.toBe(`The last install failed: ${raw}`);
   });
 
   it('hides the read-aloud rows entirely when read-aloud is off', () => {
