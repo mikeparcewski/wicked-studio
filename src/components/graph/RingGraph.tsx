@@ -67,10 +67,14 @@ function canRender(): boolean {
 /** A canvas-backed text measurer at the caption size; the label geometry's `measure` dependency. */
 function makeMeasure(cap: number): Measure {
   let ctx: CanvasRenderingContext2D | null = null;
+  // Cache the FIRST getContext attempt (success or null) so a browserless environment, where
+  // getContext always returns null, does not create a fresh canvas on every label measured (F6).
+  let tried = false;
   const sans = sansStack();
   const mono = monoStack();
   return (text: string, font: FontKind): number => {
-    if (ctx === null) {
+    if (!tried) {
+      tried = true;
       try {
         ctx = document.createElement('canvas').getContext('2d');
       } catch {
@@ -146,8 +150,8 @@ interface Ctx {
 const focusIdOf = (model: VisibleModel): string =>
   model.items.find((i) => i.kind === 'focus')?.id ?? model.items[0]?.id ?? 'q:';
 
-/** The label inputs for the current positions and selection — one per item, plus one per guide. */
-function buildLabelInputs(ctx: Ctx, selectedId: string | null): LabelInput[] {
+/** The label inputs for the current positions, selection and hover — one per item, plus one per guide. */
+function buildLabelInputs(ctx: Ctx, selectedId: string | null, hoverLevel: number | null): LabelInput[] {
   const chain = selectedChain(ctx.model, selectedId, ctx.focusId);
   const inputs: LabelInput[] = ctx.model.items.map((it) => {
     // Model ids are cytoscape element ids verbatim; cy.$id looks them up literally (POL-2101).
@@ -155,7 +159,10 @@ function buildLabelInputs(ctx: Ctx, selectedId: string | null): LabelInput[] {
     return {
       id: it.id, kind: it.kind, level: it.level, text: it.label,
       rRing: Math.hypot(p.x, p.y), rNode: sizeOf(it) / 2, angle: Math.atan2(p.y, p.x),
-      selected: it.id === selectedId, hovered: chain.nodes.has(it.id),
+      selected: it.id === selectedId,
+      // `hovered` means "on the selected chain OR on the hovered ring" — both earn label priority, so
+      // a hovered ring's labels win a collision over dimmed labels of equal base rank (F3).
+      hovered: chain.nodes.has(it.id) || (hoverLevel !== null && it.level === hoverLevel),
     };
   });
   for (const g of ctx.model.scaffold.guides) {
@@ -168,9 +175,9 @@ function buildLabelInputs(ctx: Ctx, selectedId: string | null): LabelInput[] {
 }
 
 /** Place the labels at the current zoom and write each node's label text + geometry; returns the result. */
-function applyLabels(ctx: Ctx, selectedId: string | null): ReturnType<typeof placeLabels> {
+function applyLabels(ctx: Ctx, selectedId: string | null, hoverLevel: number | null): ReturnType<typeof placeLabels> {
   const zoom = ctx.cy.zoom() || 1;
-  const inputs = buildLabelInputs(ctx, selectedId);
+  const inputs = buildLabelInputs(ctx, selectedId, hoverLevel);
   const placed = placeLabels(inputs, zoom, ctx.cap, ctx.measure, RING_STEP);
   for (const input of inputs) {
     const node = ctx.cy.$id(input.id);
@@ -192,8 +199,18 @@ function applyStateClasses(ctx: Ctx, selectedId: string | null, hoverLevel: numb
     for (const id of chain.nodes) { const n = cy.$id(id); if (n.nonempty()) n.addClass('chain'); }
     for (const e of cy.edges()) if (chain.edges.has(e.data('key') as string)) e.addClass('chain');
     if (hoverLevel !== null) {
-      cy.nodes().forEach((n) => { if ((n.data('level') as number) !== hoverLevel) n.addClass('dim'); });
-      cy.edges().forEach((e) => { if ((e.data('clamp') as number) !== clampLevel(hoverLevel)) e.addClass('dim'); });
+      // Dim never lands on the selection or on a selected-chain element: the focus can be the
+      // selection with its chain empty (selectedChain returns early when selectedId === focusId), so
+      // the :selected / .chain guards — not chain membership alone — keep it lit (F1).
+      cy.nodes().forEach((n) => {
+        if ((n.data('level') as number) !== hoverLevel && !n.selected() && !n.hasClass('chain')) n.addClass('dim');
+      });
+      // Compare each edge's REAL colour level (its data, not the 1..5 colour clamp) with hoverLevel,
+      // so on graphs deeper than five rings a level-6/7 edge dims when level 5 is hovered and vice
+      // versa; clamp stays for colour only (F2).
+      cy.edges().forEach((e) => {
+        if ((e.data('colorLevel') as number) !== hoverLevel && !e.hasClass('chain')) e.addClass('dim');
+      });
       const guide = model.scaffold.guides.find((g) => Number(g.split(':')[1]) === hoverLevel);
       if (guide !== undefined) { const n = cy.$id(guide); if (n.nonempty()) n.removeClass('dim').addClass('chain'); }
     }
@@ -208,13 +225,20 @@ function selectedXY(cy: cytoscape.Core): string {
   return `${Math.round(rp.x)},${Math.round(rp.y)}`;
 }
 
+/** The aria-label: an explicit override, else the derived "<focus> ring graph — N placed, open to level K". */
+function ariaLabelFor(model: VisibleModel, focusId: string, ariaLabel: string | undefined): string {
+  if (ariaLabel !== undefined) return ariaLabel;
+  const focusLabel = model.items.find((i) => i.id === focusId)?.label ?? '';
+  const placedTotal = model.levels.reduce((s, r) => s + r.placed, 0);
+  return `${focusLabel} ring graph — ${placedTotal} placed, open to level ${model.openLevel}`;
+}
+
 /** The model-derived + theme-derived attributes (change only on a model / theme / style change). */
 function writeModelAttrs(host: HTMLElement, ctx: Ctx, view: string, ariaLabel: string | undefined): void {
   const { cy, model, focusId } = ctx;
   const focusLabel = model.items.find((i) => i.id === focusId)?.label ?? '';
-  const placedTotal = model.levels.reduce((s, r) => s + r.placed, 0);
   host.setAttribute('role', 'img');
-  host.setAttribute('aria-label', ariaLabel ?? `${focusLabel} ring graph — ${placedTotal} placed, open to level ${model.openLevel}`);
+  host.setAttribute('aria-label', ariaLabelFor(model, focusId, ariaLabel));
   host.dataset.view = view;
   host.dataset.focus = focusLabel;
   host.dataset.visible = String(model.counts.visible);
@@ -241,10 +265,16 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const rafRef = useRef<number | null>(null);
+  // Whether the pending zoom frame was scheduled with setTimeout (no requestAnimationFrame): cleanup
+  // must clearTimeout it, not cancelAnimationFrame it, or it fires after unmount on a destroyed cy (F6).
+  const frameIsTimeoutRef = useRef(false);
   // Latest selection/hover, so the zoom + theme callbacks (which outlive the build render) read the
   // CURRENT values, not the ones captured when the graph was built (F2).
   const selectedIdRef = useRef(selectedId);
   const hoverLevelRef = useRef(hoverLevel);
+  // The latest aria-label, so refresh() (zoom/theme frames) never rewrites a stale label and a
+  // label-only prop change still updates the host even when the model and view did not change (F6).
+  const ariaLabelRef = useRef(ariaLabel);
   // The {selectedId, hoverLevel} the canvas was last painted with (by either effect). The selection
   // effect compares against it instead of a skip-once flag, so a model-only rebuild never swallows the
   // next selection or hover change (F1).
@@ -260,7 +290,18 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
   useEffect(() => {
     selectedIdRef.current = selectedId;
     hoverLevelRef.current = hoverLevel;
+    ariaLabelRef.current = ariaLabel;
   });
+
+  // A label-only prop change (model and view unchanged, so the build effect does not re-run) still
+  // updates the host's aria-label; refresh() then reads the ref, so a later zoom never reverts it (F6).
+  useEffect(() => {
+    const host = containerRef.current;
+    const cy = cyRef.current;
+    if (host === null || cy === null || cy.destroyed()) return;
+    host.setAttribute('aria-label', ariaLabelFor(model, focusIdOf(model), ariaLabel));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ariaLabel]);
 
   // Build / rebuild on a model (or view) change.
   useEffect(() => {
@@ -307,7 +348,10 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
         data: {
           id: `e${i}`, key: `${e.src}\u0000${e.tgt}`,
           source: e.src, target: e.tgt,
-          ecls: e.aggregate ? 'aggregate' : e.cls, clamp: clampLevel(e.colorLevel),
+          ecls: e.aggregate ? 'aggregate' : e.cls,
+          // `clamp` (1..5) drives the hop colour; `colorLevel` keeps the edge's REAL level so hover
+          // dimming can compare it directly with hoverLevel on graphs deeper than five rings (F2).
+          clamp: clampLevel(e.colorLevel), colorLevel: e.colorLevel,
           count: e.count, dlabel: e.aggregate ? String(e.count) : '',
         },
       }));
@@ -353,9 +397,11 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
     // Apply placement + the derived data attributes for the current zoom and state. Reads the latest
     // selection through the ref so a later zoom / theme frame never reverts to a stale selection (F2).
     const refresh = (): void => {
-      const placed = applyLabels(ctx, selectedIdRef.current);
-      writeModelAttrs(host, ctx, view, ariaLabel);
+      const placed = applyLabels(ctx, selectedIdRef.current, hoverLevelRef.current);
+      writeModelAttrs(host, ctx, view, ariaLabelRef.current);
       writeLabelAttrs(host, cy, placed);
+      // Keep the selection's rendered position current after a zoom or pan (F5).
+      host.dataset.selectedXy = selectedXY(cy);
     };
 
     // Tap: select (+ activate on an activatable item).
@@ -366,15 +412,30 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
       if (it.activatable) onActivateRef.current(it);
     });
 
-    // Recompute labels on zoom, in a single rAF frame.
-    cy.on('zoom', () => {
+    // Recompute labels + the selection's rendered position on a viewport change (zoom OR pan),
+    // coalesced to one frame. The callback no-ops if the instance was destroyed before the frame ran,
+    // and the frame is tracked as rAF vs setTimeout so cleanup cancels the right handle (F5, F6).
+    cy.on('zoom pan', () => {
       if (rafRef.current !== null) return;
-      const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn: FrameRequestCallback) => setTimeout(() => fn(0), 0) as unknown as number;
-      rafRef.current = raf(() => { rafRef.current = null; refresh(); });
+      if (typeof requestAnimationFrame === 'function') {
+        frameIsTimeoutRef.current = false;
+        rafRef.current = requestAnimationFrame(() => { rafRef.current = null; if (!cy.destroyed()) refresh(); });
+      } else {
+        frameIsTimeoutRef.current = true;
+        rafRef.current = setTimeout(() => { rafRef.current = null; if (!cy.destroyed()) refresh(); }, 0) as unknown as number;
+      }
     });
 
-    // A theme change re-resolves tokens and re-applies the stylesheet — never the layout.
-    const stopTheme = observeTheme(() => { if (!cy.destroyed()) { cy.style(ringStyle()); refresh(); } });
+    // A theme change re-resolves tokens: rebuild the stylesheet AND recompute the caption size + the
+    // measurer (whose font stacks may have changed), so labels are re-measured with the new fonts —
+    // never the layout (F6).
+    const stopTheme = observeTheme(() => {
+      if (cy.destroyed()) return;
+      ctx.cap = captionPx();
+      ctx.measure = makeMeasure(ctx.cap);
+      cy.style(ringStyle());
+      refresh();
+    });
 
     // First paint: no animation; fit synchronously and write the attributes.
     applyStateClasses(ctx, selectedId, hoverLevel);
@@ -388,7 +449,10 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
 
     return () => {
       stopTheme();
-      if (rafRef.current !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafRef.current);
+      if (rafRef.current !== null) {
+        if (frameIsTimeoutRef.current) clearTimeout(rafRef.current);
+        else if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafRef.current);
+      }
       rafRef.current = null;
       cy.stop();
       cy.destroy();
@@ -407,13 +471,24 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
     // rebuild updates lastAppliedRef to the current values, so the NEXT real change still applies (F1).
     const prev = lastAppliedRef.current;
     if (prev !== null && prev.selectedId === selectedId && prev.hoverLevel === hoverLevel) return;
+    // Only a SELECTION change may move the viewport; a hover-only change restyles and relabels in
+    // place (F5).
+    const selectionChanged = prev === null || prev.selectedId !== selectedId;
     lastAppliedRef.current = { selectedId, hoverLevel };
     const cap = captionPx();
     const ctx: Ctx = { cy, model, focusId: focusIdOf(model), cap, measure: makeMeasure(cap) };
 
     applyStateClasses(ctx, selectedId, hoverLevel);
-    const placed = applyLabels(ctx, selectedId);
+    const placed = applyLabels(ctx, selectedId, hoverLevel);
     writeLabelAttrs(host, cy, placed);
+
+    // A hover-only change never touches zoom or pan, and starts no animation. It must NOT clear
+    // data-animating either: a selection's 300 ms fit may still be in flight, and only its complete
+    // callback (or the headless/reduced-motion branch) may set the flag false (F5).
+    if (!selectionChanged) return;
+
+    // The selection changed — record its rendered position synchronously, then recentre (F5).
+    host.dataset.selectedXy = selectedXY(cy);
 
     // Animate only when there is a renderer to animate and motion is allowed (a headless instance has
     // no render loop; cy.animate's rAF step would dereference a missing viewport).
@@ -423,6 +498,9 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
       host.dataset.animating = 'false';
     } else {
       host.dataset.animating = 'true';
+      // Stop any in-flight fit first, so quick successive selections never stack 300 ms animations and
+      // data-animating cannot read false while a later animation is still running (F5).
+      cy.stop();
       cy.animate({
         fit: { eles: cy.nodes(), padding: PADDING }, duration: 300,
         easing: (resolveTokenValue('--ease-out') || 'ease-out') as cytoscape.Css.TransitionTimingFunction,

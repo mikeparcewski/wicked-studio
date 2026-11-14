@@ -21,6 +21,17 @@ npm publish dates. Every version listed here exists on
   in the dark base and the light theme, and `resolveTokenValue` / `resolveTokenPx` helpers for sinks
   that need a token as a raw string or a pixel number. Not yet wired into any screen.
 
+### Fixed
+
+- Graph rings (2 of 5) ring-canvas cross-review follow-up: hover dimming no longer dims the selection
+  or its selected chain (the tapped focus stays lit) and compares each edge's real level, so level-6/7
+  edges dim correctly on graphs deeper than five rings; a hovered ring's labels win label collisions;
+  `resolveTokenPx` probes with `display:none` so an unset token yields NaN instead of the page width;
+  a hover-only change no longer refits or animates the viewport (only a selection recentres, stopping
+  any in-flight animation first); and lifecycle fixes — a label-only `ariaLabel` change updates the
+  host, a pending zoom frame is cancelled on unmount, a failed canvas context is cached, and empty
+  labels are never placed. Still not wired into any screen.
+
 ## [0.16.10] — 2026-11-14
 
 Patch: after "Land with carried items and a note" on a capped review, the workflow's final card offers Approve

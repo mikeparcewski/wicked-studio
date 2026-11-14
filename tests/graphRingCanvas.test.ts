@@ -83,10 +83,20 @@ describe('ring layout on the worked fixture', () => {
     }
   });
 
-  it('the drawn radii strictly increase', () => {
-    const drawnLevels = [...new Set(model.items.map((i) => i.level))].sort((a, b) => a - b);
-    for (let i = 1; i < drawnLevels.length; i++) {
-      expect(model.radii[drawnLevels[i]!]!).toBeGreaterThan(model.radii[drawnLevels[i - 1]!]!);
+  it('the drawn radii strictly increase, measured on the laid-out positions', () => {
+    // Assert on where nodes actually LAND (not just model.radii): the mean placed radius per drawn
+    // level strictly increases and matches model.radii[level] within 0.5 px (F7).
+    const drawnLevels = [...new Set(model.items.map((i) => i.level))].filter((k) => k > 0).sort((a, b) => a - b);
+    let prevMean = -Infinity;
+    for (const k of drawnLevels) {
+      const nodes = model.items.filter((it) => it.level === k);
+      const mean = nodes.reduce((s, it) => {
+        const p = placed.get(it.id)!;
+        return s + Math.hypot(p.x, p.y);
+      }, 0) / nodes.length;
+      expect(Math.abs(mean - (model.radii[k] ?? 0)), `level ${k} mean radius matches model.radii`).toBeLessThanOrEqual(0.5);
+      expect(mean, `level ${k} mean radius increases`).toBeGreaterThan(prevMean);
+      prevMean = mean;
     }
   });
 
