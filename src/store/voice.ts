@@ -55,6 +55,10 @@ export interface VoiceState {
   tts: VoiceTtsStatus | null;
   /** The 404 upgrade line for a crew with no read-aloud routes, else null. */
   ttsError: string | null;
+  /** A failed action on one voice row (a sample or an install): shown on that row, which keeps its controls to retry. */
+  ttsActionError: { voice: string; message: string } | null;
+  /** A reply could not be read aloud (the speaker refused): captions stand, the view says so briefly. */
+  readAloudFailed: boolean;
   /** The chosen read-aloud voice id (kept per person in localStorage), or null until one is chosen. */
   ttsVoice: string | null;
   /** Read-aloud is on but piper isn't set up: the view says so and does not speak. */
@@ -89,7 +93,7 @@ export interface VoiceState {
 
 export const INITIAL_VOICE: VoiceState = {
   phase: 'off', mode: null, modal: [], lines: [], heard: null, status: null, statusError: null,
-  tts: null, ttsError: null, ttsVoice: null, readAloudNeedsSetup: false, micError: null,
+  tts: null, ttsError: null, ttsActionError: null, readAloudFailed: false, ttsVoice: null, readAloudNeedsSetup: false, micError: null,
   micOn: false, bars: [], speaking: 'idle', holding: false, transcribing: false, readAloud: true, openAsk: null,
   awaitingGate: null, error: null, preview: null, lastChoice: [], pageFocus: null,
 };

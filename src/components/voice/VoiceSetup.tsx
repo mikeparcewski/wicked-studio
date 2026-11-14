@@ -1,4 +1,4 @@
-import { chooseVoice, consentToModel, consentToVoice, playSample, refreshStatus } from '../../voice/controller.js';
+import { chooseVoice, consentToModel, consentToVoice, playSample, refreshStatus, refreshTts } from '../../voice/controller.js';
 import { useShallow } from 'zustand/react/shallow';
 import { useVoiceStore } from '../../store/voice.js';
 import type { VoiceTtsVoice } from '../../api/voice.js';
@@ -16,10 +16,11 @@ const mbDec = (n: number): string => `${Math.round(n / 1e6)} MB`;
  * ready and the mic is on; the read-aloud rows show whenever read-aloud is on (so a voice can be chosen or sampled).
  */
 export function VoiceSetup(): React.ReactElement | null {
-  const { status, statusError, micError, tts, ttsError, ttsVoice, readAloud } = useVoiceStore(
+  const { status, statusError, micError, tts, ttsError, ttsActionError, ttsVoice, readAloud, readAloudFailed } = useVoiceStore(
     useShallow((s) => ({
       status: s.status, statusError: s.statusError, micError: s.micError,
-      tts: s.tts, ttsError: s.ttsError, ttsVoice: s.ttsVoice, readAloud: s.readAloud,
+      tts: s.tts, ttsError: s.ttsError, ttsActionError: s.ttsActionError, ttsVoice: s.ttsVoice, readAloud: s.readAloud,
+      readAloudFailed: s.readAloudFailed,
     })),
   );
 
@@ -69,8 +70,16 @@ export function VoiceSetup(): React.ReactElement | null {
   }
 
   // ── Read-aloud (piper) ──────────────────────────────────────────────────────────────────────
-  const readAloudBlock = buildReadAloud(readAloud, tts, ttsError, ttsVoice);
+  const readAloudBlock = buildReadAloud(readAloud, tts, ttsError, ttsActionError, ttsVoice);
   if (readAloudBlock !== null) rows.push(readAloudBlock);
+  if (readAloud && readAloudFailed) {
+    rows.push(
+      <p key="tts-speak-failed" data-testid="voice-readaloud-failed">
+        Read-aloud couldn’t speak that reply; the captions are unaffected.{' '}
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-readaloud-retry" onClick={() => void refreshTts()}>Check read-aloud again</button>
+      </p>,
+    );
+  }
 
   if (rows.length === 0) return null;
   return <div className="wk-voice-setup" data-testid="voice-setup" role="status">{rows}</div>;
@@ -80,12 +89,18 @@ function buildReadAloud(
   readAloud: boolean,
   tts: ReturnType<typeof useVoiceStore.getState>['tts'],
   ttsError: string | null,
+  ttsActionError: { voice: string; message: string } | null,
   ttsVoice: string | null,
 ): React.ReactNode {
   if (!readAloud) return null;
-  // A crew with no read-aloud routes (404) or a read error: the upgrade/remedy line.
-  if (ttsError !== null) {
-    return <div key="tts" data-testid="voice-tts" data-state="error"><p data-testid="voice-tts-error">{ttsError}</p></div>;
+  // No status yet and a read error (or a crew with no read-aloud routes, 404): the remedy line, with a retry.
+  if (tts === null && ttsError !== null) {
+    return (
+      <div key="tts" data-testid="voice-tts" data-state="error">
+        <p data-testid="voice-tts-error">{ttsError}</p>
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-tts-retry" onClick={() => void refreshTts()}>Try again</button>
+      </div>
+    );
   }
   if (tts === null) return null; // still loading
 
@@ -127,8 +142,18 @@ function buildReadAloud(
     inner.push(<p key="failed" data-testid="voice-tts-failed">The last install failed: {translateWireError(500, tts.install.error ?? '')}</p>);
   }
 
+  // A read error with a known status: the error sits above the rows, which keep their status and controls.
+  if (ttsError !== null) {
+    inner.push(
+      <div key="tts-read-error">
+        <p data-testid="voice-tts-error">{ttsError}</p>
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-tts-retry" onClick={() => void refreshTts()}>Try again</button>
+      </div>,
+    );
+  }
+
   for (const [id, v] of Object.entries(tts.voices)) {
-    inner.push(voiceRow(id, v, ttsVoice === id, installing));
+    inner.push(voiceRow(id, v, ttsVoice === id, installing, ttsActionError?.voice === id ? ttsActionError.message : null));
   }
 
   return <div key="tts" data-testid="voice-tts" data-state="ready">{inner}</div>;
@@ -145,7 +170,7 @@ function installStepLabel(step: string | null, voices: Record<string, VoiceTtsVo
   return 'Installing read-aloud…';
 }
 
-function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boolean): React.ReactNode {
+function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boolean, error: string | null): React.ReactNode {
   return (
     <div key={`voice-${id}`} className="wk-voice-trow" data-testid={`voice-tts-voice-${id}`}>
       <p>
@@ -172,6 +197,7 @@ function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boo
           </label>
         </div>
       )}
+      {error !== null && <p data-testid={`voice-tts-row-error-${id}`} role="alert">{error}</p>}
     </div>
   );
 }

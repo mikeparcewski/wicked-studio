@@ -246,63 +246,144 @@ function ttsReady(): boolean {
 export function setReadAloud(on: boolean): void {
   set({ readAloud: on });
   try { localStorage.setItem(READ_ALOUD_KEY, on ? 'on' : 'off'); } catch { /* private mode */ }
-  if (!on) { deps.speaker.cancel(); set({ readAloudNeedsSetup: false }); }
+  if (!on) { stopPlayback(); set({ readAloudNeedsSetup: false, readAloudFailed: false }); }
   else void refreshTts();
 }
 
-/** Read what read-aloud needs on this machine (piper + the voices). On a crew without the routes, the upgrade line. */
+/** Read what read-aloud needs on this machine (piper + the voices). On a crew without the routes, the upgrade line;
+ *  on any other read error the last known status stays, so its rows and controls remain next to the error. A read
+ *  that lands after Voice closed is dropped. An install crew reports as running is (re)polled until it settles. */
 export async function refreshTts(): Promise<VoiceTtsStatus | null> {
+  const gen = generation;
   try {
     const tts = await getVoiceTts();
+    if (gen !== generation) return null;
     const installed = Object.entries(tts.voices).filter(([, v]) => v.installed).map(([id]) => id);
     const cur = S.getState().ttsVoice ?? savedTtsVoice();
     // Keep a saved choice only while it is still installed; otherwise default to the first installed voice.
     const chosen = cur !== null && installed.includes(cur) ? cur : installed[0] ?? null;
     set({ tts, ttsError: null, ttsVoice: chosen });
     if (ttsReady()) set({ readAloudNeedsSetup: false });
+    if (tts.install?.state === 'running') void pollTtsInstall(gen);
     return tts;
   } catch (e) {
-    set({ tts: null, ttsError: isVoiceUnsupported(e) ? 'This crew has no read-aloud yet. Upgrade wicked-crew to use read-aloud.' : e instanceof Error ? e.message : String(e) });
+    if (gen !== generation) return null;
+    const unsupported = isVoiceUnsupported(e);
+    set({
+      ...(unsupported ? { tts: null } : {}),
+      ttsError: unsupported ? 'This crew has no read-aloud yet. Upgrade wicked-crew to use read-aloud.' : e instanceof Error ? e.message : String(e),
+    });
     return null;
+  }
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+/** The generation a read-aloud install poll is running for (one poll at a time), or -1. */
+let ttsPolling = -1;
+
+/** Poll crew until its install is no longer running: installed or failed, whichever lands. A voice showing installed
+ *  while the engine step still runs does not stop it. Stops when Voice closes (checked after every await). */
+async function pollTtsInstall(gen: number): Promise<void> {
+  if (ttsPolling === gen) return;
+  ttsPolling = gen;
+  try {
+    for (let i = 0; i < 900 && gen === generation; i++) {
+      await sleep(1000);
+      if (gen !== generation) return;
+      const st = await refreshTts();
+      if (gen !== generation || st === null || st.install?.state !== 'running') return;
+    }
+  } finally {
+    if (ttsPolling === gen) ttsPolling = -1;
   }
 }
 
 /** The person said yes to installing piper and one voice. Polls until it lands or fails. */
 export async function consentToVoice(id: string): Promise<void> {
+  const gen = generation;
+  set({ ttsActionError: null });
   try {
-    set({ tts: await installVoiceTts([id]), ttsError: null });
+    const tts = await installVoiceTts([id]);
+    if (gen !== generation) return;
+    set({ tts, ttsError: null });
   } catch (e) {
-    set({ ttsError: e instanceof Error ? e.message : String(e) });
+    if (gen === generation) set({ ttsActionError: { voice: id, message: e instanceof Error ? e.message : String(e) } });
     return;
   }
-  const gen = generation;
-  for (let i = 0; i < 900 && gen === generation; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
-    const st = await refreshTts();
-    if (st === null || st.voices[id]?.installed === true || st.install?.state === 'failed') break;
-  }
+  await pollTtsInstall(gen);
 }
 
 /** Pick the read-aloud voice (an installed one), kept per person. */
 export function chooseVoice(id: string): void {
-  set({ ttsVoice: id, readAloudNeedsSetup: false });
+  set({ ttsVoice: id, readAloudNeedsSetup: false, ttsActionError: null });
   try { localStorage.setItem(TTS_VOICE_KEY, id); } catch { /* private mode */ }
 }
 
+/** Who owns playback right now. `say` and `playSample` each take a new number; only the newest owner may hand the
+ *  speaker back to idle, so a cancelled earlier playback finishing late never un-mutes the mic under a newer one. */
+let playOwner = 0;
 let sampleCtx: AudioContext | null = null;
-/** Play a short sample of one installed voice (GET /voice/tts/sample/:id), through a shared one-shot player. */
+let sampleAbort: AbortController | null = null;
+let sampleSrc: AudioBufferSourceNode | null = null;
+let sampleRelease: (() => void) | null = null;
+
+/** Stop a sample: abort its fetch, silence its source and release the `playSample` awaiting it. */
+function stopSample(): void {
+  if (sampleAbort !== null) { sampleAbort.abort(); sampleAbort = null; }
+  if (sampleSrc !== null) {
+    const src = sampleSrc;
+    sampleSrc = null;
+    src.onended = null;
+    try { src.stop(); } catch { /* not started */ }
+    try { src.disconnect(); } catch { /* already gone */ }
+  }
+  if (sampleRelease !== null) { const r = sampleRelease; sampleRelease = null; r(); }
+}
+
+/** Stop every playback (read-aloud and a sample). */
+function stopPlayback(): void {
+  deps.speaker.cancel();
+  stopSample();
+}
+
+function idleIfOwner(mine: number): void {
+  if (mine === playOwner && S.getState().speaking === 'it') set({ speaking: 'idle' });
+}
+
+/** Play a short sample of one installed voice (GET /voice/tts/sample/:id). It takes playback over (read-aloud and any
+ *  earlier sample stop, so two never overlap), pauses the mic while it plays (`speaking: 'it'`), and is dropped if
+ *  Voice closes first. A failure lands on that voice's row. Resolves when the sample ends or is stopped. */
 export async function playSample(id: string): Promise<void> {
+  const mine = ++playOwner;
+  const gen = generation;
+  stopPlayback();
+  const ac = new AbortController();
+  sampleAbort = ac;
+  const live = (): boolean => mine === playOwner && gen === generation && !ac.signal.aborted;
+  set({ speaking: 'it', ttsActionError: null });
   try {
-    const buf = await voiceSampleBuffer(id);
+    const buf = await voiceSampleBuffer(id, ac.signal);
+    if (!live()) return;
     sampleCtx ??= new AudioContext();
     if (sampleCtx.state === 'suspended') await sampleCtx.resume().catch(() => undefined);
-    const audio = await sampleCtx.decodeAudioData(buf.slice(0));
-    const src = sampleCtx.createBufferSource();
+    if (!live()) return;
+    const ctx = sampleCtx;
+    const audio = await ctx.decodeAudioData(buf.slice(0));
+    if (!live()) return;
+    const src = ctx.createBufferSource();
     src.buffer = audio;
-    src.connect(sampleCtx.destination);
-    src.start();
+    src.connect(ctx.destination);
+    await new Promise<void>((resolve) => {
+      sampleRelease = resolve;
+      src.onended = () => { if (sampleSrc === src) sampleSrc = null; if (sampleRelease === resolve) sampleRelease = null; resolve(); };
+      sampleSrc = src;
+      src.start();
+    });
   } catch (e) {
-    set({ ttsError: e instanceof Error ? e.message : String(e) });
+    if (live()) set({ ttsActionError: { voice: id, message: e instanceof Error ? e.message : String(e) } });
+  } finally {
+    if (sampleAbort === ac) sampleAbort = null;
+    idleIfOwner(mine);
   }
 }
 
@@ -348,8 +429,18 @@ function openAsk(ask: Ask, context: VoiceAskContext, text = ''): number {
 async function say(text: string): Promise<void> {
   if (!S.getState().readAloud || text.trim() === '') return;
   if (!deps.speaker.available) { set({ readAloudNeedsSetup: true }); return; }
-  set({ speaking: 'it', readAloudNeedsSetup: false });
-  try { await deps.speaker.say(text); } finally { if (S.getState().speaking === 'it') set({ speaking: 'idle' }); }
+  const mine = ++playOwner;
+  const gen = generation;
+  stopSample();
+  set({ speaking: 'it', readAloudNeedsSetup: false, readAloudFailed: false });
+  try {
+    await deps.speaker.say(text);
+  } catch {
+    // A refusal or decode error must never reach the caller (a chat answer's caption stands): read-aloud fails quietly.
+    if (mine === playOwner && gen === generation) set({ readAloudFailed: true });
+  } finally {
+    idleIfOwner(mine);
+  }
 }
 
 async function itSays(text: string): Promise<void> {
@@ -1031,7 +1122,8 @@ export async function consentToModel(): Promise<void> {
   }
   const gen = generation;
   for (let i = 0; i < 900 && gen === generation; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
+    await sleep(1000);
+    if (gen !== generation) return;
     const st = await refreshStatus();
     if (st === null || st.model.present || st.model.download?.state === 'failed') break;
   }
@@ -1070,7 +1162,7 @@ function describeNow(): string {
 
 function enterFull(): void {
   if (S.getState().phase !== 'ask') return;
-  deps.speaker.cancel();
+  stopPlayback();
   set({ phase: 'full', heard: null, lines: [], openAsk: null });
   watchGates();
   // A job pinned last time is shown again while it is still running.
@@ -1100,7 +1192,7 @@ export function holdToTalk(down: boolean): void {
   if (s.phase !== 'full' || s.mode !== 'space' || mic === null) return;
   if (down) {
     if (s.holding) return;
-    deps.speaker.cancel();
+    stopPlayback();
     set({ holding: true, speaking: 'you' });
     recordingAsk = S.getState().openAsk;
     mic.record();
@@ -1122,7 +1214,7 @@ export function closeVoice(): void {
   mic = null;
   gateUnsub?.();
   gateUnsub = null;
-  deps.speaker.cancel();
+  stopPlayback();
   deps.endChat();
   set({ ...INITIAL_VOICE, readAloud: S.getState().readAloud });
 }

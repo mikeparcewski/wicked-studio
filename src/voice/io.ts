@@ -213,8 +213,14 @@ export class PiperSpeaker implements Speaker {
     const controller = new AbortController();
     this.controller = controller;
     const ctx = this.deps.ctx();
-    const fetchAt = (i: number): Promise<ArrayBuffer> | null =>
-      i < pieces.length ? this.deps.fetchWav(pieces[i]!, voice, controller.signal) : null;
+    const fetchAt = (i: number): Promise<ArrayBuffer> | null => {
+      if (i >= pieces.length) return null;
+      const p = this.deps.fetchWav(pieces[i]!, voice, controller.signal);
+      // A prefetch can reject while the current sentence is still playing: mark it handled now. Awaiting `p` later
+      // still throws, so the loop reports the failure when it reaches that sentence.
+      p.catch(() => undefined);
+      return p;
+    };
     let next = fetchAt(0);
     try {
       for (let i = 0; i < pieces.length; i++) {
@@ -229,8 +235,9 @@ export class PiperSpeaker implements Speaker {
       if (controller.signal.aborted || mine !== this.token) return;
       throw e;
     } finally {
-      // Don't leave an aborted fetch unhandled when we bailed out of the loop early.
-      if (next !== null) void next.catch(() => undefined);
+      // Every exit (done, cancelled, a play or decode failure) aborts what is still pending, so a prefetch never
+      // outlives the call; `fetchAt` already marked it handled.
+      if (this.controller === controller) { controller.abort(); this.controller = null; }
     }
   }
 
@@ -247,7 +254,11 @@ export class PiperSpeaker implements Speaker {
         src.onended = () => { if (this.source === src) this.source = null; done(); };
         this.source = src;
         src.start();
-      }).catch(reject);
+      }).catch((e: unknown) => {
+        if (this.playResolve === resolve) this.playResolve = null;
+        if (this.source !== null) { try { this.source.stop(); } catch { /* not started */ } this.source = null; }
+        reject(e);
+      });
     });
   }
 

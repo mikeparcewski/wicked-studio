@@ -128,8 +128,8 @@ export function speakVoiceText(text: string, voice: string, signal?: AbortSignal
 }
 
 /** A short sample of one installed voice (GET /voice/tts/sample/:voice → audio/wav). */
-export function voiceSampleBuffer(voice: string): Promise<ArrayBuffer> {
-  return voiceWavFetch(`/voice/tts/sample/${encodeURIComponent(voice)}`);
+export function voiceSampleBuffer(voice: string, signal?: AbortSignal): Promise<ArrayBuffer> {
+  return voiceWavFetch(`/voice/tts/sample/${encodeURIComponent(voice)}`, signal !== undefined ? { signal } : undefined);
 }
 
 /** A crew without voice's routes (a bare 404 / unknown route). */

@@ -43,6 +43,11 @@ npm publish dates. Every version listed here exists on
   the voice view says so and shows the setup rows instead of speaking. A crew without the routes shows the upgrade
   line. There is no browser-speech fallback. The read-aloud wire types (`VoiceTtsStatus`, `PostVoiceTtsBody`,
   `PostVoiceSpeakBody`) come from `wicked-crew-api-types` 0.209.0 (re-pinned from 0.206.0), not a local copy.
+  Read-aloud playback is hardened: a refused or failed read-aloud never replaces a chat answer (captions stand and
+  a short note offers a retry); Play sample stops when Voice closes, pauses the mic and never overlaps read-aloud; a
+  replaced utterance no longer un-mutes the mic under the new one; a prefetch failure is no unhandled rejection;
+  the install poll stops on close, keeps going until crew's install finishes and resumes when Voice reopens; and a
+  failed sample or install shows on its own voice row, with the known status and a read-aloud retry.
 
 ## [0.16.10] — 2026-11-14
 
