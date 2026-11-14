@@ -109,6 +109,60 @@ describe('PiperSpeaker', () => {
     expect(h.fetched.length).toBe(after); // no further fetches after cancel
   });
 
+  it('cancel aborts a STILL-PENDING prefetch, settles say, and raises no unhandled rejection', async () => {
+    // Done-when 1 (barge-in): the previous cancel test used an immediate fetch, so no fetch was ever in
+    // flight at cancel time. Here the next sentence's fetch stays pending and only settles when its signal
+    // aborts — so the assertions actually exercise "abort the pending fetch". A PiperSpeaker that does NOT
+    // abort its pending fetch fails `signals[1].aborted`; one that leaks the rejection fails `unhandled`.
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => { unhandled.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const ctx = new FakeCtx();
+      const signals: AbortSignal[] = [];
+      let pendingRejected = false;
+      const fetchWav = (text: string, _voice: string, signal: AbortSignal): Promise<ArrayBuffer> => {
+        signals.push(signal);
+        // Sentence 1 resolves at once so playback starts; sentence 2 stays pending until its signal aborts.
+        if (text === 'One.') return Promise.resolve(new ArrayBuffer(8));
+        return new Promise<ArrayBuffer>((_resolve, reject) => {
+          signal.addEventListener('abort', () => { pendingRejected = true; reject(new DOMException('aborted', 'AbortError')); });
+        });
+      };
+      const deps: PiperDeps = {
+        fetchWav,
+        ctx: () => ctx as unknown as AudioContext,
+        voice: () => 'en_US-joe-medium',
+        ready: () => true,
+      };
+      const speaker = new PiperSpeaker(deps);
+      const done = speaker.say('One. Two.');
+      await flush();
+      // Sentence 1 is playing; sentence 2's fetch is in flight and NOT yet settled or aborted.
+      expect(ctx.sources.length).toBe(1);
+      expect(ctx.sources[0]!.started).toBe(true);
+      expect(signals.length).toBe(2);
+      expect(signals[1]!.aborted).toBe(false);
+      expect(pendingRejected).toBe(false);
+
+      speaker.cancel();
+      await done; // settles without any sentence finishing
+
+      // The pending prefetch's signal is aborted and its promise has settled (rejected).
+      expect(signals[1]!.aborted).toBe(true);
+      expect(pendingRejected).toBe(true);
+      // Nothing plays after cancel: sentence 1's source is stopped and no source was made for sentence 2.
+      expect(ctx.sources[0]!.stopped).toBe(true);
+      expect(ctx.sources.length).toBe(1);
+
+      // Give any leaked rejection a chance to surface before asserting there is none.
+      await flush(); await flush();
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.removeListener('unhandledRejection', onUnhandled);
+    }
+  });
+
   it('is unavailable when the engine is not ready, the voice is missing, or none is chosen', () => {
     expect(make({ ready: true, voice: 'en_US-joe-medium' }).speaker.available).toBe(true);
     expect(make({ ready: false, voice: 'en_US-joe-medium' }).speaker.available).toBe(false);
