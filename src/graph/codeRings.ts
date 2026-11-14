@@ -359,7 +359,7 @@ export function buildCodeRings(input: CodeBlastInput): CodeRings {
     hiddenLinks: 0,
   });
 
-  // ---- owner map (first match wins; all lookups O(1) via symbolLoc) ----
+  // ---- owner map (first match wins; every ownerOf lookup is O(1) via symbolLoc) ----
   const ownerOf = (state: CollapseState) => (id: string): string => {
     if (id === focusId) return focusId;
     const lvl = levelById.get(id);

@@ -658,3 +658,60 @@ describe('R13: bfsLevels is re-exported from the adapter', () => {
     expect(Object.fromEntries(depth)).toEqual({ a: 0, b: 1, c: 2 });
   });
 });
+
+describe('R3: placeholder scaffold parents are independent of input row order (model level, summary included)', () => {
+  // Only the summary's member list is built in input-row order (via `placed`); group and "+N more"
+  // member lists are sorted. So the summary is the row-order-sensitive placeholder, and a tie in its
+  // owner tally is exactly where the drawn-owner-order tie-break (not member encounter order) decides.
+  function tieFixture(): CodeBlastInput {
+    return {
+      query: 'Q',
+      rows: [
+        ...rows(25, 1, 'fileA.ts', 'a'), // level-1 group gA (closed)
+        ...rows(25, 1, 'fileB.ts', 'b'), // level-1 group gB (closed)
+        // four level-2 symbols fold into the summary; their parents split 2/2 across gA and gB (a tie)
+        { symbolId: 'c0', name: 'c0', file: 'fileC.ts', depth: 2 },
+        { symbolId: 'c1', name: 'c1', file: 'fileC.ts', depth: 2 },
+        { symbolId: 'c2', name: 'c2', file: 'fileC.ts', depth: 2 },
+        { symbolId: 'c3', name: 'c3', file: 'fileC.ts', depth: 2 },
+      ],
+      edges: [
+        { src: 'c0', tgt: 'a00' },
+        { src: 'c1', tgt: 'a00' },
+        { src: 'c2', tgt: 'b00' },
+        { src: 'c3', tgt: 'b00' },
+      ],
+    };
+  }
+
+  const placeholderParents = (m: {
+    items: Array<{ id: string; size: string }>;
+    scaffold: { edges: Array<{ src: string; tgt: string }> };
+  }): Record<string, string | null> => {
+    const out: Record<string, string | null> = {};
+    for (const it of m.items) {
+      if (it.size !== 'placeholder') continue;
+      const edge = m.scaffold.edges.find((e) => e.tgt === it.id);
+      out[it.id] = edge ? edge.src : null;
+    }
+    return out;
+  };
+
+  it('reversing the input rows leaves every placeholder parent unchanged, the tied summary included', () => {
+    const input = tieFixture();
+    const cr1 = buildCodeRings(input);
+    const cr2 = buildCodeRings({ ...input, rows: [...input.rows].reverse() });
+    const m1 = cr1.model(cr1.openToLevel(cr1.defaultState(), 1)); // level 2 → summary s:2
+    const m2 = cr2.model(cr2.openToLevel(cr2.defaultState(), 1));
+
+    const p1 = placeholderParents(m1);
+    const p2 = placeholderParents(m2);
+    // the fixture actually exercises the tie: the summary and both level-1 groups are the placeholders
+    expect(Object.keys(p1).sort()).toEqual(['g:1:fileA.ts', 'g:1:fileB.ts', 's:2']);
+    // the summary's tie breaks by drawn owner order (fileA sorts before fileB), never by row order
+    expect(p1['s:2']).toBe('g:1:fileA.ts');
+    // every placeholder parent is identical across the two orderings
+    // (fails without the R3 fix: the summary parent flips to g:1:fileB.ts on reversal)
+    expect(p2).toEqual(p1);
+  });
+});
