@@ -75,6 +75,15 @@ describe('computeParents (code mode)', () => {
     expect(res.primaryKeys.has('a\u0000q:')).toBe(true);
   });
 
+  it('gives an edgeless placed hop-1 node a synthetic focus parent (nodeIds, not edge endpoints)', () => {
+    const lvl = levelMap({ 'q:': 0, a: 1, lonely: 1 });
+    const norm: RingEdge[] = [{ src: 'a', tgt: 'q:' }]; // 'lonely' appears on no edge
+    const res = computeParents(norm, lvl, 'q:', undefined, ['a', 'lonely']);
+    expect(res.parent.get('lonely')).toBe('q:');
+    expect(res.edges).toContainEqual({ src: 'lonely', tgt: 'q:' }); // synthetic
+    expect(res.primaryKeys.has('lonely\u0000q:')).toBe(true);
+  });
+
   it('keeps the real hop-1→focus edge instead of synthesizing', () => {
     const norm: RingEdge[] = [{ src: 'a', tgt: 'q:' }];
     const res = computeParents(norm, levelOf, 'q:');

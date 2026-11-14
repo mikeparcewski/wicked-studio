@@ -209,12 +209,18 @@ const key = (src: NodeId, tgt: NodeId): string => `${src}\u0000${tgt}`;
  * level k−1; a reverse edge is never a parent. Primary direction is node→parent.
  *
  * Hint mode: parent = the hint, primary direction is parent→node, and no synthetic edges are added.
+ *
+ * `nodeIds` is the full list of placed node ids (caller passes input.nodes). It matters because a
+ * placed hop-1 row with no fetched edge must still get a synthetic node→focus primary; deriving the
+ * node set from edge endpoints alone would miss it (edges can be partial). When omitted, the node set
+ * falls back to the edge endpoints.
  */
 export function computeParents(
   normEdges: RingEdge[],
   levelOf: (id: NodeId) => number | null,
   focusId: NodeId,
   parentHint?: Record<NodeId, NodeId>,
+  nodeIds?: NodeId[],
 ): ParentResult {
   const hintMode = parentHint !== undefined;
   const parent = new Map<NodeId, NodeId>();
@@ -236,7 +242,7 @@ export function computeParents(
   for (const e of normEdges) {
     (fwdBySrc.get(e.src) ?? fwdBySrc.set(e.src, []).get(e.src)!).push(e.tgt);
   }
-  for (const [node, lvl] of allPlaced(normEdges, levelOf)) {
+  for (const [node, lvl] of allPlaced(normEdges, levelOf, nodeIds, focusId)) {
     if (lvl <= 0) continue; // focus / centre members have no parent
     if (lvl === 1) {
       parent.set(node, focusId);
@@ -261,13 +267,23 @@ export function computeParents(
   return { parent, edges, primaryKeys, hintMode };
 }
 
-/** The placed nodes that appear on any normalised edge, with their level. Focus included when present. */
-function allPlaced(edges: RingEdge[], levelOf: (id: NodeId) => number | null): Array<[NodeId, number]> {
+/**
+ * Every placed node to consider for parenting, with its level: the explicit `nodeIds` (when given)
+ * unioned with the edge endpoints and the focus, so an edgeless placed row is never skipped.
+ */
+function allPlaced(
+  edges: RingEdge[],
+  levelOf: (id: NodeId) => number | null,
+  nodeIds: NodeId[] | undefined,
+  focusId: NodeId,
+): Array<[NodeId, number]> {
   const ids = new Set<NodeId>();
+  if (nodeIds !== undefined) for (const id of nodeIds) ids.add(id);
   for (const e of edges) {
     ids.add(e.src);
     ids.add(e.tgt);
   }
+  ids.add(focusId);
   const out: Array<[NodeId, number]> = [];
   for (const id of ids) {
     const l = levelOf(id);
@@ -473,7 +489,8 @@ export function visibleModel(input: RingInput, view: AdapterView): VisibleModel 
   const levelOf = (id: NodeId): number | null => (levelById.has(id) ? levelById.get(id)! : null);
 
   const norm = normaliseEdges(input.edges, input.focusId, view.centreMembers);
-  const { parent, edges: withSynthetic, primaryKeys } = computeParents(norm, levelOf, input.focusId, input.parentHint);
+  const nodeIds = input.nodes.map((n) => n.id);
+  const { parent, edges: withSynthetic, primaryKeys } = computeParents(norm, levelOf, input.focusId, input.parentHint, nodeIds);
   const { classified, dropped } = classifyEdges(withSynthetic, levelOf, primaryKeys);
   const { edges: projected, hiddenLinks } = project(classified, view.ownerOf);
 

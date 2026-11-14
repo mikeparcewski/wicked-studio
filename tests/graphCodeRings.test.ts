@@ -38,6 +38,26 @@ describe('levels: placed / unplaced / minimum depth', () => {
     expect(s1.level).toBe(1); // minimum depth
   });
 
+  it('gives a placed hop-1 row with no fetched edge a synthetic primary edge to the focus', () => {
+    const input: CodeBlastInput = {
+      query: 'Q',
+      rows: [
+        { symbolId: 'withEdge', name: 'withEdge', file: 'f.ts', depth: 1 },
+        { symbolId: 'lonely', name: 'lonely', file: 'f.ts', depth: 1 }, // no edge at all
+      ],
+      edges: [{ src: 'withEdge', tgt: 'Q' }],
+    };
+    const cr = buildCodeRings(input);
+    const m = cr.model(cr.defaultState());
+    // both hop-1 symbols get a primary edge to the focus (one real, one synthetic)
+    const toFocus = m.edges.filter((e) => e.tgt === cr.focusId && e.cls === 'primary');
+    expect(toFocus.some((e) => e.src === 'n:withEdge')).toBe(true);
+    expect(toFocus.some((e) => e.src === 'n:lonely')).toBe(true);
+    // and the edgeless node attaches to the focus in the scaffold (not a spine)
+    const scaf = m.scaffold.edges.find((e) => e.tgt === 'n:lonely')!;
+    expect(scaf.src).toBe(cr.focusId);
+  });
+
   it('folds centre members (slice nodes whose name equals the query) into the focus; others are loaded-not-placed', () => {
     const input: CodeBlastInput = {
       query: 'Q',
