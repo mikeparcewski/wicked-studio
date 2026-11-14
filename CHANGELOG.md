@@ -12,6 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+
+- Graph rings (2 of 5): design tokens `--graph-level-1..5` (the concentric ring canvas's fixed hop
+  colours) in the dark base and the light theme, and `resolveTokenValue` / `resolveTokenPx` helpers
+  for sinks that need a token as a raw string or a pixel number. Not yet wired into any screen.
+
 ## [0.16.10] — 2026-11-14
 
 Patch: after "Land with carried items and a note" on a capped review, the workflow's final card offers Approve

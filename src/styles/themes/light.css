@@ -25,6 +25,14 @@
   --kn-run:     hsl(330 55% 44%);
   --kn-pr:      hsl(48 80% 32%);
 
+  /* Graph ring hop-colours (tokens.css), darkened for a light ground: each clears 3:1 on the page
+     and the rail here too, same ΔE_OK spacing (tests/graphLevelTokens.contrast.test.ts). */
+  --graph-level-1: #b02a78;   /* pink */
+  --graph-level-2: #293fae;   /* blue */
+  --graph-level-3: #a12ba1;   /* magenta */
+  --graph-level-4: #186c8b;   /* cyan */
+  --graph-level-5: #6a31b9;   /* violet — and every deeper ring */
+
   /* Cool paper: the page sits a shade below white cards, the rail a shade below the page. */
   --_surface-0: #f4f6fa;
   --_surface-1: #eceff5;

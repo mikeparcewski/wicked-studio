@@ -169,6 +169,19 @@
   --section-vibe: hsl(198 80% 62%);   /* cyan */
   --section-demo: hsl(320 70% 66%);   /* magenta */
 
+  /* ── Graph ring hop-colours (Graph rings) — the concentric ring canvas colours each hop a fixed
+     hue so distance from the focus reads at a glance. Five distinct hues (level 5 covers every
+     deeper ring); the focus itself takes the live --accent, never these. Each clears 3:1 on the
+     page and the rail and sits ≥0.10 ΔE_OK from every status colour, with ≥0.08 ΔE_OK between
+     adjacent levels (tests/graphLevelTokens.contrast.test.ts). Hex, not hsl(): resolveToken()
+     feeds them to cytoscape, which parses only concrete colours. The light grounds re-set them in
+     themes/light.css (that block also drives wicked-light). */
+  --graph-level-1: #e382af;   /* pink */
+  --graph-level-2: #8394ec;   /* blue */
+  --graph-level-3: #e694e6;   /* magenta */
+  --graph-level-4: #5ebcde;   /* cyan */
+  --graph-level-5: #bb99ea;   /* violet — and every deeper ring */
+
   /* ── Spacing scale (§2.7) — base unit 4px ── */
   --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
   --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;
