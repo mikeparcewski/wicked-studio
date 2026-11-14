@@ -7,7 +7,9 @@ STREAM and a STUB speech-to-text:
     real `getUserMedia` → AnalyserNode → recorder → pause detector path runs and real 16 kHz WAVs are POSTed.
   - `POST /api/v1/voice/transcribe` is answered here: it checks the body is a RIFF/WAVE 16 kHz mono 16-bit file and
     answers the scripted phrase until its effect shows (or "" while nothing is scripted, which voice ignores).
-  - `speechSynthesis.speak` is stubbed to end at once and record what was said (read-aloud is asserted, not heard).
+  - read-aloud now speaks via `POST /voice/speak` (piper on the machine) played with Web Audio; the journey
+    intercepts that fetch to record the spoken text in `window.__said` and returns a tiny silent WAV (read-aloud is
+    asserted by the speak request, not heard). `GET /voice/tts` answers an installed engine + voice so it is ready.
   - `/ws` is played by the journey (a gate arriving, the system chat's reply). `/system`, `/voice/*`, `POST /chats`,
     the chat message and the gate POST are answered here; everything else is the in-process fixture.
 
@@ -103,6 +105,12 @@ SYSTEM = {
 STATUS = {"local": True, "ready": True, "engine": {"name": "whisper.cpp", "found": True, "path": "/opt/homebrew/bin/whisper-cli", "install": None},
           "model": {"name": "base.en", "present": True, "bytes": 147964211, "approxBytes": 148897792, "source": "huggingface.co/ggerganov/whisper.cpp", "download": None}}
 
+# Read-aloud (piper): the engine and one voice installed, so read-aloud is ready on first read.
+TTS = {"supported": {"ok": True, "reason": None}, "python": {"found": True, "path": "/usr/bin/python3", "version": "3.11.4"},
+       "engine": {"found": True, "version": "1.8.0"},
+       "voices": {"amy": {"installed": True, "name": "Amy", "accent": "US English", "licence": "CC BY 4.0", "bytes": 66060288,
+                          "source": "Hugging Face rhasspy/piper-voices"}}, "install": None}
+
 
 def wav_ok(body: bytes) -> dict:
     if len(body) < 44 or body[0:4] != b"RIFF" or body[8:12] != b"WAVE":
@@ -119,6 +127,11 @@ def route_api(route) -> None:
     j = lambda b, s=200: route.fulfill(status=s, content_type="application/json", body=json.dumps(b))  # noqa: E731
     if path == "/api/v1/voice/status":
         return j(STATUS)
+    if path == "/api/v1/voice/tts":
+        return j(TTS)
+    if path == "/api/v1/voice/speak" or path.startswith("/api/v1/voice/tts/sample/"):
+        # Usually intercepted in the page (window.fetch), answered here only if that ever misses.
+        return route.fulfill(status=200, content_type="audio/wav", body=b"RIFF")
     if path == "/api/v1/voice/transcribe":
         info = wav_ok(req.post_data_buffer or b"")
         wavs.append(info)
@@ -154,8 +167,28 @@ def route_api(route) -> None:
 
 INIT = """
 window.__said = [];
-const synth = window.speechSynthesis;
-if (synth) { synth.speak = (u) => { window.__said.push(u.text); setTimeout(() => { if (u.onend) u.onend(new Event('end')); }, 30); }; synth.cancel = () => {}; }
+// Read-aloud speaks via POST /voice/speak + Web Audio. Record WHAT is said and answer with a tiny silent WAV so the
+// journey asserts the speak request without real audio. (The mic's own AudioContext is left untouched.)
+function __silentWav(ms) {
+  const rate = 8000, n = Math.floor(rate * ms / 1000), buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true);
+  dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true);
+  dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+  return buf;
+}
+const __fetch = window.fetch.bind(window);
+window.fetch = (input, init) => {
+  const url = typeof input === 'string' ? input : (input && input.url) || '';
+  if (url.includes('/voice/speak')) {
+    try { window.__said.push(JSON.parse(init.body).text); } catch (e) { /* ignore */ }
+    return Promise.resolve(new Response(__silentWav(60), { status: 200, headers: { 'Content-Type': 'audio/wav' } }));
+  }
+  if (url.includes('/voice/tts/sample/')) {
+    return Promise.resolve(new Response(__silentWav(60), { status: 200, headers: { 'Content-Type': 'audio/wav' } }));
+  }
+  return __fetch(input, init);
+};
 """
 
 
