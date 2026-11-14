@@ -130,7 +130,6 @@ function selectedChain(model: VisibleModel, selectedId: string | null, focusId: 
 interface Ctx {
   cy: cytoscape.Core;
   model: VisibleModel;
-  cyIdOf: Map<string, string>;
   focusId: string;
   cap: number;
   measure: Measure;
@@ -143,7 +142,8 @@ const focusIdOf = (model: VisibleModel): string =>
 function buildLabelInputs(ctx: Ctx, selectedId: string | null): LabelInput[] {
   const chain = selectedChain(ctx.model, selectedId, ctx.focusId);
   const inputs: LabelInput[] = ctx.model.items.map((it) => {
-    const p = ctx.cy.$id(ctx.cyIdOf.get(it.id)!).position();
+    // Model ids are cytoscape element ids verbatim; cy.$id looks them up literally (POL-2101).
+    const p = ctx.cy.$id(it.id).position();
     return {
       id: it.id, kind: it.kind, level: it.level, text: it.label,
       rRing: Math.hypot(p.x, p.y), rNode: sizeOf(it) / 2, angle: Math.atan2(p.y, p.x),
@@ -165,9 +165,7 @@ function applyLabels(ctx: Ctx, selectedId: string | null): ReturnType<typeof pla
   const inputs = buildLabelInputs(ctx, selectedId);
   const placed = placeLabels(inputs, zoom, ctx.cap, ctx.measure, RING_STEP);
   for (const input of inputs) {
-    const cyId = ctx.cyIdOf.get(input.id);
-    if (cyId === undefined) continue;
-    const node = ctx.cy.$id(cyId);
+    const node = ctx.cy.$id(input.id);
     if (node.empty()) continue;
     const g = labelGeom(input, zoom, ctx.cap, ctx.measure);
     node.data({ dlabel: placed.shown.has(input.id) ? g.text : '', fsize: g.fontSizeModelPx, mx: g.marginXModelPx, my: g.marginYModelPx, rot: g.rotation });
@@ -177,20 +175,19 @@ function applyLabels(ctx: Ctx, selectedId: string | null): ReturnType<typeof pla
 
 /** Reflect selection + the selected chain + hover dimming as classes. Selection never dims. */
 function applyStateClasses(ctx: Ctx, selectedId: string | null, hoverLevel: number | null): void {
-  const { cy, model, cyIdOf, focusId } = ctx;
+  const { cy, model, focusId } = ctx;
   cy.batch(() => {
     cy.elements().removeClass('dim chain');
     cy.nodes().unselect();
-    const safeSel = selectedId !== null ? cyIdOf.get(selectedId) : undefined;
-    if (safeSel !== undefined) { const n = cy.$id(safeSel); if (n.nonempty()) n.select(); }
+    if (selectedId !== null) { const n = cy.$id(selectedId); if (n.nonempty()) n.select(); }
     const chain = selectedChain(model, selectedId, focusId);
-    for (const id of chain.nodes) { const c = cyIdOf.get(id); if (c) cy.$id(c).addClass('chain'); }
+    for (const id of chain.nodes) { const n = cy.$id(id); if (n.nonempty()) n.addClass('chain'); }
     for (const e of cy.edges()) if (chain.edges.has(e.data('key') as string)) e.addClass('chain');
     if (hoverLevel !== null) {
       cy.nodes().forEach((n) => { if ((n.data('level') as number) !== hoverLevel) n.addClass('dim'); });
       cy.edges().forEach((e) => { if ((e.data('clamp') as number) !== clampLevel(hoverLevel)) e.addClass('dim'); });
       const guide = model.scaffold.guides.find((g) => Number(g.split(':')[1]) === hoverLevel);
-      if (guide !== undefined) { const c = cyIdOf.get(guide); if (c) cy.$id(c).removeClass('dim').addClass('chain'); }
+      if (guide !== undefined) { const n = cy.$id(guide); if (n.nonempty()) n.removeClass('dim').addClass('chain'); }
     }
   });
 }
@@ -205,7 +202,7 @@ function selectedXY(cy: cytoscape.Core): string {
 
 /** The model-derived + theme-derived attributes (change only on a model / theme / style change). */
 function writeModelAttrs(host: HTMLElement, ctx: Ctx, view: string, ariaLabel: string | undefined): void {
-  const { cy, model, cyIdOf, focusId } = ctx;
+  const { cy, model, focusId } = ctx;
   const focusLabel = model.items.find((i) => i.id === focusId)?.label ?? '';
   const placedTotal = model.levels.reduce((s, r) => s + r.placed, 0);
   host.setAttribute('role', 'img');
@@ -218,7 +215,7 @@ function writeModelAttrs(host: HTMLElement, ctx: Ctx, view: string, ariaLabel: s
   host.dataset.openLevel = String(model.openLevel);
   host.dataset.edges = edgeCounts(model.edges);
   host.dataset.styleTheme = document.documentElement.getAttribute('data-theme') ?? '';
-  const focusNode = cy.$id(cyIdOf.get(focusId)!);
+  const focusNode = cy.$id(focusId);
   host.dataset.focusColor = focusNode.nonempty() ? focusNode.style('background-color') : '';
 }
 
@@ -229,13 +226,12 @@ function writeLabelAttrs(host: HTMLElement, cy: cytoscape.Core, placed: ReturnTy
   host.dataset.guidesHidden = String(placed.guidesHidden);
   host.dataset.labelsShown = formatPerLevel(placed.perLevelShown);
   const sel = cy.nodes(':selected');
-  host.dataset.selected = sel.nonempty() ? String(sel.first().data('origId')) : '';
+  host.dataset.selected = sel.nonempty() ? sel.first().id() : '';
 }
 
 export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onActivate, ariaLabel }: RingGraphProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
-  const idMapRef = useRef<Map<string, string>>(new Map()); // model id → safe cy id
   const rafRef = useRef<number | null>(null);
   // Latest selection/hover, so the zoom + theme callbacks (which outlive the build render) read the
   // CURRENT values, not the ones captured when the graph was built (F2).
@@ -268,18 +264,17 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
     const measure = makeMeasure(cap);
     const counts = countPerLevel(model);
 
-    // Safe cy ids (model ids carry ':', '/', '%', '.').
-    const cyIdOf = new Map<string, string>();
-    model.items.forEach((it, i) => cyIdOf.set(it.id, `i${i}`));
-    model.scaffold.guides.forEach((g, i) => cyIdOf.set(g, `g${i}`));
-    idMapRef.current = cyIdOf;
+    // Model ids (and guide ids) are used verbatim as cytoscape element ids. cytoscape 3.34.1 accepts
+    // any string id and resolves it literally via cy.$id()/getElementById and edge source/target, so
+    // no remap is needed for ids carrying ':', '/', '%', '.', '#', spaces or quotes (POL-2101).
+    const nodeIds = new Set<string>([...model.items.map((it) => it.id), ...model.scaffold.guides]);
 
     const itemById = new Map(model.items.map((it) => [it.id, it]));
 
     const nodeEls: cytoscape.ElementDefinition[] = model.items.map((it) => ({
       group: 'nodes' as const,
       data: {
-        id: cyIdOf.get(it.id)!, origId: it.id, level: it.level, kind: it.kind,
+        id: it.id, level: it.level, kind: it.kind,
         isFocus: it.kind === 'focus' ? 1 : 0, isGuide: 0,
         clamp: clampLevel(it.colorLevel), outlined: it.outlined ? 1 : 0,
         diameter: sizeOf(it), dlabel: '', fsize: cap, mx: 0, my: 0, rot: 0,
@@ -292,18 +287,18 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
       const label = model.levels.find((l) => l.k === k)?.label ?? '';
       return {
         group: 'nodes' as const,
-        data: { id: cyIdOf.get(g)!, origId: g, level: k, kind: 'guide', isFocus: 0, isGuide: 1, clamp: clampLevel(k), outlined: 0, diameter: 2 * r, dlabel: '', fsize: cap, mx: 0, my: 0, rot: 0, guideLabel: label },
+        data: { id: g, level: k, kind: 'guide', isFocus: 0, isGuide: 1, clamp: clampLevel(k), outlined: 0, diameter: 2 * r, dlabel: '', fsize: cap, mx: 0, my: 0, rot: 0, guideLabel: label },
         grabbable: false, selectable: false,
       };
     });
 
     const edgeEls: cytoscape.ElementDefinition[] = model.edges
-      .filter((e) => cyIdOf.has(e.src) && cyIdOf.has(e.tgt))
+      .filter((e) => nodeIds.has(e.src) && nodeIds.has(e.tgt))
       .map((e, i) => ({
         group: 'edges' as const,
         data: {
           id: `e${i}`, key: `${e.src}\u0000${e.tgt}`,
-          source: cyIdOf.get(e.src)!, target: cyIdOf.get(e.tgt)!,
+          source: e.src, target: e.tgt,
           ecls: e.aggregate ? 'aggregate' : e.cls, clamp: clampLevel(e.colorLevel),
           count: e.count, dlabel: e.aggregate ? String(e.count) : '',
         },
@@ -321,7 +316,7 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
       maxZoom: 4,
     });
     cyRef.current = cy;
-    const ctx: Ctx = { cy, model, cyIdOf, focusId, cap, measure };
+    const ctx: Ctx = { cy, model, focusId, cap, measure };
 
     // Lock guides at the origin (they are circles centred on the focus, sized to 2·r_k).
     const guideCol = cy.nodes('[isGuide = 1]');
@@ -357,7 +352,7 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
 
     // Tap: select (+ activate on an activatable item).
     cy.on('tap', 'node[isGuide = 0]', (evt) => {
-      const it = itemById.get(evt.target.data('origId') as string);
+      const it = itemById.get(evt.target.id());
       if (it === undefined) return;
       onSelectRef.current(it);
       if (it.activatable) onActivateRef.current(it);
@@ -406,7 +401,7 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
     if (prev !== null && prev.selectedId === selectedId && prev.hoverLevel === hoverLevel) return;
     lastAppliedRef.current = { selectedId, hoverLevel };
     const cap = captionPx();
-    const ctx: Ctx = { cy, model, cyIdOf: idMapRef.current, focusId: focusIdOf(model), cap, measure: makeMeasure(cap) };
+    const ctx: Ctx = { cy, model, focusId: focusIdOf(model), cap, measure: makeMeasure(cap) };
 
     applyStateClasses(ctx, selectedId, hoverLevel);
     const placed = applyLabels(ctx, selectedId);

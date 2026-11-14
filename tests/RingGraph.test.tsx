@@ -119,8 +119,8 @@ describe('hoverLevel dims the other levels; selection dims nothing', () => {
     const offLevel = cy.nodes('[isGuide = 0][level != 2]');
     const onLevel = cy.nodes('[isGuide = 0][level = 2]');
     expect(offLevel.nonempty()).toBe(true);
-    offLevel.forEach((n) => expect(n.hasClass('dim'), String(n.data('origId'))).toBe(true));
-    onLevel.forEach((n) => expect(n.hasClass('dim'), String(n.data('origId'))).toBe(false));
+    offLevel.forEach((n) => expect(n.hasClass('dim'), n.id()).toBe(true));
+    onLevel.forEach((n) => expect(n.hasClass('dim'), n.id()).toBe(false));
   });
 
   it('a selection with no hover dims nothing', () => {
@@ -156,7 +156,7 @@ describe('tap selects and activates', () => {
     const cy = latestCy();
     const activatable = m.items.find((i) => i.activatable && i.kind !== 'focus');
     expect(activatable).toBeTruthy();
-    const safe = cy.nodes().filter((n) => n.data('origId') === activatable!.id);
+    const safe = cy.$id(activatable!.id);
     safe.emit('tap');
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: activatable!.id }));
     expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ id: activatable!.id }));
@@ -208,8 +208,8 @@ function edgeModel(): VisibleModel {
   );
 }
 
-const nodeFor = (cy: cytoscape.Core, origId: string): cytoscape.NodeSingular =>
-  cy.nodes().filter((n) => n.data('origId') === origId).first() as unknown as cytoscape.NodeSingular;
+const nodeFor = (cy: cytoscape.Core, id: string): cytoscape.NodeSingular =>
+  cy.$id(id) as unknown as cytoscape.NodeSingular;
 
 describe('F1: a model-only rerender does not swallow the next selection or hover change', () => {
   it('after a new model with the same selection, the next selectedId change is applied', () => {
@@ -236,7 +236,7 @@ describe('F1: a model-only rerender does not swallow the next selection or hover
     const cy = latestCy();
     const off = cy.nodes('[isGuide = 0][level != 2]');
     expect(off.nonempty()).toBe(true);
-    off.forEach((n) => expect(n.hasClass('dim'), String(n.data('origId'))).toBe(true));
+    off.forEach((n) => expect(n.hasClass('dim'), n.id()).toBe(true));
     cy.nodes('[isGuide = 0][level = 2]').forEach((n) => expect(n.hasClass('dim')).toBe(false));
   });
 });
@@ -272,6 +272,34 @@ describe('F4: primary edges keep their per-level hop colour; secondary edges sta
     expect(primary.style('line-color')).toBe('rgb(10,100,200)');
     expect(primary.style('target-arrow-color')).toBe('rgb(10,100,200)');
     expect(secondary.style('line-color')).toBe('rgb(50,50,50)');
+  });
+});
+
+describe('P1 (POL-2101): model ids are used verbatim as cytoscape ids, no remap', () => {
+  it('an id with :, /, %, ., #, a space and a quote is looked up, selectable, chained, and reported', () => {
+    const weird = "n:src/a.b#c%20 'x'";
+    const m = mkModel(
+      [
+        mkItem({ id: 'q:F', kind: 'focus' as ItemKind, size: 'focus' as ItemSize, level: 0, order: 0, colorLevel: 0, label: 'F', activatable: false }),
+        mkItem({ id: weird, kind: 'symbol' as ItemKind, size: 'node' as ItemSize, level: 1, order: 1, colorLevel: 1, label: 'x' }),
+      ],
+      [0, 150],
+      [{ src: weird, tgt: 'q:F', cls: 'primary', colorLevel: 1, count: 1, aggregate: false }],
+      [{ k: 1, placed: 1, shown: 1, label: '1 hop' }],
+    );
+    const { getByTestId } = render(
+      <RingGraph model={m} view="rings" selectedId={weird} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />,
+    );
+    const cy = latestCy();
+    // cy.$id resolves the literal id (no remap).
+    expect(cy.$id(weird).nonempty()).toBe(true);
+    expect(cy.$id(weird).id()).toBe(weird);
+    // Selection and the selected chain work on that id.
+    expect(cy.nodes(':selected').first().id()).toBe(weird);
+    expect(cy.$id(weird).hasClass('chain')).toBe(true);
+    expect(cy.$id('q:F').hasClass('chain')).toBe(true); // the primary path in to the focus
+    // data-selected is the model id.
+    expect(getByTestId('ring-graph').dataset.selected).toBe(weird);
   });
 });
 
