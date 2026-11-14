@@ -18,6 +18,9 @@ import {
   visibleModel,
 } from './ringModel.js';
 
+// Re-exported so callers import bfsLevels from the adapter too; ringModel.ts stays the source.
+export { bfsLevels } from './ringModel.js';
+
 export interface CodeRow {
   symbolId: string;
   name: string;
@@ -60,6 +63,19 @@ export const INLINE_MAX = 24; // a level with ≤ this many rows shows symbols i
 export const FILE_PAGE = 12; // files per "+N more files" page
 export const MEMBER_PAGE = 20; // members per "+N more" page
 export const DEFAULT_LIMIT = 150; // the largest level whose closed view stays under this is openLevel
+
+/** A row counted but never drawn (bad/missing depth), retained so a later inspector can list it. */
+export interface CodeUnplacedRow {
+  id: string;
+  name: string;
+  file: string;
+  depth: number | null;
+}
+
+/** The code adapter's drawable model: the generic model plus the retained unplaced rows. */
+export interface CodeVisibleModel extends VisibleModel {
+  unplacedRows: CodeUnplacedRow[];
+}
 
 export interface BlockDescriptor {
   level: number;
@@ -106,7 +122,7 @@ export interface CodeRings {
   defaultState(): CollapseState;
   ringInput(): RingInput;
   view(state: CollapseState): AdapterView;
-  model(state: CollapseState): VisibleModel;
+  model(state: CollapseState): CodeVisibleModel;
   blocks(state: CollapseState, level: number): BlockDescriptor[];
   levelAccounting(state: CollapseState): Map<number, { placed: number; drawn: number; closed: number; more: number; summary: number }>;
   openGroup(state: CollapseState, groupId: string): CollapseState;
@@ -130,11 +146,11 @@ export function buildCodeRings(input: CodeBlastInput): CodeRings {
 
   // Placed rows: integer depth ≥ 1, keeping the minimum depth per symbol.
   const placedBySymbol = new Map<string, PlacedSymbol>();
-  let unplaced = 0;
+  const unplacedCandidates: Array<{ symbolId: string; row: CodeUnplacedRow }> = [];
   for (const r of input.rows) {
     const ok = typeof r.depth === 'number' && Number.isInteger(r.depth) && r.depth >= 1;
     if (!ok) {
-      unplaced += 1;
+      unplacedCandidates.push({ symbolId: r.symbolId, row: { id: `n:${r.symbolId}`, name: r.name, file: r.file, depth: r.depth } });
       continue;
     }
     const prev = placedBySymbol.get(r.symbolId);
@@ -142,6 +158,9 @@ export function buildCodeRings(input: CodeBlastInput): CodeRings {
       placedBySymbol.set(r.symbolId, { symbolId: r.symbolId, id: `n:${r.symbolId}`, name: r.name, file: r.file, level: r.depth as number });
     }
   }
+  // A row whose symbol is placed by a sibling row with valid depth is not unplaced.
+  const unplacedRows: CodeUnplacedRow[] = unplacedCandidates.filter((u) => !placedBySymbol.has(u.symbolId)).map((u) => u.row);
+  const unplaced = unplacedRows.length;
   const placed = [...placedBySymbol.values()];
   const levelById = new Map<string, number>();
   for (const p of placed) levelById.set(p.id, p.level);
@@ -160,6 +179,17 @@ export function buildCodeRings(input: CodeBlastInput): CodeRings {
       .map(([file, members]) => ({ file, groupId: groupIdOf(k, file), members: [...members].sort(byLabelThenId), count: members.length }))
       .sort(byBlockOrder);
     perLevel.set(k, { symbols, inline, fileBlocks });
+  }
+
+  // O(1) lookups built once: symbol id → {level, file index, member index}; group id → {level, file index, block}.
+  const symbolLoc = new Map<string, { level: number; fileIndex: number; memberIndex: number }>();
+  const blockByGroupId = new Map<string, { level: number; fileIndex: number; fb: FileBlock }>();
+  for (const k of placedLevels) {
+    const pl = perLevel.get(k)!;
+    pl.fileBlocks.forEach((fb, fi) => {
+      blockByGroupId.set(fb.groupId, { level: k, fileIndex: fi, fb });
+      fb.members.forEach((m, mi) => symbolLoc.set(m.id, { level: k, fileIndex: fi, memberIndex: mi }));
+    });
   }
 
   const placedCount = (k: number): number => perLevel.get(k)?.symbols.length ?? 0;
@@ -329,26 +359,22 @@ export function buildCodeRings(input: CodeBlastInput): CodeRings {
     hiddenLinks: 0,
   });
 
-  // ---- owner map (first match wins) ----
-  const ownerOf = (state: CollapseState) => {
-    // Index each placed symbol's file position and member position per level for O(1) lookup.
-    return (id: string): string => {
-      if (id === focusId) return focusId;
-      const lvl = levelById.get(id);
-      if (lvl === undefined) return id; // not a placed symbol
-      if (lvl > state.openLevel) return summaryId(state.openLevel + 1); // 1: summary
-      const pl = perLevel.get(lvl)!;
-      if (pl.inline) return id; // 4: the node itself
-      const fileIndex = pl.fileBlocks.findIndex((fb) => fb.members.some((m) => m.id === id));
-      if (fileIndex < 0) return id;
-      const shown = shownFiles(state, lvl);
-      if (fileIndex >= shown) return moreFilesId(lvl); // 2: "+N more files"
-      const fb = pl.fileBlocks[fileIndex]!;
-      if (!state.openGroups.has(fb.groupId)) return fb.groupId; // 3: the closed group
-      const memberIndex = fb.members.findIndex((m) => m.id === id);
-      if (memberIndex >= shownMembers(state, fb)) return moreMembersId(fb.groupId); // 3: the group's "+N more"
-      return id; // 4: the node itself
-    };
+  // ---- owner map (first match wins; all lookups O(1) via symbolLoc) ----
+  const ownerOf = (state: CollapseState) => (id: string): string => {
+    if (id === focusId) return focusId;
+    const lvl = levelById.get(id);
+    if (lvl === undefined) return id; // not a placed symbol
+    if (lvl > state.openLevel) return summaryId(state.openLevel + 1); // 1: summary
+    const pl = perLevel.get(lvl)!;
+    if (pl.inline) return id; // 4: the node itself
+    const loc = symbolLoc.get(id);
+    if (loc === undefined) return id;
+    const shown = shownFiles(state, lvl);
+    if (loc.fileIndex >= shown) return moreFilesId(lvl); // 2: "+N more files"
+    const fb = pl.fileBlocks[loc.fileIndex]!;
+    if (!state.openGroups.has(fb.groupId)) return fb.groupId; // 3: the closed group
+    if (loc.memberIndex >= shownMembers(state, fb)) return moreMembersId(fb.groupId); // 3: the group's "+N more"
+    return id; // 4: the node itself
   };
 
   const membersOf = (state: CollapseState) => (itemId: string): string[] => {
@@ -370,19 +396,14 @@ export function buildCodeRings(input: CodeBlastInput): CodeRings {
     }
     // a group "+N more" members: m:g:<level>:<enc>
     if (itemId.startsWith('m:g:')) {
-      const gid = itemId.slice(2);
-      const k = Number(gid.split(':')[1]);
-      const pl = perLevel.get(k);
-      const fb = pl?.fileBlocks.find((b) => b.groupId === gid);
-      if (fb === undefined) return [];
-      return fb.members.slice(shownMembers(state, fb)).map((m) => m.id);
+      const entry = blockByGroupId.get(itemId.slice(2));
+      if (entry === undefined) return [];
+      return entry.fb.members.slice(shownMembers(state, entry.fb)).map((m) => m.id);
     }
     // a closed group: g:<level>:<enc>
     if (itemId.startsWith('g:')) {
-      const k = Number(itemId.split(':')[1]);
-      const pl = perLevel.get(k);
-      const fb = pl?.fileBlocks.find((b) => b.groupId === itemId);
-      return fb ? fb.members.map((m) => m.id) : [];
+      const entry = blockByGroupId.get(itemId);
+      return entry ? entry.fb.members.map((m) => m.id) : [];
     }
     return [];
   };
@@ -408,7 +429,7 @@ export function buildCodeRings(input: CodeBlastInput): CodeRings {
     };
   };
 
-  const model = (state: CollapseState): VisibleModel => visibleModel(ringInput(), view(state));
+  const model = (state: CollapseState): CodeVisibleModel => ({ ...visibleModel(ringInput(), view(state)), unplacedRows });
 
   // ---- per-level conservation accounting (rows) ----
   const levelAccounting = (state: CollapseState) => {
@@ -461,8 +482,6 @@ export function buildCodeRings(input: CodeBlastInput): CodeRings {
   const moreMembers = (state: CollapseState, groupId: string): CollapseState => withMemberPages(state, groupId, memberPagesOf(state, groupId) + 1);
   const openToLevel = (state: CollapseState, level: number): CollapseState => ({ ...state, openLevel: level });
 
-  const levelOfGroup = (groupId: string): number => Number(groupId.split(':')[1]);
-
   const reveal = (state: CollapseState, id: string): CollapseState => {
     // reveal a symbol: open its level, file page, group and member page so it is drawn.
     if (id.startsWith('n:')) {
@@ -471,25 +490,22 @@ export function buildCodeRings(input: CodeBlastInput): CodeRings {
       let next: CollapseState = lvl > state.openLevel ? openToLevel(state, lvl) : state;
       const pl = perLevel.get(lvl)!;
       if (pl.inline) return next;
-      const fileIndex = pl.fileBlocks.findIndex((fb) => fb.members.some((m) => m.id === id));
-      if (fileIndex < 0) return next;
-      const fb = pl.fileBlocks[fileIndex]!;
-      const neededFilePages = Math.ceil((fileIndex + 1) / FILE_PAGE);
+      const loc = symbolLoc.get(id);
+      if (loc === undefined) return next;
+      const fb = pl.fileBlocks[loc.fileIndex]!;
+      const neededFilePages = Math.ceil((loc.fileIndex + 1) / FILE_PAGE);
       if (neededFilePages > filePagesOf(next, lvl)) next = withFilePages(next, lvl, neededFilePages);
       next = openGroup(next, fb.groupId);
-      const memberIndex = fb.members.findIndex((m) => m.id === id);
-      const neededMemberPages = Math.ceil((memberIndex + 1) / MEMBER_PAGE);
+      const neededMemberPages = Math.ceil((loc.memberIndex + 1) / MEMBER_PAGE);
       if (neededMemberPages > memberPagesOf(next, fb.groupId)) next = withMemberPages(next, fb.groupId, neededMemberPages);
       return next;
     }
     // reveal a file group: open its level and file page only; leave its expansion and member page alone.
     if (id.startsWith('g:')) {
-      const lvl = levelOfGroup(id);
-      const pl = perLevel.get(lvl);
-      if (pl === undefined) return state;
+      const entry = blockByGroupId.get(id);
+      if (entry === undefined) return state;
+      const { level: lvl, fileIndex } = entry;
       let next: CollapseState = lvl > state.openLevel ? openToLevel(state, lvl) : state;
-      const fileIndex = pl.fileBlocks.findIndex((fb) => fb.groupId === id);
-      if (fileIndex < 0) return next;
       const neededFilePages = Math.ceil((fileIndex + 1) / FILE_PAGE);
       if (neededFilePages > filePagesOf(next, lvl)) next = withFilePages(next, lvl, neededFilePages);
       return next;

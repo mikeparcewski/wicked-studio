@@ -232,6 +232,7 @@ export function computeParents(
 
   if (hintMode) {
     for (const [node, p] of Object.entries(parentHint!)) {
+      if (node === focusId) continue; // the focus never has a parent
       if (levelOf(node) === null || levelOf(p) === null) continue;
       parent.set(node, p);
       primaryKeys.add(key(p, node)); // parent→node
@@ -332,8 +333,11 @@ export function classifyEdges(
  * Project classified edges onto their owners and merge with counts.
  *  - Both ends drawn as themselves → a real edge (kept, drawn).
  *  - A primary with a placeholder end → an aggregate (drawn, counted as aggregate not primary).
- *  - An aggregate secondary (same/skip/alt onto a placeholder) → counted on the owning item's
- *    hiddenLinks, never drawn.
+ *  - A primary whose two ends collapse into one placeholder → nothing drawn and never counted
+ *    (hiddenLinks holds secondaries only).
+ *  - An aggregate secondary (same/skip/alt onto a placeholder) → counted once per distinct
+ *    placeholder owner it touches, never drawn. An edge whose two ends collapse into the same
+ *    placeholder is counted once, not twice.
  */
 export function project(
   classified: ClassifiedEdge[],
@@ -355,16 +359,15 @@ export function project(
     }
     // At least one end is a placeholder.
     if (e.cls === 'primary') {
-      if (os === ot) {
-        // both ends collapsed into the same placeholder — nothing to draw, count as hidden
-        bump(os);
-        continue;
-      }
+      // both ends collapsed into the same placeholder — nothing to draw; primaries are never hidden-counted
+      if (os === ot) continue;
       addEdge(merged, { src: os, tgt: ot, cls: 'primary', colorLevel: e.colorLevel, count: 1, aggregate: true });
     } else {
-      // aggregate secondary: counted on each placeholder end, never drawn
-      if (os !== e.src) bump(os);
-      if (ot !== e.tgt) bump(ot);
+      // aggregate secondary: counted once per distinct placeholder owner it touches, never drawn
+      const owners = new Set<NodeId>();
+      if (os !== e.src) owners.add(os);
+      if (ot !== e.tgt) owners.add(ot);
+      for (const o of owners) bump(o);
     }
   }
   return { edges: [...merged.values()], hiddenLinks };
@@ -383,8 +386,9 @@ function addEdge(merged: Map<string, ModelEdge>, e: ModelEdge): void {
 
 /**
  * A placeholder's parent for the scaffold: the commonest owner of its members' parents, counting only
- * owners at the placeholder's level − 1 and never the placeholder itself. Ties break by model order
- * (the order members appear in `members`), then by id.
+ * owners whose DRAWN level is the placeholder's level − 1 and never the placeholder itself. `levelOf`
+ * and `orderOf` resolve the DRAWN item (owner), independent of member iteration or input row order:
+ * ties break by the drawn owner's Item.order, then by id.
  */
 export function placeholderParent(
   placeholderId: NodeId,
@@ -393,23 +397,22 @@ export function placeholderParent(
   parent: Map<NodeId, NodeId>,
   ownerOf: (id: NodeId) => NodeId,
   levelOf: (id: NodeId) => number | null,
+  orderOf: (id: NodeId) => number,
 ): NodeId | null {
-  const tally = new Map<NodeId, { count: number; order: number }>();
-  let order = 0;
+  const tally = new Map<NodeId, number>();
   for (const m of members) {
     const p = parent.get(m);
     if (p === undefined) continue;
     const owner = ownerOf(p);
     if (owner === placeholderId) continue; // never itself
     if (levelOf(owner) !== placeholderLevel - 1) continue;
-    const prev = tally.get(owner);
-    if (prev) prev.count += 1;
-    else tally.set(owner, { count: 1, order: order++ });
+    tally.set(owner, (tally.get(owner) ?? 0) + 1);
   }
   let best: NodeId | null = null;
   let bestCount = 0;
   let bestOrder = Infinity;
-  for (const [owner, { count, order: o }] of tally) {
+  for (const [owner, count] of tally) {
+    const o = orderOf(owner);
     let better = count > bestCount;
     if (!better && count === bestCount) {
       if (o < bestOrder) better = true;
@@ -504,6 +507,17 @@ export function visibleModel(input: RingInput, view: AdapterView): VisibleModel 
 
   const drawnIds = new Set<NodeId>(items.map((it) => it.id));
 
+  // Owner levels and block order come from the DRAWN items (a group/"+N more"/summary owner has no
+  // input-node level). The input node levels (levelOf) stay for edge classification.
+  const itemLevel = new Map<NodeId, number>();
+  const itemOrder = new Map<NodeId, number>();
+  for (const it of items) {
+    itemLevel.set(it.id, it.level);
+    itemOrder.set(it.id, it.order);
+  }
+  const drawnLevelOf = (id: NodeId): number | null => (itemLevel.has(id) ? itemLevel.get(id)! : null);
+  const orderOf = (id: NodeId): number => itemOrder.get(id) ?? Infinity;
+
   // Drawn count per ring, and the highest ring with a drawn item.
   const drawnPerLevel: number[] = [];
   let maxDrawnLevel = 0;
@@ -517,12 +531,15 @@ export function visibleModel(input: RingInput, view: AdapterView): VisibleModel 
   // Parent owner for the scaffold, per drawn item.
   const parentOwnerOf = (it: Item): NodeId | null => {
     if (it.level < 1) return null;
-    const members = view.membersOf(it.id);
     if (it.size === 'node') {
       const p = parent.get(it.id);
-      return p === undefined ? null : view.ownerOf(p);
+      if (p === undefined) return null;
+      const owner = view.ownerOf(p);
+      // Use a parent owner only when its DRAWN level is exactly one ring in; else fall to the spine.
+      return drawnLevelOf(owner) === it.level - 1 ? owner : null;
     }
-    return placeholderParent(it.id, it.level, members, parent, view.ownerOf, levelOf);
+    const members = view.membersOf(it.id);
+    return placeholderParent(it.id, it.level, members, parent, view.ownerOf, drawnLevelOf, orderOf);
   };
   const scaffold = buildScaffold(items, input.focusId, maxDrawnLevel, parentOwnerOf, drawnIds);
 

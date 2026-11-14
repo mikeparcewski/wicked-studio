@@ -202,7 +202,8 @@ describe('placeholderParent', () => {
     ]);
     const ownerOf = (id: string): string => id; // parents drawn as themselves
     const levelOf = levelMap({ p1: 1, p2: 1, G: 2 });
-    const got = placeholderParent('G', 2, ['m1', 'm2', 'm3', 'm4'], parent, ownerOf, levelOf);
+    const orderOf = (id: string): number => ({ p1: 0, p2: 1 } as Record<string, number>)[id] ?? 0;
+    const got = placeholderParent('G', 2, ['m1', 'm2', 'm3', 'm4'], parent, ownerOf, levelOf, orderOf);
     expect(got).toBe('p1');
   });
 
@@ -210,7 +211,23 @@ describe('placeholderParent', () => {
     const parent = new Map([['m1', 'deep']]);
     const ownerOf = (id: string): string => id;
     const levelOf = levelMap({ deep: 2, G: 2 });
-    expect(placeholderParent('G', 2, ['m1'], parent, ownerOf, levelOf)).toBeNull();
+    expect(placeholderParent('G', 2, ['m1'], parent, ownerOf, levelOf, () => 0)).toBeNull();
+  });
+
+  it('breaks ties by the drawn owner Item.order then id, not by member encounter order (R3)', () => {
+    // p1 and p2 each own one member; p2 appears first among members but p1 has the lower Item.order.
+    const parent = new Map([
+      ['m1', 'p2'],
+      ['m2', 'p1'],
+    ]);
+    const ownerOf = (id: string): string => id;
+    const levelOf = levelMap({ p1: 1, p2: 1, G: 2 });
+    const orderOf = (id: string): number => ({ p1: 3, p2: 9 } as Record<string, number>)[id] ?? 0;
+    // members in encounter order [m1 (p2), m2 (p1)] but p1 wins on lower order.
+    expect(placeholderParent('G', 2, ['m1', 'm2'], parent, ownerOf, levelOf, orderOf)).toBe('p1');
+    // equal order → break by id (p1 < p2).
+    const equalOrder = (): number => 5;
+    expect(placeholderParent('G', 2, ['m1', 'm2'], parent, ownerOf, levelOf, equalOrder)).toBe('p1');
   });
 });
 
