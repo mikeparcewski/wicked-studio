@@ -113,8 +113,8 @@ TTS_STATE = {"name": "installed"}
 # Only the voices crew's manifest offers: Joe (en_US-joe-medium, CC0) and Cori (en_GB-cori-high, public domain).
 _JOE_ID = "en_US-joe-medium"
 _CORI_ID = "en_GB-cori-high"
-_JOE = {"name": "Joe", "accent": "US English", "licence": "CC0", "bytes": 66060288, "source": "Hugging Face rhasspy/piper-voices"}
-_CORI = {"name": "Cori", "accent": "UK English", "licence": "Public domain", "bytes": 89128960, "source": "Hugging Face rhasspy/piper-voices"}
+_JOE = {"name": "Joe", "accent": "US English", "licence": "CC0", "bytes": 63227449, "source": "Hugging Face rhasspy/piper-voices"}
+_CORI = {"name": "Cori", "accent": "UK English", "licence": "Public domain", "bytes": 114224315, "source": "Hugging Face rhasspy/piper-voices"}
 _TTS_BASE = {"supported": {"ok": True, "reason": None}, "python": {"found": True, "path": "/usr/bin/python3", "version": "3.11.4"}}
 
 

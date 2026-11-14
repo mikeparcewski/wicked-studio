@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PiperSpeaker, sentences, type PiperDeps } from '../src/voice/io.js';
 
@@ -126,16 +126,13 @@ describe('no browser speech-synthesis anywhere under src/', () => {
   it('src/ has no speechSynthesis or SpeechSynthesisUtterance reference', () => {
     const root = join(__dirname, '..', 'src');
     const offenders: string[] = [];
-    const walk = (dir: string): void => {
-      for (const name of readdirSync(dir)) {
-        const p = join(dir, name);
-        if (statSync(p).isDirectory()) { walk(p); continue; }
-        if (!/\.(ts|tsx)$/.test(name)) continue;
-        const text = readFileSync(p, 'utf8');
-        if (/speechSynthesis|SpeechSynthesisUtterance/.test(text)) offenders.push(p);
-      }
-    };
-    walk(root);
+    // Node >= 22: readdirSync walks the tree itself (recursive + withFileTypes).
+    for (const ent of readdirSync(root, { recursive: true, withFileTypes: true })) {
+      if (ent.isDirectory()) continue;
+      if (!/\.(ts|tsx)$/.test(ent.name)) continue;
+      const p = join(ent.parentPath, ent.name);
+      if (/speechSynthesis|SpeechSynthesisUtterance/.test(readFileSync(p, 'utf8'))) offenders.push(p);
+    }
     expect(offenders).toEqual([]);
   });
 });
