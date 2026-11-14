@@ -43,7 +43,7 @@ function make(opts: { ready?: boolean; voice?: string | null } = {}): Harness {
   const deps: PiperDeps = {
     fetchWav: (text, _voice, signal) => { fetched.push(text); signals.push(signal); return Promise.resolve(new ArrayBuffer(8)); },
     ctx: () => ctx as unknown as AudioContext,
-    voice: () => (opts.voice === undefined ? 'amy' : opts.voice),
+    voice: () => (opts.voice === undefined ? 'en_US-joe-medium' : opts.voice),
     ready: () => opts.ready ?? true,
   };
   return { speaker: new PiperSpeaker(deps), ctx, fetched, signals };
@@ -104,8 +104,8 @@ describe('PiperSpeaker', () => {
   });
 
   it('is unavailable when the engine is not ready, the voice is missing, or none is chosen', () => {
-    expect(make({ ready: true, voice: 'amy' }).speaker.available).toBe(true);
-    expect(make({ ready: false, voice: 'amy' }).speaker.available).toBe(false);
+    expect(make({ ready: true, voice: 'en_US-joe-medium' }).speaker.available).toBe(true);
+    expect(make({ ready: false, voice: 'en_US-joe-medium' }).speaker.available).toBe(false);
     expect(make({ ready: true, voice: null }).speaker.available).toBe(false);
   });
 

@@ -90,7 +90,7 @@ STATUS = {"local": True, "ready": True, "engine": {"name": "whisper.cpp", "found
 # Read-aloud (piper): the engine and one voice installed, so read-aloud is ready on first read.
 TTS = {"supported": {"ok": True, "reason": None}, "python": {"found": True, "path": "/usr/bin/python3", "version": "3.11.4"},
        "engine": {"found": True, "version": "1.8.0"},
-       "voices": {"amy": {"installed": True, "name": "Amy", "accent": "US English", "licence": "CC BY 4.0", "bytes": 66060288,
+       "voices": {"en_US-joe-medium": {"installed": True, "name": "Joe", "accent": "US English", "licence": "CC0", "bytes": 66060288,
                           "source": "Hugging Face rhasspy/piper-voices"}}, "install": None}
 POWER = {"on": True, "available": True, "refusedReason": None, "rigor": "standard", "plan": None, "history": [], "toggles": [],
          "orchestrator": {"cli": "codex", "ord": 3, "turns": 2, "inTurn": True, "sessionRestarts": 0}, "turnLog": [], "checkpoints": 1, "handoff": None, "pause": None, "outcome": None}

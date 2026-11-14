@@ -110,9 +110,11 @@ function buildReadAloud(
   if (installing) {
     inner.push(
       <div key="progress" data-testid="voice-tts-progress">
-        <p>Installing read-aloud… {tts.install?.step}</p>
-        <div className="wk-voice-progress" role="progressbar" aria-label="Read-aloud install" aria-valuemin={0} aria-valuemax={100}>
-          <span style={{ width: '40%' }} />
+        <p>{installStepLabel(tts.install?.step ?? null, tts.voices)}</p>
+        {/* Crew reports no byte count for this install, so the bar is indeterminate: no width claim, no
+            aria-valuenow (its absence is what marks a progressbar indeterminate), and aria-busy while it runs. */}
+        <div className="wk-voice-progress wk-voice-progress--busy" role="progressbar" aria-label="Read-aloud install" aria-busy={true} aria-valuemin={0} aria-valuemax={100}>
+          <span />
         </div>
       </div>,
     );
@@ -126,6 +128,17 @@ function buildReadAloud(
   }
 
   return <div key="tts" data-testid="voice-tts" data-state="ready">{inner}</div>;
+}
+
+/** A human label for crew's install step, never the raw id: `engine` → the engine line; `voice:<id>` → the voice's
+ *  name from the status map (its id if the name is unknown). Any other step falls back to a plain line. */
+function installStepLabel(step: string | null, voices: Record<string, VoiceTtsVoice>): string {
+  if (step === 'engine') return 'Installing the read-aloud engine…';
+  if (step !== null && step.startsWith('voice:')) {
+    const id = step.slice('voice:'.length);
+    return `Downloading ${voices[id]?.name ?? id}…`;
+  }
+  return 'Installing read-aloud…';
 }
 
 function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boolean): React.ReactNode {
