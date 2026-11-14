@@ -326,4 +326,254 @@ describe('guide rings are 2·r_k across (RingGraph.tsx:298, read off the mounted
   });
 });
 
+// A focus → level-1 → level-2 primary chain, for the "dim never touches the selection or its chain" cases.
+function chainModel(): VisibleModel {
+  return mkModel(
+    [
+      mkItem({ id: 'q:F', kind: 'focus' as ItemKind, size: 'focus' as ItemSize, level: 0, order: 0, colorLevel: 0, label: 'F', activatable: false }),
+      mkItem({ id: 'n:A', kind: 'symbol' as ItemKind, size: 'node' as ItemSize, level: 1, order: 1, colorLevel: 1, label: 'A' }),
+      mkItem({ id: 'n:B', kind: 'symbol' as ItemKind, size: 'node' as ItemSize, level: 2, order: 2, colorLevel: 2, label: 'B' }),
+    ],
+    [0, 100, 200], 
+    [
+      { src: 'n:B', tgt: 'n:A', cls: 'primary', colorLevel: 2, count: 1, aggregate: false },
+      { src: 'n:A', tgt: 'q:F', cls: 'primary', colorLevel: 1, count: 1, aggregate: false },
+    ],
+    [{ k: 1, placed: 1, shown: 1, label: '1 hop' }, { k: 2, placed: 1, shown: 1, label: '2 hops' }],
+  );
+}
+
+describe('F1: hover dimming never lands on the selection or its selected chain', () => {
+  it('selecting the focus and hovering another level leaves the focus lit (opacity 1, no .dim)', () => {
+    const m = chainModel();
+    render(<RingGraph model={m} view="rings" selectedId="q:F" hoverLevel={2} onSelect={() => {}} onActivate={() => {}} />);
+    const cy = latestCy();
+    const f = nodeFor(cy, 'q:F');
+    expect(f.selected()).toBe(true);
+    expect(f.hasClass('dim')).toBe(false);
+    expect(Number(f.style('opacity'))).toBe(1);
+  });
+
+  it('selecting a level-2 node and hovering level 3 dims neither the selection nor its chain', () => {
+    const m = chainModel();
+    render(<RingGraph model={m} view="rings" selectedId="n:B" hoverLevel={3} onSelect={() => {}} onActivate={() => {}} />);
+    const cy = latestCy();
+    expect(nodeFor(cy, 'n:B').hasClass('dim')).toBe(false); // the selection
+    expect(nodeFor(cy, 'n:A').hasClass('dim')).toBe(false); // on the chain
+    expect(nodeFor(cy, 'q:F').hasClass('dim')).toBe(false); // the focus, on the chain
+    expect(nodeFor(cy, 'n:A').hasClass('chain')).toBe(true);
+    expect(cy.nodes('.chain').length).toBeGreaterThan(0);
+  });
+});
+
+// A straight chain 1→7, each edge carrying its own colorLevel, for deep-ring edge dimming.
+function deepEdgeModel(): VisibleModel {
+  const items: Item[] = [mkItem({ id: 'q:F', kind: 'focus' as ItemKind, size: 'focus' as ItemSize, level: 0, order: 0, colorLevel: 0, label: 'F', activatable: false })];
+  const edges: ModelEdge[] = [];
+  const radii = [0];
+  const levels: VisibleModel['levels'] = [];
+  for (let k = 1; k <= 7; k++) {
+    items.push(mkItem({ id: `n:${k}`, kind: 'symbol' as ItemKind, size: 'node' as ItemSize, level: k, order: k, colorLevel: k, label: `n${k}` }));
+    edges.push({ src: `n:${k}`, tgt: k === 1 ? 'q:F' : `n:${k - 1}`, cls: 'same', colorLevel: k, count: 1, aggregate: false });
+    radii.push(50 * k);
+    levels.push({ k, placed: 1, shown: 1, label: `${k} hop` });
+  }
+  return mkModel(items, radii, edges, levels);
+}
+
+describe('F2: edge hover dimming compares the real colorLevel, not the 1..5 colour clamp', () => {
+  it('hovering level 5 dims every edge whose colorLevel is not 5 (including level 6 and 7)', () => {
+    render(<RingGraph model={deepEdgeModel()} view="rings" selectedId={null} hoverLevel={5} onSelect={() => {}} onActivate={() => {}} />);
+    const cy = latestCy();
+    cy.edges().forEach((e) => {
+      const cl = e.data('colorLevel') as number;
+      expect(e.hasClass('dim'), `edge colorLevel ${cl}`).toBe(cl !== 5);
+    });
+    // explicitly: the deep edges (6, 7) are dimmed; the level-5 edge is not.
+    expect(cy.edges().filter((e) => (e.data('colorLevel') as number) === 6).first().hasClass('dim')).toBe(true);
+    expect(cy.edges().filter((e) => (e.data('colorLevel') as number) === 7).first().hasClass('dim')).toBe(true);
+    expect(cy.edges().filter((e) => (e.data('colorLevel') as number) === 5).first().hasClass('dim')).toBe(false);
+  });
+
+  it('hovering level 6 dims the level-5 edge', () => {
+    render(<RingGraph model={deepEdgeModel()} view="rings" selectedId={null} hoverLevel={6} onSelect={() => {}} onActivate={() => {}} />);
+    const cy = latestCy();
+    expect(cy.edges().filter((e) => (e.data('colorLevel') as number) === 5).first().hasClass('dim')).toBe(true);
+    expect(cy.edges().filter((e) => (e.data('colorLevel') as number) === 6).first().hasClass('dim')).toBe(false);
+  });
+});
+
+// Two placeholders on close rings (levels 2 and 3), long labels at the same angle — they collide; the
+// hovered ring's label must win. Placeholders (not symbols) are never LOD-dropped at any zoom.
+function hoverCollisionModel(): VisibleModel {
+  const long = (c: string): string => c.repeat(20);
+  return mkModel(
+    [
+      mkItem({ id: 'q:F', kind: 'focus' as ItemKind, size: 'focus' as ItemSize, level: 0, order: 0, colorLevel: 0, label: 'F', activatable: false }),
+      mkItem({ id: 'g:2:A', kind: 'group' as ItemKind, size: 'placeholder' as ItemSize, level: 2, order: 1, colorLevel: 2, label: long('A'), count: 3 }),
+      mkItem({ id: 'g:3:B', kind: 'group' as ItemKind, size: 'placeholder' as ItemSize, level: 3, order: 2, colorLevel: 3, label: long('B'), count: 3 }),
+    ],
+    [0, 250, 500, 510], [],
+    [{ k: 2, placed: 1, shown: 1, label: '2 hops' }, { k: 3, placed: 1, shown: 1, label: '3 hops' }],
+  );
+}
+
+describe('F3: a hovered ring\'s labels win a collision over dimmed labels of equal base rank', () => {
+  it('hovering level 2 places A and suppresses B; hovering level 3 swaps the result', () => {
+    const m = hoverCollisionModel();
+    const base = { view: 'rings' as const, selectedId: null, onSelect: () => {}, onActivate: () => {} };
+    const { rerender } = render(<RingGraph model={m} hoverLevel={2} {...base} />);
+    const cy = latestCy();
+    expect(nodeFor(cy, 'g:2:A').data('dlabel')).not.toBe('');
+    expect(nodeFor(cy, 'g:3:B').data('dlabel')).toBe('');
+    rerender(<RingGraph model={m} hoverLevel={3} {...base} />);
+    expect(nodeFor(cy, 'g:3:B').data('dlabel')).not.toBe('');
+    expect(nodeFor(cy, 'g:2:A').data('dlabel')).toBe('');
+  });
+});
+
+describe('F5: hover never refits; a selection stops the prior animation and records xy synchronously', () => {
+  it('three hover changes leave zoom and pan untouched and start no animation', () => {
+    const { m } = model();
+    const base = { view: 'rings' as const, selectedId: null, onSelect: () => {}, onActivate: () => {} };
+    const { rerender } = render(<RingGraph model={m} hoverLevel={null} {...base} />);
+    const cy = latestCy();
+    cy.zoom(2);
+    cy.pan({ x: 37, y: 53 });
+    const zoom0 = cy.zoom();
+    const pan0 = { ...cy.pan() };
+    const animateSpy = vi.spyOn(cy, 'animate');
+    rerender(<RingGraph model={m} hoverLevel={1} {...base} />);
+    rerender(<RingGraph model={m} hoverLevel={2} {...base} />);
+    rerender(<RingGraph model={m} hoverLevel={3} {...base} />);
+    expect(cy.zoom()).toBe(zoom0);
+    expect(cy.pan()).toEqual(pan0);
+    expect(animateSpy).not.toHaveBeenCalled();
+  });
+
+  it('a selection change calls cy.stop() before cy.animate() and writes data-selected-xy synchronously', () => {
+    const origGetContext = HTMLCanvasElement.prototype.getContext;
+    // A canvas context stub with setTransform makes canRender() true, so the animate branch runs.
+    const fakeCtx = new Proxy({}, {
+      get: (_t, p) => (p === 'measureText' ? (t: string) => ({ width: t.length * 7 }) : p === 'font' ? '' : () => {}),
+    });
+    HTMLCanvasElement.prototype.getContext = (() => fakeCtx) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+    const origRaf = global.requestAnimationFrame;
+    // a no-op rAF so cytoscape never paints the fake context during the test.
+    global.requestAnimationFrame = (() => 0) as unknown as typeof requestAnimationFrame;
+    try {
+      const m = chainModel();
+      const base = { view: 'rings' as const, hoverLevel: null, onSelect: () => {}, onActivate: () => {} };
+      const { rerender, getByTestId } = render(<RingGraph model={m} selectedId={null} {...base} />);
+      const cy = latestCy();
+      const el = getByTestId('ring-graph');
+      rerender(<RingGraph model={m} selectedId="n:A" {...base} />); // first selection
+      el.dataset.selectedXy = ''; // clear, to detect the synchronous write on the next change
+      const calls: string[] = [];
+      const stopSpy = vi.spyOn(cy, 'stop').mockImplementation(() => { calls.push('stop'); return cy; });
+      const animateSpy = vi.spyOn(cy, 'animate').mockImplementation((() => { calls.push('animate'); return cy; }) as unknown as typeof cy.animate);
+      rerender(<RingGraph model={m} selectedId="n:B" {...base} />); // second selection
+      expect(animateSpy).toHaveBeenCalledTimes(1);
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+      expect(calls).toEqual(['stop', 'animate']); // stop runs BEFORE animate
+      expect(el.dataset.selectedXy).not.toBe(''); // written synchronously, not only on animate complete
+    } finally {
+      HTMLCanvasElement.prototype.getContext = origGetContext;
+      global.requestAnimationFrame = origRaf;
+    }
+  });
+});
+
+describe('F6: lifecycle — aria-label ref, pending-frame cleanup, cached measure canvas', () => {
+  it('a label-only prop change updates aria-label and survives a zoom refresh', async () => {
+    const { m } = model();
+    const base = { model: m, view: 'rings' as const, selectedId: null, hoverLevel: null, onSelect: () => {}, onActivate: () => {} };
+    const { rerender, getByTestId } = render(<RingGraph {...base} ariaLabel="first" />);
+    const el = getByTestId('ring-graph');
+    expect(el.getAttribute('aria-label')).toBe('first');
+    rerender(<RingGraph {...base} ariaLabel="second" />); // model + view unchanged
+    expect(el.getAttribute('aria-label')).toBe('second');
+    const cy = latestCy();
+    cy.zoom(cy.zoom() * 1.3); // fire a zoom → schedules a refresh frame
+    await waitFor(() => expect(el.dataset.labelsShown).toBeTruthy());
+    expect(el.getAttribute('aria-label')).toBe('second'); // refresh must not revert to the build-time label
+  });
+
+  it('a pending frame scheduled via the setTimeout fallback is cleared on unmount (no write afterwards)', () => {
+    const { m } = model();
+    const { unmount, getByTestId } = render(
+      <RingGraph model={m} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />,
+    );
+    const el = getByTestId('ring-graph');
+    const cy = latestCy();
+    // Headless cytoscape needs rAF for its own loop, so build with rAF present, then switch to fake
+    // timers and remove rAF only while we trigger the handler — forcing its setTimeout fallback.
+    vi.useFakeTimers();
+    const origRaf = globalThis.requestAnimationFrame;
+    // @ts-expect-error removing an optional global to exercise the fallback path
+    globalThis.requestAnimationFrame = undefined;
+    try {
+      cy.emit('pan'); // invoke RingGraph's 'zoom pan' handler → schedules a setTimeout frame
+      el.dataset.labelsShown = 'SENTINEL';
+      unmount(); // cleanup must clearTimeout (not cancelAnimationFrame) the pending frame
+      globalThis.requestAnimationFrame = origRaf; // restore before draining timers
+      vi.runAllTimers();
+      expect(el.dataset.labelsShown).toBe('SENTINEL'); // the frame never ran after unmount
+    } finally {
+      globalThis.requestAnimationFrame = origRaf;
+      vi.useRealTimers();
+    }
+  });
+
+  it('with getContext returning null, measuring the whole fixture creates at most one measure canvas', () => {
+    const origGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+    const createSpy = vi.spyOn(document, 'createElement');
+    try {
+      const { m } = model(); // 249 items — hundreds of measure calls
+      render(<RingGraph model={m} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />);
+      const canvases = createSpy.mock.calls.filter((c) => c[0] === 'canvas').length;
+      // one canvas for canRender()'s probe + one cached measure canvas = 2; the bug created one per label.
+      expect(canvases).toBeLessThanOrEqual(2);
+    } finally {
+      createSpy.mockRestore();
+      HTMLCanvasElement.prototype.getContext = origGetContext;
+    }
+  });
+});
+
+// A single node on a ring, to prove the π/n_k shift keeps it off 12 o'clock on the mounted canvas.
+function singleNodeModel(): VisibleModel {
+  return mkModel(
+    [
+      mkItem({ id: 'q:F', kind: 'focus' as ItemKind, size: 'focus' as ItemSize, level: 0, order: 0, colorLevel: 0, label: 'F', activatable: false }),
+      mkItem({ id: 'n:S', kind: 'symbol' as ItemKind, size: 'node' as ItemSize, level: 1, order: 1, colorLevel: 1, label: 'S' }),
+    ],
+    [0, 200], [],
+    [{ k: 1, placed: 1, shown: 1, label: '1 hop' }],
+  );
+}
+
+describe('F7: the mounted canvas lays nodes on their model radii, off 12 o\'clock', () => {
+  it('every non-guide node sits at hypot(x, y) ≈ model.radii[level] (within 0.5 px)', () => {
+    const { m } = model();
+    render(<RingGraph model={m} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />);
+    const cy = latestCy();
+    for (const it of m.items) {
+      const p = cy.$id(it.id).position();
+      const r = Math.hypot(p.x, p.y);
+      expect(Math.abs(r - (m.radii[it.level] ?? 0)), `${it.id} level ${it.level}`).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it('a single node on a ring is shifted off 12 o\'clock (the π/n_k shift)', () => {
+    render(<RingGraph model={singleNodeModel()} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />);
+    const cy = latestCy();
+    const p = cy.$id('n:S').position();
+    expect(Math.hypot(p.x, p.y)).toBeCloseTo(200, 6);
+    const angle = Math.atan2(p.y, p.x); // 12 o'clock is -π/2
+    expect(Math.abs(angle - (-Math.PI / 2))).toBeGreaterThan(1e-3);
+  });
+});
+
 void fireEvent; // reserved for interaction tests as the view grows

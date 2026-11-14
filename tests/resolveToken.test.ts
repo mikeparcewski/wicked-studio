@@ -9,7 +9,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { resolveTokenPx } from '../src/styles/resolveToken.js';
+import { resolveTokenPx, resolveTokenValue } from '../src/styles/resolveToken.js';
 
 describe('resolveTokenPx (F3)', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -31,5 +31,59 @@ describe('resolveTokenPx (F3)', () => {
     }) as typeof window.getComputedStyle);
 
     expect(resolveTokenPx('--text-caption')).toBe(12);
+  });
+});
+
+describe('resolveTokenPx (F4): a display:none probe reports the computed value, never a laid-out width', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // Emulate the browser: a laid-out block reports its used (container) width; a display:none probe
+  // reports the COMPUTED width — the resolved token (rem normalised against a 16px root) or `auto`.
+  const ROOT: Record<string, string> = { '--text-caption': '0.75rem' }; // 0.75rem × 16 = 12px
+  function stub(): void {
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(((el: Element) => {
+      const node = el as HTMLElement;
+      const expr = node.style.width;
+      const m = /^var\((--[a-z-]+)\)$/.exec(expr);
+      let width: string;
+      if (node.style.display !== 'none') {
+        width = '1280px'; // a laid-out block — the body's content width, the bug path
+      } else if (m !== null) {
+        let v = ROOT[m[1]!] ?? 'auto'; // an unset token has no computed length
+        if (/rem$/.test(v)) v = `${Number.parseFloat(v) * 16}px`;
+        width = v;
+      } else {
+        width = expr === '' ? 'auto' : expr;
+      }
+      return { width, getPropertyValue: (p: string) => (p === 'width' ? width : '') } as unknown as CSSStyleDeclaration;
+    }) as typeof window.getComputedStyle);
+  }
+
+  it('a 0.75rem token on a 16px root resolves to 12', () => {
+    stub();
+    expect(resolveTokenPx('--text-caption')).toBe(12);
+  });
+
+  it('an unset token resolves to NaN, not the container width', () => {
+    stub();
+    expect(resolveTokenPx('--unset-token')).toBeNaN();
+  });
+});
+
+describe('resolveTokenValue (F4)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('a set token returns its value; an unset one returns an empty string', () => {
+    const ROOT: Record<string, string> = { '--font-mono': 'ui-monospace, monospace' };
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(((el: Element) => {
+      const node = el as HTMLElement;
+      const expr = node.style.getPropertyValue('--resolve-probe'); // resolveTokenValue sets `var(--token)`
+      const m = /^var\((--[a-z-]+)\)$/.exec(expr);
+      // A set token resolves through the cascade; an unset one keeps the unresolved var() passthrough.
+      const resolved = m !== null ? (ROOT[m[1]!] ?? expr) : expr;
+      return { getPropertyValue: (p: string) => (p === '--resolve-probe' ? resolved : '') } as unknown as CSSStyleDeclaration;
+    }) as typeof window.getComputedStyle);
+    expect(resolveTokenValue('--font-mono')).toBe('ui-monospace, monospace');
+    expect(resolveTokenValue('--unset-token')).toBe('');
   });
 });

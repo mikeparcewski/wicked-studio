@@ -227,7 +227,9 @@ export function placeLabels(
   ringStep: number,
 ): PlacementResult {
   const lodOk = ringStep * zoom >= LOD_MIN_RING_PX;
-  const candidates = inputs.filter((i) => !(i.kind === 'symbol' && i.level >= 2 && !lodOk));
+  // An empty-text label is never a candidate: it would otherwise reserve a zero-width rect, count
+  // toward data-labels-shown, and could suppress an overlapping non-empty label (F8).
+  const candidates = inputs.filter((i) => i.text !== '' && !(i.kind === 'symbol' && i.level >= 2 && !lodOk));
 
   const rank = (i: LabelInput): number => {
     if (i.level === 0 && i.kind !== 'guide') return 0; // focus

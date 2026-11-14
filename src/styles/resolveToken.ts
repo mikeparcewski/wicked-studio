@@ -68,6 +68,10 @@ export function resolveTokenPx(name: string): number {
   const probe = document.createElement('div');
   // Do NOT set --name on the probe: that would shadow the real token with an invalid value and the
   // width would resolve to auto/NaN. The probe inherits the token from the cascade instead (F3).
+  // display:none so the browser hands back the COMPUTED value, never a used/layout width: a valid
+  // length still resolves to px, but an unset or invalid var() stays `auto` (→ NaN) instead of
+  // collapsing to the body's content width (e.g. 1280px) that a laid-out block would report (F4).
+  probe.style.display = 'none';
   probe.style.width = `var(${name})`;
   document.body.appendChild(probe);
   const computed = getComputedStyle(probe).width.trim();

@@ -175,6 +175,22 @@ describe('the worked fixture: focus and all nine level-1 labels survive every fi
   }
 });
 
+// ── empty-text labels (F8) ──
+describe('empty-text labels are never placed', () => {
+  it('an empty-text input is not shown, not counted, and does not suppress an overlapping non-empty label', () => {
+    const atOrigin = (id: string, text: string): LabelInput => ({
+      id, kind: 'symbol', level: 1, text, rRing: 0, rNode: 0, angle: 0, selected: false, hovered: false,
+    });
+    // Both labels sit at the same spot and share a rank; without the fix the empty one is placed first
+    // (a zero-width rect) and its collision suppresses the non-empty label.
+    const r = placeLabels([atOrigin('empty', ''), atOrigin('full', 'hello')], 1, CAPTION, measure, RING_STEP);
+    expect(r.shown.has('empty')).toBe(false);
+    expect(r.hidden.has('empty')).toBe(false); // not a candidate at all — never counted as a collision
+    expect(r.shown.has('full')).toBe(true);
+    expect(r.perLevelShown.get(1)).toBe(1); // only the non-empty label counts
+  });
+});
+
 // ── a sanity check on labelGeom itself ──
 describe('labelGeom', () => {
   it('truncates a long radial label at 24 chars with an ellipsis', () => {
