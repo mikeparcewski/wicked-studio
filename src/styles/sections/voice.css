@@ -27,11 +27,15 @@
 .wk-voice-say[data-who="you"] { color: var(--ink-high); padding-left: 10px; border-left: 3px solid var(--accent); }
 .wk-voice-modal-thread { display: flex; flex-direction: column; gap: 8px; }
 .wk-voice-tip { margin: 0; text-align: center; color: var(--ink-dim); font-size: var(--text-xs); }
-.wk-voice-setup { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-raised); color: var(--ink-body); font-size: var(--text-sm); line-height: 1.5; }
+.wk-voice-setup { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-raised); color: var(--ink-body); font-size: var(--text-sm); line-height: 1.5; max-height: 42vh; overflow-y: auto; }
 .wk-voice-setup p { margin: 0 0 6px; }
 .wk-voice-setup[data-state="error"] { color: var(--status-warn); }
 .wk-voice-progress { height: 6px; border-radius: 999px; background: var(--surface-base); overflow: hidden; }
 .wk-voice-progress span { display: block; height: 100%; background: var(--accent); transition: width .3s var(--ease-out); }
+/* Indeterminate (no byte count): a travelling sliver, no width claim. */
+.wk-voice-progress--busy { position: relative; overflow: hidden; }
+.wk-voice-progress--busy span { width: 35%; animation: wk-voice-indeterminate 1.1s ease-in-out infinite; }
+@keyframes wk-voice-indeterminate { 0% { transform: translateX(-120%); } 100% { transform: translateX(340%); } }
 .wk-voice-note { margin: 0; padding: 6px 10px; border-radius: 10px; background: color-mix(in oklab, var(--status-warn) 14%, transparent); color: var(--status-warn); font-size: var(--text-sm); }
 .wk-voice-trow { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--surface-base); }
 .wk-voice-trow p { margin: 0; }

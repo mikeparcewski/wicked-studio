@@ -110,21 +110,25 @@ STATUS = {"local": True, "ready": True, "engine": {"name": "whisper.cpp", "found
 # Read-aloud (piper). The GET /voice/tts answer is stateful so the look pass can screenshot the three setup states
 # (not-installed, installing, installed-with-sample). `TTS_STATE` selects which; the behaviour pass uses "installed".
 TTS_STATE = {"name": "installed"}
-_AMY = {"name": "Amy", "accent": "US English", "licence": "CC BY 4.0", "bytes": 66060288, "source": "Hugging Face rhasspy/piper-voices"}
-_RYAN = {"name": "Ryan", "accent": "US English", "licence": "MIT", "bytes": 78643200, "source": "Hugging Face rhasspy/piper-voices"}
+# Only the voices crew's manifest offers: Joe (en_US-joe-medium, CC0) and Cori (en_GB-cori-high, public domain).
+_JOE_ID = "en_US-joe-medium"
+_CORI_ID = "en_GB-cori-high"
+_JOE = {"name": "Joe", "accent": "US English", "licence": "CC0", "bytes": 66060288, "source": "Hugging Face rhasspy/piper-voices"}
+_CORI = {"name": "Cori", "accent": "UK English", "licence": "Public domain", "bytes": 89128960, "source": "Hugging Face rhasspy/piper-voices"}
 _TTS_BASE = {"supported": {"ok": True, "reason": None}, "python": {"found": True, "path": "/usr/bin/python3", "version": "3.11.4"}}
 
 
 def tts_for(name: str) -> dict:
     if name == "not-installed":
         return {**_TTS_BASE, "engine": {"found": False, "version": None},
-                "voices": {"amy": {"installed": False, **_AMY}, "ryan": {"installed": False, **_RYAN}}, "install": None}
+                "voices": {_JOE_ID: {"installed": False, **_JOE}, _CORI_ID: {"installed": False, **_CORI}}, "install": None}
     if name == "installing":
+        # Crew reports a step id, never a human string: `voice:<id>` while a voice downloads.
         return {**_TTS_BASE, "engine": {"found": False, "version": None},
-                "voices": {"amy": {"installed": False, **_AMY}, "ryan": {"installed": False, **_RYAN}},
-                "install": {"state": "running", "step": "Downloading Amy (63 MB)\u2026", "error": None}}
+                "voices": {_JOE_ID: {"installed": False, **_JOE}, _CORI_ID: {"installed": False, **_CORI}},
+                "install": {"state": "running", "step": f"voice:{_JOE_ID}", "error": None}}
     return {**_TTS_BASE, "engine": {"found": True, "version": "1.8.0"},
-            "voices": {"amy": {"installed": True, **_AMY}, "ryan": {"installed": False, **_RYAN}}, "install": None}
+            "voices": {_JOE_ID: {"installed": True, **_JOE}, _CORI_ID: {"installed": False, **_CORI}}, "install": None}
 
 
 TTS = tts_for("installed")
@@ -389,6 +393,14 @@ with sync_playwright() as p:
                 name = f"voice-tts-{state}-{w}x{h}-{theme}.png"
                 page.locator('[data-testid="voice-setup"]').first.screenshot(path=str(SHOTS / name))
                 tts_shots.append(name)
+                # D4: the voice-mode question and its Yes button stay reachable in every state and size
+                # (the modal/setup scrolls; the question is never pushed out of reach).
+                yes = page.locator('[data-testid="voice-entry-ask"] [data-ask-option="yes"]').first
+                try:
+                    yes.scroll_into_view_if_needed(timeout=3000)
+                except Exception:  # noqa: BLE001
+                    fail(f"7b-yes-reachable-{state}-{w}-{theme}", {"errors": errors[:3]})
+                check(f"7b-yes-reachable-{state}-{w}-{theme}", yes.is_visible(), state=state, w=w, h=h, theme=theme)
                 ctx.close()
     TTS_STATE["name"] = "installed"
     check("7b-tts-setup-shots", len(tts_shots) == 12 and all((SHOTS / n).exists() for n in tts_shots), shots=tts_shots)
