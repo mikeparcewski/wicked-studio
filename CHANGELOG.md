@@ -31,7 +31,8 @@ npm publish dates. Every version listed here exists on
   one consent button per voice, install progress and failure text, the platform remedy when Python is missing, and
   Play sample / choose-voice (kept per person) for an installed voice. When read-aloud is on but piper is not set up,
   the voice view says so and shows the setup rows instead of speaking. A crew without the routes shows the upgrade
-  line. There is no browser-speech fallback.
+  line. There is no browser-speech fallback. The read-aloud wire types (`VoiceTtsStatus`, `PostVoiceTtsBody`,
+  `PostVoiceSpeakBody`) come from `wicked-crew-api-types` 0.209.0 (re-pinned from 0.206.0), not a local copy.
 
 ## [0.16.10] — 2026-11-14
 
