@@ -31,6 +31,17 @@ npm publish dates. Every version listed here exists on
   any in-flight animation first); and lifecycle fixes — a label-only `ariaLabel` change updates the
   host, a pending zoom frame is cancelled on unmount, a failed canvas context is cached, and empty
   labels are never placed. Still not wired into any screen.
+### Changed
+
+- Voice read-aloud now speaks with **piper on this machine** (crew's `/voice/speak`) instead of the browser's
+  `speechSynthesis`, so one voice is used across the product and nothing is spoken by a remote service
+  (wicked-crew#1548, api-types 0.209.0). Voice setup gains read-aloud rows beside the speech-input rows: before
+  anything downloads they state exactly what is fetched and from where (piper-tts 1.8.0 from PyPI, GPL-3.0-or-later,
+  installed as a separate program; each voice from Hugging Face rhasspy/piper-voices with its size and licence), then
+  one consent button per voice, install progress and failure text, the platform remedy when Python is missing, and
+  Play sample / choose-voice (kept per person) for an installed voice. When read-aloud is on but piper is not set up,
+  the voice view says so and shows the setup rows instead of speaking. A crew without the routes shows the upgrade
+  line. There is no browser-speech fallback.
 
 ## [0.16.10] — 2026-11-14
 
