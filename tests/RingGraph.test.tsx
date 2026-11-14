@@ -528,7 +528,7 @@ describe('F6: lifecycle — aria-label ref, pending-frame cleanup, cached measur
     expect(el.getAttribute('aria-label')).toBe('second'); // refresh must not revert to the build-time label
   });
 
-  it('a pending frame scheduled via the setTimeout fallback is cleared on unmount (no write afterwards)', async () => {
+  it('a pending setTimeout-fallback frame is cleared on unmount with clearTimeout (not cancelAnimationFrame)', async () => {
     const { m } = model();
     const { unmount, getByTestId } = render(
       <RingGraph model={m} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />,
@@ -538,22 +538,27 @@ describe('F6: lifecycle — aria-label ref, pending-frame cleanup, cached measur
     // Flush the build fit's pending rAF frame first, so our emit below actually SCHEDULES a frame
     // (the handler coalesces while one is already pending) rather than being swallowed.
     await new Promise((r) => requestAnimationFrame(() => r(null)));
-    // Headless cytoscape needs rAF for its own loop, so build with rAF present, then switch to fake
-    // timers and remove rAF only while we trigger the handler — forcing its setTimeout fallback.
-    vi.useFakeTimers();
+    // Headless cytoscape needs rAF for its own loop, so build with rAF present, then remove rAF only
+    // while we trigger the handler — forcing its setTimeout fallback. Spy on clearTimeout so the test
+    // is sensitive to the cleanup branch itself (the cy.destroyed() guard would otherwise mask a
+    // missing cancellation by making the fired frame a no-op).
     const origRaf = globalThis.requestAnimationFrame;
     // @ts-expect-error removing an optional global to exercise the fallback path
     globalThis.requestAnimationFrame = undefined;
+    const setSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
     try {
       cy.emit('pan'); // invoke RingGraph's 'zoom pan' handler → schedules a setTimeout frame
+      expect(setSpy).toHaveBeenCalled();
+      const id = setSpy.mock.results[setSpy.mock.results.length - 1]!.value as number;
       el.dataset.labelsShown = 'SENTINEL';
-      unmount(); // cleanup must clearTimeout (not cancelAnimationFrame) the pending frame
-      globalThis.requestAnimationFrame = origRaf; // restore before draining timers
-      vi.runAllTimers();
-      expect(el.dataset.labelsShown).toBe('SENTINEL'); // the frame never ran after unmount
+      unmount(); // cleanup must clearTimeout the pending fallback frame (not cancelAnimationFrame it)
+      expect(clearSpy).toHaveBeenCalledWith(id); // the clearTimeout branch specifically ran
+      expect(el.dataset.labelsShown).toBe('SENTINEL'); // and nothing wrote after unmount
     } finally {
+      setSpy.mockRestore();
+      clearSpy.mockRestore();
       globalThis.requestAnimationFrame = origRaf;
-      vi.useRealTimers();
     }
   });
 
@@ -585,6 +590,36 @@ describe('F6: lifecycle — aria-label ref, pending-frame cleanup, cached measur
     document.documentElement.setAttribute('data-theme', 'bigcap');
     await waitFor(() => expect(cy.$id('n:A').data('fsize') as number).not.toBe(before));
     expect(cy.$id('n:A').data('fsize') as number).toBeCloseTo(before * 2, 5);
+  });
+
+  it('a theme change rebuilds the measurer so labels are re-measured with the new font stack', async () => {
+    const origGetContext = HTMLCanvasElement.prototype.getContext;
+    // measureText width depends on the font string makeMeasure bakes into ctx.font, so a changed font
+    // stack only alters measurement if the measurer itself is rebuilt (ctx.measure = makeMeasure(...)).
+    HTMLCanvasElement.prototype.getContext = (() => {
+      const ctx: { font: string; measureText: (t: string) => { width: number } } = {
+        font: '',
+        measureText: (t: string) => ({ width: t.length * (ctx.font.includes('BIGFONT') ? 20 : 7) }),
+      };
+      return ctx;
+    }) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+    try {
+      const m = chainModel();
+      render(<RingGraph model={m} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />);
+      const cy = latestCy();
+      // hypot(mx, my) is the label's radial reach = rNode + (6 + measuredWidth/2)/zoom — scales with
+      // the measured width independent of the node's angle.
+      const reach = (): number => { const n = cy.$id('n:A'); return Math.hypot(n.data('mx') as number, n.data('my') as number); };
+      const before = reach(); // measured with the default 'system-ui' stack (width factor 7)
+      expect(before).toBeGreaterThan(0);
+      // A --font-sans change is a style mutation on <html>, so observeTheme fires; the handler must
+      // rebuild the measurer with the new stack so the next measure uses the BIGFONT width factor.
+      document.documentElement.style.setProperty('--font-sans', 'BIGFONT');
+      await waitFor(() => expect(reach()).not.toBe(before));
+      expect(reach()).toBeGreaterThan(before); // a wider font yields a larger label reach
+    } finally {
+      HTMLCanvasElement.prototype.getContext = origGetContext;
+    }
   });
 
   it('a scheduled zoom frame no-ops if the instance was destroyed before it ran (defensive guard)', () => {
