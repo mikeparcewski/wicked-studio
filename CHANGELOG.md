@@ -14,9 +14,12 @@ npm publish dates. Every version listed here exists on
 
 ### Added
 
-- Graph rings (2 of 5): design tokens `--graph-level-1..5` (the concentric ring canvas's fixed hop
-  colours) in the dark base and the light theme, and `resolveTokenValue` / `resolveTokenPx` helpers
-  for sinks that need a token as a raw string or a pixel number. Not yet wired into any screen.
+- Graph rings (2 of 5): the cytoscape ring canvas `RingGraph` (concentric layout with a π/n_k angle
+  shift and model radii, dashed guide rings, classified edges, hover-level dimming, a selected chain,
+  screen-space label placement with oriented-rectangle collision and symbol LOD, a theme observer,
+  and derived data-* attributes), plus the design tokens `--graph-level-1..5` (its fixed hop colours)
+  in the dark base and the light theme, and `resolveTokenValue` / `resolveTokenPx` helpers for sinks
+  that need a token as a raw string or a pixel number. Not yet wired into any screen.
 
 ## [0.16.10] — 2026-11-14
 
