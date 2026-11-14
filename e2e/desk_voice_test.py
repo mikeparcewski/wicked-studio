@@ -21,7 +21,9 @@ STREAM and a STUB speech-to-text:
      and sends NOTHING; "confirm" starts the 10 s undo; after it the gate POST carries input "voice".
   6. Widgets: remove "Today", add it back from the picker, make a metric widget from /system; PUT /voice/dashboard.
   7. Esc leaves; the overlay is gone. 0 page errors.
-  Screens: modal-ask, modal-answer, mode, streaming, gate at 1440x900 and 390x844, dark and light.
+  Screens: modal-ask, modal-answer, mode, streaming, gate at 1440x900 and 390x844, dark and light; plus the three
+  read-aloud (piper) Voice-setup states (not-installed, installing, installed-with-sample) at 1440x700 and 390x844,
+  light and dark — 12 `voice-tts-*` shots asserted by step 7b.
 
 Env: FEEDBACK_PORT (default 4691).
 """
@@ -105,11 +107,27 @@ SYSTEM = {
 STATUS = {"local": True, "ready": True, "engine": {"name": "whisper.cpp", "found": True, "path": "/opt/homebrew/bin/whisper-cli", "install": None},
           "model": {"name": "base.en", "present": True, "bytes": 147964211, "approxBytes": 148897792, "source": "huggingface.co/ggerganov/whisper.cpp", "download": None}}
 
-# Read-aloud (piper): the engine and one voice installed, so read-aloud is ready on first read.
-TTS = {"supported": {"ok": True, "reason": None}, "python": {"found": True, "path": "/usr/bin/python3", "version": "3.11.4"},
-       "engine": {"found": True, "version": "1.8.0"},
-       "voices": {"amy": {"installed": True, "name": "Amy", "accent": "US English", "licence": "CC BY 4.0", "bytes": 66060288,
-                          "source": "Hugging Face rhasspy/piper-voices"}}, "install": None}
+# Read-aloud (piper). The GET /voice/tts answer is stateful so the look pass can screenshot the three setup states
+# (not-installed, installing, installed-with-sample). `TTS_STATE` selects which; the behaviour pass uses "installed".
+TTS_STATE = {"name": "installed"}
+_AMY = {"name": "Amy", "accent": "US English", "licence": "CC BY 4.0", "bytes": 66060288, "source": "Hugging Face rhasspy/piper-voices"}
+_RYAN = {"name": "Ryan", "accent": "US English", "licence": "MIT", "bytes": 78643200, "source": "Hugging Face rhasspy/piper-voices"}
+_TTS_BASE = {"supported": {"ok": True, "reason": None}, "python": {"found": True, "path": "/usr/bin/python3", "version": "3.11.4"}}
+
+
+def tts_for(name: str) -> dict:
+    if name == "not-installed":
+        return {**_TTS_BASE, "engine": {"found": False, "version": None},
+                "voices": {"amy": {"installed": False, **_AMY}, "ryan": {"installed": False, **_RYAN}}, "install": None}
+    if name == "installing":
+        return {**_TTS_BASE, "engine": {"found": False, "version": None},
+                "voices": {"amy": {"installed": False, **_AMY}, "ryan": {"installed": False, **_RYAN}},
+                "install": {"state": "running", "step": "Downloading Amy (63 MB)\u2026", "error": None}}
+    return {**_TTS_BASE, "engine": {"found": True, "version": "1.8.0"},
+            "voices": {"amy": {"installed": True, **_AMY}, "ryan": {"installed": False, **_RYAN}}, "install": None}
+
+
+TTS = tts_for("installed")
 
 
 def wav_ok(body: bytes) -> dict:
@@ -128,7 +146,7 @@ def route_api(route) -> None:
     if path == "/api/v1/voice/status":
         return j(STATUS)
     if path == "/api/v1/voice/tts":
-        return j(TTS)
+        return j(tts_for(TTS_STATE["name"]))
     if path == "/api/v1/voice/speak" or path.startswith("/api/v1/voice/tts/sample/"):
         # Usually intercepted in the page (window.fetch), answered here only if that ever misses.
         return route.fulfill(status=200, content_type="audio/wav", body=b"RIFF")
@@ -352,6 +370,28 @@ with sync_playwright() as p:
                 over = page.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
                 check(f"look-{w}-{theme}-fits", over <= 1, over=over)
             ctx.close()
+
+    # ── read-aloud setup states: the three Voice-setup moments at the two required sizes, both themes ──────
+    tts_shots: list[str] = []
+    for w, h in ((1440, 700), (390, 844)):
+        for theme in ("light", "dark"):
+            for state in ("not-installed", "installing", "installed"):
+                TTS_STATE["name"] = state
+                script.clear()
+                sockets.clear()
+                ctx, page = new_page(browser, w, h, theme)
+                open_voice(page)
+                try:
+                    page.locator('[data-testid="voice-tts"]').first.wait_for(timeout=10000)
+                except Exception:  # noqa: BLE001
+                    fail(f"tts-shot-{state}-{w}-{theme}", {"setup": page.locator('[data-testid="voice-setup"]').all_inner_texts(), "errors": errors[:3]})
+                page.wait_for_timeout(400)
+                name = f"voice-tts-{state}-{w}x{h}-{theme}.png"
+                page.locator('[data-testid="voice-setup"]').first.screenshot(path=str(SHOTS / name))
+                tts_shots.append(name)
+                ctx.close()
+    TTS_STATE["name"] = "installed"
+    check("7b-tts-setup-shots", len(tts_shots) == 12 and all((SHOTS / n).exists() for n in tts_shots), shots=tts_shots)
 
     check("8-no-page-errors", errors == [], errors=errors[:5])
     report["ok"] = True
