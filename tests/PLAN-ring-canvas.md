@@ -21,7 +21,7 @@ Source: `tests/graphRingCanvas.test.ts`
 | RL-1 | every item of level k sits at radius r_k (±0.5) | deterministic | covered (graphRingCanvas.test.ts) |
 | RL-2 | the drawn radii strictly increase | deterministic | covered (graphRingCanvas.test.ts) |
 | RL-3 | no item sits at 12 o'clock (angle shifted by π/n_k) | deterministic | covered (graphRingCanvas.test.ts) |
-| RL-4 | each guide ring is 2·r_k across | deterministic | covered (graphRingCanvas.test.ts) |
+| RL-4 | each guide ring is 2·r_k across — the mounted guide node's data(diameter) + rendered width()/height() = 2·r_k | deterministic | covered (RingGraph.test.tsx, "guide rings are 2·r_k across") |
 | RL-5 | radii increase across a gap {0,1,3} (empty ring 2) | deterministic | covered (graphRingCanvas.test.ts) |
 | RL-6 | radii increase across a gap {0,3} (ring 3 beyond ring 0) | deterministic | covered (graphRingCanvas.test.ts) |
 
@@ -35,7 +35,7 @@ Source: `tests/graphRingLabels.test.ts`
 |----|----------|------|--------|
 | LB-1 | oriented-rectangle (SAT) collision vs axis-aligned for diagonal labels | deterministic | covered (graphRingLabels.test.ts) |
 | LB-2 | two overlapping oriented rectangles are detected | deterministic | covered (graphRingLabels.test.ts) |
-| LB-3 | priority order: focus > selected/hovered > level 1 > placeholders > rest; guides last | deterministic | covered (graphRingLabels.test.ts) |
+| LB-3 | priority order (partial): focus > selected > level 1, and a guide loses to a colliding node | deterministic | covered (graphRingLabels.test.ts) |
 | LB-4 | LOD applies to `symbol` only — a ring-2 symbol drops below the zoom floor; a group stays | deterministic | covered (graphRingLabels.test.ts) |
 | LB-5 | worked fixture: focus + all 9 level-1 labels shown at every zoom 0.3→1.0 step 0.05, no overlaps | deterministic | covered (graphRingLabels.test.ts) |
 | LB-6 | labelGeom truncates a radial label at 24 chars with an ellipsis | deterministic | covered (graphRingLabels.test.ts) |

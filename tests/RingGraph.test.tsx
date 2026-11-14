@@ -303,4 +303,27 @@ describe('P1 (POL-2101): model ids are used verbatim as cytoscape ids, no remap'
   });
 });
 
+describe('guide rings are 2·r_k across (RingGraph.tsx:298, read off the mounted guide node)', () => {
+  it('every drawn guide gd:k has data(diameter) and rendered width()/height() equal to 2·model.radii[k]', () => {
+    const { m } = model();
+    render(
+      <RingGraph model={m} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />,
+    );
+    const cy = latestCy();
+    expect(m.scaffold.guides.length).toBeGreaterThan(0);
+    for (const g of m.scaffold.guides) {
+      const k = Number(g.split(':')[1]);
+      const expected = 2 * m.radii[k]!;
+      expect(expected, `r_${k} must be > 0`).toBeGreaterThan(0);
+      const node = cy.$id(g);
+      expect(node.nonempty(), `guide ${g} exists`).toBe(true);
+      // The diameter the component writes (RingGraph.tsx:298) and the size cytoscape renders from it.
+      // If the component used r instead of 2·r, every assertion here halves and fails.
+      expect(node.data('diameter') as number, `${g} data(diameter)`).toBe(expected);
+      expect(node.width(), `${g} width()`).toBeCloseTo(expected, 6);
+      expect(node.height(), `${g} height()`).toBeCloseTo(expected, 6);
+    }
+  });
+});
+
 void fireEvent; // reserved for interaction tests as the view grows

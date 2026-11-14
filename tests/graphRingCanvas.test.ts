@@ -1,8 +1,10 @@
 /**
  * The ring layout, on a HEADLESS cytoscape with a fixed bounding box: the built-in concentric
  * distributes the angle and the cytoBase transform (shift π/n_k, radius r_k) places every item on its
- * ring. Asserts every item of level k sits at r_k, the radii increase across gaps, nothing lands at
- * 12 o'clock, and the guides are 2·r_k across.
+ * ring. Asserts every item of level k sits at r_k, the radii increase across gaps, and nothing lands at
+ * 12 o'clock. The guide diameters (2·r_k) are proved against the MOUNTED component in RingGraph.test.tsx,
+ * where the guide node's own data('diameter') + rendered width()/height() are read back (a node-env test
+ * here cannot mount RingGraph, so it could not catch a regression in the production guide element).
  *
  * @vitest-environment node
  */
@@ -98,13 +100,6 @@ describe('ring layout on the worked fixture', () => {
     }
   });
 
-  it('each guide ring is 2·r_k across', () => {
-    for (const g of model.scaffold.guides) {
-      const k = Number(g.split(':')[1]);
-      expect(2 * (model.radii[k] ?? 0)).toBeCloseTo(2 * model.radii[k]!, 6);
-      expect(model.radii[k]!).toBeGreaterThan(0);
-    }
-  });
 });
 
 describe('radii increase across gaps, through the layout', () => {
