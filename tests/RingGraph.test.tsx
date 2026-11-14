@@ -499,13 +499,16 @@ describe('F6: lifecycle — aria-label ref, pending-frame cleanup, cached measur
     expect(el.getAttribute('aria-label')).toBe('second'); // refresh must not revert to the build-time label
   });
 
-  it('a pending frame scheduled via the setTimeout fallback is cleared on unmount (no write afterwards)', () => {
+  it('a pending frame scheduled via the setTimeout fallback is cleared on unmount (no write afterwards)', async () => {
     const { m } = model();
     const { unmount, getByTestId } = render(
       <RingGraph model={m} view="rings" selectedId={null} hoverLevel={null} onSelect={() => {}} onActivate={() => {}} />,
     );
     const el = getByTestId('ring-graph');
     const cy = latestCy();
+    // Flush the build fit's pending rAF frame first, so our emit below actually SCHEDULES a frame
+    // (the handler coalesces while one is already pending) rather than being swallowed.
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
     // Headless cytoscape needs rAF for its own loop, so build with rAF present, then switch to fake
     // timers and remove rAF only while we trigger the handler — forcing its setTimeout fallback.
     vi.useFakeTimers();
