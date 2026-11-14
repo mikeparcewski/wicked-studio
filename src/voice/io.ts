@@ -138,20 +138,50 @@ export interface PiperDeps {
 /** The longest piece handed to `POST /voice/speak` at once (crew refuses an over-long body, `voice_text_invalid`). */
 const SAY_CHUNK = 280;
 
-/** Split text into speakable pieces: on sentence ends and newlines, then any over-long piece on whitespace. */
-export function sentences(text: string): string[] {
+/** Title abbreviations ICU's sentence breaker (Intl.Segmenter) wrongly treats as a sentence end — merged back below.
+ *  (Decimals like "3.5" and "i.e." are already handled by the segmenter, so they are not listed here.) */
+const ABBREVIATIONS = new Set(['dr', 'mr', 'mrs', 'ms', 'mx', 'prof', 'sr', 'jr', 'st', 'vs']);
+
+function endsWithAbbreviation(s: string): boolean {
+  const t = s.trimEnd();
+  if (!t.endsWith('.')) return false;
+  const tokens = t.split(/\s+/);
+  const last = tokens[tokens.length - 1] ?? '';
+  return ABBREVIATIONS.has(last.slice(0, -1).toLowerCase()); // drop the trailing '.'
+}
+
+function chunkToLimit(piece: string): string[] {
   const out: string[] = [];
-  for (const raw of text.split(/(?<=[.!?…])\s+|\n+/)) {
-    let piece = raw.trim();
-    if (piece === '') continue;
-    while (piece.length > SAY_CHUNK) {
-      // Prefer a space near the limit so a word is never cut; fall back to a hard cut.
-      const cut = piece.lastIndexOf(' ', SAY_CHUNK);
-      const at = cut > SAY_CHUNK * 0.5 ? cut : SAY_CHUNK;
-      out.push(piece.slice(0, at).trim());
-      piece = piece.slice(at).trim();
-    }
-    if (piece !== '') out.push(piece);
+  let p = piece;
+  while (p.length > SAY_CHUNK) {
+    // Prefer a space near the limit so a word is never cut; fall back to a hard cut.
+    const cut = p.lastIndexOf(' ', SAY_CHUNK);
+    const at = cut > SAY_CHUNK * 0.5 ? cut : SAY_CHUNK;
+    out.push(p.slice(0, at).trim());
+    p = p.slice(at).trim();
+  }
+  if (p !== '') out.push(p);
+  return out;
+}
+
+/**
+ * Split text into speakable pieces. Sentence segmentation is the platform's `Intl.Segmenter` (ICU/UAX #29, POL-2101),
+ * not a hand-written rule; we only (a) merge a piece the segmenter broke after a title abbreviation like "Dr." back
+ * into the next, and (b) cap any over-long piece for the wire (`voice_text_invalid`).
+ */
+export function sentences(text: string): string[] {
+  const seg = new Intl.Segmenter('en', { granularity: 'sentence' });
+  const base = [...seg.segment(text)].map((s) => s.segment).filter((s) => s.trim() !== '');
+  const merged: string[] = [];
+  for (const piece of base) {
+    const prev = merged.length > 0 ? merged[merged.length - 1]! : null;
+    if (prev !== null && endsWithAbbreviation(prev)) merged[merged.length - 1] = `${prev.trim()} ${piece.trim()}`;
+    else merged.push(piece);
+  }
+  const out: string[] = [];
+  for (const piece of merged) {
+    const t = piece.trim();
+    if (t !== '') out.push(...chunkToLimit(t));
   }
   return out;
 }

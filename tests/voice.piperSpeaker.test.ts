@@ -56,6 +56,12 @@ describe('sentences()', () => {
     expect(sentences('   ')).toEqual([]);
   });
 
+  it('keeps an abbreviation and a decimal in one sentence, and splits two plain sentences in order', () => {
+    // Intl.Segmenter handles the decimal; the abbreviation "Dr." is merged back so it does not split.
+    expect(sentences('Dr. Smith paid 3.5 dollars.')).toEqual(['Dr. Smith paid 3.5 dollars.']);
+    expect(sentences('The cat slept. The dog barked.')).toEqual(['The cat slept.', 'The dog barked.']);
+  });
+
   it('chunks an over-long sentence so no piece exceeds the speak limit', () => {
     const long = 'word '.repeat(120).trim(); // ~600 chars, no sentence end
     const pieces = sentences(long);
