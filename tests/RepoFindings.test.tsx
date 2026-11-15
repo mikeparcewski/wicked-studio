@@ -487,7 +487,8 @@ describe('first-run-2 C1: a missing folder shows crew’s own sentence', () => {
   it('a refused private clone (repo_clone_denied) shows crew’s sentence as the headline', async () => {
     const { ApiError } = await import('../src/api/errors.js');
     const said = 'The clone of https://example.com/private.git was refused. To add a private repository, use On this computer.';
-    cloneAndRegisterRepo.mockRejectedValueOnce(new ApiError(400, said, { code: 'repo_clone_denied', error: said }));
+    const err = new ApiError(400, said, { code: 'repo_clone_denied', error: said });
+    cloneAndRegisterRepo.mockRejectedValueOnce(err);
     listRepos.mockResolvedValueOnce({ repos: [] });
     render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);
     await screen.findByTestId('repos-empty');
@@ -495,7 +496,8 @@ describe('first-run-2 C1: a missing folder shows crew’s own sentence', () => {
     fireEvent.change(screen.getByTestId('repo-git-url'), { target: { value: 'https://example.com/private.git' } });
     fireEvent.click(screen.getByTestId('repo-register-submit'));
     const banner = await screen.findByTestId('repo-register-error');
-    expect(banner.querySelector('.wk-state-banner-text')!.textContent).toBe(said);
+    expect(err.status).toBe(400);
+    expect(banner.querySelector('.wk-state-banner-text')!.textContent).toBe(err.wire);
     expect(banner.textContent).not.toMatch(/Couldn’t load/);
   });
 
