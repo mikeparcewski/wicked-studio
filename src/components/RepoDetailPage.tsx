@@ -62,8 +62,9 @@ const JOBS_SHOWN = 10;
 
 /** The sentence to show for a failed code-graph read, shared by the mount read, the completion re-read and
  *  retryGraph. An ApiError's `message` is already translateWireError's operator sentence (src/api/errors.ts:76);
- *  the raw `.wire` is never rendered. A non-ApiError Error's own message is shown; anything without one falls back. */
-function graphReadError(e: unknown): string {
+ *  the raw `.wire` is never rendered. A non-ApiError Error's own message is shown; anything without one falls back.
+ *  Exported for the unit spine (like {@link dedupeContributors}). */
+export function graphReadError(e: unknown): string {
   return e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer';
 }
 

@@ -41,7 +41,7 @@ vi.mock('../src/api/client.js', () => ({
   apiFetch: () => Promise.reject(new Error('not in this suite')),
 }));
 
-const { RepoDetailPage } = await import('../src/components/RepoDetailPage.js');
+const { RepoDetailPage, graphReadError } = await import('../src/components/RepoDetailPage.js');
 const { resetRepoLinks } = await import('../src/store/repoLinks.js');
 const { resetRepoKnowledge } = await import('../src/store/repoKnowledge.js');
 
@@ -64,6 +64,24 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const codeMark = (): string => document.querySelector('[data-mark="code"]')?.textContent ?? '';
+
+// Rule proposal:01a07c56-f241: the shared helper shows ApiError.message (translateWireError's output), never raw wire.
+describe('graphReadError (studio#1161 P2)', () => {
+  it('returns an ApiError’s translated message, not its raw wire', () => {
+    const err = new ApiError(409, 'graph store is locked');
+    expect(graphReadError(err)).toBe(err.message);
+    expect(graphReadError(err)).not.toBe(err.wire);
+    expect(graphReadError(err)).toMatch(/the daemon refused this/i); // translateWireError wrapper, absent from .wire
+  });
+  it('shows a plain Error’s own message', () => {
+    expect(graphReadError(new Error('boom'))).toBe('boom');
+  });
+  it('falls back when there is no usable message', () => {
+    expect(graphReadError(new Error(''))).toBe('Studio’s service did not answer');
+    expect(graphReadError('nope')).toBe('Studio’s service did not answer');
+    expect(graphReadError(null)).toBe('Studio’s service did not answer');
+  });
+});
 
 describe('repo page re-read fixes (studio#1161 P2)', () => {
   // Finding 1: the Code graph size comes from the knowledge store, which the finished transition must re-read.
