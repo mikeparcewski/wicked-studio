@@ -484,6 +484,21 @@ describe('first-run-2 C1: a missing folder shows crew’s own sentence', () => {
     expect(banner.textContent).not.toMatch(/Couldn’t load|the daemon refused this|Technical details/);
   });
 
+  it('a refused private clone (repo_clone_denied) shows crew’s sentence as the headline', async () => {
+    const { ApiError } = await import('../src/api/errors.js');
+    const said = 'The clone of https://example.com/private.git was refused. To add a private repository, use On this computer.';
+    cloneAndRegisterRepo.mockRejectedValueOnce(new ApiError(400, said, { code: 'repo_clone_denied', error: said }));
+    listRepos.mockResolvedValueOnce({ repos: [] });
+    render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);
+    await screen.findByTestId('repos-empty');
+    fireEvent.click(screen.getByRole('radio', { name: 'From a URL' }));
+    fireEvent.change(screen.getByTestId('repo-git-url'), { target: { value: 'https://example.com/private.git' } });
+    fireEvent.click(screen.getByTestId('repo-register-submit'));
+    const banner = await screen.findByTestId('repo-register-error');
+    expect(banner.querySelector('.wk-state-banner-text')!.textContent).toBe(said);
+    expect(banner.textContent).not.toMatch(/Couldn’t load/);
+  });
+
   it('a refusal crew did not name keeps the plain line with its raw text under Technical details', async () => {
     const { ApiError } = await import('../src/api/errors.js');
     registerRepo.mockRejectedValueOnce(new ApiError(400, 'engine said something odd', { error: 'engine said something odd' }));
