@@ -69,7 +69,7 @@ interface Props {
  */
 
 /** Crew's register refusals that are already written for a person (crew api/repo-input.ts): shown as the line. */
-const PLAIN_REGISTER_CODES = ['repo_path_missing', 'repo_path_relative'] as const;
+const PLAIN_REGISTER_CODES = ['repo_path_missing', 'repo_path_relative', 'repo_clone_denied'] as const;
 
 /** A failure's raw text, for Technical details only. */
 function errorText(e: unknown): string {

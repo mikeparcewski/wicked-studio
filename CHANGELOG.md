@@ -23,6 +23,20 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- A repository's page left open through an onboarding now follows the live run list (studio#1161): the
+  Code graph mark, Working now, Recent jobs and the Jobs tab leave "indexing now" when the run ends,
+  and the page reads the repository and its graph again once when a run of that repository finishes.
+  Cross-model review follow-up (studio#1161): the finished transition also refreshes the Code graph size
+  from the knowledge store (no more stale "not built"); an archived run the live list has dropped is not
+  resurrected from the page's own read; a working live list clears the page's own failed /runs read; the
+  repository and graph re-reads apply independently (one failing no longer discards the other); and only
+  the newest re-read of the current visit may land (older or post-navigation answers are dropped).
+  Second review round (studio#1161): a forced knowledge read asked while that repository's read is pending is read
+  once more when it settles, and the completion re-read and "Try again" share one graph sequence so an older failure never overwrites a newer graph.
+- A private repository added "From a URL" shows crew's own sentence when the clone is refused
+  (`repo_clone_denied`), instead of "Couldn't load the repository." (crew#1535).
+- Tests for the three RingGraph fixes of #1158 now fail when each fix is reverted: the zoom refresh
+  keeps the latest aria-label and hover level, and a selected chain's edges are never dimmed (studio#1159).
 - Graph rings (2 of 5) ring-canvas cross-review follow-up: hover dimming no longer dims the selection
   or its selected chain (the tapped focus stays lit) and compares each edge's real level, so level-6/7
   edges dim correctly on graphs deeper than five rings; a hovered ring's labels win label collisions;

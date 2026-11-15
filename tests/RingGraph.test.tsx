@@ -365,6 +365,13 @@ describe('F1: hover dimming never lands on the selection or its selected chain',
     expect(nodeFor(cy, 'q:F').hasClass('dim')).toBe(false); // the focus, on the chain
     expect(nodeFor(cy, 'n:A').hasClass('chain')).toBe(true);
     expect(cy.nodes('.chain').length).toBeGreaterThan(0);
+    // The selected chain's edges are marked .chain and never .dim, though their colorLevel (1, 2) is
+    // not the hovered level 3 — the `!hasClass('chain')` guard in applyStateClasses keeps them lit.
+    expect(cy.edges().length).toBe(2);
+    cy.edges().forEach((e) => {
+      expect(e.hasClass('chain'), `edge ${String(e.data('key'))} is on the chain`).toBe(true);
+      expect(e.hasClass('dim'), `edge ${String(e.data('key'))} stays lit`).toBe(false);
+    });
   });
 });
 
@@ -523,9 +530,27 @@ describe('F6: lifecycle — aria-label ref, pending-frame cleanup, cached measur
     rerender(<RingGraph {...base} ariaLabel="second" />); // model + view unchanged
     expect(el.getAttribute('aria-label')).toBe('second');
     const cy = latestCy();
+    el.removeAttribute('data-label-overlaps'); // refresh() rewrites this; its return proves the frame ran
     cy.zoom(cy.zoom() * 1.3); // fire a zoom → schedules a refresh frame
-    await waitFor(() => expect(el.dataset.labelsShown).toBeTruthy());
+    await new Promise((r) => requestAnimationFrame(() => r(null))); // queued after the zoom's frame
+    expect(el.getAttribute('data-label-overlaps')).not.toBeNull(); // the refresh frame really ran
     expect(el.getAttribute('aria-label')).toBe('second'); // refresh must not revert to the build-time label
+  });
+
+  it('a zoom refresh keeps the latest hoverLevel (reads the ref, not the build-time prop)', async () => {
+    const m = hoverCollisionModel();
+    const base = { view: 'rings' as const, selectedId: null, onSelect: () => {}, onActivate: () => {} };
+    const { rerender, getByTestId } = render(<RingGraph model={m} hoverLevel={2} {...base} />);
+    const el = getByTestId('ring-graph');
+    const cy = latestCy();
+    rerender(<RingGraph model={m} hoverLevel={3} {...base} />); // model + view unchanged: no rebuild
+    expect(nodeFor(cy, 'g:3:B').data('dlabel')).not.toBe('');
+    el.removeAttribute('data-label-overlaps');
+    cy.zoom(cy.zoom() * 1.3); // schedules a refresh frame
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    expect(el.getAttribute('data-label-overlaps')).not.toBeNull(); // the refresh frame really ran
+    expect(nodeFor(cy, 'g:3:B').data('dlabel')).not.toBe(''); // B still wins; a build-time hover of 2 would give A
+    expect(nodeFor(cy, 'g:2:A').data('dlabel')).toBe('');
   });
 
   it('a pending setTimeout-fallback frame is cleared on unmount with clearTimeout (not cancelAnimationFrame)', async () => {

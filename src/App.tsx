@@ -791,6 +791,7 @@ export function App(): React.ReactElement {
             navigate={navigate}
             onOpenGraph={openGraphModal}
             search={search}
+            liveRuns={runsLoaded ? runs : undefined}
           />
         </div>
       );

@@ -37,6 +37,8 @@ let running = 0;
 /** Bumped by the test seam: a read from before it neither lands nor frees a slot. */
 let gen = 0;
 const pending = new Set<string>();
+/** A forced ensure that found the repo's read already running: it is read once more when that read settles (one per repo). */
+const followUp = new Set<string>();
 
 async function readKinds(id: string, signal: AbortSignal): Promise<KindsRead> {
   try {
@@ -76,6 +78,7 @@ export const useRepoKnowledge = create<State>((set, get) => {
         if (mine !== gen) return;
         running -= 1;
         pending.delete(id);
+        if (followUp.delete(id)) { pending.add(id); queue = [id, ...queue.filter((q) => q !== id)]; }
         pump();
       });
     }
@@ -87,6 +90,9 @@ export const useRepoKnowledge = create<State>((set, get) => {
       const { at, reads } = get();
       const now = Date.now();
       const ids = [...new Set(asked)];
+      // A forced ask for a repo whose read is under way (not still queued: a queued read has not looked yet) would be
+      // dropped, and that read may predate what the caller knows; remember it for one more read.
+      if (force) for (const id of ids) if (pending.has(id) && !queue.includes(id)) followUp.add(id);
       const due = ids.filter((id) => !pending.has(id) && (force || at[id] === undefined || now - at[id]! > FRESH_MS));
       for (const id of due) pending.add(id);
       // The page asking now goes first: its repos (new, or still waiting in the queue) jump ahead of an earlier
@@ -131,5 +137,6 @@ export function resetRepoKnowledge(): void {
   queue = [];
   running = 0;
   pending.clear();
+  followUp.clear();
   useRepoKnowledge.setState({ reads: {}, at: {} });
 }
