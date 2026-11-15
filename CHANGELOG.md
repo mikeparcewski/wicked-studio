@@ -23,6 +23,17 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- Voice playback and session ownership (class sweep on the read-aloud work). Any stop (Leave voice, turning
+  read-aloud off, a new line) now takes playback over, so a late refusal from what it stopped sets no failure
+  banner and never leaves the speaker marked busy; Play sample settles at once whichever step it waits in
+  (fetch, resume, decode); a sample or reply played while the mic records pauses the recording and the
+  streaming partials (so it is never transcribed as your words) and resumes them after. Every async voice
+  entry point (open, speech-model download, read-aloud checks and installs, spoken lines, confirmed
+  actions) now checks it is still in the same voice session after each wait, so a stale open can no longer
+  write into a closed or reopened session, start a poll, or ask its question twice. A voice that installed
+  while the engine step failed keeps an install retry and its own error on its row; Play sample is disabled
+  while the engine is missing or installing; the read-aloud retry clears the banner and speaks the failed
+  reply again; the "needs setup" note follows the real state; and the setup error colour applies again.
 - Graph rings (2 of 5) ring-canvas cross-review follow-up: hover dimming no longer dims the selection
   or its selected chain (the tapped focus stays lit) and compares each edge's real level, so level-6/7
   edges dim correctly on graphs deeper than five rings; a hovered ring's labels win label collisions;

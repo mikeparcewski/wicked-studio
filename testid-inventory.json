@@ -27094,7 +27094,19 @@
       ]
     },
     {
+      "pattern": "voice-tts-install-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
       "pattern": "voice-tts-row-error-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-tts-row-install-failed-*",
       "files": [
         "src/components/voice/VoiceSetup.tsx"
       ]

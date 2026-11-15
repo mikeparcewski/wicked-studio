@@ -1,4 +1,4 @@
-import { chooseVoice, consentToModel, consentToVoice, playSample, refreshStatus, refreshTts } from '../../voice/controller.js';
+import { chooseVoice, consentToModel, consentToVoice, playSample, refreshStatus, refreshTts, retryReadAloud } from '../../voice/controller.js';
 import { useShallow } from 'zustand/react/shallow';
 import { useVoiceStore } from '../../store/voice.js';
 import type { VoiceTtsVoice } from '../../api/voice.js';
@@ -76,7 +76,7 @@ export function VoiceSetup(): React.ReactElement | null {
     rows.push(
       <p key="tts-speak-failed" data-testid="voice-readaloud-failed">
         Read-aloud couldn’t speak that reply; the captions are unaffected.{' '}
-        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-readaloud-retry" onClick={() => void refreshTts()}>Check read-aloud again</button>
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-readaloud-retry" onClick={() => void retryReadAloud()}>Try again</button>
       </p>,
     );
   }
@@ -153,7 +153,7 @@ function buildReadAloud(
   }
 
   for (const [id, v] of Object.entries(tts.voices)) {
-    inner.push(voiceRow(id, v, ttsVoice === id, installing, ttsActionError?.voice === id ? ttsActionError.message : null));
+    inner.push(voiceRow(id, v, ttsVoice === id, installing, tts.engine.found, tts.install?.state === 'failed' ? translateWireError(500, tts.install.error ?? '') : null, ttsActionError?.voice === id ? ttsActionError.message : null));
   }
 
   return <div key="tts" data-testid="voice-tts" data-state="ready">{inner}</div>;
@@ -170,7 +170,10 @@ function installStepLabel(step: string | null, voices: Record<string, VoiceTtsVo
   return 'Installing read-aloud…';
 }
 
-function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boolean, error: string | null): React.ReactNode {
+/** One voice's row. Its controls follow what that voice can do now, not `v.installed` alone: a voice file can be on disk
+ *  while the engine step failed (or is still running), and then it can be neither sampled nor used, only installed again. */
+function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boolean, engineFound: boolean, installFailure: string | null, error: string | null): React.ReactNode {
+  const needsEngine = v.installed && !engineFound && !installing;
   return (
     <div key={`voice-${id}`} className="wk-voice-trow" data-testid={`voice-tts-voice-${id}`}>
       <p>
@@ -189,7 +192,12 @@ function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boo
         </button>
       ) : (
         <div className="wk-voice-trow-actions">
-          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid={`voice-tts-sample-${id}`} onClick={() => void playSample(id)}>
+          {needsEngine && (
+            <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid={`voice-tts-install-${id}`} onClick={() => void consentToVoice(id)}>
+              Install the read-aloud engine
+            </button>
+          )}
+          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid={`voice-tts-sample-${id}`} disabled={installing || !engineFound} onClick={() => void playSample(id)}>
             Play sample
           </button>
           <label className="wk-voice-choose" data-testid={`voice-tts-choose-${id}`}>
@@ -197,7 +205,8 @@ function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boo
           </label>
         </div>
       )}
-      {error !== null && <p data-testid={`voice-tts-row-error-${id}`} role="alert">{error}</p>}
+      {needsEngine && installFailure !== null && <p data-testid={`voice-tts-row-install-failed-${id}`} data-state="error" role="alert">The engine install failed: {installFailure}</p>}
+      {error !== null && <p data-testid={`voice-tts-row-error-${id}`} data-state="error" role="alert">{error}</p>}
     </div>
   );
 }

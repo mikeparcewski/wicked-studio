@@ -31,6 +31,9 @@ export interface MicSource {
   peek(): Blob | null;
   /** End the turn: its WAV, and the samples are dropped. null when nothing was kept. */
   take(): Blob | null;
+  /** Stop keeping samples while something else plays (nothing heard then is kept); `resume` carries on with what was kept. */
+  pause(): void;
+  resume(): void;
   /** Release the mic (the browser's indicator goes off). */
   stop(): void;
   readonly live: boolean;
@@ -45,6 +48,7 @@ export class BrowserMic implements MicSource {
   private proc: ScriptProcessorNode | null = null;
   private analyser: AnalyserNode | null = null;
   private chunks: Float32Array[] | null = null;
+  private paused = false;
   private rate = 48_000;
 
   get live(): boolean { return this.stream !== null; }
@@ -67,7 +71,7 @@ export class BrowserMic implements MicSource {
     const freq = new Uint8Array(analyser.frequencyBinCount);
     proc.onaudioprocess = (e) => {
       const data = new Float32Array(e.inputBuffer.getChannelData(0));
-      if (this.chunks !== null) this.chunks.push(data);
+      if (this.chunks !== null && !this.paused) this.chunks.push(data);
       analyser.getByteFrequencyData(freq);
       const step = Math.max(1, Math.floor(freq.length / BARS));
       const bars: number[] = [];
@@ -82,6 +86,10 @@ export class BrowserMic implements MicSource {
 
   record(): void { this.chunks = []; }
 
+  pause(): void { this.paused = true; }
+
+  resume(): void { this.paused = false; }
+
   peek(): Blob | null {
     return this.chunks !== null && this.chunks.length > 0 ? chunksToWav(this.chunks, this.rate) : null;
   }
@@ -94,6 +102,7 @@ export class BrowserMic implements MicSource {
 
   stop(): void {
     this.chunks = null;
+    this.paused = false;
     if (this.proc !== null) this.proc.onaudioprocess = null;
     this.proc?.disconnect();
     this.analyser?.disconnect();

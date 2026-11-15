@@ -219,7 +219,10 @@ const vad = new Vad();
 let partialTimer: ReturnType<typeof setInterval> | null = null;
 let partialBusy = false;
 let gateUnsub: (() => void) | null = null;
+/** The voice session. Every async entry point captures it BEFORE its first await and re-checks it (`live`) after EVERY
+ *  await, before any store write, poll start or spoken line. */
 let generation = 0;
+const live = (gen: number): boolean => gen === generation;
 
 const S = useVoiceStore;
 /** The newest system read: voice's own poll, else the Nerve Center's. */
@@ -243,11 +246,40 @@ function ttsReady(): boolean {
   return s.tts !== null && s.tts.engine.found && v !== null && s.tts.voices[v]?.installed === true;
 }
 
+/** The "needs setup" note follows the real state: read-aloud on, the speaker unable to speak, and what it needs known
+ *  (a status or a read error, not still loading). */
+function syncNeedsSetup(): void {
+  const s = S.getState();
+  const known = s.tts !== null || s.ttsError !== null;
+  set({ readAloudNeedsSetup: s.readAloud && known && !deps.speaker.available });
+}
+
+/** The text read-aloud failed to speak, kept so the retry can speak it again. */
+let failedSpeech: string | null = null;
+
 export function setReadAloud(on: boolean): void {
   set({ readAloud: on });
   try { localStorage.setItem(READ_ALOUD_KEY, on ? 'on' : 'off'); } catch { /* private mode */ }
-  if (!on) { stopPlayback(); set({ readAloudNeedsSetup: false, readAloudFailed: false }); }
-  else void refreshTts();
+  if (!on) {
+    // Turning it off is a deliberate stop: it takes playback over, so a late refusal from what it stopped counts for nothing.
+    stopPlayback();
+    failedSpeech = null;
+    set({ readAloudNeedsSetup: false, readAloudFailed: false });
+  } else {
+    syncNeedsSetup();
+    void refreshTts();
+  }
+}
+
+/** The banner's retry: clear the failure, re-read what read-aloud needs, and speak the failed reply again. */
+export async function retryReadAloud(): Promise<void> {
+  const gen = generation;
+  const text = failedSpeech;
+  failedSpeech = null;
+  set({ readAloudFailed: false });
+  await refreshTts();
+  if (!live(gen) || text === null || !S.getState().readAloud) return;
+  await say(text, gen);
 }
 
 /** Read what read-aloud needs on this machine (piper + the voices). On a crew without the routes, the upgrade line;
@@ -257,22 +289,23 @@ export async function refreshTts(): Promise<VoiceTtsStatus | null> {
   const gen = generation;
   try {
     const tts = await getVoiceTts();
-    if (gen !== generation) return null;
+    if (!live(gen)) return null;
     const installed = Object.entries(tts.voices).filter(([, v]) => v.installed).map(([id]) => id);
     const cur = S.getState().ttsVoice ?? savedTtsVoice();
     // Keep a saved choice only while it is still installed; otherwise default to the first installed voice.
     const chosen = cur !== null && installed.includes(cur) ? cur : installed[0] ?? null;
     set({ tts, ttsError: null, ttsVoice: chosen });
-    if (ttsReady()) set({ readAloudNeedsSetup: false });
+    syncNeedsSetup();
     if (tts.install?.state === 'running') void pollTtsInstall(gen);
     return tts;
   } catch (e) {
-    if (gen !== generation) return null;
+    if (!live(gen)) return null;
     const unsupported = isVoiceUnsupported(e);
     set({
       ...(unsupported ? { tts: null } : {}),
       ttsError: unsupported ? 'This crew has no read-aloud yet. Upgrade wicked-crew to use read-aloud.' : e instanceof Error ? e.message : String(e),
     });
+    syncNeedsSetup();
     return null;
   }
 }
@@ -284,14 +317,14 @@ let ttsPolling = -1;
 /** Poll crew until its install is no longer running: installed or failed, whichever lands. A voice showing installed
  *  while the engine step still runs does not stop it. Stops when Voice closes (checked after every await). */
 async function pollTtsInstall(gen: number): Promise<void> {
-  if (ttsPolling === gen) return;
+  if (!live(gen) || ttsPolling === gen) return;
   ttsPolling = gen;
   try {
-    for (let i = 0; i < 900 && gen === generation; i++) {
+    for (let i = 0; i < 900 && live(gen); i++) {
       await sleep(1000);
-      if (gen !== generation) return;
+      if (!live(gen)) return;
       const st = await refreshTts();
-      if (gen !== generation || st === null || st.install?.state !== 'running') return;
+      if (!live(gen) || st === null || st.install?.state !== 'running') return;
     }
   } finally {
     if (ttsPolling === gen) ttsPolling = -1;
@@ -304,10 +337,10 @@ export async function consentToVoice(id: string): Promise<void> {
   set({ ttsActionError: null });
   try {
     const tts = await installVoiceTts([id]);
-    if (gen !== generation) return;
+    if (!live(gen)) return;
     set({ tts, ttsError: null });
   } catch (e) {
-    if (gen === generation) set({ ttsActionError: { voice: id, message: e instanceof Error ? e.message : String(e) } });
+    if (live(gen)) set({ ttsActionError: { voice: id, message: e instanceof Error ? e.message : String(e) } });
     return;
   }
   await pollTtsInstall(gen);
@@ -315,19 +348,39 @@ export async function consentToVoice(id: string): Promise<void> {
 
 /** Pick the read-aloud voice (an installed one), kept per person. */
 export function chooseVoice(id: string): void {
-  set({ ttsVoice: id, readAloudNeedsSetup: false, ttsActionError: null });
+  set({ ttsVoice: id, ttsActionError: null });
+  syncNeedsSetup();
   try { localStorage.setItem(TTS_VOICE_KEY, id); } catch { /* private mode */ }
 }
 
-/** Who owns playback right now. `say` and `playSample` each take a new number; only the newest owner may hand the
- *  speaker back to idle, so a cancelled earlier playback finishing late never un-mutes the mic under a newer one. */
+/** Who owns playback right now. Every start AND every stop takes a new number; only the newest owner may hand the
+ *  speaker back to idle or report a failure, so a stopped or replaced playback settling late (a refusal, a decode
+ *  error, an end) never un-mutes the mic under a newer one, never sets a failure banner after a deliberate stop,
+ *  and never leaves `speaking: 'it'` behind. */
 let playOwner = 0;
 let sampleCtx: AudioContext | null = null;
 let sampleAbort: AbortController | null = null;
 let sampleSrc: AudioBufferSourceNode | null = null;
-let sampleRelease: (() => void) | null = null;
+/** The mic's recording and the streaming partials are paused while anything plays (so it is never transcribed as the
+ *  person's words), and resumed when the owner of that playback ends. */
+let capturePaused = false;
+const STOPPED = Symbol('stopped');
 
-/** Stop a sample: abort its fetch, silence its source and release the `playSample` awaiting it. */
+function pauseCapture(): void {
+  if (capturePaused) return;
+  capturePaused = true;
+  stopPartials();
+  mic?.pause();
+}
+
+function resumeCapture(): void {
+  if (!capturePaused) return;
+  capturePaused = false;
+  mic?.resume();
+  if (vad.active) startPartials();
+}
+
+/** Stop a sample: abort its fetch (which also frees any step waiting on it) and silence its source. */
 function stopSample(): void {
   if (sampleAbort !== null) { sampleAbort.abort(); sampleAbort = null; }
   if (sampleSrc !== null) {
@@ -337,50 +390,64 @@ function stopSample(): void {
     try { src.stop(); } catch { /* not started */ }
     try { src.disconnect(); } catch { /* already gone */ }
   }
-  if (sampleRelease !== null) { const r = sampleRelease; sampleRelease = null; r(); }
 }
 
-/** Stop every playback (read-aloud and a sample). */
+/** Stop every playback (read-aloud and a sample). A stop is a new owner: whatever it stopped can no longer touch state. */
 function stopPlayback(): void {
+  playOwner += 1;
   deps.speaker.cancel();
   stopSample();
+  resumeCapture();
+  if (S.getState().speaking === 'it') set({ speaking: 'idle' });
+}
+
+/** Take playback over (anything playing stops) and pause the mic's recording and partials. Returns the new owner. */
+function claimPlayback(): number {
+  stopPlayback();
+  pauseCapture();
+  return playOwner;
 }
 
 function idleIfOwner(mine: number): void {
-  if (mine === playOwner && S.getState().speaking === 'it') set({ speaking: 'idle' });
+  if (mine !== playOwner) return;
+  resumeCapture();
+  if (S.getState().speaking === 'it') set({ speaking: 'idle' });
 }
 
 /** Play a short sample of one installed voice (GET /voice/tts/sample/:id). It takes playback over (read-aloud and any
- *  earlier sample stop, so two never overlap), pauses the mic while it plays (`speaking: 'it'`), and is dropped if
- *  Voice closes first. A failure lands on that voice's row. Resolves when the sample ends or is stopped. */
+ *  earlier sample stop, so two never overlap), pauses the mic's recording and partials while it plays, and is dropped
+ *  if Voice closes or anything else stops it: every step it waits on (fetch, resume, decode, play) is raced against
+ *  its abort, so a stop settles it at once. A failure lands on that voice's row. Resolves when it ends or is stopped. */
 export async function playSample(id: string): Promise<void> {
-  const mine = ++playOwner;
   const gen = generation;
-  stopPlayback();
+  const mine = claimPlayback();
   const ac = new AbortController();
   sampleAbort = ac;
-  const live = (): boolean => mine === playOwner && gen === generation && !ac.signal.aborted;
+  const alive = (): boolean => mine === playOwner && live(gen) && !ac.signal.aborted;
+  const gone = new Promise<typeof STOPPED>((r) => { ac.signal.addEventListener('abort', () => r(STOPPED), { once: true }); });
+  const until = <T,>(p: Promise<T>): Promise<T | typeof STOPPED> => Promise.race([p, gone]);
   set({ speaking: 'it', ttsActionError: null });
   try {
-    const buf = await voiceSampleBuffer(id, ac.signal);
-    if (!live()) return;
+    const buf = await until(voiceSampleBuffer(id, ac.signal));
+    if (buf === STOPPED || !alive()) return;
     sampleCtx ??= new AudioContext();
-    if (sampleCtx.state === 'suspended') await sampleCtx.resume().catch(() => undefined);
-    if (!live()) return;
     const ctx = sampleCtx;
-    const audio = await ctx.decodeAudioData(buf.slice(0));
-    if (!live()) return;
+    if (ctx.state === 'suspended') {
+      await until(ctx.resume().catch(() => undefined));
+      if (!alive()) return;
+    }
+    const audio = await until(ctx.decodeAudioData(buf.slice(0)));
+    if (audio === STOPPED || !alive()) return;
     const src = ctx.createBufferSource();
     src.buffer = audio;
     src.connect(ctx.destination);
-    await new Promise<void>((resolve) => {
-      sampleRelease = resolve;
-      src.onended = () => { if (sampleSrc === src) sampleSrc = null; if (sampleRelease === resolve) sampleRelease = null; resolve(); };
+    await until(new Promise<void>((resolve) => {
+      src.onended = () => { if (sampleSrc === src) sampleSrc = null; resolve(); };
       sampleSrc = src;
       src.start();
-    });
+    }));
   } catch (e) {
-    if (live()) set({ ttsActionError: { voice: id, message: e instanceof Error ? e.message : String(e) } });
+    if (alive()) set({ ttsActionError: { voice: id, message: e instanceof Error ? e.message : String(e) } });
   } finally {
     if (sampleAbort === ac) sampleAbort = null;
     idleIfOwner(mine);
@@ -425,28 +492,31 @@ function openAsk(ask: Ask, context: VoiceAskContext, text = ''): number {
 }
 
 /** Say it (captions are the transcript line; read aloud unless turned off). When read-aloud is on but piper isn't set
- *  up, nothing is spoken and the view says so (the setup rows show the remedy); captions are unaffected. */
-async function say(text: string): Promise<void> {
-  if (!S.getState().readAloud || text.trim() === '') return;
+ *  up, nothing is spoken and the view says so (the setup rows show the remedy); captions are unaffected. `gen` is the
+ *  session the caller started in, captured before its own awaits: a line for a closed session is never spoken. */
+async function say(text: string, gen: number = generation): Promise<void> {
+  if (!live(gen) || !S.getState().readAloud || text.trim() === '') return;
   if (!deps.speaker.available) { set({ readAloudNeedsSetup: true }); return; }
-  const mine = ++playOwner;
-  const gen = generation;
-  stopSample();
+  const mine = claimPlayback();
+  failedSpeech = null;
   set({ speaking: 'it', readAloudNeedsSetup: false, readAloudFailed: false });
   try {
     await deps.speaker.say(text);
   } catch {
-    // A refusal or decode error must never reach the caller (a chat answer's caption stands): read-aloud fails quietly.
-    if (mine === playOwner && gen === generation) set({ readAloudFailed: true });
+    // A refusal or decode error must never reach the caller (a chat answer's caption stands): read-aloud fails quietly,
+    // and only while this is still the playback (a deliberate stop or a newer line took over otherwise).
+    if (mine === playOwner && live(gen)) { failedSpeech = text; set({ readAloudFailed: true }); }
   } finally {
     idleIfOwner(mine);
   }
 }
 
-async function itSays(text: string): Promise<void> {
+async function itSays(text: string, gen: number = generation): Promise<void> {
+  if (!live(gen)) return;
   pushLine({ who: 'it', text });
-  await say(text);
+  await say(text, gen);
 }
+
 
 // ── Listening ─────────────────────────────────────────────────────────────────────────────────
 
@@ -461,7 +531,7 @@ function onFrame(level: number, bars: number[]): void {
   const s = S.getState();
   // Never hear ourselves: the detector rests while the reply is read aloud.
   const listening = s.speaking !== 'it' && s.status?.ready === true && (listensByPause() || s.holding);
-  if (!listening) { set({ bars }); vad.reset(); return; }
+  if (!listening) { set({ bars }); if (!capturePaused) vad.reset(); return; }
   set({ bars, speaking: level > 0.02 ? 'you' : s.speaking === 'you' ? 'idle' : s.speaking });
   if (!listensByPause()) return;
   const ev = vad.feed(level, deps.now());
@@ -483,14 +553,14 @@ function stopPartials(): void {
 /** A streaming partial: the turn so far, shown as a muted line with a caret. A busy engine just skips a beat, and a
  *  finished recording waiting its turn goes first (the engine takes one at a time, and one waiting). */
 async function partial(): Promise<void> {
-  if (partialBusy || mic === null || finals.length > 0) return;
+  if (partialBusy || capturePaused || mic === null || finals.length > 0) return;
   const wav = mic.peek();
   if (wav === null) return;
   partialBusy = true;
   const gen = generation;
   try {
     const text = (await deps.stt.transcribe(wav)).trim();
-    if (gen !== generation || text === '') return;
+    if (!live(gen) || capturePaused || text === '') return;
     const s = S.getState();
     const last = s.lines.at(-1);
     if (last?.who === 'you' && last.partial === true) patchLine(last.id, { text });
@@ -601,6 +671,7 @@ async function sayError(text: string): Promise<void> {
 
 /** Words heard (spoken, or typed in the "type instead" box): the one entry for both. */
 export async function hear(raw: string, how: 'spoken' | 'typed' = 'spoken'): Promise<void> {
+  const gen = generation;
   const text = raw.trim();
   const s = S.getState();
   if (s.phase === 'off') return;
@@ -647,7 +718,7 @@ export async function hear(raw: string, how: 'spoken' | 'typed' = 'spoken'): Pro
     }
   }
 
-  if (await hearJobWords(text)) return;
+  if (await hearJobWords(text) || !live(gen)) return;
 
   // A decision read out, or the only one waiting: a spoken answer proposes it, never sends it.
   const gates = Object.values(useGateStore.getState().gates);
@@ -662,6 +733,7 @@ export async function hear(raw: string, how: 'spoken' | 'typed' = 'spoken'): Pro
     const job = jobRefs().find((j) => j.runId === shown.runId) ?? { runId: shown.runId, title: titleOf(shown.runId), running: true };
     let kind: ReturnType<typeof readClass> = null;
     try { kind = readClass(await deps.classify(text, job.title)); } catch { kind = null; }
+    if (!live(gen)) return;
     if (kind === 'steer') { await proposeJobAction(job, { kind: 'steer', note: capFirst(text) }, text); return; }
     if (kind === 'stop') { await proposeJobAction(job, { kind: 'stop', reason: null }, text); return; }
     if (kind === 'rigor') { await proposeJobAction(job, { kind: 'rigor', to: null }, text); return; }
@@ -759,6 +831,7 @@ export function pinJob(on: boolean): void {
 
 /** "show me …", "the other one", "close it", "pin it", "tell it …": true when the words were about a job. */
 async function hearJobWords(text: string): Promise<boolean> {
+  const gen = generation;
   const w = parseJobWords(text);
   if (w === null) return false;
   if (w.kind === 'close') {
@@ -773,6 +846,7 @@ async function hearJobWords(text: string): Promise<boolean> {
     return true;
   }
   const jobs = await jobsForNaming();
+  if (!live(gen)) return true;
   if (w.kind === 'other') {
     const next = otherJob(S.getState().preview?.runId ?? null, S.getState().lastChoice, jobs);
     if (next === null) { await itSays(jobs.some((j) => j.running) ? 'There’s no other running job.' : 'No job is running.'); return true; }
@@ -810,6 +884,7 @@ function openPick(jobs: readonly JobRef[], why: string, then: { kind: 'show' } |
 
 /** One action on one job → an on-screen confirm (always). Rigor and stop may ask first. */
 async function proposeJobAction(job: JobRef, action: JobAction, heard: string): Promise<void> {
+  const gen = generation;
   if (action.kind === 'gate') {
     const gate = useGateStore.getState().gates[job.runId];
     if (gate === undefined) { await itSays(`“${job.title}” has no decision waiting.`); return; }
@@ -841,7 +916,8 @@ async function proposeJobAction(job: JobRef, action: JobAction, heard: string): 
   let rigorNow: Rigor | null = null;
   if (action.kind === 'rigor') {
     let r: Awaited<ReturnType<VoiceDeps['rigorOf']>>;
-    try { r = await deps.rigorOf(job.runId); } catch (e) { await itSays(`I couldn’t read its rigor: ${e instanceof Error ? e.message : String(e)}`); return; }
+    try { r = await deps.rigorOf(job.runId); } catch (e) { await itSays(`I couldn’t read its rigor: ${e instanceof Error ? e.message : String(e)}`, gen); return; }
+    if (!live(gen)) return;
     if (!r.power) { await itSays(`“${job.title}” runs phased, so it has no rigor to raise. You can steer it, stop it, or check on it.`); return; }
     rigorNow = r.rigor;
     const to = action.to ?? nextRigor(r.rigor);
@@ -873,37 +949,39 @@ const ACTION_LABEL: Record<JobAction['kind'], string> = { steer: 'Steer', doc: '
 /** A confirmed job action, sent. Resolves with the record line. */
 async function runJobAction(lineIdOf: number, ctx: Extract<VoiceAskContext, { kind: 'job' }>): Promise<void> {
   const { runId, title, action } = ctx;
-  const done = (record: string): void => patchLine(lineIdOf, { record });
+  // The session this was confirmed in: a request that settles after Voice closed (or opened again) writes and says nothing.
+  const gen = generation;
+  const done = (record: string): void => { if (live(gen)) patchLine(lineIdOf, { record }); };
   const fail = (e: unknown): void => done(`Not sent: ${e instanceof Error ? e.message : String(e)}`);
   switch (action.kind) {
     case 'steer':
       done(`Sending to ${title}…`);
-      try { await deps.steer(runId, action.note); done(`Sent to ${title} · by voice`); void say('Sent.'); } catch (e) { fail(e); }
+      try { await deps.steer(runId, action.note); done(`Sent to ${title} · by voice`); void say('Sent.', gen); } catch (e) { fail(e); }
       return;
     case 'doc':
       done(`Adding to ${title}’s context document…`);
-      try { await deps.editDoc(runId, action.section, action.text); done(actionWords(action, title).record); void say('Added.'); } catch (e) { fail(e); }
+      try { await deps.editDoc(runId, action.section, action.text); done(actionWords(action, title).record); void say('Added.', gen); } catch (e) { fail(e); }
       return;
     case 'stop':
       deps.stop(runId, title, action.reason === null || action.reason.trim() === '' ? null : action.reason);
       done(`Stopping ${title} in 10 s · by voice, confirmed (Undo below)`);
-      void say('Confirmed. It stops in 10 seconds unless you undo it.');
+      void say('Confirmed. It stops in 10 seconds unless you undo it.', gen);
       return;
     case 'rigor':
       if (action.to === null) return;
       done(`Raising ${title}’s rigor…`);
-      try { await deps.raiseRigor(runId, action.to, `Asked by voice: “${ctx.heard}”`); done(actionWords(action, title).record); void say(`Rigor raised to ${action.to}.`); } catch (e) { fail(e); }
+      try { await deps.raiseRigor(runId, action.to, `Asked by voice: “${ctx.heard}”`); done(actionWords(action, title).record); void say(`Rigor raised to ${action.to}.`, gen); } catch (e) { fail(e); }
       return;
     case 'check': {
       done(`Checking on ${title}…`);
-      const gen = generation;
       let rec: UnitInspection;
       try { rec = await deps.inspect(runId); } catch (e) { if (gen === generation) done(`Not checked: ${e instanceof Error ? e.message : String(e)}`); return; }
       if (gen !== generation) return;
       done(`Checked ${title} · by voice`);
       const verdict = rec.verdict === null ? 'It could not tell' : { progressing: 'It’s progressing', looping: 'It looks like it’s looping', stuck: 'It looks stuck', wasteful: 'It’s wasting tokens' }[rec.verdict];
       const words = `${verdict}.${rec.doing !== null ? ` ${rec.doing}` : ''}${rec.progress !== null ? ` ${rec.progress}` : ''}`;
-      await itSays(words);
+      await itSays(words, gen);
+      if (!live(gen)) return;
       // The check's recommended move is offered, never taken: the same confirm.
       const job = { runId, title, running: true };
       if (rec.action === 'steer' && rec.note !== null && rec.note.trim() !== '') await proposeJobAction(job, { kind: 'steer', note: rec.note.trim() }, 'the check’s suggestion');
@@ -923,8 +1001,9 @@ async function hearInModal(text: string): Promise<void> {
   if (r.kind === 'no') { closeVoice(); return; }
   if (r.kind === 'question') {
     S.setState((st) => ({ modal: [...st.modal, { id: lineId(), who: 'you', text, spoken: true }, { id: lineId(), who: 'it', text: r.answer }] }));
-    await say(r.answer);
-    await say('Do you want to enter voice mode?');
+    const gen = generation;
+    await say(r.answer, gen);
+    await say('Do you want to enter voice mode?', gen);
     return;
   }
   await say('Say yes or no, or ask me about voice mode.');
@@ -975,12 +1054,12 @@ async function askChat(question: string): Promise<void> {
     const reply = await deps.ask(question);
     if (gen !== generation) return;
     patchLine(id, { text: reply, partial: false });
-    await say(reply);
+    await say(reply, gen);
   } catch (e) {
     if (gen !== generation) return;
     const why = e instanceof Error ? e.message : String(e);
     patchLine(id, { text: `I couldn’t get an answer: ${why}`, partial: false });
-    await say(`I couldn’t get an answer. ${why}`);
+    await say(`I couldn’t get an answer. ${why}`, gen);
   }
 }
 
@@ -990,6 +1069,8 @@ export function answerAsk(lineIdOf: number, answer: AskAnswer): void {
   const line = s.lines.find((l) => l.id === lineIdOf);
   if (line?.ask === undefined || line.record !== undefined) return;
   const { ask, context } = line.ask;
+  // The session the card was answered in: a decide / steer that settles later patches and says nothing once Voice closed.
+  const gen = generation;
   const opt = (ask.options ?? []).find((o) => o.id === answer.option);
   if (s.openAsk === lineIdOf) set({ openAsk: null });
   if (context.kind === 'mode') {
@@ -1013,8 +1094,8 @@ export function answerAsk(lineIdOf: number, answer: AskAnswer): void {
     set({ awaitingGate: null });
     const decision = { ...context.decision, input: 'voice' } as GateAnswer;
     void deps.decide(context.runId, decision, context.record, { ord: context.ord, receivedAt: context.receivedAt }).then(
-      (outcome) => patchLine(lineIdOf, { record: outcome === 'sent' ? context.record : outcome === 'undone' ? 'Undone · nothing was sent' : outcome === 'cancelled' ? 'Not sent · that gate has moved on' : `Not sent (${outcome})` }),
-      (e: unknown) => patchLine(lineIdOf, { record: `Not sent: ${e instanceof Error ? e.message : String(e)}` }),
+      (outcome) => { if (live(gen)) patchLine(lineIdOf, { record: outcome === 'sent' ? context.record : outcome === 'undone' ? 'Undone · nothing was sent' : outcome === 'cancelled' ? 'Not sent · that gate has moved on' : `Not sent (${outcome})` }); },
+      (e: unknown) => { if (live(gen)) patchLine(lineIdOf, { record: `Not sent: ${e instanceof Error ? e.message : String(e)}` }); },
     );
     void say('Confirmed. It sends in 10 seconds unless you undo it.');
     return;
@@ -1049,8 +1130,8 @@ export function answerAsk(lineIdOf: number, answer: AskAnswer): void {
     if (answer.option !== 'yes') { patchLine(lineIdOf, { record: 'Not sent · you said not that' }); return; }
     patchLine(lineIdOf, { record: `Sending to ${context.title}…` });
     void deps.steer(context.runId, context.message).then(
-      () => { patchLine(lineIdOf, { record: `Sent to ${context.title} · by voice` }); void say('Sent.'); },
-      (e: unknown) => patchLine(lineIdOf, { record: `Not sent: ${e instanceof ApiError ? e.message : String(e)}` }),
+      () => { if (!live(gen)) return; patchLine(lineIdOf, { record: `Sent to ${context.title} · by voice` }); void say('Sent.', gen); },
+      (e: unknown) => { if (live(gen)) patchLine(lineIdOf, { record: `Not sent: ${e instanceof ApiError ? e.message : String(e)}` }); },
     );
   }
 }
@@ -1088,25 +1169,34 @@ export function setVoicePageFocus(runId: string | null): void { pageRun = runId;
 export async function openVoice(opts: { focus?: string | null } = {}): Promise<void> {
   if (S.getState().phase !== 'off') return;
   generation += 1;
+  const gen = generation;
   finals.length = 0;
   recentCache = null;
+  failedSpeech = null;
   set({ ...INITIAL_VOICE, phase: 'ask', readAloud: savedReadAloud(), ttsVoice: savedTtsVoice(), heard: null, pageFocus: opts.focus ?? pageRun });
   // The dashboard's first read starts now, so full screen opens on the live system (and says what it sees).
   void loadDashboard().then(() => readDashboardData());
+  // Each step below writes only into its own session (it re-checks after its await); this open stops at the first
+  // step that finds Voice closed (or opened again), so it starts no poll and asks nothing over a newer session.
   await refreshStatus();
+  if (!live(gen)) return;
   await startMic();
+  if (!live(gen)) return;
   // Read-aloud readiness (piper on this machine) is known before the first spoken line, so the entry question is
   // actually read aloud when read-aloud is ready (and the setup note shows when it is not).
   await refreshTts();
-  if (S.getState().phase === 'ask') await say('Do you want to enter voice mode?');
+  if (live(gen) && S.getState().phase === 'ask') await say('Do you want to enter voice mode?', gen);
 }
 
 export async function refreshStatus(): Promise<VoiceStatus | null> {
+  const gen = generation;
   try {
     const status = await getVoiceStatus();
+    if (!live(gen)) return null;
     set({ status, statusError: null });
     return status;
   } catch (e) {
+    if (!live(gen)) return null;
     set({ status: null, statusError: isVoiceUnsupported(e) ? 'This crew has no voice service yet. Upgrade wicked-crew to use voice.' : e instanceof Error ? e.message : String(e) });
     return null;
   }
@@ -1114,29 +1204,35 @@ export async function refreshStatus(): Promise<VoiceStatus | null> {
 
 /** The person said yes to fetching the speech model. Polls until it lands or fails. */
 export async function consentToModel(): Promise<void> {
+  const gen = generation;
   try {
-    set({ status: await downloadVoiceModel(), statusError: null });
+    const status = await downloadVoiceModel();
+    if (!live(gen)) return;
+    set({ status, statusError: null });
   } catch (e) {
-    set({ statusError: e instanceof Error ? e.message : String(e) });
+    if (live(gen)) set({ statusError: e instanceof Error ? e.message : String(e) });
     return;
   }
-  const gen = generation;
-  for (let i = 0; i < 900 && gen === generation; i++) {
+  for (let i = 0; i < 900 && live(gen); i++) {
     await sleep(1000);
-    if (gen !== generation) return;
+    if (!live(gen)) return;
     const st = await refreshStatus();
-    if (st === null || st.model.present || st.model.download?.state === 'failed') break;
+    if (!live(gen) || st === null || st.model.present || st.model.download?.state === 'failed') break;
   }
 }
 
 async function startMic(): Promise<void> {
   if (mic !== null) return;
+  const gen = generation;
   const m = deps.mic();
   mic = m;
   try {
     await m.start((f) => onFrame(f.level, f.bars));
+    // Voice closed while the browser was asking for the mic: release it, touching nothing of a newer session.
+    if (!live(gen)) { m.stop(); if (mic === m) mic = null; return; }
     set({ micOn: true, micError: null });
   } catch (e) {
+    if (!live(gen)) { if (mic === m) mic = null; return; }
     mic = null;
     const name = (e as { name?: string } | null)?.name;
     set({ micOn: false, micError: name === 'NotAllowedError' ? 'The browser was not allowed to use the microphone. You can still tap and type.' : name === 'NotFoundError' ? 'No microphone was found. You can still tap and type.' : `The microphone could not start: ${e instanceof Error ? e.message : String(e)}` });
@@ -1212,6 +1308,8 @@ export function closeVoice(): void {
   vad.reset();
   mic?.stop();
   mic = null;
+  capturePaused = false;
+  failedSpeech = null;
   gateUnsub?.();
   gateUnsub = null;
   stopPlayback();

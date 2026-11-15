@@ -29,7 +29,7 @@
 .wk-voice-tip { margin: 0; text-align: center; color: var(--ink-dim); font-size: var(--text-xs); }
 .wk-voice-setup { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-raised); color: var(--ink-body); font-size: var(--text-sm); line-height: 1.5; max-height: 42vh; overflow-y: auto; }
 .wk-voice-setup p { margin: 0 0 6px; }
-.wk-voice-setup[data-state="error"] { color: var(--status-warn); }
+.wk-voice-setup [data-state="error"] { color: var(--status-warn); }
 .wk-voice-progress { height: 6px; border-radius: 999px; background: var(--surface-base); overflow: hidden; }
 .wk-voice-progress span { display: block; height: 100%; background: var(--accent); transition: width .3s var(--ease-out); }
 /* Indeterminate (no byte count): a travelling sliver, no width claim. */

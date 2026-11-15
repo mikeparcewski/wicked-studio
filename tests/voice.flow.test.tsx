@@ -23,6 +23,8 @@ class FakeMic implements MicSource {
   live = false;
   async start(cb: (f: MicFrame) => void): Promise<void> { this.onFrame = cb; this.live = true; }
   record(): void { this.recording = true; }
+  pause(): void { /* no-op */ }
+  resume(): void { /* no-op */ }
   peek(): Blob | null { return this.recording ? new Blob(['partial'], { type: 'audio/wav' }) : null; }
   take(): Blob | null { const r = this.recording; this.recording = false; return r ? new Blob(['turn'], { type: 'audio/wav' }) : null; }
   stop(): void { this.stops += 1; this.live = false; this.recording = false; }

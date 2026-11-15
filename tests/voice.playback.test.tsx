@@ -2,12 +2,12 @@
 // it starts, checks the session after each await, pauses the mic for any playback (samples too), never overlaps two
 // playbacks, and never lets a speaker refusal replace a chat answer.
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { VoiceSetup } from '../src/components/voice/VoiceSetup.js';
 import { PiperSpeaker, type MicFrame, type MicSource, type PiperDeps } from '../src/voice/io.js';
 import {
-  answerEntry, chooseMode, closeVoice, consentToModel, consentToVoice, hear, openVoice, playSample, resetVoice, resetVoiceDeps, setVoiceDeps,
+  answerEntry, chooseMode, chooseVoice, closeVoice, consentToModel, consentToVoice, hear, openVoice, playSample, refreshTts, resetVoice, resetVoiceDeps, setReadAloud, setVoiceDeps,
 } from '../src/voice/controller.js';
 import { INITIAL_VOICE, useVoiceStore } from '../src/store/voice.js';
 import type { VoiceTtsStatus } from '../src/api/voice.js';
@@ -37,11 +37,19 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 class FakeMic implements MicSource {
   live = false;
-  async start(cb: (f: MicFrame) => void): Promise<void> { void cb; this.live = true; }
-  record(): void { /* no-op */ }
-  peek(): Blob | null { return null; }
+  paused = false;
+  recorded = 0;
+  stopped = 0;
+  /** Give peek() a recording to return, so a streaming partial has something to transcribe. */
+  hasAudio = false;
+  onFrame: (f: MicFrame) => void = () => undefined;
+  async start(cb: (f: MicFrame) => void): Promise<void> { this.onFrame = cb; this.live = true; }
+  record(): void { this.recorded += 1; }
+  pause(): void { this.paused = true; }
+  resume(): void { this.paused = false; }
+  peek(): Blob | null { return this.hasAudio ? new Blob(['x']) : null; }
   take(): Blob | null { return null; }
-  stop(): void { /* no-op */ }
+  stop(): void { this.stopped += 1; }
 }
 
 const JOE = 'en_US-joe-medium';
@@ -327,5 +335,285 @@ describe('the read-aloud install poll', () => {
     closeVoice();
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     expect(reads).toBe(0);
+  });
+});
+
+// ── The class sweep (VD2r3): playback ownership and session ownership ─────────────────────────────
+
+/** Resolves true when `p` settles within `ms`, false when it is still pending (a hung await). */
+const settles = (p: Promise<unknown>, ms = 200): Promise<boolean> =>
+  Promise.race([p.then(() => true, () => true), new Promise<boolean>((r) => { setTimeout(() => { r(false); }, ms); })]);
+const never = <T,>(): Promise<T> => new Promise<T>(() => undefined);
+
+describe('Play sample: a stop settles it whichever step it waits in', () => {
+  const realResume = ctx.resume.bind(ctx);
+  const realDecode = ctx.decodeAudioData.bind(ctx);
+  afterEach(() => { ctx.state = 'running'; ctx.resume = realResume; ctx.decodeAudioData = realDecode; });
+
+  it('close during the fetch: the promise settles and nothing plays, even when the fetch ignores the abort', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => never<Response>()));
+    const p = playSample(JOE);
+    await flush();
+    closeVoice();
+    expect(await settles(p)).toBe(true);
+    expect(ctx.sources).toHaveLength(0);
+    expect(useVoiceStore.getState().speaking).toBe('idle');
+  });
+
+  it('close during the audio-context resume: the promise settles and nothing plays', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ArrayBuffer(8), { status: 200 })));
+    ctx.state = 'suspended';
+    ctx.resume = () => never<void>();
+    const p = playSample(JOE);
+    await flush(); await flush();
+    closeVoice();
+    expect(await settles(p)).toBe(true);
+    expect(ctx.sources).toHaveLength(0);
+    expect(useVoiceStore.getState().speaking).toBe('idle');
+  });
+
+  it('close during the decode: the promise settles and nothing plays', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ArrayBuffer(8), { status: 200 })));
+    ctx.decodeAudioData = () => never<unknown>();
+    const p = playSample(JOE);
+    await flush(); await flush();
+    closeVoice();
+    expect(await settles(p)).toBe(true);
+    expect(ctx.sources).toHaveLength(0);
+    expect(useVoiceStore.getState().speaking).toBe('idle');
+  });
+
+  it('read-aloud turned off during the decode settles it and leaves no speaking state', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ArrayBuffer(8), { status: 200 })));
+    ctx.decodeAudioData = () => never<unknown>();
+    const p = playSample(JOE);
+    await flush(); await flush();
+    setReadAloud(false);
+    expect(await settles(p)).toBe(true);
+    expect(useVoiceStore.getState().speaking).toBe('idle');
+  });
+});
+
+describe('read-aloud off during say(), then a late rejection', () => {
+  it('a deliberate stop takes playback over: the late refusal sets no failure and leaves nothing speaking', async () => {
+    let rejectSay: (e: Error) => void = () => undefined;
+    setVoiceDeps({ speaker: { available: true, say: () => new Promise<void>((_, rej) => { rejectSay = rej; }), cancel: () => undefined } });
+    chooseMode('stream');
+    expect(useVoiceStore.getState().speaking).toBe('it');
+    setReadAloud(false);
+    expect(useVoiceStore.getState().speaking).toBe('idle');
+    rejectSay(new Error('voice_busy')); // the stopped playback settles late
+    await flush(); await flush();
+    expect(useVoiceStore.getState().readAloudFailed).toBe(false);
+    expect(useVoiceStore.getState().speaking).toBe('idle');
+  });
+
+  it('a late rejection from a sample that was stopped sets no row error', async () => {
+    let rejectFetch: (e: Error) => void = () => undefined;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((_, rej) => { rejectFetch = rej; })));
+    useVoiceStore.setState({ tts: tts(), readAloud: true });
+    const p = playSample(JOE);
+    await flush();
+    setReadAloud(false);
+    rejectFetch(new Error('late'));
+    await act(async () => { await p; });
+    expect(useVoiceStore.getState().ttsActionError).toBeNull();
+    expect(useVoiceStore.getState().speaking).toBe('idle');
+  });
+});
+
+describe('a sample while the mic is recording', () => {
+  it('pauses the recorder and the partial transcription (not only a flag), and resumes both after', async () => {
+    vi.useFakeTimers();
+    const fake = new FakeMic();
+    let t = 0;
+    const transcribe = vi.fn(async () => 'hello');
+    setVoiceDeps({ mic: () => fake, stt: { transcribe }, now: () => t, speaker: { available: false, say: async () => undefined, cancel: () => undefined }, endChat: () => undefined });
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (String(url).includes('/tts/sample/') ? new Response(new ArrayBuffer(8), { status: 200 }) : json({ error: 'Not Found' }, 404))));
+    await act(async () => { await openVoice(); });
+    useVoiceStore.setState({ status: { local: true, ready: true } as never });
+    act(() => { answerEntry(true); });
+    act(() => { chooseMode('stream'); });
+    fake.hasAudio = true;
+    // The person starts talking: the detector starts a turn and the recorder runs.
+    act(() => { fake.onFrame({ level: 0.5, bars: [] }); });
+    t = 300;
+    act(() => { fake.onFrame({ level: 0.5, bars: [] }); });
+    expect(fake.recorded).toBe(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
+    const before = transcribe.mock.calls.length;
+    expect(before).toBeGreaterThan(0); // partials run while recording
+
+    const p = playSample(JOE);
+    expect(fake.paused).toBe(true); // the recorder itself, not a flag
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+    expect(transcribe.mock.calls.length).toBe(before); // and no partial is made of the sample
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    ctx.sources[0]!.end();
+    await act(async () => { await p; });
+    expect(fake.paused).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
+    expect(transcribe.mock.calls.length).toBeGreaterThan(before); // partials resume
+  });
+});
+
+describe('closing during openVoice, and a reopen with a stale open still pending', () => {
+  const statusBody = { local: true, ready: false, engine: { name: 'whisper.cpp', found: true, path: '/x', install: null }, model: { name: 'base.en', present: true, bytes: 1, approxBytes: 1, source: 's', download: null } };
+
+  it('a close during the status read: the stale open writes nothing, starts no mic, no poll, says nothing', async () => {
+    let releaseStatus: (r: Response) => void = () => undefined;
+    let ttsReads = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const u = String(url);
+      if (u.endsWith('/voice/status')) return new Promise<Response>((r) => { releaseStatus = r; });
+      if (u.endsWith('/voice/tts')) { ttsReads += 1; return Promise.resolve(json(running())); }
+      return Promise.resolve(json({ error: 'Not Found' }, 404));
+    }));
+    const mics: FakeMic[] = [];
+    const said: string[] = [];
+    setVoiceDeps({ mic: () => { const m = new FakeMic(); mics.push(m); return m; }, speaker: { available: true, say: async (t) => { said.push(t); }, cancel: () => undefined }, endChat: () => undefined });
+    const open = openVoice();
+    await flush();
+    closeVoice();
+    releaseStatus(json(statusBody));
+    await act(async () => { await open; });
+    expect(useVoiceStore.getState().status).toBeNull();
+    expect(useVoiceStore.getState().phase).toBe('off');
+    expect(mics).toHaveLength(0);
+    expect(ttsReads).toBe(0);
+    expect(said).toEqual([]);
+  });
+
+  it('a close while the browser asks for the mic: the late mic is released and nothing is asked', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (String(url).endsWith('/voice/status') ? json(statusBody) : String(url).endsWith('/voice/tts') ? json(tts()) : json({ error: 'Not Found' }, 404))));
+    let releaseMic: () => void = () => undefined;
+    const fake = new FakeMic();
+    fake.start = () => new Promise<void>((r) => { releaseMic = r; });
+    const said: string[] = [];
+    setVoiceDeps({ mic: () => fake, speaker: { available: true, say: async (t) => { said.push(t); }, cancel: () => undefined }, endChat: () => undefined });
+    const open = openVoice();
+    await flush(); await flush();
+    closeVoice();
+    releaseMic();
+    await act(async () => { await open; });
+    expect(fake.stopped).toBeGreaterThan(0);
+    expect(useVoiceStore.getState().micOn).toBe(false);
+    expect(said).toEqual([]);
+  });
+
+  it('a reopen with the first open still pending: only the new session asks its question', async () => {
+    const releases: Array<(r: Response) => void> = [];
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const u = String(url);
+      if (u.endsWith('/voice/status')) {
+        if (releases.length === 0) return new Promise<Response>((r) => { releases.push(r); });
+        return Promise.resolve(json(statusBody));
+      }
+      if (u.endsWith('/voice/tts')) return Promise.resolve(json(tts()));
+      return Promise.resolve(json({ error: 'Not Found' }, 404));
+    }));
+    const said: string[] = [];
+    setVoiceDeps({ mic: () => new FakeMic(), speaker: { available: true, say: async (t) => { said.push(t); }, cancel: () => undefined }, endChat: () => undefined });
+    const stale = openVoice();
+    await flush();
+    closeVoice();
+    await act(async () => { await openVoice(); });
+    expect(said.filter((t) => t === 'Do you want to enter voice mode?')).toHaveLength(1);
+    releases[0]!(json({ ...statusBody, ready: true }));
+    await act(async () => { await stale; });
+    expect(said.filter((t) => t === 'Do you want to enter voice mode?')).toHaveLength(1); // the stale open said nothing
+    expect(useVoiceStore.getState().status?.ready).toBe(false); // and wrote nothing over the new session
+  });
+
+  it('consentToModel: a close while the download request is pending writes no status and starts no poll', async () => {
+    let releasePost: (r: Response) => void = () => undefined;
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith('/voice/model') && init?.method === 'POST') return new Promise<Response>((r) => { releasePost = r; });
+      if (u.endsWith('/voice/status')) { reads += 1; return Promise.resolve(json(statusBody)); }
+      return Promise.resolve(json({ error: 'Not Found' }, 404));
+    }));
+    vi.useFakeTimers();
+    const p = consentToModel();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    closeVoice();
+    releasePost(json({ ...statusBody, model: { ...statusBody.model, present: false } }, 202));
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); await p; });
+    expect(useVoiceStore.getState().status).toBeNull();
+    expect(reads).toBe(0);
+  });
+});
+
+describe('the voice row when the engine step failed after the voice installed', () => {
+  const failedEngine = (): VoiceTtsStatus => tts({ engine: { found: false, version: null } as never, install: { state: 'failed', step: 'engine', error: 'pip failed' } });
+
+  it('offers an install retry on that row with its own error, and cannot play a sample', async () => {
+    const f = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/voice/tts') && init?.method === 'POST') return json(running(), 202);
+      return json({ error: 'Not Found' }, 404);
+    });
+    vi.stubGlobal('fetch', f);
+    useVoiceStore.setState({ tts: failedEngine(), readAloud: true });
+    render(<VoiceSetup />);
+    const row = screen.getByTestId(`voice-tts-voice-${JOE}`);
+    expect(row.querySelector(`[data-testid="voice-tts-row-install-failed-${JOE}"]`)).not.toBeNull();
+    expect((screen.getByTestId(`voice-tts-sample-${JOE}`) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { fireEvent.click(screen.getByTestId(`voice-tts-install-${JOE}`)); await flush(); });
+    const post = f.mock.calls.find(([u, i]) => String(u).endsWith('/voice/tts') && (i as RequestInit | undefined)?.method === 'POST');
+    expect(post).toBeTruthy();
+    expect(JSON.parse(String((post![1] as RequestInit).body))).toEqual({ consent: true, voices: [JOE] });
+  });
+
+  it('Play sample is disabled while an install runs, and enabled once the engine is there', () => {
+    useVoiceStore.setState({ tts: running(), readAloud: true });
+    const { rerender } = render(<VoiceSetup />);
+    expect((screen.getByTestId(`voice-tts-sample-${JOE}`) as HTMLButtonElement).disabled).toBe(true);
+    act(() => { useVoiceStore.setState({ tts: tts() }); });
+    rerender(<VoiceSetup />);
+    expect((screen.getByTestId(`voice-tts-sample-${JOE}`) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe('the read-aloud retry', () => {
+  it('clears the failure banner and speaks the failed reply again', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (String(url).endsWith('/voice/tts') ? json(tts()) : json({ error: 'Not Found' }, 404))));
+    const spoken: string[] = [];
+    let fail = true;
+    setVoiceDeps({
+      mic: () => new FakeMic(),
+      speaker: { available: true, say: async (t) => { spoken.push(t); if (fail && t.startsWith('Two jobs')) throw new Error('voice_busy'); }, cancel: () => undefined },
+      ask: async () => 'Two jobs are running.',
+      endChat: () => undefined,
+    });
+    render(<VoiceSetup />);
+    await act(async () => { await openVoice(); });
+    act(() => { answerEntry(true); });
+    await act(async () => { await hear('space bar'); });
+    await act(async () => { await hear('What is running right now?'); });
+    expect(screen.getByTestId('voice-readaloud-failed')).toBeTruthy();
+    fail = false;
+    await act(async () => { fireEvent.click(screen.getByTestId('voice-readaloud-retry')); await flush(); await flush(); });
+    expect(screen.queryByTestId('voice-readaloud-failed')).toBeNull();
+    expect(useVoiceStore.getState().readAloudFailed).toBe(false);
+    expect(spoken.filter((t) => t === 'Two jobs are running.')).toHaveLength(2);
+  });
+});
+
+describe('the "needs setup" note follows the real state', () => {
+  it('is set while the speaker cannot speak, and cleared when the voice choice makes it able to', async () => {
+    const speaker = { available: false, say: async () => undefined, cancel: () => undefined };
+    setVoiceDeps({ speaker });
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (String(url).endsWith('/voice/tts') ? json(tts()) : json({ error: 'Not Found' }, 404))));
+    useVoiceStore.setState({ readAloud: true });
+    await act(async () => { await refreshTts(); });
+    expect(useVoiceStore.getState().readAloudNeedsSetup).toBe(true);
+    speaker.available = true;
+    act(() => { chooseVoice(JOE); });
+    expect(useVoiceStore.getState().readAloudNeedsSetup).toBe(false);
+    speaker.available = false;
+    act(() => { chooseVoice(JOE); });
+    expect(useVoiceStore.getState().readAloudNeedsSetup).toBe(true); // not cleared just because a voice was picked
   });
 });
