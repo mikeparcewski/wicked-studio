@@ -45,8 +45,8 @@ const { RepoDetailPage, graphReadError } = await import('../src/components/RepoD
 const { resetRepoLinks } = await import('../src/store/repoLinks.js');
 const { resetRepoKnowledge } = await import('../src/store/repoKnowledge.js');
 
-function ui(repoId: string, liveRuns: readonly SessionView[]): React.ReactElement {
-  return <RepoDetailPage repoId={repoId} onSelectRun={() => {}} navigate={() => {}} onOpenGraph={() => {}} liveRuns={liveRuns} />;
+function ui(repoId: string, liveRuns: readonly SessionView[], search?: string): React.ReactElement {
+  return <RepoDetailPage repoId={repoId} {...(search !== undefined ? { search } : {})} onSelectRun={() => {}} navigate={() => {}} onOpenGraph={() => {}} liveRuns={liveRuns} />;
 }
 
 beforeEach(() => {
@@ -203,6 +203,8 @@ describe('repo page re-read fixes (studio#1161 P2)', () => {
   });
 });
 
+const BUILT = { nodes: [{ id: 'n1', name: 'charge', kind: 'Function', file: 'src/charge.ts', inDeg: 3, outDeg: 1 }], edges: [], stats: { nodeCount: 5, edgeCount: 0, fileCount: 2 } };
+
 describe('repo page re-read fixes (studio#1161 second review round)', () => {
   // P2-1: the forced knowledge read asked while the first read is pending is not dropped.
   it('re-reads the Code graph size after a pending first read settles with a stale zero', async () => {
@@ -226,7 +228,7 @@ describe('repo page re-read fixes (studio#1161 second review round)', () => {
     getRepoGraph
       .mockRejectedValueOnce(new Error('first graph read boom'))
       .mockImplementationOnce(() => new Promise((_, rej) => { failA = () => rej(new Error('re-read A boom')); }))
-      .mockResolvedValue({ graph: null });
+      .mockResolvedValue({ graph: BUILT } as unknown as { graph: null });
 
     const { rerender } = render(ui('billing', [running]));
     await screen.findByTestId('repo-graph'); // the first graph read failed
@@ -238,6 +240,10 @@ describe('repo page re-read fixes (studio#1161 second review round)', () => {
     failA(); // the older re-read fails last
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByTestId('repo-graph')).toBeNull();
+    // The graph B answered is the one shown (its hotspot and Code map stats), not the failed state.
+    rerender(ui('billing', [done], '?tab=knowledge')); // the Knowledge tab shows the Code map and hotspots
+    expect((await screen.findByTestId('graph-stat-symbols')).textContent).toBe('5');
+    expect(screen.getByTestId('hotspots-excerpt').getAttribute('data-count')).toBe('1');
     expect(document.body.textContent).not.toMatch(/couldn.t load the code map/i);
   });
 });
