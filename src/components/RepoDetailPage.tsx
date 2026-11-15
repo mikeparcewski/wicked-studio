@@ -1,5 +1,5 @@
 import { healthText } from '../board/rowHeadline.js';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useTrackerLinksSupported } from '../api/trackers.js';
 import type { CodeGraphData, GitCommit, GitContributor, RepoEntry, SessionView } from '../api/types.js';
@@ -49,6 +49,9 @@ interface Props {
   onOpenGraph: (focus?: string, view?: 'code' | 'domain') => void;
   /** The address's query: `?tab=` picks the tab, `?project=` carries the project it was opened from. */
   search?: string;
+  /** App's live run list (`useRuns`, refreshed on run lifecycle events), once it has answered: the page's run-derived
+   *  states follow it, and a run of this repository finishing re-reads the repository and its graph once. */
+  liveRuns?: readonly SessionView[] | undefined;
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
@@ -94,7 +97,7 @@ export function dedupeContributors(rows: readonly GitContributor[]): GitContribu
  * address (`?tab=`), one panel in the page at a time. What blocks the code map (an onboarding that could not start, the
  * engine's findings, a code map that could not be read) is said above the tabs, on every tab.
  */
-export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, search = '' }: Props): React.ReactElement {
+export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, search = '', liveRuns }: Props): React.ReactElement {
   const showText = useDisplayText();
   const tab = repoTabOf(search);
   const ambientProject = ambientProjectId('', search);
@@ -102,7 +105,16 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const watch = useRepoWatch();
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
-  const [rawRuns, setRuns] = useState<SessionView[]>([]);
+  const [fetchedRuns, setRuns] = useState<SessionView[]>([]);
+  // The page's own read, overlaid by the live list (a live entry wins by id; a run only the read knows stays, so a
+  // list that has not heard of a just-launched run yet never blanks it). Newest first, as the read is.
+  const rawRuns = useMemo(() => {
+    if (liveRuns === undefined) return fetchedRuns;
+    const live = liveRuns.filter((v) => v.session.repo_ref === repoId);
+    const liveIds = new Set(live.map((v) => v.session.id));
+    return [...live, ...fetchedRuns.filter((v) => !liveIds.has(v.session.id))]
+      .sort((a, b) => (b.session.created_at ?? 0) - (a.session.created_at ?? 0));
+  }, [liveRuns, fetchedRuns, repoId]);
   // (crew#1042) The runs, marked from the shared held set (subscribed): a run a Needs-you row holds is not
   // "working now" (Overview, Jobs), and each row's word (statusWord) says it waits on you.
   const runs = useHeldMarked(rawRuns);
@@ -187,6 +199,29 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [repoId, reload]);
+
+  // A run of this repository going from in flight to finished (seen in the live list): the repository (its findings)
+  // and its graph (the code-graph size) are read again once. The in-flight set of the last list seen is the memory.
+  const inFlightRef = useRef<{ repoId: string; ids: Set<string> }>({ repoId, ids: new Set() });
+  useEffect(() => {
+    if (loading) return;
+    const ids = new Set(rawRuns.filter((v) => !TERMINAL_STATUSES.has(v.session.status)).map((v) => v.session.id));
+    const prev = inFlightRef.current;
+    inFlightRef.current = { repoId, ids };
+    if (prev.repoId !== repoId) return;
+    const finished = [...prev.ids].some((id) => !ids.has(id));
+    if (!finished) return;
+    const forRepo = repoId;
+    void Promise.all([
+      api.listRepos().then(({ repos }) => repos.find((r) => r.id === forRepo) ?? null),
+      api.getRepoGraph(forRepo).then(({ graph: g }) => g),
+    ]).then(([r, g]) => {
+      if (repoRef.current !== forRepo) return;
+      if (r !== null) setRepo(r);
+      setGraph(g);
+      setGraphFailed(null);
+    }).catch(() => { /* the page keeps what it shows; Try again on the graph reads it alone */ });
+  }, [rawRuns, loading, repoId]);
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
   function retryGraph(): void {
