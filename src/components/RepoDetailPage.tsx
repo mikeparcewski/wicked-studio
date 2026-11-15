@@ -21,7 +21,7 @@ import { ambientProjectId } from '../hooks/ambientProject.js';
 import { useDisplayText } from '../hooks/useHomePath.js';
 import { announceHistoryChange, keepEntryState, useHistoryEntryValue } from '../hooks/useHistoryState.js';
 import { useMembershipStore } from '../store/membership.js';
-import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
+import { knowledgeOf, useRepoKnowledge, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { linksOf, useRepoLinks, useRepoLinksFor } from '../store/repoLinks.js';
 import { AddRepoToProject } from './AddRepoToProject.js';
 import { RepoWatchControls, RepoWatchLine } from './RepoWatchLine.js';
@@ -106,6 +106,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [fetchedRuns, setRuns] = useState<SessionView[]>([]);
+  // Run ids the live list has ever shown: once it has heard of a run the live list is authoritative for that id
+  // (absent from it = gone). A fetched-only entry survives only until its id first appears live, so a run the page's
+  // own read still remembers is not resurrected after it is archived out of the live list.
+  const seenLiveRef = useRef<Set<string>>(new Set());
   // The page's own read, overlaid by the live list (a live entry wins by id; a run only the read knows stays, so a
   // list that has not heard of a just-launched run yet never blanks it). Newest first, as the read is.
   const rawRuns = useMemo(() => {
@@ -114,19 +118,30 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     if (liveRuns === undefined) return read;
     const live = liveRuns.filter((v) => v.session.repo_ref === repoId);
     const liveIds = new Set(live.map((v) => v.session.id));
-    return [...live, ...read.filter((v) => !liveIds.has(v.session.id))]
+    const seen = seenLiveRef.current;
+    for (const id of liveIds) seen.add(id);
+    return [...live, ...read.filter((v) => !liveIds.has(v.session.id) && !seen.has(v.session.id))]
       .sort((a, b) => (b.session.created_at ?? 0) - (a.session.created_at ?? 0));
   }, [liveRuns, fetchedRuns, repoId]);
   // (crew#1042) The runs, marked from the shared held set (subscribed): a run a Needs-you row holds is not
   // "working now" (Overview, Jobs), and each row's word (statusWord) says it waits on you.
   const runs = useHeldMarked(rawRuns);
   const [runsFailed, setRunsFailed] = useState(false);
+  // The page's own /runs read failed — but when App's live list is in hand (liveRuns defined) the jobs are readable
+  // from it, so the failed own-read never keeps Recent jobs, the Jobs tab or the knowledge marks in "could not be read".
+  const jobsFailed = runsFailed && liveRuns === undefined;
   const [graph, setGraph] = useState<CodeGraphData | null>(null);
   // studio#461: a failed graph read is its own state, never "not indexed".
   const [graphFailed, setGraphFailed] = useState<string | null>(null);
   // The repo a retry belongs to: a retry's answer for another repo is dropped (codex on #461).
   const repoRef = useRef(repoId);
   repoRef.current = repoId;
+  // A visit: bumped the instant repoId changes (updated during render, like repoRef). A re-read begun before a
+  // navigation (A → B → A while A's re-read is in flight) belongs to an older visit and never lands.
+  const visitRef = useRef({ repoId, visit: 0 });
+  if (visitRef.current.repoId !== repoId) visitRef.current = { repoId, visit: visitRef.current.visit + 1 };
+  // Only the newest re-read of the current visit may land its answer.
+  const reReadSeq = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [reload, setReload] = useState(0);
@@ -215,15 +230,20 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     inFlightRef.current = { repoId, ids, pending: false };
     if (!pending) return;
     const forRepo = repoId;
-    void Promise.all([
-      api.listRepos().then(({ repos }) => repos.find((r) => r.id === forRepo) ?? null),
-      api.getRepoGraph(forRepo).then(({ graph: g }) => g),
-    ]).then(([r, g]) => {
-      if (repoRef.current !== forRepo) return;
-      if (r !== null) setRepo(r);
-      setGraph(g);
-      setGraphFailed(null);
-    }).catch(() => { /* the page keeps what it shows; Try again on the graph reads it alone */ });
+    const forVisit = visitRef.current.visit;
+    const seq = ++reReadSeq.current;
+    // The code-graph size the header and the Code graph mark read comes from the knowledge store, not `graph`: force
+    // it to re-read this repository so a just-built graph stops reading "not built" until the next minute's refresh.
+    useRepoKnowledge.getState().ensure([forRepo], true);
+    // Only the newest re-read of the still-current visit may land (an older or superseded answer is dropped).
+    const current = (): boolean => repoRef.current === forRepo && visitRef.current.visit === forVisit && reReadSeq.current === seq;
+    // The repository and the graph are applied independently: one read failing never discards the other's success.
+    void api.listRepos().then(({ repos }) => repos.find((r) => r.id === forRepo) ?? null)
+      .then((r) => { if (current() && r !== null) setRepo(r); })
+      .catch(() => { /* a failed repository read keeps the repository shown */ });
+    void api.getRepoGraph(forRepo).then(({ graph: g }) => g)
+      .then((g) => { if (current()) { setGraph(g); setGraphFailed(null); } })
+      .catch((e: unknown) => { if (current()) setGraphFailed(e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer'); });
   }, [rawRuns, loading, repoId]);
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
@@ -280,7 +300,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const ready = repoReadiness(state, now);
   const kinds = knowledgeOf(knowledge, repo.id).kinds;
   // Unread jobs leave the index's state unknown: never "not indexed" from an empty list that was never read.
-  const map = runsFailed ? { tone: 'none' as const, words: 'Code map state unknown', size: null } : mapCell(ready, state, kinds, now);
+  const map = jobsFailed ? { tone: 'none' as const, words: 'Code map state unknown', size: null } : mapCell(ready, state, kinds, now);
   const lang = languageWords(graph);
 
   const hotspots = graph
@@ -299,7 +319,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   // A re-run failure takes precedence without overwriting the current entry's registration notice.
   const onboardError = rerunError ?? registrationError;
   const onboardErrorText = onboardError === null ? null : onboardError instanceof Error ? onboardError.message : String(onboardError);
-  const notMapped = !runsFailed && onboard.state !== 'onboarding' && (
+  const notMapped = !jobsFailed && onboard.state !== 'onboarding' && (
     graphGap !== null || graphStateNow.kind === 'none' ||
     (graph === null && (onboard.state === 'never' || onboard.state === 'failed'))
   );
@@ -317,7 +337,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   // prefix, home paths masked (also JSON-escaped Windows ones); the whole text stays under Technical details.
   const plainFirstLine = (text: string | null): string =>
     text === null ? '' : healthText(text.replace(/^the daemon refused this[^—]*—\s*/, '').split(/[\r\n]/)[0]!.trim());
-  const marks = knowledgeMarks(repo, runsFailed ? null : runs, knowledgeOf(knowledge, repo.id), now);
+  const marks = knowledgeMarks(repo, jobsFailed ? null : runs, knowledgeOf(knowledge, repo.id), now);
   const trackerCount = links !== null && links.state === 'ok' ? links.trackers : null;
   const projects = links !== null && links.state === 'ok' ? links.projects : null;
   const jobProjects = (projectsByJobs(runs, new Map(sharedProjects.map((p) => [p.id, p.name])), nameByRun).get(repo.id) ?? [])
@@ -336,7 +356,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     if (Object.keys(notices).length > 0) navigate(tabPath(t), { state: notices });
     else navigate(tabPath(t));
   };
-  const count: Partial<Record<RepoTab, number | null>> = { jobs: runsFailed ? null : runs.length, trackers: trackerCount };
+  const count: Partial<Record<RepoTab, number | null>> = { jobs: jobsFailed ? null : runs.length, trackers: trackerCount };
 
   /** Added to a project from here: its membership is read again; a registration's "not added to P" notice is settled
    *  only by adding it to P (a "run not filed" notice, or one about another project, stays true). */
@@ -440,7 +460,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
           <RepoWatchLine status={watch} repoId={repo.id} now={now} navigate={navigate} />
 
           {/* What blocks the code map, above the tabs (seen on every tab); silent when nothing does. */}
-          {(onboardErrorText !== null || hasFindings || graphFailedHere || captureError !== null || runsFailed) && (
+          {(onboardErrorText !== null || hasFindings || graphFailedHere || captureError !== null || jobsFailed) && (
             <div className="wk-rp-alerts" data-testid="repo-alerts">
               {onboardErrorText !== null && (
                 <div data-testid="repo-onboard-error" role="status" className="wk-state-banner wk-state-banner--warn">
@@ -464,7 +484,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
               {hasFindings && <RepoFindings findings={repo.findings} onRerunOnboarding={() => void startOnboarding()} rerunning={onboarding} />}
               {graphFailedHere && <StateBanner data-testid="repo-graph" kind={readErrorKind(graphFailed)} what="the code map" error={graphFailed} onRetry={retryGraph} />}
               {/* The jobs could not be read: the states they decide (indexed, learnings) are unknown, never "none". */}
-              {runsFailed && <StateBanner data-testid="repo-runs-failed" kind="error" what="this repository’s jobs" error="" onRetry={() => setReload((n) => n + 1)} />}
+              {jobsFailed && <StateBanner data-testid="repo-runs-failed" kind="error" what="this repository’s jobs" error="" onRetry={() => setReload((n) => n + 1)} />}
               {/* Capture learnings can start from More on any tab: its failure is said here, on every tab. */}
               {captureError !== null && (
                 <div data-testid="repo-capture-error" role="status" className="wk-state-banner wk-state-banner--warn">
@@ -517,7 +537,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                       </Section>
                     )}
                     <Section title="Recent jobs" testId="repo-overview-recent">
-                      {runsFailed ? (
+                      {jobsFailed ? (
                         <p className="wk-pg-repo-empty">The jobs could not be read just now.</p>
                       ) : runs.length === 0 ? (
                         <p className="wk-pg-repo-empty">No jobs on this repository yet.</p>
@@ -578,7 +598,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     <div className="flex flex-col gap-1">{active.map(v => <RunRow key={v.session.id} view={v} onSelect={onSelectRun} />)}</div>
                   </Section>
                 )}
-                <JobsList runs={runs} failed={runsFailed} repoName={repo.name} onSelect={onSelectRun} />
+                <JobsList runs={runs} failed={jobsFailed} repoName={repo.name} onSelect={onSelectRun} />
               </>
             )}
 
@@ -602,7 +622,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                       </button>
                       {/* §7.8 (slice AC, EC43): the named action previews what it does and writes. */}
                       <p data-testid="action-preview">Onboarding rebuilds this repository’s code map as a tracked run you can watch; it usually takes a few minutes.</p>
-                      {runsFailed
+                      {jobsFailed
                         ? <p className="wk-rp-state" data-testid="repo-graph-state" data-state="unknown" data-tone="quiet">Unknown: this repository’s jobs could not be read.</p>
                         : <p className="wk-rp-state" data-testid="repo-graph-state" data-state={graphStateOf(state)} data-tone={graphTone(state)}>{graphStateWord(state, attachedAt, now)}</p>}
                     </div>
@@ -622,10 +642,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                       <button type="button" data-testid="repo-capture-learnings" disabled={capturing} className="wk-btn wk-btn--secondary"
                         title={`Start a tracked run that saves what this repository’s history teaches${ambientProject !== null ? ', filed under this project' : ''}`}
                         onClick={() => void captureLearnings()}>
-                        {capturing ? 'Starting…' : !runsFailed && capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
+                        {capturing ? 'Starting…' : !jobsFailed && capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
                       </button>
                       <p>A tracked run that saves what this repository’s history teaches.</p>
-                      {runsFailed
+                      {jobsFailed
                         ? <p className="wk-rp-state" data-testid="repo-capture-state" data-state="unknown" data-tone="quiet">Unknown: this repository’s jobs could not be read.</p>
                         : <p className="wk-rp-state" data-testid="repo-capture-state" data-state={capture.state} data-tone={captureTone(state)}>{captureStateWord(state, attachedAt, now)}</p>}
                     </div>

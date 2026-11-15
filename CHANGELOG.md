@@ -26,6 +26,11 @@ npm publish dates. Every version listed here exists on
 - A repository's page left open through an onboarding now follows the live run list (studio#1161): the
   Code graph mark, Working now, Recent jobs and the Jobs tab leave "indexing now" when the run ends,
   and the page reads the repository and its graph again once when a run of that repository finishes.
+  Cross-model review follow-up (studio#1161): the finished transition also refreshes the Code graph size
+  from the knowledge store (no more stale "not built"); an archived run the live list has dropped is not
+  resurrected from the page's own read; a working live list clears the page's own failed /runs read; the
+  repository and graph re-reads apply independently (one failing no longer discards the other); and only
+  the newest re-read of the current visit may land (older or post-navigation answers are dropped).
 - A private repository added "From a URL" shows crew's own sentence when the clone is refused
   (`repo_clone_denied`), instead of "Couldn't load the repository." (crew#1535).
 - Tests for the three RingGraph fixes of #1158 now fail when each fix is reverted: the zoom refresh
