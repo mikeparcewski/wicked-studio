@@ -88,4 +88,12 @@ describe('RepoDetailPage follows the live run list (studio#1161)', () => {
     rerender(ui([otherRunning]));
     expect(screen.getByTestId('repo-overview-working')).toBeTruthy();
   });
+
+  it('a list still behind the read (run executing there, finished in the read) does not bring indexing back', async () => {
+    listRuns.mockImplementationOnce(() => Promise.resolve({ runs: [done] }));
+    render(ui([running]));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'billing' })).toBeTruthy());
+    expect(screen.queryByTestId('repo-overview-working')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/indexing now/i);
+  });
 });

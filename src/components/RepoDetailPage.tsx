@@ -111,8 +111,11 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const rawRuns = useMemo(() => {
     if (liveRuns === undefined) return fetchedRuns;
     const live = liveRuns.filter((v) => v.session.repo_ref === repoId);
-    const liveIds = new Set(live.map((v) => v.session.id));
-    return [...live, ...fetchedRuns.filter((v) => !liveIds.has(v.session.id))]
+    // A finished run never goes back: when the read saw it finished and the list is still behind, the read wins.
+    const finishedByRead = new Set(fetchedRuns.filter((v) => TERMINAL_STATUSES.has(v.session.status)).map((v) => v.session.id));
+    const current = live.filter((v) => TERMINAL_STATUSES.has(v.session.status) || !finishedByRead.has(v.session.id));
+    const liveIds = new Set(current.map((v) => v.session.id));
+    return [...current, ...fetchedRuns.filter((v) => !liveIds.has(v.session.id))]
       .sort((a, b) => (b.session.created_at ?? 0) - (a.session.created_at ?? 0));
   }, [liveRuns, fetchedRuns, repoId]);
   // (crew#1042) The runs, marked from the shared held set (subscribed): a run a Needs-you row holds is not
