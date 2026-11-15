@@ -150,6 +150,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   if (visitRef.current.repoId !== repoId) visitRef.current = { repoId, visit: visitRef.current.visit + 1 };
   // Only the newest re-read of the current visit may land its answer.
   const reReadSeq = useRef(0);
+  // The graph answer has one sequence shared by the completion re-read and retryGraph: only the newest request lands.
+  const graphSeq = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [reload, setReload] = useState(0);
@@ -240,6 +242,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     const forRepo = repoId;
     const forVisit = visitRef.current.visit;
     const seq = ++reReadSeq.current;
+    const gseq = ++graphSeq.current;
     // The code-graph size the header and the Code graph mark read comes from the knowledge store, not `graph`: force
     // it to re-read this repository so a just-built graph stops reading "not built" until the next minute's refresh.
     useRepoKnowledge.getState().ensure([forRepo], true);
@@ -249,18 +252,22 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     void api.listRepos().then(({ repos }) => repos.find((r) => r.id === forRepo) ?? null)
       .then((r) => { if (current() && r !== null) setRepo(r); })
       .catch(() => { /* a failed repository read keeps the repository shown */ });
+    const graphCurrent = (): boolean => repoRef.current === forRepo && visitRef.current.visit === forVisit && graphSeq.current === gseq;
     void api.getRepoGraph(forRepo).then(({ graph: g }) => g)
-      .then((g) => { if (current()) { setGraph(g); setGraphFailed(null); } })
-      .catch((e: unknown) => { if (current()) setGraphFailed(graphReadError(e)); });
+      .then((g) => { if (graphCurrent()) { setGraph(g); setGraphFailed(null); } })
+      .catch((e: unknown) => { if (graphCurrent()) setGraphFailed(graphReadError(e)); });
   }, [rawRuns, loading, repoId]);
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
   function retryGraph(): void {
     const forRepo = repoId;
+    const forVisit = visitRef.current.visit;
+    const gseq = ++graphSeq.current;
+    const graphCurrent = (): boolean => repoRef.current === forRepo && visitRef.current.visit === forVisit && graphSeq.current === gseq;
     api.getRepoGraph(forRepo)
-      .then(({ graph: g }) => { if (repoRef.current === forRepo) { setGraph(g); setGraphFailed(null); } })
+      .then(({ graph: g }) => { if (graphCurrent()) { setGraph(g); setGraphFailed(null); } })
       .catch((e: unknown) => {
-        if (repoRef.current === forRepo) setGraphFailed(graphReadError(e));
+        if (graphCurrent()) setGraphFailed(graphReadError(e));
       });
   }
 

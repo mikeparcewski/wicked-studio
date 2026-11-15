@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { GraphKind, RepoEntry, SessionView } from '../src/api/types.js';
 import { ApiError } from '../src/api/errors.js';
 import { makeView } from './factories.js';
@@ -200,5 +200,44 @@ describe('repo page re-read fixes (studio#1161 P2)', () => {
     resolveStale(); // A's old-visit re-read resolves now
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByTestId('repo-findings')).toBeNull();
+  });
+});
+
+describe('repo page re-read fixes (studio#1161 second review round)', () => {
+  // P2-1: the forced knowledge read asked while the first read is pending is not dropped.
+  it('re-reads the Code graph size after a pending first read settles with a stale zero', async () => {
+    let settleFirst: () => void = () => {};
+    getGraphKindsForRepo.mockImplementationOnce(() => new Promise((r) => { settleFirst = () => r({ kinds: [] }); }));
+    const { rerender } = render(ui('billing', [running]));
+    await screen.findByTestId('repo-overview-working');
+    expect(getGraphKindsForRepo).toHaveBeenCalledTimes(1);
+
+    kindsAnswer = [{ kind: 'Function', count: 77 }];
+    rerender(ui('billing', [done])); // the run finishes while the first read is still pending
+    settleFirst(); // the older read answers zero
+    await waitFor(() => expect(codeMark()).toContain('77'));
+    expect(codeMark()).toMatch(/symbols/i);
+    expect(getGraphKindsForRepo).toHaveBeenCalledTimes(2);
+  });
+
+  // P2-2: retryGraph and the completion re-read share one graph sequence.
+  it('an older failing completion re-read does not undo a newer successful Try again', async () => {
+    let failA: () => void = () => {};
+    getRepoGraph
+      .mockRejectedValueOnce(new Error('first graph read boom'))
+      .mockImplementationOnce(() => new Promise((_, rej) => { failA = () => rej(new Error('re-read A boom')); }))
+      .mockResolvedValue({ graph: null });
+
+    const { rerender } = render(ui('billing', [running]));
+    await screen.findByTestId('repo-graph'); // the first graph read failed
+    rerender(ui('billing', [done])); // re-read A starts (pending)
+    await waitFor(() => expect(getRepoGraph).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByTestId('repo-graph-retry')); // B succeeds
+    await waitFor(() => expect(screen.queryByTestId('repo-graph')).toBeNull());
+
+    failA(); // the older re-read fails last
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('repo-graph')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/couldn.t load the code map/i);
   });
 });

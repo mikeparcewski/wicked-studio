@@ -31,6 +31,8 @@ npm publish dates. Every version listed here exists on
   resurrected from the page's own read; a working live list clears the page's own failed /runs read; the
   repository and graph re-reads apply independently (one failing no longer discards the other); and only
   the newest re-read of the current visit may land (older or post-navigation answers are dropped).
+  Second review round (studio#1161): a forced knowledge read asked while that repository's read is pending is read
+  once more when it settles, and the completion re-read and "Try again" share one graph sequence so an older failure never overwrites a newer graph.
 - A private repository added "From a URL" shows crew's own sentence when the clone is refused
   (`repo_clone_denied`), instead of "Couldn't load the repository." (crew#1535).
 - Tests for the three RingGraph fixes of #1158 now fail when each fix is reverted: the zoom refresh
