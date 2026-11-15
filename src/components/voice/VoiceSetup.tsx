@@ -1,20 +1,35 @@
-import { consentToModel, refreshStatus } from '../../voice/controller.js';
+import { chooseVoice, consentToModel, consentToVoice, playSample, refreshStatus, refreshTts, retryReadAloud } from '../../voice/controller.js';
 import { useShallow } from 'zustand/react/shallow';
 import { useVoiceStore } from '../../store/voice.js';
+import type { VoiceTtsVoice } from '../../api/voice.js';
+import { translateWireError } from '../../api/errors.js';
 
 const mb = (n: number): string => `${Math.round(n / 1048576)} MB`;
+/** Read-aloud voice sizes are shown in decimal MB (bytes ÷ 1e6), to match crew's manifest figures. */
+const mbDec = (n: number): string => `${Math.round(n / 1e6)} MB`;
 
 /**
- * What voice needs before it can hear, said plainly (DES-VOICE §3, §4): the speech engine (whisper.cpp) on this
- * machine, and one model file fetched ONLY with the person's consent. Audio never leaves the machine either way.
- * Nothing renders once both are here and the mic is on.
+ * What voice needs before it can hear and speak, said plainly (DES-VOICE §3, §4; wicked-crew#1548):
+ *   - speech input: the whisper.cpp engine on this machine, and one model fetched ONLY with consent;
+ *   - read-aloud: piper on this machine, and one or more licence-cleared voices fetched ONLY with consent.
+ * Both run locally — audio never leaves the machine either way. The whisper rows disappear once speech input is
+ * ready and the mic is on; the read-aloud rows show whenever read-aloud is on (so a voice can be chosen or sampled).
  */
 export function VoiceSetup(): React.ReactElement | null {
-  const { status, statusError, micError } = useVoiceStore(useShallow((s) => ({ status: s.status, statusError: s.statusError, micError: s.micError })));
-  if (statusError !== null) {
-    return <div className="wk-voice-setup" data-testid="voice-setup" data-state="error" role="status">{statusError}</div>;
-  }
+  const { status, statusError, micError, tts, ttsError, ttsActionError, ttsVoice, readAloud, readAloudFailed } = useVoiceStore(
+    useShallow((s) => ({
+      status: s.status, statusError: s.statusError, micError: s.micError,
+      tts: s.tts, ttsError: s.ttsError, ttsActionError: s.ttsActionError, ttsVoice: s.ttsVoice, readAloud: s.readAloud,
+      readAloudFailed: s.readAloudFailed,
+    })),
+  );
+
   const rows: React.ReactNode[] = [];
+
+  // ── Speech input (whisper.cpp) ──────────────────────────────────────────────────────────────
+  if (statusError !== null) {
+    rows.push(<p key="status-error" data-testid="voice-setup-status-error" data-state="error">{statusError}</p>);
+  }
   if (micError !== null) rows.push(<p key="mic" data-testid="voice-mic-error">{micError}</p>);
   if (status !== null && (!status.engine.found || status.engine.supported === false)) {
     rows.push(
@@ -53,6 +68,145 @@ export function VoiceSetup(): React.ReactElement | null {
       );
     }
   }
+
+  // ── Read-aloud (piper) ──────────────────────────────────────────────────────────────────────
+  const readAloudBlock = buildReadAloud(readAloud, tts, ttsError, ttsActionError, ttsVoice);
+  if (readAloudBlock !== null) rows.push(readAloudBlock);
+  if (readAloud && readAloudFailed) {
+    rows.push(
+      <p key="tts-speak-failed" data-testid="voice-readaloud-failed">
+        Read-aloud couldn’t speak that reply; the captions are unaffected.{' '}
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-readaloud-retry" onClick={() => void retryReadAloud()}>Try again</button>
+      </p>,
+    );
+  }
+
   if (rows.length === 0) return null;
   return <div className="wk-voice-setup" data-testid="voice-setup" role="status">{rows}</div>;
+}
+
+function buildReadAloud(
+  readAloud: boolean,
+  tts: ReturnType<typeof useVoiceStore.getState>['tts'],
+  ttsError: string | null,
+  ttsActionError: { voice: string; message: string } | null,
+  ttsVoice: string | null,
+): React.ReactNode {
+  if (!readAloud) return null;
+  // No status yet and a read error (or a crew with no read-aloud routes, 404): the remedy line, with a retry.
+  if (tts === null && ttsError !== null) {
+    return (
+      <div key="tts" data-testid="voice-tts" data-state="error">
+        <p data-testid="voice-tts-error">{ttsError}</p>
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-tts-retry" onClick={() => void refreshTts()}>Try again</button>
+      </div>
+    );
+  }
+  if (tts === null) return null; // still loading
+
+  const inner: React.ReactNode[] = [];
+  // Read-aloud can't run here (no python, unsupported platform): show the remedy, nothing to download.
+  if (!tts.supported.ok || !tts.python.found) {
+    inner.push(
+      <p key="unsup" data-testid="voice-tts-unsupported">
+        {tts.supported.reason ?? 'Read-aloud can’t run on this computer: Python wasn’t found where crew runs.'}
+      </p>,
+    );
+    return <div key="tts" data-testid="voice-tts" data-state="unsupported">{inner}</div>;
+  }
+
+  // Before anything downloads, say exactly what will be fetched and from where.
+  inner.push(
+    <p key="disclosure" data-testid="voice-tts-disclosure">
+      Read-aloud speaks on this computer with <b>piper-tts 1.8.0</b> from PyPI (GPL-3.0-or-later), installed here as a
+      separate program. Each voice is downloaded from Hugging Face (rhasspy/piper-voices); its size and licence are
+      shown below.
+    </p>,
+  );
+
+  const installing = tts.install?.state === 'running';
+  if (installing) {
+    inner.push(
+      <div key="progress" data-testid="voice-tts-progress">
+        <p>{installStepLabel(tts.install?.step ?? null, tts.voices)}</p>
+        {/* Crew reports no byte count for this install, so the bar is indeterminate: no width claim, no
+            aria-valuenow (its absence is what marks a progressbar indeterminate), and aria-busy while it runs. */}
+        <div className="wk-voice-progress wk-voice-progress--busy" role="progressbar" aria-label="Read-aloud install" aria-busy={true} aria-valuemin={0} aria-valuemax={100}>
+          <span />
+        </div>
+      </div>,
+    );
+  }
+  if (tts.install?.state === 'failed') {
+    // Never render crew's raw sentence: route it through the one translator (EC33), like every other daemon line.
+    inner.push(<p key="failed" data-testid="voice-tts-failed">The last install failed: {translateWireError(500, tts.install.error ?? '')}</p>);
+  }
+
+  // A read error with a known status: the error sits above the rows, which keep their status and controls.
+  if (ttsError !== null) {
+    inner.push(
+      <div key="tts-read-error">
+        <p data-testid="voice-tts-error">{ttsError}</p>
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-tts-retry" onClick={() => void refreshTts()}>Try again</button>
+      </div>,
+    );
+  }
+
+  for (const [id, v] of Object.entries(tts.voices)) {
+    inner.push(voiceRow(id, v, ttsVoice === id, installing, tts.engine.found, tts.install?.state === 'failed' ? translateWireError(500, tts.install.error ?? '') : null, ttsActionError?.voice === id ? ttsActionError.message : null));
+  }
+
+  return <div key="tts" data-testid="voice-tts" data-state="ready">{inner}</div>;
+}
+
+/** A human label for crew's install step, never the raw id: `engine` → the engine line; `voice:<id>` → the voice's
+ *  name from the status map (its id if the name is unknown). Any other step falls back to a plain line. */
+function installStepLabel(step: string | null, voices: Record<string, VoiceTtsVoice>): string {
+  if (step === 'engine') return 'Installing the read-aloud engine…';
+  if (step !== null && step.startsWith('voice:')) {
+    const id = step.slice('voice:'.length);
+    return `Downloading ${voices[id]?.name ?? id}…`;
+  }
+  return 'Installing read-aloud…';
+}
+
+/** One voice's row. Its controls follow what that voice can do now, not `v.installed` alone: a voice file can be on disk
+ *  while the engine step failed (or is still running), and then it can be neither sampled nor used, only installed again. */
+function voiceRow(id: string, v: VoiceTtsVoice, chosen: boolean, installing: boolean, engineFound: boolean, installFailure: string | null, error: string | null): React.ReactNode {
+  const needsEngine = v.installed && !engineFound && !installing;
+  return (
+    <div key={`voice-${id}`} className="wk-voice-trow" data-testid={`voice-tts-voice-${id}`}>
+      <p>
+        <b>{v.name}</b> · {v.accent} · {v.licence} · {mbDec(v.bytes)}{' '}
+        <span className="wk-voice-src">({v.source})</span>
+      </p>
+      {!v.installed ? (
+        <button
+          type="button"
+          className="wk-btn wk-btn--primary wk-btn--sm"
+          data-testid={`voice-tts-consent-${id}`}
+          disabled={installing}
+          onClick={() => void consentToVoice(id)}
+        >
+          Download {v.name} ({mbDec(v.bytes)})
+        </button>
+      ) : (
+        <div className="wk-voice-trow-actions">
+          {needsEngine && (
+            <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid={`voice-tts-install-${id}`} onClick={() => void consentToVoice(id)}>
+              Install the read-aloud engine
+            </button>
+          )}
+          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid={`voice-tts-sample-${id}`} disabled={installing || !engineFound} onClick={() => void playSample(id)}>
+            Play sample
+          </button>
+          <label className="wk-voice-choose" data-testid={`voice-tts-choose-${id}`}>
+            <input type="radio" name="voice-tts-voice" checked={chosen} onChange={() => chooseVoice(id)} /> Use this voice
+          </label>
+        </div>
+      )}
+      {needsEngine && installFailure !== null && <p data-testid={`voice-tts-row-install-failed-${id}`} data-state="error" role="alert">The engine install failed: {installFailure}</p>}
+      {error !== null && <p data-testid={`voice-tts-row-error-${id}`} data-state="error" role="alert">{error}</p>}
+    </div>
+  );
 }

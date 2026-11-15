@@ -7,7 +7,9 @@ STREAM and a STUB speech-to-text:
     real `getUserMedia` → AnalyserNode → recorder → pause detector path runs and real 16 kHz WAVs are POSTed.
   - `POST /api/v1/voice/transcribe` is answered here: it checks the body is a RIFF/WAVE 16 kHz mono 16-bit file and
     answers the scripted phrase until its effect shows (or "" while nothing is scripted, which voice ignores).
-  - `speechSynthesis.speak` is stubbed to end at once and record what was said (read-aloud is asserted, not heard).
+  - read-aloud now speaks via `POST /voice/speak` (piper on the machine) played with Web Audio; the journey
+    intercepts that fetch to record the spoken text in `window.__said` and returns a tiny silent WAV (read-aloud is
+    asserted by the speak request, not heard). `GET /voice/tts` answers an installed engine + voice so it is ready.
   - `/ws` is played by the journey (a gate arriving, the system chat's reply). `/system`, `/voice/*`, `POST /chats`,
     the chat message and the gate POST are answered here; everything else is the in-process fixture.
 
@@ -19,7 +21,9 @@ STREAM and a STUB speech-to-text:
      and sends NOTHING; "confirm" starts the 10 s undo; after it the gate POST carries input "voice".
   6. Widgets: remove "Today", add it back from the picker, make a metric widget from /system; PUT /voice/dashboard.
   7. Esc leaves; the overlay is gone. 0 page errors.
-  Screens: modal-ask, modal-answer, mode, streaming, gate at 1440x900 and 390x844, dark and light.
+  Screens: modal-ask, modal-answer, mode, streaming, gate at 1440x900 and 390x844, dark and light; plus the three
+  read-aloud (piper) Voice-setup states (not-installed, installing, installed-with-sample) at 1440x700 and 390x844,
+  light and dark — 12 `voice-tts-*` shots asserted by step 7b.
 
 Env: FEEDBACK_PORT (default 4691).
 """
@@ -103,6 +107,32 @@ SYSTEM = {
 STATUS = {"local": True, "ready": True, "engine": {"name": "whisper.cpp", "found": True, "path": "/opt/homebrew/bin/whisper-cli", "install": None},
           "model": {"name": "base.en", "present": True, "bytes": 147964211, "approxBytes": 148897792, "source": "huggingface.co/ggerganov/whisper.cpp", "download": None}}
 
+# Read-aloud (piper). The GET /voice/tts answer is stateful so the look pass can screenshot the three setup states
+# (not-installed, installing, installed-with-sample). `TTS_STATE` selects which; the behaviour pass uses "installed".
+TTS_STATE = {"name": "installed"}
+# Only the voices crew's manifest offers: Joe (en_US-joe-medium, CC0) and Cori (en_GB-cori-high, public domain).
+_JOE_ID = "en_US-joe-medium"
+_CORI_ID = "en_GB-cori-high"
+_JOE = {"name": "Joe", "accent": "US English", "licence": "CC0", "bytes": 63227449, "source": "Hugging Face rhasspy/piper-voices"}
+_CORI = {"name": "Cori", "accent": "UK English", "licence": "Public domain", "bytes": 114224315, "source": "Hugging Face rhasspy/piper-voices"}
+_TTS_BASE = {"supported": {"ok": True, "reason": None}, "python": {"found": True, "path": "/usr/bin/python3", "version": "3.11.4"}}
+
+
+def tts_for(name: str) -> dict:
+    if name == "not-installed":
+        return {**_TTS_BASE, "engine": {"found": False, "version": None},
+                "voices": {_JOE_ID: {"installed": False, **_JOE}, _CORI_ID: {"installed": False, **_CORI}}, "install": None}
+    if name == "installing":
+        # Crew reports a step id, never a human string: `voice:<id>` while a voice downloads.
+        return {**_TTS_BASE, "engine": {"found": False, "version": None},
+                "voices": {_JOE_ID: {"installed": False, **_JOE}, _CORI_ID: {"installed": False, **_CORI}},
+                "install": {"state": "running", "step": f"voice:{_JOE_ID}", "error": None}}
+    return {**_TTS_BASE, "engine": {"found": True, "version": "1.8.0"},
+            "voices": {_JOE_ID: {"installed": True, **_JOE}, _CORI_ID: {"installed": False, **_CORI}}, "install": None}
+
+
+TTS = tts_for("installed")
+
 
 def wav_ok(body: bytes) -> dict:
     if len(body) < 44 or body[0:4] != b"RIFF" or body[8:12] != b"WAVE":
@@ -119,6 +149,11 @@ def route_api(route) -> None:
     j = lambda b, s=200: route.fulfill(status=s, content_type="application/json", body=json.dumps(b))  # noqa: E731
     if path == "/api/v1/voice/status":
         return j(STATUS)
+    if path == "/api/v1/voice/tts":
+        return j(tts_for(TTS_STATE["name"]))
+    if path == "/api/v1/voice/speak" or path.startswith("/api/v1/voice/tts/sample/"):
+        # Usually intercepted in the page (window.fetch), answered here only if that ever misses.
+        return route.fulfill(status=200, content_type="audio/wav", body=b"RIFF")
     if path == "/api/v1/voice/transcribe":
         info = wav_ok(req.post_data_buffer or b"")
         wavs.append(info)
@@ -154,8 +189,28 @@ def route_api(route) -> None:
 
 INIT = """
 window.__said = [];
-const synth = window.speechSynthesis;
-if (synth) { synth.speak = (u) => { window.__said.push(u.text); setTimeout(() => { if (u.onend) u.onend(new Event('end')); }, 30); }; synth.cancel = () => {}; }
+// Read-aloud speaks via POST /voice/speak + Web Audio. Record WHAT is said and answer with a tiny silent WAV so the
+// journey asserts the speak request without real audio. (The mic's own AudioContext is left untouched.)
+function __silentWav(ms) {
+  const rate = 8000, n = Math.floor(rate * ms / 1000), buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true);
+  dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true);
+  dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+  return buf;
+}
+const __fetch = window.fetch.bind(window);
+window.fetch = (input, init) => {
+  const url = typeof input === 'string' ? input : (input && input.url) || '';
+  if (url.includes('/voice/speak')) {
+    try { window.__said.push(JSON.parse(init.body).text); } catch (e) { /* ignore */ }
+    return Promise.resolve(new Response(__silentWav(60), { status: 200, headers: { 'Content-Type': 'audio/wav' } }));
+  }
+  if (url.includes('/voice/tts/sample/')) {
+    return Promise.resolve(new Response(__silentWav(60), { status: 200, headers: { 'Content-Type': 'audio/wav' } }));
+  }
+  return __fetch(input, init);
+};
 """
 
 
@@ -319,6 +374,36 @@ with sync_playwright() as p:
                 over = page.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
                 check(f"look-{w}-{theme}-fits", over <= 1, over=over)
             ctx.close()
+
+    # ── read-aloud setup states: the three Voice-setup moments at the two required sizes, both themes ──────
+    tts_shots: list[str] = []
+    for w, h in ((1440, 700), (390, 844)):
+        for theme in ("light", "dark"):
+            for state in ("not-installed", "installing", "installed"):
+                TTS_STATE["name"] = state
+                script.clear()
+                sockets.clear()
+                ctx, page = new_page(browser, w, h, theme)
+                open_voice(page)
+                try:
+                    page.locator('[data-testid="voice-tts"]').first.wait_for(timeout=10000)
+                except Exception:  # noqa: BLE001
+                    fail(f"tts-shot-{state}-{w}-{theme}", {"setup": page.locator('[data-testid="voice-setup"]').all_inner_texts(), "errors": errors[:3]})
+                page.wait_for_timeout(400)
+                name = f"voice-tts-{state}-{w}x{h}-{theme}.png"
+                page.locator('[data-testid="voice-setup"]').first.screenshot(path=str(SHOTS / name))
+                tts_shots.append(name)
+                # D4: the voice-mode question and its Yes button stay reachable in every state and size
+                # (the modal/setup scrolls; the question is never pushed out of reach).
+                yes = page.locator('[data-testid="voice-entry-ask"] [data-ask-option="yes"]').first
+                try:
+                    yes.scroll_into_view_if_needed(timeout=3000)
+                except Exception:  # noqa: BLE001
+                    fail(f"7b-yes-reachable-{state}-{w}-{theme}", {"errors": errors[:3]})
+                check(f"7b-yes-reachable-{state}-{w}-{theme}", yes.is_visible(), state=state, w=w, h=h, theme=theme)
+                ctx.close()
+    TTS_STATE["name"] = "installed"
+    check("7b-tts-setup-shots", len(tts_shots) == 12 and all((SHOTS / n).exists() for n in tts_shots), shots=tts_shots)
 
     check("8-no-page-errors", errors == [], errors=errors[:5])
     report["ok"] = True

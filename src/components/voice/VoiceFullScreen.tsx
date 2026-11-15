@@ -90,6 +90,9 @@ export function VoiceFullScreen(): React.ReactElement {
           </button>
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-exit" onClick={closeVoice}>Leave voice</button>
         </div>
+        {v.readAloud && v.readAloudNeedsSetup && (
+          <p className="wk-voice-note" data-testid="voice-readaloud-note" role="status">Read-aloud needs Voice setup.</p>
+        )}
         <VoiceSetup />
         <div className="wk-voice-trans" ref={trans} role="log" aria-live="polite" aria-label="Transcript" data-testid="voice-trans" tabIndex={0}>
           {((undoLines) => v.lines.map((l) => <Line key={l.id} l={l} undoHere={undoLines.has(l.id)} />))(latestUndoLine(v.lines))}

@@ -23,6 +23,17 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- Voice playback and session ownership (class sweep on the read-aloud work). Any stop (Leave voice, turning
+  read-aloud off, a new line) now takes playback over, so a late refusal from what it stopped sets no failure
+  banner and never leaves the speaker marked busy; Play sample settles at once whichever step it waits in
+  (fetch, resume, decode); a sample or reply played while the mic records pauses the recording and the
+  streaming partials (so it is never transcribed as your words) and resumes them after. Every async voice
+  entry point (open, speech-model download, read-aloud checks and installs, spoken lines, confirmed
+  actions, and the voice chat's creation and message send) now checks it is still in the same voice session after each wait, so a stale open can no longer
+  write into a closed or reopened session, start a poll, or ask its question twice. A voice that installed
+  while the engine step failed keeps an install retry and its own error on its row; Play sample is disabled
+  while the engine is missing or installing; the read-aloud retry clears the banner and speaks the failed
+  reply again; the "needs setup" note follows the real state; and the setup error colour applies again.
 - Graph rings (2 of 5) ring-canvas cross-review follow-up: hover dimming no longer dims the selection
   or its selected chain (the tapped focus stays lit) and compares each edge's real level, so level-6/7
   edges dim correctly on graphs deeper than five rings; a hovered ring's labels win label collisions;
@@ -31,6 +42,23 @@ npm publish dates. Every version listed here exists on
   any in-flight animation first); and lifecycle fixes — a label-only `ariaLabel` change updates the
   host, a pending zoom frame is cancelled on unmount, a failed canvas context is cached, and empty
   labels are never placed. Still not wired into any screen.
+### Changed
+
+- Voice read-aloud now speaks with **piper on this machine** (crew's `/voice/speak`) instead of the browser's
+  `speechSynthesis`, so one voice is used across the product and nothing is spoken by a remote service
+  (wicked-crew#1548, api-types 0.209.0). Voice setup gains read-aloud rows beside the speech-input rows: before
+  anything downloads they state exactly what is fetched and from where (piper-tts 1.8.0 from PyPI, GPL-3.0-or-later,
+  installed as a separate program; each voice from Hugging Face rhasspy/piper-voices with its size and licence), then
+  one consent button per voice, install progress and failure text, the platform remedy when Python is missing, and
+  Play sample / choose-voice (kept per person) for an installed voice. When read-aloud is on but piper is not set up,
+  the voice view says so and shows the setup rows instead of speaking. A crew without the routes shows the upgrade
+  line. There is no browser-speech fallback. The read-aloud wire types (`VoiceTtsStatus`, `PostVoiceTtsBody`,
+  `PostVoiceSpeakBody`) come from `wicked-crew-api-types` 0.209.0 (re-pinned from 0.206.0), not a local copy.
+  Read-aloud playback is hardened: a refused or failed read-aloud never replaces a chat answer (captions stand and
+  a short note offers a retry); Play sample stops when Voice closes, pauses the mic and never overlaps read-aloud; a
+  replaced utterance no longer un-mutes the mic under the new one; a prefetch failure is no unhandled rejection;
+  the install poll stops on close, keeps going until crew's install finishes and resumes when Voice reopens; and a
+  failed sample or install shows on its own voice row, with the known status and a read-aloud retry.
 
 ## [0.16.10] — 2026-11-14
 

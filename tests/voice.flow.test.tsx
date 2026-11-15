@@ -23,6 +23,8 @@ class FakeMic implements MicSource {
   live = false;
   async start(cb: (f: MicFrame) => void): Promise<void> { this.onFrame = cb; this.live = true; }
   record(): void { this.recording = true; }
+  pause(): void { /* no-op */ }
+  resume(): void { /* no-op */ }
   peek(): Blob | null { return this.recording ? new Blob(['partial'], { type: 'audio/wav' }) : null; }
   take(): Blob | null { const r = this.recording; this.recording = false; return r ? new Blob(['turn'], { type: 'audio/wav' }) : null; }
   stop(): void { this.stops += 1; this.live = false; this.recording = false; }
@@ -461,6 +463,19 @@ describe('voice setup: what it needs before it can hear', () => {
     render(<VoiceRoot />);
     await act(async () => { await openVoice(); });
     expect(screen.getByTestId('voice-engine-missing').textContent).toMatch(/too old for voice.*brew upgrade whisper-cpp/);
+    closeVoice();
+  });
+
+  it('read-aloud on but piper not set up: it does not speak and the view says setup is needed', async () => {
+    // A speaker that is not available stands in for piper not being installed.
+    setVoiceDeps({ speaker: { available: false, say: async (t) => { said.push(t); }, cancel: () => undefined } });
+    render(<VoiceRoot />);
+    await act(async () => { await openVoice(); });
+    await speak('yes');
+    await waitFor(() => expect(screen.getByTestId('voice-full')).toBeTruthy());
+    expect(said).toEqual([]); // nothing was ever spoken
+    expect(useVoiceStore.getState().readAloudNeedsSetup).toBe(true);
+    expect(screen.getByTestId('voice-readaloud-note').textContent).toMatch(/Read-aloud needs Voice setup/);
     closeVoice();
   });
 });

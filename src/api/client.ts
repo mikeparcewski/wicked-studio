@@ -115,6 +115,26 @@ export const KEEPALIVE_MAX_BYTES = 48 * 1024;
 /** The catalog route New job reads (wf-catalog WIRE). */
 export const WORKFLOW_CATALOG_PATH = '/workflows/catalog';
 
+/**
+ * Turn a non-OK `Response` into an `ApiError` — the ONE place the wire refusal body is parsed
+ * (`{ error? , message? }`), so `apiFetch` and the raw-audio `voiceWavFetch` read a refusal identically
+ * (EC33: `ApiError.message` is the translated sentence, the parsed body rides along for a refusal's
+ * extra fields, and `voiceErrorCode`/`isVoiceUnsupported` keep reading `status`/`body.code`).
+ */
+export async function errorFromResponse(res: Response): Promise<ApiError> {
+  const text = await res.text();
+  let msg: string;
+  let parsed: unknown;
+  try {
+    const body = JSON.parse(text) as { error?: unknown; message?: unknown };
+    parsed = body;
+    const raw = body.error ?? body.message ?? text;
+    msg = typeof raw === 'string' ? raw : JSON.stringify(raw);
+  } catch { msg = text; }
+  if (!msg) msg = res.statusText;
+  return new ApiError(res.status, msg, parsed);
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // Only advertise a JSON body when we actually send one — Fastify v5 rejects
   // an empty body with Content-Type: application/json (FST_ERR_CTP_EMPTY_JSON_BODY),
@@ -126,22 +146,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       : { ...init?.headers };
   const res = await fetch(`${apiBase()}${path}`, { ...init, headers });
   if (!res.ok) {
-    const text = await res.text();
-    let msg: string;
-    let parsed: unknown;
-    try {
-      const body = JSON.parse(text) as { error?: unknown; message?: unknown };
-      parsed = body;
-      const raw = body.error ?? body.message ?? text;
-      msg = typeof raw === 'string' ? raw : JSON.stringify(raw);
-    } catch { msg = text; }
-    if (!msg) msg = res.statusText;
     // EC33 (DES-UX-001 §7.10): the raw `API NNN:` framing never reaches the
     // DOM — ApiError's message is the translated operator sentence; matchers
     // read the typed `status`/`wire` fields instead of parsing a prefix. The
     // parsed body rides along for the fields a refusal carries beside its
-    // sentence (a skills 409's `revision`).
-    throw new ApiError(res.status, msg, parsed);
+    // sentence (a skills 409's `revision`). See `errorFromResponse`.
+    throw await errorFromResponse(res);
   }
   // A 204 has no body to parse (crew's `DELETE /tracker-links/:id`): the caller gets `undefined`.
   if (res.status === 204) return undefined as T;

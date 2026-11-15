@@ -25210,6 +25210,24 @@
       ]
     },
     {
+      "testId": "voice-readaloud-failed",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-readaloud-note",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-readaloud-retry",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
       "testId": "voice-scrim",
       "files": [
         "src/components/voice/VoiceModal.tsx"
@@ -25222,9 +25240,57 @@
       ]
     },
     {
+      "testId": "voice-setup-status-error",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
       "testId": "voice-trans",
       "files": [
         "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "testId": "voice-tts",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-tts-disclosure",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-tts-error",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-tts-failed",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-tts-progress",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-tts-retry",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-tts-unsupported",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
       ]
     },
     {
@@ -27013,6 +27079,48 @@
       "pattern": "voice-line-*",
       "files": [
         "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-tts-choose-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-tts-consent-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-tts-install-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-tts-row-error-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-tts-row-install-failed-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-tts-sample-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "pattern": "voice-tts-voice-*",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
       ]
     },
     {
