@@ -89,6 +89,9 @@ describe('repo page re-read fixes (studio#1161 P2)', () => {
     // Archived: gone from the live list. The executing snapshot must not come back.
     rerender(ui('billing', []));
     await new Promise((r) => setTimeout(r, 20));
+    // Not shown: the run's own row is gone, not merely the Working-now header.
+    expect(document.body.textContent).not.toContain('Onboard billing');
+    // Does not count as in flight: the Working-now section (active runs) is absent and nothing reads "indexing now".
     expect(screen.queryByTestId('repo-overview-working')).toBeNull();
     expect(document.body.textContent).not.toMatch(/indexing now/i);
   });
