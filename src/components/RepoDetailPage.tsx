@@ -109,13 +109,12 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   // The page's own read, overlaid by the live list (a live entry wins by id; a run only the read knows stays, so a
   // list that has not heard of a just-launched run yet never blanks it). Newest first, as the read is.
   const rawRuns = useMemo(() => {
-    if (liveRuns === undefined) return fetchedRuns;
+    // Only this repository's runs (the read's list may still be the previous repository's while a new one loads).
+    const read = fetchedRuns.filter((v) => v.session.repo_ref === repoId);
+    if (liveRuns === undefined) return read;
     const live = liveRuns.filter((v) => v.session.repo_ref === repoId);
-    // A finished run never goes back: when the read saw it finished and the list is still behind, the read wins.
-    const finishedByRead = new Set(fetchedRuns.filter((v) => TERMINAL_STATUSES.has(v.session.status)).map((v) => v.session.id));
-    const current = live.filter((v) => TERMINAL_STATUSES.has(v.session.status) || !finishedByRead.has(v.session.id));
-    const liveIds = new Set(current.map((v) => v.session.id));
-    return [...current, ...fetchedRuns.filter((v) => !liveIds.has(v.session.id))]
+    const liveIds = new Set(live.map((v) => v.session.id));
+    return [...live, ...read.filter((v) => !liveIds.has(v.session.id))]
       .sort((a, b) => (b.session.created_at ?? 0) - (a.session.created_at ?? 0));
   }, [liveRuns, fetchedRuns, repoId]);
   // (crew#1042) The runs, marked from the shared held set (subscribed): a run a Needs-you row holds is not
@@ -204,16 +203,17 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   }, [repoId, reload]);
 
   // A run of this repository going from in flight to finished (seen in the live list): the repository (its findings)
-  // and its graph (the code-graph size) are read again once. The in-flight set of the last list seen is the memory.
-  const inFlightRef = useRef<{ repoId: string; ids: Set<string> }>({ repoId, ids: new Set() });
+  // and its graph (the code-graph size) are read again once. The in-flight set of the last list seen is the memory,
+  // kept current while the first read is still pending too; a transition seen then is read once after that read lands.
+  const inFlightRef = useRef<{ repoId: string; ids: Set<string>; pending: boolean }>({ repoId, ids: new Set(), pending: false });
   useEffect(() => {
-    if (loading) return;
     const ids = new Set(rawRuns.filter((v) => !TERMINAL_STATUSES.has(v.session.status)).map((v) => v.session.id));
     const prev = inFlightRef.current;
-    inFlightRef.current = { repoId, ids };
-    if (prev.repoId !== repoId) return;
-    const finished = [...prev.ids].some((id) => !ids.has(id));
-    if (!finished) return;
+    const sameRepo = prev.repoId === repoId;
+    const pending = sameRepo && (prev.pending || [...prev.ids].some((id) => !ids.has(id)));
+    if (loading) { inFlightRef.current = { repoId, ids, pending }; return; }
+    inFlightRef.current = { repoId, ids, pending: false };
+    if (!pending) return;
     const forRepo = repoId;
     void Promise.all([
       api.listRepos().then(({ repos }) => repos.find((r) => r.id === forRepo) ?? null),

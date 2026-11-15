@@ -89,11 +89,26 @@ describe('RepoDetailPage follows the live run list (studio#1161)', () => {
     expect(screen.getByTestId('repo-overview-working')).toBeTruthy();
   });
 
-  it('a list still behind the read (run executing there, finished in the read) does not bring indexing back', async () => {
-    listRuns.mockImplementationOnce(() => Promise.resolve({ runs: [done] }));
+  it('a run that completes before the first read resolves: the repo and graph are read again once the read lands', async () => {
+    let land: (v: { runs: SessionView[] }) => void = () => {};
+    listRuns.mockImplementationOnce(() => new Promise((r) => { land = r; }));
+    const { rerender } = render(ui([running]));
+    rerender(ui([done]));
+    await new Promise((r) => setTimeout(r, 20));
+    land({ runs: [done] });
+    await screen.findByRole('heading', { name: 'billing' });
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(2));
+    expect(getRepoGraph).toHaveBeenCalledTimes(2);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(listRepos).toHaveBeenCalledTimes(2);
+    expect(getRepoGraph).toHaveBeenCalledTimes(2);
+  });
+
+  it('a run the read saw failed that the live list shows in flight again (same id) is listed under Working now', async () => {
+    const failed = makeView({ id: 'o-1', repo_ref: 'billing', workflow_id: 'onboarding', status: 'failed', problem: 'Onboard billing', created_at: 100 });
+    listRuns.mockImplementationOnce(() => Promise.resolve({ runs: [failed] }));
     render(ui([running]));
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'billing' })).toBeTruthy());
-    expect(screen.queryByTestId('repo-overview-working')).toBeNull();
-    expect(document.body.textContent).not.toMatch(/indexing now/i);
+    const working = await screen.findByTestId('repo-overview-working');
+    expect(working.textContent).toContain('Onboard billing');
   });
 });
