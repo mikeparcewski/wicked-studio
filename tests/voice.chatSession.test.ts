@@ -114,3 +114,27 @@ describe('voice chat: session ownership', () => {
     expect(said.filter((t) => t.includes('couldn’t get an answer'))).toEqual([]);
   });
 });
+
+describe('voice chat: a reopen while the chat is still being created', () => {
+  it('the old session never sends, and nothing lands in the new session', async () => {
+    let releaseOpen: (v: never) => void = () => undefined;
+    const open = vi.spyOn(api, 'openChat')
+      .mockImplementationOnce(() => new Promise((r) => { releaseOpen = r as never; }))
+      .mockResolvedValue(opened);
+    const send = vi.spyOn(api, 'sendChatMessage').mockResolvedValue({ turnId: 't1' } as never);
+    await enterVoice();
+    const stale = hear('What is running right now?');
+    await flush(); await flush();
+    const staleId = (open.mock.calls[0]![0] as { chatId: string }).chatId;
+    act(() => { closeVoice(); });
+    await enterVoice(); // reopened while the first creation is still pending
+    releaseOpen(opened);
+    await act(async () => { await stale; });
+    await flush();
+    expect(send.mock.calls.some(([id]) => id === staleId)).toBe(false); // nothing sent over the old chat
+    expect(api.endChat).toHaveBeenCalledWith(staleId);
+    expect(useVoiceStore.getState().lines.some((l) => l.who === 'you' && l.text === 'What is running right now?')).toBe(false); // the old question is not in the new session
+    expect(useVoiceStore.getState().lines.filter((l) => l.partial === true && l.who === 'it')).toEqual([]);
+    expect(said.filter((t) => t.includes('answer'))).toEqual([]);
+  });
+});

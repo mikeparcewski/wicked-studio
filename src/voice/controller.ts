@@ -141,6 +141,8 @@ async function openVoiceChat(gen: number): Promise<string> {
 async function askSystemChat(question: string): Promise<string> {
   const gen = generation;
   const id = await openVoiceChat(gen);
+  // openVoiceChat checked the session just before it returned, but this continuation runs a microtask later.
+  if (!live(gen)) throw new StaleSession();
   const sent = await api.sendChatMessage(id, question);
   if (!live(gen)) throw new StaleSession();
   const turnId = sent.turnId;
