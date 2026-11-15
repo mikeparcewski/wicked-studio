@@ -60,6 +60,13 @@ const OVERVIEW_JOBS = 5;
 /** Jobs shown on the Jobs tab before "Show all". */
 const JOBS_SHOWN = 10;
 
+/** The sentence to show for a failed code-graph read, shared by the mount read, the completion re-read and
+ *  retryGraph. An ApiError's `message` is already translateWireError's operator sentence (src/api/errors.ts:76);
+ *  the raw `.wire` is never rendered. A non-ApiError Error's own message is shown; anything without one falls back. */
+function graphReadError(e: unknown): string {
+  return e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer';
+}
+
 /**
  * §7.10 (slice X2): contributor identity de-duplicates. Git histories routinely
  * carry one person under several author rows (work + noreply emails, case
@@ -201,7 +208,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
       ).catch(() => null),
       api.getRepoGraph(repoId)
         .then(({ graph: g }) => ({ g, failed: null as string | null }))
-        .catch((e: unknown) => ({ g: null, failed: e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer' })),
+        .catch((e: unknown) => ({ g: null, failed: graphReadError(e) })),
     ]).then(([r, rs, gr]) => {
       if (cancelled) return;
       setRepo(r);
@@ -243,7 +250,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
       .catch(() => { /* a failed repository read keeps the repository shown */ });
     void api.getRepoGraph(forRepo).then(({ graph: g }) => g)
       .then((g) => { if (current()) { setGraph(g); setGraphFailed(null); } })
-      .catch((e: unknown) => { if (current()) setGraphFailed(e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer'); });
+      .catch((e: unknown) => { if (current()) setGraphFailed(graphReadError(e)); });
   }, [rawRuns, loading, repoId]);
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
@@ -252,7 +259,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     api.getRepoGraph(forRepo)
       .then(({ graph: g }) => { if (repoRef.current === forRepo) { setGraph(g); setGraphFailed(null); } })
       .catch((e: unknown) => {
-        if (repoRef.current === forRepo) setGraphFailed(e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer');
+        if (repoRef.current === forRepo) setGraphFailed(graphReadError(e));
       });
   }
 

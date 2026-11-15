@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { GraphKind, RepoEntry, SessionView } from '../src/api/types.js';
+import { ApiError } from '../src/api/errors.js';
 import { makeView } from './factories.js';
 
 /**
@@ -118,6 +119,20 @@ describe('repo page re-read fixes (studio#1161 P2)', () => {
     // The repository re-read landed (new findings) even though the graph re-read rejected (graph-failed state shows).
     await screen.findByTestId('repo-findings');
     await screen.findByTestId('repo-graph');
+  });
+
+  // Finding 4 (rule proposal:01a07c56-f241): a failed graph re-read shows ApiError.message (translateWireError's
+  // output), never the raw .wire.
+  it('shows the translated ApiError message on a failed graph re-read, not the raw wire', async () => {
+    const err = new ApiError(409, 'graph store is locked');
+    expect(err.message).not.toBe(err.wire); // translateWireError wraps the raw sentence (src/api/errors.ts:76)
+    getRepoGraph.mockResolvedValueOnce({ graph: null }).mockRejectedValue(err);
+
+    const { rerender } = render(ui('billing', [running]));
+    await screen.findByTestId('repo-overview-working');
+    rerender(ui('billing', [done]));
+    const banner = await screen.findByTestId('repo-graph');
+    expect(banner.textContent).toContain(err.message);
   });
 
   // Finding 5a: two transitions, the first re-read resolves last — only the newest (second) answer lands.
