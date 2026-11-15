@@ -29,7 +29,7 @@ npm publish dates. Every version listed here exists on
   (fetch, resume, decode); a sample or reply played while the mic records pauses the recording and the
   streaming partials (so it is never transcribed as your words) and resumes them after. Every async voice
   entry point (open, speech-model download, read-aloud checks and installs, spoken lines, confirmed
-  actions) now checks it is still in the same voice session after each wait, so a stale open can no longer
+  actions, and the voice chat's creation and message send) now checks it is still in the same voice session after each wait, so a stale open can no longer
   write into a closed or reopened session, start a poll, or ask its question twice. A voice that installed
   while the engine step failed keeps an install retry and its own error on its row; Play sample is disabled
   while the engine is missing or installing; the read-aloud retry clears the banner and speaks the failed

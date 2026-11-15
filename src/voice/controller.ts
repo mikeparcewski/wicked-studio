@@ -78,7 +78,25 @@ export interface VoiceDeps {
 }
 
 let chatId: string | null = null;
-let chatOpening: Promise<string> | null = null;
+/** The chat being created, and the voice session that asked for it: a creation belongs to ONE session, so a later
+ *  session never reuses (or adopts) one a closed session started. */
+let chatOpening: { gen: number; p: Promise<string> } | null = null;
+
+/** Thrown to a caller whose voice session ended while it waited (it ends quietly: nothing is written or said). */
+class StaleSession extends Error {
+  constructor() { super('Voice closed.'); }
+}
+
+/** Stop a chat (history kept), best effort. */
+function endChatId(id: string): void {
+  void api.endChat(id).catch(() => api.closeChat(id).catch(() => undefined));
+}
+
+/** Questions waiting on a chat reply: closing (or opening) Voice cancels each, so none lingers to its 3 minute timer. */
+const pendingAsks = new Set<() => void>();
+function cancelPendingAsks(): void {
+  for (const cancel of [...pendingAsks]) cancel();
+}
 
 async function chatSeats(): Promise<string[]> {
   let roster: RosterSeat[] | null = getCachedRoster();
@@ -90,36 +108,56 @@ async function chatSeats(): Promise<string[]> {
   return defaultSelection(roster, false).slice(0, 1);
 }
 
-async function openVoiceChat(): Promise<string> {
+/** The session's chat: the one already open, else one created for `gen`. Re-checks `gen` after each await; a chat that
+ *  came up after its session ended is stopped and never recorded or reused. */
+async function openVoiceChat(gen: number): Promise<string> {
+  if (!live(gen)) throw new StaleSession();
   if (chatId !== null) return chatId;
-  chatOpening ??= (async () => {
-    const clis = await chatSeats();
-    if (clis.length === 0) throw new Error('No agent is signed in and able to chat, so nothing can answer.');
-    const id = crypto.randomUUID();
-    const opened = await api.openChat({ chatId: id, scopeKind: 'system', clis });
-    if (!opened.seats.some((s) => s.ok)) throw new Error('No agent came up to answer.');
-    chatId = id;
-    return id;
-  })().finally(() => { chatOpening = null; });
-  return chatOpening;
+  if (chatOpening === null || chatOpening.gen !== gen) {
+    const opening: { gen: number; p: Promise<string> } = {
+      gen,
+      p: (async () => {
+        const clis = await chatSeats();
+        if (!live(gen)) throw new StaleSession();
+        if (clis.length === 0) throw new Error('No agent is signed in and able to chat, so nothing can answer.');
+        const id = crypto.randomUUID();
+        const opened = await api.openChat({ chatId: id, scopeKind: 'system', clis });
+        if (!live(gen)) { endChatId(id); throw new StaleSession(); }
+        if (!opened.seats.some((s) => s.ok)) throw new Error('No agent came up to answer.');
+        chatId = id;
+        return id;
+      })().finally(() => { if (chatOpening === opening) chatOpening = null; }),
+    };
+    chatOpening = opening;
+  }
+  const id = await chatOpening.p;
+  if (!live(gen)) throw new StaleSession();
+  return id;
 }
 
-/** The system chat, kept open for the voice session: one question in, the reply's words out. */
+/** The system chat, kept open for the voice session: one question in, the reply's words out. The session is captured
+ *  at entry and re-checked after every await: a close (or reopen) while the chat is created or the message is in
+ *  flight rejects with {@link StaleSession} and records nothing. */
 async function askSystemChat(question: string): Promise<string> {
-  const id = await openVoiceChat();
+  const gen = generation;
+  const id = await openVoiceChat(gen);
   const sent = await api.sendChatMessage(id, question);
+  if (!live(gen)) throw new StaleSession();
   const turnId = sent.turnId;
   return new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => { unsub(); reject(new Error('No answer after 3 minutes.')); }, 180_000);
+    const done = (): void => { clearTimeout(timer); unsub(); pendingAsks.delete(cancel); };
+    const cancel = (): void => { done(); reject(new StaleSession()); };
+    const timer = setTimeout(() => { done(); reject(new Error('No answer after 3 minutes.')); }, 180_000);
     const read = (): void => {
+      if (!live(gen)) { cancel(); return; }
       const turns = useAskThreadStore.getState().turns[id] ?? [];
       const reply = [...turns].reverse().find((t) => t.who !== 'you' && (turnId === undefined || t.turnId === turnId));
       if (reply === undefined || reply.pending) return;
-      clearTimeout(timer);
-      unsub();
+      done();
       if (reply.ok === false) reject(new Error(reply.text.trim() !== '' ? reply.text : 'The agent could not answer.'));
       else resolve(reply.text);
     };
+    pendingAsks.add(cancel);
     const unsub = useAskThreadStore.subscribe(read);
     read();
   });
@@ -200,7 +238,7 @@ const defaults = (): VoiceDeps => ({
   endChat: () => {
     const id = chatId;
     chatId = null;
-    if (id !== null) void api.endChat(id).catch(() => api.closeChat(id).catch(() => undefined));
+    if (id !== null) endChatId(id);
   },
   now: () => Date.now(),
   wait: (ms) => new Promise((r) => { setTimeout(r, ms); }),
@@ -1306,6 +1344,7 @@ export function closeVoice(): void {
   recordingAsk = null;
   stopPartials();
   vad.reset();
+  cancelPendingAsks();
   mic?.stop();
   mic = null;
   capturePaused = false;
