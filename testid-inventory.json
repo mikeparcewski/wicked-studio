@@ -7526,6 +7526,12 @@
       ]
     },
     {
+      "testId": "gate-posture-power",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "gate-toast",
       "files": [
         "src/components/GateNotifications.tsx"
@@ -9327,6 +9333,12 @@
     },
     {
       "testId": "launch-plan-note",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-power-toggle",
       "files": [
         "src/components/ChatInput.tsx"
       ]

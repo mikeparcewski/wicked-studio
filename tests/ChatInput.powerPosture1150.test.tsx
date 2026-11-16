@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ChatInput, POWER_GATE_WORDS } from '../src/components/ChatInput.js';
+import { ChatInput, POWER_GATE_WORDS, POWER_NO_GATE_WORDS } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
 import type { LaunchBodyWithDeliver } from '../src/api/types.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
@@ -16,26 +16,27 @@ import { pickLaunchWorkflow } from './launchWorkflowPick.js';
 
 const REPOS = [{ id: 'wicked-studio', name: 'wicked-studio', root_path: '/tmp/studio' }];
 
-function setup(powerModeDefault: boolean | undefined, powerCap = true): void {
+function setup(powerModeDefault: boolean | undefined | 'fail', powerCap = true): void {
   vi.restoreAllMocks();
   vi.spyOn(client.api, 'getRoster').mockResolvedValue({
     roster: [{ key: 'claude', display_name: 'claude', binary: 'claude', enabled_for_council: true }],
   });
   vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: REPOS as never });
-  vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [{ id: 'feature', is_system: false, phases: [] }] });
+  vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [{ id: 'feature', is_system: false, phases: [] }, { id: 'onboarding', is_system: true, phases: [] }] });
   vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
   vi.spyOn(client.api, 'launchRun').mockResolvedValue({ runId: 'r-new' });
-  vi.spyOn(client.api, 'getSettings').mockResolvedValue({ settings: powerModeDefault === undefined ? {} : { powerModeDefault } } as never);
+  if (powerModeDefault === 'fail') vi.spyOn(client.api, 'getSettings').mockRejectedValue(new Error('offline'));
+  else vi.spyOn(client.api, 'getSettings').mockResolvedValue({ settings: powerModeDefault === undefined ? {} : { powerModeDefault } } as never);
   useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS, loaded: true, persist: 'unknown' });
   useCapabilities.setState({ loaded: true, powerMode: powerCap });
   localStorage.clear();
   clearRetryPrefill();
 }
 
-async function fill(): Promise<ReturnType<typeof userEvent.setup>> {
+async function fill(opts: { mode?: 'ask' | 'autonomous'; workflow?: string } = {}): Promise<ReturnType<typeof userEvent.setup>> {
   const user = userEvent.setup();
-  render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
-  await pickLaunchWorkflow(user, 'feature');
+  render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} {...(opts.mode !== undefined ? { mode: opts.mode } : {})} />);
+  await pickLaunchWorkflow(user, opts.workflow ?? 'feature');
   await user.click(screen.getByRole('button', { name: /open launch options/i }));
   await user.click(await screen.findByTestId('launch-repo-wicked-studio'));
   await user.click(screen.getByRole('button', { name: /open launch options/i }));
@@ -53,11 +54,11 @@ async function send(user: ReturnType<typeof userEvent.setup>): Promise<LaunchBod
 describe('New job form: the gate it promises is the gate the run keeps (studio#1150)', () => {
   beforeEach(() => setup(undefined));
 
-  it('power on (the default): no posture select, "At hand-off (power mode)", and no power key is sent', async () => {
+  it('power on (the default): the posture reads "At hand-off (power mode)" and no power key is sent', async () => {
     const user = await fill();
     await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_GATE_WORDS));
     expect(screen.queryByTestId('gate-posture')).toBeNull();
-    expect(screen.getByTestId('gate-posture-power').textContent).toMatch(/At hand-off \(power mode\)/);
+    expect((screen.getByTestId('gate-posture-power') as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('At hand-off (power mode)');
     expect(screen.getByTestId('launch-confirm').textContent).not.toMatch(/first gate/);
     const body = await send(user);
     expect(body.power).toBeUndefined();
@@ -74,11 +75,47 @@ describe('New job form: the gate it promises is the gate the run keeps (studio#1
     expect(body.humanConfirm).toMatch(/^before:/);
   });
 
+  it('off then on again follows the setting: no power key is sent', async () => {
+    const user = await fill();
+    await user.click(await screen.findByTestId('launch-power-toggle'));
+    await user.click(screen.getByTestId('launch-power-toggle'));
+    expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_GATE_WORDS);
+    expect((await send(user)).power).toBeUndefined();
+  });
+
+  it('power on with "Never": no gate at all is promised', async () => {
+    const user = await fill();
+    await user.selectOptions(await screen.findByTestId('gate-posture-power'), 'none');
+    expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_NO_GATE_WORDS);
+    expect((await send(user)).power).toBeUndefined();
+  });
+
+  it('Autonomous mode under power: no gate at all is promised', async () => {
+    await fill({ mode: 'autonomous' });
+    await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_NO_GATE_WORDS));
+  });
+
+  it('Ask mode (every step) is never a power launch: its posture shows and the body says power: false', async () => {
+    const user = await fill({ mode: 'ask' });
+    expect(screen.queryByTestId('launch-power-toggle')).toBeNull();
+    expect(screen.getByTestId('launch-confirm-gate').textContent).toBe('every unit');
+    expect((await send(user)).power).toBe(false);
+  });
+
+  it('a settings read that failed asserts nothing about power: the form reads as before', async () => {
+    setup('fail');
+    await fill();
+    expect(screen.queryByTestId('launch-power-toggle')).toBeNull();
+    expect(screen.getByTestId('gate-posture')).toBeInTheDocument();
+    expect(screen.getByTestId('launch-confirm-gate').textContent).toBe('first gate');
+  });
+
   it('the setting off: the posture select shows, as before, and nothing is sent about power', async () => {
     setup(false);
     const user = await fill();
     await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe('first gate'));
     expect(screen.getByTestId('gate-posture')).toBeInTheDocument();
+    expect(screen.queryByTestId('launch-power-toggle'), 'the setting off: no new switch').toBeNull();
     expect((await send(user)).power).toBeUndefined();
   });
 
