@@ -23,6 +23,9 @@ import { GateRow } from '../src/components/session/GateRow.js';
 import { flushDecisionsForTest, resetDecisionsForTest, setUndoWindowForTest } from '../src/board/undoQueue.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { makeUnit, makeView } from './factories.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { GateAction } from '../src/board/gateContract.js';
 
 const RUN = 'r-1102';
 const NOW = 1_700_000_000_000;
@@ -146,6 +149,23 @@ describe('ProposalCard: the card\'s answers equal the gate\'s list', () => {
     const gate = gateOf({ ord: 1, gateKind: 'plan_approval', prompt: 'Approve plan rev 1: build, review.', fromRead: true, actions: listed('approve', 'edit_plan', 'request_changes', 'reject') });
     expect(answers(gate, false)).toEqual(['approve', 'reject', 'send-back']);
   });
+  it('a listed plan send-back submits request_changes with the note and the held revision, under its own words', async () => {
+    setUndoWindowForTest(0);
+    vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ ok: true } as never);
+    const gate = gateOf({ ord: 1, gateKind: 'plan_approval', prompt: 'Approve plan rev 3: build, review.', fromRead: true, actionsRead: true, planRev: 3,
+      actions: listed('approve', 'request_changes', 'reject').map((a) => ({ ...a, needsPlanRev: true as const })) });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    render(<ProposalCard view={view} chain={CHAIN} acceptance={null} />);
+    fireEvent.click(document.querySelector<HTMLElement>('[data-option="send-back"]')!);
+    const box = await screen.findByRole('textbox');
+    fireEvent.change(box, { target: { value: 'split the build step' } });
+    const send = screen.getByRole('button', { name: 'Send the plan back' });
+    expect(screen.queryByRole('button', { name: /Stop with this reason/ })).toBeNull();
+    fireEvent.click(send);
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(vi.mocked(client.api.confirmGate).mock.calls[0]?.[1]).toMatchObject({ approve: false, action: 'request_changes', amend: 'split the build step', ord: 1, planRev: 3 });
+  });
   it('deliver with the engine\'s list: every listed answer, nothing else', () => {
     const gate = gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.', fromRead: true, actions: listed('approve', 'amend_intent', 'request_changes', 'reject') });
     expect(answers(gate, false)).toEqual(['act:amend_intent', 'approve', 'reject', 'send-back']);
@@ -211,7 +231,7 @@ describe('ProposalCard: the card\'s answers equal the gate\'s list', () => {
 
   it('deliver uses a skipQe offer already on the gate without acceptance or another read', async () => {
     // A gate carrying crew's skipQe came from a gate read (a live frame never carries it): no second read for its list.
-    answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Deliver?', skipQe: SKIP!, fromRead: true }), null);
+    answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Deliver?', skipQe: SKIP!, fromRead: true, actionsRead: true }), null);
     expect(await screen.findByTestId('session-proposal-skip-qe')).toBeTruthy();
     const deliver = document.querySelector<HTMLElement>('[data-option="go"]')!;
     expect(within(deliver).queryByTestId('ask-recommended')).toBeNull();
@@ -361,6 +381,32 @@ describe('GateRow submits, for each action it draws, the decision the gate lists
     return call === undefined ? null : (call[1] as { action?: string; approve?: boolean });
   };
 
+  // studio#1170 review r1: with the engine's list, every control the row draws SUBMITS a listed token (the wire body,
+  // not the model), for every shape the engine pins — and a steer keeps where its note lands (`amendScope`).
+  const ENGINE = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/gate-actions.engine.json'), 'utf8')) as Record<string, { gateKind: string; actions: GateAction[] }>;
+  for (const [name, shape] of Object.entries(ENGINE).filter(([, sh]) => sh.gateKind !== 'plan_approval' && sh.gateKind !== 'deliver')) {
+    it(`engine shape ${name}: every drawn control submits a listed token`, async () => {
+      const gate = gateOf({ ord: 2, gateKind: shape.gateKind, prompt: 'The gate.', actions: shape.actions, actionsRead: true });
+      const c: EscCase = { kind: name, gate, units: UNITS, events: [], engine: shape.actions.map((a) => a.action) };
+      const m = sessionGateChoices({ runId: RUN, gate, units: UNITS, events: [], pool: ['claude', 'codex', 'pi'], roster: null, actions: shape.actions })!;
+      for (const ch of [...m.choices, ...m.overflow].filter((x) => x.decision !== null && x.key !== 'rerun')) {
+        const body = await submitted(c, ch.key);
+        expect(body, `${name}: ${ch.key} sent nothing`).not.toBeNull();
+        expect(c.engine, `${name}: ${ch.key}`).toContain(tokenOf(body));
+      }
+    });
+  }
+  it('a listed steer before a non-creator step still lands on the next creator (amendScope)', async () => {
+    const units = [
+      makeUnit({ id: `${RUN}:triage`, session_id: RUN, ord: 1, role: 'neutral', status: 'pending', stage: 'build', assigned_cli: 'claude' }),
+      makeUnit({ id: `${RUN}:fix`, session_id: RUN, ord: 2, role: 'creator', status: 'pending', stage: 'build', assigned_cli: 'claude' }),
+    ];
+    const gate = gateOf({ ord: 1, gateKind: 'def', prompt: 'Approve before unit 1 runs.', actionsRead: true,
+      actions: [{ action: 'approve', intent: 'continue', note: 'optional' }, { action: 'reject', intent: 'stop', note: 'none' }] });
+    const body = await submitted({ kind: 'steer', gate, units, events: [], engine: ['approve', 'reject'] }, 'steer');
+    expect(body).toMatchObject({ approve: true, amendScope: 'creator' });
+  });
+
   for (const c of ESC) {
     it(c.kind, async () => {
       const m = rowModelOf(c);
@@ -459,7 +505,7 @@ describe('ProposalCard submits, for each answer it draws, the decision the gate 
     expect(deliver.getAttribute('aria-disabled')).not.toBe('true');
   });
   it('the same gate with cached skipQe offers Deliver again when acceptance changes from refused to satisfied', () => {
-    const gate = gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP, prompt: 'Deliver?', fromRead: true });
+    const gate = gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP, prompt: 'Deliver?', fromRead: true, actionsRead: true });
     useGateStore.setState({ gates: { [RUN]: gate } });
     const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
     const refused = { required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' };

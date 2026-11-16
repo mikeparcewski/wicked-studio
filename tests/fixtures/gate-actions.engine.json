@@ -393,7 +393,7 @@
         "intent": "reseat_and_retry",
         "note": "optional",
         "seats": [
-          "codex"
+          "claude"
         ]
       },
       {

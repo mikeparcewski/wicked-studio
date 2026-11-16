@@ -23,6 +23,13 @@ npm publish dates. Every version listed here exists on
   review lands with carried items, and no retry is offered there (studio#1155, studio#1167). The distinct-evaluator
   retry offers Reassign on each distinct seat (studio#1174). A plan gate's send-back and every other listed answer
   get a control (studio#1113). Without the list (an older daemon) the cards keep their own resolver.
+- Gate cards render the answers the engine takes (studio#1170). When crew's gate read lists them (`GateInfo.actions`,
+  api-types 0.211.0, from wicked-core `gate_actions`), the session gate row draws one control per listed answer and
+  none other, worded by what it does at that gate, and the plan and hand-over card takes its answers from the list
+  (a listed send-back and every other listed answer get a way). The capped review lands with carried items, and no
+  retry is offered there (studio#1155, studio#1167). The distinct-evaluator retry offers Reassign on each distinct
+  seat (studio#1174). Not yet on the list: consent and free-text rows, a chat job's plan passage, and a chatless
+  card's plan edit (studio#1175, studio#1177). Without the list (an older daemon) the cards keep their own resolver.
 
 ## [0.16.11] — 2026-11-15
 

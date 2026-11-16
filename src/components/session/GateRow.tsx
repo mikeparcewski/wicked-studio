@@ -177,7 +177,9 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const liveSkipQe = useGateSkipQe(runId, gateInstance(gate), gate?.ord, refusedHandOver);
   // studio#1170: every answer the engine takes at this gate now (crew's gate read). When the daemon lists them, the
   // row's answers are exactly these.
-  const actions = useGateActions(runId, gate);
+  // A seat signing in changes a reassign's seats: the signed-in roster is the list's refresh key.
+  const signedIn = (roster ?? []).filter((r) => r.signed_in !== false).map((r) => r.key).join(',');
+  const actions = useGateActions(runId, gate, signedIn);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
     const read = gate.skipQe === undefined && liveSkipQe !== null ? { ...gate, skipQe: liveSkipQe } : gate;

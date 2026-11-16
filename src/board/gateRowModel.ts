@@ -506,7 +506,17 @@ const CONTRACT_EXEMPT: ReadonlySet<SessionGateReason> = new Set(['consent', 'fre
  */
 function withContract(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null): GateRowModel {
   const label = (cli: string): string => roster?.find((r) => r.key === cli)?.display_name ?? cli;
-  const { choices, overflow } = contractChoices(actions, label);
+  const listedChoices = contractChoices(actions, label);
+  // Where a note on an approve LANDS is the template's to know (studio#1170 review r1): a steer before a non-creator
+  // step goes to the next creator (`amendScope: 'creator'`, `steerScopeTarget`). The listed steer keeps the template's
+  // own wire body when both are a plain approve-with-note — never when the list says the note does something else.
+  const own = [...model.choices, ...model.overflow].find((c) => c.key === 'steer');
+  const approve = actions.find((a) => a.action === 'approve');
+  const ownBody = own?.decision !== null && own?.decision !== undefined && own.decision.approve === true
+    && (own.decision as { action?: string }).action === undefined && approve?.noteIntent === undefined ? own.decision : null;
+  const keepScope = (c: GateRowChoice): GateRowChoice => (c.key === 'steer' && ownBody !== null ? { ...c, decision: ownBody } : c);
+  const choices = listedChoices.choices.map(keepScope);
+  const overflow = listedChoices.overflow.map(keepScope);
   const rerun = [...model.choices, ...model.overflow].find((c) => c.key === 'rerun');
   if (rerun !== undefined && actions.some((a) => a.action === OFFER_REQUEST_CHANGES)) overflow.push(rerun);
   const recKey = model.recommended !== null ? model.choices[model.recommended]?.key : undefined;

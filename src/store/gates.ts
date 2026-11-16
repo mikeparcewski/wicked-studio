@@ -46,6 +46,11 @@ export interface OpenGate {
   /** (studio#1170, api-types 0.211.0) EVERY answer the gate takes now, off `GET /runs/:id/gate`; absent on a live frame
    *  (never carried) and from a daemon that sends none. */
   actions?: GateAction[];
+  /** (api-types 0.211.0) A plan gate's held revision, served beside `actions`: what a plan answer's `planRev` names. */
+  planRev?: number;
+  /** (studio#1170) Set on a gate built from a `GET /runs/:id/gate` read: its `actions` (or their absence: a daemon
+   *  without the list) is that read's. A live frame's gate never has it, so its list is read once. */
+  actionsRead?: true;
   /** F31: set when the gate came from a `GET /runs/:id/gate` read (a page load, a late join), not a live frame. The
    *  toast strip orders read gates by their runs' age and queues live ones after them in arrival order. */
   fromRead?: true;
@@ -105,6 +110,8 @@ export function gateFromInfo(g: GateInfo): OpenGate {
     ...(recommended !== undefined ? { recommended } : {}),
     ...(g.skipQe !== undefined && g.skipQe !== null ? { skipQe: g.skipQe } : {}),
     ...(actions !== undefined ? { actions } : {}),
+    ...(typeof bag['planRev'] === 'number' ? { planRev: bag['planRev'] as number } : {}),
+    actionsRead: true,
     ...gateKindOf(g),
   };
 }

@@ -1,31 +1,35 @@
-import { useEffect, useState } from 'react';
-import { api } from '../api/client.js';
-import { gateActionsOf, type GateAction } from '../board/gateContract.js';
+import { useEffect, useRef } from 'react';
+import { refreshGate } from '../board/gateActions.js';
+import type { GateAction } from '../board/gateContract.js';
 import { gateInstance } from '../board/proposalCard.js';
 import type { OpenGate } from '../store/gates.js';
+import { useCapabilities } from '../store/capabilities.js';
 
 /**
- * (studio#1170, api-types 0.211.0) EVERY answer a run's open gate takes now. A gate that came from `GET /runs/:id/gate`
- * carries the list (`gateFromInfo`), and a read that carried none is a daemon without it: no second read. A gate opened by
- * a live `awaitingHuman` frame (which never carries the list) is read ONCE for it. `undefined` until read, for another
- * gate, on a failed read, and from a daemon that sends none: the card then keeps its own resolver.
+ * (studio#1170, api-types 0.211.0) EVERY answer a run's open gate takes now, off the gate itself (from a daemon whose
+ * `capabilities.gateActions` says it serves them). A gate built from
+ * `GET /runs/:id/gate` carries the read's list (`actionsRead`; no list = a daemon without it). A gate a live
+ * `awaitingHuman` frame opened (which never carries the list) is read ONCE, through the store's own read
+ * (`refreshGate`): the whole gate is replaced by what the daemon says now, so a list is never attached to a gate it
+ * was not read for. `refresh` (when it changes, while this gate is open) reads it again: what makes the list stale —
+ * a QE acceptance that passed, a seat signed in — is not a new gate. `undefined` = no list: keep the card's resolver.
  */
-export function useGateActions(runId: string, gate: OpenGate | undefined): readonly GateAction[] | undefined {
+export function useGateActions(runId: string, gate: OpenGate | undefined, refresh = ''): readonly GateAction[] | undefined {
   const instance = gateInstance(gate);
-  const known = gate?.actions;
-  const needsRead = gate !== undefined && known === undefined && gate.fromRead !== true;
-  const ord = gate?.ord;
-  const key = `${runId}:${instance ?? ''}`;
-  const [read, setRead] = useState<{ key: string; actions: GateAction[] | undefined } | null>(null);
+  // Only a daemon that serves the list (`capabilities.gateActions`) is asked for it.
+  const served = useCapabilities((c) => c.gateActions);
+  const needsRead = served && gate !== undefined && gate.actions === undefined && gate.actionsRead !== true;
   useEffect(() => {
-    if (!needsRead) return undefined;
-    let live = true;
-    api.getGate(runId).then(
-      (info) => { if (live) setRead({ key, actions: (info as { ord?: unknown }).ord === ord ? gateActionsOf(info) : undefined }); },
-      () => { if (live) setRead({ key, actions: undefined }); },
-    );
-    return () => { live = false; };
-  }, [runId, ord, key, needsRead]);
-  if (known !== undefined) return known;
-  return read?.key === key ? read.actions : undefined;
+    if (needsRead) void refreshGate(runId);
+  }, [runId, instance, needsRead]);
+  // A change of what the list depends on, after the first render of this gate: read it again.
+  const seen = useRef<{ instance: string | null; refresh: string } | null>(null);
+  useEffect(() => {
+    const prev = seen.current;
+    seen.current = { instance, refresh };
+    // Only a gate that HAS a list can hold a stale one (a daemon without it has nothing to re-read).
+    if (gate?.actions === undefined || prev === null || prev.instance !== instance || prev.refresh === refresh) return;
+    void refreshGate(runId);
+  }, [runId, instance, refresh, gate]);
+  return gate?.actions;
 }
