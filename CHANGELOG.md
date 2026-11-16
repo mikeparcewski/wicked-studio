@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.11] — 2026-11-15
+
+Patch (fix release): a repository's page follows the live run list, so "Indexing now" / "Working" clear when onboarding
+finishes without a reload (studio#1161); a private repository added by URL shows crew's own refusal sentence
+(`repo_clone_denied`, crew#1535); and the three RingGraph fixes of #1158 are pinned by fail-first tests (studio#1159).
+Also carries #1154, the graph rings ring canvas (part 2 of 5; not wired into any screen yet). Carries #1154, #1158 and
+#1166. Bundled by the next wicked-crew release.
+
 ### Added
 
 - Graph rings (2 of 5): the cytoscape ring canvas `RingGraph` (concentric layout with a π/n_k angle
@@ -3577,7 +3585,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.10...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.11...HEAD
+[0.16.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.10...v0.16.11
 [0.16.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.9...v0.16.10
 [0.16.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.8...v0.16.9
 [0.16.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.7...v0.16.8
