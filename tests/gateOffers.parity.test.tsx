@@ -25,7 +25,7 @@ import { useRunEventStore } from '../src/store/events.js';
 import { makeUnit, makeView } from './factories.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { GateAction } from '../src/board/gateContract.js';
+import { choiceTokens, type GateAction } from '../src/board/gateContract.js';
 
 const RUN = 'r-1102';
 const NOW = 1_700_000_000_000;
@@ -392,7 +392,47 @@ describe('GateRow submits, for each action it draws, the decision the gate lists
       for (const ch of [...m.choices, ...m.overflow].filter((x) => x.decision !== null && x.key !== 'rerun')) {
         const body = await submitted(c, ch.key);
         expect(body, `${name}: ${ch.key} sent nothing`).not.toBeNull();
-        expect(c.engine, `${name}: ${ch.key}`).toContain(tokenOf(body));
+        // The control sends the very answer it is drawn for (review r2: not just some listed one).
+        expect(tokenOf(body), `${name}: ${ch.key}`).toBe(choiceTokens([ch])[0]);
+      }
+      // A reassign control re-seats on exactly its seat.
+      for (const ch of [...m.choices, ...m.overflow].filter((x) => x.reassignCli !== undefined)) {
+        const reassign = vi.spyOn(client.api, 'reassignRun').mockResolvedValue({ status: 'ok' } as never);
+        await submitted(c, ch.key);
+        expect(reassign, `${name}: ${ch.key}`).toHaveBeenCalledWith(RUN, ch.reassignCli);
+        reassign.mockRestore();
+      }
+    });
+  }
+  const CARD_CHAIN: ChainModel = { source: 'units', steps: [], proposed: false, transportLine: null, done: 0, total: 0, checked: null };
+  // …and the plan and hand-over shapes through the card that draws them: each listed way submits its own token (a plan
+  // edit needs the chat's editor, studio#1175).
+  for (const [name, shape] of Object.entries(ENGINE).filter(([, sh]) => sh.gateKind === 'plan_approval' || sh.gateKind === 'deliver')) {
+    it(`engine shape ${name}: every way the card draws submits its own listed token`, async () => {
+      setUndoWindowForTest(0);
+      const tokens = shape.actions.map((a) => a.action).filter((t) => t !== 'edit_plan' && t !== 'reassign');
+      for (const token of tokens) {
+        vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ ok: true } as never);
+        vi.mocked(client.api.confirmGate).mockClear();
+        useGateActionStore.setState({ byGate: {} });
+        const gate = gateOf({ ord: shape.gateKind === 'deliver' ? 3 : 1, gateKind: shape.gateKind, prompt: 'The gate.', fromRead: true, actionsRead: true, actions: shape.actions, ...(shape.gateKind === 'plan_approval' ? { planRev: 1 } : {}) });
+        useGateStore.setState({ gates: { [RUN]: gate } });
+        render(<ProposalCard view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} chain={CARD_CHAIN} acceptance={null} />);
+        const id = token === 'approve' ? 'go' : token === 'reject' ? 'end' : token === 'request_changes' ? 'send-back' : token === 'skip_qe' ? 'skip-qe' : `act:${token}`;
+        const way = document.querySelector<HTMLElement>(`[data-option="${id}"]`);
+        expect(way, `${name}: ${token} is drawn`).not.toBeNull();
+        fireEvent.click(way!);
+        const box = screen.queryByRole('textbox');
+        if (box !== null) fireEvent.change(box, { target: { value: 'because' } });
+        const primary = screen.queryByTestId('session-proposal-skip-qe-send') ?? screen.queryByTestId('session-proposal-go') ?? screen.queryByTestId('session-proposal-primary');
+        if (primary !== null) fireEvent.click(primary);
+        const yes = screen.queryByTestId('session-proposal-confirm-yes');
+        if (yes !== null) fireEvent.click(yes);
+        await act(async () => { await flushDecisionsForTest(); });
+        const sent = vi.mocked(client.api.confirmGate).mock.calls[0]?.[1];
+        expect(sent, `${name}: ${token} sent nothing`).toBeDefined();
+        expect(tokenOf(sent), `${name}: ${token}`).toBe(token);
+        cleanup();
       }
     });
   }
