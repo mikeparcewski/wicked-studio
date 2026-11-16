@@ -20092,6 +20092,12 @@
       ]
     },
     {
+      "testId": "session-proposal-send-back",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-skip-qe",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -26965,6 +26971,12 @@
       "pattern": "seat-signin-*",
       "files": [
         "src/components/ContextPopover.tsx"
+      ]
+    },
+    {
+      "pattern": "session-proposal-act-*",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
       ]
     },
     {

@@ -1,0 +1,491 @@
+{
+  "adj": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "land_with_carried_items",
+        "note": "optional"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "review_adjudication",
+    "ord": 4
+  },
+  "adj-qe": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "land_with_carried_items",
+        "note": "optional"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "review_adjudication",
+    "ord": 4
+  },
+  "adj-rules": {
+    "actions": [
+      {
+        "action": "retry_rules",
+        "intent": "retry_rules",
+        "note": "none"
+      },
+      {
+        "action": "skip_rules",
+        "intent": "skip_rules",
+        "note": "required",
+        "rules": [
+          "R1"
+        ]
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "review_adjudication",
+    "ord": 4
+  },
+  "adj-rules-settled": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "land_with_carried_items",
+        "note": "optional"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "review_adjudication",
+    "ord": 4
+  },
+  "def": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "continue",
+        "note": "optional"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reassign",
+        "intent": "reseat_and_retry",
+        "note": "optional",
+        "seats": [
+          "claude"
+        ]
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "def",
+    "ord": 4
+  },
+  "deliver": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "deliver",
+        "note": "optional"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "deliver",
+    "ord": 5
+  },
+  "deliver-qe": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "deliver",
+        "note": "optional"
+      },
+      {
+        "action": "skip_qe",
+        "intent": "skip_qe",
+        "note": "required"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "deliver",
+    "ord": 5
+  },
+  "distinct": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "retry",
+        "note": "optional"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reassign",
+        "benchedSeats": [
+          "pi"
+        ],
+        "intent": "reseat_and_retry",
+        "note": "optional",
+        "seats": [
+          "codex",
+          "pi"
+        ]
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "escalation",
+    "ord": 4
+  },
+  "floor": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "retry",
+        "note": "optional"
+      },
+      {
+        "action": "operator_judgment",
+        "intent": "operator_judgment",
+        "note": "required"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "escalation",
+    "ord": 3
+  },
+  "floor-fix": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "retry",
+        "note": "optional",
+        "noteIntent": "floor_fix"
+      },
+      {
+        "action": "operator_judgment",
+        "intent": "operator_judgment",
+        "note": "required"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reassign",
+        "intent": "reseat_and_retry",
+        "note": "optional",
+        "seats": [
+          "codex"
+        ]
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "escalation",
+    "ord": 4
+  },
+  "no-judge": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "operator_judgment",
+        "note": "optional"
+      },
+      {
+        "action": "rejudge",
+        "intent": "rejudge",
+        "note": "none"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "escalation",
+    "ord": 3
+  },
+  "plan": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "approve_plan",
+        "needsPlanRev": true,
+        "note": "optional"
+      },
+      {
+        "action": "edit_plan",
+        "intent": "edit_plan",
+        "needsPlanRev": true,
+        "note": "optional"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "needsPlanRev": true,
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "needsPlanRev": true,
+        "note": "none"
+      }
+    ],
+    "gateKind": "plan_approval",
+    "ord": 2,
+    "planRev": 1
+  },
+  "plan-ran": {
+    "actions": [
+      {
+        "action": "reject",
+        "intent": "stop",
+        "needsPlanRev": true,
+        "note": "none"
+      }
+    ],
+    "gateKind": "plan_approval",
+    "ord": 2,
+    "planRev": 1
+  },
+  "qe-fail": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "retry",
+        "note": "optional"
+      },
+      {
+        "action": "skip_qe",
+        "intent": "skip_qe",
+        "note": "required"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reassign",
+        "intent": "reseat_and_retry",
+        "note": "optional",
+        "seats": [
+          "codex"
+        ]
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "escalation",
+    "ord": 4
+  },
+  "qe-inconclusive": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "operator_judgment",
+        "note": "optional"
+      },
+      {
+        "action": "retry_qe",
+        "intent": "retry_qe",
+        "note": "none"
+      },
+      {
+        "action": "skip_qe",
+        "intent": "skip_qe",
+        "note": "required"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "escalation",
+    "ord": 4
+  },
+  "rules": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "retry",
+        "note": "optional"
+      },
+      {
+        "action": "retry_rules",
+        "intent": "retry_rules",
+        "note": "none"
+      },
+      {
+        "action": "skip_rules",
+        "intent": "skip_rules",
+        "note": "required",
+        "rules": [
+          "R1"
+        ]
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reassign",
+        "intent": "reseat_and_retry",
+        "note": "optional",
+        "seats": [
+          "pi"
+        ]
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "escalation",
+    "ord": 3
+  }
+}

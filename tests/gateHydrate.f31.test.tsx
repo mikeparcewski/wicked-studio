@@ -109,7 +109,10 @@ describe('a waiting run’s thread reads its own gate', () => {
     useGateStore.setState({ gates: {}, approaching: {} });
     render(<RunBlock view={makeView({ id: RUN, status: 'executing', problem: 'x' })} badge={0} sessionId={`run:${RUN}`} />);
     await new Promise((r) => setTimeout(r, 20));
-    expect(getGate).not.toHaveBeenCalled();
+    // No hydrating read (a cached gate needs none). studio#1170: a gate a live frame opened is read once for its list of
+    // answers (`useGateActions`, the one-argument read), never by the hydration path (which passes its deadline signal).
+    expect(getGate).not.toHaveBeenCalledWith(RUN, expect.any(AbortSignal));
+    expect(getGate.mock.calls.length).toBeLessThanOrEqual(1);
   });
 });
 

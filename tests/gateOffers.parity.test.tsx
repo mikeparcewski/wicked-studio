@@ -138,6 +138,22 @@ describe('ProposalCard: the card\'s answers equal the gate\'s list', () => {
   it('plan_approval', () => {
     expect(answers(gateOf({ ord: 1, gateKind: 'plan_approval', prompt: 'Approve plan rev 1: build, review.' }), false)).toEqual(['approve', 'reject']);
   });
+  // studio#1170 / #1113: with the engine's list on the gate (crew's read), the card draws every listed answer — a plan
+  // gate's send-back, a hand-over's intent amendment — and nothing the list does not name. (A plan edit needs the chat's
+  // plan editor; a chatless card does not draw it: a known limit.)
+  const listed = (...tokens: string[]) => tokens.map((action) => ({ action, intent: action, note: (action === 'reject' ? 'none' : action === 'approve' || action === 'request_changes' ? 'optional' : 'required') as 'none' | 'optional' | 'required' }));
+  it('plan_approval with the engine\'s list (a chatless run\'s card too)', () => {
+    const gate = gateOf({ ord: 1, gateKind: 'plan_approval', prompt: 'Approve plan rev 1: build, review.', fromRead: true, actions: listed('approve', 'edit_plan', 'request_changes', 'reject') });
+    expect(answers(gate, false)).toEqual(['approve', 'reject', 'send-back']);
+  });
+  it('deliver with the engine\'s list: every listed answer, nothing else', () => {
+    const gate = gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.', fromRead: true, actions: listed('approve', 'amend_intent', 'request_changes', 'reject') });
+    expect(answers(gate, false)).toEqual(['act:amend_intent', 'approve', 'reject', 'send-back']);
+  });
+  it('a list without an approve draws none, whatever the template would', () => {
+    const gate = gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.', fromRead: true, actions: listed('skip_qe', 'reject') });
+    expect(answers(gate, true)).toEqual(['reject', 'skip_qe']);
+  });
   it('deliver', () => {
     expect(answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Approve delivery before unit 3 runs.' }), false)).toEqual(['approve', 'reject']);
   });
@@ -194,7 +210,8 @@ describe('ProposalCard: the card\'s answers equal the gate\'s list', () => {
   });
 
   it('deliver uses a skipQe offer already on the gate without acceptance or another read', async () => {
-    answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Deliver?', skipQe: SKIP! }), null);
+    // A gate carrying crew's skipQe came from a gate read (a live frame never carries it): no second read for its list.
+    answers(gateOf({ ord: 3, gateKind: 'deliver', prompt: 'Deliver?', skipQe: SKIP!, fromRead: true }), null);
     expect(await screen.findByTestId('session-proposal-skip-qe')).toBeTruthy();
     const deliver = document.querySelector<HTMLElement>('[data-option="go"]')!;
     expect(within(deliver).queryByTestId('ask-recommended')).toBeNull();
@@ -285,6 +302,44 @@ describe('GateRow submits, for each action it draws, the decision the gate lists
     expect(line).toContainElement(screen.getByTestId('session-gate-floor-override-consequence'));
     expect(screen.getAllByText(/Overrides the failed floor/)).toHaveLength(1);
     expect(screen.queryByText('Preview:')).toBeNull();
+  });
+
+  // studio#1170: the session gate row draws the engine's list and nothing else — the capped QE review lands (never
+  // "Retry with a note", studio#1155 / #1167), the distinct_evaluator retry offers Reassign on the distinct seat.
+  const radios = (): string[] => screen.queryAllByRole('radio').map((r) => r.getAttribute('aria-label') ?? r.textContent ?? '');
+  it('capped QE review with the engine\'s list: Land, Send back, Stop; no retry', async () => {
+    const actions = [
+      { action: 'approve', intent: 'land_with_carried_items', note: 'optional' as const },
+      { action: 'request_changes', intent: 'send_back', note: 'optional' as const },
+      { action: 'reject', intent: 'stop', note: 'none' as const },
+    ];
+    const gate = gateOf({ ord: 2, gateKind: 'review_adjudication', fromRead: true, actions,
+      prompt: 'Unit 2 verdict is NOT PASS again (round 3) — QE acceptance: the isolated QE reviewer recorded FAIL. Approve = LAND WITH CARRIED ITEMS.' });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    useRunEventStore.setState({ byRun: { [RUN]: [] } });
+    vi.spyOn(client.api, 'getGate').mockRejectedValue(new Error('no read'));
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} gate={gate} navigate={vi.fn()} />);
+    await screen.findByRole('radio', { name: /Land with carried items and a note/ });
+    const names = radios().join(' | ');
+    expect(names).toMatch(/Land with carried items/);
+    // ("Redo from the <step> step" is the rewind, a send-back: it stays where the list takes one.)
+    expect(names).not.toMatch(/Retry|Redo the QE|Reassign/);
+    expect(client.api.getGate).not.toHaveBeenCalled();
+  });
+  it('distinct_evaluator retry with the engine\'s list offers Reassign on the distinct seat', async () => {
+    const actions = [
+      { action: 'approve', intent: 'retry', note: 'optional' as const },
+      { action: 'request_changes', intent: 'send_back', note: 'optional' as const },
+      { action: 'reassign', intent: 'reseat_and_retry', note: 'optional' as const, seats: ['codex'] },
+      { action: 'reject', intent: 'stop', note: 'none' as const },
+    ];
+    const gate = gateOf({ ord: 2, gateKind: 'escalation', fromRead: true, actions,
+      prompt: 'unit 2 checks work built on `claude` and ran on that same seat; the run requires a distinct evaluator (distinct_evaluator) — reassign it to a distinct signed-in seat and approve to re-run, or relaunch with reduced assurance' });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    useRunEventStore.setState({ byRun: { [RUN]: [] } });
+    vi.spyOn(client.api, 'getGate').mockRejectedValue(new Error('no read'));
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human', clis: ['claude', 'codex'] } as never, UNITS)} gate={gate} navigate={vi.fn()} />);
+    await waitFor(() => expect(radios().join(' | ')).toMatch(/Reassign to codex|retry with codex/i));
   });
 
   const submitted = async (c: EscCase, key: string): Promise<{ action?: string; approve?: boolean } | null> => {
@@ -404,7 +459,7 @@ describe('ProposalCard submits, for each answer it draws, the decision the gate 
     expect(deliver.getAttribute('aria-disabled')).not.toBe('true');
   });
   it('the same gate with cached skipQe offers Deliver again when acceptance changes from refused to satisfied', () => {
-    const gate = gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP, prompt: 'Deliver?' });
+    const gate = gateOf({ ord: 3, gateKind: 'deliver', skipQe: SKIP, prompt: 'Deliver?', fromRead: true });
     useGateStore.setState({ gates: { [RUN]: gate } });
     const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
     const refused = { required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' };
