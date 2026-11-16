@@ -35,6 +35,8 @@ import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from
 import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
+import { Switch } from './ui/Switch.js';
+import { useCapabilities } from '../store/capabilities.js';
 import { deliverKindOf, type RunKind, type RunMode } from './runMode.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useLaunchPreview, usePhaseSelection } from '../hooks/useLaunchPlan.js';
@@ -141,6 +143,9 @@ export function teamReceiptLine(text: string): string {
   const clipped = flat.length > 60 ? `${flat.slice(0, 59).trimEnd()}…` : flat;
   return `✓ Sent to the team: "${clipped}" · queued for their next turn · the plan gate stays open`;
 }
+
+/** studio#1150: the Ready-to-send gate words for a power launch (crew drops its humanConfirm; it asks once, at hand-off). */
+export const POWER_GATE_WORDS = 'at hand-off (power mode)';
 
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const shownText = useDisplayText();
@@ -451,6 +456,22 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     requireExplicit: launchKind === 'build',
   });
   const targetRepoRef = target.kind === 'resolved' ? target.repoRef : null;
+  // studio#1150: POWER MODE (program DES-POWER-MODE, operator ruling 2026-10-29). A repo-scoped workflow or plan launch on
+  // a daemon that runs it, with `powerModeDefault` on (on when unset), runs as one orchestrator session and asks once, at
+  // hand-off: crew sets its humanConfirm to none. The form says so (the guided launch's words) instead of promising a step
+  // gate, and offers the one way to keep one: Power mode off for this job (it then runs phased, with the posture chosen).
+  const powerCap = useCapabilities((s) => s.powerMode);
+  const [powerDefault, setPowerDefault] = useState(true);
+  useEffect(() => {
+    if (!powerCap || runId) return undefined;
+    let live = true;
+    api.getSettings().then((r) => { if (live) setPowerDefault((r.settings as { powerModeDefault?: unknown }).powerModeDefault !== false); }, () => {});
+    return () => { live = false; };
+  }, [powerCap, runId]);
+  /** This launch's own word on power mode; `null` = the daemon's setting decides (nothing is sent). */
+  const [powerOverride, setPowerOverride] = useState<boolean | null>(null);
+  const powerLaunch = powerCap && !runId && targetRepoRef !== null && (selection.plan !== null || launchWorkflow !== '');
+  const powerOn = powerLaunch && (powerOverride ?? powerDefault);
   // studio#596: the daemon reads linked issues for a WORKFLOW launch only (crew's `POST /runs`), so
   // the preview is read for exactly that launch — the one this form is about to send.
   // The SAME problem the launch sends — the steer field rides it as "Operator guidance" (codex r1).
@@ -892,6 +913,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // only to a daemon that takes it, only for a workflow that requires QE acceptance.
     if (offerQe && !qeOff && skipQe) body.skipQeAcceptance = { reason: skipQeReason.trim() };
     if (offerQe && forceQe) body.forceQeAcceptance = true;
+    // studio#1150: only this launch's own word on power mode rides the body (the setting decides otherwise, as it always has).
+    if (powerLaunch && powerOverride !== null) (body as LaunchBodyWithDeliver & { power?: boolean }).power = powerOverride;
 
     try {
       let launched;
@@ -1595,20 +1618,34 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         >
           Ask me
         </span>
-        <select
-          data-testid="gate-posture"
-          aria-label="Gate posture"
-          title="When a human confirms this run's units — default: before the first gate-bearing unit"
-          className="wk-field wk-composer-form-select"
-          value={confirmMode}
-          onChange={(e) => setConfirmMode(e.target.value as ConfirmMode)}
-        >
-          {/* The same plain words as the composer's launch strip (operator 2026-10-10). F-E2E-030: when
-              this launch delivers, "Never" is also the auto-deliver opt-out — the option says so. */}
-          <option value="before">{gatePostureWord('before', beforeOrd)}</option>
-          <option value="all">{gatePostureWord('all', beforeOrd)}</option>
-          <option value="none">{gatePostureWord('none', beforeOrd, deliverNotice?.state === 'on' && mode !== 'ask' && daemonDeliverGate === true)}</option>
-        </select>
+        {powerOn ? (
+          <span data-testid="gate-posture-power" className="wk-field-note" title="Power mode asks you once, at hand-off, plus anything policy or the QE plan requires">
+            At hand-off (power mode)
+          </span>
+        ) : (
+          <select
+            data-testid="gate-posture"
+            aria-label="Gate posture"
+            title="When a human confirms this run's units — default: before the first gate-bearing unit"
+            className="wk-field wk-composer-form-select"
+            value={confirmMode}
+            onChange={(e) => setConfirmMode(e.target.value as ConfirmMode)}
+          >
+            {/* The same plain words as the composer's launch strip (operator 2026-10-10). F-E2E-030: when
+                this launch delivers, "Never" is also the auto-deliver opt-out — the option says so. */}
+            <option value="before">{gatePostureWord('before', beforeOrd)}</option>
+            <option value="all">{gatePostureWord('all', beforeOrd)}</option>
+            <option value="none">{gatePostureWord('none', beforeOrd, deliverNotice?.state === 'on' && mode !== 'ask' && daemonDeliverGate === true)}</option>
+          </select>
+        )}
+        {powerLaunch && (
+          <Switch
+            label={`Power mode: ${powerOn ? 'On' : 'Off'}`}
+            checked={powerOn}
+            onChange={(v) => setPowerOverride(v)}
+            data-testid="launch-power-toggle"
+          />
+        )}
         </span>
       </div>
 
@@ -1870,7 +1907,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-workflow={selection.composing ? '' : launchWorkflow}
           data-plan={selection.plan === null ? '' : selection.plan.steps.map((st) => st.id ?? st.catalog).join(' ')}
           data-target={targetRepoRef ?? ''}
-          data-gate={describeGate(mode, confirmMode, beforeOrd)}
+          data-gate={powerOn ? POWER_GATE_WORDS : describeGate(mode, confirmMode, beforeOrd)}
           className="text-xs px-1"
           style={{ color: 'var(--ink-muted)' }}
         >
@@ -1887,7 +1924,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             {targetLabel ?? (target.kind === 'ambiguous' ? 'no target repo chosen' : 'no repository')}
           </span>
           {' · gate: '}
-          <span data-testid="launch-confirm-gate" style={{ color: 'var(--ink-high)' }}>{describeGate(mode, confirmMode, beforeOrd)}</span>
+          <span data-testid="launch-confirm-gate" style={{ color: 'var(--ink-high)' }}>{powerOn ? POWER_GATE_WORDS : describeGate(mode, confirmMode, beforeOrd)}</span>
           {/* F-E2E-030: the deliver gate is part of what is being sent — read it here too. */}
           {deliverNotice?.state === 'on' && (
             <>
