@@ -1,4 +1,5 @@
 import { CodebaseDownload, DeliverCredentialsNotice } from './session/CodebaseDownload.js';
+import { intentOf } from '../board/problemIntent.js';
 import { TechDetails } from './ui/TechDetails.js';
 import { useEffect, useMemo } from 'react';
 import type { CoreEvent, SessionView } from '../api/types.js';
@@ -400,7 +401,9 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
             data-pr={String(prNum)}
             onClick={() => {
               const headRef = view.session.run_branch ?? '';
-              const baseProblem = `Revise PR #${prNum} (${headRef}): ${view.session.problem}`;
+              // studio#1148: the intent alone, so text typed after the pre-fill comes before crew's blocks.
+              const intent = intentOf(view.session.problem);
+              const baseProblem = `Revise PR #${prNum} (${headRef}): ${intent}`;
               const reviseProblem = reviseContext ? `${baseProblem} — ${reviseContext}` : baseProblem;
               setRetryPrefill({
                 retryOf: null,
@@ -411,7 +414,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
                 entityMode: view.session.entity_mode,
                 humanConfirm: view.session.human_confirm,
                 projectId: typeof view.session.project_id === 'string' ? view.session.project_id : null,
-                revisesPr: { number: prNum, title: view.session.problem, headRef },
+                revisesPr: { number: prNum, title: intent, headRef },
               });
               navigate('/runs/new');
             }}

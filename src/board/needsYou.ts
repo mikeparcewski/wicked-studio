@@ -1,4 +1,5 @@
 import { isAskTurnRun } from './askTurn.js';
+import { intentOf } from './problemIntent.js';
 import type { Campaign } from '../api/campaigns.js';
 import { memoryPayload, policyPayload, proposalKind, type Proposal } from '../api/proposals.js';
 import { memoryPath } from '../api/memory.js';
@@ -307,7 +308,8 @@ export function retryPrefillOf(v: SessionView): RetryPrefill {
   const s = v.session;
   return {
     retryOf: s.id,
-    problem: s.problem,
+    // studio#1148: the intent alone — words typed after the pre-fill must come before crew's blocks.
+    problem: intentOf(s.problem),
     clis: s.clis,
     workflowId: s.workflow_id || null,
     repoRef: s.repo_ref,

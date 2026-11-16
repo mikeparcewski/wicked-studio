@@ -131,3 +131,38 @@ describe('RunDelivery — "Revise this PR" button (#301)', () => {
     expect(screen.queryByTestId('run-revise-pr')).toBeNull();
   });
 });
+
+// studio#1148: the run's problem as crew stores it — the person's words, then the daemon's blocks.
+const DECORATED = `${PROBLEM}\n\n<!-- wicked-crew:linked-issues -->\n## Linked issues\n- #7 Fix it\n<!-- /wicked-crew:linked-issues -->\n\n<!-- wicked-crew:learnings -->\n- a learning\n<!-- /wicked-crew:learnings -->\n\n<!-- wicked-crew:rules -->\nrule R1\n<!-- /wicked-crew:rules -->`;
+
+/** crew's own cut on every workflow launch (`stripLinkedIssues`, packages/crew/src/core/linked-issues.ts). */
+const crewCut = (problem: string): string => {
+  const at = problem.indexOf('<!-- wicked-crew:linked-issues -->');
+  return at === -1 ? problem : problem.slice(0, at).trimEnd();
+};
+
+describe('RunDelivery — the revise pre-fill keeps what the person adds (studio#1148)', () => {
+  it('pre-fills the intent alone: no daemon block, and the title is the intent', async () => {
+    const user = userEvent.setup();
+    const v = deliveredView();
+    v.session.problem = DECORATED;
+    render(<RunDelivery view={v} navigate={vi.fn()} />);
+    await user.click(screen.getByTestId('run-revise-pr'));
+    const prefill = takeRetryPrefill();
+    expect(prefill!.problem).toBe(`Revise PR #42 (${RUN_BRANCH}): ${PROBLEM}`);
+    expect(prefill!.problem).not.toContain('<!-- wicked-crew:');
+    expect(prefill!.revisesPr?.title).toBe(PROBLEM);
+  });
+
+  it('text typed after the pre-fill survives crew\'s cut at the first linked-issues marker', async () => {
+    const user = userEvent.setup();
+    const v = deliveredView();
+    v.session.problem = DECORATED;
+    render(<RunDelivery view={v} navigate={vi.fn()} />);
+    await user.click(screen.getByTestId('run-revise-pr'));
+    const typed = 'Also fix review finding 2: the retry card drops the note.';
+    // The composer appends what the person types; crew's launch re-adds its blocks after it.
+    const launched = `${takeRetryPrefill()!.problem}\n\n${typed}`;
+    expect(crewCut(launched)).toContain(typed);
+  });
+});
