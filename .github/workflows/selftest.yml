@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   selftest:
-    uses: mikeparcewski/wicked-ci/.github/workflows/selftest.yml@40d9ec2c4e2d18ee07dced50e5595277e99b8a31
+    uses: mikeparcewski/wicked-ci/.github/workflows/selftest.yml@d88119f9a8f7dd8d3a536dce101ed0415b735bd4
     with:
       under_test: studio
-      wicked_ci_ref: 40d9ec2c4e2d18ee07dced50e5595277e99b8a31
+      wicked_ci_ref: d88119f9a8f7dd8d3a536dce101ed0415b735bd4
