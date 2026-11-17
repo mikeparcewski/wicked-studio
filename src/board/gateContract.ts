@@ -49,6 +49,9 @@ const APPROVE_WORDS: Readonly<Record<string, readonly [string, string, string]>>
   deliver: ['Deliver', 'Deliver with a note', 'Hand the work over (push the branch and open the pull request).'],
   complete: ['Approve completion', 'Approve completion with a note', 'Finish the run: the work is accepted.'],
   approve_plan: ['Approve plan', 'Approve plan with a note', 'Run the plan as it stands (a note goes to the first step that builds).'],
+  // wicked-core#1512: a team dispute's approve counts the disputed work; a team transport pause's publishes the missing step.
+  accept_work: ['Accept the work as it stands', 'Accept with a note', 'The disputed work counts as it stands; the run goes on.'],
+  continue_team: ['Continue', 'Continue with a note', 'Publish the team\'s missing step and go on.'],
 };
 const FLOOR_FIX_WORDS = ['Fix with a note', 'A distinct seat makes the fix your note describes, then only the checks run again.'] as const;
 
@@ -100,7 +103,10 @@ export function choicesForAction(a: GateAction, seatLabel: (cli: string) => stri
     if (a.note !== 'required') out.push({ key: 'approve', label: plain, decision: decisionFor(a), needsNote: false, title });
     if (a.note !== 'none') {
       const fix = a.noteIntent === 'floor_fix';
-      out.push({ key: 'steer', label: fix ? FLOOR_FIX_WORDS[0] : noted, decision: decisionFor(a), needsNote: true, title: fix ? FLOOR_FIX_WORDS[1] : title });
+      // A note that sends the work back (a team dispute's noted approve) is worded as the send-back it is.
+      const back = a.noteIntent === 'send_back';
+      out.push({ key: 'steer', label: fix ? FLOOR_FIX_WORDS[0] : back ? 'Send back with a note' : noted, decision: decisionFor(a), needsNote: true,
+        title: fix ? FLOOR_FIX_WORDS[1] : back ? 'Your note sends the work back to be done again.' : title });
     }
     return out;
   }

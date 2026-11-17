@@ -277,9 +277,50 @@
       {
         "action": "reassign",
         "intent": "reseat_and_retry",
-        "note": "optional",
+        "note": "none",
         "seats": [
           "codex"
+        ]
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "escalation",
+    "ord": 4
+  },
+  "floor-fix-reassign": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "retry",
+        "note": "optional",
+        "noteIntent": "floor_fix"
+      },
+      {
+        "action": "operator_judgment",
+        "intent": "operator_judgment",
+        "note": "required"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reassign",
+        "intent": "reseat_and_retry",
+        "note": "none",
+        "seats": [
+          "codex",
+          "pi"
         ]
       },
       {

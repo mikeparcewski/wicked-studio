@@ -68,4 +68,10 @@ describe('every engine gate shape renders exactly its listed answers (studio#117
     const all = Object.values(contractChoices(distinct.actions, (c) => (c === 'codex' ? 'Codex' : c))).flat();
     expect(all.map((c) => c.label)).toContain('Reassign to Codex');
   });
+
+  it('a team pause\'s approve says what it does: accept the disputed work, or continue the team (wicked-core#1512)', () => {
+    const words = (intent: string, noteIntent?: string) => Object.values(contractChoices([{ action: 'approve', intent, note: 'optional', ...(noteIntent !== undefined ? { noteIntent } : {}) }], seat)).flat().map((c) => c.label);
+    expect(words('accept_work', 'send_back')).toEqual(['Accept the work as it stands', 'Send back with a note']);
+    expect(words('continue_team')).toEqual(['Continue', 'Continue with a note']);
+  });
 });
