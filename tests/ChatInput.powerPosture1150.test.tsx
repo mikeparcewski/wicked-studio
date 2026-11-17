@@ -6,7 +6,8 @@ import * as client from '../src/api/client.js';
 import type { LaunchBodyWithDeliver } from '../src/api/types.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { useCapabilities } from '../src/store/capabilities.js';
-import { clearRetryPrefill } from '../src/store/retryPrefill.js';
+import { clearRetryPrefill, setRetryPrefill } from '../src/store/retryPrefill.js';
+import { POWER_NO_HANDOFF_WORDS } from '../src/components/ChatInput.js';
 import { pickLaunchWorkflow } from './launchWorkflowPick.js';
 
 /**
@@ -122,8 +123,37 @@ describe('New job form: the gate it promises is the gate the run keeps (studio#1
     const select = await screen.findByTestId('gate-posture-power') as HTMLSelectElement;
     await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_GATE_WORDS));
     expect(select.value).toBe('before');
+    expect(select.title, 'the tooltip says the gate stays, never "not even at hand-off"').toMatch(/hand-off gate stays/);
     const body = await send(user);
     expect((body as { deliverGate?: string }).deliverGate, 'no auto: the engine keeps its deliver gate').toBeUndefined();
+  });
+
+  it('delivery off: no hand-off, said the same in the selector, the summary and the body (confirmation r4)', async () => {
+    const user = await fill();
+    await screen.findByTestId('gate-posture-power');
+    await user.click(screen.getByTestId('deliver-toggle'));
+    const select = screen.getByTestId('gate-posture-power') as HTMLSelectElement;
+    expect(select.value).toBe('no-handoff');
+    expect(select).toBeDisabled();
+    expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_NO_HANDOFF_WORDS);
+    expect((await send(user)).deliver).toBe('none');
+  });
+
+  it('a revision delivers onto its PR whatever the toggle says: the hand-off it keeps is what it shows (confirmation r4)', async () => {
+    vi.mocked(client.api.getHealth).mockResolvedValue({ ok: true, capabilities: { deliverGate: true, revisesPr: true } } as never);
+    setRetryPrefill({ retryOf: null, problem: 'Revise PR #42 (b): add the retry card', clis: ['claude'], workflowId: 'feature', repoRef: 'wicked-studio',
+      entityMode: 'shared', humanConfirm: { before: 1 }, projectId: null, revisesPr: { number: 42, title: 'add the retry card', headRef: 'b' } });
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    // The pre-fill carries the workflow and the repository.
+    await waitFor(() => expect(screen.getByTestId('launch-workflow-pill').dataset.workflow).toBe('feature'));
+    const toggle = await screen.findByTestId('deliver-toggle') as HTMLInputElement;
+    if (toggle.checked) await user.click(toggle);
+    await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_GATE_WORDS));
+    const body = await send(user);
+    expect(body.deliver).toBe('pr');
+    expect((body as { revisesPr?: number }).revisesPr).toBe(42);
+    expect((body as { deliverGate?: string }).deliverGate).toBeUndefined();
   });
 
   it('what the power selector shows is what the body sends (At hand-off keeps the deliver gate; Never sends deliverGate auto)', async () => {

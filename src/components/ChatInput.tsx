@@ -490,7 +490,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // What the body will do at hand-off, from the SAME conditions the body is built from (codex-check r3): a power run's
   // one gate is the deliver gate; it is waived only by the body's `deliverGate: 'auto'` (an unattended posture on a
   // daemon that keeps the gate), and there is none on a daemon without it. Unknown (the health read failed) keeps it.
-  const powerDelivers = launchKind === 'build' && targetRepoRef !== null && deliverOn;
+  // A revision always delivers onto its PR (the body's `revisesPr` override, below), whatever the toggle says.
+  const powerDelivers = (launchKind === 'build' && targetRepoRef !== null && deliverOn)
+    || (revisesPr !== null && daemonRevisesPr === true && targetRepoRef !== null && selection.plan === null);
   const powerUnattended = powerDelivers && (daemonDeliverGate === false || (autoDeliver && daemonDeliverGate === true));
   // studio#596: the daemon reads linked issues for a WORKFLOW launch only (crew's `POST /runs`), so
   // the preview is read for exactly that launch — the one this form is about to send.
@@ -1644,16 +1646,21 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           <select
             data-testid="gate-posture-power"
             aria-label="Gate posture"
-            title={mode === 'autonomous'
-              ? 'Autonomous: the job runs and delivers on its own (no gate, not even at hand-off)'
-              : 'Power mode asks you once, at hand-off, plus anything policy or the QE plan requires'}
+            title={!powerDelivers
+              ? 'Nothing is delivered, so there is no hand-off to ask at'
+              : powerUnattended
+                ? 'The job runs and delivers on its own: no gate, not even at hand-off'
+                : mode === 'autonomous'
+                  ? 'The hand-off gate stays: this daemon could not be read to say it may deliver on its own'
+                  : 'Power mode asks you once, at hand-off, plus anything policy or the QE plan requires'}
             className="wk-field wk-composer-form-select"
             // studio#1150 (codex-check): the shown posture is the one sent. `autoDeliver` decides the body's
             // `deliverGate: 'auto'`; Autonomous forces it, so there the choice is fixed at Never.
-            value={powerUnattended ? 'none' : 'before'}
+            value={!powerDelivers ? 'no-handoff' : powerUnattended ? 'none' : 'before'}
             disabled={mode === 'autonomous' || !powerDelivers}
             onChange={(e) => setConfirmMode(e.target.value === 'none' ? 'none' : 'before')}
           >
+            {!powerDelivers && <option value="no-handoff">No hand-off (nothing is delivered)</option>}
             <option value="before">At hand-off (power mode)</option>
             <option value="none">{gatePostureWord('none', beforeOrd, deliverNotice?.state === 'on' && daemonDeliverGate === true)}</option>
           </select>
