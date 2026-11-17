@@ -64,6 +64,9 @@ export interface SetupKnown {
   languages: Array<{ name: string; files: number; share: number }>;
   filesCounted: number;
   nearby: Array<{ name: string; path: string }>;
+  /** (crew#1527, api-types 0.212.0) Can a pull-request delivery push, and as which GitHub account; absent on an
+   *  older crew. The fields studio reads of `DeliveryReadiness`. */
+  delivery?: { ready: boolean | null; pushAs: string | null };
 }
 
 export function getSetupKnown(): Promise<SetupKnown> {

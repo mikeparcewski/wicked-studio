@@ -355,3 +355,22 @@ describe('Memory: Steering’s ways in (§6.3)', () => {
     expect(await screen.findByTestId('memory-retired-back')).toBeTruthy();
   });
 });
+
+// crew#1527: the first run shows, beside the git identity, whether a pull request can push and as whom.
+describe('First run: the pull-request account (crew#1527)', () => {
+  const known = { git: { name: 'Sam Rivera', email: 'sam@acme.dev' }, languages: [], filesCounted: 0, nearby: [] };
+  it('names the account, says not ready, or says nothing against an older crew', async () => {
+    d.on('GET /setup/known', { ...known, delivery: { deliverDefault: 'pr', ready: true, pushAs: 'samr', github: {}, gitAuthor: null, reason: 'r', fix: null } });
+    const a = render(<FirstRun navigate={nav} agents={[]} hasRoster />);
+    await waitFor(() => expect(screen.getByTestId('known-git').textContent).toContain('pull requests as samr'));
+    a.unmount(); resetFirstRun();
+    d.on('GET /setup/known', { ...known, delivery: { deliverDefault: 'pr', ready: false, pushAs: null, github: {}, gitAuthor: null, reason: 'r', fix: 'f' } });
+    const b = render(<FirstRun navigate={nav} agents={[]} hasRoster />);
+    await waitFor(() => expect(screen.getByTestId('known-git').textContent).toContain('pull requests: not ready'));
+    b.unmount(); resetFirstRun();
+    d.on('GET /setup/known', known);
+    render(<FirstRun navigate={nav} agents={[]} hasRoster />);
+    await waitFor(() => expect(screen.getByTestId('known-git').textContent).toContain('Sam Rivera'));
+    expect(screen.getByTestId('known-git').textContent).not.toContain('pull requests');
+  });
+});

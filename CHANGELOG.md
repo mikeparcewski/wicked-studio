@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+- **The setup steps check the GitHub sign-in a pull request needs (crew#1527).** A new step, "Sign in to GitHub for
+  pull requests, or deliver locally", reads crew's `delivery` row (crew 0.212.0 api-types). It is done when a pull
+  request can be opened, or when "Open a PR when a build run finishes" is off in Settings. Otherwise it shows crew's
+  reason and fix (`gh auth login`, the `git config --global` commands) and an Open Settings link. With no reading yet
+  it says "Not checked yet." and is never done. The Desk's first run names the pull-request account beside the git
+  identity. A missing GitHub sign-in no longer surfaces only when a first job reaches its deliver step. The step does
+  not gate "You're ready" (the landing rule is unchanged).
+
 ## [0.16.13] — 2026-11-17
 
 Patch (fix release): a source's Agents box never shows switches that aren't crew's latest answer as verified. After

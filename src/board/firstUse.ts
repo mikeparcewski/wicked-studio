@@ -36,9 +36,26 @@ export interface SetupChecks {
   estate: boolean | null;
   runtime: boolean | null;
   runtimeRequired: boolean | null;
+  /** (crew#1527) Can a pull-request delivery push (crew's `delivery` row, the GitHub sign-in and the git author)?
+   *  `ready` null = not known yet; the whole reading is absent against a crew without the row. */
+  delivery?: DeliveryCheck | null;
+}
+
+/** crew's `delivery` infra row as the setup step reads it: `ok` = a pull request can push; `degraded` / `off` = it
+ *  cannot (`off`: the daemon itself defaults to local delivery, but studio's composer asks for one when its
+ *  preference is on); `unknown` = not known yet. `reason` / `fix` are crew's words for the user. */
+export interface DeliveryCheck {
+  ready: boolean | null;
+  reason: string | null;
+  fix: string | null;
 }
 
 export const UNCHECKED_SETUP: SetupChecks = { skills: null, estate: null, runtime: null, runtimeRequired: null };
+
+/** The delivery step is done when this computer can open pull requests, or pull requests are off in studio. */
+export function deliveryDone(delivery: DeliveryCheck | null | undefined, deliverPr: boolean): boolean {
+  return !deliverPr || delivery?.ready === true;
+}
 
 /** Reuse the Nerve Center's normalized probes, never their raw error prose. */
 export function setupChecks(snapshot: SystemSnapshot | null, health?: unknown, diagnostics?: unknown): SetupChecks {
@@ -73,9 +90,16 @@ export function setupChecks(snapshot: SystemSnapshot | null, health?: unknown, d
   const estate = estateMissing || estateVersion === null ? false : typeof estateVersion === 'string' && estateVersion.trim() !== '' ? true : null;
   const skillsReady = skillState === null ? state('skills')
     : skillState !== 'published' ? false : skills['current'] === undefined ? null : skills['current'] !== null;
+  const deliveryRow = infra.find((r) => r.key === 'delivery');
   return {
     skills: skillsBlocked || state('skills') === false ? false : skillsReady,
     estate, runtime, runtimeRequired,
+    // Absent against a crew without the row (the step then says it is not checked yet).
+    ...(deliveryRow === undefined ? {} : { delivery: {
+      ready: deliveryRow.state === 'ok' ? true : deliveryRow.state === 'unknown' ? null : false,
+      reason: deliveryRow.reason ?? null,
+      fix: deliveryRow.remedy ?? null,
+    } }),
   };
 }
 

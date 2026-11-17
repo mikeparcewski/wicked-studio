@@ -1,7 +1,8 @@
 import { useEffect, useId, useState } from 'react';
 import { Check } from 'lucide-react';
 import { setPickedForNewWork } from './useAgentRows.js';
-import { goodEnough, setupAgents, setupMove, setupSteps, withRowRuntime } from '../../board/firstUse.js';
+import { deliveryDone, goodEnough, setupAgents, setupMove, setupSteps, withRowRuntime } from '../../board/firstUse.js';
+import { useComposerPrefsStore } from '../../store/composerPrefs.js';
 import { authOf, type AgentRow } from '../../board/agentsModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useFirstUseReads } from '../../store/firstUseReads.js';
@@ -44,7 +45,10 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const f = useFirstUseReads();
   const [creating, setCreating] = useState(false);
 
+  // (crew#1527) Studio's own "Open a PR when a build run finishes" preference decides whether jobs open pull requests.
+  const deliverPr = useComposerPrefsStore((s) => s.prefs.deliverPr);
   const checks = withRowRuntime(f.checks, rows);
+  const delivery = f.checks.delivery ?? null;
   const facts = { rows, repos: f.repos, projects: f.projects, checks };
   const steps = setupSteps(facts);
   const counted = setupAgents(rows);
@@ -113,13 +117,24 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
               : `Not done. ${checks.downReason !== null ? `${checks.downReason.replace(/[.!]$/, '')}: start it` : 'Start Docker Desktop or Rancher Desktop'}, then check again.`}{' '}
             <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/watch')}>Open Nerve Center</button>
           </Step>
-          <Step n={5} done={false} testId="agents-setup-step-defaults">
+          <Step n={5} done={deliveryDone(delivery, deliverPr)} testId="agents-setup-step-delivery">
+            <b>Sign in to GitHub for pull requests, or deliver locally.</b>{' '}
+            {!deliverPr
+              ? 'Done. Pull requests are off: finished work stays on its branch.'
+              : delivery === null || delivery.ready === null
+              ? 'Not checked yet.'
+              : delivery.ready
+              ? `Done. ${delivery.reason ?? 'Pull requests can be opened.'}`
+              : <span data-testid="agents-setup-delivery-why">Not done. {delivery.reason}{delivery.fix !== null && <> <span className="wk-agents-sub" data-testid="agents-setup-delivery-fix">{delivery.fix}</span></>}</span>}{' '}
+            <button type="button" data-testid="agents-setup-delivery-settings" className="wk-btn wk-btn--link" onClick={() => navigate('/system')}>Open Settings</button>
+          </Step>
+          <Step n={6} done={false} testId="agents-setup-step-defaults">
             <b>Choose the helpers new work uses</b> (optional).{' '}
             {picked.length > 0 ? `Right now: ${names(picked)}.` : 'Right now: none.'}
             {off.length > 0 ? ` ${names(off)} ${off.length === 1 ? 'is' : 'are'} off until you pick ${off.length === 1 ? 'it' : 'them'}.` : ''}{' '}
             <button type="button" data-testid="agents-setup-change" className="wk-btn wk-btn--link" onClick={() => navigate('/system')}>Change</button>
           </Step>
-          <Step n={6} done={placeKnown && steps.placeDone} testId="agents-setup-step-project">
+          <Step n={7} done={placeKnown && steps.placeDone} testId="agents-setup-step-project">
             <b>Create your first project.</b>{' '}
             {!placeKnown
               ? <span data-testid="agents-setup-place-reading" data-state={placeFailed ? 'failed' : 'reading'} role="status">

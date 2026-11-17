@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useEffect } from 'react';
 import type { RosterSeat } from '../src/api/types.js';
 import { normalizeSnapshot } from '../src/api/system.js';
-import { goodEnough, setupChecks, setupMove, setupSettled } from '../src/board/firstUse.js';
+import { deliveryDone, goodEnough, setupChecks, setupMove, setupSettled } from '../src/board/firstUse.js';
 import { agentRows } from '../src/board/agentsModel.js';
 import { agentStatus } from '../src/board/calmAgents.js';
 import { issueCopy } from '../src/board/agentsCopy.js';
@@ -22,6 +22,8 @@ const { useAuthOps } = await import('../src/components/agents/agentLogin.js');
 const { resetAgentsReads } = await import('../src/store/agentsReads.js');
 const { resetFirstUseReads, useFirstUseReads } = await import('../src/store/firstUseReads.js');
 const { clearCachedRoster } = await import('../src/store/rosterCache.js');
+const { useComposerPrefsStore } = await import('../src/store/composerPrefs.js');
+const { DEFAULT_COMPOSER_PREFS } = await import('../src/store/composerPrefs.js');
 
 const helper = (extra: Partial<RosterSeat> = {}): RosterSeat => ({
   key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true,
@@ -31,7 +33,7 @@ const helper = (extra: Partial<RosterSeat> = {}): RosterSeat => ({
 let estateVersion: string | null | undefined;
 let roster: RosterSeat[];
 let refusal: { status: number; body: Record<string, unknown> };
-let infra: { key: string; state: string }[];
+let infra: { key: string; state: string; reason?: string; remedy?: string | null }[];
 let settings: Record<string, unknown>;
 let warnings: unknown[];
 let writes: unknown[];
@@ -278,5 +280,58 @@ describe('A-C4 complete setup guide', () => {
     expect(setupChecks(system)).toEqual({ skills: true, estate: null, runtime: false, runtimeRequired: false });
     expect(setupChecks(system, null, { components: { engineBinaries: { 'wicked-estate': null } } }).estate).toBe(false);
     expect(setupChecks(system, { warnings: [{ kind: 'skills.garden', severity: 'error', message: 'raw error' }] }).skills).toBe(false);
+  });
+});
+
+// crew#1527: the first run never checked the GitHub sign-in a pull request needs; a first job stopped at its deliver step.
+describe('crew#1527 the delivery step', () => {
+  beforeEach(() => { useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS }); });
+  const SIGN_IN = 'To open pull requests, sign in to GitHub: gh auth login (or export GH_TOKEN for the daemon); or deliver locally.';
+
+  it('reads crew\'s delivery row: ok is ready, degraded and off are not, unknown is not known, absent is no reading', () => {
+    const at = (state: string) => setupChecks(normalizeSnapshot({ infra: [{ key: 'delivery', state, reason: 'why', remedy: 'fix' }] })).delivery;
+    expect(at('ok')).toEqual({ ready: true, reason: 'why', fix: 'fix' });
+    expect(at('degraded')?.ready).toBe(false);
+    expect(at('off')?.ready).toBe(false);
+    expect(at('unknown')?.ready).toBeNull();
+    expect(setupChecks(normalizeSnapshot({ infra: [] })).delivery).toBeUndefined();
+    // Done when pull requests can push, or studio's own preference has them off; never on an unknown reading.
+    expect(deliveryDone({ ready: true, reason: null, fix: null }, true)).toBe(true);
+    expect(deliveryDone({ ready: null, reason: null, fix: null }, true)).toBe(false);
+    expect(deliveryDone(undefined, true)).toBe(false);
+    expect(deliveryDone({ ready: false, reason: null, fix: null }, false)).toBe(true);
+  });
+
+  it('a fresh computer with gh signed out: not done, with crew\'s reason and the sign-in or local choice', async () => {
+    infra = [...infra, { key: 'delivery', state: 'degraded', reason: 'A job that opens a pull request would stop at its deliver step: gh is not signed in to GitHub.', remedy: SIGN_IN }];
+    page('?setup=1');
+    await waitFor(() => expect(screen.getByTestId('agents-setup-step-delivery')).toHaveTextContent('Not done.'));
+    const step = screen.getByTestId('agents-setup-step-delivery');
+    expect(step).toHaveAttribute('data-done', 'false');
+    expect(step).toHaveTextContent('Sign in to GitHub for pull requests, or deliver locally.');
+    expect(screen.getByTestId('agents-setup-delivery-why')).toHaveTextContent('gh is not signed in to GitHub');
+    expect(screen.getByTestId('agents-setup-delivery-fix')).toHaveTextContent('gh auth login');
+    expect(within(step).getByRole('button', { name: 'Open Settings' })).toBeInTheDocument();
+  });
+
+  it('signed in: done, naming the account', async () => {
+    infra = [...infra, { key: 'delivery', state: 'ok', reason: 'Pull requests open as ada; commits by Ada <ada@example.invalid>.', remedy: null }];
+    page('?setup=1');
+    await waitFor(() => expect(screen.getByTestId('agents-setup-step-delivery')).toHaveAttribute('data-done', 'true'));
+    expect(screen.getByTestId('agents-setup-step-delivery')).toHaveTextContent('Done. Pull requests open as ada');
+  });
+
+  it('pull requests off in studio: done whatever the sign-in; no reading yet: not checked, never done', async () => {
+    useComposerPrefsStore.setState({ prefs: { ...DEFAULT_COMPOSER_PREFS, deliverPr: false } });
+    infra = [...infra, { key: 'delivery', state: 'degraded', reason: 'not signed in', remedy: SIGN_IN }];
+    const first = page('?setup=1');
+    await waitFor(() => expect(screen.getByTestId('agents-setup-step-delivery')).toHaveAttribute('data-done', 'true'));
+    expect(screen.getByTestId('agents-setup-step-delivery')).toHaveTextContent('Pull requests are off');
+    first.unmount(); resetFirstUseReads();
+    useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS });
+    infra = infra.filter((r) => r.key !== 'delivery');
+    page('?setup=1');
+    await waitFor(() => expect(screen.getByTestId('agents-setup-step-delivery')).toHaveTextContent('Not checked yet.'));
+    expect(screen.getByTestId('agents-setup-step-delivery')).toHaveAttribute('data-done', 'false');
   });
 });

@@ -226,7 +226,7 @@ function Known({ known, repos, agents, hasRoster, ready }: {
       <div className="wk-fr-k" data-testid="known-git">
         <span className="wk-fr-k-ic"><UserRound size={16} aria-hidden /></span>
         <span><b>{k?.git?.name ?? (known === null ? 'Git identity…' : 'No git identity')}</b>
-          <span>{k?.git !== null && k?.git !== undefined ? `git identity${k.git.email !== null ? ` · ${k.git.email}` : ''}` : known === 'failed' ? 'Couldn’t read it from this computer' : 'Commits would carry no name yet'}</span></span>
+          <span>{k?.git !== null && k?.git !== undefined ? `git identity${k.git.email !== null ? ` · ${k.git.email}` : ''}` : known === 'failed' ? 'Couldn’t read it from this computer' : 'Commits would carry no name yet'}{deliveryWords(k?.delivery)}</span></span>
       </div>
       <div className="wk-fr-k" data-testid="known-agents">
         <span className="wk-fr-k-ic"><TerminalSquare size={16} aria-hidden /></span>
@@ -248,6 +248,13 @@ function Known({ known, repos, agents, hasRoster, ready }: {
   );
 }
 
+/** (crew#1527) The pull-request account beside the git identity: as whom a pull request pushes, or that it cannot yet. */
+function deliveryWords(d: SetupKnown['delivery']): string {
+  if (d === undefined || d.ready === null) return '';
+  if (!d.ready) return ' · pull requests: not ready (see the setup steps)';
+  return d.pushAs !== null ? ` · pull requests as ${d.pushAs}` : ' · pull requests ready';
+}
+
 /** A read of `GET /setup/known` with every list present (an older or partial answer reads as nothing known). */
 function normalizeKnown(x: Partial<SetupKnown> | null | undefined): SetupKnown {
   const git = x?.git ?? null;
@@ -256,6 +263,9 @@ function normalizeKnown(x: Partial<SetupKnown> | null | undefined): SetupKnown {
     languages: Array.isArray(x?.languages) ? x.languages : [],
     filesCounted: typeof x?.filesCounted === 'number' ? x.filesCounted : 0,
     nearby: Array.isArray(x?.nearby) ? x.nearby : [],
+    ...(x?.delivery !== null && typeof x?.delivery === 'object' && (typeof x.delivery.ready === 'boolean' || x.delivery.ready === null)
+      ? { delivery: { ready: x.delivery.ready, pushAs: typeof x.delivery.pushAs === 'string' ? x.delivery.pushAs : null } }
+      : {}),
   };
 }
 
