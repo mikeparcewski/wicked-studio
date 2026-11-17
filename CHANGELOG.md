@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.13] — 2026-11-17
+
+Patch (fix release): a source's Agents box never shows switches that aren't crew's latest answer as verified. After
+"Read again", the warning and the switches now come from the same list read on both the data-source sheet
+(studio#1182, #1183) and the project-management sheet (studio#1184, #1185), and a re-read that no longer lists the
+source shows no switches. In 0.16.12 the box could, for up to two renders, show the pre-read switches enabled with no
+"may be out of date" warning (a shown "query off" while crew had query on). Carries #1183 and #1185. Bundled by
+wicked-crew 0.18.17. Known limits: wicked-ci#76 (W6: the advisory selftest check shows green over its U04 FAIL, so its
+green tick is not evidence); 0.16.12's limits studio#1175, #1177 and #1180 still apply.
+
 ### Fixed
 
 - A source's Agents box no longer drops "may be out of date" while still showing the switches from before the re-read
@@ -3623,7 +3633,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.12...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.13...HEAD
+[0.16.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.12...v0.16.13
 [0.16.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.11...v0.16.12
 [0.16.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.10...v0.16.11
 [0.16.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.9...v0.16.10
