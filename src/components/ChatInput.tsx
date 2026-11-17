@@ -148,7 +148,11 @@ export function teamReceiptLine(text: string): string {
 export const POWER_GATE_WORDS = 'at hand-off (power mode)';
 /** …and for one that also delivers on its own (Autonomous, or "Never"): no gate at all. */
 export const POWER_NO_GATE_WORDS = 'no gates (power mode, delivers on its own)';
-export const powerGateWords = (autoDeliver: boolean): string => (autoDeliver ? POWER_NO_GATE_WORDS : POWER_GATE_WORDS);
+/** …and for one that delivers nothing (no pull request): there is no hand-off to ask at. */
+export const POWER_NO_HANDOFF_WORDS = 'no gates (power mode, no hand-off)';
+/** The words for what the launch body will do (`unattended`: no gate at hand-off; `delivers`: it opens a PR). */
+export const powerGateWords = (unattended: boolean, delivers: boolean): string =>
+  (!delivers ? POWER_NO_HANDOFF_WORDS : unattended ? POWER_NO_GATE_WORDS : POWER_GATE_WORDS);
 
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const shownText = useDisplayText();
@@ -479,7 +483,15 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // step) is never one: a power run cannot keep that posture, so an Ask launch says `power: false` (below).
   const powerLaunch = powerCap && !runId && powerDefault === true && launchKind === 'build' && mode !== 'ask'
     && targetRepoRef !== null && (selection.plan !== null || launchWorkflow !== '');
-  const powerOn = powerLaunch && !powerOff;
+  // Autonomous mode keeps no step gate whatever the posture says (its body sends no humanConfirm), so the switch's way
+  // to keep one is not offered there (codex-check r3): Autonomous always follows the daemon's setting.
+  const powerSwitchable = powerLaunch && mode !== 'autonomous';
+  const powerOn = powerLaunch && !(powerOff && powerSwitchable);
+  // What the body will do at hand-off, from the SAME conditions the body is built from (codex-check r3): a power run's
+  // one gate is the deliver gate; it is waived only by the body's `deliverGate: 'auto'` (an unattended posture on a
+  // daemon that keeps the gate), and there is none on a daemon without it. Unknown (the health read failed) keeps it.
+  const powerDelivers = launchKind === 'build' && targetRepoRef !== null && deliverOn;
+  const powerUnattended = powerDelivers && (daemonDeliverGate === false || (autoDeliver && daemonDeliverGate === true));
   // studio#596: the daemon reads linked issues for a WORKFLOW launch only (crew's `POST /runs`), so
   // the preview is read for exactly that launch — the one this form is about to send.
   // The SAME problem the launch sends — the steer field rides it as "Operator guidance" (codex r1).
@@ -922,7 +934,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (offerQe && !qeOff && skipQe) body.skipQeAcceptance = { reason: skipQeReason.trim() };
     if (offerQe && forceQe) body.forceQeAcceptance = true;
     // studio#1150: only this launch's own word on power mode rides the body (the setting decides otherwise, as it always has).
-    if ((powerLaunch && powerOff) || (powerCap && mode === 'ask' && launchKind === 'build')) {
+    if ((powerSwitchable && powerOff) || (powerCap && mode === 'ask' && launchKind === 'build')) {
       (body as LaunchBodyWithDeliver & { power?: boolean }).power = false;
     }
 
@@ -1638,8 +1650,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             className="wk-field wk-composer-form-select"
             // studio#1150 (codex-check): the shown posture is the one sent. `autoDeliver` decides the body's
             // `deliverGate: 'auto'`; Autonomous forces it, so there the choice is fixed at Never.
-            value={autoDeliver ? 'none' : 'before'}
-            disabled={mode === 'autonomous'}
+            value={powerUnattended ? 'none' : 'before'}
+            disabled={mode === 'autonomous' || !powerDelivers}
             onChange={(e) => setConfirmMode(e.target.value === 'none' ? 'none' : 'before')}
           >
             <option value="before">At hand-off (power mode)</option>
@@ -1661,7 +1673,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             <option value="none">{gatePostureWord('none', beforeOrd, deliverNotice?.state === 'on' && mode !== 'ask' && daemonDeliverGate === true)}</option>
           </select>
         )}
-        {powerLaunch && (
+        {powerSwitchable && (
           <Switch
             label={`Power mode: ${powerOn ? 'On' : 'Off'}`}
             checked={powerOn}
@@ -1930,7 +1942,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-workflow={selection.composing ? '' : launchWorkflow}
           data-plan={selection.plan === null ? '' : selection.plan.steps.map((st) => st.id ?? st.catalog).join(' ')}
           data-target={targetRepoRef ?? ''}
-          data-gate={powerOn ? powerGateWords(autoDeliver) : describeGate(mode, confirmMode, beforeOrd)}
+          data-gate={powerOn ? powerGateWords(powerUnattended, powerDelivers) : describeGate(mode, confirmMode, beforeOrd)}
           className="text-xs px-1"
           style={{ color: 'var(--ink-muted)' }}
         >
@@ -1947,7 +1959,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             {targetLabel ?? (target.kind === 'ambiguous' ? 'no target repo chosen' : 'no repository')}
           </span>
           {' · gate: '}
-          <span data-testid="launch-confirm-gate" style={{ color: 'var(--ink-high)' }}>{powerOn ? powerGateWords(autoDeliver) : describeGate(mode, confirmMode, beforeOrd)}</span>
+          <span data-testid="launch-confirm-gate" style={{ color: 'var(--ink-high)' }}>{powerOn ? powerGateWords(powerUnattended, powerDelivers) : describeGate(mode, confirmMode, beforeOrd)}</span>
           {/* F-E2E-030: the deliver gate is part of what is being sent — read it here too. */}
           {deliverNotice?.state === 'on' && (
             <>

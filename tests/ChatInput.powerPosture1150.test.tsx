@@ -109,6 +109,23 @@ describe('New job form: the gate it promises is the gate the run keeps (studio#1
     expect((body as { deliverGate?: string }).deliverGate, 'Never: it delivers on its own').toBe('auto');
   });
 
+  it('Autonomous mode never offers the Power switch: a phased step gate is not something it keeps (codex-check r3)', async () => {
+    await fill({ mode: 'autonomous' });
+    await screen.findByTestId('gate-posture-power');
+    expect(screen.queryByTestId('launch-power-toggle')).toBeNull();
+    expect(screen.queryByTestId('gate-posture')).toBeNull();
+  });
+
+  it('Autonomous with the health read failed: the hand-off gate the body keeps is what it shows (codex-check r3)', async () => {
+    vi.mocked(client.api.getHealth).mockRejectedValue(new Error('offline'));
+    const user = await fill({ mode: 'autonomous' });
+    const select = await screen.findByTestId('gate-posture-power') as HTMLSelectElement;
+    await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_GATE_WORDS));
+    expect(select.value).toBe('before');
+    const body = await send(user);
+    expect((body as { deliverGate?: string }).deliverGate, 'no auto: the engine keeps its deliver gate').toBeUndefined();
+  });
+
   it('what the power selector shows is what the body sends (At hand-off keeps the deliver gate; Never sends deliverGate auto)', async () => {
     const user = await fill();
     const select = await screen.findByTestId('gate-posture-power') as HTMLSelectElement;
