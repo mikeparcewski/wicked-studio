@@ -655,6 +655,19 @@ describe('NEGATIVE CONTROL (studio#1182): the warning and the switches come from
     // Crew's switches, verified: nothing holds them.
     expect(screen.getByTestId('source-agent-controls-query')).not.toBeDisabled();
   });
+
+  it('a re-read that no longer lists the source shows no switches, never the sheet\'s old ones as verified', async () => {
+    const before = pgServer({ agents: { ...DEFAULTS, query: true } } as never);
+    const sheet = (servers: ReturnType<typeof pgServer>[], unverified: ReadonlySet<string>) => (
+      <SourceSheet target={{ mode: 'saved', server: before }} existing={[before.name]} servers={servers} agentsUnverified={unverified}
+        onReread={vi.fn()} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />
+    );
+    const { rerender } = render(sheet([before], new Set(['support-pg'])));
+    await screen.findByTestId('source-agent-controls-unverified');
+    // crew answered, without the source (removed or renamed there): the commit before the page closes the sheet.
+    rerender(sheet([], new Set()));
+    expect(screen.queryByTestId('source-agent-controls')).toBeNull();
+  });
 });
 
 describe('a job\'s data use on its gate card', () => {

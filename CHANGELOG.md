@@ -20,6 +20,8 @@ npm publish dates. Every version listed here exists on
   effects later. For up to two commits the box showed the old switches with no warning, and they were enabled (a
   shown "query off" while crew had query on). The sheet now reads the switches from the page's latest record of the
   source, as the project-management sheet already did, so the warning and the switches always come from one answer.
+  A re-read that no longer lists the source (removed or renamed at crew) shows no switches, instead of the sheet's old
+  ones as verified.
 
 ## [0.16.12] — 2026-11-17
 
