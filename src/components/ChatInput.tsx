@@ -523,9 +523,23 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   useEffect(() => {
     if (!powerCap || runId) return undefined;
     let live = true;
+    let seq = 0;
     loadPresets(noticeProject);
-    api.getSettings().then((r) => { if (live) setPowerDefault((r.settings as { powerModeDefault?: unknown }).powerModeDefault !== false); }, () => {});
-    return () => { live = false; };
+    // The setting may change elsewhere (Settings, another tab): read it again whenever the page comes back, and until that
+    // read answers (or if it fails) it is unknown — the line then says only what may happen.
+    const read = (): void => {
+      const mine = ++seq;
+      setPowerDefault(null);
+      api.getSettings().then(
+        (r) => { if (live && mine === seq) setPowerDefault((r.settings as { powerModeDefault?: unknown }).powerModeDefault !== false); },
+        () => {},
+      );
+    };
+    read();
+    const onBack = (): void => { if (document.visibilityState !== 'hidden') read(); };
+    window.addEventListener('focus', onBack);
+    document.addEventListener('visibilitychange', onBack);
+    return () => { live = false; window.removeEventListener('focus', onBack); document.removeEventListener('visibilitychange', onBack); };
   }, [powerCap, runId, noticeProject]);
   const noticePresets = presets[noticeProject ?? ''];
   const powerLine = launchKind === 'build' && targetRepoRef !== null ? powerNotice(

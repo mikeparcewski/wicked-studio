@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
@@ -87,6 +87,25 @@ describe('New job form: the line, and the body it describes is unchanged (studio
     const body = vi.mocked(client.api.launchRun).mock.calls[0]![0] as LaunchBodyWithDeliver & { power?: boolean };
     expect(body.power).toBeUndefined();
     expect(body.humanConfirm).toMatch(/^before:/);
+  });
+
+  it('the setting changed elsewhere: coming back to the page reads it again, in both directions (confirmation r8)', async () => {
+    await fill();
+    expect((await screen.findByTestId('launch-power-notice')).textContent).toBe(POWER_WILL_DROP);
+    vi.mocked(client.api.getSettings).mockResolvedValue({ settings: { powerModeDefault: false } } as never);
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(screen.queryByTestId('launch-power-notice')).toBeNull());
+    vi.mocked(client.api.getSettings).mockResolvedValue({ settings: { powerModeDefault: true } } as never);
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(screen.getByTestId('launch-power-notice').textContent).toBe(POWER_WILL_DROP));
+  });
+
+  it('a re-read that fails leaves the setting unknown: the line says only what may happen', async () => {
+    await fill();
+    await screen.findByTestId('launch-power-notice');
+    vi.mocked(client.api.getSettings).mockRejectedValue(new Error('offline'));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(screen.getByTestId('launch-power-notice').textContent).toBe(POWER_MAY_DROP));
   });
 
   it('power off in Settings: no line', async () => {
