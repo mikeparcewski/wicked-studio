@@ -26,7 +26,7 @@ import { baseSkillRefusalOf, describeBaseSkill, gatePostureWord, LAUNCH_PROBE_AF
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { humanConfirmFor } from '../board/planModel.js';
-import { powerNotice } from '../board/powerNotice.js';
+import { launchDeliveryKeys, powerNotice } from '../board/powerNotice.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { menuToken, dropToken } from '../board/planDraft.js';
 import { catalogRows, workflowsOnly, type CatalogRow } from '../board/slashCatalog.js';
@@ -542,9 +542,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     return () => { live = false; window.removeEventListener('focus', onBack); document.removeEventListener('visibilitychange', onBack); };
   }, [powerCap, runId, noticeProject]);
   const noticePresets = presets[noticeProject ?? ''];
+  // The body's delivery keys — the same function the submit uses (the line reads the body it describes).
+  const delivery = launchDeliveryKeys({
+    build: launchKind === 'build', repoRef: targetRepoRef, deliverOn, autoDeliver, daemonDeliverGate,
+    revise: revisesPr !== null && daemonRevisesPr === true, plan: selection.plan !== null,
+  });
   const powerLine = launchKind === 'build' && targetRepoRef !== null ? powerNotice(
     {
       repoRef: targetRepoRef,
+      ...(delivery.deliver !== undefined ? { deliver: delivery.deliver } : {}),
+      ...(delivery.deliverGate !== undefined ? { deliverGate: delivery.deliverGate } : {}),
       ...(selection.plan !== null ? { plan: selection.plan } : launchWorkflow !== '' ? { workflow: launchWorkflow } : {}),
       ...(() => { const hc = humanConfirmFor(mode ?? 'balanced', confirmMode, beforeOrd, 0); return hc !== undefined ? { humanConfirm: hc } : {}; })(),
     },
@@ -896,10 +903,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // run launches WITHOUT the key (the daemon defaults those to `'none'`;
     // older daemons also 400 on `'none'`, so unlicensed bodies never carry it).
     // The same verdict is on screen before the operator sends (`deliverNotice`).
-    if (launchKind === 'build' && targetRepoRef !== null) body.deliver = deliverOn ? 'pr' : 'none';
+    if (delivery.deliver !== undefined) body.deliver = delivery.deliver;
     // F-E2E-030: the deliver gate is the engine's default; the body says nothing to be gated.
     // Only the explicitly unattended postures send the opt-out — and only with a delivery.
-    if (body.deliver === 'pr' && autoDeliver && daemonDeliverGate === true) body.deliverGate = 'auto';
+    if (delivery.deliverGate !== undefined) body.deliverGate = delivery.deliverGate;
     // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
@@ -918,7 +925,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     }
     // DES-L9 §5: `revisesPr` rides the body ONLY when this daemon says it can revise a PR (an
     // older launch schema 400s on the key); a revision is always a PR delivery onto that PR.
-    if (revisesPr !== null && daemonRevisesPr === true && targetRepoRef !== null && selection.plan === null) {
+    if (delivery.revisesPr && revisesPr !== null) {
       body.revisesPr = revisesPr.number;
       body.deliver = 'pr';
     }

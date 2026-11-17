@@ -5,7 +5,7 @@ import { ChatInput } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
 import type { LaunchBodyWithDeliver } from '../src/api/types.js';
-import { POWER_MAY_DROP, POWER_WILL_DROP, powerNotice } from '../src/board/powerNotice.js';
+import { POWER_MAY_DROP, POWER_MAY_DROP_NO_HANDOFF, POWER_WILL_DROP, POWER_WILL_DROP_NO_HANDOFF, powerNotice } from '../src/board/powerNotice.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { usePlanCatalog } from '../src/store/planCatalog.js';
@@ -19,25 +19,29 @@ import { pickLaunchWorkflow } from './launchWorkflowPick.js';
  */
 
 describe('powerNotice: from the body and the daemon (crew POST /runs rules)', () => {
-  const body = { repoRef: 'r', workflow: 'feature', humanConfirm: 'before:1' };
+  const body = { repoRef: 'r', workflow: 'feature', humanConfirm: 'before:1', deliver: 'pr' as const };
   const on = { powerMode: true, powerDefault: true, isPreset: true };
   const bools = [true, false] as const;
-  it('every combination: the line appears exactly when crew may run power and drop a step gate the body asks for', () => {
+  it('every combination: the line appears exactly when crew may run power and drop a step gate, and names a hand-off only when the body keeps one', () => {
     for (const powerMode of bools) for (const powerDefault of [true, false, null] as const) for (const isPreset of [true, false, null] as const)
     for (const hc of ['before:1', 'all', 'none', undefined] as const) for (const repo of bools) for (const kind of ['workflow', 'plan', 'none'] as const)
-    for (const power of [true, false, undefined] as const) {
+    for (const power of [true, false, undefined] as const) for (const deliver of ['pr', 'none', undefined] as const) for (const auto of bools) {
       const b = { ...(repo ? { repoRef: 'r' } : {}), ...(kind === 'workflow' ? { workflow: 'feature' } : kind === 'plan' ? { plan: {} } : {}),
-        ...(hc !== undefined ? { humanConfirm: hc } : {}), ...(power !== undefined ? { power } : {}) };
+        ...(hc !== undefined ? { humanConfirm: hc } : {}), ...(power !== undefined ? { power } : {}),
+        ...(deliver !== undefined ? { deliver } : {}), ...(auto ? { deliverGate: 'auto' as const } : {}) };
       const line = powerNotice(b, { powerMode, powerDefault, isPreset });
       // crew, for every value of what the form has not read.
       const settings = powerDefault === null ? bools : [powerDefault];
       const presets = kind === 'plan' ? [true] : kind === 'none' ? [false] : isPreset === null ? bools : [isPreset];
       const drops = settings.flatMap((setting) => presets.map((preset) =>
         powerMode && repo && preset && (power ?? setting) && hc !== undefined && hc !== 'none'));
+      // A power run's only stop is the engine's deliver gate: kept only by a body that delivers without opting out.
+      const handOff = deliver === 'pr' && !auto;
       const label = JSON.stringify({ b, powerMode, powerDefault, isPreset });
       if (drops.every((d) => !d)) expect(line, label).toBeNull();
-      else if (drops.every((d) => d)) expect(line, label).toBe(POWER_WILL_DROP);
-      else expect(line, label).toBe(POWER_MAY_DROP);
+      else if (drops.every((d) => d)) expect(line, label).toBe(handOff ? POWER_WILL_DROP : POWER_WILL_DROP_NO_HANDOFF);
+      else expect(line, label).toBe(handOff ? POWER_MAY_DROP : POWER_MAY_DROP_NO_HANDOFF);
+      if (line !== null && !handOff) expect(line, `${label}: no hand-off claimed`).not.toMatch(/hand-off/);
     }
   });
   it('a registered workflow that is not a preset runs phased: no line (codex-check 1176b)', () => {
@@ -106,6 +110,18 @@ describe('New job form: the line, and the body it describes is unchanged (studio
     vi.mocked(client.api.getSettings).mockRejectedValue(new Error('offline'));
     await act(async () => { window.dispatchEvent(new Event('focus')); });
     await waitFor(() => expect(screen.getByTestId('launch-power-notice').textContent).toBe(POWER_MAY_DROP));
+  });
+
+  it('delivery off: the line claims no hand-off, and the body sends deliver none (codex-check 1176c)', async () => {
+    const user = await fill();
+    await screen.findByTestId('launch-power-notice');
+    await user.click(screen.getByTestId('deliver-toggle'));
+    await waitFor(() => expect(screen.getByTestId('launch-power-notice').textContent).toBe(POWER_WILL_DROP_NO_HANDOFF));
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    await user.click(screen.getByTestId('launch-submit'));
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    const body = vi.mocked(client.api.launchRun).mock.calls[0]![0] as LaunchBodyWithDeliver;
+    expect(body.deliver).toBe('none');
   });
 
   it('power off in Settings: no line', async () => {
