@@ -563,7 +563,11 @@ export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverifi
 
   const tools: ToolReview[] | null = shownServer !== null && !isNew ? toolReviewsOf((shownServer as { tools?: unknown }).tools, true)
     : preview !== null ? toolReviewsOf((preview as { tools?: unknown }).tools, false) : [];
-  const agentAccess = !isNew && shownServer !== null ? agentAccessOf(shownServer as { agents?: unknown }) : null;
+  /** (studio#1184, as studio#1182) The Agents switches come from the page's record, the same list read as
+   *  `agentsUnverified`; the sheet's own record only when the page gives no list. A list that no longer holds the
+   *  source shows no switches: the sheet's copy is not crew's. */
+  const agentsRecord = servers === undefined ? shownServer : followed;
+  const agentAccess = !isNew && agentsRecord !== null ? agentAccessOf(agentsRecord as { agents?: unknown }) : null;
   const unverified = shownServer !== null && agentsUnverified?.has(shownServer.name) === true;
   const links: TrackerLink[] | null = !isNew && shownServer !== null ? trackerLinksListOf((shownServer as unknown as { trackers?: unknown }).trackers) : [];
   const projectName = (id: string): string => projects.find((p) => p.id === id)?.name ?? id;

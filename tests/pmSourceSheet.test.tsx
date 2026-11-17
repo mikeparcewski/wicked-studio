@@ -508,3 +508,29 @@ describe('the GitHub CLI login option', () => {
     expect(savedWords({ code: null, cause: 'secret_missing' }, 'gh')).toContain('GitHub CLI');
   });
 });
+
+describe('NEGATIVE CONTROL (studio#1184): the Agents warning and switches come from the same record', () => {
+  // As studio#1182 on the data-source sheet: the page's re-read lands its list and clears "may be out of date" in one
+  // commit, while the sheet's own record catches up only through effects.
+  const sheet = (list: unknown[], unverified: ReadonlySet<string>) => (
+    <PmSourceSheet target={{ mode: 'saved', server: jiraServer() as never }} existing={['jira']} servers={list as never}
+      agentsUnverified={unverified} onReread={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />
+  );
+
+  it('a re-read that no longer lists the source shows no switches, never the sheet\'s old ones as verified', async () => {
+    const { rerender } = render(sheet([jiraServer()], new Set(['jira'])));
+    await screen.findByTestId('pm-agent-controls-unverified');
+    // crew answered without the source (removed or renamed there): the commit before the page closes the sheet.
+    rerender(sheet([], new Set()));
+    expect(screen.queryByTestId('pm-agent-controls')).toBeNull();
+  });
+
+  it('the commit that clears the warning shows crew\'s switches from the re-read', async () => {
+    const { rerender } = render(sheet([jiraServer()], new Set(['jira'])));
+    await screen.findByTestId('pm-agent-controls-unverified');
+    rerender(sheet([jiraServer({ agents: { see: true, query: true, projects: ['proj_billing'], everyProject: false } })], new Set()));
+    expect(screen.queryByTestId('pm-agent-controls-unverified')).toBeNull();
+    expect(screen.getByTestId('pm-agent-controls').getAttribute('data-verified')).toBe('true');
+    expect(screen.getByTestId('pm-agent-controls').getAttribute('data-query')).toBe('on');
+  });
+});

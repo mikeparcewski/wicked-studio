@@ -22,6 +22,9 @@ npm publish dates. Every version listed here exists on
   source, as the project-management sheet already did, so the warning and the switches always come from one answer.
   A re-read that no longer lists the source (removed or renamed at crew) shows no switches, instead of the sheet's old
   ones as verified.
+- The same on a project-management source's sheet (studio#1184). Its Agents box already read the page's latest
+  record first, but when a re-read no longer listed the source it fell back to the sheet's own copy and showed those
+  switches as verified while the warning cleared. A list without the source now shows no switches there too.
 
 ## [0.16.12] — 2026-11-17
 
