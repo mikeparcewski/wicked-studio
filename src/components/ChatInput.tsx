@@ -1632,9 +1632,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           <select
             data-testid="gate-posture-power"
             aria-label="Gate posture"
-            title="Power mode asks you once, at hand-off, plus anything policy or the QE plan requires"
+            title={mode === 'autonomous'
+              ? 'Autonomous: the job runs and delivers on its own (no gate, not even at hand-off)'
+              : 'Power mode asks you once, at hand-off, plus anything policy or the QE plan requires'}
             className="wk-field wk-composer-form-select"
-            value={confirmMode === 'none' ? 'none' : 'before'}
+            // studio#1150 (codex-check): the shown posture is the one sent. `autoDeliver` decides the body's
+            // `deliverGate: 'auto'`; Autonomous forces it, so there the choice is fixed at Never.
+            value={autoDeliver ? 'none' : 'before'}
+            disabled={mode === 'autonomous'}
             onChange={(e) => setConfirmMode(e.target.value === 'none' ? 'none' : 'before')}
           >
             <option value="before">At hand-off (power mode)</option>

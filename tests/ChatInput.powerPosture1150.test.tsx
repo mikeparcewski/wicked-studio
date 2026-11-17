@@ -25,6 +25,8 @@ function setup(powerModeDefault: boolean | undefined | 'fail', powerCap = true):
   vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [{ id: 'feature', is_system: false, phases: [] }, { id: 'onboarding', is_system: true, phases: [] }] });
   vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
   vi.spyOn(client.api, 'launchRun').mockResolvedValue({ runId: 'r-new' });
+  // The engine keeps a deliver gate (crew ≥ 0.7.33): the body's `deliverGate: 'auto'` is the only unattended opt-out.
+  vi.spyOn(client.api, 'getHealth').mockResolvedValue({ ok: true, capabilities: { deliverGate: true, revisesPr: false } } as never);
   if (powerModeDefault === 'fail') vi.spyOn(client.api, 'getSettings').mockRejectedValue(new Error('offline'));
   else vi.spyOn(client.api, 'getSettings').mockResolvedValue({ settings: powerModeDefault === undefined ? {} : { powerModeDefault } } as never);
   useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS, loaded: true, persist: 'unknown' });
@@ -87,12 +89,32 @@ describe('New job form: the gate it promises is the gate the run keeps (studio#1
     const user = await fill();
     await user.selectOptions(await screen.findByTestId('gate-posture-power'), 'none');
     expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_NO_GATE_WORDS);
-    expect((await send(user)).power).toBeUndefined();
+    const body = await send(user);
+    expect(body.power).toBeUndefined();
+    expect((body as { deliverGate?: string }).deliverGate).toBe('auto');
   });
 
-  it('Autonomous mode under power: no gate at all is promised', async () => {
-    await fill({ mode: 'autonomous' });
+  it('Autonomous mode under power: the selector shows Never, cannot pick At hand-off, and the body delivers on its own', async () => {
+    const user = await fill({ mode: 'autonomous' });
     await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_NO_GATE_WORDS));
+    const select = screen.getByTestId('gate-posture-power') as HTMLSelectElement;
+    expect(select.value, 'what the selector shows is what is sent').toBe('none');
+    expect(select).toBeDisabled();
+    // codex-check: before, "At hand-off" could be picked here while the body still sent deliverGate: 'auto'.
+    await user.selectOptions(select, 'before').catch(() => undefined);
+    expect(select.value).toBe('none');
+    expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_NO_GATE_WORDS);
+    const body = await send(user);
+    expect(body.power).toBeUndefined();
+    expect((body as { deliverGate?: string }).deliverGate, 'Never: it delivers on its own').toBe('auto');
+  });
+
+  it('what the power selector shows is what the body sends (At hand-off keeps the deliver gate; Never sends deliverGate auto)', async () => {
+    const user = await fill();
+    const select = await screen.findByTestId('gate-posture-power') as HTMLSelectElement;
+    expect(select.value).toBe('before');
+    const body = await send(user);
+    expect((body as { deliverGate?: string }).deliverGate).toBeUndefined();
   });
 
   it('Ask mode (every step) is never a power launch: its posture shows and the body says power: false', async () => {
