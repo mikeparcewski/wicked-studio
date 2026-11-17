@@ -12,6 +12,17 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.12] — 2026-11-17
+
+Patch (fix release): gate cards render exactly the answers the engine lists for the open gate (studio#1170; reads
+crew's `GateInfo.actions` from wicked-core `gate_actions`, crew#1581 + core#1512), and "Revise this PR" / "Retry"
+pre-fill the run's intent alone so text typed after it reaches the run (studio#1148). Carries #1172 and #1178.
+Known limits: studio#1177 (W8, W8, W6, W6: consent and free-text rows keep their own resolver; a chat job's plan
+passage ignores the list; the three-state note policy is reduced to needs-a-note; a failed event read hides a valid
+list), studio#1175 (W6: a chatless plan card has no plan editor for a listed `edit_plan`), studio#1180 (W8: a
+one-seat arbiter ruling shows as a council), wicked-ci#76 (W6: the advisory selftest shows green over its U04 FAIL).
+With an older daemon (no action list) the cards keep their own resolver. Bundled by the next wicked-crew release.
+
 ### Fixed
 
 - "Revise this PR" and "Retry" pre-fill the run's intent alone, without crew's linked-issues, learnings and rules
@@ -3598,7 +3609,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.11...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.12...HEAD
+[0.16.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.11...v0.16.12
 [0.16.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.10...v0.16.11
 [0.16.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.9...v0.16.10
 [0.16.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.8...v0.16.9
