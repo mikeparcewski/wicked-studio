@@ -12,6 +12,15 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- A source's Agents box no longer drops "may be out of date" while still showing the switches from before the re-read
+  (studio#1182). When "Read again" succeeded, the page cleared the warning in the same commit that brought crew's
+  switches, but the open sheet read the switches from its own copy of the source, which caught up only through two
+  effects later. For up to two commits the box showed the old switches with no warning, and they were enabled (a
+  shown "query off" while crew had query on). The sheet now reads the switches from the page's latest record of the
+  source, as the project-management sheet already did, so the warning and the switches always come from one answer.
+
 ## [0.16.12] — 2026-11-17
 
 Patch (fix release): gate cards render exactly the answers the engine lists for the open gate (studio#1170; reads
