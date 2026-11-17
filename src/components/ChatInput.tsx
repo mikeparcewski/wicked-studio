@@ -25,13 +25,14 @@ import { noCarryingSeatReason } from './gateVerdictModel.js';
 import { baseSkillRefusalOf, describeBaseSkill, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
+import { launchPosture } from '../board/launchPosture.js';
 import { menuToken, dropToken } from '../board/planDraft.js';
 import { catalogRows, workflowsOnly, type CatalogRow } from '../board/slashCatalog.js';
 import { jobCatalogView } from '../board/workflowCatalog.js';
 import { catalogProjectOf, useWorkflowCatalog } from '../store/workflowCatalog.js';
 import { SlashMenu } from './session/SlashMenu.js';
 import { ContextPopover } from './ContextPopover.js';
-import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
+import { normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
 import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
@@ -144,15 +145,8 @@ export function teamReceiptLine(text: string): string {
   return `✓ Sent to the team: "${clipped}" · queued for their next turn · the plan gate stays open`;
 }
 
-/** studio#1150: the Ready-to-send gate words for a power launch (crew drops its humanConfirm; it asks once, at hand-off). */
-export const POWER_GATE_WORDS = 'at hand-off (power mode)';
-/** …and for one that also delivers on its own (Autonomous, or "Never"): no gate at all. */
-export const POWER_NO_GATE_WORDS = 'no gates (power mode, delivers on its own)';
-/** …and for one that delivers nothing (no pull request): there is no hand-off to ask at. */
-export const POWER_NO_HANDOFF_WORDS = 'no gates (power mode, no hand-off)';
-/** The words for what the launch body will do (`unattended`: no gate at hand-off; `delivers`: it opens a PR). */
-export const powerGateWords = (unattended: boolean, delivers: boolean): string =>
-  (!delivers ? POWER_NO_HANDOFF_WORDS : unattended ? POWER_NO_GATE_WORDS : POWER_GATE_WORDS);
+// studio#1150: the posture words live with the one function that decides them (board/launchPosture.ts).
+export { POWER_GATE_WORDS, POWER_NO_GATE_WORDS, POWER_NO_HANDOFF_WORDS } from '../board/launchPosture.js';
 
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const shownText = useDisplayText();
@@ -479,21 +473,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }, [powerCap, runId]);
   /** This launch turned power mode OFF (the switch); otherwise the daemon's setting decides and no `power` key is sent. */
   const [powerOff, setPowerOff] = useState(false);
-  // A repo-scoped BUILD launch of a workflow or plan, on a daemon whose setting runs it in power mode. Ask mode (gate every
-  // step) is never one: a power run cannot keep that posture, so an Ask launch says `power: false` (below).
-  const powerLaunch = powerCap && !runId && powerDefault === true && launchKind === 'build' && mode !== 'ask'
-    && targetRepoRef !== null && (selection.plan !== null || launchWorkflow !== '');
-  // Autonomous mode keeps no step gate whatever the posture says (its body sends no humanConfirm), so the switch's way
-  // to keep one is not offered there (codex-check r3): Autonomous always follows the daemon's setting.
-  const powerSwitchable = powerLaunch && mode !== 'autonomous';
-  const powerOn = powerLaunch && !(powerOff && powerSwitchable);
-  // What the body will do at hand-off, from the SAME conditions the body is built from (codex-check r3): a power run's
-  // one gate is the deliver gate; it is waived only by the body's `deliverGate: 'auto'` (an unattended posture on a
-  // daemon that keeps the gate), and there is none on a daemon without it. Unknown (the health read failed) keeps it.
-  // A revision always delivers onto its PR (the body's `revisesPr` override, below), whatever the toggle says.
-  const powerDelivers = (launchKind === 'build' && targetRepoRef !== null && deliverOn)
-    || (revisesPr !== null && daemonRevisesPr === true && targetRepoRef !== null && selection.plan === null);
-  const powerUnattended = powerDelivers && (daemonDeliverGate === false || (autoDeliver && daemonDeliverGate === true));
   // studio#596: the daemon reads linked issues for a WORKFLOW launch only (crew's `POST /runs`), so
   // the preview is read for exactly that launch — the one this form is about to send.
   // The SAME problem the launch sends — the steer field rides it as "Operator guidance" (codex r1).
@@ -553,6 +532,19 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // S16a-4f (codex r1): the flat launch form is pre-bound by whichever seed carried a project — the
   // retry prefill, else the steer prefill (the pre-bound `/p/:id/build/new` route moved to the Desk).
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(prefill?.projectId ?? steerSeed?.projectId ?? null);
+  // studio#1150 / #1179: what the form SHOWS about the run's gates and the body keys that decide them, from ONE pure
+  // function — the summary, the selector, the switch and the launch body all read this, nothing else derives them.
+  // Whether the workflow is a preset (crew runs only a plan or a preset in power mode): the bound project's list.
+  const postureProject = lockedProjectId ?? selectedProjectId ?? null;
+  useEffect(() => { if (powerCap && !runId) loadPresets(postureProject); }, [powerCap, runId, postureProject]);
+  const presetsHere = presets[postureProject ?? ''];
+  const posture = launchPosture({
+    mode, confirmMode, beforeOrd, powerCap: powerCap && !runId, powerDefault, powerOff,
+    build: launchKind === 'build', repoRef: targetRepoRef, plan: selection.plan !== null, workflow: launchWorkflow,
+    isPreset: Array.isArray(presetsHere) ? presetsHere.some((pr) => pr.name === launchWorkflow) : null,
+    deliverOn, revise: revisesPr !== null && daemonRevisesPr === true, deliverGateCap: daemonDeliverGate,
+  });
+  const powerOn = posture.shown.power;
   // The project a launch's tracker set is computed for: none for Unfiled (crew's synthesised `default`).
   const issueProject = (lockedProjectId ?? selectedProjectId ?? null) === 'default' ? null : (lockedProjectId ?? selectedProjectId ?? null);
   const linkedPreview = useLinkedIssuesPreview({
@@ -876,7 +868,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // Ask → gate all; Autonomous → no human gates (confirmMode selection ignored); Balanced/unset →
     // the posture applies. `before:N` counts the run's own units: on a launch the PA scopes first
     // (its step is ord 1, wicked-core X1) it is sent as N + 1, read off the launch preview.
-    const humanConfirm = await launchPreview.resolveHumanConfirm();
+    // studio#1150: a power run drops `humanConfirm` (it asks once, at hand-off), so a power launch sends none — and needs
+    // no preview to place a step gate it will not keep.
+    const humanConfirm = posture.payload.keepsHumanConfirm ? await launchPreview.resolveHumanConfirm() : undefined;
     if (humanConfirm !== undefined) body.humanConfirm = humanConfirm;
     // The ONE repo this run works in (F-028): the resolved target — an explicit
     // tick or the Target-repo choice wins over auto-attached project members;
@@ -897,7 +891,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // run launches WITHOUT the key (the daemon defaults those to `'none'`;
     // older daemons also 400 on `'none'`, so unlicensed bodies never carry it).
     // The same verdict is on screen before the operator sends (`deliverNotice`).
-    if (launchKind === 'build' && targetRepoRef !== null) body.deliver = deliverOn ? 'pr' : 'none';
+    // studio#1150 / #1179: the delivery keys come from the posture the form shows (`launchPosture`), never derived here.
+    if (posture.payload.deliver !== undefined) body.deliver = posture.payload.deliver;
     // F-E2E-030: the deliver gate is the engine's default; the body says nothing to be gated.
     // Only the explicitly unattended postures send the opt-out — and only with a delivery.
     // (the opt-out is set below, once the revision override has settled whether this launch delivers)
@@ -919,13 +914,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     }
     // DES-L9 §5: `revisesPr` rides the body ONLY when this daemon says it can revise a PR (an
     // older launch schema 400s on the key); a revision is always a PR delivery onto that PR.
-    if (revisesPr !== null && daemonRevisesPr === true && targetRepoRef !== null && selection.plan === null) {
-      body.revisesPr = revisesPr.number;
-      body.deliver = 'pr';
-    }
-    // F-E2E-030, after every delivery decision (a revision delivers onto its PR whatever the toggle says, studio#1150
-    // confirmation r5): only an explicitly unattended posture opts out of the engine's deliver gate.
-    if (body.deliver === 'pr' && autoDeliver && daemonDeliverGate === true) body.deliverGate = 'auto';
+    if (posture.payload.revisesPr && revisesPr !== null) body.revisesPr = revisesPr.number;
+    // F-E2E-030: only an explicitly unattended posture opts out of the engine's deliver gate (the posture says when).
+    if (posture.payload.deliverGate !== undefined) body.deliverGate = posture.payload.deliverGate;
     // Ad-hoc grouping (wicked-studio#27, api-types 0.19.0): provenance only —
     // the run executes byte-identically. One control ⇒ never both keys. An
     // empty typed label sends NOTHING (omitting the key is pre-0.19 behavior,
@@ -938,10 +929,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // only to a daemon that takes it, only for a workflow that requires QE acceptance.
     if (offerQe && !qeOff && skipQe) body.skipQeAcceptance = { reason: skipQeReason.trim() };
     if (offerQe && forceQe) body.forceQeAcceptance = true;
-    // studio#1150: only this launch's own word on power mode rides the body (the setting decides otherwise, as it always has).
-    if ((powerSwitchable && powerOff) || (powerCap && mode === 'ask' && launchKind === 'build')) {
-      (body as LaunchBodyWithDeliver & { power?: boolean }).power = false;
-    }
+    // studio#1150: the launch's word on power mode, as the posture shows it (none = the daemon's setting, which is on).
+    if (posture.payload.power !== undefined) (body as LaunchBodyWithDeliver & { power?: boolean }).power = posture.payload.power;
 
     try {
       let launched;
@@ -1649,21 +1638,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           <select
             data-testid="gate-posture-power"
             aria-label="Gate posture"
-            title={!powerDelivers
-              ? 'Nothing is delivered, so there is no hand-off to ask at'
-              : powerUnattended
-                ? 'The job runs and delivers on its own: no gate, not even at hand-off'
-                : mode === 'autonomous'
-                  ? 'The hand-off gate stays: this daemon could not be read to say it may deliver on its own'
-                  : 'Power mode asks you once, at hand-off, plus anything policy or the QE plan requires'}
+            title={posture.shown.powerTitle}
             className="wk-field wk-composer-form-select"
-            // studio#1150 (codex-check): the shown posture is the one sent. `autoDeliver` decides the body's
-            // `deliverGate: 'auto'`; Autonomous forces it, so there the choice is fixed at Never.
-            value={!powerDelivers ? 'no-handoff' : powerUnattended ? 'none' : 'before'}
-            disabled={mode === 'autonomous' || !powerDelivers}
+            // studio#1150: the hand-off as the body leaves it (`launchPosture`), never the posture alone.
+            value={posture.shown.powerChoice}
+            disabled={posture.shown.powerChoiceFixed}
             onChange={(e) => setConfirmMode(e.target.value === 'none' ? 'none' : 'before')}
           >
-            {!powerDelivers && <option value="no-handoff">No hand-off (nothing is delivered)</option>}
+            {posture.shown.powerChoice === 'no-handoff' && <option value="no-handoff">No hand-off (nothing is delivered)</option>}
             <option value="before">At hand-off (power mode)</option>
             <option value="none">{gatePostureWord('none', beforeOrd, deliverNotice?.state === 'on' && daemonDeliverGate === true)}</option>
           </select>
@@ -1683,7 +1665,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             <option value="none">{gatePostureWord('none', beforeOrd, deliverNotice?.state === 'on' && mode !== 'ask' && daemonDeliverGate === true)}</option>
           </select>
         )}
-        {powerSwitchable && (
+        {posture.shown.switchShown && (
           <Switch
             label={`Power mode: ${powerOn ? 'On' : 'Off'}`}
             checked={powerOn}
@@ -1952,7 +1934,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-workflow={selection.composing ? '' : launchWorkflow}
           data-plan={selection.plan === null ? '' : selection.plan.steps.map((st) => st.id ?? st.catalog).join(' ')}
           data-target={targetRepoRef ?? ''}
-          data-gate={powerOn ? powerGateWords(powerUnattended, powerDelivers) : describeGate(mode, confirmMode, beforeOrd)}
+          data-gate={posture.shown.gateWords}
           className="text-xs px-1"
           style={{ color: 'var(--ink-muted)' }}
         >
@@ -1969,7 +1951,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             {targetLabel ?? (target.kind === 'ambiguous' ? 'no target repo chosen' : 'no repository')}
           </span>
           {' · gate: '}
-          <span data-testid="launch-confirm-gate" style={{ color: 'var(--ink-high)' }}>{powerOn ? powerGateWords(powerUnattended, powerDelivers) : describeGate(mode, confirmMode, beforeOrd)}</span>
+          <span data-testid="launch-confirm-gate" style={{ color: 'var(--ink-high)' }}>{posture.shown.gateWords}</span>
           {/* F-E2E-030: the deliver gate is part of what is being sent — read it here too. */}
           {deliverNotice?.state === 'on' && (
             <>

@@ -3,6 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput, POWER_GATE_WORDS, POWER_NO_GATE_WORDS } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
+import { teamPlanApi } from '../src/api/teamPlan.js';
+import { usePlanCatalog } from '../src/store/planCatalog.js';
 import type { LaunchBodyWithDeliver } from '../src/api/types.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { useCapabilities } from '../src/store/capabilities.js';
@@ -26,6 +28,11 @@ function setup(powerModeDefault: boolean | undefined | 'fail', powerCap = true):
   vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [{ id: 'feature', is_system: false, phases: [] }, { id: 'onboarding', is_system: true, phases: [] }] });
   vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
   vi.spyOn(client.api, 'launchRun').mockResolvedValue({ runId: 'r-new' });
+  // `feature` is one of the daemon's presets (crew runs only a plan or a preset in power mode).
+  usePlanCatalog.setState({ presets: {} });
+  vi.spyOn(teamPlanApi, 'presets').mockResolvedValue({ presets: [{ name: 'feature', scope: 'global', steps: [{ catalog: 'build', id: 'build' }], created_by: 'builtin', updated_at: 1 }] } as never);
+  // An engine without the plan preview: a step gate is placed unshifted.
+  vi.spyOn(teamPlanApi, 'previewPlan').mockRejectedValue(new client.ApiError(501, 'no preview'));
   // The engine keeps a deliver gate (crew ≥ 0.7.33): the body's `deliverGate: 'auto'` is the only unattended opt-out.
   vi.spyOn(client.api, 'getHealth').mockResolvedValue({ ok: true, capabilities: { deliverGate: true, revisesPr: false } } as never);
   if (powerModeDefault === 'fail') vi.spyOn(client.api, 'getSettings').mockRejectedValue(new Error('offline'));
@@ -65,7 +72,7 @@ describe('New job form: the gate it promises is the gate the run keeps (studio#1
     expect(screen.getByTestId('launch-confirm').textContent).not.toMatch(/first gate/);
     const body = await send(user);
     expect(body.power).toBeUndefined();
-    expect(body.humanConfirm, 'still sent: kept if the launch falls back to phased').toBeDefined();
+    expect(body.humanConfirm, 'a power run drops it: none is sent').toBeUndefined();
   });
 
   it('Power mode off: the posture comes back, the summary names it, and the body says power: false', async () => {
@@ -174,6 +181,17 @@ describe('New job form: the gate it promises is the gate the run keeps (studio#1
     });
   }
 
+  it('a registered workflow that is not a preset runs phased: its posture shows, and the body says power: false (codex-check 1176b)', async () => {
+    vi.mocked(teamPlanApi.presets).mockResolvedValue({ presets: [] } as never);
+    const user = await fill();
+    await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe('first gate'));
+    expect(screen.queryByTestId('gate-posture-power')).toBeNull();
+    expect(screen.queryByTestId('launch-power-toggle')).toBeNull();
+    const body = await send(user);
+    expect(body.power).toBe(false);
+    expect(body.humanConfirm).toMatch(/^before:/);
+  });
+
   it('what the power selector shows is what the body sends (At hand-off keeps the deliver gate; Never sends deliverGate auto)', async () => {
     const user = await fill();
     const select = await screen.findByTestId('gate-posture-power') as HTMLSelectElement;
@@ -197,13 +215,13 @@ describe('New job form: the gate it promises is the gate the run keeps (studio#1
     expect(screen.getByTestId('launch-confirm-gate').textContent).toBe('first gate');
   });
 
-  it('the setting off: the posture select shows, as before, and nothing is sent about power', async () => {
+  it('the setting off: the posture select shows, as before, and the body says the phased run it shows (power: false)', async () => {
     setup(false);
     const user = await fill();
     await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe('first gate'));
     expect(screen.getByTestId('gate-posture')).toBeInTheDocument();
     expect(screen.queryByTestId('launch-power-toggle'), 'the setting off: no new switch').toBeNull();
-    expect((await send(user)).power).toBeUndefined();
+    expect((await send(user)).power).toBe(false);
   });
 
   it('a daemon without power mode: unchanged (no switch, the posture select)', async () => {
