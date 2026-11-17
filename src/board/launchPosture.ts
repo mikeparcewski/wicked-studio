@@ -14,7 +14,7 @@
  */
 import type { LaunchPlan } from '../api/teamPlan.js';
 
-/** `POST /runs/preview`'s body (api-types 0.212.0 `LaunchPreviewBody`). */
+/** `POST /runs/preview`'s body (api-types 0.212.0 `LaunchPreviewBody`; the form never sends `humanConfirm`). */
 export interface LaunchPreviewBody {
   power?: boolean;
   repoRef?: string;
@@ -112,12 +112,13 @@ export function postureKey(fields: LaunchPostureFields, powerChoice: boolean | u
 }
 
 /**
- * What the launch sends as `power`: `true` only when crew's answer for exactly this key said power;
- * `false` otherwise (no answer for it, or phased). `undefined` on a daemon without power mode, whose
- * launch schema may not take the key.
+ * What the launch sends as `power`: `true` only when crew's answer for exactly the body sent said power; `false`
+ * otherwise (no answer for it, or phased), so the step gate shown is the one kept. `undefined` only on a daemon that
+ * SAYS it has no power mode (`takesPower === false`), whose launch schema may not take the key; a daemon not known to
+ * (`null`: its health read failed) gets `false`, a loud 400 at worst, never a silent power run.
  */
-export function powerToSend(powerCap: boolean, answer: LaunchPreviewPosture | null): boolean | undefined {
-  if (!powerCap) return undefined;
+export function powerToSend(takesPower: boolean | null, answer: LaunchPreviewPosture | null): boolean | undefined {
+  if (takesPower === false) return undefined;
   return answer?.power === true;
 }
 

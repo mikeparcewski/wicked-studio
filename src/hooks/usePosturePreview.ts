@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../api/client.js';
 import {
@@ -19,19 +19,23 @@ export type PostureAnswer =
 export interface PosturePreview {
   /** The key of the fields on screen. */
   key: string;
-  /** crew's answer for the fields on screen. */
+  /** crew's answer for the fields on screen: what the form renders, and what Send captures. */
   answer: PostureAnswer;
-  /** crew's answer for an exact key (`null` when none is in): what Send reads. */
-  postureFor: (key: string) => LaunchPreviewPosture | null;
 }
 
 /**
  * (studio#1150) crew's posture for the form's body (`POST /runs/preview`), debounced and keyed by
- * {@link postureKey}. `enabled` false (no power mode on this daemon) asks nothing.
+ * {@link postureKey}. `enabled` false (the daemon has no power mode, or is not known to) asks nothing.
+ *
+ * The request carries no `humanConfirm`: the form reads only `power`, `deliver` and `autoDeliver`,
+ * none of which crew decides from it. A phased run keeps the `humanConfirm` Send carries (crew's
+ * own matrix, `launch-posture.test.ts`); a power run keeps none.
+ *
+ * A request whose fields left the screen before it answered is dropped, never stored: a later
+ * answer for the same fields is the only one that can stand.
  */
 export function usePosturePreview(
   fields: LaunchPostureFields,
-  humanConfirm: string | undefined,
   powerChoice: boolean | undefined,
   enabled: boolean,
 ): PosturePreview {
@@ -40,7 +44,6 @@ export function usePosturePreview(
   const [, bump] = useState(0);
   const body: LaunchPreviewBody = {
     ...fields,
-    ...(humanConfirm !== undefined ? { humanConfirm } : {}),
     ...(powerChoice !== undefined ? { power: powerChoice } : {}),
   };
   const bodyJson = JSON.stringify(body);
@@ -54,14 +57,16 @@ export function usePosturePreview(
     const t = setTimeout(() => {
       api.previewLaunchPosture(JSON.parse(bodyJson) as LaunchPreviewBody).then(
         (r) => {
+          if (!live) return;
           map.set(key, r.posture !== undefined && typeof r.posture.power === 'boolean'
             ? { status: 'ready', posture: r.posture }
             : { status: 'none' });
-          if (live) bump((n) => n + 1);
+          bump((n) => n + 1);
         },
         () => {
+          if (!live) return;
           map.set(key, { status: 'none' });
-          if (live) bump((n) => n + 1);
+          bump((n) => n + 1);
         },
       );
     }, DEBOUNCE_MS);
@@ -73,10 +78,6 @@ export function usePosturePreview(
     // `key` is the fields' identity; the body is rebuilt with it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, enabled]);
-  const postureFor = useCallback((k: string): LaunchPreviewPosture | null => {
-    const a = answers.current.get(k);
-    return a !== undefined && a.status === 'ready' ? a.posture : null;
-  }, []);
   const answer: PostureAnswer = !enabled ? { status: 'none' } : answers.current.get(key) ?? { status: 'loading' };
-  return { key, answer, postureFor };
+  return { key, answer };
 }

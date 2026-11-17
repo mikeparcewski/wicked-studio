@@ -66,11 +66,12 @@ describe('postureKey', () => {
 });
 
 describe('powerToSend', () => {
-  it('true only on crew\'s power answer; false with no answer; absent on a daemon without power', () => {
+  it('true only on crew\'s power answer; false with no answer or an unknown daemon; absent only on a daemon without power', () => {
     const power = { power: true, deliver: 'pr' as const, autoDeliver: false };
     expect(powerToSend(true, power)).toBe(true);
     expect(powerToSend(true, { ...power, power: false })).toBe(false);
     expect(powerToSend(true, null)).toBe(false);
+    expect(powerToSend(null, null)).toBe(false);
     expect(powerToSend(false, power)).toBeUndefined();
   });
 });
