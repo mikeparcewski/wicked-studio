@@ -333,6 +333,15 @@ describe('retryPrefillOf', () => {
   });
 });
 
+describe('retryPrefillOf — the intent alone (studio#1148)', () => {
+  it('drops the daemon blocks so text typed after the pre-fill reaches the run', () => {
+    const v = makeView({
+      id: 'r-d', problem: 'fix the tests\n\n<!-- wicked-crew:linked-issues -->\n- #3\n<!-- /wicked-crew:linked-issues -->\n<!-- wicked-crew:rules -->\nR1\n<!-- /wicked-crew:rules -->',
+    });
+    expect(retryPrefillOf(v).problem).toBe('fix the tests');
+  });
+});
+
 describe('needsYouRows — a retried failure has its answer (S15a)', () => {
   it('a failed run that a later run retried (retry_of names it) is not a row; an unretried one still is', () => {
     const retry = makeView({ id: 'r-retry', status: 'executing' });

@@ -12,6 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- "Revise this PR" and "Retry" pre-fill the run's intent alone, without crew's linked-issues, learnings and rules
+  blocks, so text typed after the pre-fill reaches the run (crew cuts a problem at its first linked-issues marker)
+  (studio#1148).
+
 ## [0.16.11] — 2026-11-15
 
 Patch (fix release): a repository's page follows the live run list, so "Indexing now" / "Working" clear when onboarding
