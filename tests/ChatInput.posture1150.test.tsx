@@ -134,6 +134,52 @@ describe('New job form: the gates shown are crew\'s answer for the body sent (st
     expectAskedFor(body);
   });
 
+  it('Power mode off, then on again: the power words come back and power: true is sent', async () => {
+    answer = crewSays();
+    const user = userEvent.setup();
+    render(<ChatInput onLaunched={() => {}} />);
+    await bindRepo(user);
+    const toggle = async () => {
+      const sw = screen.getByTestId('gate-posture-power-switch');
+      await user.click(sw.getAttribute('role') === 'switch' ? sw : within(sw).getByRole('switch'));
+    };
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power-switch')).toBeInTheDocument());
+    await toggle();
+    await waitFor(() => expect(screen.getByTestId('gate-posture')).toBeInTheDocument());
+    await toggle();
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power')).toHaveTextContent(HAND_OFF));
+    expect(screen.getByTestId('launch-confirm-gate')).toHaveTextContent(HAND_OFF);
+    const body = await send(user);
+    expect(body.power).toBe(true);
+    expectAskedFor(body);
+  });
+
+  it('power with unattended delivery (Autonomous): no step gates, auto on the Ready line, deliverGate: auto and power: true sent', async () => {
+    answer = crewSays();
+    const user = userEvent.setup();
+    render(<ChatInput onLaunched={() => {}} mode="autonomous" />);
+    await bindRepo(user);
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power')).toHaveTextContent(NO_STEP));
+    expect(screen.getByTestId('launch-confirm-deliver')).toHaveTextContent('auto — no gate before the push');
+    const body = await send(user);
+    expect(body).toMatchObject({ power: true, deliver: 'pr', deliverGate: 'auto' });
+    expectAskedFor(body);
+  });
+
+  it('power with no delivery (toggle off): no step gates, no delivery on the Ready line; power: true, deliver: none sent', async () => {
+    answer = crewSays();
+    const user = userEvent.setup();
+    render(<ChatInput onLaunched={() => {}} />);
+    await bindRepo(user);
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power')).toBeInTheDocument());
+    await user.click(screen.getByTestId('deliver-toggle'));
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power')).toHaveTextContent(NO_STEP));
+    expect(screen.queryByTestId('launch-confirm-deliver')).toBeNull();
+    const body = await send(user);
+    expect(body).toMatchObject({ power: true, deliver: 'none' });
+    expectAskedFor(body);
+  });
+
   it('a phased answer: today\'s select and words, power: false sent', async () => {
     answer = crewSays({ power: false });
     const user = userEvent.setup();

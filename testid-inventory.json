@@ -7526,6 +7526,18 @@
       ]
     },
     {
+      "testId": "gate-posture-power",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "gate-posture-power-switch",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "gate-toast",
       "files": [
         "src/components/GateNotifications.tsx"
@@ -9273,6 +9285,12 @@
     },
     {
       "testId": "launch-gate",
+      "files": [
+        "src/components/ContextPopover.tsx"
+      ]
+    },
+    {
+      "testId": "launch-gate-power",
       "files": [
         "src/components/ContextPopover.tsx"
       ]
