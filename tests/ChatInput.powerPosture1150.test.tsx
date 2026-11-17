@@ -156,6 +156,24 @@ describe('New job form: the gate it promises is the gate the run keeps (studio#1
     expect((body as { deliverGate?: string }).deliverGate).toBeUndefined();
   });
 
+  for (const [label, mode, pick] of [['Balanced + Never', undefined, true], ['Autonomous', 'autonomous', false]] as const) {
+    it(`a revision with the toggle off, ${label}: no gate shown, and the body opts out of the deliver gate (confirmation r5)`, async () => {
+      vi.mocked(client.api.getHealth).mockResolvedValue({ ok: true, capabilities: { deliverGate: true, revisesPr: true } } as never);
+      setRetryPrefill({ retryOf: null, problem: 'Revise PR #42 (b): add the retry card', clis: ['claude'], workflowId: 'feature', repoRef: 'wicked-studio',
+        entityMode: 'shared', humanConfirm: { before: 1 }, projectId: null, revisesPr: { number: 42, title: 'add the retry card', headRef: 'b' } });
+      const user = userEvent.setup();
+      render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} {...(mode !== undefined ? { mode } : {})} />);
+      await waitFor(() => expect(screen.getByTestId('launch-workflow-pill').dataset.workflow).toBe('feature'));
+      const toggle = await screen.findByTestId('deliver-toggle') as HTMLInputElement;
+      if (toggle.checked) await user.click(toggle);
+      if (pick) await user.selectOptions(await screen.findByTestId('gate-posture-power'), 'none');
+      await waitFor(() => expect(screen.getByTestId('launch-confirm-gate').textContent).toBe(POWER_NO_GATE_WORDS));
+      const body = await send(user);
+      expect(body.deliver).toBe('pr');
+      expect((body as { deliverGate?: string }).deliverGate, 'what was shown: it delivers on its own').toBe('auto');
+    });
+  }
+
   it('what the power selector shows is what the body sends (At hand-off keeps the deliver gate; Never sends deliverGate auto)', async () => {
     const user = await fill();
     const select = await screen.findByTestId('gate-posture-power') as HTMLSelectElement;

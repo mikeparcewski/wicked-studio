@@ -900,7 +900,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (launchKind === 'build' && targetRepoRef !== null) body.deliver = deliverOn ? 'pr' : 'none';
     // F-E2E-030: the deliver gate is the engine's default; the body says nothing to be gated.
     // Only the explicitly unattended postures send the opt-out — and only with a delivery.
-    if (body.deliver === 'pr' && autoDeliver && daemonDeliverGate === true) body.deliverGate = 'auto';
+    // (the opt-out is set below, once the revision override has settled whether this launch delivers)
     // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
@@ -923,6 +923,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       body.revisesPr = revisesPr.number;
       body.deliver = 'pr';
     }
+    // F-E2E-030, after every delivery decision (a revision delivers onto its PR whatever the toggle says, studio#1150
+    // confirmation r5): only an explicitly unattended posture opts out of the engine's deliver gate.
+    if (body.deliver === 'pr' && autoDeliver && daemonDeliverGate === true) body.deliverGate = 'auto';
     // Ad-hoc grouping (wicked-studio#27, api-types 0.19.0): provenance only —
     // the run executes byte-identically. One control ⇒ never both keys. An
     // empty typed label sends NOTHING (omitting the key is pre-0.19 behavior,
