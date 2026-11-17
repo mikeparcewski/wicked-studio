@@ -17,9 +17,9 @@ npm publish dates. Every version listed here exists on
 - "Revise this PR" and "Retry" pre-fill the run's intent alone, without crew's linked-issues, learnings and rules
   blocks, so text typed after the pre-fill reaches the run (crew cuts a problem at its first linked-issues marker)
   (studio#1148).
-- The New job form no longer promises "gate: first gate" for a launch that runs in power mode: it says "At hand-off
-  (power mode)" and offers a Power mode switch, the one way to keep a step gate (the job then runs phased with the
-  posture chosen and sends `power: false`) (studio#1150).
+- The New job form says when a launch will run in power mode and so not keep the step gates its posture asks for
+  ("it asks you once, at hand-off"): one read-only line under Ready to send, derived from the launch body and the
+  daemon's power setting and presets. The body is unchanged (studio#1150; the posture selector is studio#1179).
 
 ## [0.16.11] — 2026-11-15
 
