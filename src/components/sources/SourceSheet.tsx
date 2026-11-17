@@ -449,9 +449,15 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
    *  field too, but crew's switches route refuses them (`not_a_source`), so they get no box. */
   /** A sheet opened as NEW whose saved source the page's latest read no longer holds: it is gone, so no switches. */
   const gone = target.mode === 'new' && saved !== null && servers !== undefined && !servers.some((s) => s.name === saved.name);
-  const agentAccess = saved !== null && saved.kind === 'sql' && !gone ? agentAccessOf(saved as { agents?: unknown }) : null;
+  /** (studio#1182) The switches are read from the page's latest record of this source when it holds one, as
+   *  `agentsUnverified` is: both come from the same list read, so the commit that clears "may be out of date" already
+   *  shows crew's switches. The sheet's own record (`saved`, which follows the page only through effects) is the
+   *  fallback only when the page gives no list. A list that no longer holds the source (removed or renamed at crew)
+   *  shows no switches: the sheet's copy is not crew's. */
+  const agentsRecord = saved === null ? null : servers === undefined ? saved : servers.find((s) => s.name === saved.name) ?? null;
+  const agentAccess = agentsRecord !== null && agentsRecord.kind === 'sql' && !gone ? agentAccessOf(agentsRecord as { agents?: unknown }) : null;
   /** crew sent the field but not as crew's shape: no box, and "What agents see" claims nothing either way. */
-  const agentsUnreadable = agentAccess === null && !gone && saved !== null && saved.kind === 'sql' && (saved as { agents?: unknown }).agents !== undefined;
+  const agentsUnreadable = agentAccess === null && !gone && agentsRecord !== null && agentsRecord.kind === 'sql' && (agentsRecord as { agents?: unknown }).agents !== undefined;
   /** crew couldn't be asked again after a write: the box holds its switches, and the summary claims nothing either. */
   const agentsUnverified = saved !== null && agentsUnverifiedSet?.has(saved.name) === true;
   const savedSheetKind = saved !== null ? sheetKindOf(saved) : null;

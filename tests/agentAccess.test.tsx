@@ -631,6 +631,45 @@ describe('NEGATIVE CONTROL (review r1): crew\'s switches reach the box after a w
   });
 });
 
+describe('NEGATIVE CONTROL (studio#1182): the warning and the switches come from the same answer', () => {
+  // The page's re-read lands the new list and clears "may be out of date" in one commit; the sheet's own copy of the
+  // source catches up only through effects. In that commit the box must already show crew's switches, never the
+  // pre-read ones without the warning (and enabled).
+  it('the commit that clears the warning shows crew\'s switches, even before the sheet\'s own record catches up', async () => {
+    const before = pgServer({ agents: { ...DEFAULTS } } as never);
+    const after = pgServer({ agents: { ...DEFAULTS, query: true } } as never);
+    const sheet = (servers: ReturnType<typeof pgServer>[], unverified: ReadonlySet<string>) => (
+      <SourceSheet target={{ mode: 'saved', server: before }} existing={[before.name]} servers={servers} agentsUnverified={unverified}
+        onReread={vi.fn()} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />
+    );
+    const { rerender } = render(sheet([before], new Set(['support-pg'])));
+    await screen.findByTestId('source-agent-controls-unverified');
+    expect(screen.getByTestId('source-agent-controls').getAttribute('data-query')).toBe('off');
+    // The re-read answered: the page's list is crew's (query on) and nothing is unverified; the target is still the
+    // record the sheet was opened with.
+    rerender(sheet([after], new Set()));
+    expect(screen.queryByTestId('source-agent-controls-unverified')).toBeNull();
+    expect(screen.getByTestId('source-agent-controls').getAttribute('data-verified')).toBe('true');
+    expect(screen.getByTestId('source-agent-controls').getAttribute('data-query')).toBe('on');
+    expect(screen.getByTestId('source-agent-controls-query-state').textContent).toBe('on');
+    // Crew's switches, verified: nothing holds them.
+    expect(screen.getByTestId('source-agent-controls-query')).not.toBeDisabled();
+  });
+
+  it('a re-read that no longer lists the source shows no switches, never the sheet\'s old ones as verified', async () => {
+    const before = pgServer({ agents: { ...DEFAULTS, query: true } } as never);
+    const sheet = (servers: ReturnType<typeof pgServer>[], unverified: ReadonlySet<string>) => (
+      <SourceSheet target={{ mode: 'saved', server: before }} existing={[before.name]} servers={servers} agentsUnverified={unverified}
+        onReread={vi.fn()} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />
+    );
+    const { rerender } = render(sheet([before], new Set(['support-pg'])));
+    await screen.findByTestId('source-agent-controls-unverified');
+    // crew answered, without the source (removed or renamed there): the commit before the page closes the sheet.
+    rerender(sheet([], new Set()));
+    expect(screen.queryByTestId('source-agent-controls')).toBeNull();
+  });
+});
+
 describe('a job\'s data use on its gate card', () => {
   it('names the sources its agents read; nothing when none; "not known" when crew could not read its record', async () => {
     dataUse = { runId: 'run-1', known: true, sources: [{ source: 'support-pg', queries: 3, released: 2, rows: 12, truncated: false, lastAt: '2026-11-03T22:10:00.000Z' }] };
