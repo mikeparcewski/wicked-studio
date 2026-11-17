@@ -9,7 +9,8 @@
  *  - one read per run and generation while it is on its way.
  */
 import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useCapabilities } from '../src/store/capabilities.js';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import { ApiError } from '../src/api/errors.js';
 import type { CoreEvent, GateInfo, SessionView } from '../src/api/types.js';
@@ -103,13 +104,25 @@ describe('a waiting run’s thread reads its own gate', () => {
 
   it('a run with its gate cached, or not waiting, reads nothing', async () => {
     const getGate = vi.spyOn(client.api, 'getGate').mockResolvedValue(planInfo(RUN));
-    useGateStore.getState().setGate(openGate(RUN));
+    // Cached from a read (studio#1170: a gate a live frame opened is read once for its list of answers instead).
+    useGateStore.getState().setGate({ ...openGate(RUN), actionsRead: true });
     const { unmount } = render(<RunBlock view={makeView({ id: RUN, status: 'awaiting_human', problem: 'x' })} badge={1} sessionId={`run:${RUN}`} />);
     unmount();
     useGateStore.setState({ gates: {}, approaching: {} });
     render(<RunBlock view={makeView({ id: RUN, status: 'executing', problem: 'x' })} badge={0} sessionId={`run:${RUN}`} />);
     await new Promise((r) => setTimeout(r, 20));
     expect(getGate).not.toHaveBeenCalled();
+  });
+
+  it('a gate a live frame opened is read once for its list of answers, from a daemon that serves it (studio#1170)', async () => {
+    const getGate = vi.spyOn(client.api, 'getGate').mockResolvedValue(planInfo(RUN));
+    useCapabilities.setState({ gateActions: true });
+    onTestFinished(() => useCapabilities.setState({ gateActions: false }));
+    useGateStore.getState().setGate(openGate(RUN));
+    render(<RunBlock view={makeView({ id: RUN, status: 'awaiting_human', problem: 'x' })} badge={1} sessionId={`run:${RUN}`} />);
+    await waitFor(() => expect(getGate).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(getGate).toHaveBeenCalledTimes(1);
   });
 });
 

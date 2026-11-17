@@ -1,3 +1,4 @@
+import { useGateActions } from '../../hooks/useGateActions.js';
 import { SKIP_QE_KEY, SKIP_QE_PLACEHOLDER } from '../../board/qeSkip.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
@@ -174,10 +175,15 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // from crew's gate read, as a reload does: the row then lists the same answers live and after a reload.
   const refusedHandOver = gate !== undefined && gate.skipQe === undefined && isDeliverGate(runId, view.units, gate.ord) && deliverRefusalOf(gate.prompt) !== null;
   const liveSkipQe = useGateSkipQe(runId, gateInstance(gate), gate?.ord, refusedHandOver);
+  // studio#1170: every answer the engine takes at this gate now (crew's gate read). When the daemon lists them, the
+  // row's answers are exactly these.
+  // A seat signing in changes a reassign's seats: the signed-in roster is the list's refresh key.
+  const signedIn = (roster ?? []).filter((r) => r.signed_in !== false).map((r) => r.key).join(',');
+  const actions = useGateActions(runId, gate, signedIn);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
     const read = gate.skipQe === undefined && liveSkipQe !== null ? { ...gate, skipQe: liveSkipQe } : gate;
-    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(read, events), units: view.units, events, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge });
+    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(read, events), units: view.units, events, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge, ...(actions !== undefined ? { actions } : {}) });
     if (result === null) return null;
     const toBuilder = steerReachesBuilder(view.units, gate.ord);
     // Label each arm by its effect: the denied-step approve re-runs the step; a steer on a review gate
@@ -189,7 +195,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
         ? { ...choice, label: 'Approve with a note for the next step', title: 'Approve, and your note goes to the next step — not to the builder. To have the builder change something, Send back.' }
         : choice;
     return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
-  }, [runId, gate, liveSkipQe, view.units, events, pool, roster, benched, rerunOffer, fullVerdict, rejudge]);
+  }, [runId, gate, liveSkipQe, view.units, events, pool, roster, benched, rerunOffer, fullVerdict, rejudge, actions]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
     isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',
@@ -257,9 +263,11 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
     if (seatRefusal && judges !== null) {
       // A seat in the job that did not build the work and can take it now: approve and retry with it (the reassign
       // route, its undo window).
-      if (judges.inJob !== undefined) {
-        const name = seatName(judges.inJob.cli, judges.inJob.label);
-        return { choice: { key: `reassign:${judges.inJob.cli}`, label: `Approve and retry with ${name}`, reassignCli: judges.inJob.cli, decision: null, needsNote: false,
+      // studio#1170: when the gate lists its answers, only a re-seat it lists may lead.
+      const inJob = judges.inJob;
+      if (inJob !== undefined && (actions === undefined || all.some((c) => c.reassignCli === inJob.cli))) {
+        const name = seatName(inJob.cli, inJob.label);
+        return { choice: { key: `reassign:${inJob.cli}`, label: `Approve and retry with ${name}`, reassignCli: inJob.cli, decision: null, needsNote: false,
           title: `${name} reviews the work as it stands; it did not build it. The step runs again there.` } };
       }
       // One is signed in but is not in this job: crew re-seats a step only within the job's own helpers (POST
@@ -294,7 +302,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       return signInLead();
     }
     return null;
-  }, [model, gate, seatRefusal, judgeWait, roster, pool, view, signIn, navigate, fresh, builder, judges]);
+  }, [model, gate, seatRefusal, judgeWait, roster, pool, view, signIn, navigate, fresh, builder, judges, actions]);
   const explain = model === null ? null : (
     <>
       {model.deadSeat !== undefined && (

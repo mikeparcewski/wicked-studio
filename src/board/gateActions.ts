@@ -297,6 +297,14 @@ export function commitGateDecision(
     return Promise.resolve('cancelled');
   }
   if (rev !== undefined) decision = { ...decision, planRev: rev };
+  // studio#1170: a plan gate's list says each answer names the held revision (reject included). A run that was not started
+  // from a chat proposal has no shown revision on record; the gate read's own (the plan this card drew) is it.
+  else if (decision.planRev === undefined) {
+    const open = useGateStore.getState().gates[runId];
+    if (open?.gateKind === 'plan_approval' && open.planRev !== undefined && open.actions?.some((a) => a.needsPlanRev === true)) {
+      decision = { ...decision, planRev: open.planRev };
+    }
+  }
   patch(runId, { queued: true, ...NO_ERROR });
   // studio#368: a deliver gate's approve pushes — the host names the branch and repo when it knows
   // them; any other caller (palette, triage keys) still gets the push line off the gate's kind.

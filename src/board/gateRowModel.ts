@@ -49,6 +49,7 @@ import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQU
 import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
 import { FACE_MAX, failingOnFace, failingSplit, standingFloor, type FailingOnFace, type FailingSplit } from './failingChecks.js';
 import { deliverLift } from '../components/deliverLiftModel.js';
+import { contractChoices, type GateAction } from './gateContract.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -439,6 +440,9 @@ export interface SessionGateInput {
   /** (crew api-types 0.134.0) A judge-unavailable gate's re-judge offer off `GET /runs/:id/gate`;
    *  null/absent = none read (another gate, an older daemon, not loaded yet). */
   rejudge?: RejudgeOffer | null;
+  /** (studio#1170, api-types 0.211.0) EVERY answer the open gate takes now, off `GET /runs/:id/gate`: when present the
+   *  row's answers are exactly these ({@link withContract}); absent = an older daemon, or not read yet. */
+  actions?: readonly GateAction[];
 }
 
 const HEAD_CUT = /^\s*(…|\.\.\.)/;
@@ -485,7 +489,44 @@ export function recommendedChoiceIndex(choices: readonly GateRowChoice[], move: 
  */
 export function sessionGateChoices(input: SessionGateInput): GateRowModel | null {
   const base = baseGateChoices(input);
-  return base === null ? null : withDepth(base, input);
+  if (base === null) return null;
+  const model = withDepth(base, input);
+  return input.actions === undefined || CONTRACT_EXEMPT.has(model.reason) ? model : withContract(model, input.actions, input.roster ?? null);
+}
+
+/** Rows whose answers are the payload's own (a consent plan's choices, free text): drawn by their renderer, as before. */
+const CONTRACT_EXEMPT: ReadonlySet<SessionGateReason> = new Set(['consent', 'free-text']);
+
+/**
+ * (studio#1170) The gate read lists every answer the engine takes now ({@link GateAction}): the row's answers become
+ * exactly that list ({@link contractChoices}) — the template's own choices, inferred from the prompt and the run, are
+ * replaced, never merged. The row keeps everything else it shows (the question, the reason, the failing items). The
+ * rewind ("Rerun from <step>") is a send-back, so it stays only where the list takes one; seats shown as withheld are
+ * never ones the list offers; and the "isn't offered" lines are the template's inference, so they go with it.
+ */
+function withContract(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null): GateRowModel {
+  const label = (cli: string): string => roster?.find((r) => r.key === cli)?.display_name ?? cli;
+  const listedChoices = contractChoices(actions, label);
+  // Where a note on an approve LANDS is the template's to know (studio#1170 review r1): a steer before a non-creator
+  // step goes to the next creator (`amendScope: 'creator'`, `steerScopeTarget`). The listed steer keeps the template's
+  // own wire body when both are a plain approve-with-note — never when the list says the note does something else.
+  const own = [...model.choices, ...model.overflow].find((c) => c.key === 'steer');
+  const approve = actions.find((a) => a.action === 'approve');
+  const ownBody = own?.decision !== null && own?.decision !== undefined && own.decision.approve === true
+    && (own.decision as { action?: string }).action === undefined && approve?.noteIntent === undefined ? own.decision : null;
+  const keepScope = (c: GateRowChoice): GateRowChoice => (c.key === 'steer' && ownBody !== null ? { ...c, decision: ownBody } : c);
+  const choices = listedChoices.choices.map(keepScope);
+  const overflow = listedChoices.overflow.map(keepScope);
+  const rerun = [...model.choices, ...model.overflow].find((c) => c.key === 'rerun');
+  if (rerun !== undefined && actions.some((a) => a.action === OFFER_REQUEST_CHANGES)) overflow.push(rerun);
+  const recKey = model.recommended !== null ? model.choices[model.recommended]?.key : undefined;
+  const rec = recKey === undefined ? -1 : choices.findIndex((c) => c.key === recKey);
+  const offered = new Set(actions.flatMap((a) => a.seats ?? []));
+  const withheld = model.withheldSeats?.filter((w) => !offered.has(w.cli));
+  const rest: GateRowModel = { ...model, choices, overflow, recommended: rec >= 0 ? rec : null };
+  delete rest.whyNot;
+  delete rest.withheldSeats;
+  return { ...rest, ...(withheld !== undefined && withheld.length > 0 ? { withheldSeats: withheld } : {}) };
 }
 
 /**

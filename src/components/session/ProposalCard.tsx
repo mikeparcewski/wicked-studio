@@ -1,4 +1,6 @@
-import { gateOffers, offerActions, OFFER_APPROVE, OFFER_REJECT } from '../../board/gateOffers.js';
+import { useGateActions } from '../../hooks/useGateActions.js';
+import { choicesForAction } from '../../board/gateContract.js';
+import { gateOffers, offerActions, OFFER_APPROVE, OFFER_REJECT, OFFER_REQUEST_CHANGES } from '../../board/gateOffers.js';
 import { useGateSkipQe } from '../../hooks/useGateSkipQe.js';
 import { SKIP_QE_ACTION, SKIP_QE_CONSEQUENCE, SKIP_QE_SEND } from '../../board/qeSkip.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -46,6 +48,9 @@ import { AskCard, type AskReason } from '../ask/AskCard.js';
 import type { Ask, AskOption } from '../../api/ask.js';
 
 /** Open a studio route from a card that is handed no navigate (the router listens for popstate). */
+/** The answers this card draws with its own ways; every other listed one gets a generic way (studio#1113). */
+const DRAWN_HERE: ReadonlySet<string> = new Set(['approve', 'reject', 'request_changes', 'skip_qe', 'edit_plan', 'reassign']);
+
 function goTo(path: string): void {
   history.pushState(null, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
@@ -157,7 +162,12 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     (skipQeOffer != null && (acceptance === null || (acceptance.required && !acceptance.satisfied))));
   // A `null` list (`options: null` on the gate read) marks a COMPLEX gate answered on its card, not a free-text-only
   // gate: this card has no free-text answer, and the daemon takes approve / reject on every gate (as before #1102).
-  const offered = new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices ?? undefined, skipQe: deliverRefused ? skipQeOffer : undefined })));
+  // studio#1170: when crew's gate read lists every answer the engine takes now, THAT is the card's list (crew drops a
+  // hand-over approve its delivery checks refuse, keeping the in-place skip). Without it, the gate's own offers, as before.
+  // A QE acceptance that passes (or stops passing) changes what the hand-over takes: it re-reads the list.
+  const listed = useGateActions(runId, gate, `${acceptance?.required ?? ''}:${acceptance?.satisfied ?? ''}`);
+  const offered = listed !== undefined ? new Set(listed.map((a) => a.action))
+    : new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices ?? undefined, skipQe: deliverRefused ? skipQeOffer : undefined })));
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
@@ -289,6 +299,26 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });
   };
+  // studio#1113: any other listed answer, by its token, with the person's words when given.
+  const listedAnswer = (token: string, why?: string): void => {
+    if (sending.current || gate === undefined) return;
+    sending.current = true;
+    const words = why?.trim() ?? '';
+    commitGateDecision(runId, { approve: true, action: token, ...(words !== '' ? { amend: words } : {}), ord: gate.ord } as unknown as GateAnswer,
+      { receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: token } })
+      .catch(() => { /* said in the shared action state */ })
+      .finally(() => { sending.current = false; });
+  };
+  // studio#1113: the listed send-back, with the person's note (required: it says what to change).
+  const sendBack = (why: string): void => {
+    const note = why.trim();
+    if (note === '' || sending.current || gate === undefined) return;
+    sending.current = true;
+    commitGateDecision(runId, { approve: false, action: OFFER_REQUEST_CHANGES, amend: note, ord: gate.ord } as unknown as GateAnswer,
+      { receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: 'Sent back' } })
+      .catch(() => { /* said in the shared action state */ })
+      .finally(() => { sending.current = false; });
+  };
   // §4.7 End = reject: the path is cancelled, the conversation is over.
   const end = (why?: string): void => {
     if (sending.current || gate === undefined) return;
@@ -311,7 +341,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // the same 10 s undo) the buttons had. A hand-over crew refuses keeps Deliver as a card, disabled, with why.
   type Way = AskOption & { testid: string; run: (reason?: string) => void };
   const ways: Way[] = [];
-  if (deliverRefused && rerun.offer !== null) {
+  // "Run QE again" is a send-back (the rewind): with the engine's list, only where the list takes one.
+  if (deliverRefused && rerun.offer !== null && (listed === undefined || offered.has(OFFER_REQUEST_CHANGES))) {
     ways.push({ id: 'qe-again', token: 'qe-again', label: 'Run QE again', consequence: rerun.offer.consequence, recommended: true, testid: 'session-proposal-qe-again',
       ...(rerun.state.kind === 'sending' ? { disabled: 'Starting it again…' } : {}), run: () => { void rerun.rerun(); } });
   }
@@ -329,6 +360,25 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     ...(deliverRefused ? { disabled: 'Refused until QE acceptance passes' } : { recommended: true }),
     run: () => go(),
   });
+  // studio#1113: a send-back the gate lists (a plan gate's: the plan goes back to its lead with your note) is drawn too.
+  if (listed !== undefined && offered.has(OFFER_REQUEST_CHANGES)) {
+    ways.push({ id: 'send-back', token: OFFER_REQUEST_CHANGES, label: card.kind === 'plan' ? 'Send the plan back…' : 'Send back…', needsReason: true,
+      testid: 'session-proposal-send-back',
+      consequence: card.kind === 'plan' ? 'The plan goes back to its lead with your note, and comes back here as a new revision. Nothing runs meanwhile.'
+        : 'The work goes back to the builder with your note.',
+      run: (r) => sendBack(r ?? '') });
+  }
+  // studio#1113: every other answer the gate lists is drawn too (an intent amendment on a hand-over, a named arm), worded
+  // by its intent and sent as `{approve: true, action}` with the person's words where it takes them. An edited plan needs
+  // the plan editor, which only a chat's card opens (`onEdit`).
+  for (const a of listed ?? []) {
+    if (DRAWN_HERE.has(a.action)) continue;
+    const [c] = choicesForAction(a, (cli) => cli);
+    if (c === undefined) continue;
+    ways.push({ id: `act:${a.action}`, token: a.action, label: c.label, consequence: c.title, testid: `session-proposal-act-${a.action}`,
+      ...(a.note !== 'none' ? { needsReason: true } : {}),
+      run: (r) => listedAnswer(a.action, r) });
+  }
   if (draft !== null) {
     ways.push({ id: 'drop', token: 'drop', label: 'Drop the changes', consequence: 'Your edits are dropped and the plan stays as proposed. Nothing is sent.', testid: 'session-proposal-drop-draft',
       run: () => dropGateDraft(runId, draft.gateKey) });
@@ -371,6 +421,11 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const reasonOf = (o: AskOption): AskReason => o.id === 'skip-qe'
     ? { label: 'Why QE acceptance is skipped', placeholder: 'Why QE acceptance is skipped (the seats couldn’t run the tests, you checked it yourself)…', send: SKIP_QE_SEND,
       consequenceTestId: /* testid */ 'session-proposal-skip-qe-consequence' }
+    // studio#1170 review r1: a listed answer's box is worded for what it sends, never as a Stop.
+    : o.id === 'send-back'
+      ? { label: card.kind === 'plan' ? 'What should change in the plan' : 'What to change', placeholder: 'Say what to change…', send: card.kind === 'plan' ? 'Send the plan back' : 'Send it back' }
+    : o.id.startsWith('act:')
+      ? { label: 'Your words (they go with the answer)', placeholder: 'Say it in a line or two…', send: o.label.replace(/…$/u, '') }
     : { label: card.kind === 'deliver' || ask === null ? 'Why stop? (kept with the record)' : 'Why end it? (kept with the record)', placeholder: 'One line is enough',
       send: card.kind === 'deliver' || ask === null ? 'Stop with this reason' : 'End with this reason' };
   const waysCard = (

@@ -1,3 +1,4 @@
+import { gateActionsOf, type GateAction } from '../board/gateContract.js';
 import { create } from 'zustand';
 import type { CoreEvent, GateInfo, SkipQeOffer } from '../api/types.js';
 import { isAwaitingPinned } from './awaitingPins.js';
@@ -42,6 +43,14 @@ export interface OpenGate {
   /** (api-types 0.146.0) A deliver gate whose delivery QE acceptance refuses: crew's in-place QE skip, read off
    *  `GET /runs/:id/gate`. A live `awaitingHuman` frame never carries it; absent once QE passes. */
   skipQe?: SkipQeOffer;
+  /** (studio#1170, api-types 0.211.0) EVERY answer the gate takes now, off `GET /runs/:id/gate`; absent on a live frame
+   *  (never carried) and from a daemon that sends none. */
+  actions?: GateAction[];
+  /** (api-types 0.211.0) A plan gate's held revision, served beside `actions`: what a plan answer's `planRev` names. */
+  planRev?: number;
+  /** (studio#1170) Set on a gate built from a `GET /runs/:id/gate` read: its `actions` (or their absence: a daemon
+   *  without the list) is that read's. A live frame's gate never has it, so its list is read once. */
+  actionsRead?: true;
   /** F31: set when the gate came from a `GET /runs/:id/gate` read (a page load, a late join), not a live frame. The
    *  toast strip orders read gates by their runs' age and queues live ones after them in arrival order. */
   fromRead?: true;
@@ -90,6 +99,7 @@ export function gateFromInfo(g: GateInfo): OpenGate {
   const bag = g as unknown as Record<string, unknown>;
   const choices = choicesOf(bag);
   const recommended = recommendedOf(bag);
+  const actions = gateActionsOf(bag);
   return {
     runId: g.runId,
     ord: g.ord,
@@ -99,6 +109,9 @@ export function gateFromInfo(g: GateInfo): OpenGate {
     ...(choices !== undefined ? { choices } : {}),
     ...(recommended !== undefined ? { recommended } : {}),
     ...(g.skipQe !== undefined && g.skipQe !== null ? { skipQe: g.skipQe } : {}),
+    ...(actions !== undefined ? { actions } : {}),
+    ...(typeof bag['planRev'] === 'number' ? { planRev: bag['planRev'] as number } : {}),
+    actionsRead: true,
     ...gateKindOf(g),
   };
 }
