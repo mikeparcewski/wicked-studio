@@ -285,7 +285,7 @@ describe('A-C4 complete setup guide', () => {
 
 // crew#1527: the first run never checked the GitHub sign-in a pull request needs; a first job stopped at its deliver step.
 describe('crew#1527 the delivery step', () => {
-  beforeEach(() => { useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS }); });
+  beforeEach(() => { useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS, loaded: true }); });
   const SIGN_IN = 'To open pull requests, sign in to GitHub: gh auth login (or export GH_TOKEN for the daemon); or deliver locally.';
 
   it('reads crew\'s delivery row: ok is ready, degraded and off are not, unknown is not known, absent is no reading', () => {
@@ -300,6 +300,9 @@ describe('crew#1527 the delivery step', () => {
     expect(deliveryDone({ ready: null, reason: null, fix: null }, true)).toBe(false);
     expect(deliveryDone(undefined, true)).toBe(false);
     expect(deliveryDone({ ready: false, reason: null, fix: null }, false)).toBe(true);
+    // The saved preference not read yet: never done, whatever the reading.
+    expect(deliveryDone({ ready: true, reason: null, fix: null }, null)).toBe(false);
+    expect(deliveryDone({ ready: false, reason: null, fix: null }, null)).toBe(false);
   });
 
   it('a fresh computer with gh signed out: not done, with crew\'s reason and the sign-in or local choice', async () => {
@@ -312,6 +315,28 @@ describe('crew#1527 the delivery step', () => {
     expect(screen.getByTestId('agents-setup-delivery-why')).toHaveTextContent('gh is not signed in to GitHub');
     expect(screen.getByTestId('agents-setup-delivery-fix')).toHaveTextContent('gh auth login');
     expect(within(step).getByRole('button', { name: 'Open Settings' })).toBeInTheDocument();
+    // The changing result sits in a polite status region of its own, not the whole checklist.
+    expect(within(step).getByRole('status')).toHaveTextContent('Not done.');
+  });
+
+  it('Open Settings goes to the settings page, where the pull-request default is', async () => {
+    infra = [...infra, { key: 'delivery', state: 'degraded', reason: 'not signed in', remedy: SIGN_IN }];
+    const navigate = vi.fn();
+    render(<ContainerSignInProvider><AgentsPage search="?setup=1" navigate={navigate} /></ContainerSignInProvider>);
+    const button = await screen.findByTestId('agents-setup-delivery-settings');
+    fireEvent.click(button);
+    expect(navigate).toHaveBeenCalledWith('/system');
+  });
+
+  it('the saved preference not read yet: not checked and not done, even when pull requests are off in the default it replaces', async () => {
+    useComposerPrefsStore.setState({ prefs: { ...DEFAULT_COMPOSER_PREFS, deliverPr: false }, loaded: false });
+    infra = [...infra, { key: 'delivery', state: 'degraded', reason: 'not signed in', remedy: SIGN_IN }];
+    page('?setup=1');
+    await waitFor(() => expect(screen.getByTestId('agents-setup-step-delivery')).toHaveTextContent('Not checked yet.'));
+    expect(screen.getByTestId('agents-setup-step-delivery')).toHaveAttribute('data-done', 'false');
+    act(() => { useComposerPrefsStore.setState({ loaded: true }); });
+    await waitFor(() => expect(screen.getByTestId('agents-setup-step-delivery')).toHaveAttribute('data-done', 'true'));
+    expect(screen.getByTestId('agents-setup-step-delivery')).toHaveTextContent('off by default');
   });
 
   it('signed in: done, naming the account', async () => {
@@ -328,7 +353,7 @@ describe('crew#1527 the delivery step', () => {
     await waitFor(() => expect(screen.getByTestId('agents-setup-step-delivery')).toHaveAttribute('data-done', 'true'));
     expect(screen.getByTestId('agents-setup-step-delivery')).toHaveTextContent('Pull requests are off');
     first.unmount(); resetFirstUseReads();
-    useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS });
+    useComposerPrefsStore.setState({ prefs: DEFAULT_COMPOSER_PREFS, loaded: true });
     infra = infra.filter((r) => r.key !== 'delivery');
     page('?setup=1');
     await waitFor(() => expect(screen.getByTestId('agents-setup-step-delivery')).toHaveTextContent('Not checked yet.'));

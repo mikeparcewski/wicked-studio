@@ -367,10 +367,15 @@ describe('First run: the pull-request account (crew#1527)', () => {
     d.on('GET /setup/known', { ...known, delivery: { deliverDefault: 'pr', ready: false, pushAs: null, github: {}, gitAuthor: null, reason: 'r', fix: 'f' } });
     const b = render(<FirstRun navigate={nav} agents={[]} hasRoster />);
     await waitFor(() => expect(screen.getByTestId('known-git').textContent).toContain('pull requests: not ready'));
+    // A way to the setup steps, where it says what to do.
+    nav.mockClear();
+    fireEvent.click(screen.getByTestId('known-delivery-setup'));
+    expect(nav).toHaveBeenCalledWith('/agents?setup=1');
     b.unmount(); resetFirstRun();
     d.on('GET /setup/known', known);
     render(<FirstRun navigate={nav} agents={[]} hasRoster />);
     await waitFor(() => expect(screen.getByTestId('known-git').textContent).toContain('Sam Rivera'));
     expect(screen.getByTestId('known-git').textContent).not.toContain('pull requests');
+    expect(screen.queryByTestId('known-delivery-setup')).toBeNull();
   });
 });

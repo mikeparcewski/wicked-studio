@@ -52,9 +52,10 @@ export interface DeliveryCheck {
 
 export const UNCHECKED_SETUP: SetupChecks = { skills: null, estate: null, runtime: null, runtimeRequired: null };
 
-/** The delivery step is done when this computer can open pull requests, or pull requests are off in studio. */
-export function deliveryDone(delivery: DeliveryCheck | null | undefined, deliverPr: boolean): boolean {
-  return !deliverPr || delivery?.ready === true;
+/** The delivery step is done when this computer can open pull requests, or pull requests are off by default in studio.
+ *  `deliverPr` is `null` until studio's saved preference has been read: never done on a default it has not read. */
+export function deliveryDone(delivery: DeliveryCheck | null | undefined, deliverPr: boolean | null): boolean {
+  return deliverPr === false || (deliverPr === true && delivery?.ready === true);
 }
 
 /** Reuse the Nerve Center's normalized probes, never their raw error prose. */

@@ -174,7 +174,7 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
         <div className="wk-fr-flow" data-testid="first-run-flow">
           <p className="wk-fr-msg"><b>studio</b> · {first !== null ? `Hi ${first}. ` : ''}Before asking anything, here is what I could already see on this computer.</p>
           <p className="wk-fr-section">What we already know</p>
-          <Known known={known} repos={repos} agents={agents} hasRoster={hasRoster} ready={ready.length} />
+          <Known known={known} repos={repos} agents={agents} hasRoster={hasRoster} ready={ready.length} openSetup={() => navigate('/agents?setup=1')} />
           <p className="wk-fr-section">What we’d like to know</p>
           {SETUP_ASKS.map((key) => {
             const a = answers[key];
@@ -209,8 +209,10 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
   );
 }
 
-function Known({ known, repos, agents, hasRoster, ready }: {
+function Known({ known, repos, agents, hasRoster, ready, openSetup }: {
   known: SetupKnown | null | 'failed'; repos: RepoEntry[] | null; agents: readonly AgentRow[]; hasRoster: boolean; ready: number;
+  /** (crew#1527) Opens the setup steps, where a not-ready pull-request delivery says what to do. */
+  openSetup: () => void;
 }): React.ReactElement {
   const k = known !== null && known !== 'failed' ? known : null;
   const nearby = k?.nearby.length ?? 0;
@@ -226,7 +228,7 @@ function Known({ known, repos, agents, hasRoster, ready }: {
       <div className="wk-fr-k" data-testid="known-git">
         <span className="wk-fr-k-ic"><UserRound size={16} aria-hidden /></span>
         <span><b>{k?.git?.name ?? (known === null ? 'Git identity…' : 'No git identity')}</b>
-          <span>{k?.git !== null && k?.git !== undefined ? `git identity${k.git.email !== null ? ` · ${k.git.email}` : ''}` : known === 'failed' ? 'Couldn’t read it from this computer' : 'Commits would carry no name yet'}{deliveryWords(k?.delivery)}</span></span>
+          <span>{k?.git !== null && k?.git !== undefined ? `git identity${k.git.email !== null ? ` · ${k.git.email}` : ''}` : known === 'failed' ? 'Couldn’t read it from this computer' : 'Commits would carry no name yet'}{deliveryWords(k?.delivery)}{k?.delivery?.ready === false && <>{' '}<button type="button" className="wk-btn wk-btn--link" data-testid="known-delivery-setup" onClick={openSetup}>Open setup guide</button></>}</span></span>
       </div>
       <div className="wk-fr-k" data-testid="known-agents">
         <span className="wk-fr-k-ic"><TerminalSquare size={16} aria-hidden /></span>
@@ -251,7 +253,7 @@ function Known({ known, repos, agents, hasRoster, ready }: {
 /** (crew#1527) The pull-request account beside the git identity: as whom a pull request pushes, or that it cannot yet. */
 function deliveryWords(d: SetupKnown['delivery']): string {
   if (d === undefined || d.ready === null) return '';
-  if (!d.ready) return ' · pull requests: not ready (see the setup steps)';
+  if (!d.ready) return ' · pull requests: not ready.';
   return d.pushAs !== null ? ` · pull requests as ${d.pushAs}` : ' · pull requests ready';
 }
 

@@ -46,7 +46,8 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const [creating, setCreating] = useState(false);
 
   // (crew#1527) Studio's own "Open a PR when a build run finishes" preference decides whether jobs open pull requests.
-  const deliverPr = useComposerPrefsStore((s) => s.prefs.deliverPr);
+  // `null` until the saved preference is read (the store starts on its default): the step says "Not checked yet" meanwhile.
+  const deliverPr = useComposerPrefsStore((s) => (s.loaded ? s.prefs.deliverPr : null));
   const checks = withRowRuntime(f.checks, rows);
   const delivery = f.checks.delivery ?? null;
   const facts = { rows, repos: f.repos, projects: f.projects, checks };
@@ -119,13 +120,15 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
           </Step>
           <Step n={5} done={deliveryDone(delivery, deliverPr)} testId="agents-setup-step-delivery">
             <b>Sign in to GitHub for pull requests, or deliver locally.</b>{' '}
-            {!deliverPr
-              ? 'Done. Pull requests are off: finished work stays on its branch.'
-              : delivery === null || delivery.ready === null
-              ? 'Not checked yet.'
-              : delivery.ready
-              ? `Done. ${delivery.reason ?? 'Pull requests can be opened.'}`
-              : <span data-testid="agents-setup-delivery-why">Not done. {delivery.reason}{delivery.fix !== null && <> <span className="wk-agents-sub" data-testid="agents-setup-delivery-fix">{delivery.fix}</span></>}</span>}{' '}
+            <span role="status" data-testid="agents-setup-delivery-status">
+              {deliverPr === false
+                ? 'Done. Pull requests are off by default: finished work stays on its branch (a job can still ask for one when you start it).'
+                : deliverPr === null || delivery === null || delivery.ready === null
+                ? 'Not checked yet.'
+                : delivery.ready
+                ? `Done. ${delivery.reason ?? 'Pull requests can be opened.'}`
+                : <span data-testid="agents-setup-delivery-why">Not done. {delivery.reason}{delivery.fix !== null && <> <span className="wk-agents-sub" data-testid="agents-setup-delivery-fix">{delivery.fix}</span></>}</span>}
+            </span>{' '}
             <button type="button" data-testid="agents-setup-delivery-settings" className="wk-btn wk-btn--link" onClick={() => navigate('/system')}>Open Settings</button>
           </Step>
           <Step n={6} done={false} testId="agents-setup-step-defaults">
