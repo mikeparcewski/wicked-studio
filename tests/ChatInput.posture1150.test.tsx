@@ -201,6 +201,10 @@ describe('New job form: the gates shown are crew\'s answer for the body sent (st
     ['a failed preview', () => Promise.reject(new Error('socket hang up')), 'failed'],
     ['a 500', () => Promise.reject(new client.ApiError(500, 'boom')), 'failed'],
     ['a malformed answer', () => Promise.resolve({}), 'failed'],
+    // studio#1192: an answer that is not a complete posture is no answer, never a partial one.
+    ['a posture missing its delivery fields', () => Promise.resolve({ posture: { power: true } } as never), 'failed'],
+    ['a null body', () => Promise.resolve(null as never), 'failed'],
+    ['a null posture', () => Promise.resolve({ posture: null } as never), 'failed'],
     ['an older daemon (404)', () => Promise.reject(new client.ApiError(404, 'Not found')), 'unsupported'],
     ['an answer still pending at Send', () => new Promise<never>(() => {}), null],
   ] as Array<[string, Answer, 'failed' | 'unsupported' | null]>)('%s claims nothing about power, says so, and sends power: false', async (_what, a, said) => {
@@ -223,6 +227,25 @@ describe('New job form: the gates shown are crew\'s answer for the body sent (st
     expect(screen.queryByTestId('gate-posture-power')).toBeNull();
     expect(screen.getByTestId('gate-posture')).toBeInTheDocument();
     expect(screen.getByTestId('launch-confirm-gate')).toHaveTextContent('first gate');
+    expect((await send(user)).power).toBe(false);
+  });
+
+  it.each([
+    ['a posture missing its delivery fields', { posture: { power: true } }],
+    ['a null body', null],
+    ['a null posture', { posture: null }],
+  ])('Power mode off, then %s: the failure is said, with Retry and "runs phased", and power: false is sent (studio#1192)', async (_what, bad) => {
+    answer = crewSays();
+    const user = userEvent.setup();
+    render(<ChatInput onLaunched={() => {}} />);
+    await bindRepo(user);
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power-switch')).toBeInTheDocument());
+    answer = () => Promise.resolve(bad as never);
+    const sw = screen.getByTestId('gate-posture-power-switch');
+    await user.click(sw.getAttribute('role') === 'switch' ? sw : within(sw).getByRole('switch'));
+    await waitFor(() => expect(screen.getByTestId('gate-posture-unchecked')).toHaveAttribute('data-reason', 'failed'));
+    expect(screen.getByTestId('gate-posture-retry')).toBeInTheDocument();
+    expect(screen.getByTestId('launch-confirm-phased')).toHaveTextContent("runs phased (couldn't check power mode)");
     expect((await send(user)).power).toBe(false);
   });
 

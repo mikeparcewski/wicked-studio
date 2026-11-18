@@ -36,6 +36,21 @@ export interface LaunchPreviewPosture {
   humanConfirmNotice?: string;
 }
 
+/**
+ * (studio#1192) A preview answer is crew's posture only when it is complete to the api-types shape: `power`, `deliver`
+ * and `autoDeliver` present and typed, the optional words strings. Anything else is no answer (the form shows the
+ * failure, with Retry, and Send runs phased), never a partial posture whose missing fields read as "no delivery".
+ */
+export function isLaunchPreviewPosture(v: unknown): v is LaunchPreviewPosture {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
+  const p = v as Record<string, unknown>;
+  const optString = (x: unknown) => x === undefined || typeof x === 'string';
+  return typeof p.power === 'boolean'
+    && (p.deliver === 'pr' || p.deliver === 'none')
+    && typeof p.autoDeliver === 'boolean'
+    && optString(p.humanConfirm) && optString(p.powerNotice) && optString(p.humanConfirmNotice);
+}
+
 /** The body fields that decide the run's gates, as the form sends them. */
 export interface LaunchPostureFields {
   workflow?: string;

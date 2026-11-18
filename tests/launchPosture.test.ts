@@ -6,8 +6,7 @@ import {
   postureKey,
   powerGateWords,
   powerToSend,
-  type PostureFormState,
-} from '../src/board/launchPosture.js';
+  type PostureFormState, isLaunchPreviewPosture } from '../src/board/launchPosture.js';
 
 /** studio#1150: the form's gate-deciding fields are built once, keyed without humanConfirm, and `power` is sent only as crew answered. */
 const base: PostureFormState = {
@@ -81,5 +80,19 @@ describe('powerGateWords', () => {
     expect(powerGateWords({ power: true, deliver: 'pr', autoDeliver: false })).toMatch(/^at hand-off/);
     expect(powerGateWords({ power: true, deliver: 'pr', autoDeliver: true })).toMatch(/^no step gates/);
     expect(powerGateWords({ power: true, deliver: 'none', autoDeliver: false })).toMatch(/^no step gates/);
+  });
+});
+
+describe('isLaunchPreviewPosture (studio#1192): only a complete posture is an answer', () => {
+  it('admits the api-types shape, with or without its optional words', () => {
+    expect(isLaunchPreviewPosture({ power: true, humanConfirm: 'none', deliver: 'pr', autoDeliver: false })).toBe(true);
+    expect(isLaunchPreviewPosture({ power: false, deliver: 'none', autoDeliver: false, powerNotice: 'why' })).toBe(true);
+  });
+  it('refuses anything incomplete or mistyped', () => {
+    for (const bad of [
+      null, undefined, [], 'power', { power: true }, { power: true, deliver: 'pr' }, { power: 'yes', deliver: 'pr', autoDeliver: false },
+      { power: true, deliver: 'push', autoDeliver: false }, { power: true, deliver: 'pr', autoDeliver: 'no' },
+      { power: true, deliver: 'pr', autoDeliver: false, humanConfirm: 3 }, { power: true, deliver: 'pr', autoDeliver: false, powerNotice: null },
+    ]) expect(isLaunchPreviewPosture(bad), JSON.stringify(bad) ?? 'undefined').toBe(false);
   });
 });

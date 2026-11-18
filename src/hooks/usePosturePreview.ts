@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { ApiError } from '../api/errors.js';
 import {
+  isLaunchPreviewPosture,
   postureKey,
   type LaunchPostureFields,
   type LaunchPreviewBody,
@@ -67,8 +68,9 @@ export function usePosturePreview(
       api.previewLaunchPosture(JSON.parse(bodyJson) as LaunchPreviewBody).then(
         (r) => {
           if (!live) return;
-          map.set(key, r.posture !== undefined && typeof r.posture.power === 'boolean'
-            ? { status: 'ready', posture: r.posture }
+          const posture: unknown = typeof r === 'object' && r !== null ? (r as { posture?: unknown }).posture : undefined;
+          map.set(key, isLaunchPreviewPosture(posture)
+            ? { status: 'ready', posture }
             : { status: 'failed' });
           bump((n) => n + 1);
         },
