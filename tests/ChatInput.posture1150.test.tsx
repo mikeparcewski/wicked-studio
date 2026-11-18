@@ -230,6 +230,25 @@ describe('New job form: the gates shown are crew\'s answer for the body sent (st
     expect((await send(user)).power).toBe(false);
   });
 
+  it.each([
+    ['a posture missing its delivery fields', { posture: { power: true } }],
+    ['a null body', null],
+    ['a null posture', { posture: null }],
+  ])('Power mode off, then %s: the failure is said, with Retry and "runs phased", and power: false is sent (studio#1192)', async (_what, bad) => {
+    answer = crewSays();
+    const user = userEvent.setup();
+    render(<ChatInput onLaunched={() => {}} />);
+    await bindRepo(user);
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power-switch')).toBeInTheDocument());
+    answer = () => Promise.resolve(bad as never);
+    const sw = screen.getByTestId('gate-posture-power-switch');
+    await user.click(sw.getAttribute('role') === 'switch' ? sw : within(sw).getByRole('switch'));
+    await waitFor(() => expect(screen.getByTestId('gate-posture-unchecked')).toHaveAttribute('data-reason', 'failed'));
+    expect(screen.getByTestId('gate-posture-retry')).toBeInTheDocument();
+    expect(screen.getByTestId('launch-confirm-phased')).toHaveTextContent("runs phased (couldn't check power mode)");
+    expect((await send(user)).power).toBe(false);
+  });
+
   it('a failed preview recovers with Retry: the power words come back and power: true is sent', async () => {
     answer = () => Promise.reject(new Error('socket hang up'));
     const user = userEvent.setup();

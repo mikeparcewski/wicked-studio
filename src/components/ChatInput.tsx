@@ -561,10 +561,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const powerShown = shownPosture?.power === true;
   // (codex merge check r3) No answer for power mode: the form says Send runs this phased, and why. A failure offers
   // Retry; a daemon without the preview (404) can't be asked. A person who turned power off chose phased themselves.
+  // A failure is said whatever the power choice (studio#1192 review): the words the form shows are not crew's answer.
   const powerUnchecked: 'failed' | 'unsupported' | null =
-    !powerCap || powerChoice === false ? null
+    !powerCap ? null
       : posturePreview.answer.status === 'failed' ? 'failed'
-        : posturePreview.answer.status === 'none' ? 'unsupported' : null;
+        : powerChoice !== false && posturePreview.answer.status === 'none' ? 'unsupported' : null;
   const gateWords = shownPosture !== null && shownPosture.power ? powerGateWords(shownPosture) : describeGate(mode, confirmMode, beforeOrd);
 
   function loadProjects(): void {
