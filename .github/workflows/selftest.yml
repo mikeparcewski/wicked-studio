@@ -21,7 +21,8 @@ concurrency:
 
 jobs:
   selftest:
-    uses: mikeparcewski/wicked-ci/.github/workflows/selftest.yml@40d9ec2c4e2d18ee07dced50e5595277e99b8a31
+    permissions: { contents: read, checks: write }   # checks: the advisory verdict's check run (wicked-ci#76)
+    uses: mikeparcewski/wicked-ci/.github/workflows/selftest.yml@a763834a52a49edcb36ac00903155bc0a446cba1
     with:
       under_test: studio
-      wicked_ci_ref: 40d9ec2c4e2d18ee07dced50e5595277e99b8a31
+      wicked_ci_ref: a763834a52a49edcb36ac00903155bc0a446cba1
