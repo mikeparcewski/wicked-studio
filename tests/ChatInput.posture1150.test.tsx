@@ -201,6 +201,10 @@ describe('New job form: the gates shown are crew\'s answer for the body sent (st
     ['a failed preview', () => Promise.reject(new Error('socket hang up')), 'failed'],
     ['a 500', () => Promise.reject(new client.ApiError(500, 'boom')), 'failed'],
     ['a malformed answer', () => Promise.resolve({}), 'failed'],
+    // studio#1192: an answer that is not a complete posture is no answer, never a partial one.
+    ['a posture missing its delivery fields', () => Promise.resolve({ posture: { power: true } } as never), 'failed'],
+    ['a null body', () => Promise.resolve(null as never), 'failed'],
+    ['a null posture', () => Promise.resolve({ posture: null } as never), 'failed'],
     ['an older daemon (404)', () => Promise.reject(new client.ApiError(404, 'Not found')), 'unsupported'],
     ['an answer still pending at Send', () => new Promise<never>(() => {}), null],
   ] as Array<[string, Answer, 'failed' | 'unsupported' | null]>)('%s claims nothing about power, says so, and sends power: false', async (_what, a, said) => {
