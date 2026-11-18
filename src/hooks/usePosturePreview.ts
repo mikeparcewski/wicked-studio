@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../api/client.js';
+import { ApiError } from '../api/errors.js';
 import {
   postureKey,
   type LaunchPostureFields,
@@ -13,7 +14,9 @@ const DEBOUNCE_MS = 300;
 export type PostureAnswer =
   | { status: 'loading' }
   | { status: 'ready'; posture: LaunchPreviewPosture }
-  /** Failed, or a daemon without `POST /runs/preview`: nothing is claimed. */
+  /** The preview failed (network, 5xx, a malformed answer): the form says so and offers Retry; Send runs phased. */
+  | { status: 'failed' }
+  /** A daemon without `POST /runs/preview` (404), or no power mode: nothing is claimed; Send runs phased. */
   | { status: 'none' };
 
 export interface PosturePreview {
@@ -21,6 +24,8 @@ export interface PosturePreview {
   key: string;
   /** crew's answer for the fields on screen: what the form renders, and what Send captures. */
   answer: PostureAnswer;
+  /** Ask again for the fields on screen (the Retry of a failed preview). */
+  retry: () => void;
 }
 
 /**
@@ -33,6 +38,9 @@ export interface PosturePreview {
  *
  * A request whose fields left the screen before it answered is dropped, never stored: a later
  * answer for the same fields is the only one that can stand.
+ *
+ * A failed preview (codex merge check r3) is its own state, never `none`: the form shows it with a Retry. It is
+ * kept only while its fields are on screen, so the next change of the form asks again, and so does coming back.
  */
 export function usePosturePreview(
   fields: LaunchPostureFields,
@@ -42,6 +50,7 @@ export function usePosturePreview(
   const key = postureKey(fields, powerChoice);
   const answers = useRef(new Map<string, PostureAnswer>());
   const [, bump] = useState(0);
+  const [retries, setRetries] = useState(0);
   const body: LaunchPreviewBody = {
     ...fields,
     ...(powerChoice !== undefined ? { power: powerChoice } : {}),
@@ -60,12 +69,12 @@ export function usePosturePreview(
           if (!live) return;
           map.set(key, r.posture !== undefined && typeof r.posture.power === 'boolean'
             ? { status: 'ready', posture: r.posture }
-            : { status: 'none' });
+            : { status: 'failed' });
           bump((n) => n + 1);
         },
-        () => {
+        (err: unknown) => {
           if (!live) return;
-          map.set(key, { status: 'none' });
+          map.set(key, err instanceof ApiError && err.status === 404 ? { status: 'none' } : { status: 'failed' });
           bump((n) => n + 1);
         },
       );
@@ -73,11 +82,17 @@ export function usePosturePreview(
     return () => {
       live = false;
       clearTimeout(t);
-      if (map.get(key)?.status === 'loading') map.delete(key);
+      const left = map.get(key)?.status;
+      if (left === 'loading' || left === 'failed') map.delete(key);
     };
     // `key` is the fields' identity; the body is rebuilt with it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, enabled]);
+  }, [key, enabled, retries]);
   const answer: PostureAnswer = !enabled ? { status: 'none' } : answers.current.get(key) ?? { status: 'loading' };
-  return { key, answer };
+  const retry = (): void => {
+    if (answers.current.get(key)?.status !== 'failed') return;
+    answers.current.delete(key);
+    setRetries((n) => n + 1);
+  };
+  return { key, answer, retry };
 }

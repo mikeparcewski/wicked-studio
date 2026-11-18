@@ -9,6 +9,8 @@ import { postureFieldsOfBody } from '../src/board/launchPosture.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { clearRetryPrefill } from '../src/store/retryPrefill.js';
 import { pickLaunchWorkflow } from './launchWorkflowPick.js';
+import { teamPlanApi, type PlanPreviewResponse } from '../src/api/teamPlan.js';
+import { resetPlanCatalog } from '../src/store/planCatalog.js';
 
 /**
  * studio#1150, SAYS == DOES: the New job form shows the gates crew says this body keeps
@@ -23,6 +25,7 @@ const health = (powerMode: boolean) => ({ status: 'ok', version: '0.18.18', ping
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  resetPlanCatalog();
   vi.spyOn(client.api, 'getRoster').mockResolvedValue({
     roster: [{ key: 'claude', display_name: 'claude', binary: 'claude', enabled_for_council: true }],
   });
@@ -192,19 +195,104 @@ describe('New job form: the gates shown are crew\'s answer for the body sent (st
     expect((await send(user)).power).toBe(false);
   });
 
+  // (codex merge check r3) No answer is never silent: a failure says Send runs it phased and offers Retry, a daemon
+  // without the preview says it can't be asked, and only an answer still in flight shows the plain phased form.
   it.each([
-    ['a failed preview', () => Promise.reject(new Error('socket hang up'))],
-    ['an older daemon (404)', () => Promise.reject(new client.ApiError(404, 'Not found'))],
-    ['an answer still pending at Send', () => new Promise<never>(() => {})],
-  ] as Array<[string, Answer]>)('%s claims nothing about power and sends power: false', async (_what, a) => {
+    ['a failed preview', () => Promise.reject(new Error('socket hang up')), 'failed'],
+    ['a 500', () => Promise.reject(new client.ApiError(500, 'boom')), 'failed'],
+    ['a malformed answer', () => Promise.resolve({}), 'failed'],
+    ['an older daemon (404)', () => Promise.reject(new client.ApiError(404, 'Not found')), 'unsupported'],
+    ['an answer still pending at Send', () => new Promise<never>(() => {}), null],
+  ] as Array<[string, Answer, 'failed' | 'unsupported' | null]>)('%s claims nothing about power, says so, and sends power: false', async (_what, a, said) => {
     answer = a;
     const user = userEvent.setup();
     render(<ChatInput onLaunched={() => {}} />);
     await bindRepo(user);
     await waitFor(() => expect(client.api.previewLaunchPosture).toHaveBeenCalled());
+    if (said === null) {
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByTestId('gate-posture-unchecked')).toBeNull();
+      expect(screen.queryByTestId('launch-confirm-phased')).toBeNull();
+    } else {
+      await waitFor(() => expect(screen.getByTestId('gate-posture-unchecked')).toHaveAttribute('data-reason', said));
+      expect(screen.getByTestId('gate-posture-unchecked')).toHaveTextContent('Send runs it phased, with the gate chosen here');
+      expect(screen.getByTestId('launch-confirm-phased')).toHaveTextContent('runs phased');
+      if (said === 'failed') expect(screen.getByTestId('gate-posture-retry')).toBeInTheDocument();
+      else expect(screen.queryByTestId('gate-posture-retry')).toBeNull();
+    }
     expect(screen.queryByTestId('gate-posture-power')).toBeNull();
+    expect(screen.getByTestId('gate-posture')).toBeInTheDocument();
     expect(screen.getByTestId('launch-confirm-gate')).toHaveTextContent('first gate');
     expect((await send(user)).power).toBe(false);
+  });
+
+  it('a failed preview recovers with Retry: the power words come back and power: true is sent', async () => {
+    answer = () => Promise.reject(new Error('socket hang up'));
+    const user = userEvent.setup();
+    render(<ChatInput onLaunched={() => {}} />);
+    await bindRepo(user);
+    await waitFor(() => expect(screen.getByTestId('gate-posture-retry')).toBeInTheDocument());
+    const asked = vi.mocked(client.api.previewLaunchPosture).mock.calls.length;
+    answer = crewSays();
+    await user.click(screen.getByTestId('gate-posture-retry'));
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power')).toHaveTextContent(HAND_OFF));
+    expect(vi.mocked(client.api.previewLaunchPosture).mock.calls.length).toBe(asked + 1);
+    expect(screen.queryByTestId('gate-posture-unchecked')).toBeNull();
+    expect(screen.queryByTestId('launch-confirm-phased')).toBeNull();
+    const body = await send(user);
+    expect(body.power).toBe(true);
+    expectAskedFor(body);
+  });
+
+  it('a failed preview is asked again when the form changes, and on coming back to the same fields', async () => {
+    answer = () => Promise.reject(new Error('socket hang up'));
+    const user = userEvent.setup();
+    render(<ChatInput onLaunched={() => {}} />);
+    await bindRepo(user);
+    await waitFor(() => expect(screen.getByTestId('gate-posture-unchecked')).toHaveAttribute('data-reason', 'failed'));
+    answer = crewSays();
+    await pickLaunchWorkflow(user, 'bug');
+    await waitFor(() => expect(lastAsked().workflow).toBe('bug'));
+    await waitFor(() => expect(screen.queryByTestId('gate-posture-unchecked')).toBeNull());
+    await pickLaunchWorkflow(user, 'feature');
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power')).toHaveTextContent(HAND_OFF));
+    expect((await send(user)).power).toBe(true);
+  });
+
+  it('an answer that lands while Send waits on the plan preview does not change what is sent (the form at Send: phased)', async () => {
+    // A preset `feature` with "pause before step 1": Send waits for the plan preview to place the gate.
+    resetPlanCatalog();
+    vi.spyOn(teamPlanApi, 'presets').mockResolvedValue({
+      presets: [{ name: 'feature', scope: 'global', steps: [{ catalog: 'build', id: 'build' }], created_by: 'builtin', updated_at: 0, system: false }],
+    });
+    let planGo: (() => void) | undefined;
+    const planGate = new Promise<void>((r) => { planGo = r; });
+    const plan: PlanPreviewResponse = {
+      score: 1, deterministic: 1, reasons: [], destructive: false, band: 'low', high_risk: false, floor: [], floor_override: null,
+      steps: [{ catalog: 'build', id: 'build' } as never], def: { id: 'feature', phases: [] } as never, pauses: false, pause_reason: null, graph: 'not_needed',
+    };
+    vi.spyOn(teamPlanApi, 'previewPlan').mockImplementation(() => planGate.then(() => plan));
+    let late: ((v: { posture: LaunchPreviewPosture }) => void) | undefined;
+    answer = () => new Promise((res) => { late = res; });
+    const user = userEvent.setup();
+    render(<ChatInput onLaunched={() => {}} />);
+    await bindRepo(user);
+    await waitFor(() => expect(late).toBeDefined());
+    await waitFor(() => expect(teamPlanApi.previewPlan).toHaveBeenCalled());
+    await user.type(screen.getByTestId('launch-problem'), 'make it so');
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    expect(screen.queryByTestId('gate-posture-power')).toBeNull();
+    await user.click(screen.getByTestId('launch-submit'));
+    // Send is waiting on the plan preview; crew's posture answer lands now (power).
+    late!({ posture: { power: true, humanConfirm: 'none', deliver: 'pr', autoDeliver: false } });
+    await waitFor(() => expect(screen.getByTestId('gate-posture-power')).toBeInTheDocument());
+    expect(client.api.launchRun).not.toHaveBeenCalled();
+    planGo!();
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalled());
+    const body = vi.mocked(client.api.launchRun).mock.calls[0]![0];
+    // What the form showed as Send was pressed (phased, the step gate) is what is sent.
+    expect(body.power).toBe(false);
+    expect(body.humanConfirm).toMatch(/^before:/);
   });
 
   it('an answer that lands after its fields left the screen is dropped: what is shown is what is sent', async () => {

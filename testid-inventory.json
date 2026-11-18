@@ -7538,6 +7538,18 @@
       ]
     },
     {
+      "testId": "gate-posture-retry",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "gate-posture-unchecked",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "gate-toast",
       "files": [
         "src/components/GateNotifications.tsx"
@@ -9255,6 +9267,12 @@
     },
     {
       "testId": "launch-confirm-gate",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-confirm-phased",
       "files": [
         "src/components/ChatInput.tsx"
       ]

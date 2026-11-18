@@ -559,6 +559,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const posturePreview = usePosturePreview(postureFields, powerChoice, powerCap);
   const shownPosture = posturePreview.answer.status === 'ready' ? posturePreview.answer.posture : null;
   const powerShown = shownPosture?.power === true;
+  // (codex merge check r3) No answer for power mode: the form says Send runs this phased, and why. A failure offers
+  // Retry; a daemon without the preview (404) can't be asked. A person who turned power off chose phased themselves.
+  const powerUnchecked: 'failed' | 'unsupported' | null =
+    !powerCap || powerChoice === false ? null
+      : posturePreview.answer.status === 'failed' ? 'failed'
+        : posturePreview.answer.status === 'none' ? 'unsupported' : null;
   const gateWords = shownPosture !== null && shownPosture.power ? powerGateWords(shownPosture) : describeGate(mode, confirmMode, beforeOrd);
 
   function loadProjects(): void {
@@ -1648,6 +1654,19 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             hint={powerShown ? 'One orchestrator; turn off to keep a step gate.' : 'Off: phased, with the gate chosen here.'}
           />
         )}
+        {powerUnchecked !== null && (
+          <span data-testid="gate-posture-unchecked" data-reason={powerUnchecked} role="status" className="wk-field-note" style={{ margin: 0 }}>
+            {powerUnchecked === 'failed'
+              ? "Couldn't check how this will launch, so Send runs it phased, with the gate chosen here."
+              : "This daemon can't say whether it would use power mode, so Send runs it phased, with the gate chosen here."}
+            {powerUnchecked === 'failed' && (
+              <>
+                {' '}
+                <button type="button" data-testid="gate-posture-retry" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={posturePreview.retry}>Retry</button>
+              </>
+            )}
+          </span>
+        )}
         </span>
       </div>
 
@@ -1927,6 +1946,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           </span>
           {' · gate: '}
           <span data-testid="launch-confirm-gate" style={{ color: 'var(--ink-high)' }}>{gateWords}</span>
+          {powerUnchecked !== null && (
+            <span data-testid="launch-confirm-phased" style={{ color: 'var(--status-gate)' }}>
+              {powerUnchecked === 'failed' ? " · runs phased (couldn't check power mode)" : ' · runs phased'}
+            </span>
+          )}
           {/* F-E2E-030: the deliver gate is part of what is being sent — read it here too. */}
           {confirmDelivers && (
             <>
