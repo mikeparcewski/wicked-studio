@@ -7,7 +7,9 @@ import type { PreviewStepView } from '../board/planModel.js';
  * `useLaunchPreview().view`. A plan the PA will scope has no final score yet: it says so and draws
  * no floor markers (its floor is only the baseline's).
  */
-export function LaunchPreview({ model }: { model: LaunchPreviewModel }): React.ReactElement | null {
+/** (studio#1150) `powerWords`: crew runs this launch in power mode, which has no plan approval: the pause line says
+ *  what the power run asks instead of a plan-approval gate it will not keep. */
+export function LaunchPreview({ model, powerWords }: { model: LaunchPreviewModel; powerWords?: string | null }): React.ReactElement | null {
   const { preview, view, previewOf } = model;
   if (preview === null) return null;
   const state = preview.status === 'ready' ? (view?.kind ?? 'ready') : preview.status;
@@ -37,7 +39,7 @@ export function LaunchPreview({ model }: { model: LaunchPreviewModel }): React.R
             band and floor come from its answer.
           </span>
           <Steps steps={view.steps} />
-          <Pause pauses={view.pauses} text={view.pauseText} />
+          <Pause pauses={powerWords != null ? false : view.pauses} text={powerWords != null ? `Power mode: ${powerWords}.` : view.pauseText} />
         </>
       )}
       {view?.kind === 'scored' && (
@@ -55,7 +57,7 @@ export function LaunchPreview({ model }: { model: LaunchPreviewModel }): React.R
               The floor added {view.floorAdded.map((s) => s.id).join(', ')} for band {view.band}.
             </span>
           )}
-          <Pause pauses={view.pauses} text={view.pauseText} />
+          <Pause pauses={powerWords != null ? false : view.pauses} text={powerWords != null ? `Power mode: ${powerWords}.` : view.pauseText} />
         </>
       )}
     </section>

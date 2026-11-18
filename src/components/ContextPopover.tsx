@@ -12,6 +12,8 @@ interface Props {
   onConfirmModeChange: (mode: ConfirmMode) => void;
   beforeOrd: number;
   onBeforeOrdChange: (ord: number) => void;
+  /** (studio#1150) Set while crew runs this launch in power mode: no step gate is kept, so none is offered here. */
+  powerNote?: string | null;
   entityMode: EntityMode;
   onEntityModeChange: (mode: EntityMode) => void;
   repos: RepoEntry[];
@@ -47,6 +49,7 @@ export function ContextPopover({
   onConfirmModeChange,
   beforeOrd,
   onBeforeOrdChange,
+  powerNote = null,
   entityMode,
   onEntityModeChange,
   repos,
@@ -121,6 +124,9 @@ export function ContextPopover({
       {/* ── Gate ─────────────────────────────────────────────────── */}
       <div className="px-4 py-3">
         <SectionHead>Set gate</SectionHead>
+        {powerNote !== null ? (
+          <p data-testid="launch-gate-power" className="wk-field-note" style={{ margin: 0 }}>{powerNote}</p>
+        ) : (
         <div className="flex items-center gap-2 flex-wrap">
           <select
             data-testid="launch-gate"
@@ -154,6 +160,7 @@ export function ContextPopover({
             />
           )}
         </div>
+        )}
       </div>
 
       <Divider />

@@ -7526,6 +7526,30 @@
       ]
     },
     {
+      "testId": "gate-posture-power",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "gate-posture-power-switch",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "gate-posture-retry",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "gate-posture-unchecked",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "gate-toast",
       "files": [
         "src/components/GateNotifications.tsx"
@@ -9248,6 +9272,12 @@
       ]
     },
     {
+      "testId": "launch-confirm-phased",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "launch-confirm-target",
       "files": [
         "src/components/ChatInput.tsx"
@@ -9273,6 +9303,12 @@
     },
     {
       "testId": "launch-gate",
+      "files": [
+        "src/components/ContextPopover.tsx"
+      ]
+    },
+    {
+      "testId": "launch-gate-power",
       "files": [
         "src/components/ContextPopover.tsx"
       ]

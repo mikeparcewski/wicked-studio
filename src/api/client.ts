@@ -280,6 +280,11 @@ export const api = {
   launchRun: (body: LaunchBodyWithDeliver) =>
     apiFetch<{ runId: string }>('/runs', { method: 'POST', body: JSON.stringify(body) }),
 
+  /** (studio#1150) The human gates a launch of `body` would keep — crew's one decision, the same one `POST /runs`
+   *  makes (api-types 0.212.0). Nothing is launched. Rejects on an older daemon (404): show nothing then. */
+  previewLaunchPosture: (body: import('../board/launchPosture.js').LaunchPreviewBody) =>
+    apiFetch<{ posture?: import('../board/launchPosture.js').LaunchPreviewPosture }>('/runs/preview', { method: 'POST', body: JSON.stringify(body) }),
+
   /**
    * What a workflow launch of `problem` WOULD append as linked issues (crew#825, crew ≥ 0.8.8): the
    * same read `POST /runs` does, nothing launched. Call only when `GET /health.capabilities
