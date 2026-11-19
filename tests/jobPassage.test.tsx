@@ -21,6 +21,7 @@ const { useCapabilities } = await import('../src/store/capabilities.js');
 const { useAskThreadStore } = await import('../src/store/askThread.js');
 const { useTeamPlanStore } = await import('../src/store/teamPlan.js');
 const { useGateStore } = await import('../src/store/gates.js');
+const { useGateReadStore } = await import('../src/board/gateActions.js');
 const { usePlanGateStore } = await import('../src/store/planGates.js');
 const { useSheets } = await import('../src/store/sheets.js');
 const { useJobBinding } = await import('../src/store/jobBinding.js');
@@ -463,6 +464,17 @@ describe('review round 2 folds', () => {
     expect(reply('approve').disabled).toBe(true);
     expect(screen.queryByTestId('job-passage-gate')).toBeNull();
     expect(await screen.findByTestId('job-passage-plan-unread')).toBeTruthy();
+  });
+
+  it('studio#1197: the plan is known from the team record but the gate read has not landed: Approve is held and the card says so, with Retry', async () => {
+    useGateStore.setState({ gates: {}, approaching: {} });
+    useGateReadStore.setState({ failed: { [RUN]: 1 } });
+    page([run()]);
+    await waitFor(() => expect(screen.getByTestId('job-passage').dataset['phase']).toBe('planHeld'));
+    expect(reply('approve').disabled).toBe(true);
+    expect((await screen.findByTestId('job-passage-plan-unread')).textContent).toMatch(/gate hasn’t loaded yet/);
+    expect(screen.getByTestId('job-passage-plan-retry')).toBeTruthy();
+    useGateReadStore.setState({ failed: {} });
   });
 
   it('a gate on a step whose last attempt was refused still unfolds under its step', async () => {

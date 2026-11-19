@@ -698,9 +698,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         </div>
       )}
 
-      {v.phase === 'planHeld' && v.plan === null && planRetry !== null && (
+      {v.phase === 'planHeld' && (v.plan === null || gate === undefined) && planRetry !== null && (
         <p data-testid="job-passage-plan-unread" role="alert" className="wk-pass-sub wk-pass-error">
-          The plan couldn’t be read, so nothing can be approved yet.{' '}
+          {v.plan === null ? 'The plan couldn’t be read, so nothing can be approved yet.' : 'The plan’s gate hasn’t loaded yet (the daemon is slow); it is trying again, and nothing can be approved until it does.'}{' '}
           <button type="button" className="wk-pass-inl" data-testid="job-passage-plan-retry" onClick={planRetry}>Retry</button>
         </p>
       )}

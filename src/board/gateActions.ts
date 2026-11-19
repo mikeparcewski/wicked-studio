@@ -492,8 +492,47 @@ export function refreshGate(runId: string): Promise<void> {
 }
 
 /** F31: a gate read is abandoned after this long, so a hung request cannot hold a run's card, or one of the runs
- *  list's read slots, forever. An abandoned read applies nothing; the next pass reads again. */
+ *  list's read slots, forever. An abandoned read applies nothing. studio#1197: a read that misses its deadline is
+ *  retried (`scheduleGateRetry`) with a longer deadline each time, up to `GATE_READ_DEADLINE_MAX_MS`: crew's gate
+ *  answer takes 2.5 s on a loaded host and 15 s for a 40 KB plan gate, so a fixed 10 s never lands it. */
 export const GATE_READ_DEADLINE_MS = 10_000;
+export const GATE_READ_DEADLINE_MAX_MS = 60_000;
+/** studio#1197: the wait before a failed read is tried again: doubles per consecutive failure, capped. */
+export const GATE_RETRY_BASE_MS = 2_000;
+export const GATE_RETRY_MAX_MS = 30_000;
+
+/** studio#1197: consecutive failed (non-404) reads per run; absent = none failed since the last answer. A card
+ *  with no gate in hand says so and offers a retry while this holds a count. */
+export const useGateReadStore = create<{ failed: Record<string, number> }>(() => ({ failed: {} }));
+function setFailed(runId: string, n: number): void {
+  useGateReadStore.setState((s) => {
+    if ((s.failed[runId] ?? 0) === n) return s;
+    const failed = { ...s.failed };
+    if (n === 0) delete failed[runId]; else failed[runId] = n;
+    return { failed };
+  });
+}
+
+const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function clearRetry(runId: string): void {
+  const t = retryTimers.get(runId);
+  if (t !== undefined) { clearTimeout(t); retryTimers.delete(runId); }
+}
+function scheduleGateRetry(runId: string, failures: number): void {
+  clearRetry(runId);
+  const wait = Math.min(GATE_RETRY_BASE_MS * 2 ** (failures - 1), GATE_RETRY_MAX_MS);
+  retryTimers.set(runId, setTimeout(() => {
+    retryTimers.delete(runId);
+    void ensureGate(runId);
+  }, wait));
+}
+/** studio#1197: stop retrying the gate reads of every run that no longer waits on a person (`waiting` = the ids
+ *  that do), and forget their failures. */
+export function reconcileGateRetries(waiting: readonly string[]): void {
+  const keep = new Set(waiting);
+  for (const id of [...retryTimers.keys()]) if (!keep.has(id)) clearRetry(id);
+  for (const id of Object.keys(useGateReadStore.getState().failed)) if (!keep.has(id)) setFailed(id, 0);
+}
 
 interface GateRead {
   ticket: GateReadTicket;
@@ -507,13 +546,24 @@ function startGateRead(runId: string): GateRead {
   const read: GateRead = { ticket, promise: Promise.resolve() };
   read.promise = (async () => {
     const store = useGateStore.getState();
+    const failures = useGateReadStore.getState().failed[runId] ?? 0;
     const deadline = new AbortController();
-    const timer = setTimeout(() => deadline.abort(), GATE_READ_DEADLINE_MS);
+    const timer = setTimeout(() => deadline.abort(), Math.min(GATE_READ_DEADLINE_MS * 2 ** failures, GATE_READ_DEADLINE_MAX_MS));
     try {
       store.applyGateRead(ticket, gateFromInfo(await api.getGate(runId, deadline.signal)));
+      clearRetry(runId);
+      setFailed(runId, 0);
     } catch (e) {
-      // crew's 404: no open gate. Any other failure (network, the deadline) leaves the store as it was.
-      if (e instanceof ApiError && e.status === 404) store.applyGateRead(ticket, null);
+      // crew's 404: no open gate, an answer. Any other failure (network, the deadline) leaves the store as it was and
+      // is tried again, later and for longer (studio#1197), until a read lands or the run stops waiting.
+      if (e instanceof ApiError && e.status === 404) {
+        store.applyGateRead(ticket, null);
+        clearRetry(runId);
+        setFailed(runId, 0);
+      } else {
+        setFailed(runId, failures + 1);
+        scheduleGateRetry(runId, failures + 1);
+      }
     } finally {
       clearTimeout(timer);
       if (gateReads.get(runId) === read) gateReads.delete(runId);
@@ -529,7 +579,11 @@ function startGateRead(runId: string): GateRead {
  * write is obsolete: it will be dropped, so it cannot stand in); else one new read.
  */
 export function ensureGate(runId: string): Promise<void> {
-  if (useGateStore.getState().gates[runId] !== undefined) return Promise.resolve();
+  if (useGateStore.getState().gates[runId] !== undefined) {
+    clearRetry(runId);
+    setFailed(runId, 0);
+    return Promise.resolve();
+  }
   const on = gateReads.get(runId);
   if (on !== undefined && on.ticket.gen === gateGen(runId)) return on.promise;
   return startGateRead(runId).promise;

@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- A waiting run's plan card no longer stays on "reading the plan…" when the gate read is slow (studio#1197). A `GET /runs/:id/gate` that
+  missed its 10 s deadline was dropped and never read again until a live frame refreshed the runs list; on a loaded host a large plan
+  gate takes longer than 10 s every time. A missed read is now retried with a doubling wait (2 s up to 30 s) and a longer deadline each
+  try (10 s up to 60 s) until it lands or the run stops waiting, and while no gate has landed the card says so and offers Retry.
+
 ## [0.16.14] — 2026-11-19
 
 Minor patch (feature): the New job form asks crew what a run will keep before it starts, and shows it. A power run shows its

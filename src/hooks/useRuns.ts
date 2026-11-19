@@ -7,7 +7,7 @@ import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { useGateStore } from '../store/gates.js';
 import { answerShapeOf, askerOf, useElicitationStore } from '../store/elicitations.js';
-import { ensureGate, rememberWorkTitles } from '../board/gateActions.js';
+import { ensureGate, reconcileGateRetries, rememberWorkTitles } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -157,6 +157,8 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
         .filter((v) => v.session.status === 'awaiting_human')
         .map((v) => v.session.id);
       reconcileGates(awaiting);
+      // studio#1197: a gate read that is being retried stops when its run no longer waits on a person.
+      reconcileGateRetries(awaiting);
       // A recorded turn gate on a run that no longer waits there is stale (codex r2 #2).
       // (`unit_ix` is a 0-based index into the ord-ordered units — the cursor unit's ORD is what a gate names.)
       useAskThreadStore.getState().reconcileTurnGates(fetched.map((v) => ({
