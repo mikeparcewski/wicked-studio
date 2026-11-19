@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.14] — 2026-11-19
+
+Minor patch (feature): the New job form asks crew what a run will keep before it starts, and shows it. A power run shows its
+own gate words (a hand-off, or no step gates) in place of the step-gate select, gains a Power mode switch, and Send carries
+`power` exactly as shown (studio#1150, #1191). If crew cannot answer (network, an error, or a 404 from an older crew) the
+form says so, offers Retry, and Send runs phased with the gate chosen on the form. An incomplete or null preview answer is a
+visible failure with Retry, not a silent "loading" and not a half-drawn power card (studio#1192, #1194). Needs wicked-crew
+0.18.18's `POST /runs/preview`; bundled by wicked-crew 0.18.18. Known limits: wicked-ci#76 (W6: the advisory selftest check
+shows green over its U04 FAIL, so its green tick is not evidence); 0.16.13's limits stand.
+
 ## [0.16.13] — 2026-11-17
 
 Patch (fix release): a source's Agents box never shows switches that aren't crew's latest answer as verified. After
@@ -3633,7 +3643,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.13...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.14...HEAD
+[0.16.14]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.13...v0.16.14
 [0.16.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.12...v0.16.13
 [0.16.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.11...v0.16.12
 [0.16.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.16.10...v0.16.11
