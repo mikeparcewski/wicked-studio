@@ -513,25 +513,64 @@ function setFailed(runId: string, n: number): void {
   });
 }
 
+/** F31: how many late-join gate reads are on their way at once (98 parked runs read one by one took ~28 s on the rig). */
+export const GATE_READS_IN_FLIGHT = 4;
+
+/**
+ * F31: the late-join passes' shared read slots. At most `GATE_READS_IN_FLIGHT` reads are on their way across every
+ * pass (a refresh that replaces a pass does not add four more). A slot is held until its read ends; a hydration read
+ * ends by its deadline at the latest (`GATE_READ_DEADLINE_MS`), so a hung request cannot stall the passes after it.
+ */
+let slotsBusy = 0;
+const slotWaiters: Array<() => void> = [];
+export async function inGateSlot(fn: () => Promise<void>): Promise<void> {
+  // A freed slot is handed to the longest waiter (first in, first out), never taken by a newcomer.
+  if (slotsBusy < GATE_READS_IN_FLIGHT) slotsBusy += 1;
+  else await new Promise<void>((r) => slotWaiters.push(r));
+  try {
+    await fn();
+  } finally {
+    const next = slotWaiters.shift();
+    if (next !== undefined) next();
+    else slotsBusy -= 1;
+  }
+}
+
+/** Test seam: a test that abandons a hung read must not leave its slot held for the next. */
+export function resetGateSlotsForTest(): void {
+  slotsBusy = 0;
+  slotWaiters.length = 0;
+}
+
 const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 function clearRetry(runId: string): void {
   const t = retryTimers.get(runId);
   if (t !== undefined) { clearTimeout(t); retryTimers.delete(runId); }
 }
+/** Bumped when a run stops waiting: a read begun before that never schedules a retry (its failure is not news). */
+const retryEpoch = new Map<string, number>();
+const epochOf = (runId: string): number => retryEpoch.get(runId) ?? 0;
 function scheduleGateRetry(runId: string, failures: number): void {
   clearRetry(runId);
   const wait = Math.min(GATE_RETRY_BASE_MS * 2 ** (failures - 1), GATE_RETRY_MAX_MS);
+  const epoch = epochOf(runId);
   retryTimers.set(runId, setTimeout(() => {
     retryTimers.delete(runId);
-    void ensureGate(runId);
+    // Through the runs list's shared read slots, so many runs retrying at once never read all at once; eligibility is
+    // rechecked once a slot is held (the run may have stopped waiting, or its gate arrived, meanwhile).
+    void inGateSlot(async () => { if (epochOf(runId) === epoch) await ensureGate(runId); });
   }, wait));
 }
 /** studio#1197: stop retrying the gate reads of every run that no longer waits on a person (`waiting` = the ids
  *  that do), and forget their failures. */
 export function reconcileGateRetries(waiting: readonly string[]): void {
   const keep = new Set(waiting);
-  for (const id of [...retryTimers.keys()]) if (!keep.has(id)) clearRetry(id);
-  for (const id of Object.keys(useGateReadStore.getState().failed)) if (!keep.has(id)) setFailed(id, 0);
+  for (const id of new Set([...retryTimers.keys(), ...Object.keys(useGateReadStore.getState().failed), ...retryEpoch.keys(), ...gateReads.keys()])) {
+    if (keep.has(id)) continue;
+    clearRetry(id);
+    setFailed(id, 0);
+    retryEpoch.set(id, epochOf(id) + 1);
+  }
 }
 
 interface GateRead {
@@ -547,6 +586,7 @@ function startGateRead(runId: string): GateRead {
   read.promise = (async () => {
     const store = useGateStore.getState();
     const failures = useGateReadStore.getState().failed[runId] ?? 0;
+    const epoch = epochOf(runId);
     const deadline = new AbortController();
     const timer = setTimeout(() => deadline.abort(), Math.min(GATE_READ_DEADLINE_MS * 2 ** failures, GATE_READ_DEADLINE_MAX_MS));
     try {
@@ -560,7 +600,9 @@ function startGateRead(runId: string): GateRead {
         store.applyGateRead(ticket, null);
         clearRetry(runId);
         setFailed(runId, 0);
-      } else {
+      } else if (gateReads.get(runId) === read && epochOf(runId) === epoch && useGateStore.getState().gates[runId] === undefined) {
+        // Only the newest read counts, for a run still waiting that holds no gate: a read that was replaced, one begun
+        // before the run stopped waiting, and a forced refresh of a gate already in hand schedule nothing.
         setFailed(runId, failures + 1);
         scheduleGateRetry(runId, failures + 1);
       }

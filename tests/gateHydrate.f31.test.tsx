@@ -15,7 +15,7 @@ import * as client from '../src/api/client.js';
 import { ApiError } from '../src/api/errors.js';
 import type { CoreEvent, GateInfo, SessionView } from '../src/api/types.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
-import { GATE_READ_DEADLINE_MS, IDLE_GATE_ACTION, ensureGate, refreshGate, useGateActionStore } from '../src/board/gateActions.js';
+import { GATE_READ_DEADLINE_MS, IDLE_GATE_ACTION, ensureGate, reconcileGateRetries, refreshGate, resetGateSlotsForTest, useGateActionStore } from '../src/board/gateActions.js';
 import { RunBlock } from '../src/components/session/RunConversation.js';
 import { GATE_READS_IN_FLIGHT, inGateSlot, useRuns } from '../src/hooks/useRuns.js';
 import { useConnectionStore } from '../src/store/connection.js';
@@ -58,7 +58,7 @@ beforeEach(() => {
   useGateStore.setState({ gates: {}, approaching: {} });
   useGateActionStore.setState({ byGate: {} });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); reconcileGateRetries([]); resetGateSlotsForTest(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('a waiting run’s thread reads its own gate', () => {
   const RUN = 'r-f31-plan';

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { GateInfo } from '../src/api/types.js';
 import {
-  GATE_READ_DEADLINE_MS, GATE_RETRY_BASE_MS, ensureGate, reconcileGateRetries, refreshGate, useGateReadStore,
+  GATE_READ_DEADLINE_MS, GATE_READS_IN_FLIGHT, GATE_RETRY_BASE_MS, ensureGate, inGateSlot, reconcileGateRetries, refreshGate, useGateReadStore,
 } from '../src/board/gateActions.js';
 import { useGateStore } from '../src/store/gates.js';
 
@@ -28,7 +28,7 @@ function slowGate(ms: number, runId: string): ReturnType<typeof vi.spyOn> {
 }
 
 beforeEach(() => { vi.useFakeTimers(); useGateStore.setState({ gates: {}, approaching: {} }); useGateReadStore.setState({ failed: {} }); });
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { reconcileGateRetries([]); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('a gate read that misses its deadline', () => {
   it('lands on a later try: the deadline grows, so a 15 s gate is read where a fixed 10 s never would', async () => {
@@ -66,6 +66,46 @@ describe('a gate read that misses its deadline', () => {
     const spy = vi.spyOn(client.api, 'getGate').mockRejectedValue(new Error('down'));
     await refreshGate(id);
     reconcileGateRetries([]);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(useGateReadStore.getState().failed[id]).toBeUndefined();
+  });
+
+  it('reconciling while a read is in flight (the first, or a retry) leaves no retry behind', async () => {
+    const id = fresh();
+    const spy = slowGate(15_000, id);
+    void ensureGate(id);
+    await vi.advanceTimersByTimeAsync(5_000);
+    reconcileGateRetries([]);
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(useGateReadStore.getState().failed[id]).toBeUndefined();
+    expect(useGateStore.getState().gates[id]).toBeUndefined();
+  });
+
+  it('retries share the runs list’s read slots: many failed runs never retry all at once', async () => {
+    const ids = Array.from({ length: 12 }, () => fresh());
+    let open = 0;
+    let peak = 0;
+    vi.spyOn(client.api, 'getGate').mockImplementation((id: string) => {
+      open += 1; peak = Math.max(peak, open);
+      return new Promise<GateInfo>((_, reject) => setTimeout(() => { open -= 1; reject(new Error('down')); }, 3_000));
+    });
+    // The initial reads fail one by one through the slots; their retries come due together.
+    const firsts = Promise.all(ids.map((id) => inGateSlot(() => ensureGate(id))));
+    await vi.advanceTimersByTimeAsync(10_000);
+    await firsts;
+    peak = 0;
+    await vi.advanceTimersByTimeAsync(GATE_RETRY_BASE_MS + 1);
+    expect(peak).toBeGreaterThan(0);
+    expect(peak).toBeLessThanOrEqual(GATE_READS_IN_FLIGHT);
+  });
+
+  it('a failed forced refresh of a gate already in hand schedules no retry', async () => {
+    const id = fresh();
+    useGateStore.setState({ gates: { [id]: { runId: id, ord: 2, prompt: 'Approve', lifecycle: 'open', receivedAt: NOW, gateKind: 'plan_approval' } }, approaching: {} });
+    const spy = vi.spyOn(client.api, 'getGate').mockRejectedValue(new Error('down'));
+    await refreshGate(id);
     await vi.advanceTimersByTimeAsync(120_000);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(useGateReadStore.getState().failed[id]).toBeUndefined();
