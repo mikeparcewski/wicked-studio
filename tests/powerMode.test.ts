@@ -6,11 +6,53 @@
 import { describe, expect, it } from 'vitest';
 import { powerOf } from '../src/api/power.js';
 import type { CoreEvent } from '../src/api/types.js';
-import { checkpointWords, handoffRow, handoffWords, higherRigors, mergePower, pauseOrder, powerSwitch, powerTimeline, raiseConsequence, rigorChip, rigorMarkWords } from '../src/board/powerMode.js';
+import { checkpointWords, handoffRow, handoffWords, higherRigors, mergePower, pauseCause, pauseOrder, powerSwitch, powerTimeline, raiseConsequence, rigorChip, rigorMarkWords } from '../src/board/powerMode.js';
 import { at, buildEvents, change, plan, state, step } from './powerFixtures.js';
 
 const clock = (ms: number): string => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 const events = (x: Array<Record<string, unknown>>): CoreEvent[] => x as unknown as CoreEvent[];
+
+describe('pause cause', () => {
+  const pause = { at: at(20), checkpoint: 3, reasons: ['rigor jumped two bands at once (standard -> highest)'], recommended: 'continue_high' as const };
+  const row = (seq: number, checkpoint: number, reasons: string[], paused = true) =>
+    change(seq, seq, 'commit', 'standard', 'highest', 34, 80, checkpoint, reasons, { paused });
+  const raw = 'code graph indexed from working tree does not match run base abc123; failed closed';
+
+  it('prefers the newest paused row for this checkpoint over newer unrelated rows', () => {
+    const p = state({ pause, history: [row(1, 3, ['ordinary growth']), row(2, 3, [raw]), row(3, 4, ['ordinary growth']), row(4, 3, ['ordinary growth'], false)] });
+    expect(pauseCause(p)).toEqual({
+      kind: 'graph', eyebrow: 'Paused · code graph',
+      question: "The code graph for this repository couldn't be matched to the run's base commit, so rigor went up. How should it go on?",
+      raw,
+    });
+  });
+
+  it('falls back to the newest paused row when the checkpoint has no match', () => {
+    expect(pauseCause(state({ pause, history: [row(1, 1, ['ordinary growth']), row(2, 2, [raw]), row(3, 4, ['ordinary growth'], false)] })))
+      .toMatchObject({ kind: 'graph', raw });
+  });
+
+  it.each(['graph cannot match run base', 'graph uses working tree', 'graph is not indexed', 'fail closed', 'failed closed'])(
+    'recognizes graph provenance from pause reasons: %s', (reason) => {
+      expect(pauseCause(state({ history: [], pause: { ...pause, reasons: ['struggling: 4 failed test runs', reason] } })))
+        .toMatchObject({ kind: 'graph', raw: reason });
+    },
+  );
+
+  it('uses struggle wording for a struggling pause reason', () => {
+    expect(pauseCause(state({ pause: { ...pause, reasons: ['struggling: 4 failed test runs'] } }))).toEqual({
+      kind: 'struggle', eyebrow: 'Paused · stuck',
+      question: 'This job is taking longer or failing more than planned. How should it go on?', raw: null,
+    });
+  });
+
+  it('keeps growth wording for ordinary pauses, missing history and missing pauses', () => {
+    const growth = { kind: 'growth', eyebrow: 'Paused · this grew', question: 'This change grew past its plan. How should it go on?', raw: null };
+    expect(pauseCause(state({ pause, history: [] }))).toEqual(growth);
+    expect(pauseCause(state({ pause, history: [row(1, 3, [raw], false)] }))).toEqual(growth);
+    expect(pauseCause(state())).toEqual(growth);
+  });
+});
 
 describe('the switch (DES-POWER-MODE §2)', () => {
   it('phased required: Off and disabled, the reason in its tooltip', () => {

@@ -183,6 +183,27 @@ function activityRow(e: PowerActivityEvent, commitN: number): ActivityRow {
   return { kind: 'edit', at, lead: 'Edited', code: e.path ?? (e.paths?.[0] ?? null), added: n(e.added), removed: n(e.removed), tail: null, sha: null, tone: 'plain' };
 }
 
+/** The current pause's cause, using the paused rescore's provenance before the pause's summary reasons. */
+export function pauseCause(power: PowerState): { kind: 'graph' | 'struggle' | 'growth'; eyebrow: string; question: string; raw: string | null } {
+  const paused = power.history.filter((c) => c.paused === true).sort((a, b) => b.seq - a.seq);
+  const source = paused.find((c) => c.checkpoint === power.pause?.checkpoint) ?? paused[0] ?? null;
+  const reasons = [...(source?.reasons ?? []), ...(power.pause?.reasons ?? [])];
+  const raw = reasons.find((r) => /graph .*(run base|working tree|indexed)|fail(ed)? closed/i.test(r));
+  if (raw !== undefined) return {
+    kind: 'graph', eyebrow: 'Paused · code graph',
+    question: "The code graph for this repository couldn't be matched to the run's base commit, so rigor went up. How should it go on?",
+    raw,
+  };
+  if (power.pause?.reasons.some((r) => /^struggling:/i.test(r.trim()))) return {
+    kind: 'struggle', eyebrow: 'Paused · stuck',
+    question: 'This job is taking longer or failing more than planned. How should it go on?', raw: null,
+  };
+  return {
+    kind: 'growth', eyebrow: 'Paused · this grew',
+    question: 'This change grew past its plan. How should it go on?', raw: null,
+  };
+}
+
 /**
  * The engine's pause reasons (core power.rs `sudden_complexity` / `struggle`) in plain words: "struggling: 80 min
  * against an estimate of 20 min" → "taking much longer than estimated (80 min vs 20)". A reason studio does not know

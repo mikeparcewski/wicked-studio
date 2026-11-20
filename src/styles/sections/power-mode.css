@@ -120,6 +120,7 @@ button.pm-chip { cursor: pointer; }
 /* The "this grew" dock: the decision dock's card, with four ways on. */
 .pm-pause-eyebrow { color: var(--status-fail); }
 .pm-pause-reasons { margin: 4px 0 0; padding-left: 18px; color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.55; }
+.pm-pause-more { margin: 6px 0 0; color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.55; overflow-wrap: anywhere; }
 .pm-pause-note { margin: 6px 0 0; color: var(--ink-muted); font-size: var(--text-xs); }
 
 /* The New job form and Settings: the switch with its one-line reason. */
