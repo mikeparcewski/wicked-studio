@@ -42,7 +42,10 @@ export function start(): void {
   const editable = (): boolean => grants.includes('artifact.write') && !busy && !disposed;
   const advanced = (): boolean => surface === 'options' || mode === 'advanced';
   const status = (line: string): void => { el('status').textContent = line; send('ui.status', { line: line.replace(/[\r\n]/g, ' ').slice(0, 120) }); };
-  const publish = (): void => { if (protocol === 2) for (const tab of ['captions', 'theme']) v2?.values(tab, videoValues(cut?.style ?? defaultVideoStyle(''), tab, skin, cut?.resolvedTheme)); };
+  const publish = (): void => { if (protocol === 2 && cut !== null) for (const tab of ['captions', 'theme']) v2?.values(tab, videoValues(cut.style, tab, skin, cut.resolvedTheme)); };
+  /** No demo-cut to read (another artifact kind, or a failed read): the tabs still show the style a new cut starts from. */
+  const noCutValues = (tab: string): Record<string, unknown> => videoValues(defaultVideoStyle(''), tab, skin);
+  const publishNoCut = (): void => { if (protocol === 2 && cut === null) for (const tab of ['captions', 'theme']) v2?.values(tab, noCutValues(tab)); };
   /** The active studio skin as video colours, resolved from the host's tokens to plain rgb() (the colour grammar). */
   let skin: VideoColours | null = null;
   const resolveColour = (v: unknown): string | null => {
@@ -146,7 +149,7 @@ export function start(): void {
     const r = await req('artifact.read', {});
     if (disposed || generation !== readingGeneration) return false;
     const content = r.payload?.['content'] as DemoCut | undefined;
-    if (!r.ok || content?.type !== 'demo-cut' || !Array.isArray(content.chapters)) { status(r.error?.message ?? 'No cut is available here.'); publish(); return false; }
+    if (!r.ok || content?.type !== 'demo-cut' || !Array.isArray(content.chapters)) { status(r.error?.message ?? 'No cut is available here.'); publishNoCut(); return false; }
     if (cut !== null && content.version < cut.version) return false;
     const oldVersion = cut?.version;
     cut = content;
@@ -413,7 +416,7 @@ export function start(): void {
   }
   async function optionsChanged(tab: string, id: string, value: unknown) {
     const control = declaration.options?.tabs.find(t => t.id === tab)?.controls?.find(c => c.id === id);
-    if (cut === null || control === undefined || !controlValueOk(control, value) || !grants.includes('artifact.theme') || (typeof value === 'string' && /[\r\n]/.test(value))) return { applied: false, values: cut === null ? {} : videoValues(cut.style, tab, skin, cut.resolvedTheme), reason: 'That style change is not available.' };
+    if (cut === null || control === undefined || !controlValueOk(control, value) || !grants.includes('artifact.theme') || (typeof value === 'string' && /[\r\n]/.test(value))) return { applied: false, values: cut === null ? noCutValues(tab) : videoValues(cut.style, tab, skin, cut.resolvedTheme), reason: 'That style change is not available.' };
     if (busy) return { applied: false, values: videoValues(cut.style, tab, skin, cut.resolvedTheme), reason: 'A cut is being saved.' };
     busy = true; draw();
     try {

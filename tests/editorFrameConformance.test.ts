@@ -79,13 +79,14 @@ describe('editor frame conformance cases 5 and 6', () => {
       expect.soft(press(content, 'x').defaultPrevented).toBe(true);
       expect(effects(seen)).toEqual([expect.objectContaining({ type: 'ui.typed', payload: { grapheme: 'x' } })]);
     });
-    it(`${pack}: keeps a focusable surface and leaves root Tab native`, async () => {
+    it(`${pack}: leaves Tab native from the surface itself and from a body whose focus a redraw dropped`, async () => {
       const { root, seen } = await boot(pack);
-      expect(root.getAttribute('tabindex')).toBe('-1');
-      root.focus(); expect(document.activeElement).toBe(root);
+      if (pack === 'doc' || pack === 'page') { expect(root.getAttribute('tabindex')).toBe('-1'); root.focus(); expect(document.activeElement).toBe(root); }
       seen.length = 0;
-      expect(press(root, 'Tab').defaultPrevented).toBe(false);
-      expect(press(root, 'Tab', { shiftKey: true }).defaultPrevented).toBe(false);
+      for (const node of [root, document.body]) {
+        expect(press(node, 'Tab').defaultPrevented).toBe(false);
+        expect(press(node, 'Tab', { shiftKey: true }).defaultPrevented).toBe(false);
+      }
       expect(effects(seen)).toEqual([]);
     });
     it(`${pack}: Backspace and Delete on unselected content do nothing`, async () => {
@@ -95,8 +96,9 @@ describe('editor frame conformance cases 5 and 6', () => {
       expect(effects(seen)).toEqual([]);
     });
   }
-  it.each(['apps', 'insights'] as const)('%s: forwards host navigation chords, never action chords', async pack => {
-    const { root, seen } = await boot(pack);
+  it.each(['apps', 'insights'] as const)('%s: forwards host navigation chords, never action chords, with focus on the body', async pack => {
+    const { seen } = await boot(pack);
+    const root = document.body;
     seen.length = 0;
     for (const [key, init] of [
       ['Escape', {}], ['k', { ctrlKey: true }], ['k', { metaKey: true }], ['j', { code: 'KeyJ', altKey: true }],
@@ -105,6 +107,29 @@ describe('editor frame conformance cases 5 and 6', () => {
     expect(effects(seen).map(m => [m.type, m.payload])).toEqual([
       ['ui.key', { key: 'Escape' }], ['ui.key', { key: 'Mod+K' }], ['ui.key', { key: 'Mod+K' }], ['ui.key', { key: 'Alt+J' }],
     ]);
+  });
+  it.each(['apps', 'insights'] as const)('%s: typing still reaches the composer when a redraw dropped the focused part', async pack => {
+    const { seen } = await boot(pack);
+    seen.length = 0;
+    expect(press(document.body, 'q').defaultPrevented).toBe(true);
+    expect(effects(seen)).toEqual([expect.objectContaining({ type: 'ui.typed', payload: { grapheme: 'q' } })]);
+  });
+  it('apps: Space and Enter on a focused editable component select it, not type', async () => {
+    const { root, seen } = await boot('apps');
+    const cell = root.querySelector<HTMLElement>('.wk-cell')!;
+    expect(cell.tabIndex).toBe(0);
+    seen.length = 0;
+    expect(press(cell, ' ').defaultPrevented).toBe(true); // the runtime selects it (its own handler), the key is not typing
+    expect(effects(seen).some(m => m.type === 'ui.typed')).toBe(false);
+  });
+  it('insights: Tab on a summary in the middle of the tab order is native', async () => {
+    const { root, seen } = await boot('insights');
+    root.insertAdjacentHTML('beforeend', '<button id="first">One</button><details><summary id="mid">Why</summary></details><button id="last">Two</button>');
+    seen.length = 0;
+    expect(press(root.querySelector('#mid')!, 'Tab').defaultPrevented).toBe(false);
+    expect(press(root.querySelector('#mid')!, 'Tab', { shiftKey: true }).defaultPrevented).toBe(false);
+    expect(press(root.querySelector('#last')!, 'Tab').defaultPrevented).toBe(true);
+    expect(effects(seen)).toEqual([expect.objectContaining({ type: 'ui.key', payload: { key: 'Tab' } })]);
   });
   it('apps: Escape deselects before a subsequent Escape reaches the host', async () => {
     const { root, seen } = await boot('apps');
@@ -137,29 +162,28 @@ describe('editor frame conformance cases 5 and 6', () => {
 });
 
 describe('insights conformance case 14', () => {
-  it('reports a positive rounded card height after reading, once per height change', async () => {
+  it('reports a positive rounded card height once the read has drawn, once per height change', async () => {
     let height = 240.6;
+    const watchers: (() => void)[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { watchers.push(cb); } observe() {} disconnect() {} });
     const measure = HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      // jsdom has no layout; the loading state stays at zero until the read completes.
-      return this.tagName === 'MAIN' ? new DOMRect(0, 0, 320, this.querySelector('h1') ? height : 0) : measure.call(this);
+      // jsdom has no layout.
+      return this.tagName === 'MAIN' ? new DOMRect(0, 0, 320, height) : measure.call(this);
     });
-    const { seen, send } = await boot('insights', 'style', 'card');
+    const resized = () => { for (const w of watchers) w(); };
+    const { seen } = await boot('insights', 'style', 'card');
     const heights = () => seen.filter(m => m.type === 'ui.height');
+    resized();
     expect(heights()).toEqual([expect.objectContaining({ payload: { px: 241 } })]);
-
-    send('host.selection', { anchors: [] });
-    send('selection.cleared', {});
+    resized();
     expect(heights()).toHaveLength(1);
-
-    height = 300.2;
-    send('host.selection', { anchors: [] });
+    height = 300.2; resized();
     expect(heights().map(m => m.payload?.['px'])).toEqual([241, 300]);
-    height = 300.4;
-    send('host.selection', { anchors: [] });
-    height = 0;
-    send('host.selection', { anchors: [] });
+    height = 300.4; resized();
+    height = 0; resized();
     expect(heights()).toHaveLength(2);
+    vi.unstubAllGlobals();
   });
 });
 
@@ -171,8 +195,8 @@ describe('video conformance case 15', () => {
         expect.objectContaining({ payload: { tab: controlsTab, rev: 1, values: videoValues(defaultVideoStyle(''), controlsTab, null) } }),
       ]);
     }
-    send('options.changed', { tab, id: tab === 'captions' ? 'on' : 'palette', value: false }, 'change');
-    await vi.waitFor(() => expect(seen.find(m => m.re === 'change')?.payload).toMatchObject({ applied: false, reason: expect.any(String) }));
+    send('options.changed', { tab, id: tab === 'captions' ? 'on' : 'palette', value: tab === 'captions' ? false : 'corporate' }, 'change');
+    await vi.waitFor(() => expect(seen.find(m => m.re === 'change')?.payload).toMatchObject({ applied: false, values: videoValues(defaultVideoStyle(''), tab, null), reason: expect.any(String) }));
     expect(seen.some(m => m.type === 'theme.set' || m.type === 'version.write')).toBe(false);
   });
 });

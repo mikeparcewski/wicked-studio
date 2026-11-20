@@ -75,7 +75,7 @@ export function trendSvg(points: InsightsView['trends'][number]['points'], unit:
 }
 
 export function start(): void {
-  const main = h('main', { 'data-testid': 'insights-plugin', tabindex: '-1' });
+  const main = h('main', { 'data-testid': 'insights-plugin' });
   document.body.prepend(main);
   let port: MessagePort | null = null;
   let v2: V2Port | null = null;
@@ -90,7 +90,9 @@ export function start(): void {
   let disposed = false;
   const pending = new Map<string, { resolve: (r: Reply) => void; timer: ReturnType<typeof setTimeout> }>();
   const send = (type: string, payload: unknown): void => port?.postMessage({ p: PROTOCOL, v: ENVELOPE, type, payload });
-  main.onkeydown = e => { forwardFrameKey(e, main, send); };
+  // On the document, not <main>: a redraw that drops the focused control leaves focus on <body>, and typing there is still the frame's.
+  const onFrameKey = (e: KeyboardEvent): void => { forwardFrameKey(e, main, send); };
+  document.addEventListener('keydown', onFrameKey);
   const req = (type: string, payload: unknown): Promise<Reply> => new Promise((resolve) => {
     if (port === null || disposed) { resolve({ ok: false, error: { code: 'unavailable', message: 'No host here.' } }); return; }
     const id = `wi-${++seq}`;
@@ -178,14 +180,6 @@ export function start(): void {
   }
 
   function draw(): void {
-    drawContent();
-    if (protocol === 2 && v2 !== null) {
-      const px = Math.round(main.getBoundingClientRect().height);
-      if (px > 0 && px !== lastHeight) { lastHeight = px; v2.height(px); }
-    }
-  }
-
-  function drawContent(): void {
     main.replaceChildren();
     if (view === null) { main.append(h('p', { class: 'muted' }, 'Reading the reviews…')); return; }
     if (view.reviews.length === 0) {
@@ -238,6 +232,9 @@ export function start(): void {
   }
 
   async function read(): Promise<void> {
+    try { await readView(); } finally { settled = true; reportHeight(); }
+  }
+  async function readView(): Promise<void> {
     const r = await req('artifact.read', {});
     if (!r.ok || r.payload === undefined) { main.replaceChildren(h('p', { class: 'muted' }, `The reviews could not be read: ${r.error?.message ?? 'no answer'}.`)); return; }
     const content = r.payload['content'] as InsightsView | undefined;
@@ -259,6 +256,8 @@ export function start(): void {
     for (const { timer, resolve } of pending.values()) { clearTimeout(timer); resolve({ ok: false, error: { code: 'unavailable', message: 'Closed.' } }); }
     pending.clear();
     port?.close();
+    sizeWatch?.disconnect();
+    document.removeEventListener('keydown', onFrameKey);
     window.removeEventListener('message', hello);
   }
 
@@ -303,6 +302,16 @@ export function start(): void {
     void read();
   }
 
+  // The card is aspect:"auto": tell the host the height the content wants, on every change of it (a redraw, a wrap on resize, a
+  // <details> opening) once the first read has settled (whatever it found), never for the loading line.
+  let settled = false;
+  function reportHeight(): void {
+    if (protocol !== 2 || v2 === null || !settled) return;
+    const px = Math.round(main.getBoundingClientRect().height);
+    if (px > 0 && px !== lastHeight) { lastHeight = px; v2.height(px); }
+  }
+  const sizeWatch = typeof ResizeObserver === 'function' ? new ResizeObserver(reportHeight) : null;
+  sizeWatch?.observe(main);
   window.addEventListener('message', hello);
   window.addEventListener('pagehide', dispose, { once: true });
   draw();

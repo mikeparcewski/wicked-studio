@@ -11,6 +11,8 @@ import { readThemeTokens } from '../../editors/theme.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { CalmHead, CalmPage } from '../calm/Calm.js';
 import { InsightsDecide } from './InsightsDecide.js';
+import { forwardedKey } from '../editorHost/composerBridge.js';
+import { focusBeside } from '../../editors/focus.js';
 
 // The decide aside and where Accept lands moved to `InsightsDecide` (G2: a review run's card decides with it too).
 export { acceptPath, SETTINGS_SECTION_PATHS } from './InsightsDecide.js';
@@ -78,8 +80,9 @@ export function InsightsPage({ navigate }: { navigate: Navigate }): React.ReactE
         ui: {
           chips: () => undefined,
           draft: () => undefined,
-          typed: () => undefined,
-          key: () => undefined,
+          // No composer on this page: the first typed letter leaves the frame (the rest is the page's, never three drops).
+          typed: () => { focusBeside(frameBox.current?.querySelector('iframe') ?? null, false); },
+          key: (k) => forwardedKey(k, frameBox.current?.querySelector('iframe') ?? null),
           morph: () => undefined,
           status: () => undefined,
           notes: () => undefined,

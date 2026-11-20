@@ -87,7 +87,6 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
   if (!(styleEl instanceof HTMLStyleElement) && !(styleEl instanceof HTMLLinkElement)) return;
   const sheet = new Sheet(styleEl);
   const root = el('div', 'wk-app');
-  root.tabIndex = -1;
   root.setAttribute('data-testid', 'apps-runtime');
   document.body.append(root);
 
@@ -140,11 +139,13 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
     return new Promise((resolve) => pending.set(id, resolve));
   };
   const say = (type: string, payload: Record<string, unknown>): void => post({ type, payload });
-  root.onkeydown = e => {
-    // The document handler keeps Escape's existing deselection behavior, along with undo/delete.
-    if (e.key === 'Escape' && selected !== null && !(e.target as Element).closest('input,textarea,select')) return;
+  // On the document, not the root: a redraw that drops the focused part leaves focus on <body>, and typing there is still the frame's.
+  const onFrameKey = (e: KeyboardEvent): void => {
+    // The document's onKey keeps Escape's existing deselection, along with undo/delete.
+    if (e.key === 'Escape' && selected !== null && !(e.target as Element).closest?.('input,textarea,select')) return;
     forwardFrameKey(e, root, say);
   };
+  document.addEventListener('keydown', onFrameKey);
 
   const onPort = (m: MessageEvent): void => {
     const d = m.data as Record<string, unknown> | null;
@@ -172,6 +173,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
         for (const t of timers.values()) clearInterval(t);
         timers.clear();
         document.removeEventListener('keydown', onKey);
+        document.removeEventListener('keydown', onFrameKey);
         port?.close();
         port = null;
         root.replaceChildren(el('p', 'wk-empty', 'Closed'));
