@@ -188,6 +188,12 @@ describe('insights conformance case 14', () => {
 });
 
 describe('video conformance case 15', () => {
+  it('republishes the no-cut values when the host theme changes', async () => {
+    const { seen, send } = await boot('video', 'theme');
+    const before = seen.filter(m => m.type === 'options.values' && m.payload?.['tab'] === 'theme').length;
+    send('host.theme', { theme: { '--accent': '#112233' } });
+    await vi.waitFor(() => expect(seen.filter(m => m.type === 'options.values' && m.payload?.['tab'] === 'theme')).toHaveLength(before + 1));
+  });
   it.each(['captions', 'theme'])('publishes effective %s defaults for non-video content and refuses changes', async tab => {
     const { seen, send } = await boot('video', tab);
     for (const controlsTab of ['captions', 'theme']) {

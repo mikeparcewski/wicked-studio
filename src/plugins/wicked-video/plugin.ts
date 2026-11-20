@@ -503,7 +503,7 @@ export function start(): void {
           surface = protocol === 1 && p['size'] === 'pane' ? 'full' : surfaceOfSize(p['size']);
           draw(); if (was === 'options' && surface !== 'options') void media();
         } break;
-        case 'host.theme': applyTheme(p['theme']); publish(); drawCaption(); draw(); break;
+        case 'host.theme': applyTheme(p['theme']); publish(); publishNoCut(); drawCaption(); draw(); break;
         case 'artifact.changed': if (typeof p['head'] !== 'number' || cut === null || p['head'] > cut.version) void read(); break;
         case 'host.teardown': dispose(); break;
         case 'selection.cleared': selected = null; draw(); break;
