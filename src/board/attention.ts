@@ -3,6 +3,28 @@ import { isAskTurnRun } from './askTurn.js';
 import type { NeedRow } from './needsYou.js';
 import { needCount, needSection } from './needsQueue.js';
 import { createdAtMs } from './windowStats.js';
+import type { SystemAttention } from '../api/system.js';
+import { nerveState } from './nerveCenter.js';
+
+export type NeedsSource =
+  | { phase: 'loading' }
+  | { phase: 'ready'; from: 'crew'; items: SystemAttention[] }
+  | { phase: 'ready'; from: 'fold'; rows: NeedRow[] };
+
+/** The badge and session banner read the same list, including crew's read state. */
+export function needsSource(
+  signals: Parameters<typeof nerveState>[0],
+  ws: Parameters<typeof nerveState>[1],
+  needRows: readonly NeedRow[],
+  now: number,
+): NeedsSource {
+  if (signals.mode === 'system') {
+    const state = nerveState(signals, ws, 0, now);
+    return state.read === 'fresh' ? { phase: 'ready', from: 'crew', items: state.attention } : { phase: 'loading' };
+  }
+  if (signals.mode === 'unknown' && signals.healthError === null) return { phase: 'loading' };
+  return { phase: 'ready', from: 'fold', rows: attentionRows(needRows) };
+}
 
 /**
  * THE ATTENTION MODEL: one pure module that defines what needs the operator, so no surface counts

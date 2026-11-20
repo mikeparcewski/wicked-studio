@@ -37,6 +37,31 @@ function renderAsk(ask: Ask, extra: Partial<React.ComponentProps<typeof AskCard>
 const opt = (id: string): HTMLElement => document.querySelector<HTMLElement>(`[data-ask-option="${id}"]`)!;
 
 describe('choose', () => {
+  it('#1092: a gate choice is named by its visible label and describes every rendered hint', () => {
+    renderAsk({ ...PAUSE, host: 'gate', options: [{
+      id: 're check rules', token: 'recheck', label: 'Re-check the rules', sub: 'Run the rules again',
+      meta: 'Rules gate', recommended: true,
+    }] }, { optionExtra: () => <span>Track record: 4 passes</span> });
+    const choice = screen.getByRole('radio', { name: 'Re-check the rules' });
+    expect(choice).toHaveAccessibleDescription('Run the rules again Rules gate Track record: 4 passes Recommended');
+    const labelId = choice.getAttribute('aria-labelledby')!;
+    expect(document.getElementById(labelId)).toHaveTextContent('Re-check the rules');
+    expect(labelId).not.toMatch(/\s/);
+  });
+
+  it('#1092: caller descriptions merge with the disabled reason and omitted hints leave no dangling ids', () => {
+    render(<><p id="host-why">Delivery is refused until QE acceptance passes.</p><AskCard
+      ask={{ ...PAUSE, options: [{ id: 'go with spaces', token: 'go', label: 'Deliver', disabled: 'Refused until QE acceptance passes' }] }}
+      onAnswer={() => {}} optionProps={() => ({ 'aria-describedby': 'host-why' })}
+    /></>);
+    const choice = screen.getByRole('radio');
+    expect(choice).toHaveAccessibleDescription('Refused until QE acceptance passes Delivery is refused until QE acceptance passes.');
+    expect(choice).toHaveAccessibleName('Deliver');
+    const ids = choice.getAttribute('aria-describedby')!.split(/\s+/);
+    expect(ids).toContain('host-why');
+    expect(ids.every((id) => document.getElementById(id) !== null)).toBe(true);
+  });
+
   it('marks and preselects the recommendation, says its consequence, and sends nothing until the primary', () => {
     const { onAnswer } = renderAsk(PAUSE);
     expect(screen.getByRole('radiogroup', { name: PAUSE.prompt })).toBeTruthy();

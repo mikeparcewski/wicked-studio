@@ -8,6 +8,7 @@ import { stepWord } from './runConversation.js';
 import type { SessionState } from './sessionModel.js';
 import { chatStatusWord } from './statusWords.js';
 import { displayText } from './homePath.js';
+import { attentionRows, type NeedsSource } from './attention.js';
 
 /**
  * THE RUN PAGE'S HEADER, ITS "NEEDS YOU" BANNER AND ITS JUMP-TO-LATEST (operator 2026-10-18: "Header could be much
@@ -100,6 +101,37 @@ export function waitingItems(
     });
   }
   return out;
+}
+
+/** This session's slice of the badge's source; crew items keep their identity and count. */
+export function needsForSession(
+  source: NeedsSource,
+  rows: readonly NeedRow[],
+  views: readonly SessionView[],
+  gates: Readonly<Record<string, OpenGate>>,
+  now: number,
+): WaitingItem[] {
+  if (source.phase === 'loading') return [];
+  if (source.from === 'fold') return waitingItems(source.rows, views, gates, now);
+  const mine = new Set(views.map((v) => v.session.id));
+  // A run's words: its decision or failure row first (the badge's own rows), then any other row about it.
+  const words = new Map<string, WaitingItem>();
+  for (const item of waitingItems([...attentionRows(rows), ...rows], views, gates, now)) {
+    if (!words.has(item.runId)) words.set(item.runId, item);
+  }
+  return source.items.flatMap((item) => {
+    const runId = item.runId != null && mine.has(item.runId) ? item.runId : item.blockedRunIds?.find((id) => mine.has(id));
+    if (runId === undefined) return [];
+    const row = words.get(runId);
+    return [{
+      key: item.id,
+      runId,
+      kind: row?.kind ?? 'Needs you',
+      step: row?.step ?? null,
+      question: row?.question ?? displayText(item.text),
+      age: item.waitedSince == null ? null : relTime(item.waitedSince, now),
+    }];
+  });
 }
 
 /** The banner's yellow words. */
