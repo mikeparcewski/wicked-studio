@@ -13,6 +13,7 @@ import { deliveryAssuranceOf, deliveryReceiptOf } from '../board/assuranceModel.
 import { AssuranceReceipt, DeliveryAssuranceLines } from './session/AssuranceReceipt.js';
 import { actionJobTitle, TrackerActions } from './trackers/TrackerActions.js';
 import { RunDataUse } from './session/RunDataUse.js';
+import { PrRedeliver } from './RunRedeliver.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { QeRefusalWarning } from './QeRefusalWarning.js';
 import {
@@ -355,6 +356,28 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
   const isSystemWorkflow = useIsSystemWorkflow();
   const remedyLicensed = runClassLicensed(view.session, isSystemWorkflow);
 
+  function revise(context: string | null) {
+    if (href === null || navigate === undefined) return;
+    const prNum = prNumberFromUrl(href);
+    if (prNum === null) return;
+    const headRef = view.session.run_branch ?? '';
+    // studio#1148: the intent alone, so text typed after the pre-fill comes before crew's blocks.
+    const intent = intentOf(view.session.problem);
+    const baseProblem = `Revise PR #${prNum} (${headRef}): ${intent}`;
+    const reviseProblem = context ? `${baseProblem} — ${context}` : baseProblem;
+    setRetryPrefill({
+      retryOf: null,
+      problem: reviseProblem,
+      clis: view.session.clis,
+      workflowId: view.session.workflow_id ?? null,
+      repoRef: view.session.repo_ref ?? null,
+      entityMode: view.session.entity_mode,
+      projectId: typeof view.session.project_id === 'string' ? view.session.project_id : null,
+      revisesPr: { number: prNum, title: intent, headRef },
+    });
+    navigate('/runs/new');
+  }
+
   return (
     <div data-testid="run-delivery" data-state={claim} className="flex flex-col gap-1.5 text-xs">
       {/*
@@ -386,6 +409,9 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
           {href} <span aria-hidden>↗</span>
         </a>
       )}
+      {claim === 'pr-open' && href !== null && view.session.status === 'completed' && (
+        <PrRedeliver runId={runId} {...(navigate !== undefined && prNumberFromUrl(href) !== null ? { onRevise: revise } : {})} />
+      )}
       {/* "Revise this PR" (#301): prefills the Build composer with `revisesPr` shape so the operator
        *  can launch a follow-on run that targets the same branch. The composer sends `revisesPr` only
        *  when `GET /health.capabilities.revisesPr === true` (ChatInput guards it) — the button here
@@ -399,24 +425,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
             type="button"
             data-testid="run-revise-pr"
             data-pr={String(prNum)}
-            onClick={() => {
-              const headRef = view.session.run_branch ?? '';
-              // studio#1148: the intent alone, so text typed after the pre-fill comes before crew's blocks.
-              const intent = intentOf(view.session.problem);
-              const baseProblem = `Revise PR #${prNum} (${headRef}): ${intent}`;
-              const reviseProblem = reviseContext ? `${baseProblem} — ${reviseContext}` : baseProblem;
-              setRetryPrefill({
-                retryOf: null,
-                problem: reviseProblem,
-                clis: view.session.clis,
-                workflowId: view.session.workflow_id ?? null,
-                repoRef: view.session.repo_ref ?? null,
-                entityMode: view.session.entity_mode,
-                projectId: typeof view.session.project_id === 'string' ? view.session.project_id : null,
-                revisesPr: { number: prNum, title: intent, headRef },
-              });
-              navigate('/runs/new');
-            }}
+            onClick={() => revise(reviseContext)}
             className="rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
             style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)', alignSelf: 'flex-start' }}
           >

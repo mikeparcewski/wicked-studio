@@ -13,6 +13,8 @@ import type {
   CoreEvent,
   CreateProjectBody,
   DeliverRunResult,
+  RunPullRequest,
+  RedeliverRunResult,
   GateDecision,
   GateInfo,
   HealthResponse,
@@ -303,6 +305,12 @@ export const api = {
    */
   deliverRun: (id: string) =>
     apiFetch<DeliverRunResult>(`/runs/${encodeURIComponent(id)}/deliver`, { method: 'POST' }),
+
+  runPullRequest: (id: string) =>
+    apiFetch<RunPullRequest>(`/runs/${encodeURIComponent(id)}/pr`),
+
+  redeliverRun: (id: string) =>
+    apiFetch<RedeliverRunResult>(`/runs/${encodeURIComponent(id)}/redeliver`, { method: 'POST' }),
 
   /**
    * The steering gate (§11.1). `{approve:true}` = approve; `{approve:true, amend}`
