@@ -18,6 +18,7 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- "Revise this PR" opens with the composer's default gate posture instead of inheriting the original run's "Ask me: Never" setting. Prefills without a gate posture use that default; Retry still preserves an explicit original posture (studio#1145).
 - The New job form derives its gate words and launch payload together in one pure posture function, preserving crew's
   preview decisions and the existing request fields (studio#1179). The launch panel now points to the form for what
   it will ask before Send, instead of promising plan approval for every launch posture (studio#1173).

@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StrictMode } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput } from '../src/components/ChatInput.js';
+import { COMPOSER_DEFAULT_GATE_POSTURE } from '../src/components/composerDefaults.js';
 import * as client from '../src/api/client.js';
-import type { LaunchBodyWithDeliver } from '../src/api/types.js';
+import type { HumanConfirm, LaunchBodyWithDeliver } from '../src/api/types.js';
 import { confirmModeOf, setRetryPrefill, takeRetryPrefill } from '../src/store/retryPrefill.js';
 import { useProvenanceStore } from '../src/store/provenance.js';
 
@@ -32,7 +33,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-function depositPrefill(): void {
+function depositPrefill(humanConfirm: HumanConfirm = 'all'): void {
   setRetryPrefill({
     retryOf: 'r-original',
     problem: 'refactor the auth middleware',
@@ -40,7 +41,7 @@ function depositPrefill(): void {
     workflowId: 'feature',
     repoRef: 'studio-api',
     entityMode: 'shared',
-    humanConfirm: 'all',
+    humanConfirm,
     projectId: null,
   });
 }
@@ -76,6 +77,15 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
     expect(seats.map((s) => s.key)).toEqual(['claude']);
     // The launch is marked as studio-witnessed for the provenance channel.
     expect(useProvenanceStore.getState().launchedHere['r-new']).toBe(true);
+  });
+
+  it('preserves an explicit none posture when retrying', async () => {
+    depositPrefill('none');
+    await act(async () => {
+      render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    });
+    expect(screen.getByTestId('gate-posture')).toHaveValue('none');
+    expect(screen.getByText('Retry of an earlier run')).toBeInTheDocument();
   });
 
   it('clearing the pill drops the lineage claim from the launch body', async () => {
@@ -127,6 +137,9 @@ describe('confirmModeOf (§4.3 gate-posture mapping)', () => {
     expect(confirmModeOf('all')).toEqual({ mode: 'all', beforeOrd: 1 });
     expect(confirmModeOf('none')).toEqual({ mode: 'none', beforeOrd: 1 });
     expect(confirmModeOf({ before: 3 })).toEqual({ mode: 'before', beforeOrd: 3 });
-    expect(confirmModeOf(undefined)).toEqual({ mode: 'none', beforeOrd: 1 });
+  });
+
+  it('uses the composer default when humanConfirm is absent (studio#1145)', () => {
+    expect(confirmModeOf(undefined)).toEqual(COMPOSER_DEFAULT_GATE_POSTURE);
   });
 });

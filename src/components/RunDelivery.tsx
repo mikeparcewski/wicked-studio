@@ -412,7 +412,6 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
                 workflowId: view.session.workflow_id ?? null,
                 repoRef: view.session.repo_ref ?? null,
                 entityMode: view.session.entity_mode,
-                humanConfirm: view.session.human_confirm,
                 projectId: typeof view.session.project_id === 'string' ? view.session.project_id : null,
                 revisesPr: { number: prNum, title: intent, headRef },
               });

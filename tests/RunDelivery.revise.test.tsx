@@ -9,9 +9,12 @@
 // On click: setRetryPrefill is called with revisesPr.{number, title, headRef}, then navigate('/runs/new').
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { act, render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RunDelivery } from '../src/components/RunDelivery.js';
+import { ChatInput } from '../src/components/ChatInput.js';
+import { COMPOSER_DEFAULT_GATE_POSTURE } from '../src/components/composerDefaults.js';
+import * as client from '../src/api/client.js';
 import { useDeliveryStore } from '../src/store/delivery.js';
 import { usePostHocDeliverStore } from '../src/store/postHocDeliver.js';
 import { clearCachedWorkflows } from '../src/store/workflowCache.js';
@@ -102,6 +105,35 @@ describe('RunDelivery — "Revise this PR" button (#301)', () => {
       title: PROBLEM,
       headRef: RUN_BRANCH,
     });
+  });
+
+  it('omits humanConfirm when revising a run with Ask me: Never (studio#1145)', async () => {
+    const v = deliveredView();
+    v.session.human_confirm = 'none';
+    render(<RunDelivery view={v} navigate={vi.fn()} />);
+    await userEvent.setup().click(screen.getByTestId('run-revise-pr'));
+
+    const prefill = takeRetryPrefill();
+    expect(prefill).not.toBeNull();
+    expect(prefill).not.toHaveProperty('humanConfirm');
+  });
+
+  it('opens the composer at the default before posture when revising Ask me: Never (studio#1145)', async () => {
+    vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: [] });
+    vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
+    vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] });
+    vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
+    const v = deliveredView();
+    v.session.human_confirm = 'none';
+    const delivery = render(<RunDelivery view={v} navigate={vi.fn()} />);
+    await userEvent.setup().click(screen.getByTestId('run-revise-pr'));
+    delivery.unmount();
+
+    await act(async () => {
+      render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    });
+    expect(screen.getByTestId('gate-posture')).toHaveValue('before');
+    expect(screen.getByTestId('gate-posture')).toHaveValue(COMPOSER_DEFAULT_GATE_POSTURE.mode);
   });
 
   it('prefill problem is prefixed with "Revise PR #N (<headRef>):" and seeds from the session problem', async () => {
