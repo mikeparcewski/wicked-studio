@@ -9,10 +9,10 @@
 # tokenless OIDC trusted publishing with `--provenance`, tag/manifest agreement guarded, and a
 # post-publish registry probe.
 #
-# What gates the GitHub Release is the PUBLISH; the registry probe is advisory (studio#331). The
-# probe still exists for FINDING-096 ("a green publish for something no operator can install is
-# not a release") and it still reports — but registry lag is not a publish failure, and on v0.5.14
-# it cost a good release its Release page. So it backs off over ~6 min and then WARNS.
+# CI publishes to npm, waits until the registry serves the version, then drafts the Release.
+# Re-run failed jobs for registry lag; never re-run a successful publish (EPUBLISHCONFLICT).
+# After JOURNEY CERTIFIED, coord/operator publishes the draft and sets Latest locally:
+# gh release edit <tag> --repo mikeparcewski/wicked-studio --draft=false --latest
 
 name: Release
 
@@ -22,13 +22,14 @@ on:
       - 'v*'
 
 permissions:
-  contents: write # create the GitHub Release after a successful npm publish
-  # OIDC trusted publishing — no NPM_TOKEN stored in this repo.
-  id-token: write
+  contents: read
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC trusted publishing
     env:
       # tests/testidRemovals.test.ts diffs testid-inventory.json against a base commit and must not
       # skip in CI. A release tag sits on a main commit, so its base is the previous main commit,
@@ -78,64 +79,65 @@ jobs:
       - name: Publish to npm (trusted publisher + provenance)
         run: npm publish --access public --provenance
 
-      # Registry lag is not a publish failure (studio#331): on v0.5.14 `npm publish` succeeded, this
-      # probe 404'd through its 60 s window, and the GitHub Release was skipped — then the same
-      # version resolved a minute later and the release had to be cut by hand. So the probe now
-      # backs off over ~6 minutes and, if the registry is still lagging, reports a WARNING and
-      # exits 0. The release page is advertised for a version npm accepted; the probe says whether
-      # it was servable yet.
-      - name: The registry can actually serve it
-        id: serve_probe
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          # ~6 min total: 10+15+20+30+45+60+60+60+60 = 360 s of waiting across 10 attempts.
-          BACKOFF="10 15 20 30 45 60 60 60 60"
-          attempt=1
-          for wait in $BACKOFF ""; do
-            if npm view "wicked-studio@${TAG_VERSION}" version; then
-              echo "  ok — obtainable from the registry (attempt ${attempt})"
-              echo "served=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            if [ -z "$wait" ]; then
-              break
-            fi
-            echo "  not visible yet (attempt ${attempt}), waiting ${wait}s…"
-            sleep "$wait"
-            attempt=$((attempt + 1))
-          done
-          echo "served=false" >> "$GITHUB_OUTPUT"
-          echo "::warning::wicked-studio@${TAG_VERSION} was published but is still not resolvable after ~6 min of retries (FINDING-096 registry lag). The GitHub Release is still cut; verify \`npm view wicked-studio@${TAG_VERSION} version\` before announcing."
-
-      # Cut the GitHub Release after npm publish succeeds. The registry-serve probe above is a
-      # report, not a gate (studio#331): a publish npm accepted but serves late must not leave the
-      # Releases page empty. A failed *publish* still stops here, because the step before this one
-      # is the publish itself. This is the step studio lacked: it published to npm every release but
-      # never created a GitHub Release, so the Releases page stayed empty while npm shipped through
-      # v0.4.14. Idempotent — an existing release (e.g. a hand-backfilled one) is updated in place.
-      - name: Create the GitHub Release from CHANGELOG
-        env:
-          GH_TOKEN: ${{ github.token }}
+  registry:
+    name: wait until the registry serves the version
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait until the registry serves the version (up to 15 min)
+        shell: bash
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          # Notes = this version's CHANGELOG section. Distinguish "no section" (exit 1 → generic
-          # note) from a real script failure (exit 2 → missing/unreadable CHANGELOG, usage bug),
-          # which must FAIL rather than silently ship a generic note.
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Refresh npm's cached packument and bound each lookup.
+          started="$(date +%s)"
+          deadline=$(( started + 15 * 60 ))
+          attempt=0
+          while :; do
+            attempt=$(( attempt + 1 ))
+            if served="$(timeout 60 npm view --prefer-online "wicked-studio@${VERSION}" version 2>/dev/null)" \
+               && [ "$served" = "$VERSION" ]; then
+              echo "  ok — wicked-studio@${VERSION} resolves after $(( $(date +%s) - started ))s (attempt ${attempt})"
+              break
+            fi
+            now="$(date +%s)"
+            if [ "$now" -ge "$deadline" ]; then
+              echo "::error::the registry still does not serve wicked-studio at ${VERSION} after 15 minutes. The publish job succeeded, so this is npm's asynchronous processing, not a publish failure — re-run failed jobs (this one and the one after it), never the publish job (a second publish fails with EPUBLISHCONFLICT)."
+              exit 1
+            fi
+            echo "  not yet: wicked-studio@${VERSION} — attempt ${attempt}, $(( now - started ))s elapsed of 15 min; next check in 30s"
+            sleep 30
+          done
+
+  github-release:
+    name: draft the GitHub Release (published after certification)
+    needs: registry
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create this tag's draft Release
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Draft the GitHub Release from CHANGELOG
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "a GitHub Release for $TAG already exists (draft or published); left as it is"
+            exit 0
+          fi
           set +e
-          python3 scripts/changelog-section.py "$TAG" > /tmp/relnotes.md
+          python3 scripts/changelog-section.py "$TAG" > "$RUNNER_TEMP/relnotes.md"
           code=$?
           set -e
           if [ "$code" -eq 1 ]; then
-            printf 'Release %s\n' "$TAG" > /tmp/relnotes.md
+            printf 'Release %s\n' "$TAG" > "$RUNNER_TEMP/relnotes.md"
+            echo "::warning::CHANGELOG.md has no block for $TAG; the draft gets a generic note"
           elif [ "$code" -ne 0 ]; then
-            echo "::error::changelog-section.py failed (exit $code) — refusing to publish a release with fallback notes"
+            echo "::error::changelog-section.py failed (exit $code); refusing to draft a Release with fallback notes"
             exit "$code"
           fi
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --notes-file /tmp/relnotes.md
-            echo "updated existing GitHub Release $TAG"
-          else
-            gh release create "$TAG" --title "$TAG" --notes-file /tmp/relnotes.md --verify-tag
-            echo "created GitHub Release $TAG"
-          fi
+          gh release create "$TAG" --draft --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/relnotes.md"
