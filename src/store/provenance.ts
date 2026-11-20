@@ -152,6 +152,16 @@ export function cancelStoryOf(entries: readonly AuditEntry[], runId: string): Ca
   };
 }
 
+/** crew#1645: the daemon's one audit entry when the engine's `git fetch origin` failed at run start. */
+export const BASE_UNFETCHED_AUDIT = 'run.base_unfetched';
+
+/** The sentence crew wrote on `run.base_unfetched` (`detail.message`), or null when the run has none. */
+export function baseNoticeOf(entries: readonly AuditEntry[], runId: string): string | null {
+  const e = entries.find((x) => x.action === BASE_UNFETCHED_AUDIT && x.runId === runId);
+  const m = e?.detail?.['message'];
+  return typeof m === 'string' && m.trim() !== '' ? m : null;
+}
+
 /** SessionStorage key for runs this studio session launched (survives page reload). */
 const SESSION_KEY = 'wk-studio-launches';
 
@@ -180,6 +190,8 @@ interface ProvenanceStore {
   rejectNotes: Record<string, string | null>;
   /** studio#537: why a cancelled run ended ({@link cancelStoryOf}), from the same one fetch. */
   cancelStories: Record<string, CancelStory>;
+  /** wicked-crew#1566: why this run may have started behind the remote ({@link baseNoticeOf}), same one fetch. */
+  baseNotices: Record<string, string | null>;
   /** Run ids THIS studio session launched (the `studio` channel witness). */
   launchedHere: Record<string, true>;
   markLaunchedHere: (runId: string) => void;
@@ -194,6 +206,7 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
   byRun: {},
   rejectNotes: {},
   cancelStories: {},
+  baseNotices: {},
   launchedHere: {},
 
   markLaunchedHere: (runId) => {
@@ -219,6 +232,7 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
           },
           rejectNotes: { ...s.rejectNotes, [runId]: rejectNoteOf(entries, runId) },
           cancelStories: { ...s.cancelStories, [runId]: cancelStoryOf(entries, runId) },
+          baseNotices: { ...s.baseNotices, [runId]: baseNoticeOf(entries, runId) },
         }));
       })
       .catch(() => {

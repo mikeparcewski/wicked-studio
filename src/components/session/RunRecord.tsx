@@ -136,6 +136,14 @@ export function RunCheckersNote({ events }: { events: readonly CoreEvent[] }): R
   );
 }
 
+/** wicked-crew#1566: the run may have started behind the remote (the daemon could not fetch origin): one quiet warning line. */
+export function RunBaseNote({ runId }: { runId: string }): React.ReactElement | null {
+  useEffect(() => { useProvenanceStore.getState().load(runId); }, [runId]);
+  const note = useProvenanceStore((s) => s.baseNotices[runId] ?? null);
+  if (note === null) return null;
+  return <p data-testid="run-base-unfetched" role="note" className="wk-session-base-note">{note}</p>;
+}
+
 /**
  * S16a-1c: the run's record lines under its status sentence — the cancel / stop story, the amended
  * acceptance list, the short-council note, and the Watchtower's lines (what was not checked; "You

@@ -1107,6 +1107,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 /* crew#720: the final-codebase zip (every outcome) and the credentials-missing state. */
 .wk-session-codebase { margin: 0; font-size: var(--text-sm); }
 .wk-session-codebase a { color: var(--accent); text-decoration: underline; }
+.wk-session-base-note { margin: 4px 0; color: var(--status-warn); font-size: var(--text-sm, 0.875em); overflow-wrap: anywhere; }
 .wk-session-credentials { margin: 4px 0; padding: 6px 8px; border-left: 3px solid var(--status-warn, var(--status-fail)); }
 .wk-session-credentials-head { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--ink-body); }
 .wk-session-turn { max-width: 720px; }

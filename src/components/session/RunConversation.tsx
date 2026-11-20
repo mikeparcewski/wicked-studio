@@ -48,7 +48,7 @@ import { startRetry } from './RunActions.js';
 import { RunArtifacts } from './RunArtifacts.js';
 import { useArtifactAddress } from './ArtifactAddress.js';
 import { artifactKey, artifactSizeOf, useArtifactSizes } from '../../store/artifactSizes.js';
-import { RunRecordLines, RunStory } from './RunRecord.js';
+import { RunBaseNote, RunRecordLines, RunStory } from './RunRecord.js';
 import { StrandedCard } from './StrandedCard.js';
 import { RunQuestions } from './ThreadQuestions.js';
 import { TurnWho } from './TurnWho.js';
@@ -556,6 +556,8 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null, madeEl
       {/* Deliver's phase report, after the hand-over or the final message. */}
       {phaseOf('deliver') !== null && (deliverOpen || words !== null || phaseOf('deliver')!.current) && <RunPhaseRows sessionId={sessionId} runId={id} phase={phaseOf('deliver')!} live={!isTerminal} />}
 
+      {/* wicked-crew#1566: a run that may have started behind the remote says so outside the fold, where the job is read. */}
+      <RunBaseNote runId={id} />
       {/* The run's whole record, one fold under its messages (the details panel holds the same, grouped). */}
       {/* A Watchtower "Jump in" (`?jump=`) lands on this run's record: the fold opens on that line. */}
       <details data-testid="chat-run-details" className="wk-chat-details" {...(jump !== null ? { open: true } : {})}>
