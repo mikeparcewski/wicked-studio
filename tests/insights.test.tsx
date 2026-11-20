@@ -5,7 +5,7 @@
  * now, last review); where Accept lands.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { InsightsResponse, WorkflowSchedule } from '../src/api/insights.js';
 
 const insights = vi.fn();
@@ -203,6 +203,41 @@ describe('Schedules (Build & settings)', () => {
     createdAt: '2026-10-27T05:00:00.000Z', updatedAt: '2026-10-27T05:00:00.000Z',
     lastReview: { runId: 'r', launchedAt: '2026-10-27T05:00:00.000Z', endedAt: '2026-10-27T05:10:00.000Z', status: 'completed' },
     ...over,
+  });
+
+  it.each([0, 1, 3])('links a blocked schedule to its run with %i missed due times', async (missedDue) => {
+    const since = '2026-10-27T05:00:00.000Z';
+    schedules.mockResolvedValue([{ ...row(), blocked: { since, missedDue, target: { kind: 'run', runId: 'abc' }, detail: 'Another run is working.' } }]);
+    const navigate = vi.fn();
+    render(<SchedulesSection navigate={navigate} />);
+
+    const blocked = await screen.findByTestId('schedule-blocked');
+    const date = new Date(since).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    expect(blocked.textContent).toContain(`Blocked since ${date}`);
+    if (missedDue > 0) expect(blocked.textContent).toContain(` · ${missedDue} missed ${missedDue === 1 ? 'run' : 'runs'}`);
+    else expect(blocked.textContent).not.toContain('missed');
+    const link = within(blocked).getByRole('link');
+    expect(link.getAttribute('href')).toBe('/s/run%3Aabc');
+    for (const click of [{ button: 1 }, { metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { altKey: true }]) {
+      let defaultPrevented: boolean | undefined;
+      // Observe React's handler, then stop jsdom from trying to follow the native link.
+      document.addEventListener('click', (event) => {
+        defaultPrevented = event.defaultPrevented;
+        event.preventDefault();
+      }, { once: true });
+      fireEvent.click(link, click);
+      expect(defaultPrevented).toBe(false);
+    }
+    expect(navigate).not.toHaveBeenCalled();
+    fireEvent.click(link);
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/s/run%3Aabc');
+  });
+
+  it('omits the blocked notice for an unblocked schedule', async () => {
+    schedules.mockResolvedValue([row()]);
+    render(<SchedulesSection navigate={vi.fn()} />);
+    await screen.findByTestId('schedule-row');
+    expect(screen.queryByTestId('schedule-blocked')).toBeNull();
   });
 
   it('shows the cadence, the next run and the last review, and saves on/off, cadence and projects', async () => {

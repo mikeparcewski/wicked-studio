@@ -12,6 +12,13 @@ import { isRouteUnsupported } from './errors.js';
 export type ScheduleOutcome = 'launched' | 'refused' | 'completed' | 'failed' | 'cancelled' | 'skipped';
 export type InsightsReviewStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
+export interface ScheduleBlocked {
+  since: string;
+  missedDue: number;
+  target: { kind: 'run'; runId: string };
+  detail: string;
+}
+
 export interface WorkflowSchedule {
   id: string;
   workflow: string;
@@ -29,6 +36,7 @@ export interface WorkflowSchedule {
   createdAt: string;
   updatedAt: string;
   lastReview?: { runId: string; launchedAt: string; endedAt: string | null; status: InsightsReviewStatus } | null;
+  blocked?: ScheduleBlocked;
 }
 
 export interface SchedulePutBody {

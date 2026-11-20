@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CADENCE_DAYS, REVIEW_WORKFLOW, cadenceWords, insightsApi, type WorkflowSchedule } from '../../api/insights.js';
+import { sessionPath } from '../../board/sessionModel.js';
 import { useProjectsStore } from '../../store/projects.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { CalmButton, CalmRow, CalmRows, CalmSection } from '../calm/Calm.js';
@@ -87,6 +88,7 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
             const days = s.everyHours / 24;
             const name = WORKFLOW_NAMES[s.workflow] ?? s.workflow;
             const covered = s.projectIds.length === 0 ? 'All projects' : projects.filter((p) => s.projectIds.includes(p.id)).map((p) => p.name).join(', ') || `${s.projectIds.length} projects`;
+            const blockedPath = s.blocked ? sessionPath(`run:${s.blocked.target.runId}`) : '';
             return (
               <div key={s.id} className="wk-schedule" data-testid="schedule-row" data-schedule={s.id} data-enabled={String(s.enabled)}>
                 <CalmRows label={name}>
@@ -110,6 +112,17 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
                     )}
                   />
                 </CalmRows>
+                {s.blocked && (
+                  <p className="wk-schedule-blocked" data-testid="schedule-blocked">
+                    Blocked since {day(s.blocked.since)}
+                    {s.blocked.missedDue > 0 && ` · ${s.blocked.missedDue} missed ${s.blocked.missedDue === 1 ? 'run' : 'runs'}`}
+                    {' · '}<a href={blockedPath} onClick={(e) => {
+                      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                      e.preventDefault();
+                      navigate(blockedPath);
+                    }}>Open run</a>
+                  </p>
+                )}
                 <div className="wk-schedule-controls">
                   <label className="wk-schedule-toggle">
                     <input type="checkbox" data-testid="schedule-enabled" checked={s.enabled} disabled={busy === s.id}
