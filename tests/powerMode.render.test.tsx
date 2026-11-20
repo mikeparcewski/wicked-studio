@@ -181,7 +181,7 @@ describe('the "this grew" dock (a pause, not an engine gate: POST /runs/:id/powe
   });
 
   it('explains a graph-provenance pause and keeps the engine reason in More about this', () => {
-    const raw = 'code graph indexed from working tree does not match run base abc123; failed closed';
+    const raw = 'fail closed at 100: graph recorded at 1ada00f3 is not known to be the run base 1ada00f3: it was indexed from a working tree or a live checkout, or its index did not finish';
     const p = state({
       history: [change(4, 20, 'commit', 'standard', 'highest', 34, 80, 3, [raw], { paused: true })],
       pause: { ...pause, reasons: ['rigor jumped two bands at once (standard -> highest)'] },
@@ -195,6 +195,21 @@ describe('the "this grew" dock (a pause, not an engine gate: POST /runs/:id/powe
     expect(more.querySelector('summary')?.textContent).toBe('More about this');
     expect(more.textContent).toContain(raw);
     expect(screen.getAllByTestId('power-pause-choice')).toHaveLength(4);
+  });
+
+  it('explains a missing-graph pause and keeps the engine reason in More about this', () => {
+    const raw = 'fail closed at 100: no graph: the graph records no commit';
+    const p = state({
+      history: [change(4, 20, 'commit', 'standard', 'highest', 34, 80, 3, [raw], { paused: true })],
+      pause: { ...pause, reasons: ['rigor jumped two bands at once (standard -> highest)'] },
+    });
+    render(<PowerPauseCard view={view({ power: p })} power={p} />);
+    expect(screen.getByTestId('power-pause-eyebrow').textContent).toBe('Paused · code graph · checkpoint 3');
+    expect(screen.getByTestId('power-pause-question').textContent).toBe("The code graph for this repository is missing or couldn't be read, so rigor went up. How should it go on?");
+    const more = screen.getByTestId('power-pause-more');
+    expect(more.tagName).toBe('DETAILS');
+    expect(more.querySelector('summary')?.textContent).toBe('More about this');
+    expect(more.textContent).toContain(raw);
   });
 
   it('explains a struggle pause without a graph disclosure', () => {

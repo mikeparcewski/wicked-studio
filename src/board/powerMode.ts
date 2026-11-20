@@ -183,17 +183,27 @@ function activityRow(e: PowerActivityEvent, commitN: number): ActivityRow {
   return { kind: 'edit', at, lead: 'Edited', code: e.path ?? (e.paths?.[0] ?? null), added: n(e.added), removed: n(e.removed), tail: null, sha: null, tone: 'plain' };
 }
 
-/** The current pause's cause, using the paused rescore's provenance before the pause's summary reasons. */
+/**
+ * The current pause's cause, using the paused rescore's provenance before the pause's summary reasons. A graph cause is
+ * the engine's own wording (wicked-core review_scale.rs `GraphAge::reason`, optionally wrapped by `assess` as
+ * `fail closed at <score>: …`): not the run base (stale or dirty) or missing/unreadable (anything else that failed closed).
+ */
 export function pauseCause(power: PowerState): { kind: 'graph' | 'struggle' | 'growth'; eyebrow: string; question: string; raw: string | null } {
   const paused = power.history.filter((c) => c.paused === true).sort((a, b) => b.seq - a.seq);
   const source = paused.find((c) => c.checkpoint === power.pause?.checkpoint) ?? paused[0] ?? null;
   const reasons = [...(source?.reasons ?? []), ...(power.pause?.reasons ?? [])];
-  const raw = reasons.find((r) => /graph .*(run base|working tree|indexed)|fail(ed)? closed/i.test(r));
-  if (raw !== undefined) return {
-    kind: 'graph', eyebrow: 'Paused · code graph',
-    question: "The code graph for this repository couldn't be matched to the run's base commit, so rigor went up. How should it go on?",
-    raw,
-  };
+  for (const raw of reasons) {
+    const reason = raw.trim();
+    const inner = reason.replace(/^fail(?:ed)? closed at \d+:\s*/i, '');
+    const provenance = /^graph (?:indexed at .+ is not the run base\b|recorded at .+ is not known to be the run base\b)/i.test(inner);
+    if (provenance || inner !== reason || /^(?:no graph:|graph read failed:)/i.test(inner)) return {
+      kind: 'graph', eyebrow: 'Paused · code graph',
+      question: provenance
+        ? "The code graph for this repository couldn't be matched to the run's base commit, so rigor went up. How should it go on?"
+        : "The code graph for this repository is missing or couldn't be read, so rigor went up. How should it go on?",
+      raw,
+    };
+  }
   if (power.pause?.reasons.some((r) => /^struggling:/i.test(r.trim()))) return {
     kind: 'struggle', eyebrow: 'Paused · stuck',
     question: 'This job is taking longer or failing more than planned. How should it go on?', raw: null,

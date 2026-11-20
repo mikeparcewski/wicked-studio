@@ -16,13 +16,17 @@ describe('pause cause', () => {
   const pause = { at: at(20), checkpoint: 3, reasons: ['rigor jumped two bands at once (standard -> highest)'], recommended: 'continue_high' as const };
   const row = (seq: number, checkpoint: number, reasons: string[], paused = true) =>
     change(seq, seq, 'commit', 'standard', 'highest', 34, 80, checkpoint, reasons, { paused });
-  const raw = 'code graph indexed from working tree does not match run base abc123; failed closed';
+  const stale = 'graph indexed at 222afb61 is not the run base 1ada00f3';
+  const dirty = 'graph recorded at 1ada00f3 is not known to be the run base 1ada00f3: it was indexed from a working tree or a live checkout, or its index did not finish';
+  const raw = `fail closed at 100: ${stale}`;
+  const provenance = "The code graph for this repository couldn't be matched to the run's base commit, so rigor went up. How should it go on?";
+  const missing = "The code graph for this repository is missing or couldn't be read, so rigor went up. How should it go on?";
 
   it('prefers the newest paused row for this checkpoint over newer unrelated rows', () => {
     const p = state({ pause, history: [row(1, 3, ['ordinary growth']), row(2, 3, [raw]), row(3, 4, ['ordinary growth']), row(4, 3, ['ordinary growth'], false)] });
     expect(pauseCause(p)).toEqual({
       kind: 'graph', eyebrow: 'Paused · code graph',
-      question: "The code graph for this repository couldn't be matched to the run's base commit, so rigor went up. How should it go on?",
+      question: provenance,
       raw,
     });
   });
@@ -32,10 +36,38 @@ describe('pause cause', () => {
       .toMatchObject({ kind: 'graph', raw });
   });
 
-  it.each(['graph cannot match run base', 'graph uses working tree', 'graph is not indexed', 'fail closed', 'failed closed'])(
-    'recognizes graph provenance from pause reasons: %s', (reason) => {
+  it.each([raw, `fail closed at 100: ${dirty}`, stale, dirty])(
+    'explains stale or dirty graph provenance: %s', (reason) => {
       expect(pauseCause(state({ history: [], pause: { ...pause, reasons: ['struggling: 4 failed test runs', reason] } })))
-        .toMatchObject({ kind: 'graph', raw: reason });
+        .toEqual({ kind: 'graph', eyebrow: 'Paused · code graph', question: provenance, raw: reason });
+    },
+  );
+
+  it.each([
+    'fail closed at 100: no graph: the graph records no commit',
+    'fail closed at 100: no graph: the graph records no repo info',
+    'fail closed at 100: no graph: repo info unreadable: database is locked',
+    'fail closed at 100: graph read failed: database is locked',
+    'fail closed at 100: no code graph is indexed for ~/repo',
+    'fail closed at 100: the run has no repo, so there is no graph to read',
+    "fail closed at 100: the run's base commit is unknown",
+    'fail closed at 100: the code graph could not be opened: database is locked',
+    'no graph: the graph records no repo info',
+    'graph read failed: database is locked',
+  ])(
+    'explains a missing or unreadable graph: %s', (reason) => {
+      expect(pauseCause(state({ pause, history: [row(1, 3, [reason])] })))
+        .toEqual({ kind: 'graph', eyebrow: 'Paused · code graph', question: missing, raw: reason });
+    },
+  );
+
+  it.each([
+    'the change spread into another product; the graph is indexed nightly',
+    `rigor raised to highest by operator: ${raw}`,
+  ])(
+    'keeps growth wording for prose mentioning a graph: %s', (reason) => {
+      expect(pauseCause(state({ pause, history: [row(1, 3, [reason])] })))
+        .toEqual({ kind: 'growth', eyebrow: 'Paused · this grew', question: 'This change grew past its plan. How should it go on?', raw: null });
     },
   );
 
