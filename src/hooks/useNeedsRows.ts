@@ -1,4 +1,3 @@
-import { nerveState } from '../board/nerveCenter.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
@@ -15,7 +14,8 @@ import { useAskThreadStore } from '../store/askThread.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useDecisionsStore } from '../store/decisions.js';
 import { useNeedsSources, type NeedsSource } from '../store/needsSources.js';
-import { attentionBadge } from '../board/attention.js';
+import { attentionBadge, needsSource } from '../board/attention.js';
+import { needCount } from '../board/needsQueue.js';
 import { useSystemPoll, useSystemStore } from '../store/systemSnapshot.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { useStallEscalationStore } from '../store/stallEscalations.js';
@@ -210,13 +210,16 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   // app-wide number is held (never the fold's count flashing before crew's, coordinator 2026-10-27).
   const signals = useSystemStore();
   const ws = useConnectionStore((st) => st.status);
-  const crewPending = signals.mode === 'unknown' && signals.healthError === null;
   const rec = settledScope(scope);
   const [since] = useState(() => Date.now());
   const [, tick] = useState(0);
-  // Operator ruling 2026-10-12: the number counts decisions + failures; reviews are counted on their own.
-  const count = attentionBadge(needRows as NeedRow[]);
   const now = Date.now();
+  const source = needsSource(signals, ws, needRows, now);
+  // Keep the fold's existing quiet clock running while crew is pending; publication below waits
+  // for the selector. Project scopes always settle their own rows (studio#833).
+  const count = scope === ALL_NEEDS_SCOPE && source.phase === 'ready'
+    ? source.from === 'crew' ? source.items.length : needCount(source.rows)
+    : attentionBadge(needRows);
   const held = (): { phase: 'loading' | 'complete'; count: number | null; missing: string[] } =>
     rec.lastComplete === null ? { phase: 'loading', count: null, missing: [] } : { phase: 'complete', count: rec.lastComplete, missing: [] };
   // Decide first (no early return before the effects): what to say, and when to look again.
@@ -254,13 +257,13 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   }, [wakeAt]);
   // A ranked crew's list is ONE settled read: its length is the number for every run (a project's
   // Desk still counts its own rows).
-  if (signals.mode === 'system' && scope === ALL_NEEDS_SCOPE) {
-    // One complete system read, exactly the items Nerve Center displays, never a page's partial fold.
-    const state = nerveState(signals, ws, 0, now);
-    return state.read === 'fresh'
-      ? { phase: 'complete', count: state.attention.length, missing: [] }
-      : { phase: 'loading', count: null, missing: [] };
+  if (scope === ALL_NEEDS_SCOPE && source.phase === 'ready' && source.from === 'crew') {
+    return { phase: 'complete', count: source.items.length, missing: [] };
   }
-  if (crewPending && scope === ALL_NEEDS_SCOPE && !runsFailed) return { phase: 'loading', count: null, missing: [] };
+  if (scope === ALL_NEEDS_SCOPE && source.phase === 'loading') {
+    return signals.mode === 'system' || !runsFailed
+      ? { phase: 'loading', count: null, missing: [] }
+      : out;
+  }
   return out;
 }

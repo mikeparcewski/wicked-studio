@@ -17,6 +17,13 @@ import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import { useSessionDrafts } from '../src/store/sessionDrafts.js';
 import { useSheets } from '../src/store/sheets.js';
+import { needsSource } from '../src/board/attention.js';
+import { normalizeSnapshot } from '../src/api/system.js';
+import { resetSystemStore, useSystemStore } from '../src/store/systemSnapshot.js';
+import { useConnectionStore } from '../src/store/connection.js';
+import { resetSettledNeedsForTest } from '../src/hooks/useNeedsRows.js';
+import { SessionRail } from '../src/components/desk/SessionRail.js';
+import { useNeedsSources } from '../src/store/needsSources.js';
 import { makeUnit, makeView } from './factories.js';
 
 const NOW = 1_800_000_000_000;
@@ -186,6 +193,8 @@ describe('NeedsBanner — shown only while something waits; hover or focus gives
 
 describe('the run page: banner below the header, jump to latest', () => {
   beforeEach(() => {
+    resetSystemStore();
+    useSystemStore.setState({ mode: 'fallback', refresh: vi.fn().mockResolvedValue(undefined) });
     localStorage.removeItem(DETAILS_OPEN_KEY);
     useSheets.setState({ open: null, stopping: {} } as never);
     useRunEventStore.setState({ byRun: { a: [] } });
@@ -200,6 +209,44 @@ describe('the run page: banner below the header, jump to latest', () => {
   const page = (needRows: NeedRow[], status = 'awaiting_human'): void => {
     render(<SessionPage sessionId="run:a" runs={[run('a', status)]} runsLoaded needRows={needRows} navigate={() => {}} onAsk={() => {}} />);
   };
+
+  it('#1091: ranked crew items give the session banner and rail badge the same count from one store', () => {
+    const now = Date.now();
+    resetSettledNeedsForTest();
+    useConnectionStore.setState({ status: 'connected' });
+    const snapshot = normalizeSnapshot({ checkedAt: new Date(now).toISOString(), level: 'yellow', unresolved: [],
+      attention: [
+        { id: 'gate:a', severity: 'yellow', source: 'run', title: 'Approve the plan', target: { kind: 'run', runId: 'a' } },
+        { id: 'answer:a', severity: 'yellow', source: 'run', title: 'Answer turn', target: { kind: 'run', runId: 'a' } },
+      ], clis: [], runs: [], infra: [], governance: [] });
+    useSystemStore.setState({ mode: 'system', healthAt: now, snapshotAt: now, snapshot });
+    const rows = [row('gate:a', 'gate', { question: 'Approve the plan (2 steps)' })];
+    render(<SessionRail runs={[run('a', 'awaiting_human')]} needRows={rows} navigate={() => {}} pathname="/" />);
+    page(rows);
+    const badge = screen.getByTestId('desk-rail-badge');
+    expect(badge).toHaveTextContent('2');
+    expect(screen.getByTestId('session-needs-banner')).toHaveAttribute('data-count', badge.textContent);
+    const source = needsSource(useSystemStore.getState(), 'connected', rows, now);
+    expect(source.phase === 'ready' && source.from === 'crew' && source.items.length).toBe(Number(badge.textContent));
+    act(() => useSystemStore.setState({ snapshotError: 'read failed' }));
+    expect(screen.queryByTestId('session-needs-banner')).toBeNull();
+    expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
+  });
+
+  it('#1091: a fold review row is in neither the session banner nor the badge', () => {
+    vi.useFakeTimers();
+    try {
+      const now = Date.now();
+      resetSettledNeedsForTest();
+      useNeedsSources.setState({ chats: [], proposals: [], repos: [], readAt: { chats: now, proposals: now, repos: now, campaigns: now } });
+      const rows = [row('gate:a', 'proposal')];
+      render(<SessionRail runs={[run('a', 'awaiting_human')]} needRows={rows} navigate={() => {}} pathname="/" />);
+      page(rows);
+      act(() => { vi.advanceTimersByTime(1600); });
+      expect(screen.queryByTestId('desk-rail-badge')).toBeNull();
+      expect(screen.queryByTestId('session-needs-banner')).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
 
   it('a waiting run: the banner sits between the header and the thread; the header has no "needs you" words', () => {
     page([row('gate:a', 'gate', { question: 'Approve the plan (2 steps)' })]);

@@ -104,3 +104,19 @@ describe('studio#577: the deliver card’s acceptance line says what this Delive
     expect(line.textContent).toBe('Not accepted yet: the walkthrough failed in chapter 4.');
   });
 });
+
+
+it('#1092: ProposalCard go keeps its own description alongside the disabled reason', () => {
+  const id = 'r-refused';
+  const gate: OpenGate = { runId: id, ord: 2, prompt: 'Confirm delivery', lifecycle: 'open', receivedAt: NOW, gateKind: 'deliver',
+    skipQe: { action: 'skip_qe', reasonRequired: true, actor: 'human_operator', label: 'QE acceptance skipped by operator', qeAcceptance: {} } as never };
+  useGateStore.setState({ gates: { [id]: gate } });
+  useRunEventStore.setState({ byRun: { [id]: [] } });
+  const view = makeView({ id, status: 'awaiting_human' }, [
+    makeUnit({ id: `${id}:deliver`, session_id: id, ord: 2, stage: 'build', phase_ref: 'deliver', role: 'neutral', status: 'pending' }),
+  ]);
+  render(<ProposalCard view={view} chain={CHAIN} acceptance={{ required: true, satisfied: false, walkthrough: null, line: 'QE has not passed.' }} />);
+  const go = screen.getByTestId('session-proposal-go');
+  expect(go).toHaveAttribute('aria-describedby', expect.stringContaining(`${id}-go-why`));
+  expect(go).toHaveAccessibleDescription('Refused until QE acceptance passes Delivery is refused until QE acceptance passes.');
+});

@@ -264,6 +264,17 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
         {options.map((o, i) => {
           const on = o.id === sel;
           const extra = optionProps?.(o, i) ?? {};
+          const id = `${autoId}-option-${i}`;
+          const content = optionExtra?.(o);
+          const recommended = o.recommended === true && ask.kind !== 'confirm';
+          const describedBy = [
+            o.sub !== undefined ? `${id}-sub` : null,
+            o.disabled !== undefined ? `${id}-why` : null,
+            o.meta !== undefined ? `${id}-meta` : null,
+            content != null && content !== false ? `${id}-extra` : null,
+            recommended ? `${id}-recommended` : null,
+            extra['aria-describedby'],
+          ].filter(Boolean).join(' ');
           return (
             <button
               key={o.id}
@@ -286,14 +297,15 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
               onMouseEnter={() => setHover(o.id)}
               onMouseLeave={() => setHover(null)}
               {...extra}
+              aria-labelledby={`${id}-label`}
+              aria-describedby={describedBy || undefined}
             >
-              <b className="wk-ask-opt-label">{o.label}</b>
-              {o.sub !== undefined && <span className="wk-ask-opt-sub">{o.sub}</span>}
-              {o.disabled !== undefined && <span className="wk-ask-opt-sub wk-ask-opt-why" data-testid="ask-option-why">{o.disabled}</span>}
-              {o.meta !== undefined && <span className="wk-ask-meta" data-testid="ask-option-meta">{o.meta}</span>}
-              {optionExtra?.(o)}
-              {/* After the words (drawn in the corner), so the card's name reads label first. */}
-              {o.recommended === true && ask.kind !== 'confirm' && <span className="wk-ask-rec" data-testid="ask-recommended">Recommended</span>}
+              <b id={`${id}-label`} className="wk-ask-opt-label">{o.label}</b>
+              {o.sub !== undefined && <span id={`${id}-sub`} className="wk-ask-opt-sub">{o.sub}</span>}
+              {o.disabled !== undefined && <span id={`${id}-why`} className="wk-ask-opt-sub wk-ask-opt-why" data-testid="ask-option-why">{o.disabled}</span>}
+              {o.meta !== undefined && <span id={`${id}-meta`} className="wk-ask-meta" data-testid="ask-option-meta">{o.meta}</span>}
+              {content != null && content !== false && <span id={`${id}-extra`} style={{ display: 'contents' }}>{content}</span>}
+              {recommended && <span id={`${id}-recommended`} className="wk-ask-rec" data-testid="ask-recommended">Recommended</span>}
             </button>
           );
         })}

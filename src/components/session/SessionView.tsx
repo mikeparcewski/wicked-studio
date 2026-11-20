@@ -33,7 +33,8 @@ import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { ChatQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { NeedsBanner } from './NeedsBanner.js';
-import { arrival, atEnd, headerBadge, jumpLabel, newEntries, QUESTION_KINDS, readDetailsOpen, waitingItems, writeDetailsOpen, type WaitingItem } from '../../board/runHeader.js';
+import { arrival, atEnd, headerBadge, jumpLabel, newEntries, QUESTION_KINDS, readDetailsOpen, needsForSession, writeDetailsOpen, type WaitingItem } from '../../board/runHeader.js';
+import { needsSource } from '../../board/attention.js';
 import { Composer, type ComposerSend, type ComposerSuggestion } from './Composer.js';
 import { quoteLabel } from '../../board/aboutChips.js';
 import { addAboutChip } from '../../store/composerChips.js';
@@ -91,7 +92,7 @@ import { takeRestoredNote, useUndoQueue } from '../../board/undoQueue.js';
 import { switchWords, useReplyRoute } from '../../board/replyRoute.js';
 import { useDraftRouter } from '../../hooks/useDraftRouter.js';
 import { useElicitationStore } from '../../store/elicitations.js';
-import { useSystemStore } from '../../store/systemSnapshot.js';
+import { useSystemPoll, useSystemStore } from '../../store/systemSnapshot.js';
 import { askingResponder, builderResponder, seatResponder } from '../../board/responder.js';
 import { useRunEventStore } from '../../store/events.js';
 import { headlineProgress } from '../../board/repeatProgress.js';
@@ -568,9 +569,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const powerRun = mine.length === 1 ? mine[0]! : null;
   const power = usePower(powerRun);
   const badge = mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(mine, answeredOnly ? 'done' : state)) : null;
-  // The banner below the header: each thing here that waits on the operator (the Needs-you rows about these runs).
+  // The banner takes this session's slice of the same source as the brand badge.
   const gates = useGateStore((s) => s.gates);
-  const waiting = useMemo(() => waitingItems(needRows, mine, gates, Date.now()), [needRows, mine, gates]);
+  useSystemPoll();
+  const signals = useSystemStore();
+  const waiting = useMemo(() => {
+    const now = Date.now();
+    return needsForSession(needsSource(signals, wsStatus, needRows, now), needRows, mine, gates, now);
+  }, [signals, wsStatus, needRows, mine, gates]);
   useEffect(() => {
     if (ref.kind !== 'run' || !runsLoaded || runInIndex) { setDetail(null); return; }
     const id = ref.runId;
