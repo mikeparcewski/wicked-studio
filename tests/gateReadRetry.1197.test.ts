@@ -87,7 +87,7 @@ describe('a gate read that misses its deadline', () => {
     const ids = Array.from({ length: 12 }, () => fresh());
     let open = 0;
     let peak = 0;
-    vi.spyOn(client.api, 'getGate').mockImplementation((id: string) => {
+    vi.spyOn(client.api, 'getGate').mockImplementation(() => {
       open += 1; peak = Math.max(peak, open);
       return new Promise<GateInfo>((_, reject) => setTimeout(() => { open -= 1; reject(new Error('down')); }, 3_000));
     });
