@@ -99,8 +99,7 @@ function NewRunView({
     : 'What do you need built?';
   const sub = chatMode
     ? 'Ask about your repos, get answers, run searches, analyse patterns — without kicking off a full build.'
-    // D1 in plain words (UI contract §5: no internal roles): you approve the plan before any work starts.
-    : 'Say what you need built; you approve the plan before any work starts.';
+    : 'Say what you need built; the form below shows what it will ask you before you send.';
 
   return (
     <div className="flex flex-col h-full items-center justify-center">
