@@ -108,6 +108,12 @@ describe('ChatQuestions — the chat\'s own gate at its thread foot', () => {
     expect(screen.getByTestId('session-gate-row')).toBeInTheDocument();
     expect(events).not.toHaveBeenCalled();
   });
+
+  it('a chat gate draws only the answers its list carries (studio#1177)', () => {
+    const actions = [{ action: 'reject', intent: 'stop', note: 'none' as const }];
+    render(<GateRow view={null} gate={gate('chat-4', { actions })} chatId="chat-4" />);
+    expect(screen.getAllByTestId('session-gate-choice').map((c) => c.dataset['choiceKey'])).toEqual(['stop']);
+  });
 });
 
 describe('AnswerInThread — the one line a dock or panel shows', () => {

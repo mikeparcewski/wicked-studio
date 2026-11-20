@@ -703,3 +703,32 @@ describe('sessionGateChoices — consent gate', () => {
     expect(sessionGateChoices(input(gate, events))!.reason).toBe('consent');
   });
 });
+
+// studio#1177: a consent / free-text row draws only the answers the engine lists now.
+describe('sessionGateChoices — consent and free-text rows follow the listed answers (studio#1177)', () => {
+  const list = (...tokens: string[]) => tokens.map((action) => ({ action, intent: action === 'reject' ? 'stop' : 'continue', note: 'none' as const }));
+
+  it('a consent row whose list has only Reject draws only Decline', () => {
+    const gate = plainGate({ gateKind: 'consent', prompt: 'Consent needed before unit 9 runs — nothing in it has run yet.' });
+    const model = sessionGateChoices({ ...input(gate), actions: list('reject') })!;
+    expect([...model.choices, ...model.overflow].map((c) => c.key)).toEqual(['decline']);
+  });
+
+  it('a consent row keeps its Approve and Decline when both are listed', () => {
+    const gate = plainGate({ gateKind: 'consent', prompt: 'Consent needed before unit 9 runs — nothing in it has run yet.' });
+    const model = sessionGateChoices({ ...input(gate), actions: list('approve', 'reject') })!;
+    expect(model.choices.map((c) => c.key)).toEqual(['approve', 'decline']);
+  });
+
+  it('a free-text row draws no Send when the list has no approve, and still draws the listed Reject', () => {
+    const gate = plainGate({ choices: null });
+    const model = sessionGateChoices({ ...input(gate), actions: list('reject') })!;
+    expect([...model.choices, ...model.overflow].map((c) => c.key)).toEqual(['stop']);
+  });
+
+  it('a listed consent choice the template does not name is drawn, and a stale one is not', () => {
+    const gate = plainGate({ gateKind: 'consent', prompt: 'Consent needed before unit 9 runs — nothing in it has run yet.' });
+    const model = sessionGateChoices({ ...input(gate), actions: list('consent:worker', 'reject') })!;
+    expect([...model.choices, ...model.overflow].map((c) => c.key)).toEqual(['choice:consent:worker', 'decline']);
+  });
+});

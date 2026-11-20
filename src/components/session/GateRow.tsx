@@ -143,7 +143,7 @@ const NO_EVENTS: readonly never[] = [];
 function ChatGateRow({ chatId, gate }: { chatId: string; gate: OpenGate | undefined }): React.ReactElement | null {
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined) return null;
-    return sessionGateChoices({ runId: chatId, gate, units: NO_UNITS, events: NO_EVENTS, pool: [], roster: null, rerun: null, fullVerdict: null });
+    return sessionGateChoices({ runId: chatId, gate, units: NO_UNITS, events: NO_EVENTS, pool: [], roster: null, rerun: null, fullVerdict: null, ...(gate.actions !== undefined ? { actions: gate.actions } : {}) });
   }, [chatId, gate]);
   return <GateRowBody runId={chatId} gate={gate} model={model} seat={null} rerunOffer={null} eventsUnavailable={false} retryEvents={() => undefined} depth={null} />;
 }
