@@ -38,10 +38,11 @@ import { Segmented } from './ui/Segmented.js';
 import { Switch } from './ui/Switch.js';
 import { TechDetails } from './ui/TechDetails.js';
 import { StateBanner, EmptyState, Skeleton } from './ui/StateBanner.js';
-import { readErrorKind } from '../api/errors.js';
+import { ApiError, readErrorKind } from '../api/errors.js';
 import { seatLabel } from '../board/seatNames.js';
 import { OverflowMenu } from './ui/OverflowMenu.js';
 import { Tabs } from './ui/Tabs.js';
+import { unconfirmedAddress, type UnconfirmedAddress } from './sources/sourceModel.js';
 
 /**
  * MCP tools (DES-MCP-TOOLS-001 §7, slice S6): the operator's registry of upstream MCP servers and
@@ -356,6 +357,11 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   const [target, setTarget] = useState('');
   /** `rest` only: where crew fetches the API's OpenAPI document. */
   const [openapiUrl, setOpenapiUrl] = useState('');
+  const [asks, setAsks] = useState<Array<UnconfirmedAddress & { forTarget: string }>>([]);
+  const [confirmed, setConfirmed] = useState<{ ranges: string[]; forTarget: string } | null>(null);
+  /** A range tick speaks only for these dial points. */
+  const forTarget = JSON.stringify({ kind, target: target.trim(), openapiUrl: openapiUrl.trim() });
+  const asksNow = asks.filter((a) => a.forTarget === forTarget);
   const [authRef, setAuthRef] = useState('');
   const [authEnv, setAuthEnv] = useState('');
   /**
@@ -393,17 +399,19 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   const impliedRef = (): string => (authValue !== '' ? `keychain:wicked-mcp/${name}` : authRef.trim());
 
   /** The request for one secret reference — the state's, or the one a pasted value implies. */
-  const bodyWith = (ref: string) => {
+  const bodyWith = (ref: string, confirmation = confirmed) => {
     const parts = target.trim().split(/\s+/);
     const into = authEnv.trim() !== '' ? (kind === 'mcp-stdio' ? { env: authEnv.trim() } : { header: authEnv.trim() }) : {};
     // A prefix belongs to a HEADER injection only; an env-injected secret is the value itself.
     const scheme = kind !== 'mcp-stdio' && authPrefix.trim() !== '' ? { prefix: schemePrefix(authPrefix) } : {};
     const auth = ref === '' ? null : { ref, ...into, ...scheme };
     if (kind === 'mcp-stdio') return { name, kind, command: parts[0] ?? '', args: parts.slice(1), auth };
-    if (kind === 'rest') return { name, kind, url: target.trim(), openapiUrl: openapiUrl.trim(), auth };
-    return { name, kind, url: target.trim(), auth };
+    const address = confirmation !== null && confirmation.forTarget === forTarget && confirmation.ranges.length > 0
+      ? { address: { allow: [...confirmation.ranges] } } : {};
+    if (kind === 'rest') return { name, kind, url: target.trim(), openapiUrl: openapiUrl.trim(), auth, ...address };
+    return { name, kind, url: target.trim(), auth, ...address };
   };
-  const body = () => bodyWith(impliedRef());
+  const body = (confirmation = confirmed) => bodyWith(impliedRef(), confirmation);
 
   const previewSeq = useRef(0);
   const formKey = JSON.stringify(body());
@@ -418,7 +426,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   /** Any edit drops the held preview AND the last failure: neither speaks for the form now. */
   const setPreview = (p: null): void => { setHeld(p); setError(null); };
 
-  const doPreview = async (): Promise<void> => {
+  const doPreview = async (confirmation = confirmed): Promise<void> => {
     setBusy(true);
     setError(null);
     setHeld(null);
@@ -431,7 +439,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
     // keychain only when the save commits. Nothing is written before the operator saves, so this
     // no longer re-points `asked` half way through — and the two-step it replaces is exactly what
     // could leave a keychain entry with no server.
-    const asked = formKey;
+    const asked = JSON.stringify(body(confirmation));
     const askedValue = authValue;
     const stillMine = (): boolean =>
       seq === previewSeq.current && formKeyRef.current === asked && authValueRef.current === askedValue;
@@ -450,10 +458,28 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
       // A rejection belongs to the form it was asked about (codex review round 3 on #387): "a
       // secret is at least 8 characters" must not land on a form whose secret the operator has
       // already lengthened, or on another server entirely.
-      if (stillMine()) setError(msg(e));
+      if (!stillMine()) return;
+      const u = kind !== 'mcp-stdio' && e instanceof ApiError
+        && typeof e.body === 'object' && e.body !== null && 'code' in e.body && e.body.code === 'address_unconfirmed'
+        ? unconfirmedAddress(e.wire) : null;
+      if (u !== null) {
+        setAsks((list) => list.some((a) => a.forTarget === forTarget && a.range === u.range)
+          ? list : [...list, { ...u, forTarget }]);
+        return;
+      }
+      setError(msg(e));
     } finally {
       if (seq === previewSeq.current) setBusy(false);
     }
+  };
+
+  /** A tick confirms the range and immediately probes under that updated policy. */
+  const confirmRange = (range: string, on: boolean): void => {
+    const ranges = confirmed?.forTarget === forTarget ? confirmed.ranges.filter((r) => r !== range) : [];
+    const next = { ranges: on ? [...ranges, range] : ranges, forTarget };
+    setConfirmed(next);
+    setPreview(null);
+    if (on) void doPreview(next);
   };
 
   const doSave = async (): Promise<void> => {
@@ -565,6 +591,14 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
           </span>
         </div>
       )}
+      {kind !== 'mcp-stdio' && asksNow.map((a) => (
+        <label key={a.range} className="wk-src-check-row">
+          <input type="checkbox" data-testid="mcp-add-address-tick" data-range={a.range} disabled={busy}
+            checked={confirmed?.forTarget === forTarget && confirmed.ranges.includes(a.range)}
+            onChange={(e) => confirmRange(a.range, e.target.checked)} />
+          <span className="wk-src-note">{a.cls === 'loopback' ? 'Loopback' : 'Private'} address <code className="wk-src-mono">{a.address}</code>: allow this host at <code className="wk-src-mono">{a.range}</code> only.</span>
+        </label>
+      ))}
       {error !== null && (
         <StateBanner data-testid="mcp-add-error" kind={readErrorKind(error)} what="the server preview" error={error} onRetry={() => void doPreview()} />
       )}

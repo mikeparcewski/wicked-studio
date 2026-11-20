@@ -228,6 +228,70 @@ describe('MCP tools: Approve and Revoke are audited policy edits crew makes', ()
 });
 
 describe('MCP tools: add an existing server', () => {
+  it.each(['mcp-http', 'rest'])('%s asks for a loopback range, previews on the tick, and drops consent for an edited URL (studio#1198)', async (kind) => {
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    const bodies: Array<Record<string, unknown>> = [];
+    apiFetch.mockImplementation((p: string, i?: RequestInit) => {
+      if (p === '/mcp/servers/preview') {
+        const body = JSON.parse(i?.body as string) as Record<string, unknown>;
+        bodies.push(body);
+        if (body['address'] === undefined) return Promise.reject(new ApiError(409,
+          '127.0.0.1 is a loopback address, which a source reaches only when the person confirms a range covering it.',
+          { code: 'address_unconfirmed' }));
+      }
+      return base(p, i);
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = within(screen.getByTestId('mcp-add-panel'));
+    fireEvent.change(panel.getByTestId('mcp-add-kind'), { target: { value: kind } });
+    fireEvent.change(panel.getByTestId('mcp-add-name'), { target: { value: 'local' } });
+    fireEvent.change(panel.getByTestId('mcp-add-target'), { target: { value: 'http://127.0.0.1:8080/mcp' } });
+    if (kind === 'rest') fireEvent.change(panel.getByTestId('mcp-add-openapi-url'), { target: { value: 'http://127.0.0.1:8080/openapi.json' } });
+    fireEvent.click(panel.getByTestId('mcp-add-preview'));
+
+    const tick = await panel.findByTestId('mcp-add-address-tick');
+    expect(tick).not.toBeChecked();
+    expect(tick).toHaveAttribute('data-range', '127.0.0.1/32');
+    expect(tick.closest('label')).toHaveTextContent('Loopback address 127.0.0.1: allow this host at 127.0.0.1/32 only.');
+    expect(panel.queryByTestId('mcp-add-error')).toBeNull();
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).not.toHaveProperty('address');
+
+    fireEvent.click(tick);
+    await panel.findByTestId('mcp-add-preview-result');
+    expect(tick).toBeChecked();
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]?.['address']).toEqual({ allow: ['127.0.0.1/32'] });
+
+    // Taking back the tick invalidates the preview bound to that address policy.
+    fireEvent.click(tick);
+    expect(panel.queryByTestId('mcp-add-preview-result')).toBeNull();
+    expect(bodies).toHaveLength(2);
+    fireEvent.click(tick);
+    await panel.findByTestId('mcp-add-preview-result');
+
+    fireEvent.change(panel.getByTestId('mcp-add-target'), { target: { value: 'http://127.0.0.1:9090/mcp' } });
+    expect(panel.queryByTestId('mcp-add-address-tick')).toBeNull();
+    expect(panel.queryByTestId('mcp-add-preview-result')).toBeNull();
+    fireEvent.click(panel.getByTestId('mcp-add-preview'));
+    expect(await panel.findByTestId('mcp-add-address-tick')).not.toBeChecked();
+    expect(bodies.at(-1)).not.toHaveProperty('address');
+    expect(panel.queryByTestId('mcp-add-error')).toBeNull();
+
+    if (kind === 'rest') {
+      fireEvent.click(panel.getByTestId('mcp-add-address-tick'));
+      await panel.findByTestId('mcp-add-preview-result');
+      fireEvent.change(panel.getByTestId('mcp-add-openapi-url'), { target: { value: 'http://127.0.0.1:9090/openapi.json' } });
+      expect(panel.queryByTestId('mcp-add-address-tick')).toBeNull();
+      expect(panel.queryByTestId('mcp-add-preview-result')).toBeNull();
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      expect(await panel.findByTestId('mcp-add-address-tick')).not.toBeChecked();
+      expect(bodies.at(-1)).not.toHaveProperty('address');
+    }
+  });
+
   it('paste → preview shows each tool with its decisions → save sends exactly that preview', async () => {
     wire();
     render(<McpToolsPage navigate={navigate} search="" />);
