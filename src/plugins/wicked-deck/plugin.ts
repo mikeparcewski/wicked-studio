@@ -70,7 +70,7 @@ const MARKUP = `
         <button type="button" id="zoom-100" data-testid="deck-zoom-100" aria-pressed="false">100%</button>
       </div>
       <button type="button" id="fullscreen" data-testid="deck-fullscreen">Full screen</button>
-      <button type="button" id="notes-toggle" data-testid="deck-notes-toggle" aria-pressed="false" title="Show the speaker notes under the slide">Notes</button>
+      <button type="button" id="notes-toggle" data-testid="deck-notes-toggle" data-wicked-reveal aria-pressed="false" title="Show the speaker notes under the slide">Notes</button>
       <button type="button" id="present" data-testid="deck-present" title="Show the slide on its own; ← → move, Esc leaves">Present</button>
     </div>
     <div data-testid="deck-add-menu" id="menu" class="menu" role="menu" aria-label="Add a slide like" hidden></div>
