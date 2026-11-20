@@ -30,13 +30,14 @@ export function composerOnScreen(composerKey: string): boolean {
 
 const selectionChipKeys = new Map<string, string[]>();
 
-/** Elements and chapters replace the previous selection's chips; the label is the host's own (the host resolved it from its inventory). An
+/** Elements and chapters replace the previous selection's chips of the same artifact on that composer (another card's chips stay); the label is the host's own (the host resolved it from its inventory). An
  *  element of an interactive document keeps its artifact and `data-wid`, so the message names the part it is about
  *  (DES-CHAT-ARTIFACTS-001 §6.1). */
 export function chipsToComposer(b: ArtifactBinding, chips: readonly Chip[]): void {
-  for (const key of selectionChipKeys.get(b.composerKey) ?? []) removeAboutChip(b.composerKey, key);
-  const keys: string[] = [];
   const doc = b.docId ?? b.artifactKey;
+  const owner = `${b.composerKey}\u0000${doc}`;
+  for (const key of selectionChipKeys.get(owner) ?? []) removeAboutChip(b.composerKey, key);
+  const keys: string[] = [];
   const ref = b.source === 'interactive-doc' ? artifactRefOf(b.projectId, b.docId) : null;
   for (const c of chips) {
     if (c.anchor.kind === 'element') {
@@ -49,7 +50,7 @@ export function chipsToComposer(b: ArtifactBinding, chips: readonly Chip[]): voi
       keys.push(key);
     }
   }
-  selectionChipKeys.set(b.composerKey, keys);
+  selectionChipKeys.set(owner, keys);
 }
 
 export function typedToComposer(composerKey: string, grapheme: string): void {

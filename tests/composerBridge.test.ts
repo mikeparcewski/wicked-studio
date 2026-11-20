@@ -25,4 +25,13 @@ describe('composer selection chips', () => {
       { kind: 'about', key: 'el:d/other', label: 'Other composer selection' },
     ]);
   });
+
+  it('keeps another artifact\'s chips on the same composer', () => {
+    const a: ArtifactBinding = { artifactKey: 'a', title: 'A', kind: 'deck', source: 'fake', projectId: 'p', docId: 'd1', composerKey: 'shared' };
+    const b: ArtifactBinding = { ...a, artifactKey: 'b', docId: 'd2' };
+    chipsToComposer(a, [{ anchor: { kind: 'element', id: 'x' }, label: 'A part' }]);
+    chipsToComposer(b, [{ anchor: { kind: 'element', id: 'y' }, label: 'B part' }]);
+    chipsToComposer(a, []);
+    expect(chipsOf(useComposerChips.getState(), 'shared').map((c) => c.key)).toEqual(['el:d2/y']);
+  });
 });
