@@ -1,7 +1,7 @@
 import type { Chip } from '../../editors/model.js';
 import type { ArtifactBinding } from '../../editors/hostApi.js';
 import { focusBeside } from '../../editors/focus.js';
-import { addAboutChip } from '../../store/composerChips.js';
+import { addAboutChip, removeAboutChip } from '../../store/composerChips.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
 import { artifactRefOf, isAnchorWid } from '../../api/chatArtifacts-wire.js';
 
@@ -28,19 +28,29 @@ export function composerOnScreen(composerKey: string): boolean {
   return document.querySelector(`[data-testid="composer"][data-composer="${composerKey.replace(/["\\]/g, '\\$&')}"] textarea`) !== null;
 }
 
-/** Elements and chapters become chips; the label is the host's own (the host resolved it from its inventory). An
+const selectionChipKeys = new Map<string, string[]>();
+
+/** Elements and chapters replace the previous selection's chips of the same artifact on that composer (another card's chips stay); the label is the host's own (the host resolved it from its inventory). An
  *  element of an interactive document keeps its artifact and `data-wid`, so the message names the part it is about
  *  (DES-CHAT-ARTIFACTS-001 §6.1). */
 export function chipsToComposer(b: ArtifactBinding, chips: readonly Chip[]): void {
   const doc = b.docId ?? b.artifactKey;
+  const owner = `${b.composerKey}\u0000${doc}`;
+  for (const key of selectionChipKeys.get(owner) ?? []) removeAboutChip(b.composerKey, key);
+  const keys: string[] = [];
   const ref = b.source === 'interactive-doc' ? artifactRefOf(b.projectId, b.docId) : null;
   for (const c of chips) {
     if (c.anchor.kind === 'element') {
-      addAboutChip(b.composerKey, { kind: 'about', key: `el:${doc}/${c.anchor.id}`, label: c.label, ...(ref !== null ? { ref } : {}), ...(ref !== null && isAnchorWid(c.anchor.id) ? { wid: c.anchor.id } : {}) });
+      const key = `el:${doc}/${c.anchor.id}`;
+      addAboutChip(b.composerKey, { kind: 'about', key, label: c.label, ...(ref !== null ? { ref } : {}), ...(ref !== null && isAnchorWid(c.anchor.id) ? { wid: c.anchor.id } : {}) });
+      keys.push(key);
     } else if (c.anchor.kind === 'chapter') {
-      addAboutChip(b.composerKey, { kind: 'about', key: `ch:${doc}/${c.anchor.id}`, label: c.label, ...(ref !== null ? { ref } : {}) });
+      const key = `ch:${doc}/${c.anchor.id}`;
+      addAboutChip(b.composerKey, { kind: 'about', key, label: c.label, ...(ref !== null ? { ref } : {}) });
+      keys.push(key);
     }
   }
+  selectionChipKeys.set(owner, keys);
 }
 
 export function typedToComposer(composerKey: string, grapheme: string): void {
