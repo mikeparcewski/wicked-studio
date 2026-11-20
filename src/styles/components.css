@@ -450,6 +450,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
    room — the run composer a right gutter, the Home scroller and the gate-toast stack a
    bottom one. ── */
 .wk-run-composer { padding-right: var(--fab-clear) !important; }
+#main[data-ask-bubble="true"] { padding-bottom: var(--fab-clear); }
 [data-place-scroll="home-board"] {
   padding-bottom: var(--fab-clear);
   scroll-padding-bottom: var(--fab-clear);
