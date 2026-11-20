@@ -2,7 +2,7 @@ import type {
   AppActionBinding, AppBindingRef, AppCell, AppComponent, AppComponentType, AppFilterComponent, AppFormComponent, AppOutputColumn, AppPage, AppParamSchema,
   AppParamsSchema, AppSpec, AppTableColumn, AppTableComponent,
 } from '../../../api/types.js';
-import { ENVELOPE, PROTOCOL, announceReady } from '../../_shared/v2.js';
+import { ENVELOPE, PROTOCOL, announceReady, forwardFrameKey } from '../../_shared/v2.js';
 import { drawChart } from './chart.js';
 import { cellText, lineOf } from './format.js';
 import { Sheet, type Box } from './sheet.js';
@@ -87,6 +87,7 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
   if (!(styleEl instanceof HTMLStyleElement) && !(styleEl instanceof HTMLLinkElement)) return;
   const sheet = new Sheet(styleEl);
   const root = el('div', 'wk-app');
+  root.tabIndex = -1;
   root.setAttribute('data-testid', 'apps-runtime');
   document.body.append(root);
 
@@ -139,6 +140,11 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
     return new Promise((resolve) => pending.set(id, resolve));
   };
   const say = (type: string, payload: Record<string, unknown>): void => post({ type, payload });
+  root.onkeydown = e => {
+    // The document handler keeps Escape's existing deselection behavior, along with undo/delete.
+    if (e.key === 'Escape' && selected !== null && !(e.target as Element).closest('input,textarea,select')) return;
+    forwardFrameKey(e, root, say);
+  };
 
   const onPort = (m: MessageEvent): void => {
     const d = m.data as Record<string, unknown> | null;
