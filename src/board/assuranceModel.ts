@@ -191,8 +191,9 @@ export interface RuleRow {
   blocking: boolean;
   /** (api-types 0.193.0) The reviewer's own reading of the rule, when it wrote one. */
   reviewer: RulePosition | null;
-  /** (api-types 0.193.0) The council a dispute on this rule went to: its ruling, or why there is none. */
-  council: RuleCouncilRecord | null;
+  /** (api-types 0.193.0) The council a dispute on this rule went to: its ruling, or why there is none.
+   *  core src/rule_check.rs `RuleCouncil.arbiter` (crew#972 / core#1526) is not yet in the pinned api-types. */
+  council: (RuleCouncilRecord & { arbiter?: string }) | null;
   /** (e2e-1105 CJ9, core-ts 0.15.34) `true` on a broken row of a rule the person may waive (severity warn or info): the
    *  gate's skip takes it with a written reason. `false` from an older engine and on every other row (fail-closed). */
   waivable: boolean;
@@ -214,7 +215,7 @@ function positionOf(v: unknown): RulePosition | null {
   return { by: typeof v['by'] === 'string' ? v['by'] : '', seat: v['seat'], status, cite: typeof v['cite'] === 'string' ? v['cite'] : '' };
 }
 
-function councilOf(v: unknown): RuleCouncilRecord | null {
+function councilOf(v: unknown): RuleRow['council'] {
   if (!isRecord(v)) return null;
   const num = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
   const votes: RuleCouncilVote[] = Array.isArray(v['votes'])
@@ -228,6 +229,7 @@ function councilOf(v: unknown): RuleCouncilRecord | null {
   const ruling = ruleStatusOf(v['ruling']);
   const reason = str(v['reason']);
   const ballotsIn = str(v['ballotsIn']);
+  const arbiter = str(v['arbiter']);
   return {
     taskId: typeof v['taskId'] === 'string' ? v['taskId'] : '',
     positions: Array.isArray(v['positions']) ? v['positions'].flatMap((p) => { const x = positionOf(p); return x === null ? [] : [x]; }) : [],
@@ -241,6 +243,7 @@ function councilOf(v: unknown): RuleCouncilRecord | null {
     ...(ruling !== null ? { ruling } : {}),
     ...(reason !== null ? { reason } : {}),
     ...(ballotsIn !== null ? { ballotsIn } : {}),
+    ...(arbiter !== null ? { arbiter } : {}),
   };
 }
 

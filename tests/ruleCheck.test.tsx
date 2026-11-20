@@ -439,7 +439,55 @@ describe('(rev 2) disputed rules, council rulings and process rules', () => {
     reason: 'settled by council 2-1: sum() changed with no test', cite: 'sum() changed with no test',
     council: { taskId: 't-2', positions: [judgePos, reviewerPos], ruling: 'broken', votes: [{ seat: 'agy', status: 'broken', counted: true }, { seat: 'pi', status: 'broken', counted: true }, { seat: 'opencode', status: 'kept', counted: true }], seated: 3, returned: 3, agreementPct: 67, consensus: true, seed: 9, eligible: ['agy', 'pi', 'opencode'] },
   });
+  const arbiter = 'claude (distinct from every party)';
+  const oneSeat = (how = 'council'): Record<string, unknown> => ({
+    ...settled(how),
+    council: { ...(settled()['council'] as object), votes: [{ seat: 'claude', status: 'broken', counted: true }], seated: 1, returned: 1, agreementPct: 100, eligible: ['claude'] },
+  });
   const proc = (id: string, status: string, party: string): Record<string, unknown> => ({ ruleId: id, status, how: 'judge', ruleKey: 'k', judge: 'claude', origin: 'judge', reason: 'from the engine record', party, blocking: false });
+
+  it('keeps the single arbiter and its footing from the council receipt', () => {
+    const rule = { ...oneSeat(), council: { ...(oneSeat()['council'] as object), arbiter } };
+    expect(receiptOf({ ...base, rules: [rule] })!.rules![0]!.council).toMatchObject({ arbiter });
+  });
+
+  it.each([['empty', ''], ['number', 1], ['absent', undefined]])('leaves an %s arbiter key absent', (_name, value) => {
+    const rule = { ...oneSeat(), council: { ...(oneSeat()['council'] as object), ...(value !== undefined ? { arbiter: value } : {}) } };
+    expect('arbiter' in receiptOf({ ...base, rules: [rule] })!.rules![0]!.council!).toBe(false);
+  });
+
+  it.each(['council', 'cache'])('a one-seat ruling names its arbiter only when recorded (%s)', (how) => {
+    for (const seatedBy of [undefined, arbiter]) {
+      const rule = { ...oneSeat(how), council: { ...(oneSeat()['council'] as object), ...(seatedBy !== undefined ? { arbiter: seatedBy } : {}) } };
+      const { unmount } = render(<ReceiptView receipt={receiptOf({ ...base, rules: [rule] })!} passed={false} />);
+      fireEvent.click(screen.getByTestId('assurance-rules-line'));
+      const said = screen.getByTestId('assurance-rule-how').textContent!;
+      const lead = seatedBy !== undefined ? `settled by one arbiter: ${arbiter}` : 'settled by council 1-0 (claude)';
+      expect(said).toBe(` ${lead}${how === 'cache' ? ', unchanged since last check' : ''}`);
+      if (seatedBy !== undefined) expect(said).not.toContain('settled by council');
+      expect(screen.getByTestId('assurance-rule-votes').textContent).toBe(`${seatedBy !== undefined ? "Arbiter's vote:" : 'Council votes:'} claude: broken`);
+      unmount();
+    }
+  });
+
+  it('an arbiter waiver asks for confirmation or a skip', () => {
+    const rule = { ...oneSeat(), status: 'waived', council: { ...(oneSeat()['council'] as object), arbiter, ruling: 'waived', votes: [{ seat: 'claude', status: 'kept', counted: true }] } };
+    render(<RulesChecked rows={receiptOf({ ...base, rules: [rule] })!.rules!} />);
+    expect(screen.getByTestId('assurance-rule-how').textContent).toBe(` kept only on your instruction by one arbiter, ${arbiter}: confirm or skip it`);
+  });
+
+  it('a council row with no ruling it carries names its arbiter', () => {
+    const rule = { ...oneSeat(), council: { ...(oneSeat()['council'] as object), arbiter, ruling: 'kept' } };
+    render(<RulesChecked rows={receiptOf({ ...base, rules: [rule] })!.rules!} />);
+    expect(screen.getByTestId('assurance-rule-how').textContent).toBe(` by one arbiter: ${arbiter}`);
+  });
+
+  it('a disputed arbiter row labels its uncounted vote and still says nothing in how', () => {
+    const rule = { ...disputed(), council: { ...(disputed()['council'] as object), arbiter, votes: [{ seat: 'claude', status: 'broken', counted: false, whyNot: 'names no changed file' }], seated: 1, returned: 1, agreementPct: 0, eligible: ['claude'], reason: 'no_quorum: the counted votes reached no majority (0 of 1 counted)' } };
+    render(<RulesChecked rows={receiptOf({ ...base, rules: [rule] })!.rules!} />);
+    expect(screen.queryByTestId('assurance-rule-how')).toBeNull();
+    expect(screen.getByTestId('assurance-rule-votes').textContent).toBe("Arbiter's vote: claude: broken (not counted: names no changed file)");
+  });
 
   it('parses disputed (not unchecked), the council and the process fields', () => {
     const r = receiptOf({ ...base, rules: [disputed(), settled(), proc('RVWL-1001', 'broken', 'reviewer')] })!.rules!;

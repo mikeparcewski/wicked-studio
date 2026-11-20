@@ -128,15 +128,18 @@ const NO_RULING_CODE = /\b(?:no_quorum|timeout|seats_benched|cap|error|incomplet
  *  council's. A disputed row says nothing here: its reason says why no ruling stands. */
 function howWords(r: RuleRow): string {
   const ruled = councilRulingOf(r);
+  const arbiter = r.council?.arbiter;
   if (ruled !== null) {
     const who = [ruled.seats.join(', '), ...(ruled.uncounted.length > 0 ? [`${ruled.uncounted.join(', ')} not counted`] : [])].filter((x) => x !== '').join('; ');
     const seats = who !== '' ? ` (${who})` : '';
-    const lead = ruled.ruling === 'waived' ? `the council kept it only on your instruction, ${ruled.tally}${seats}: confirm or skip it` : `settled by council ${ruled.tally}${seats}`;
+    const lead = arbiter !== undefined
+      ? ruled.ruling === 'waived' ? `kept only on your instruction by one arbiter, ${arbiter}: confirm or skip it` : `settled by one arbiter: ${arbiter}`
+      : ruled.ruling === 'waived' ? `the council kept it only on your instruction, ${ruled.tally}${seats}: confirm or skip it` : `settled by council ${ruled.tally}${seats}`;
     return `${lead}${r.how === 'cache' ? ', unchanged since last check' : ''}`;
   }
   if (r.status === 'disputed') return '';
   // A council row with no ruling it carries is never "by a judge (<the rule judge>)".
-  if (r.how === 'council' || r.origin === 'council') return HOW_WORD['council']!;
+  if (r.how === 'council' || r.origin === 'council') return arbiter !== undefined ? `by one arbiter: ${arbiter}` : HOW_WORD['council']!;
   // A skip is the operator's, never a seat's.
   return `${HOW_WORD[r.how] ?? r.how}${r.judge !== null && r.how !== 'operator' ? ` (${r.judge})` : ''}`;
 }
@@ -175,7 +178,7 @@ function RuleItem({ r }: { r: RuleRow }): React.ReactElement {
           ))}
           {c.votes.length > 0 && (
             <li data-testid="assurance-rule-votes">
-              Council votes: {c.votes.map((v, i) => (
+              {c.arbiter !== undefined ? "Arbiter's vote:" : 'Council votes:'} {c.votes.map((v, i) => (
                 <span key={`v${i}`} data-testid="assurance-rule-vote" data-counted={v.counted ? 'true' : 'false'}>
                   {i > 0 ? ' · ' : ''}{v.seat}: {v.status !== undefined ? RULE_WORD[v.status] ?? v.status : 'no vote'}
                   {!v.counted && (v.status !== undefined ? ` (not counted${v.whyNot !== undefined ? `: ${showText(v.whyNot)}` : ''})` : v.whyNot !== undefined ? ` (${showText(v.whyNot)})` : '')}
