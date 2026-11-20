@@ -18,7 +18,7 @@ import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useLaunchWizard, resetLaunchWizard } from '../src/store/launchWizard.js';
 import { makeUnit, makeView } from './factories.js';
-import { buildEvents, plan, state } from './powerFixtures.js';
+import { buildEvents, change, plan, state } from './powerFixtures.js';
 
 const RUN = 'r-pm';
 const unit = (key: string, ord: number, status: string, cli: string | null, stage = 'build'): WorkUnit =>
@@ -169,6 +169,7 @@ describe('the "this grew" dock (a pause, not an engine gate: POST /runs/:id/powe
 
   it('marks and preselects the recommendation; the reasons are listed; every way on is a card', () => {
     card();
+    expect(screen.getByTestId('power-pause-eyebrow').textContent).toBe('Paused · this grew · checkpoint 3');
     expect(screen.getByTestId('power-pause-question').textContent).toBe('This change grew past its plan. How should it go on?');
     expect(screen.getByTestId('power-pause-reasons').textContent).toContain('The diff now spans 3 packages');
     const cards = screen.getAllByTestId('power-pause-choice');
@@ -177,6 +178,31 @@ describe('the "this grew" dock (a pause, not an engine gate: POST /runs/:id/powe
     expect(cards.slice(1).every((b) => b.getAttribute('aria-checked') === 'false')).toBe(true);
     expect(screen.queryByTestId('power-pause-more')).toBeNull();
     expect(screen.getByTestId('power-pause-confirm').textContent).toBe('Split into lanes');
+  });
+
+  it('explains a graph-provenance pause and keeps the engine reason in More about this', () => {
+    const raw = 'code graph indexed from working tree does not match run base abc123; failed closed';
+    const p = state({
+      history: [change(4, 20, 'commit', 'standard', 'highest', 34, 80, 3, [raw], { paused: true })],
+      pause: { ...pause, reasons: ['rigor jumped two bands at once (standard -> highest)'] },
+    });
+    render(<PowerPauseCard view={view({ power: p })} power={p} />);
+    expect(screen.getByTestId('power-pause').textContent).not.toContain('grew past its plan');
+    expect(screen.getByTestId('power-pause-eyebrow').textContent).toBe('Paused · code graph · checkpoint 3');
+    expect(screen.getByTestId('power-pause-question').textContent).toBe("The code graph for this repository couldn't be matched to the run's base commit, so rigor went up. How should it go on?");
+    const more = screen.getByTestId('power-pause-more');
+    expect(more.tagName).toBe('DETAILS');
+    expect(more.querySelector('summary')?.textContent).toBe('More about this');
+    expect(more.textContent).toContain(raw);
+    expect(screen.getAllByTestId('power-pause-choice')).toHaveLength(4);
+  });
+
+  it('explains a struggle pause without a graph disclosure', () => {
+    const p = state({ pause: { ...pause, reasons: ['struggling: 4 failed test runs'] } });
+    render(<PowerPauseCard view={view({ power: p })} power={p} />);
+    expect(screen.getByTestId('power-pause-eyebrow').textContent).toBe('Paused · stuck · checkpoint 3');
+    expect(screen.getByTestId('power-pause-question').textContent).toBe('This job is taking longer or failing more than planned. How should it go on?');
+    expect(screen.queryByTestId('power-pause-more')).toBeNull();
   });
 
   it('each way on answers the pause route with its decision (after the undo window); Stop carries its reason', async () => {

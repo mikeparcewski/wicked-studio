@@ -7,7 +7,7 @@ import { queueDecision, reportDecision, useUndoQueue } from '../../board/undoQue
 import { InlineUndo } from '../InlineUndo.js';
 import { clockTime } from '../../board/handover.js';
 import {
-  PAUSE_CHOICES, RAISE_WORDS, changeReason, pauseReasonWords, changedBy, handoffRow, handoffWords, higherRigors, listWords, powerSwitch, rigorAt, rigorChip, settleHandoff,
+  PAUSE_CHOICES, RAISE_WORDS, changeReason, pauseCause, pauseReasonWords, changedBy, handoffRow, handoffWords, higherRigors, listWords, powerSwitch, rigorAt, rigorChip, settleHandoff,
   type ActivityRow, type PauseChoice, type PowerItem,
 } from '../../board/powerMode.js';
 import { seatResponder } from '../../board/responder.js';
@@ -376,6 +376,7 @@ function unitForStep(view: SessionView, ord: number | null, kind: HandoffStep['s
 export function PowerPauseCard({ view, power }: { view: SessionView; power: PowerState }): React.ReactElement {
   const id = view.session.id;
   const pause = power.pause;
+  const cause = pauseCause(power);
   const roster = useRoster();
   const who = power.orchestrator.cli !== null ? seatResponder(power.orchestrator.cli, roster).name : 'The orchestrator';
   const recommended: PauseChoice = pause?.recommended ?? 'continue_high';
@@ -424,7 +425,7 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
   // (mockup learn-and-panels h) The four ways on as cards, the engine's recommendation marked and preselected.
   const ask: Ask = {
     id: `${id}:pause`, host: 'power', from: { kind: 'engine', id: 'engine', label: `${who} paused` },
-    prompt: 'This change grew past its plan. How should it go on?', kind: 'choose', answeredBy: 'person', undoMs: 10_000,
+    prompt: cause.question, kind: 'choose', answeredBy: 'person', undoMs: 10_000,
     default: recommended, record: 'You chose: {label}',
     options: (['split', 'switch_phased', 'continue_high', 'stop'] as const).map((c) => ({
       id: c, token: c, label: PAUSE_CHOICES[c].label,
@@ -435,10 +436,11 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
   };
   return (
     <div data-testid="power-pause" data-undo-host="power-pause" data-recommended={recommended} className="wk-prop wk-prop--ask wk-prop--chat">
-      <p className="wk-dock-eyebrow pm-pause-eyebrow" data-testid="power-pause-eyebrow">Paused · this grew{pause !== null ? ` · checkpoint ${pause.checkpoint}` : ''}</p>
-      <h2 className="wk-prop-text wk-gate2-q" data-testid="power-pause-question">This change grew past its plan. How should it go on?</h2>
+      <p className="wk-dock-eyebrow pm-pause-eyebrow" data-testid="power-pause-eyebrow">{cause.eyebrow}{pause !== null ? ` · checkpoint ${pause.checkpoint}` : ''}</p>
+      <h2 className="wk-prop-text wk-gate2-q" data-testid="power-pause-question">{cause.question}</h2>
       <p className="wk-prop-why wk-gate2-p">{who} paused at the end of its turn. Recommended: {PAUSE_CHOICES[recommended].label.toLowerCase()}.</p>
       {reasons.length > 0 && <ul className="pm-pause-reasons" data-testid="power-pause-reasons">{reasons.map((r) => <li key={r}>{pauseReasonWords(r)}</li>)}</ul>}
+      {cause.raw !== null && <details className="pm-pause-more" data-testid="power-pause-more"><summary>More about this</summary>{cause.raw}</details>}
       <div className="wk-gate2-decide">
       {busy !== null ? (
         // Answered: one plain line where the cards were, with the undo window's countdown (DES-GUIDED-CHAT §3).

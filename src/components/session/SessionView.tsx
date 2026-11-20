@@ -75,7 +75,7 @@ import { PowerSwitchButton, RigorChipButton } from './PowerMode.js';
 import { LiveActivity } from './LiveActivity.js';
 import { usePower } from '../../hooks/usePower.js';
 import { powerOf } from '../../api/power.js';
-import { mergePower } from '../../board/powerMode.js';
+import { mergePower, pauseCause } from '../../board/powerMode.js';
 import { TrackerSet } from '../trackers/TrackerSet.js';
 import { useTrackerLinksSupported } from '../../api/trackers.js';
 import { RunRibbon, RunTab } from './RunTab.js';
@@ -596,12 +596,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // Only a run still going says it, the newest first (a finished one's badge says it ended).
   const progressLine = useMemo(() => headlineProgress(mine, eventsByRun), [mine, eventsByRun]);
   const pauses = useMemo(() => {
-    const out = new Map<string, { at: number; who: string | null }>();
+    const out = new Map<string, { at: number; who: string | null; question: string }>();
     if (!powerCap) return out;
     for (const v of mine) {
       if (['completed', 'cancelled', 'failed'].includes(v.session.status)) continue;
       const p = mergePower(powerOf(v.session), eventsByRun[v.session.id]);
-      if (p?.pause != null) out.set(v.session.id, { at: p.pause.at, who: p.orchestrator.cli !== null ? seatResponder(p.orchestrator.cli, roster).name : null });
+      if (p?.pause != null) out.set(v.session.id, { at: p.pause.at, who: p.orchestrator.cli !== null ? seatResponder(p.orchestrator.cli, roster).name : null, question: pauseCause(p).question });
     }
     return out;
   }, [powerCap, mine, eventsByRun, roster]);
@@ -1087,7 +1087,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         out.push({ key: id, who: who.role === 'seat' ? who.name : null, since: null, question: el.message, tone: blocking(id) ? 'blocking' : 'waiting' });
       } else if (pauses.has(id)) {
         const pz = pauses.get(id)!;
-        out.push({ key: id, who: pz.who, since: pz.at > 0 ? pz.at : null, question: 'This change grew past its plan. How should it go on?', tone: blocking(id) ? 'blocking' : 'waiting' });
+        out.push({ key: id, who: pz.who, since: pz.at > 0 ? pz.at : null, question: pz.question, tone: blocking(id) ? 'blocking' : 'waiting' });
       }
     }
     if (ref.kind === 'chat') {

@@ -14507,6 +14507,12 @@
       ]
     },
     {
+      "testId": "power-pause-more",
+      "files": [
+        "src/components/session/PowerMode.tsx"
+      ]
+    },
+    {
       "testId": "power-pause-question",
       "files": [
         "src/components/session/PowerMode.tsx"
